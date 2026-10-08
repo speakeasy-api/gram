@@ -56,10 +56,7 @@ func IsDirectGrant(grant Grant) bool {
 func DirectOverrideGrants(grants []Grant) []Grant {
 	var direct []Grant
 	for _, grant := range grants {
-		if !IsDirectGrant(grant) {
-			continue
-		}
-		if !isBlocklistScope(grant.Scope) && grant.Selector.ResourceID() == WildcardResource {
+		if !isDirectOverrideGrant(grant) {
 			continue
 		}
 		direct = append(direct, grant)
@@ -67,15 +64,24 @@ func DirectOverrideGrants(grants []Grant) []Grant {
 	return direct
 }
 
+// isDirectOverrideGrant reports whether grant takes part in direct override
+// evaluation: a direct exclusion, or a direct allow naming a concrete resource.
+func isDirectOverrideGrant(grant Grant) bool {
+	if !IsDirectGrant(grant) {
+		return false
+	}
+	return IsBlocklistScope(grant.Scope) || grant.Selector.ResourceID() != WildcardResource
+}
+
 // ExclusionYieldsToDirectGrants reports whether a direct concrete grant can
 // outrank the exclusion paired with scope when that exclusion is inherited.
 func ExclusionYieldsToDirectGrants(scope Scope) bool {
 	exclusion, ok := ExclusionScopeFor(scope)
-	return ok && isBlocklistScope(exclusion)
+	return ok && IsBlocklistScope(exclusion)
 }
 
-// isBlocklistScope reports whether scope is one of the *:blocked_* scopes.
-func isBlocklistScope(scope Scope) bool {
+// IsBlocklistScope reports whether scope is one of the *:blocked_* scopes.
+func IsBlocklistScope(scope Scope) bool {
 	return strings.HasPrefix(scope.Parts().Action, "blocked_")
 }
 
@@ -86,13 +92,7 @@ func directOverride(grants []Grant, check Check) (*Grant, *Check, error) {
 	if !ExclusionYieldsToDirectGrants(check.Scope) {
 		return nil, nil, nil
 	}
-	// A server-level check is proven by any direct grant on the server, but a
-	// tool call only by one whose every constraint the call carries. Loose
-	// matching would let a disposition-scoped grant reach a tool with no
-	// derivable disposition, past a block that otherwise covers it.
-	if _, toolCall := check.Dimensions[SelectorKeyTool]; toolCall {
-		check = check.WithStrictSelectorMatch()
-	}
+	check = directOverrideCheck(check)
 	expression := expressionForCheck(check)
 	if expression == nil {
 		return nil, nil, nil
@@ -110,4 +110,16 @@ func directOverride(grants []Grant, check Check) (*Grant, *Check, error) {
 	}
 	grant, matchedCheck := matchingGrant(direct, check.expand())
 	return grant, matchedCheck, nil
+}
+
+// directOverrideCheck returns the check a direct grant must satisfy to outrank
+// an inherited exclusion. A server-level check is proven by any direct grant on
+// the server, but a tool call only by one whose every constraint the call
+// carries. Loose matching would let a disposition-scoped grant reach a tool
+// with no derivable disposition, past a block that otherwise covers it.
+func directOverrideCheck(check Check) Check {
+	if _, toolCall := check.Dimensions[SelectorKeyTool]; toolCall {
+		return check.WithStrictSelectorMatch()
+	}
+	return check
 }

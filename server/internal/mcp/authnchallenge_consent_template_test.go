@@ -20,7 +20,7 @@ func TestConsentTemplateCompletedFirstPartyConnectionAutoCloses(t *testing.T) {
 
 	var page bytes.Buffer
 	err := consentTemplate.Execute(&page, consentTemplateData{
-		ClientName:     "Gram",
+		ClientName:     "Speakeasy",
 		MCPSlug:        "example",
 		MCPRouteBase:   "x/mcp",
 		State:          "state",
@@ -56,7 +56,7 @@ func TestConsentTemplateIncompleteFirstPartyConnectionStaysOpen(t *testing.T) {
 
 	var page bytes.Buffer
 	err := consentTemplate.Execute(&page, consentTemplateData{
-		ClientName:     "Gram",
+		ClientName:     "Speakeasy",
 		MCPSlug:        "example",
 		MCPRouteBase:   "x/mcp",
 		State:          "state",
@@ -92,7 +92,7 @@ func TestConsentTemplateRendersPendingVerification(t *testing.T) {
 
 	var page bytes.Buffer
 	err := consentTemplate.Execute(&page, consentTemplateData{
-		ClientName:     "Gram",
+		ClientName:     "Speakeasy",
 		MCPSlug:        "example",
 		MCPRouteBase:   "x/mcp",
 		State:          "state",
@@ -158,7 +158,7 @@ func TestConsentTemplateShowsAutoRefreshAndServiceExpiry(t *testing.T) {
 
 	var page bytes.Buffer
 	err := consentTemplate.Execute(&page, consentTemplateData{
-		ClientName:     "Gram",
+		ClientName:     "Speakeasy",
 		MCPSlug:        "example",
 		MCPRouteBase:   "mcp",
 		State:          "state",
@@ -215,7 +215,7 @@ func TestConsentTemplateLocksAutoRefreshWhenOrganizationRequires(t *testing.T) {
 
 	var page bytes.Buffer
 	err := consentTemplate.Execute(&page, consentTemplateData{
-		ClientName:     "Gram",
+		ClientName:     "Speakeasy",
 		MCPSlug:        "example",
 		MCPRouteBase:   "mcp",
 		State:          "state",
@@ -257,7 +257,7 @@ func TestConsentTemplateShowsAutoRefreshOffWhenOrganizationDisables(t *testing.T
 
 	var page bytes.Buffer
 	err := consentTemplate.Execute(&page, consentTemplateData{
-		ClientName:     "Gram",
+		ClientName:     "Speakeasy",
 		MCPSlug:        "example",
 		MCPRouteBase:   "mcp",
 		State:          "state",
@@ -304,7 +304,7 @@ func TestConsentTemplateOmitsAutoRefreshRowWithoutRemoteSessions(t *testing.T) {
 
 	var page bytes.Buffer
 	err := consentTemplate.Execute(&page, consentTemplateData{
-		ClientName:         "Gram",
+		ClientName:         "Speakeasy",
 		MCPSlug:            "example",
 		MCPRouteBase:       "mcp",
 		State:              "state",
@@ -328,7 +328,7 @@ func TestConsentTemplateOmitsExpiryTooltipWhenNoExpiryReported(t *testing.T) {
 
 	var page bytes.Buffer
 	err := consentTemplate.Execute(&page, consentTemplateData{
-		ClientName:     "Gram",
+		ClientName:     "Speakeasy",
 		MCPSlug:        "example",
 		MCPRouteBase:   "mcp",
 		State:          "state",
@@ -735,9 +735,17 @@ func TestConsentTemplateAgentSelectionShowsFixedPolicyAndSetupOnly(t *testing.T)
 	require.Contains(t, html, "user@example.com")
 	require.Contains(t, html, "Build agent")
 	require.Contains(t, html, `name="agent_id"`)
-	// The self option is the checked default and carries the empty value the
-	// approve action maps to a human grant.
-	require.Contains(t, html, `value=""`)
+	// Mode is UI-only; the form still carries exactly one agent_id (empty for self).
+	require.Contains(t, html, `class="grid grid-cols-2 border"`)
+	require.Regexp(t, `name="consent_actor"\s+value="self"\s+checked`, html)
+	require.Regexp(t, `name="consent_actor"\s+value="agent"\s+disabled\s+data-agent-mode`, html)
+	require.Contains(t, html, `data-agent-picker hidden`)
+	require.Contains(t, html, `data-agent-setup hidden`)
+	require.Contains(t, html, `data-agent-search`)
+	require.Contains(t, html, `max-h-64 overflow-y-auto`)
+	require.Contains(t, html, `No agents match your search.`)
+	require.Regexp(t, `type="hidden" name="agent_id" value="" form="consent-approve-form" data-agent-self`, html)
+	require.Regexp(t, `form="consent-approve-form"\s+disabled\s+data-agent-select`, html)
 	require.Contains(t, html, "mcp:connect")
 	require.Contains(t, html, `href="https://app.example.com/example/agent-management"`)
 	require.Contains(t, html, `data-agent-label="Authorize agent"`)
@@ -826,7 +834,7 @@ func TestConsentTemplateFirstPartyNoCardCopy(t *testing.T) {
 
 	var page bytes.Buffer
 	err := consentTemplate.Execute(&page, consentTemplateData{
-		ClientName:         "Gram",
+		ClientName:         "Speakeasy",
 		MCPSlug:            "example",
 		MCPRouteBase:       "mcp",
 		State:              "state",
@@ -852,7 +860,7 @@ func TestConsentTemplateOffersIdentityReconnect(t *testing.T) {
 	renderCard := func(identityReconnect bool) string {
 		var page bytes.Buffer
 		err := consentTemplate.Execute(&page, consentTemplateData{
-			ClientName:     "Gram",
+			ClientName:     "Speakeasy",
 			MCPSlug:        "example",
 			MCPRouteBase:   "mcp",
 			State:          "state",

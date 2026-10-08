@@ -10,11 +10,15 @@
 
 import {
   BuildingIcon,
+  UsersIcon,
   CalculatorIcon,
   FolderIcon,
+  BookOpenIcon,
   Grid2X2Icon,
   KeyRoundIcon,
   PlugZapIcon,
+  ListChecksIcon,
+  ChartColumnStackedIcon,
 } from "lucide-react";
 
 import { McpIcon } from "@/components/ui/mcp-icon";
@@ -31,6 +35,12 @@ export const ADMIN_NAV_GROUPS = [
         // the label still finds the page rather than reading as "no results".
         keywords: "orgs accounts customers tenants companies",
         icon: BuildingIcon,
+      },
+      {
+        to: "/users",
+        label: "Users",
+        keywords: "people email members directory",
+        icon: UsersIcon,
       },
       {
         to: "/projects",
@@ -62,6 +72,18 @@ export const ADMIN_NAV_GROUPS = [
         icon: Grid2X2Icon,
       },
       {
+        to: "/onboarding-steps",
+        label: "Steps",
+        keywords: "onboarding steps setup wizard cards groups playbooks",
+        icon: ListChecksIcon,
+      },
+      {
+        to: "/onboarding-playbooks",
+        label: "Use Cases & Playbooks",
+        keywords: "onboarding use cases playbooks outcomes default",
+        icon: BookOpenIcon,
+      },
+      {
         to: "/remote-session-issuers",
         label: "Remote Session Issuers",
         keywords: "oauth identity providers issuers",
@@ -72,6 +94,15 @@ export const ADMIN_NAV_GROUPS = [
         label: "Admin MCP",
         keywords: "install connect agents claude codex cursor tailscale",
         icon: PlugZapIcon,
+      },
+      {
+        to: "/customer-usage",
+        label: "Customer usage",
+        keywords: "spend billing usage customers paying growth estimate",
+        icon: ChartColumnStackedIcon,
+        // Rendered after the external Demo organization link rather than in
+        // array order, so the sidebar lists it below that link.
+        afterDemoOrganization: true,
       },
     ],
   },

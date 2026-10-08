@@ -46,7 +46,7 @@ export function RevokeClientDialog({
             <AlertTitle>Revoking will not block this agent</AlertTitle>
             <AlertDescription>
               This agent is identified by its metadata document
-              {origin ? ` at ${origin}` : ""}, not by a registration Gram
+              {origin ? ` at ${origin}` : ""}, not by a registration Speakeasy
               issued. It can register again the next time it authorizes.
               Revoking ends its current sessions, but it does not lock the agent
               out.

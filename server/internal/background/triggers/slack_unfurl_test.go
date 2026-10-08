@@ -14,7 +14,7 @@ import (
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 )
 
-// linkSharedWebhookBody is a Slack event_callback envelope carrying one Gram
+// linkSharedWebhookBody is a Slack event_callback envelope carrying one Speakeasy
 // dashboard link and one foreign link, as delivered to the trigger webhook.
 const linkSharedWebhookBody = `{
 	"type": "event_callback",
@@ -95,9 +95,74 @@ func TestUnfurlSlackGramLinksCallsChatUnfurl(t *testing.T) {
 	require.Len(t, preview.Blocks, 1)
 	require.Equal(t, "context", preview.Blocks[0].Type)
 	require.Len(t, preview.Blocks[0].Elements, 2)
-	require.Equal(t, "https://app.getgram.ai/favicon.png", preview.Blocks[0].Elements[0].ImageURL)
+	require.Equal(t, "https://app.getgram.ai/external/sticker-logo.png", preview.Blocks[0].Elements[0].ImageURL)
 	require.Equal(t, "Speakeasy", preview.Blocks[0].Elements[0].AltText)
 	require.Equal(t, "<https://app.getgram.ai/acme/projects/default/toolsets/my-tools|My Tools · Toolsets>", preview.Blocks[0].Elements[1].Text)
+}
+
+func TestUnfurlSlackGramLinksCoversExtraPlatformHosts(t *testing.T) {
+	t.Parallel()
+
+	var form url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("parse form: %v", err)
+		}
+		form = r.PostForm
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write([]byte(`{"ok":true}`)); err != nil {
+			t.Errorf("write response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	siteURL, err := url.Parse("https://app.getgram.ai")
+	require.NoError(t, err)
+	app := &App{
+		// testenv.NewLogger is unavailable here (import cycle back into this
+		// package); the logger only fires on the warn path anyway.
+		logger:        slog.New(slog.DiscardHandler), //nolint:forbidigo // GG006: testenv imports this package, so testenv.NewLogger(t) cannot be used here
+		siteURL:       siteURL,
+		platformHosts: map[string]string{"ai.speakeasy.com": "https://ai.speakeasy.com"},
+		slackClient:   slackclient.NewSlackClientWithBaseURL(server.URL, server.Client()),
+	}
+	body := `{"type":"event_callback","event":{"type":"link_shared","channel":"C1","message_ts":"1.2","unfurl_id":"U1","source":"composer","links":[` +
+		`{"domain":"app.getgram.ai","url":"https://app.getgram.ai/acme/projects/default/toolsets"},` +
+		`{"domain":"ai.speakeasy.com","url":"https://AI.Speakeasy.com/acme/projects/default/toolsets/my-tools"},` +
+		`{"domain":"speakeasy.com","url":"https://speakeasy.com/acme/projects/default/toolsets"},` +
+		`{"domain":"example.com","url":"https://example.com/x"}]}}`
+
+	app.unfurlSlackGramLinks(
+		t.Context(),
+		triggerrepo.TriggerInstance{DefinitionSlug: DefinitionSlugSlack, Status: StatusActive},
+		map[string]string{"SLACK_BOT_TOKEN": "xoxb-test-token"},
+		[]byte(body),
+		EventEnvelope{Event: slackTriggerEvent{EventType: "link_shared"}},
+	)
+
+	var unfurls map[string]struct {
+		Blocks []struct {
+			Elements []struct {
+				ImageURL string `json:"image_url"`
+				Text     string `json:"text"`
+			} `json:"elements"`
+		} `json:"blocks"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(form.Get("unfurls")), &unfurls))
+
+	// The site host and the extra platform host (matched case-insensitively)
+	// unfurl; the parent domain and the foreign host are skipped.
+	require.Len(t, unfurls, 2)
+	site, ok := unfurls["https://app.getgram.ai/acme/projects/default/toolsets"]
+	require.True(t, ok)
+	require.Equal(t, "https://app.getgram.ai/external/sticker-logo.png", site.Blocks[0].Elements[0].ImageURL)
+	require.Equal(t, "<https://app.getgram.ai/acme/projects/default/toolsets|Toolsets>", site.Blocks[0].Elements[1].Text)
+
+	extra, ok := unfurls["https://AI.Speakeasy.com/acme/projects/default/toolsets/my-tools"]
+	require.True(t, ok)
+	// The icon stays on the site URL; the link keeps its own host.
+	require.Equal(t, "https://app.getgram.ai/external/sticker-logo.png", extra.Blocks[0].Elements[0].ImageURL)
+	require.Equal(t, "<https://AI.Speakeasy.com/acme/projects/default/toolsets/my-tools|My Tools · Toolsets>", extra.Blocks[0].Elements[1].Text)
 }
 
 func TestUnfurlSlackGramLinksSkipsForeignLinksOnly(t *testing.T) {

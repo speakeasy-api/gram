@@ -40,6 +40,7 @@ export const AUDIT_ACTIONS = [
   "api_key:create",
   "api_key:revoke",
   "asset:create",
+  "assistant:identity_provision",
   "assistant:tool_call",
   "aws_iam_credential:create",
   "aws_iam_credential:delete",
@@ -60,8 +61,14 @@ export const AUDIT_ACTIONS = [
   "custom_domains:create",
   "custom_domains:delete",
   "custom_domains:update",
+  "dashboard:create",
+  "dashboard:delete",
+  "dashboard:layout",
+  "dashboard:update",
   "data_export_route:create",
   "data_export_route:delete",
+  "data_export_route:pause",
+  "data_export_route:resume",
   "data_export_route:update",
   "deployments:create",
   "deployments:evolve",
@@ -86,6 +93,8 @@ export const AUDIT_ACTIONS = [
   "gcp_kms_key:update",
   "identity-provider-connection:create",
   "identity-provider-connection:record-agent",
+  "identity-provider-connection:replace-client-secret",
+  "identity-provider-connection:set-setup-method",
   "identity-provider-connection:revoke",
   "identity-provider-connection:submit-client-id",
   "identity-provider-connection:sync-applications",
@@ -111,6 +120,7 @@ export const AUDIT_ACTIONS = [
   "mcp-server:create",
   "mcp-server:delete",
   "mcp-server:update",
+  "mcp-server:update-scope-pin",
   "mcp-server:update-tool-metadata",
   "mcp_approval_request:approve",
   "mcp_approval_request:create",
@@ -135,6 +145,9 @@ export const AUDIT_ACTIONS = [
   "openrouter-key:enable",
   "openrouter-key:set_spend_cap",
   "organization:device_agent_configuration_updated",
+  "organization:disabled",
+  "organization:enabled",
+  "organization:whitelist_updated",
   "organization:enterprise_trial_armed",
   "organization:enterprise_trial_converted",
   "organization:enterprise_trial_demoted",
@@ -145,6 +158,9 @@ export const AUDIT_ACTIONS = [
   "organization:hooks_fail_open_disabled",
   "organization:hooks_fail_open_enabled",
   "organization:onboarding_updated",
+  "organization:onboarding_stack_updated",
+  "organization:onboarding_playbook_assigned",
+  "organization:onboarding_playbook_unassigned",
   "organization:payg_activated",
   "organization:payg_deactivated",
   "organization:product_feature_disabled",
@@ -159,6 +175,9 @@ export const AUDIT_ACTIONS = [
   "otel_destination:delete",
   "okta-resource-connection:confirm",
   "okta-resource-connection:reset",
+  "okta-resource-connection:observe",
+  "okta-server-suggestion:dismiss",
+  "okta-server-suggestion:restore",
   "otel_destination:update",
   "platform-mcp-diagnostics:attribution_read",
   "platform-mcp-diagnostics:user_status_read",
@@ -219,6 +238,7 @@ export const AUDIT_ACTIONS = [
   "risk_policy:update",
   "risk_result:dismiss",
   "risk_result:restore",
+  "risk_result:reveal_payload",
   "risk_result:unmask",
   "session_quarantine:open",
   "session_quarantine:release",
@@ -276,10 +296,15 @@ export const AUDIT_ACTIONS = [
   "wake:cancelled",
   "wake:fired",
   "wake:scheduled",
+  "widget:create",
+  "widget:delete",
+  "widget:update",
   "workload-admission:admit",
+  "workload-admission:update",
   "workload-admission:withdraw",
   "workload-issuer:create",
   "workload-issuer:delete",
+  "workload-issuer:update",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -370,6 +395,8 @@ export function staticActionPhrase(action: AuditAction): string {
 
     case "asset:create":
       return "uploaded asset";
+    case "assistant:identity_provision":
+      return "gave a dedicated agent to assistant";
     case "assistant:tool_call":
       return "ran assistant tool";
 
@@ -401,6 +428,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "connected identity provider";
     case "identity-provider-connection:submit-client-id":
       return "submitted client ID for identity provider";
+    case "identity-provider-connection:replace-client-secret":
+      return "replaced client secret for identity provider";
+    case "identity-provider-connection:set-setup-method":
+      return "changed setup method for identity provider";
     case "identity-provider-connection:verify":
       return "verified identity provider connection to";
     case "identity-provider-connection:record-agent":
@@ -413,6 +444,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "confirmed the Cross App Access connection for";
     case "okta-resource-connection:reset":
       return "reset the Cross App Access connection for";
+    case "okta-resource-connection:observe":
+      return "observed a Cross App Access exchange result for";
+    case "okta-server-suggestion:dismiss":
+      return "dismissed a suggestion for";
+    case "okta-server-suggestion:restore":
+      return "restored a suggestion for";
     case "json_web_key_set:create":
       return "created JSON Web Key Set";
     case "json_web_key_set:update":
@@ -464,6 +501,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated data export route";
     case "data_export_route:delete":
       return "deleted data export route";
+    case "data_export_route:pause":
+      return "paused data export route";
+    case "data_export_route:resume":
+      return "resumed data export route";
 
     case "network_ingress:create":
       return "created private network ingress";
@@ -550,6 +591,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated MCP server";
     case "mcp-server:delete":
       return "deleted MCP server";
+    case "mcp-server:update-scope-pin":
+      return "updated pinned scopes on MCP server";
     case "mcp-server:update-tool-metadata":
       return "updated tool metadata on MCP server";
 
@@ -581,6 +624,12 @@ export function staticActionPhrase(action: AuditAction): string {
     case "openrouter-key:set_spend_cap":
       return "changed inference cap for";
 
+    case "organization:enabled":
+      return "enabled organization access for";
+    case "organization:disabled":
+      return "disabled organization access for";
+    case "organization:whitelist_updated":
+      return "changed demo-access whitelisting for";
     case "organization:webhooks_enabled":
       return "enabled webhook delivery";
     case "organization:webhooks_disabled":
@@ -617,6 +666,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated setup task for";
     case "organization:onboarding_updated":
       return "updated onboarding for";
+    case "organization:onboarding_stack_updated":
+      return "updated the onboarding stack for";
+    case "organization:onboarding_playbook_assigned":
+      return "assigned an onboarding playbook to";
+    case "organization:onboarding_playbook_unassigned":
+      return "removed the onboarding playbook from";
 
     case "organization_invitation:create":
       return "invited";
@@ -670,12 +725,28 @@ export function staticActionPhrase(action: AuditAction): string {
     case "project:delete":
       return "deleted project";
 
+    // Saved queries were replaced by widgets; these stay so audit rows
+    // written before the change still read well.
     case "query:create":
       return "created saved query";
     case "query:update":
       return "updated saved query";
     case "query:delete":
       return "deleted saved query";
+    case "widget:create":
+      return "created widget";
+    case "widget:update":
+      return "updated widget";
+    case "widget:delete":
+      return "deleted widget";
+    case "dashboard:create":
+      return "created dashboard";
+    case "dashboard:update":
+      return "updated dashboard";
+    case "dashboard:layout":
+      return "laid out dashboard";
+    case "dashboard:delete":
+      return "deleted dashboard";
 
     case "remote-mcp:create":
       return "added remote MCP server";
@@ -759,6 +830,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "dismissed risk finding";
     case "risk_result:restore":
       return "restored risk finding";
+    case "risk_result:reveal_payload":
+      return "revealed risk finding payload";
     case "risk_result:unmask":
       return "unmasked risk finding";
 
@@ -885,12 +958,16 @@ export function staticActionPhrase(action: AuditAction): string {
 
     case "workload-issuer:create":
       return "started trusting workload issuer";
+    case "workload-issuer:update":
+      return "updated workload issuer";
     case "workload-issuer:delete":
       return "stopped trusting workload issuer";
     // Named for what they do, because the row is the grant of machine access
     // rather than a record about one.
     case "workload-admission:admit":
       return "admitted workload";
+    case "workload-admission:update":
+      return "updated workload";
     case "workload-admission:withdraw":
       return "withdrew workload";
 

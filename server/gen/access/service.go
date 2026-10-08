@@ -92,13 +92,13 @@ type Service interface {
 	// Record whether a detected AI tool may reach this organization's MCP gateway.
 	// The decision is organization-level and applies to every server: a blocked
 	// tool is refused when it authenticates, so its users see an error their
-	// client cannot recover from. Enforcement needs a credential Gram can verify,
-	// so a tool that carries no verifiable gateway matcher — one linked only by a
-	// self-reported client name, or by nothing at all — cannot be decided on: the
-	// request is rejected with bad_request, nothing is recorded, and no summary is
-	// returned. An id the organization's scan target catalog does not know is
-	// rejected with not_found. Requires an authenticated session authorized for
-	// org:admin on the active organization.
+	// client cannot recover from. Enforcement needs a credential Speakeasy can
+	// verify, so a tool that carries no verifiable gateway matcher — one linked
+	// only by a self-reported client name, or by nothing at all — cannot be
+	// decided on: the request is rejected with bad_request, nothing is recorded,
+	// and no summary is returned. An id the organization's scan target catalog
+	// does not know is rejected with not_found. Requires an authenticated session
+	// authorized for org:admin on the active organization.
 	SetAIToolDecision(context.Context, *SetAIToolDecisionPayload) (res *SetAIToolDecisionResult, err error)
 	// List who can reach one resource: the principals granted or blocked on it,
 	// and the organization-wide rules they inherit.
@@ -109,6 +109,14 @@ type Service interface {
 	// List the principals that can be given access: everyone, roles, people, and
 	// agents.
 	ListAudienceOptions(context.Context, *ListAudienceOptionsPayload) (res *ListAudienceOptionsResult, err error)
+	// Explain whether one organization member can connect to, view, and manage one
+	// resource, and which rules decide it. The decision comes from the same
+	// evaluation as runtime enforcement. A gateway is refused: nothing checks
+	// access on its own id, so check each server it fronts instead. Like
+	// listIdentityAccess it describes one person's access, so it takes a session
+	// only: API keys are not checked against grants and would see any member's
+	// rules.
+	ExplainResourceAccess(context.Context, *ExplainResourceAccessPayload) (res *ExplainResourceAccessResult, err error)
 	// Request access to a scope by sending an email notification to organization
 	// administrators.
 	RequestAccess(context.Context, *RequestAccessPayload) (res *RequestAccessResult, err error)
@@ -150,7 +158,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [31]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "syncDirectoryGroups", "setDirectoryRoleMapping", "deleteDirectoryRoleMapping", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
+var MethodNames = [32]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "syncDirectoryGroups", "setDirectoryRoleMapping", "deleteDirectoryRoleMapping", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
 
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
@@ -492,6 +500,87 @@ type DirectoryRoleMapping struct {
 	UpdatedAt string
 }
 
+// ExplainResourceAccessPayload is the payload type of the access service
+// explainResourceAccess method.
+type ExplainResourceAccessPayload struct {
+	// The kind of resource to explain.
+	ResourceKind string
+	// The resource to explain.
+	ResourceID string
+	// The organization member whose access to explain.
+	UserID       string
+	SessionToken *string
+}
+
+// ExplainResourceAccessResult is the result type of the access service
+// explainResourceAccess method.
+type ExplainResourceAccessResult struct {
+	// Who may connect without a rule. public: connecting is not checked against
+	// rules. private: rules decide. disabled: nobody can connect.
+	Visibility string
+	// The decision for use, view and manage, in that order.
+	Levels []*ExplainedAccessLevel
+}
+
+type ExplainedAccessDirectorySource struct {
+	// Whether membership of a directory group or a directory attribute value
+	// mapped the role.
+	SourceKind string
+	// The directory group, for a group mapping.
+	DirectoryGroupName *string
+	// The directory attribute, for an attribute mapping.
+	AttributeKey *string
+	// The attribute value the member's profile matched, for an attribute mapping.
+	AttributeValue *string
+}
+
+type ExplainedAccessLevel struct {
+	// The access being explained.
+	Level string
+	// Whether the rules give the member this access.
+	Allowed bool
+	// For use: whether every tool, only some, or none are reachable.
+	ToolAccess *string
+	// Every rule matching this access, deciding rules first.
+	Rules []*ExplainedAccessRule
+}
+
+type ExplainedAccessRule struct {
+	// Canonical principal URN holding the rule.
+	PrincipalUrn string
+	// What the principal identifies.
+	Kind string
+	// Human-readable name for the principal.
+	DisplayName string
+	// The access the rule gives, or the access a "blocked_" rule takes away. "all"
+	// is a grant covering every permission.
+	Level string
+	// Whether the rule names this resource, every resource in its project, or
+	// every resource of its kind.
+	AppliesTo string
+	// Tool names the rule is narrowed to, when it is not the whole resource.
+	Tools []string
+	// Tool annotations the rule is narrowed to, when it is not the whole resource.
+	Dispositions []string
+	// How the rule shaped the decision. allows: proves the access. overrides: a
+	// rule made directly to the member that proves the access despite a block from
+	// a role or everyone. overridden: a block such a rule overrides. blocks: takes
+	// the access away. blocked: an allow that matches but that a block keeps from
+	// counting. limits: a block taking away some of the resource's tools.
+	Effect string
+	// Why a blocked rule made directly to the member did not override the block.
+	// wildcard_direct_grant: it covers every resource. narrower_direct_grant: it
+	// constrains something the tool does not carry. own_exclusion: the member's
+	// own block applies.
+	Reason *string
+	// Whether the member holds this role only through a directory role mapping.
+	ViaDirectoryMapping bool
+	// The directory role mappings giving the member this role, including when they
+	// also hold it directly. Returned only to organization administrators, because
+	// attribute values can carry personal data.
+	DirectorySources []*ExplainedAccessDirectorySource
+}
+
 // GetRolePayload is the payload type of the access service getRole method.
 type GetRolePayload struct {
 	// The ID of the role.
@@ -667,7 +756,7 @@ type ListGrantsPayload struct {
 // ListIdentityAccessPayload is the payload type of the access service
 // listIdentityAccess method.
 type ListIdentityAccessPayload struct {
-	// The Gram user ID to look up accessible resources for.
+	// The Speakeasy user ID to look up accessible resources for.
 	UserID       string
 	SessionToken *string
 }
@@ -968,8 +1057,8 @@ type Selector struct {
 	Disposition *string
 	// Specific tool name filter (MCP scopes only).
 	Tool *string
-	// Project filter (MCP scopes only). When set with resource_id='*', grants
-	// access to all servers in the project.
+	// Project filter (MCP, environment, and assistant scopes). When set with
+	// resource_id='*', grants access to every resource of the kind in the project.
 	ProjectID *string
 	// Server URL filter (risk policy scopes only). Include the URI scheme, for
 	// example https://api.example.com.

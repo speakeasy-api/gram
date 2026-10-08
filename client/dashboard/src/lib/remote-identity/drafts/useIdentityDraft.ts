@@ -9,21 +9,31 @@ import type { RemoteSessionClient } from "@gram/client/models/components/remotes
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
 import type { ServerIdentityClientConfiguration } from "@gram/client/models/components/serveridentityclientconfiguration.js";
+import { invalidateAllGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
-import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
+import { queryKeyRemoteSessionIssuer } from "@gram/client/react-query/remoteSessionIssuer.js";
+import {
+  invalidateAllRemoteSessionIssuers,
+  useRemoteSessionIssuers,
+  useRemoteSessionIssuersInfinite,
+} from "@gram/client/react-query/remoteSessionIssuers.js";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   invalidateAllRemoteSessionsCount,
   useRemoteSessionsCount,
 } from "@gram/client/react-query/remoteSessionsCount.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
+  advertisedScopes,
+  normalizeScopes,
   preferredScopes,
   serverIdentityAuthMethod,
 } from "../model/clientConfiguration";
 import { useAllRemoteSessionClients } from "../queries/useAllRemoteSessionClients";
 import { useProtectedResourceMetadata } from "../queries/useProtectedResourceMetadata";
+import { useRemoteSessionIssuersByIds } from "../queries/useRemoteSessionIssuersByIds";
 
 /**
  * The provider the upstream advertises but Speakeasy has no record of yet.
@@ -47,9 +57,16 @@ export type ProviderOption = {
   match: boolean;
 };
 
-type ProviderGroup = {
+export type ProviderGroup = {
   tier: ProviderTier;
   options: ProviderOption[];
+  /** The tier's first page is still loading. */
+  isLoading: boolean;
+  isError: boolean;
+  /** More of this tier (for the current search) lies past what has loaded. */
+  hasMore: boolean;
+  loadingMore: boolean;
+  loadMore: () => void;
 };
 
 export type ClientOption = {
@@ -149,10 +166,6 @@ function clientOptionHint(
   return labelShared ? idTail(candidate.id) : null;
 }
 
-function scopesFromText(text: string): string[] {
-  return [...new Set(text.split(/\s+/).filter((scope) => scope !== ""))];
-}
-
 // A provider counts as this upstream's own only on a DNS-label boundary. A
 // bare suffix test would read notgithub.com as github.com and hand that
 // unrelated upstream the provider's tokens.
@@ -178,6 +191,63 @@ async function protectedResourceScopes(
   } catch {
     return undefined;
   }
+}
+
+type ProviderTierQuery = {
+  issuers: RemoteSessionIssuer[];
+  isLoading: boolean;
+  isError: boolean;
+  hasMore: boolean;
+  loadingMore: boolean;
+  loadMore: () => void;
+};
+
+// One tier of the provider menu, searched and paged on the server.
+function useProviderTier(
+  tier: "project" | "organization" | "platform",
+  search: string,
+  enabled: boolean,
+): ProviderTierQuery {
+  const query = useRemoteSessionIssuersInfinite(
+    { tier, search: search || undefined },
+    undefined,
+    { enabled, throwOnError: false },
+  );
+  const { fetchNextPage } = query;
+  const issuers = useMemo(
+    () => query.data?.pages.flatMap((page) => page.result.items) ?? [],
+    [query.data],
+  );
+  const loadMore = useCallback(() => void fetchNextPage(), [fetchNextPage]);
+  const { isLoading, isError, hasNextPage, isFetchingNextPage } = query;
+  return useMemo(
+    () => ({
+      issuers,
+      isLoading,
+      isError,
+      hasMore: !!hasNextPage,
+      loadingMore: isFetchingNextPage,
+      loadMore,
+    }),
+    [issuers, isLoading, isError, hasNextPage, isFetchingNextPage, loadMore],
+  );
+}
+
+// Issuers whose host is `host` or one of its parent domains, from every tier
+// the project can see. Off for an empty host.
+function useIssuersForHost(
+  host: string,
+  enabled: boolean,
+): { issuers: RemoteSessionIssuer[]; isLoading: boolean; isError: boolean } {
+  const query = useRemoteSessionIssuers({ upstreamHost: host }, undefined, {
+    enabled: enabled && host !== "",
+    throwOnError: false,
+  });
+  return {
+    issuers: query.data?.result.items ?? [],
+    isLoading: query.isLoading,
+    isError: query.isError,
+  };
 }
 
 function hostOf(url: string | undefined | null): string {
@@ -214,11 +284,16 @@ const TIER_BY_SCOPE = {
 /** Everything the User Identity row renders and everything it can change. */
 export type UserIdentityDraft = {
   providerGroups: ProviderGroup[];
+  /** Text the provider menu searches on the server; "" lists every tier. */
+  providerSearch: string;
+  setProviderSearch: (search: string) => void;
   selected: ProviderOption | null;
   selectProvider: (id: string | null) => void;
   /** The upstream advertised no provider and none matched. */
   providerUnreachable: boolean;
   providerLoading: boolean;
+  /** A provider lookup failed, so the choices may be incomplete. */
+  providerLoadFailed: boolean;
 
   clientsLoading: boolean;
   /** A discovered provider's capabilities are still being read. */
@@ -255,16 +330,21 @@ export type UserIdentityDraft = {
   setClientId: (value: string) => void;
   clientSecret: string;
   setClientSecret: (value: string) => void;
-  /** Space-separated scopes for a manual client. Blank requests the defaults. */
-  scopeText: string;
-  setScopeText: (value: string) => void;
+  /** Scopes chosen for a manual client. Empty requests the defaults. */
+  scopes: string[];
+  setScopes: (values: string[]) => void;
+  /** Scopes the server and provider advertise, offered as choices. */
+  scopeOptions: string[];
   registrationGuideUrl: string | null;
 
   /** Save swaps the server's client for another, so everyone signs in again. */
   replacesClient: boolean;
   status: UserIdentityStatus;
   canSave: boolean;
-  save: () => Promise<void>;
+  /** The operator changed the selection, whether or not it can be saved yet. */
+  pendingChange: boolean;
+  /** Resolves true when the commit landed; failures are already on screen. */
+  save: () => Promise<boolean>;
   saving: boolean;
 };
 
@@ -282,7 +362,6 @@ export function useUserIdentityDraft({
   mcpServerId,
   remoteMcpServerId,
   upstreamUrl,
-  issuers,
   linkedClients,
   configured,
   enabled,
@@ -290,7 +369,6 @@ export function useUserIdentityDraft({
   mcpServerId: string;
   remoteMcpServerId: string;
   upstreamUrl: string | undefined;
-  issuers: RemoteSessionIssuer[];
   linkedClients: RemoteSessionClient[];
   configured: boolean;
   enabled: boolean;
@@ -307,33 +385,112 @@ export function useUserIdentityDraft({
     useState<RegistrationMethod>("cimd");
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
-  const [scopeText, setScopeText] = useState("");
+  const [scopes, setScopes] = useState<string[]>([]);
   const [localStatus, setLocalStatus] = useState<UserIdentityStatus>({
     kind: "idle",
   });
 
+  // The menu lists each tier on its own, searched and paged on the server:
+  // the platform catalog is far larger than any page, and a single mixed
+  // listing lets it crowd the project's own providers out entirely.
+  const [providerSearch, setProviderSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(providerSearch.trim(), 250);
+  const platformTier = useProviderTier("platform", debouncedSearch, enabled);
+  const organizationTier = useProviderTier(
+    "organization",
+    debouncedSearch,
+    enabled,
+  );
+  const projectTier = useProviderTier("project", debouncedSearch, enabled);
+
+  // The linked and picked providers are resolved by id and merged in, never
+  // looked for in the menu's pages alone: a search or a short page can leave
+  // either out, and the server would then render with no provider selected.
+  const linkedIssuerId = linkedClients[0]?.remoteSessionIssuerId;
+  const pickedIssuerId =
+    providerPick && providerPick !== DISCOVERED_PROVIDER_ID
+      ? providerPick
+      : undefined;
+  const resolvedIssuerIds = useMemo(
+    () =>
+      [...new Set([linkedIssuerId, pickedIssuerId])].filter(
+        (id): id is string => !!id,
+      ),
+    [linkedIssuerId, pickedIssuerId],
+  );
+  const {
+    items: linkedIssuers,
+    isLoading: linkedIssuerLoading,
+    isError: linkedIssuerError,
+  } = useRemoteSessionIssuersByIds(resolvedIssuerIds, { enabled });
+
+  // The provider this server's upstream points at, found on the server: the
+  // same-site rule (the upstream's host or a parent domain of it) runs over
+  // every issuer the project can see, not just a loaded page. Newest first,
+  // as the listing is.
+  const upstreamHost = hostOf(upstreamUrl);
+  const hostMatchQuery = useIssuersForHost(upstreamHost, enabled);
+  const matchedIssuer = hostMatchQuery.issuers.find((issuer) =>
+    sameSite(hostOf(issuer.issuer), upstreamHost),
+  );
+
   // Only probe for a provider to create when none of the existing ones match;
   // a configured server already has its answer.
-  const upstreamHost = hostOf(upstreamUrl);
-  const matchedIssuer = useMemo(
-    () =>
-      issuers.find((issuer) => sameSite(hostOf(issuer.issuer), upstreamHost)),
-    [issuers, upstreamHost],
-  );
-  const linkedIssuerId = linkedClients[0]?.remoteSessionIssuerId;
   const prm = useProtectedResourceMetadata(
     remoteMcpServerId,
-    enabled && !configured && !matchedIssuer && !linkedIssuerId,
+    enabled &&
+      !configured &&
+      !hostMatchQuery.isLoading &&
+      !matchedIssuer &&
+      !linkedIssuerId,
   );
   const discoveredIssuerUrl = prm.metadata?.authorizationServers?.[0] ?? null;
-  const discoveredIsKnown =
-    !!discoveredIssuerUrl &&
-    issuers.some(
-      (issuer) => hostOf(issuer.issuer) === hostOf(discoveredIssuerUrl),
-    );
+  // An advertised provider is new only when no issuer the project can see
+  // shares its host. Held (not offered) until that lookup answers.
+  const discoveredHost = hostOf(discoveredIssuerUrl);
+  const discoveredQuery = useIssuersForHost(discoveredHost, enabled);
+  const knownDiscoveredIssuer = discoveredQuery.issuers.find(
+    (issuer) => hostOf(issuer.issuer) === discoveredHost,
+  );
+  const discoveredIsKnown = !!knownDiscoveredIssuer;
+
+  // Every issuer the chooser may need to name: the loaded menu pages, plus
+  // the linked, picked and matched ones resolved above, which may sit past
+  // them.
+  const issuers = useMemo(() => {
+    const merged = new Map<string, RemoteSessionIssuer>();
+    for (const issuer of [
+      ...platformTier.issuers,
+      ...organizationTier.issuers,
+      ...projectTier.issuers,
+      ...linkedIssuers,
+      ...(matchedIssuer ? [matchedIssuer] : []),
+      ...(knownDiscoveredIssuer ? [knownDiscoveredIssuer] : []),
+    ]) {
+      if (!merged.has(issuer.id)) merged.set(issuer.id, issuer);
+    }
+    return [...merged.values()];
+  }, [
+    platformTier.issuers,
+    organizationTier.issuers,
+    projectTier.issuers,
+    linkedIssuers,
+    matchedIssuer,
+    knownDiscoveredIssuer,
+  ]);
+
+  // A lookup that failed is not an answer: offering a provider as new, or
+  // picking none, on a failed lookup could duplicate or hide one the project
+  // already has. The row reports the failure and Save stays off instead.
+  const providerLoadFailed =
+    linkedIssuerError || hostMatchQuery.isError || discoveredQuery.isError;
+
   const discovered = useMemo<ProviderOption | null>(
     () =>
-      discoveredIssuerUrl && !discoveredIsKnown
+      discoveredIssuerUrl &&
+      !discoveredQuery.isLoading &&
+      !discoveredQuery.isError &&
+      !discoveredIsKnown
         ? {
             id: DISCOVERED_PROVIDER_ID,
             name:
@@ -344,14 +501,22 @@ export function useUserIdentityDraft({
             match: true,
           }
         : null,
-    [discoveredIssuerUrl, discoveredIsKnown],
+    [
+      discoveredIssuerUrl,
+      discoveredQuery.isLoading,
+      discoveredQuery.isError,
+      discoveredIsKnown,
+    ],
   );
 
   // Nothing matched and nothing was advertised: the upstream could not tell us
   // where its users sign in, so the chooser opens empty.
+  // Not claimed while our own lookup failed: that alert already explains the
+  // missing provider, and the upstream may be fine.
   const providerUnreachable =
     enabled &&
     !configured &&
+    !providerLoadFailed &&
     !matchedIssuer &&
     !linkedIssuerId &&
     !discovered &&
@@ -375,31 +540,65 @@ export function useUserIdentityDraft({
       }
     : selectedDiscovered;
 
+  const searching = debouncedSearch !== "";
   const providerGroups = useMemo<ProviderGroup[]>(() => {
-    const groups = new Map<ProviderTier, ProviderOption[]>(
-      TIER_ORDER.map((tier) => [tier, []]),
-    );
-    for (const issuer of issuers) {
-      const tier = TIER_BY_SCOPE[remoteSessionScopeTier(issuer)];
-      groups.get(tier)?.push({
+    // While searching, a tier shows only its search results. Otherwise the
+    // matched provider, the one in use, the existing one the upstream
+    // advertises, and a discovered one to create are always offered, whether
+    // or not the tier's loaded pages reach them.
+    const pinned = searching
+      ? []
+      : [matchedIssuer, selectedIssuer, knownDiscoveredIssuer].filter(
+          (issuer): issuer is RemoteSessionIssuer => !!issuer,
+        );
+    const tierQueries = {
+      Platform: platformTier,
+      Organization: organizationTier,
+      Project: projectTier,
+    } satisfies Record<ProviderTier, ProviderTierQuery>;
+    return TIER_ORDER.map((tier) => {
+      const query = tierQueries[tier];
+      const byId = new Map(query.issuers.map((issuer) => [issuer.id, issuer]));
+      for (const issuer of pinned) {
+        if (TIER_BY_SCOPE[remoteSessionScopeTier(issuer)] === tier) {
+          byId.set(issuer.id, issuer);
+        }
+      }
+      const options: ProviderOption[] = [...byId.values()].map((issuer) => ({
         id: issuer.id,
         name: issuerDisplayName(issuer),
         url: displayUrl(issuer.issuer),
         isNew: false,
         match: issuer.id === matchedIssuer?.id,
-      });
-    }
-    if (discovered) groups.get("Project")?.push(discovered);
-    return TIER_ORDER.map((tier) => ({
-      tier,
-      // URL matches first, then alphabetical, so the provider this server
-      // actually points at is never buried in a long platform list.
-      options: [...(groups.get(tier) ?? [])].sort(
-        (a, b) =>
-          Number(b.match) - Number(a.match) || a.name.localeCompare(b.name),
-      ),
-    }));
-  }, [issuers, matchedIssuer, discovered]);
+      }));
+      if (tier === "Project" && discovered && !searching) {
+        options.push(discovered);
+      }
+      return {
+        tier,
+        // URL matches first, then alphabetical, so the provider this server
+        // actually points at is never buried in a long platform list.
+        options: options.sort(
+          (a, b) =>
+            Number(b.match) - Number(a.match) || a.name.localeCompare(b.name),
+        ),
+        isLoading: query.isLoading,
+        isError: query.isError,
+        hasMore: query.hasMore,
+        loadingMore: query.loadingMore,
+        loadMore: query.loadMore,
+      };
+    });
+  }, [
+    searching,
+    matchedIssuer,
+    selectedIssuer,
+    knownDiscoveredIssuer,
+    discovered,
+    platformTier,
+    organizationTier,
+    projectTier,
+  ]);
 
   // Existing clients live on the provider; a provider that does not exist yet
   // has none to offer.
@@ -493,6 +692,20 @@ export function useUserIdentityDraft({
   const replacesClient =
     linkedClients.length > 0 && !connected && !sameAsConnected;
 
+  // The provider probe is off once a provider matches. Manual is also the
+  // fallback while clients load, so wait for the choice to settle.
+  const scopeProbe = useProtectedResourceMetadata(
+    remoteMcpServerId,
+    enabled && !!selected && !clientsLoading && manualNeeded && !connected,
+  );
+  const resourceScopes = scopeProbe.metadata?.scopesSupported;
+  const issuerScopes =
+    selectedIssuer?.scopesSupported ?? discoveredMetadata?.scopesSupported;
+  const scopeOptions = useMemo(
+    () => advertisedScopes(resourceScopes, issuerScopes),
+    [resourceScopes, issuerScopes],
+  );
+
   const resetChoice = (): void => {
     setChoicePick(null);
     setExistingPick(null);
@@ -501,13 +714,22 @@ export function useUserIdentityDraft({
     // next, so they leave with it rather than being saved under its successor.
     setClientId("");
     setClientSecret("");
-    setScopeText("");
+    setScopes([]);
     setLocalStatus({ kind: "idle" });
   };
 
   // A client belongs to exactly one provider, so choosing a provider clears
   // the client choice and any outcome from the previous one.
   const selectProvider = (id: string | null): void => {
+    // Seed the by-id lookup with the record the menu already holds, so the
+    // pick stays named once the menu's search moves on.
+    const picked = issuers.find((issuer) => issuer.id === id);
+    if (picked) {
+      queryClient.setQueryData(
+        queryKeyRemoteSessionIssuer({ id: picked.id }),
+        picked,
+      );
+    }
     setProviderPick(id);
     resetChoice();
   };
@@ -570,13 +792,14 @@ export function useUserIdentityDraft({
         // A new client asks for what this server's protected resource
         // advertises, exactly as the create flow does. Left empty, the server
         // falls back to every scope the issuer advertises — the request that
-        // broke Salesforce logins. Scopes typed for a manual client win.
-        const typedScopes = manualNeeded ? scopesFromText(scopeText) : [];
-        const scopes =
-          typedScopes.length > 0
-            ? typedScopes
+        // broke Salesforce logins. Scopes chosen for a manual client win.
+        const chosenScopes = manualNeeded ? scopes : [];
+        const requestedScopes =
+          chosenScopes.length > 0
+            ? chosenScopes
             : preferredScopes(
                 prm.metadata?.scopesSupported ??
+                  resourceScopes ??
                   (await protectedResourceScopes(client, remoteMcpServerId)),
                 selectedIssuer?.scopesSupported ?? draft?.scopesSupported,
               );
@@ -584,7 +807,7 @@ export function useUserIdentityDraft({
         clientConfiguration = {
           clientId: manualNeeded ? clientId.trim() : undefined,
           clientSecret: secret || undefined,
-          scope: scopes.length > 0 ? scopes : undefined,
+          scope: requestedScopes.length > 0 ? requestedScopes : undefined,
           // A manual client without a secret is a public client; naming a
           // secret-based method for it is refused by the server.
           tokenEndpointAuthMethod:
@@ -643,6 +866,7 @@ export function useUserIdentityDraft({
         invalidateAllRemoteSessionClients(queryClient),
         invalidateAllRemoteSessionIssuers(queryClient),
         invalidateAllRemoteSessionsCount(queryClient),
+        invalidateAllGetRemoteMcpServerScopes(queryClient),
       ]);
     },
     onError: (error: unknown) => {
@@ -673,9 +897,15 @@ export function useUserIdentityDraft({
     choiceComplete = !!existingClient && !sameAsConnected;
   if (choice === "manual") choiceComplete = clientId.trim() !== "";
 
+  const pendingChange =
+    touched &&
+    status.kind !== "done" &&
+    !(choice === "existing" && sameAsConnected);
+
   const canSave =
     !!selected &&
     !connected &&
+    !providerLoadFailed &&
     !capabilitiesLoading &&
     // Saving before the client list lands would miss an existing client and
     // register a duplicate in its place.
@@ -686,10 +916,17 @@ export function useUserIdentityDraft({
 
   return {
     providerGroups,
+    providerSearch,
+    setProviderSearch,
     selected,
     selectProvider,
     providerUnreachable,
-    providerLoading: prm.status === "loading",
+    providerLoading:
+      prm.status === "loading" ||
+      linkedIssuerLoading ||
+      hostMatchQuery.isLoading ||
+      discoveredQuery.isLoading,
+    providerLoadFailed,
 
     clientsLoading,
     capabilitiesLoading,
@@ -727,8 +964,9 @@ export function useUserIdentityDraft({
     setClientId,
     clientSecret,
     setClientSecret,
-    scopeText,
-    setScopeText,
+    scopes,
+    setScopes: (values: string[]): void => setScopes(normalizeScopes(values)),
+    scopeOptions,
     registrationGuideUrl:
       selectedIssuer?.clientSetupDocumentationUrl ??
       selectedIssuer?.serviceDocumentation ??
@@ -738,14 +976,17 @@ export function useUserIdentityDraft({
     replacesClient,
     status,
     canSave,
-    save: async (): Promise<void> => {
+    pendingChange,
+    save: async (): Promise<boolean> => {
       // Awaitable so callers can sequence work after it. onError has already
       // put the failure on screen, so the rejection is swallowed here rather
       // than surfacing twice or escaping as an unhandled rejection.
       try {
         await runCommit();
+        return true;
       } catch {
         /* reported by onError */
+        return false;
       }
     },
     saving: isPending,

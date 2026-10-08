@@ -298,6 +298,9 @@ func EncodeListIssuersRequest(encoder func(*http.Request) goahttp.Encoder) func(
 		if p.Limit != nil {
 			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
 		}
+		if p.Tier != nil {
+			values.Add("tier", *p.Tier)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -2928,6 +2931,7 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 		IntrospectionEndpoint:             v.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        v.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: v.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          v.OmitScopeFallback,
 		ResourceIndicatorSupported:                 v.ResourceIndicatorSupported,
 		CreatedAt:                                  *v.CreatedAt,
 		UpdatedAt:                                  *v.UpdatedAt,

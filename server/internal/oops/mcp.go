@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"runtime/debug"
 
@@ -43,7 +44,7 @@ func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.R
 		var shareableErr *ShareableError
 		switch {
 		case errors.As(err, &shareableErr):
-			// The status starts from the Gram error code, which is what makes
+			// The status starts from the Speakeasy error code, which is what makes
 			// this path answer 401 with the OAuth discovery challenge MCP
 			// clients need to start authorizing, 403 for a denied toolset, and
 			// 405 for the GET compatibility probe. Those wire codes carry no
@@ -53,7 +54,7 @@ func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.R
 			// It does not leave the not-found alone, and must not: the wire
 			// code answered here is now the revision's, and a code carries its
 			// status with it. A not-found on a modern request answers -32602,
-			// whose mandated status is 400. Keeping the Gram code's 404 would
+			// whose mandated status is 400. Keeping the Speakeasy code's 404 would
 			// pair it with the one status the specification gives a distinct
 			// meaning — a 404 carrying a JSON-RPC body says the method is
 			// unimplemented — and tell a dual-era client something untrue.
@@ -177,6 +178,33 @@ type MCPErrorData struct {
 
 	// Requested is the unsupported protocol revision the client declared.
 	Requested string `json:"requested,omitempty"`
+
+	// RequiredCapabilities lists the client capabilities a
+	// MissingRequiredClientCapabilityError needs and the client did not
+	// declare, in the shape of MCP's ClientCapabilities object: each key is a
+	// capability name and each value its capability object (e.g.
+	// {"elicitation": {}}).
+	RequiredCapabilities map[string]json.RawMessage `json:"requiredCapabilities,omitempty"`
+}
+
+// NewMissingRequiredClientCapabilityError builds the MCP 2026-07-28
+// MissingRequiredClientCapabilityError (-32021) a server returns when
+// processing a request needs client capabilities the request's
+// `io.modelcontextprotocol/clientCapabilities` did not declare. required
+// names each missing capability with its capability object and must not be
+// empty; the error is answered with HTTP 400 under that revision.
+func NewMissingRequiredClientCapabilityError(id mcpjsonrpc.ID, required map[string]json.RawMessage) *MCPError {
+	return &MCPError{
+		ID:      id,
+		Code:    MCPCodeMissingRequiredClientCapability,
+		Message: MCPCodeMissingRequiredClientCapability.Message(),
+		Data: &MCPErrorData{
+			Code:                 "",
+			Supported:            nil,
+			Requested:            "",
+			RequiredCapabilities: maps.Clone(required),
+		},
+	}
 }
 
 type MCPError struct {

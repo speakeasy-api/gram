@@ -55,7 +55,7 @@ func (s *Service) submitPreparationDCRWithTunnel(ctx context.Context, in Prepara
 		AuthMethod string   `json:"token_endpoint_auth_method"`
 		Scope      string   `json:"scope,omitempty"`
 		ClientName string   `json:"client_name"`
-	}{[]string{oauthwire.GrantTypeJWTBearer}, method, strings.Join(in.Scopes, " "), "Gram identity chaining"})
+	}{[]string{oauthwire.GrantTypeJWTBearer}, method, strings.Join(in.Scopes, " "), "Speakeasy identity chaining"})
 	requestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, endpoint, bytes.NewReader(body))
@@ -216,7 +216,9 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 		if response.ClientSecretExpiresAt > 0 {
 			expires = conv.ToPGTimestamptz(time.Unix(response.ClientSecretExpiresAt, 0))
 		}
-		client, err = q.CreateRemoteSessionClient(saveCtx, repo.CreateRemoteSessionClientParams{JsonWebKeySetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, IdentityProviderConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, TokenEndpointAuthAudienceFormat: conv.ToPGTextEmpty(""), Audience: conv.ToPGTextEmpty(""), LegacyCallbackUrl: false, ProjectID: conv.ToNullUUID(b.ProjectID), OrganizationID: conv.ToPGText(b.OrganizationID), RemoteSessionIssuerID: issuer.ID, ClientID: response.ClientID, ClientSecretEncrypted: conv.ToPGText(ciphertext), TokenEndpointAuthMethod: conv.ToPGText(response.TokenEndpointAuthMethod), Scope: scopes, ClientIDIssuedAt: issued, ClientSecretExpiresAt: expires})
+		// Identity-chaining registrations carry no redirect_uris, so they record
+		// no callback origin.
+		client, err = q.CreateRemoteSessionClient(saveCtx, repo.CreateRemoteSessionClientParams{JsonWebKeySetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, IdentityProviderConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, TokenEndpointAuthAudienceFormat: conv.ToPGTextEmpty(""), Audience: conv.ToPGTextEmpty(""), LegacyCallbackUrl: false, CallbackBaseUrl: pgtype.Text{String: "", Valid: false}, ProjectID: conv.ToNullUUID(b.ProjectID), OrganizationID: conv.ToPGText(b.OrganizationID), RemoteSessionIssuerID: issuer.ID, ClientID: response.ClientID, ClientSecretEncrypted: conv.ToPGText(ciphertext), TokenEndpointAuthMethod: conv.ToPGText(response.TokenEndpointAuthMethod), Scope: scopes, ClientIDIssuedAt: issued, ClientSecretExpiresAt: expires})
 		if err != nil {
 			return preparationResult(b, currentIssuer, client, PreparationStateIndeterminate), err
 		}

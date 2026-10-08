@@ -26,7 +26,7 @@ import {
 /**
  * The templates render the real app frame (breadcrumbs, RBAC crumb check via
  * useGrants, sidebar trigger), so each story mounts inside the minimal
- * provider stack the frame needs. The Gram client points at an unreachable
+ * provider stack the frame needs. The Speakeasy client points at an unreachable
  * host: the one query the frame issues (grants) fails silently and the org
  * crumb simply renders unlinked. Auth/Telemetry/Insights contexts all have
  * safe defaults and need no providers here.

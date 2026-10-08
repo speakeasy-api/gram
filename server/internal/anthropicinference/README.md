@@ -1,6 +1,6 @@
 # Anthropic inference hooks
 
-Receives Anthropic Enterprise's signed pre-inference transcript, stores conversation history through Gram's shared chat writer, and evaluates project security policies before returning an allow/deny verdict.
+Receives Anthropic Enterprise's signed pre-inference transcript, stores conversation history through Speakeasy's shared chat writer, and evaluates project security policies before returning an allow/deny verdict.
 
 Protocol: https://platform.claude.com/docs/en/manage-claude/inference-hooks-endpoint
 
@@ -57,7 +57,19 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
   not deliver a final-response event.
 - Conversation identity is scoped to the project, Anthropic tenant, and actor.
   Client-asserted session identifiers cannot join another actor's conversation.
-  Missing session identifiers or actor identities fall back to the request identifier.
+  A frame with a session identifier continues the conversation that
+  identifier names, or starts it. A frame with no session identifier (the
+  protocol allows that, and some products send none) continues the actor's
+  archived conversation when its transcript extends that conversation's
+  history; a conversation that merely starts the same way is never continued,
+  two conversations that so far read the same are never chosen between, and a
+  frame with no actor never continues one. Otherwise it starts a new
+  conversation keyed by its request identifier. See `ResolveConversation` for
+  the matching rule.
+  Each frame's resolution is counted on `anthropic_inference.conversations`
+  (`session`, `adopted_prefix`, `ambiguous_prefix`, `new`) by application and
+  whether a session
+  identifier was present.
 - Archival deduplication is separate from acceptance. Storage uses message hashes
   to align a delivery with the eight newest archived message identities. It tries
   the newest anchor first and scans incoming messages backward, stopping at the

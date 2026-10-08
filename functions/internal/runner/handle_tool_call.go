@@ -2,6 +2,7 @@ package runner
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -42,7 +43,7 @@ var allowedHeaders = map[string]struct{}{
 	"x-ratelimit-reset":       {},
 }
 
-// CallToolPayload is the request body Gram POSTs to /tool-call. Mirrored by
+// CallToolPayload is the request body Speakeasy POSTs to /tool-call. Mirrored by
 // the server's own encode type in `server/internal/functions/auth.go` — the
 // two live in separate `internal` subtrees and cannot import one another, so
 // they must be changed together.
@@ -56,8 +57,7 @@ type CallToolPayload struct {
 // ToolCallMeta describes the caller of one tool call, keyed the way MCP keys
 // request `_meta`. Decoding into a declared shape (rather than forwarding the
 // bytes) is what bounds what reaches the entrypoint: the request is re-encoded
-// from this struct, so unknown keys never make it into the subprocess
-// arguments.
+// from this struct, so unknown keys never make it into the subprocess.
 type ToolCallMeta struct {
 	// ClientInfo is what the MCP client reports about itself. Untrusted and
 	// self-reported.
@@ -74,8 +74,17 @@ type MCPClientInfo struct {
 }
 
 type callRequest struct {
-	requestArg  []byte
+	// request is the JSON request the entrypoint reads from stdin. It never
+	// goes on the command line: Linux caps a single argument at 128 KiB, which
+	// tool input such as base64-encoded media easily exceeds.
+	request []byte
+
+	// environment is the complete environment of the subprocess, which
+	// inherits nothing from the runner.
 	environment map[string]string
+
+	// requestType tells the entrypoint which handler to call: "tool" or
+	// "resource".
 	requestType string
 }
 
@@ -122,9 +131,10 @@ func (s *Service) executeRequest(ctx context.Context, logger *slog.Logger, req c
 	// Build a fresh argument slice per call: executeRequest runs concurrently,
 	// so appending onto s.args directly would race on (and corrupt) its backing
 	// array if it ever carried spare capacity.
-	args := slices.Concat(s.args, []string{fifoPath, string(req.requestArg), req.requestType})
+	args := slices.Concat(s.args, []string{fifoPath, req.requestType})
 	cmd := guardian.NewCommand(timeoutCtx, s.command, args...)
 	cmd.Dir = s.workDir
+	cmd.Stdin = bytes.NewReader(req.request)
 	cmd.Stdout = stdoutWrt
 	cmd.Stderr = stderrWrt
 
@@ -298,7 +308,7 @@ func (s *Service) callTool(ctx context.Context, logger *slog.Logger, payload Cal
 
 	reqCopy := payload
 	reqCopy.Environment = nil
-	reqArg, err := json.Marshal(reqCopy)
+	request, err := json.Marshal(reqCopy)
 	if err != nil {
 		return svc.NewPermanentError(
 			fmt.Errorf("serialize tool call request: %w", err),
@@ -314,7 +324,7 @@ func (s *Service) callTool(ctx context.Context, logger *slog.Logger, payload Cal
 	}
 
 	return s.executeRequest(ctx, logger, callRequest{
-		requestArg:  reqArg,
+		request:     request,
 		environment: payload.Environment,
 		requestType: "tool",
 	}, w)
@@ -329,11 +339,7 @@ func (s *Service) handleToolCall(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var payload CallToolPayload
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		s.logger.ErrorContext(ctx, "failed to decode tool call request", attr.SlogError(err))
-
-		msg := fmt.Sprintf("decode tool call request: %s", err.Error())
-		http.Error(w, msg, http.StatusBadRequest)
+	if !s.decodeRequestBody(w, r, &payload) {
 		return
 	}
 

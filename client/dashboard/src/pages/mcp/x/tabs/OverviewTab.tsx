@@ -5,7 +5,7 @@ import { TunneledMcpConnectionsPanel } from "./TunneledMcpConnectionsPanel";
 import { UnproxiedMcpOverviewTab } from "./UnproxiedMcpOverviewTab";
 
 // Picks the overview for the server's backend. Unproxied servers have no
-// Gram-proxied traffic and get their own scoped-down tab; tunneled servers
+// Speakeasy-proxied traffic and get their own scoped-down tab; tunneled servers
 // get the live connections panel on top of the shared usage dashboard.
 export function OverviewTab({
   mcpServer,
@@ -34,6 +34,13 @@ export function OverviewTab({
         slug: mcpServer.slug,
         name: mcpServer.name ?? "MCP Server",
       }}
+      // Tool Logs cannot currently filter a tunneled target by id. Treating
+      // it as hosted or shadow would silently show the wrong server's calls.
+      logsTarget={
+        mcpServer.tunneledMcpServerId
+          ? null
+          : { type: "hosted", id: mcpServer.slug }
+      }
     />
   ) : null;
 

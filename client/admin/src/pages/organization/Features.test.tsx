@@ -11,10 +11,6 @@ import { Features } from "@/pages/organization/Features";
 import { anOrganization } from "@/test/fixtures";
 import { renderWithApp } from "@/test/harness";
 
-vi.mock("@/pages/organization/Onboarding", () => ({
-  Onboarding: () => <section aria-label="Onboarding" />,
-}));
-
 const mocks = vi.hoisted(() => ({
   featureFetch: vi.fn(),
   getOrganizationChatAnalysisSettings: vi.fn(),
@@ -183,9 +179,10 @@ beforeEach(() => {
       enabled: boolean;
       feature_name: string;
     };
+    const responseKey = `${body.feature_name}_enabled`;
     return jsonResponse({
       ...FEATURES_RESPONSE,
-      [`${body.feature_name}_enabled`]: body.enabled,
+      [responseKey]: body.enabled,
     });
   });
   vi.stubGlobal("fetch", mocks.featureFetch);
@@ -270,6 +267,10 @@ describe("Features", () => {
         organization_id: ORG.id,
         feature_name: featureName,
         enabled: true,
+      });
+      await waitFor(() => {
+        expect(queryClient.isMutating()).toBe(0);
+        expect(control.getAttribute("data-state")).toBe("checked");
       });
     },
   );

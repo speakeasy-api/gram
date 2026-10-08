@@ -113,7 +113,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
 
 12. **External OAuth settings** — open **MCP → Acme OAuth Discovery →
     Authentication** (`/mcp/acme-oauth-discovery/authentication`). The page
-    shows the existing Gram-hosted metadata configuration, recommends
+    shows the existing Speakeasy-hosted metadata configuration, recommends
     provider-hosted metadata, and offers **Review update**. Opening the review
     starts with the fictional `https://auth.example.com` issuer; live discovery
     does not need to succeed for this seeded-page check.
@@ -229,7 +229,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       The result shows the secret once and the selected server endpoints.
       Select individual member servers for Meta MCP: aggregate membership is
       not yet a supported agent consent/delegation target. Unproxied servers
-      cannot receive Gram credential grants.
+      cannot receive Speakeasy credential grants.
       Leaving setup must not delete connected accounts; start setup for the
       same or another eligible agent and confirm owned accounts are offered.
     - **Agent OAuth consent:** select an agent, finish required third-party
@@ -452,18 +452,49 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       `[~]` to `[x]`; API-only checks and the separate synthetic consolidation
       blocker demo do not complete this fixture's display verification.
 
-25. **Workload Identities** — open `/<org>/projects/default/workload-identities`
-    (no sidebar entry yet; the page is pre-GA and reached by URL). Two trusted
-    issuers: `Acme Agent Platform` with Wildcards **ALLOWED**, and `Acme CI`
-    with **OFF** — the second must stay off, because its subjects encode a
-    branch ref where a wildcard would admit anyone able to push a branch. Four
-    admitted workloads, exactly one badged **WILDCARD**
-    (`wimse://agents.example.com/org/acme/agent/*`), each resolving to a named
-    agent with no row showing "None assigned". Open **Admit a workload**, pick
-    the agent platform, leave Match on _Exact_ and type a subject containing
-    `*`: the warning appears in destructive red and the submit is disabled.
-    Switching Match to _Wildcard_ clears it. Selecting `Acme CI` instead
-    disables the Wildcard option and says why.
+25. **Access Hub** — open `/<org>/access-hub` (organization sidebar, under
+    **Secure**; the old `/<org>/projects/default/access-hub` URL redirects
+    there) and click **Custom (2)**.
+    Two platform cards: `Acme Agent Platform` and `Acme CI`, each with tags
+    and sharing one. The page shows the organization tier only, so `Acme CI`
+    lists two machines (`Docs publish` and `Payments deploy (all projects)`);
+    the project-tier `Payments deploy` admission stays off this page. Open
+    `Acme Agent Platform`: its machines each resolve to
+    a named agent with no row showing "None assigned", and one is the wildcard
+    rule `wimse://agents.example.com/org/acme/agent/*`. `Acme CI` must keep
+    wildcard admission off, because its subjects encode a branch ref where a
+    wildcard would admit anyone able to push a branch. On `Acme CI`, open
+    **+ Allow a machine** and type a subject ending in `*`: the warning appears
+    in destructive red under the field and **Allow machine** stays disabled.
+
+26. **Explore widgets** — open `/<org>/projects/default/explore` and click
+    the **Widgets** tab, which shows a count of 5. Five widgets, most
+    recently updated first, starting with Amara Okafor's "Sessions by
+    surface" with its description beneath; Hana Sato's widget of the same
+    name sits further down with her name beside it. Each row shows its
+    dataset and chart type, and none carries the broken-widget warning.
+    Clicking "Slowest MCP tools" switches to the Explore tab with the
+    tool_calls dataset, a 7-day window and a table ordered by p95 duration,
+    runs it, and returns rows; the bar names the widget with Priya Raman as
+    its creator and **Save** stays disabled until something is edited.
+27. **Check access** — open MCP → **GitHub** → Team Access and pick Mateo
+    Alvarez in Check access. Connect is **Blocked**: the Contractors block
+    wins, Engineer's grants show as blocked, and his own grant covering
+    every server is blocked because it does not name GitHub. Contractors
+    reads "Mapped from employee_type = contractor" for an organization
+    admin. View and Manage stay allowed, since the block covers Connect
+    only. Pick Priya Raman: Connect is **Allowed** because her grant naming
+    GitHub overrides the Contractors block, which shows as overridden.
+28. **Role editor: MCP access** — open Team → Roles & Permissions and edit
+    **Support Desk**. MCP access opens on Specific servers with the Default
+    project expanded: Acme Support Tools is ticked with no badge, and Slack
+    is ticked with a **Read-Only Tools** badge that opens its tool access
+    sheet on By annotation. Edit **Contractors**: GitHub sits in the
+    Forbidden section with Remove. Edit **Engineer**: every server row is
+    ticked and locked, and the lock's card links to Platform access, where
+    `mcp:read` and `mcp:write` carry the note that they also connect. Edit
+    **Read-only Tools**: All servers is chosen with a Read-Only Tools badge.
+    Save stays disabled on each until something is edited.
 
 ## On failure
 
@@ -490,3 +521,14 @@ Open Amara Okafor's identity and select Accounts & devices. Work identities shou
 Repeat in the seeded local organization. An employee can read their own mapped accounts and sees contact-admin guidance, without a link to the members table. Another employee's profile must not request these accounts. Verify the empty state for a person without mappings and retry after a failed read. Following Open in Slack members must not create a mapping or change its revision. Seed data demonstrates navigation and retained mappings; live OAuth requires the configured Slack app.
 
 In shared Explore Demo, verify the mapping dialog shows its read-only notice and disables Personnel selection and Confirm. Verify Sync members is disabled. In the retargeted local organization, personnel changes remain available.
+
+## Assistant identity fixtures
+
+1. Open Assistants. Confirm the identity-bound and legacy examples are listed.
+2. Inspect the bound example and its dedicated managed agent. Confirm the agent
+   has no grants and there is one stable dashboard root, not one per delivery.
+3. Inspect API identity configuration: the bound example reports its agent and
+   generation, while the legacy example reports `NEVER_CONFIGURED`.
+4. Do not run workloads using the illustrative issuer/JWKS URLs: these fixtures
+   are display-only, not usable credentials. Leave the page marked `[~]` until
+   the browser checks above are performed.

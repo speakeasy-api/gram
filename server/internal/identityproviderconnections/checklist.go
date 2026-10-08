@@ -2,9 +2,11 @@ package identityproviderconnections
 
 import (
 	"slices"
+
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
-// Listing modes select the console checklist template.
+// Listing modes select the client authentication a new connection provisions.
 const (
 	ListingModeCustomApp = "custom_app"
 	ListingModeOIN       = "oin"
@@ -93,8 +95,8 @@ type AgentAppSignal struct {
 
 const (
 	accessInstruction   = "On the app's Admin roles tab, assign these roles. Speakeasy checks whether it can read apps, users, and groups through the Okta API; it does not check which named admin roles are assigned. Okta will ask you to confirm your identity with multi-factor authentication first."
-	linkInstruction     = "On User access and authentication, keep Create a new OIDC app linked to this AI agent selected. Okta uses this app only to decide which users the agent may act for; it does not change how your people sign in to Speakeasy."
-	activateInstruction = "Okta creates the agent in Staged status and its linked app as Inactive. Open the linked app (under Applications, the Speakeasy Agent app marked Linked AI Agent), set it to Active, and on its Assignments tab assign the users or groups who use MCP servers through Speakeasy. Okta issues assertions only for the users assigned here."
+	linkInstruction     = "On User access and authentication, keep Allow users to access this agent checked and Create a new OIDC app linked to this AI agent selected, then click Next. You can skip the Add owners step that follows. Okta uses the linked app only to decide which users the agent may act for; it does not change how your people sign in to Speakeasy."
+	activateInstruction = "Okta creates the agent in Staged status and its linked app as Inactive. Open the linked app (linked from the agent's User access section), set it to Active, and on its Assignments tab assign the users or groups who use MCP servers through Speakeasy. Okta issues assertions only for the users assigned here."
 )
 
 // completions holds each observable step's tri-state; nil is not observed.
@@ -130,7 +132,7 @@ func observe(signal ChecklistSignal) completions {
 	}
 	// Scope verification can complete without a token. Only report token
 	// protection and key authentication when token issuance is evidenced.
-	if signal.Checked && !slices.Contains(signal.Reasons, ReasonKeyNotFetched) {
+	if signal.Checked && !slices.Contains(signal.Reasons, ReasonKeyNotFetched) && !slices.Contains(signal.Reasons, ReasonSecretRejected) {
 		// A granted scope or a bound token proves credential acceptance.
 		if signal.DPoPBound || len(signal.MissingScopes) < len(RequiredOktaScopes) {
 			done.appCreated = new(true)
@@ -201,41 +203,34 @@ func activateDescription(app *AgentAppSignal) string {
 	}
 }
 
-// OktaChecklist renders the console steps for a listing mode; signal ticks
-// the steps a verification can observe.
-func OktaChecklist(listingMode string, signal ChecklistSignal) []ChecklistItem {
+// OktaChecklist renders the console steps for the connection's client
+// authentication; signal ticks the steps a verification can observe.
+func OktaChecklist(authMethod remotesessions.TokenEndpointAuthMethod, signal ChecklistSignal) []ChecklistItem {
 	done := observe(signal)
-	return slices.Concat(connectItems(listingMode, done), agentItems(signal.Agent.App, done))
+	return slices.Concat(connectItems(authMethod, done), agentItems(signal.Agent.App, done))
 }
 
-func appItem(listingMode string, completed *bool) ChecklistItem {
-	if listingMode == ListingModeOIN {
-		return ChecklistItem{
-			Key:         ChecklistKeyAddOINApp,
-			Group:       ChecklistGroupConnect,
-			Title:       "Add the Speakeasy app from the Okta Integration Network",
-			Description: "In the Admin Console go to Applications > Browse App Catalog, search for Speakeasy, and add it. This creates the API Services app for you; skip creating one by hand.",
-			Details:     []string{},
-			Completed:   completed,
-		}
-	}
+func appItem(completed *bool) ChecklistItem {
 	return ChecklistItem{
 		Key:         ChecklistKeyCreateAPIServicesApp,
 		Group:       ChecklistGroupConnect,
 		Title:       "Create an app for Speakeasy",
-		Description: "In the Okta Admin Console, open Applications and choose Create App Integration. Use Classic experience if offered, select API Services, name the app Speakeasy, and save it.",
+		Description: "In the Okta Admin Console, open Applications and Resources > Applications and choose Create App Integration. Select API Services, name the app Speakeasy, choose Use Okta-generated client ID, and save it.",
 		Details: []string{
-			"If Public key / Private key is marked Coming soon in the creation wizard, return to Applications and choose Create App Integration > Classic experience. Configure public-key authentication on the saved app, not in that wizard.",
+			"Do not choose Client ID Metadata Document (CIMD). Configure public-key authentication on the saved app, in the next step.",
 		},
 		Completed: completed,
 	}
 }
 
-// Verified against the live console 2026-09-28: Okta greys out Public key /
+// Verified against the live console 2026-10-05: Okta greys out Public key /
 // Private key under Client Credentials until a key URL is saved on Public keys.
-func connectItems(listingMode string, done completions) []ChecklistItem {
+func connectItems(authMethod remotesessions.TokenEndpointAuthMethod, done completions) []ChecklistItem {
+	if authMethod == remotesessions.TokenEndpointAuthMethodBasic {
+		return oinConnectItems(done)
+	}
 	return []ChecklistItem{
-		appItem(listingMode, done.appCreated),
+		appItem(done.appCreated),
 		{
 			Key:         ChecklistKeyPublicKeyAuth,
 			Group:       ChecklistGroupConnect,
@@ -244,7 +239,7 @@ func connectItems(listingMode string, done completions) []ChecklistItem {
 			Details: []string{
 				"On the newly created Speakeasy app's General tab, find Public keys and click Edit.",
 				"Choose Use a URL to fetch keys dynamically, enter the key URL below, and save.",
-				"Then, in Client Credentials, click Edit, set Client authentication to Public key / Private key, and save. Okta enables that option only once a key URL is saved.",
+				"Then, in Client Credentials, click Edit, set Client authentication to Public key / Private key, and save. Okta enables that option only once a key URL is saved; refresh the page if it is still grayed out.",
 			},
 			Completed: done.keyAuth,
 		},
@@ -252,7 +247,7 @@ func connectItems(listingMode string, done completions) []ChecklistItem {
 			Key:         ChecklistKeyDPoP,
 			Group:       ChecklistGroupConnect,
 			Title:       "Keep token protection (DPoP) enabled",
-			Description: "Leave \"Require Demonstrating Proof of Possession (DPoP) header in token requests\" enabled. DPoP protects the access token Okta gives Speakeasy so that someone who copies the token cannot use it on its own.",
+			Description: "Under General Settings, leave \"Require Demonstrating Proof of Possession (DPoP) header in token requests\" enabled. DPoP protects the access token Okta gives Speakeasy so that someone who copies the token cannot use it on its own.",
 			Details:     []string{},
 			Completed:   done.dpop,
 		},
@@ -283,20 +278,60 @@ func connectItems(listingMode string, done completions) []ChecklistItem {
 	}
 }
 
+// oinConnectItems covers an install from the Okta Integration Network, which
+// authenticates with a client secret, so there is no key URL or DPoP step.
+func oinConnectItems(done completions) []ChecklistItem {
+	return []ChecklistItem{
+		{
+			Key:         ChecklistKeyAddOINApp,
+			Group:       ChecklistGroupConnect,
+			Title:       "Install Speakeasy from the Okta Integration Network",
+			Description: "In the Okta Admin Console go to Applications > API Service Integrations, choose Add Integration, select Speakeasy, review the read-only permissions, and choose Install & Authorize.",
+			Details: []string{
+				"Okta shows the client secret only once. Copy the client ID and client secret before leaving the page.",
+			},
+			Completed: done.appCreated,
+		},
+		{
+			Key:         ChecklistKeyGrantScopes,
+			Group:       ChecklistGroupConnect,
+			Title:       "Allow read-only permissions",
+			Description: "Okta asks you to approve these read-only permissions during installation. They let Speakeasy read apps, users, and groups without changing them.",
+			Details:     slices.Clone(RequiredOktaScopes),
+			Completed:   done.scopesGranted,
+		},
+		{
+			Key:         ChecklistKeyAssignAdminRoles,
+			Group:       ChecklistGroupConnect,
+			Title:       "Allow access to apps, users, and groups",
+			Description: accessDescription(done.apiAccess),
+			Details:     accessDetails(done.apiAccess),
+			Completed:   done.apiAccess,
+		},
+		{
+			Key:         ChecklistKeySubmitClientID,
+			Group:       ChecklistGroupConnect,
+			Title:       "Enter the integration's credentials",
+			Description: "Enter the client ID (it starts with 0oa) and client secret from the Speakeasy integration here. Speakeasy will check the connection and whether it can read apps, users, and groups.",
+			Details:     []string{},
+			Completed:   done.clientID,
+		},
+	}
+}
+
 func agentItems(app *AgentAppSignal, done completions) []ChecklistItem {
 	return []ChecklistItem{
-		// Verified against the live console 2026-09-19. The wizard is two steps
-		// (Profile, then User access and authentication) and creates the agent
-		// STAGED; client registration, user assignment and resource connections
-		// are sections on the agent page afterwards. Okta's generated client ID
-		// for the agent is the agent ID itself, and the agent turns ACTIVE when its
-		// linked app is activated, with no credential. The agent key is separate from
-		// the management service app key; its JWKS URI ships with AIM-62.
+		// Verified against the live console 2026-10-05. The wizard creates the
+		// agent STAGED on its second step; it turns ACTIVE when its linked app is
+		// activated, with no credential. The linked app's Client ID shows the
+		// agent ID (wlp...); its own ID (0oa...) is only in its page URL. The
+		// agent key is separate from the management service app key; its JWKS URI
+		// ships with AIM-62.
 		{
 			Key:         ChecklistKeyRegisterAIAgent,
 			Group:       ChecklistGroupCrossAppAccess,
 			Title:       "Register the Speakeasy AI agent",
-			Description: "Okta issues Cross App Access assertions only through a registered AI agent. Go to Directory > AI Agents and select Register AI agent. Name it Speakeasy Agent, so the app Okta creates for it is easy to tell apart from the Speakeasy app above. This first step only asks for a name and description.",
+			Description: "Okta issues Cross App Access assertions only through a registered AI agent. Go to Directory > AI Agents and select Register AI agent > Register manually. Name it Speakeasy Agent, so the app Okta creates for it is easy to tell apart from the Speakeasy app above. This first step only asks for a name and description.",
 			Details:     []string{},
 			Completed:   done.agentRecorded,
 		},
@@ -317,6 +352,7 @@ func agentItems(app *AgentAppSignal, done completions) []ChecklistItem {
 			Description: activateDescription(app),
 			Details: []string{
 				"Activating the linked app also moves the agent from Staged to Active.",
+				"Owners and Machine access can stay unset.",
 				"Skip Client registration for now: the agent only needs that credential when it requests access on a user's behalf, and Speakeasy will provide the key URL (JWKS URI) for it in an upcoming release.",
 			},
 			Completed: done.agentAppReady,
@@ -325,7 +361,7 @@ func agentItems(app *AgentAppSignal, done completions) []ChecklistItem {
 			Key:         ChecklistKeyRecordAIAgent,
 			Group:       ChecklistGroupCrossAppAccess,
 			Title:       "Record the agent ID",
-			Description: "Enter the agent ID and the linked app's ID below. The agent ID is the wlp... value in the agent page URL; the bound application ID is the linked app's Client ID, which lets Speakeasy check the steps above after the next applications sync.",
+			Description: "Enter the agent ID and the linked app's ID below. The agent ID is the wlp... value in the agent page URL; the bound application ID is the 0oa... value in the linked app's page URL (not its Client ID, which Okta sets to the agent ID), which lets Speakeasy check the steps above after the next applications sync.",
 			Details:     []string{},
 			Completed:   done.agentRecorded,
 		},
@@ -335,6 +371,8 @@ func agentItems(app *AgentAppSignal, done completions) []ChecklistItem {
 			Title:       "Set up your first Cross App Access connection",
 			Description: "The agent needs one resource connection per MCP server. Open the Cross App Access tab and pick a server: Speakeasy shows the values to copy into Okta, on the agent's Resource connections section, and records the connection once you confirm it. Repeat for each MCP server your agents use.",
 			Details: []string{
+				"First enable Cross App Access on the app for that service: under Applications, open the app, go to Resource Server > Cross-app access (XAA) > Edit, and set it to Enabled. If Okta asks for an Issuer URL, enter the server's authorization server issuer shown on the Cross App Access tab; Audience/tenant ID can stay empty.",
+				"Then on the agent choose Add resource connection > Application > App configured for AI Agent access and pick that app, listed with an XAA suffix (for example, Linear - XAA). Okta lists only apps with Cross App Access enabled.",
 				"Speakeasy records what you confirm. It does not create the connection in Okta or prove that access works.",
 			},
 			Completed: done.firstConnection,

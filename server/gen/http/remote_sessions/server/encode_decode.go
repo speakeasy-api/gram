@@ -1729,6 +1729,7 @@ func unmarshalCreateRemoteSessionIssuerFormRequestBodyToRemotesessionsCreateRemo
 		IntrospectionEndpoint:             v.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        v.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: v.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          v.OmitScopeFallback,
 		ResourceIndicatorSupported:                 v.ResourceIndicatorSupported,
 	}
 	if v.ScopesSupported != nil {
@@ -1852,6 +1853,7 @@ func marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v *types.R
 		IntrospectionEndpoint:             v.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        v.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: v.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          v.OmitScopeFallback,
 		ResourceIndicatorSupported:                 v.ResourceIndicatorSupported,
 		CreatedAt:                                  v.CreatedAt,
 		UpdatedAt:                                  v.UpdatedAt,
@@ -1941,6 +1943,8 @@ func marshalTypesRemoteSessionClientToRemoteSessionClientResponseBody(v *types.R
 		TokenEndpointAuthAudienceFormat: v.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 v.JSONWebKeySetID,
 		Audience:                        v.Audience,
+		LegacyCallbackURL:               v.LegacyCallbackURL,
+		CallbackURL:                     v.CallbackURL,
 		CreatedAt:                       v.CreatedAt,
 		UpdatedAt:                       v.UpdatedAt,
 	}

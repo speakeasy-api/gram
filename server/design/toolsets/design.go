@@ -3,6 +3,7 @@ package toolsets
 import (
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	. "goa.design/goa/v3/dsl"
 )
 
@@ -146,7 +147,11 @@ var _ = Service("toolsets", func() {
 
 		Payload(func() {
 			Required("slug")
-			Attribute("slug", shared.Slug, "The slug of the toolset")
+			// Toolset slugs are stored with a 60-character limit.
+			Attribute("slug", String, "The slug of the toolset", func() {
+				Pattern(constants.SlugPattern)
+				MaxLength(60)
+			})
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
@@ -301,7 +306,7 @@ var _ = Service("toolsets", func() {
 	})
 
 	Method("updateExternalOAuthServer", func() {
-		Description("Change an attached external OAuth server between provider-hosted and Gram-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association")
+		Description("Change an attached external OAuth server between provider-hosted and Speakeasy-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association")
 
 		Payload(func() {
 			Extend(UpdateExternalOAuthServerForm)
@@ -473,8 +478,8 @@ var AddExternalOAuthServerForm = Type("AddExternalOAuthServerForm", func() {
 
 var UpdateExternalOAuthServerForm = Type("UpdateExternalOAuthServerForm", func() {
 	Attribute("slug", shared.Slug, "The slug of the toolset whose attached external OAuth server is updated")
-	Attribute("metadata", Any, "JSON object metadata to restore Gram-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.")
-	Attribute("authorization_server_issuer", String, "Exact HTTPS issuer to set for provider-hosted discovery. Gram strictly discovers and verifies it before the atomic update. Supply exactly one of authorization_server_issuer and metadata; clients may need to register or authenticate again after a mode change.", func() {
+	Attribute("metadata", Any, "JSON object metadata to restore Speakeasy-hosted compatibility mode. Supply exactly one of metadata and authorization_server_issuer.")
+	Attribute("authorization_server_issuer", String, "Exact HTTPS issuer to set for provider-hosted discovery. Speakeasy strictly discovers and verifies it before the atomic update. Supply exactly one of authorization_server_issuer and metadata; clients may need to register or authenticate again after a mode change.", func() {
 		Format(FormatURI)
 		Pattern(`^https://`)
 		MaxLength(500)

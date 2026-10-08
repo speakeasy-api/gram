@@ -9,7 +9,7 @@ import (
 )
 
 var _ = Service("userSessionIssuers", func() {
-	Description("Manage user_session_issuer records — Gram-side authorization-server configuration that issues user sessions for an MCP server.")
+	Description("Manage user_session_issuer records — Speakeasy-side authorization-server configuration that issues user sessions for an MCP server.")
 	Security(security.Session, security.ProjectSlug)
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("producer")
@@ -443,7 +443,7 @@ var UpdateUserSessionIssuerForm = Type("UpdateUserSessionIssuerForm", func() {
 		Minimum(1)
 		Maximum(2562047)
 	})
-	Attribute("client_id_metadata_admission_mode", String, "Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Gram's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.", func() {
+	Attribute("client_id_metadata_admission_mode", String, "Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Speakeasy's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged.", func() {
 		Enum("disabled", "presets", "open")
 	})
 
@@ -456,7 +456,7 @@ var CreateOrganizationUserSessionIssuerForm = Type("CreateOrganizationUserSessio
 	Attribute("trusted_remote_session_issuer_id", String, "Organization-level or global remote_session_issuer whose assertions this issuer trusts. Omit to leave enterprise-managed authorization disabled.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("trusted_remote_session_client_id", String, "Organization-level remote_session_client Gram uses with the trusted issuer. Must be supplied together with trusted_remote_session_issuer_id.", func() {
+	Attribute("trusted_remote_session_client_id", String, "Organization-level remote_session_client Speakeasy uses with the trusted issuer. Must be supplied together with trusted_remote_session_issuer_id.", func() {
 		Format(FormatUUID)
 	})
 })
@@ -465,7 +465,7 @@ var UpdateOrganizationUserSessionIssuerForm = Type("UpdateOrganizationUserSessio
 	Description("Form for updating an organization-owned user_session_issuer. All non-id fields are optional patches.")
 	Extend(UpdateUserSessionIssuerForm)
 	Attribute("trusted_remote_session_issuer_id", String, "Organization-level or global remote_session_issuer whose assertions this issuer trusts. Omit to leave unchanged; pass an empty string to clear the link.")
-	Attribute("trusted_remote_session_client_id", String, "Organization-level remote_session_client Gram uses with the trusted issuer. Omit to leave unchanged; pass an empty string to clear the link. The resulting issuer and client must either both be configured or both be absent.")
+	Attribute("trusted_remote_session_client_id", String, "Organization-level remote_session_client Speakeasy uses with the trusted issuer. Omit to leave unchanged; pass an empty string to clear the link. The resulting issuer and client must either both be configured or both be absent.")
 })
 
 var UserSessionIssuer = Type("UserSessionIssuer", func() {
@@ -487,7 +487,7 @@ var UserSessionIssuer = Type("UserSessionIssuer", func() {
 	Attribute("trusted_remote_session_issuer_id", String, "The organization-level or global remote_session_issuer whose assertions this issuer trusts. Absent when enterprise-managed authorization is disabled.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("trusted_remote_session_client_id", String, "The organization-level remote_session_client Gram uses with the trusted issuer. Absent when enterprise-managed authorization is disabled.", func() {
+	Attribute("trusted_remote_session_client_id", String, "The organization-level remote_session_client Speakeasy uses with the trusted issuer. Absent when enterprise-managed authorization is disabled.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("created_at", String, func() {

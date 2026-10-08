@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 func TestResolveClient(t *testing.T) {
@@ -40,43 +41,43 @@ func TestResolveClient(t *testing.T) {
 	inProject := uuid.NullUUID{UUID: project, Valid: true}
 	orgWide := uuid.NullUUID{}
 
-	id, scopes, state := resolveClient(server, "https://mcp.example/", nil, nil)
+	id, scopes, state := resolveClient(server, "https://mcp.example/", nil, nil, allClients(remotesessions.ResourceScopes{}))
 	require.Empty(t, id)
 	require.Empty(t, scopes)
 	require.Equal(t, ClientBindingMissing, state)
 
-	id, _, state = resolveClient(server, "https://mcp.example/", []repo.ListIssuerClientsRow{client(a, inProject, "one", "")}, nil)
+	id, _, state = resolveClient(server, "https://mcp.example/", []repo.ListIssuerClientsRow{client(a, inProject, "one", "")}, nil, allClients(remotesessions.ResourceScopes{}))
 	require.Equal(t, "one", id)
 	require.Equal(t, ClientBindingSingle, state)
 
 	// A client in another project does not count; an org-level one does.
-	id, _, state = resolveClient(server, "https://mcp.example/", []repo.ListIssuerClientsRow{client(a, uuid.NullUUID{UUID: other, Valid: true}, "elsewhere", ""), client(b, orgWide, "org", "")}, nil)
+	id, _, state = resolveClient(server, "https://mcp.example/", []repo.ListIssuerClientsRow{client(a, uuid.NullUUID{UUID: other, Valid: true}, "elsewhere", ""), client(b, orgWide, "org", "")}, nil, allClients(remotesessions.ResourceScopes{}))
 	require.Equal(t, "org", id)
 	require.Equal(t, ClientBindingSingle, state)
 
 	two := []repo.ListIssuerClientsRow{client(a, inProject, "one", ""), client(b, orgWide, "org", "")}
-	_, _, state = resolveClient(server, "https://mcp.example/", two, nil)
+	_, _, state = resolveClient(server, "https://mcp.example/", two, nil, allClients(remotesessions.ResourceScopes{}))
 	require.Equal(t, ClientBindingAmbiguous, state)
 
 	// A client registered for this resource narrows the candidates.
-	id, _, state = resolveClient(server, "https://mcp.example/", []repo.ListIssuerClientsRow{client(a, inProject, "one", "https://mcp.example/"), client(b, orgWide, "org", "")}, nil)
+	id, _, state = resolveClient(server, "https://mcp.example/", []repo.ListIssuerClientsRow{client(a, inProject, "one", "https://mcp.example/"), client(b, orgWide, "org", "")}, nil, allClients(remotesessions.ResourceScopes{}))
 	require.Equal(t, "one", id)
 	require.Equal(t, ClientBindingSingle, state)
 
 	// An explicit binding for the resource wins over ambiguity and carries its scopes.
-	id, scopes, state = resolveClient(server, "https://mcp.example/", two, []repo.ListEMABindingsRow{binding(b, "files:read")})
+	id, scopes, state = resolveClient(server, "https://mcp.example/", two, []repo.ListEMABindingsRow{binding(b, "files:read")}, allClients(remotesessions.ResourceScopes{}))
 	require.Equal(t, "org", id)
 	require.Equal(t, []string{"files:read"}, scopes)
 	require.Equal(t, ClientBindingBound, state)
 
 	// Bindings that agree stay bound; bindings that disagree are ambiguous.
-	_, _, state = resolveClient(server, "https://mcp.example/", two, []repo.ListEMABindingsRow{binding(b), binding(b, "x")})
+	_, _, state = resolveClient(server, "https://mcp.example/", two, []repo.ListEMABindingsRow{binding(b), binding(b, "x")}, allClients(remotesessions.ResourceScopes{}))
 	require.Equal(t, ClientBindingBound, state)
-	_, _, state = resolveClient(server, "https://mcp.example/", two, []repo.ListEMABindingsRow{binding(a), binding(b)})
+	_, _, state = resolveClient(server, "https://mcp.example/", two, []repo.ListEMABindingsRow{binding(a), binding(b)}, allClients(remotesessions.ResourceScopes{}))
 	require.Equal(t, ClientBindingAmbiguous, state)
 
 	// A binding to a client outside the organization is ignored.
-	id, _, state = resolveClient(server, "https://mcp.example/", []repo.ListIssuerClientsRow{client(a, inProject, "one", "")}, []repo.ListEMABindingsRow{binding(uuid.New())})
+	id, _, state = resolveClient(server, "https://mcp.example/", []repo.ListIssuerClientsRow{client(a, inProject, "one", "")}, []repo.ListEMABindingsRow{binding(uuid.New())}, allClients(remotesessions.ResourceScopes{}))
 	require.Equal(t, "one", id)
 	require.Equal(t, ClientBindingSingle, state)
 }

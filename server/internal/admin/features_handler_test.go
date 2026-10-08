@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
@@ -54,10 +55,34 @@ func TestAttach_MountsOrganizationFeaturesRoutes(t *testing.T) {
 	Attach(mux, svc)
 
 	for _, method := range []string{http.MethodGet, http.MethodPost} {
-		rec := httptest.NewRecorder()
-		mux.ServeHTTP(rec, httptest.NewRequest(method, "/admin/organization.features", nil))
-		require.Equal(t, http.StatusUnauthorized, rec.Code)
+		for _, cookie := range []string{"", constants.SessionCookie} {
+			req := httptest.NewRequest(method, "/admin/organization.features", bytes.NewBufferString(`{"organization_id":"org_role_rollout","feature_name":"sso","enabled":true}`))
+			if cookie != "" {
+				req.AddCookie(&http.Cookie{Name: cookie, Value: "customer-session"})
+				req.Header.Set("Authorization", "Bearer customer-key")
+			}
+			rec := httptest.NewRecorder()
+			SessionMiddleware(mux).ServeHTTP(rec, req)
+			require.Equal(t, http.StatusUnauthorized, rec.Code)
+		}
 	}
+
+	// A stored admin cookie is not enough: the identity provider must still
+	// attest that its owner belongs to an allowed staff domain.
+	nonstaff := newTestSessionService(t, newTestOIDCClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, err := w.Write([]byte(`{"sub":"sub-admin","email":"person@external.test","email_verified":true,"hd":"external.test"}`))
+		assert.NoError(t, err)
+	}))
+	nonstaff.tracer = testenv.NewTracerProvider(t).Tracer("admin_test")
+	sessionID := makeAdminFeatureSession(t, t.Context(), nonstaff, "person@external.test")
+	nonstaffMux := goahttp.NewMuxer()
+	Attach(nonstaffMux, nonstaff)
+	req := httptest.NewRequest(http.MethodPost, "/admin/organization.features", bytes.NewBufferString(`{"organization_id":"org_role_rollout","feature_name":"sso","enabled":true}`))
+	req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
+	rec := httptest.NewRecorder()
+	SessionMiddleware(nonstaffMux).ServeHTTP(rec, req)
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
 func TestGetOrganizationFeatures_ReturnsTwentyFields(t *testing.T) {
@@ -242,6 +267,7 @@ func TestSetOrganizationFeature_RejectsInvalidRequests(t *testing.T) {
 	sessionID := makeAdminFeatureSession(t, ctx, svc, "operator@example.com")
 
 	for name, body := range map[string]string{
+		"retired feature": `{ "organization_id":"` + orgID + `","feature_name":"automatic-role-distribution","enabled":true}`,
 		"invalid feature": `{"organization_id":"` + orgID + `","feature_name":"not_a_feature","enabled":true}`,
 		"missing enabled": `{"organization_id":"` + orgID + `","feature_name":"logs"}`,
 		"unknown field":   `{"organization_id":"` + orgID + `","feature_name":"logs","enabled":true,"extra":true}`,

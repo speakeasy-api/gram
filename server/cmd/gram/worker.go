@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -32,13 +33,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -136,6 +141,9 @@ func newWorkerCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
 
 	flags := append(workerRuntimeFlags(),
+		&cli.StringFlag{Name: "authz-issuer-url", EnvVars: []string{"GRAM_AUTHZ_ISSUER_URL"}, Usage: "Speakeasy platform signing issuer origin"},
+		&cli.StringFlag{Name: "authz-private-key", EnvVars: []string{"GRAM_AUTHZ_PRIVATE_KEY"}, Usage: "Speakeasy platform signing key for principal credentials"},
+		&cli.StringFlag{Name: "authz-public-keys", EnvVars: []string{"GRAM_AUTHZ_PUBLIC_KEYS"}, Usage: "Speakeasy platform verification keys for principal credentials"},
 		&cli.StringFlag{
 			Name:     "server-url",
 			Usage:    "The public URL of the server",
@@ -347,10 +355,13 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, assistantRuntimeFlags()...)
 	flags = append(flags, identityProviderConnectionFlags()...)
 	flags = append(flags, pluginsFlags()...)
+	flags = append(flags, pluginPublicationEmitFlag())
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, riskReconcileFlags()...)
 	flags = append(flags, riskLLMFlags()...)
 	flags = append(flags, gcpFlags()...)
+	flags = append(flags, platformHostsCLIFlag())
+	flags = append(flags, orgDefaultHostFlags()...)
 
 	return &cli.Command{
 		Name:  "worker",
@@ -556,7 +567,7 @@ func newWorkerCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}, productFeatures, billingTracker, encryptionClient)
+				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient)
 			}
 
 			tigrisStore, shutdown, err := newTigrisStore(ctx, c, logger)
@@ -693,6 +704,15 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create mcp registry client: %w", err)
 			}
 
+			if err := externalmcp.EnsureNativeCatalogSource(ctx, db); err != nil {
+				return fmt.Errorf("ensure native catalog source: %w", err)
+			}
+			catalogValidator, err := mcpregistry.LoadValidator()
+			if err != nil {
+				return fmt.Errorf("catalog validator: %w", err)
+			}
+			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, catalogValidator)), featureFlags)
+
 			serverURL, err := url.Parse(c.String("server-url"))
 			if err != nil {
 				return fmt.Errorf("failed to parse server url: %w", err)
@@ -733,9 +753,14 @@ func newWorkerCommand() *cli.Command {
 			// The worker never serves webhook ingress (ProcessWebhook lives in
 			// the HTTP server), so the dashboard site URL used for Slack link
 			// unfurls is not needed here.
-			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL, nil, slackClient, cache.NewRedisCacheAdapter(redisClient))
+			assistantIdentities := newAssistantIdentities(c, auditLogger)
+			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemetryLogger, auditLogger, serverURL, nil, nil, slackClient, cache.NewRedisCacheAdapter(redisClient), assistantIdentities)
 
-			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
+			platformSigner, err := mcpauthz.New(c.String("authz-private-key"), c.String("authz-public-keys"), c.String("authz-issuer-url"), c.String("environment") == "local")
+			if err != nil {
+				return fmt.Errorf("configure principal credential signer: %w", err)
+			}
+			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine, principalcredential.New(platformSigner, db), cache.NewRedisCacheAdapter(redisClient))
 
 			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), serverURL)
 
@@ -767,7 +792,7 @@ func newWorkerCommand() *cli.Command {
 				return err
 			}
 			contextWindowResolver := openrouter.NewContextWindowResolver(logger, guardianPolicy, cache.NewRedisCacheAdapter(redisClient))
-			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger, contextWindowResolver, auditLogger)
+			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemetryLogger, contextWindowResolver, auditLogger, assistantIdentities, authzEngine)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
@@ -775,7 +800,7 @@ func newWorkerCommand() *cli.Command {
 			assistantsCore.SetAssetSigningKey(c.String(usersessions.JWTSigningKeyFlag))
 			assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
 			assistantsCore.SetFeatureProvider(featureFlags)
-			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
+			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient), featureFlags)
 			triggerApp.RegisterDispatcher(assistantsSvc)
 
 			/**
@@ -807,8 +832,17 @@ func newWorkerCommand() *cli.Command {
 					return fmt.Errorf("failed to parse site url: %w", err)
 				}
 			}
+			platformHosts, err := customdomains.ParsePlatformHosts(c.StringSlice(platformHostsFlag))
+			if err != nil {
+				return fmt.Errorf("invalid platform hosts: %w", err)
+			}
+			orgHosts, err := orgHostResolverFromCLI(c, serverURL, siteURL, c.String("environment"), platformHosts)
+			if err != nil {
+				return err
+			}
+			identityResolver.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
-			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
+			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, orgHosts)
 
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
 			issuerMetadataRefresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, tunnelHTTPClient, auditLogger)
@@ -843,6 +877,7 @@ func newWorkerCommand() *cli.Command {
 				ExpectedARecords:             customDomainARecords,
 				GitHubEvidenceToken:          c.String("github-evidence-token"),
 				SiteURL:                      siteURL,
+				OrgHosts:                     orgHosts,
 				BillingTracker:               billingTracker,
 				BillingRepository:            billingRepo,
 				StripeClient:                 stripeClient,
@@ -853,6 +888,7 @@ func newWorkerCommand() *cli.Command {
 				FunctionsVersion:             runnerVersion,
 				RagService:                   ragService,
 				MCPRegistryClient:            mcpRegistryClient,
+				MCPCatalog:                   mcpCatalog,
 				TelemetryLogger:              telemetryLogger,
 				ClickhouseConn:               chDB,
 				MeterReadConn:                meterReadConn,
@@ -861,6 +897,7 @@ func newWorkerCommand() *cli.Command {
 				CacheAdapter:                 remoteSessionsCache,
 				IssuerMetadataRefresher:      issuerMetadataRefresher,
 				RemoteSessionAssertionSigner: clientAssertionSigner,
+				StartupSeeds:                 startupSeeds(logger, db),
 				AssistantsCore:               assistantsCore,
 				TemporalEnv:                  temporalEnv,
 				PIIScanner:                   piiScanner,
@@ -872,6 +909,7 @@ func newWorkerCommand() *cli.Command {
 				WorkOSClient:                 backgroundWorkOSClient,
 				ProductFeatures:              productFeatures,
 				PluginPublisher:              pluginPublisher,
+				PublicationRequests:          plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)},
 				Publishers:                   publishers,
 				TrialEmailsService:           trialEmailsService,
 				TrialFixtureHandler:          newTrialFixtureHandler(c.String("environment"), db, productFeatures),

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,36 +15,41 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
-// listFromClickHouse reports whether the project-wide risk events listing
-// should serve from ClickHouse for this org. Per-org PostHog rollout flag,
-// same evaluation shape as overviewFromClickHouse. A nil provider, missing
-// ClickHouse connection, or a failed lookup degrades to the Postgres path.
-func (s *Service) listFromClickHouse(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
-	if s.findingsCH == nil || s.flags == nil {
-		return false
+// MaxExecutionIDLen bounds an execution_id filter. Execution IDs are UUIDs;
+// the slack only rejects obviously bogus input.
+const MaxExecutionIDLen = 128
+
+// ParseExecutionIDFilter canonicalizes an execution_id filter, "" meaning
+// none. A blank or over-long value is invalid rather than dropped, since
+// dropping it would list every finding.
+func ParseExecutionIDFilter(raw string) (string, bool) {
+	id := CanonicalExecutionID(raw)
+	if (raw != "" && id == "") || len(id) > MaxExecutionIDLen {
+		return "", false
 	}
-	groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, conv.PtrValOr(authCtx.ProjectSlug, ""))
-	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, groups)
-	if err != nil {
-		s.logger.WarnContext(ctx, "risk-list-from-clickhouse flag check failed; serving from postgres",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
-		)
-		return false
+	return id, true
+}
+
+// CanonicalExecutionID trims an execution_id filter and lowercases it when it
+// is a UUID, the form findings store, since the filter is an exact match.
+func CanonicalExecutionID(id string) string {
+	id = strings.TrimSpace(id)
+	if parsed, err := uuid.Parse(id); err == nil {
+		return parsed.String()
 	}
-	return on
+	return id
 }
 
 // listResultsByProjectFromClickHouse serves the project-wide (non-chat-scoped)
-// ListRiskResults page from the ClickHouse risk_findings table. Rows come back
-// pre-redacted — the store never holds raw match content — so Match and Spans
-// are always nil and MatchRedacted carries the ingest-time display string.
+// ListRiskResults page from the ClickHouse risk_findings table, the only store
+// holding MCP-seam findings. Rows come back pre-redacted (the store never
+// holds raw match content), so Match and Spans are always nil and
+// MatchRedacted carries the ingest-time display string.
 // Chat titles and tool-call block ids are enriched from Postgres per page
 // because both mutate after ingest.
 func (s *Service) listResultsByProjectFromClickHouse(
@@ -53,6 +59,8 @@ func (s *Service) listResultsByProjectFromClickHouse(
 	pageSize int,
 	policyID uuid.NullUUID,
 	mcpServerID, chatID string,
+	resultID uuid.NullUUID,
+	executionID string,
 	category, ruleID, userID string,
 	externalUserIDs []string,
 	uniqueMatch, nonAssistant bool,
@@ -74,6 +82,8 @@ func (s *Service) listResultsByProjectFromClickHouse(
 		ProjectID:       projectID.String(),
 		MCPServerID:     mcpServerID,
 		ChatID:          chatID,
+		ResultID:        resultID,
+		ExecutionID:     executionID,
 		PolicyIDs:       policyIDs,
 		From:            from,
 		To:              to,
@@ -104,8 +114,8 @@ func (s *Service) listResultsByProjectFromClickHouse(
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk findings from clickhouse").LogError(ctx, s.logger)
 	}
 
-	// Best-effort total, mirroring the Postgres path where a failed count
-	// degrades to zero rather than failing the page.
+	// Best-effort total: a failed count degrades to zero rather than failing
+	// the page.
 	var totalCount int64
 	if count, err := s.findingsCH.CountRiskFindings(ctx, params); err != nil {
 		s.logger.WarnContext(ctx, "count risk findings from clickhouse", attr.SlogError(err))
@@ -113,12 +123,12 @@ func (s *Service) listResultsByProjectFromClickHouse(
 		totalCount = safeCount(count)
 	}
 
-	titles, blocks := s.listDisplayEnrichment(ctx, projectID, rows)
+	titles, blocks, userEmails := s.listDisplayEnrichment(ctx, authCtx.ActiveOrganizationID, projectID, rows)
 
 	results := make([]*types.RiskResult, 0, len(rows))
 	var nextCursor *riskResultsCursor
 	for i, row := range rows {
-		results = append(results, chListRowToResult(row, titles, blocks))
+		results = append(results, chListRowToResult(row, titles, blocks, userEmails))
 		if i == pageSize {
 			// Cursor from the LAST RETURNED row (not this extra row): the
 			// next-page predicate is a strict (message_created_at, id) <, so a
@@ -130,14 +140,12 @@ func (s *Service) listResultsByProjectFromClickHouse(
 	return s.paginateResults(results, nextCursor, pageSize, totalCount), nil
 }
 
-// visiblePolicyIDs resolves the enabled-policy pushdown: ClickHouse cannot
-// join risk_policies, so the Postgres side decides which policies the listing
-// may show. Default view = enabled, non-deleted policies. An explicit policy
-// filter narrows to that policy and deliberately includes disabled (but not
-// deleted) ones, matching the Postgres list's semantics of surfacing a
-// disabled policy's historical findings when asked for directly. Deleted
-// policies resolve to an empty list — their ClickHouse rows linger until TTL,
-// and the pushdown is what hides them.
+// visiblePolicyIDs resolves the policy pushdown: ClickHouse cannot join
+// risk_policies, so the Postgres side decides which policies the listing may
+// show. The default view covers every non-deleted policy, disabled ones
+// included, so disabling a policy keeps its history visible. An explicit
+// policy filter narrows to that policy. Deleted policies resolve to nothing;
+// their ClickHouse rows linger until TTL and the pushdown is what hides them.
 func (s *Service) visiblePolicyIDs(ctx context.Context, projectID uuid.UUID, policyID uuid.NullUUID) ([]string, error) {
 	if policyID.Valid {
 		if _, err := s.repo.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{ID: policyID.UUID, ProjectID: projectID}); err != nil {
@@ -149,9 +157,9 @@ func (s *Service) visiblePolicyIDs(ctx context.Context, projectID uuid.UUID, pol
 		return []string{policyID.UUID.String()}, nil
 	}
 
-	policies, err := s.repo.ListEnabledRiskPoliciesByProject(ctx, projectID)
+	policies, err := s.repo.ListRiskPolicies(ctx, projectID)
 	if err != nil {
-		return nil, fmt.Errorf("list enabled risk policies: %w", err)
+		return nil, fmt.Errorf("list risk policies: %w", err)
 	}
 	ids := make([]string, 0, len(policies))
 	for _, policy := range policies {
@@ -160,15 +168,17 @@ func (s *Service) visiblePolicyIDs(ctx context.Context, projectID uuid.UUID, pol
 	return ids, nil
 }
 
-// listDisplayEnrichment batch-fetches the page's chat titles (by chat id) and
-// latest tool-call block ids (by chat message id) from Postgres. Best-effort:
-// a failed lookup logs and leaves the affected display fields empty rather
-// than failing the page.
-func (s *Service) listDisplayEnrichment(ctx context.Context, projectID uuid.UUID, rows []chrepo.RiskFindingListRow) (map[uuid.UUID]string, map[uuid.UUID]uuid.UUID) {
+// listDisplayEnrichment batch-fetches the page's chat titles (by chat id),
+// latest tool-call block ids (by chat message id), and MCP users' current
+// emails from Postgres. Best-effort: a failed lookup logs and leaves the
+// affected display fields on their existing fallbacks rather than failing the
+// page.
+func (s *Service) listDisplayEnrichment(ctx context.Context, organizationID string, projectID uuid.UUID, rows []chrepo.RiskFindingListRow) (map[uuid.UUID]string, map[uuid.UUID]uuid.UUID, map[string]string) {
 	chatIDs := make([]uuid.UUID, 0, len(rows))
 	messageIDs := make([]uuid.UUID, 0, len(rows))
 	seenChats := make(map[uuid.UUID]struct{}, len(rows))
 	seenMessages := make(map[uuid.UUID]struct{}, len(rows))
+	userIDs := make([]string, 0, len(rows))
 	for _, row := range rows {
 		if id, err := uuid.Parse(row.ChatID); err == nil {
 			if _, ok := seenChats[id]; !ok {
@@ -181,6 +191,9 @@ func (s *Service) listDisplayEnrichment(ctx context.Context, projectID uuid.UUID
 				seenMessages[id] = struct{}{}
 				messageIDs = append(messageIDs, id)
 			}
+		}
+		if isMCPFindingRow(row) && row.UserID != "" {
+			userIDs = append(userIDs, row.UserID)
 		}
 	}
 
@@ -210,14 +223,28 @@ func (s *Service) listDisplayEnrichment(ctx context.Context, projectID uuid.UUID
 		}
 	}
 
-	return titles, blocks
+	userEmails, err := s.riskUserEmailsByID(ctx, organizationID, userIDs)
+	if err != nil {
+		s.logger.WarnContext(ctx, "enrich risk listing user emails", attr.SlogError(err))
+		userEmails = map[string]string{}
+	}
+
+	return titles, blocks, userEmails
+}
+
+func isMCPFindingRow(row chrepo.RiskFindingListRow) bool {
+	return row.MCPServerID != "" ||
+		row.MetaMCPServerID != "" ||
+		row.ToolsetID != "" ||
+		row.MediationSurface != "" ||
+		row.MCPMethod != ""
 }
 
 // chListRowToResult maps one ClickHouse listing row to the API type. The
 // store-side redaction is authoritative: Match and Spans stay nil and
 // MatchRedacted carries the ingest-time display string, so the public
 // ListRiskResults redaction pass recognizes the row as already redacted.
-func chListRowToResult(row chrepo.RiskFindingListRow, titles map[uuid.UUID]string, blocks map[uuid.UUID]uuid.UUID) *types.RiskResult {
+func chListRowToResult(row chrepo.RiskFindingListRow, titles map[uuid.UUID]string, blocks map[uuid.UUID]uuid.UUID, userEmails map[string]string) *types.RiskResult {
 	var chatID *string
 	var chatTitle *string
 	if id, err := uuid.Parse(row.ChatID); err == nil {
@@ -241,6 +268,17 @@ func chListRowToResult(row chrepo.RiskFindingListRow, titles map[uuid.UUID]strin
 		tags = []string{}
 	}
 
+	displayUserID := row.ExternalUserID
+	if isMCPFindingRow(row) {
+		displayUserID = userEmails[row.UserID]
+		if displayUserID == "" {
+			displayUserID = row.ExternalUserID
+		}
+		if displayUserID == "" {
+			displayUserID = row.UserID
+		}
+	}
+
 	return &types.RiskResult{
 		ID:                 row.ID.String(),
 		PolicyID:           row.RiskPolicyID,
@@ -261,7 +299,7 @@ func chListRowToResult(row chrepo.RiskFindingListRow, titles map[uuid.UUID]strin
 		ChatContentPartID:  conv.PtrEmpty(row.ContentPartID),
 		ChatID:             chatID,
 		ChatTitle:          chatTitle,
-		UserID:             conv.PtrEmpty(row.ExternalUserID),
+		UserID:             conv.PtrEmpty(displayUserID),
 		Source:             row.Source,
 		RuleID:             conv.PtrEmpty(row.RuleID),
 		Description:        conv.PtrEmpty(row.Description),

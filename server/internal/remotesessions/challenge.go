@@ -40,6 +40,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -50,13 +51,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -91,6 +96,11 @@ type ParentChallenge struct {
 	McpServerID         uuid.NullUUID
 	MetaMcpServerID     uuid.NullUUID
 	FinalRedirectURI    string
+	// ConsentURL is the consent page the callback returns to when it cannot
+	// be rebuilt from RouteBase and McpSlug, as on a shared authorization
+	// server. Unlike FinalRedirectURI it changes only where the browser goes:
+	// the login keeps its consent parent and that parent's browser binding.
+	ConsentURL string
 	// Resource is the RFC 8707 resource indicator sent on the authorize
 	// redirect and code exchange. Empty omits the parameter.
 	Resource string
@@ -101,6 +111,11 @@ type ParentChallenge struct {
 	// Authority carries only provider-neutral mint-time request authority. It
 	// never contains advisory network identity or provider credentials.
 	Authority networkingress.Authority
+	// BrowserCookieID and BrowserHash bind the login to a host-only browser
+	// cookie on the client's callback host. Set only when that host differs
+	// from the host holding the parent challenge's callback cookie.
+	BrowserCookieID string
+	BrowserHash     string
 }
 
 // RemoteLoginState is the per-remote-leg Redis state, keyed by the opaque
@@ -137,6 +152,10 @@ type RemoteLoginState struct {
 	// own their own popup-close surface (validated against an allow-list
 	// before it lands here).
 	FinalRedirectURI string `json:"final_redirect_uri,omitempty"`
+	// ConsentURL overrides only the consent page the callback returns to,
+	// for a consent parent whose page is not at /<RouteBase>/{slug}/connect.
+	// Empty for every other login, including states minted before it existed.
+	ConsentURL string `json:"consent_url,omitempty"`
 	// AutoRefresh is the subject's consent-screen auto-refresh choice. Nil
 	// (including in-flight states minted before this field) defers to the
 	// client capability's default at persist time.
@@ -149,11 +168,19 @@ type RemoteLoginState struct {
 	// ResourceRetried marks the single retry leg the callback mints after an
 	// invalid_target answer. A retry leg that is refused again fails the login.
 	ResourceRetried bool `json:"resource_retried,omitempty"`
+	// OmitScope records that the operator chose to send no scope, so the
+	// retry leg also strips one baked into the authorization endpoint.
+	OmitScope bool `json:"omit_scope,omitempty"`
 	// ExpectedIssuer is what the RFC 9207 iss parameter must equal; empty skips the check.
 	ExpectedIssuer string `json:"expected_issuer,omitempty"`
 	// Nonce is echoed by the ID token; empty for states minted before it existed.
-	Nonce     string    `json:"nonce,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	Nonce string `json:"nonce,omitempty"`
+	// BrowserCookieID and BrowserHash replace the parent challenge's callback
+	// cookie check when the login lands on a different callback host. Empty
+	// for same-host logins and states minted before they existed.
+	BrowserCookieID string    `json:"browser_cookie_id,omitempty"`
+	BrowserHash     string    `json:"browser_hash,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 // parent rebuilds the ParentChallenge this state was minted from, so the
@@ -168,11 +195,14 @@ func (s RemoteLoginState) parent() ParentChallenge {
 		McpSlug:             s.McpSlug,
 		RouteBase:           s.RouteBase,
 		FinalRedirectURI:    s.FinalRedirectURI,
+		ConsentURL:          s.ConsentURL,
 		Resource:            s.Resource,
 		McpServerID:         s.McpServerID,
 		MetaMcpServerID:     s.MetaMcpServerID,
 		AutoRefresh:         s.AutoRefresh,
 		Authority:           s.Authority,
+		BrowserCookieID:     s.BrowserCookieID,
+		BrowserHash:         s.BrowserHash,
 	}
 }
 
@@ -193,9 +223,13 @@ type ChallengeManager struct {
 	refresher *RefreshService
 	serverURL *url.URL
 
+	// origins pins the redirect_uri and client identity URLs each client was
+	// registered with, independent of serverURL.
+	origins CallbackOrigins
+
 	// revoker pushes RFC 7009 revocations upstream when the consent screen
 	// disconnects a remote session, so the provider drops the tokens rather
-	// than only Gram forgetting them.
+	// than only Speakeasy forgetting them.
 	revoker *UpstreamRevoker
 
 	// authorizeInterceptors adapt the outgoing upstream authorize request to
@@ -206,6 +240,16 @@ type ChallengeManager struct {
 	// metrics carries the unsampled upstream-authorize census that the PKCE
 	// enforcement decision (AIS-566) reads.
 	metrics *remotesessionmetrics.Authorize
+
+	// scopeMetrics counts which precedence step decided each login's scope request.
+	scopeMetrics *remotesessionmetrics.ScopeResolution
+
+	// protectedResources resolves the login's protected resource row, probing
+	// it within a short budget; nil skips the resource steps of scope resolution.
+	protectedResources *protectedresource.Prober
+
+	// features gates resource-first scope discovery per organization; nil reads as off.
+	features feature.Provider
 
 	registrationTelemetry registration.Recorder
 
@@ -294,6 +338,25 @@ func WithTokenEndpointAssertionSigner(signer TokenEndpointAssertionSigner) Chall
 	return func(m *ChallengeManager) { m.assertions = signer }
 }
 
+// WithCallbackOrigins replaces the default origins, which pin every client to
+// the server URL.
+func WithCallbackOrigins(origins CallbackOrigins) ChallengeManagerOption {
+	return func(m *ChallengeManager) { m.origins = origins }
+}
+
+// WithProtectedResourceProber lets logins read, and when the organization is
+// enrolled probe, the protected resource row of the MCP server they are for.
+// It is the same prober the proxy refreshes rows with, so one replica has one
+// writer. Without it the login never consults a resource row.
+func WithProtectedResourceProber(prober *protectedresource.Prober) ChallengeManagerOption {
+	return func(m *ChallengeManager) { m.protectedResources = prober }
+}
+
+// WithFeatureFlags evaluates the resource-first scope discovery rollout flag.
+func WithFeatureFlags(features feature.Provider) ChallengeManagerOption {
+	return func(m *ChallengeManager) { m.features = features }
+}
+
 func NewChallengeManager(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
@@ -322,11 +385,15 @@ func NewChallengeManager(
 		refresher:      nil,
 		issuerMetadata: nil,
 		serverURL:      serverURL,
+		origins:        DefaultCallbackOrigins(serverURL),
 		revoker:        NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy, tunnels),
 		authorizeInterceptors: []interceptors.AuthorizeInterceptor{
 			interceptors.NewGoogle(logger),
 		},
 		metrics:                   remotesessionmetrics.NewAuthorize(logger, meterProvider),
+		scopeMetrics:              remotesessionmetrics.NewScopeResolution(logger, meterProvider),
+		protectedResources:        nil,
+		features:                  nil,
 		registrationTelemetry:     registration.NewMetrics(logger, meterProvider),
 		privateAuthorityValidator: nil,
 		idTokens:                  NoIDTokenVerifier(),
@@ -345,6 +412,7 @@ func NewChallengeManager(
 	// The manager's own refreshes restate identity with the same verifier.
 	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, tunnels, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshSessionEnricher(manager.enricher), WithRefreshTokenEndpointAssertionSigner(manager.assertions))
 	manager.rotator = NewClientRotator(logger, db, enc, policy, tunnels, cacheImpl, serverURL, manager.revoker, manager.auditLogger, manager.registrationTelemetry)
+	manager.rotator.origins = manager.origins
 	return manager
 }
 
@@ -360,6 +428,7 @@ type Client struct {
 	IssuerSlug            string
 
 	// IssuerName is the issuer's operator-set display name, nil when unset.
+	// WithCatalogBranding may fill it and IssuerLogoAssetID from the catalog.
 	IssuerName *string
 
 	// IssuerLogoAssetID references the issuer's logo image in the assets
@@ -407,6 +476,9 @@ type Client struct {
 	// Empty when unset; set, it is requested verbatim.
 	IssuerScopeOverride []string
 
+	// IssuerOmitScopeFallback sends no scope where the catalogue would be the last resort.
+	IssuerOmitScopeFallback bool
+
 	// IssuerResourceIndicatorSupported is an operator's answer to whether the
 	// issuer accepts the RFC 8707 resource parameter. Nil sends it.
 	IssuerResourceIndicatorSupported *bool
@@ -429,10 +501,14 @@ type Client struct {
 	// oauth_proxy_servers URL keeps working without re-registration.
 	LegacyCallbackUrl bool
 
+	// CallbackBaseURL is the origin the client registered its redirect_uri
+	// on. Invalid (NULL) resolves to the pinned outbound callback origin.
+	CallbackBaseURL pgtype.Text
+
 	// IssuerRegistrationEndpoint is the RFC 7591 registration endpoint the
 	// client's issuer publishes, as discovery last refreshed it; empty when
 	// the issuer publishes none. A client whose issuer publishes no endpoint
-	// is never re-registered automatically, since Gram has nowhere to do it.
+	// is never re-registered automatically, since Speakeasy has nowhere to do it.
 	IssuerRegistrationEndpoint string
 
 	// ClientSecretExpiresAt is when the issuer said the client secret expires,
@@ -449,7 +525,7 @@ type Client struct {
 // should be replaced before sending a user to the authorize endpoint: the
 // issuer has rejected the client_id, or the secret it issued has expired. A
 // client whose issuer publishes no registration endpoint is never rotated
-// here, since Gram has nowhere to re-register it.
+// here, since Speakeasy has nowhere to re-register it.
 func (c Client) needsRegistrationRotation(now time.Time) (RotationTrigger, bool) {
 	if c.IssuerRegistrationEndpoint == "" {
 		return "", false
@@ -468,30 +544,284 @@ func (c Client) needsRegistrationRotation(now time.Time) (RotationTrigger, bool)
 // identity; offline_access for a refresh token.
 var standardScopes = []string{"openid", "email", "profile", "offline_access"}
 
-// RequestedScopes resolves the authorize scope set: IssuerScopeOverride
-// verbatim; else ClientScope (or IssuerScopesSupported when empty) plus each
-// standard scope the issuer advertises. widened is what was appended to a
-// client scope.
-func (c Client) RequestedScopes() (scopes []string, widened []string) {
-	if len(c.IssuerScopeOverride) > 0 {
-		return slices.Clone(c.IssuerScopeOverride), nil
+// ResourceScopes is what the protected resource a login is for says about
+// scopes. The zero value is a login with no resource row.
+type ResourceScopes struct {
+	// Pin is the operator's scope_override on the resource; nil when unset.
+	Pin []string
+
+	// ChallengeScopes is the scope param of the resource's last
+	// WWW-Authenticate challenge; nil when none was seen.
+	ChallengeScopes []string
+
+	// ScopesSupported is the resource's advertised list: nil when unknown,
+	// empty when the document names none.
+	ScopesSupported []string
+
+	// Live reports that ScopesSupported was read during this login rather than from the cached row.
+	Live bool
+
+	// UseDiscovered applies ChallengeScopes, Pin, and ScopesSupported as
+	// request bases; off, the resolution is the issuer-only one.
+	UseDiscovered bool
+}
+
+// ScopeResolution is the authorize scope set and how it was decided.
+type ScopeResolution struct {
+	// Scopes is the scope parameter to send; empty sends none.
+	Scopes []string
+
+	// Widened lists the standard scopes appended to the chosen base.
+	Widened []string
+
+	// Source is the precedence step that supplied the base.
+	Source remotesessionmetrics.ScopeSource
+
+	// Unadvertised lists pinned scopes the resource's advertised list lacks,
+	// when it advertises one. They are sent regardless.
+	Unadvertised []string
+}
+
+// RequestedScopes resolves the authorize scope set, in order: the client's
+// scope, the resource's challenge scopes, the resource pin, the resource's
+// scopes_supported, the issuer's override (verbatim), the issuer's
+// scopes_supported. Every base but the issuer override gains the standard
+// scopes the issuer advertises. Without resource discovery the issuer's
+// override still beats the client's scope, as before the rollout flag.
+func (c Client) RequestedScopes(resource ResourceScopes) ScopeResolution {
+	var base []string
+	var source remotesessionmetrics.ScopeSource
+	var unadvertised []string
+	switch {
+	case !resource.UseDiscovered && len(c.IssuerScopeOverride) > 0:
+		return ScopeResolution{Scopes: slices.Clone(c.IssuerScopeOverride), Widened: nil, Source: remotesessionmetrics.ScopeSourceIssuerOverride, Unadvertised: nil}
+	case len(c.ClientScope) > 0:
+		base, source = c.ClientScope, remotesessionmetrics.ScopeSourceClientScope
+	case resource.UseDiscovered && len(resource.ChallengeScopes) > 0:
+		base, source = resource.ChallengeScopes, remotesessionmetrics.ScopeSourceChallengeScope
+	case resource.UseDiscovered && len(resource.Pin) > 0:
+		base, source = resource.Pin, remotesessionmetrics.ScopeSourceResourcePin
+		if resource.ScopesSupported != nil {
+			for _, scope := range resource.Pin {
+				if !slices.Contains(resource.ScopesSupported, scope) {
+					unadvertised = append(unadvertised, scope)
+				}
+			}
+		}
+	case resource.UseDiscovered && len(resource.ScopesSupported) > 0:
+		base, source = resource.ScopesSupported, remotesessionmetrics.ScopeSourceCachedResource
+		if resource.Live {
+			source = remotesessionmetrics.ScopeSourceLiveResource
+		}
+	case len(c.IssuerScopeOverride) > 0:
+		return ScopeResolution{Scopes: slices.Clone(c.IssuerScopeOverride), Widened: nil, Source: remotesessionmetrics.ScopeSourceIssuerOverride, Unadvertised: nil}
+	default:
+		return c.issuerCatalogueScopes()
 	}
-	base := c.IssuerScopesSupported
-	narrowed := len(c.ClientScope) > 0
-	if narrowed {
-		base = c.ClientScope
+	scopes, widened := c.withStandardScopes(base)
+	return ScopeResolution{Scopes: scopes, Widened: widened, Source: source, Unadvertised: unadvertised}
+}
+
+// issuerCatalogueScopes is the last resort: the issuer's whole
+// scopes_supported, or nothing when it advertises none or is set to omit.
+func (c Client) issuerCatalogueScopes() ScopeResolution {
+	if c.IssuerOmitScopeFallback {
+		return ScopeResolution{Scopes: nil, Widened: nil, Source: remotesessionmetrics.ScopeSourceIssuerOmitted, Unadvertised: nil}
 	}
+	if len(c.IssuerScopesSupported) == 0 {
+		return ScopeResolution{Scopes: nil, Widened: nil, Source: remotesessionmetrics.ScopeSourceNone, Unadvertised: nil}
+	}
+	scopes, widened := c.withStandardScopes(c.IssuerScopesSupported)
+	return ScopeResolution{Scopes: scopes, Widened: widened, Source: remotesessionmetrics.ScopeSourceIssuerCatalogue, Unadvertised: nil}
+}
+
+// withStandardScopes copies base and appends each standard scope the issuer
+// advertises that base lacks, returning what was appended.
+func (c Client) withStandardScopes(base []string) (scopes []string, widened []string) {
 	scopes = slices.Clone(base)
 	for _, scope := range standardScopes {
 		if slices.Contains(scopes, scope) || !slices.Contains(c.IssuerScopesSupported, scope) {
 			continue
 		}
 		scopes = append(scopes, scope)
-		if narrowed {
-			widened = append(widened, scope)
-		}
+		widened = append(widened, scope)
 	}
 	return scopes, widened
+}
+
+// ResourceScopeDiscoveryEnabled reports whether the organization's logins
+// consult the protected resource row (its challenge scopes, pin, and
+// advertised list) when deciding their scope request. A manager without a
+// prober, an unreadable organization, or an unreadable flag reads as off, so
+// the consent card and the login always agree.
+func (m *ChallengeManager) ResourceScopeDiscoveryEnabled(ctx context.Context, organizationID string) bool {
+	if m.features == nil || m.protectedResources == nil {
+		return false
+	}
+	org, err := orgrepo.New(m.db).GetOrganizationMetadata(ctx, organizationID)
+	if err != nil {
+		m.logger.WarnContext(ctx, "read organization for scope discovery flag", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		return false
+	}
+	return ResourceScopeDiscoveryEnabled(ctx, m.logger, m.features, organizationID, org.Slug)
+}
+
+// ResourceScopeDiscoveryEnabled evaluates the resource-first scope discovery
+// rollout flag for an organization whose slug the caller already holds. A
+// nil provider or an unreadable flag reads as off.
+func ResourceScopeDiscoveryEnabled(ctx context.Context, logger *slog.Logger, features feature.Provider, organizationID, organizationSlug string) bool {
+	if features == nil {
+		return false
+	}
+	enabled, err := features.IsFlagEnabledLocal(ctx, feature.FlagRemoteSessionLiveResourceScopes, organizationID, feature.OrgProjectGroups(organizationSlug, ""), nil)
+	if err != nil {
+		logger.WarnContext(ctx, "evaluate scope discovery flag", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		return false
+	}
+	return enabled
+}
+
+// CachedResourceScopesForServer is the protected resource row of a
+// remote-backed MCP server as it stands, keyed the way a login for that
+// server resolves it, for callers that must not probe. resourceURL is the
+// server's upstream URL the row is keyed by. ok is false when the server is
+// not remote-backed or its resource has no row.
+func (m *ChallengeManager) CachedResourceScopesForServer(ctx context.Context, projectID uuid.UUID, mcpServerID uuid.NullUUID, useDiscovered bool) (scopes ResourceScopes, resourceURL string, ok bool) {
+	none := ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: useDiscovered}
+	if !mcpServerID.Valid {
+		return none, "", false
+	}
+	resourceURL, err := remotesessions_repo.New(m.db).GetRemoteURLForMcpServer(ctx, remotesessions_repo.GetRemoteURLForMcpServerParams{McpServerID: mcpServerID.UUID, ProjectID: projectID})
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			m.logger.ErrorContext(ctx, "get remote url for mcp server", attr.SlogError(err), attr.SlogProjectID(projectID.String()))
+		}
+		return none, "", false
+	}
+	scopes, found, err := CachedResourceScopes(ctx, m.db, projectID, resourceURL, useDiscovered)
+	if err != nil {
+		m.logger.ErrorContext(ctx, "get remote protected resource for mcp server", attr.SlogError(err), attr.SlogProjectID(projectID.String()))
+		return none, resourceURL, false
+	}
+	return scopes, resourceURL, found
+}
+
+// CachedResourceScopes is the protected resource row at resourceURL as it
+// stands, never probed. found is false when the resource has no row.
+func CachedResourceScopes(ctx context.Context, db remotemcprepo.DBTX, projectID uuid.UUID, resourceURL string, useDiscovered bool) (scopes ResourceScopes, found bool, err error) {
+	row, err := remotemcprepo.New(db).GetRemoteProtectedResource(ctx, remotemcprepo.GetRemoteProtectedResourceParams{ProjectID: projectID, ResourceIdentifier: resourceURL})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ResourceScopesFromRow(nil, useDiscovered), false, nil
+	}
+	if err != nil {
+		return ResourceScopesFromRow(nil, useDiscovered), false, fmt.Errorf("get remote protected resource: %w", err)
+	}
+	return ResourceScopesFromRow(&row, useDiscovered), true, nil
+}
+
+// ResourceScopesFromRow is what a login reads from a protected resource row
+// without probing; a nil row is a resource never read.
+func ResourceScopesFromRow(row *remotemcprepo.RemoteProtectedResource, useDiscovered bool) ResourceScopes {
+	if row == nil {
+		return ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: useDiscovered}
+	}
+	return ResourceScopes{
+		Pin:             row.ScopeOverride,
+		ChallengeScopes: row.ChallengeScopes,
+		ScopesSupported: protectedresource.LastGoodScopes(row, time.Now()),
+		Live:            false,
+		UseDiscovered:   useDiscovered,
+	}
+}
+
+// ResourceAppliesToClient reports whether the protected resource at
+// resourceURL (an endpoint's upstream) is the one a login for clientID
+// qualifies its grant to, judged among the clients bound to the same
+// endpoint (siblingIDs): the client derives it from its own servers, or is
+// the one bound client that may claim it. A client whose grant goes
+// elsewhere, or unqualified because an owning sibling holds the resource,
+// is decided by its own authorization server, not this resource's row.
+func (m *ChallengeManager) ResourceAppliesToClient(ctx context.Context, organizationID string, clientID uuid.UUID, siblingIDs []uuid.UUID, resourceURL string) (bool, error) {
+	resource, err := m.ResourceForClientAtUpstream(ctx, organizationID, clientID, siblingIDs, resourceURL)
+	if err != nil {
+		return false, err
+	}
+	return resource != "" && sameUpstream(resource, resourceURL), nil
+}
+
+// ResourceAppliesToClients is ResourceAppliesToClient for every client bound
+// to one endpoint, judged among each other from a single load, so a consent
+// page with many cards decides them all in one round trip.
+func (m *ChallengeManager) ResourceAppliesToClients(ctx context.Context, organizationID string, clientIDs []uuid.UUID, resourceURL string) (map[uuid.UUID]bool, error) {
+	resources, err := m.refresher.ResourcesForClientsAtUpstream(ctx, organizationID, clientIDs, resourceURL)
+	if err != nil {
+		return nil, err
+	}
+	applies := make(map[uuid.UUID]bool, len(resources))
+	for id, resource := range resources {
+		applies[id] = resource != "" && sameUpstream(resource, resourceURL)
+	}
+	return applies, nil
+}
+
+// loginResourceScopes resolves the protected resource row of the MCP server
+// the login is for, probing it within the login budget, and returns the
+// resource URL it consulted. An organization not enrolled (discover false), a
+// client whose own scope decides, a login with no remote-backed server, or a
+// server whose resource the selected client's grant is not qualified to has
+// no row.
+func (m *ChallengeManager) loginResourceScopes(ctx context.Context, parent ParentChallenge, client Client, discover bool) (ResourceScopes, protectedresource.LoginResolution, string) {
+	// UseDiscovered carries the flag alone, so an enrolled login that skips
+	// the resource still ranks the client's scope above the issuer override.
+	none := ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: discover}
+	skipped := protectedresource.LoginResolution{Row: nil, ScopesSupported: nil, Live: false, Outcome: protectedresource.ProbeOutcomeNotApplicable, ProbeDuration: 0}
+	switch {
+	case !discover:
+		skipped.Outcome = protectedresource.ProbeOutcomeDisabled
+		return none, skipped, ""
+	case len(client.ClientScope) > 0:
+		skipped.Outcome = protectedresource.ProbeOutcomeSkippedClientScope
+		return none, skipped, ""
+	case !parent.McpServerID.Valid:
+		return none, skipped, ""
+	}
+	q := remotesessions_repo.New(m.db)
+	resourceURL, err := q.GetRemoteURLForMcpServer(ctx, remotesessions_repo.GetRemoteURLForMcpServerParams{McpServerID: parent.McpServerID.UUID, ProjectID: parent.ProjectID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return none, skipped, ""
+	case err != nil:
+		m.logger.ErrorContext(ctx, "get remote url for login mcp server", attr.SlogError(err), attr.SlogProjectID(parent.ProjectID.String()))
+		skipped.Outcome = protectedresource.ProbeOutcomeDBError
+		return none, skipped, ""
+	}
+	siblingIDs, err := q.ListRemoteSessionClientIDsForUserSessionIssuer(ctx, remotesessions_repo.ListRemoteSessionClientIDsForUserSessionIssuerParams{
+		UserSessionIssuerID: parent.UserSessionIssuerID,
+		ProjectID:           parent.ProjectID,
+		OrganizationID:      parent.OrganizationID,
+	})
+	if err != nil {
+		m.logger.ErrorContext(ctx, "list sibling clients for login mcp server", attr.SlogError(err), attr.SlogProjectID(parent.ProjectID.String()))
+		skipped.Outcome = protectedresource.ProbeOutcomeDBError
+		return none, skipped, resourceURL
+	}
+	applies, err := m.ResourceAppliesToClient(ctx, parent.OrganizationID, client.ID, siblingIDs, resourceURL)
+	if err != nil {
+		m.logger.ErrorContext(ctx, "decide resource ownership for login mcp server", attr.SlogError(err), attr.SlogProjectID(parent.ProjectID.String()), attr.SlogRemoteSessionClientID(client.ID.String()))
+		skipped.Outcome = protectedresource.ProbeOutcomeDBError
+		return none, skipped, resourceURL
+	}
+	if !applies {
+		skipped.Outcome = protectedresource.ProbeOutcomeNotOwned
+		return none, skipped, resourceURL
+	}
+	resolved := m.protectedResources.ResolveForLogin(ctx, m.logger, parent.ProjectID, parent.OrganizationID, resourceURL)
+	out := ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: resolved.ScopesSupported, Live: resolved.Live, UseDiscovered: true}
+	if resolved.Row != nil {
+		out.Pin = resolved.Row.ScopeOverride
+		out.ChallengeScopes = resolved.Row.ChallengeScopes
+	}
+	return out, resolved, resourceURL
 }
 
 // issuerIdentifier preserves the configured identity verbatim. Retained legacy
@@ -550,12 +880,14 @@ func (m *ChallengeManager) ListClients(
 			ClientScope:                      r.ClientScope,
 			IssuerScopesSupported:            r.ScopesSupported,
 			IssuerScopeOverride:              r.ScopeOverride,
+			IssuerOmitScopeFallback:          r.OmitScopeFallback.Valid && r.OmitScopeFallback.Bool,
 			IssuerResourceIndicatorSupported: conv.FromPGBool[bool](r.ResourceIndicatorSupported),
 			IssuerAuthorizationResponseIssParameterSupported: r.AuthorizationResponseIssParameterSupported.Valid && r.AuthorizationResponseIssParameterSupported.Bool,
 			IssuerCodeChallengeMethodsSupported:              r.CodeChallengeMethodsSupported,
 			Audience:                                         conv.FromPGTextOrEmpty[string](r.ClientAudience),
 			Passthrough:                                      r.Passthrough,
 			LegacyCallbackUrl:                                r.LegacyCallbackUrl,
+			CallbackBaseURL:                                  r.CallbackBaseUrl,
 			IssuerRegistrationEndpoint:                       conv.FromPGTextOrEmpty[string](r.IssuerRegistrationEndpoint),
 			ClientSecretExpiresAt:                            timestampPtr(r.ClientSecretExpiresAt),
 			UpstreamRejectedAt:                               timestampPtr(r.UpstreamRejectedAt),
@@ -621,7 +953,7 @@ type RemoteSessionState struct {
 	LastValidatedAt *time.Time
 	// ValidationStatus is that probe's verdict, empty when never validated.
 	ValidationStatus ValidationOutcome
-	// ValidationReason is the Gram-authored explanation of a non-valid verdict.
+	// ValidationReason is the Speakeasy-authored explanation of a non-valid verdict.
 	ValidationReason string
 }
 
@@ -761,8 +1093,8 @@ func (m *ChallengeManager) FallbackResourceForClient(ctx context.Context, client
 
 // ResourceForClientAtUpstream derives one client's RFC 8707 resource for a
 // connect made through upstream; see RefreshService.ResourceForClientAtUpstream.
-func (m *ChallengeManager) ResourceForClientAtUpstream(ctx context.Context, clientID uuid.UUID, siblingIDs []uuid.UUID, upstream string) (string, error) {
-	return m.refresher.ResourceForClientAtUpstream(ctx, clientID, siblingIDs, upstream)
+func (m *ChallengeManager) ResourceForClientAtUpstream(ctx context.Context, organizationID string, clientID uuid.UUID, siblingIDs []uuid.UUID, upstream string) (string, error) {
+	return m.refresher.ResourceForClientAtUpstream(ctx, organizationID, clientID, siblingIDs, upstream)
 }
 
 // DisconnectRemoteSession soft-deletes the subject's remote_session for one
@@ -771,7 +1103,7 @@ func (m *ChallengeManager) ResourceForClientAtUpstream(ctx context.Context, clie
 //
 // The user asked to disconnect a provider, so leaving a live refresh token at
 // that provider would defeat the action; the upstream revocation is what makes
-// the disconnect mean something outside Gram. It is best-effort in exactly the
+// the disconnect mean something outside Speakeasy. It is best-effort in exactly the
 // way the other revoke paths are: the soft delete has already committed by the
 // time it runs, and a provider that is unreachable or refuses is recorded
 // rather than surfaced, because the local disconnect succeeded either way.
@@ -829,17 +1161,23 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	parent ParentChallenge,
 	client Client,
 ) (string, error) {
-	return m.mintAuthorization(ctx, parent, client, false)
+	// Evaluated once per login; the retry leg reuses the scopes it chose.
+	discover := m.ResourceScopeDiscoveryEnabled(ctx, parent.OrganizationID)
+	return m.mintAuthorization(ctx, parent, client, nil, discover)
 }
 
-// mintAuthorization is BuildAuthorizationUrl; retry marks the single
-// resource-less leg minted after invalid_target.
+// mintAuthorization is BuildAuthorizationUrl; retryOf is the state of the
+// first leg when this is the single resource-less leg minted after
+// invalid_target, and discover is the resource-first scope discovery flag as
+// the login evaluated it.
 func (m *ChallengeManager) mintAuthorization(
 	ctx context.Context,
 	parent ParentChallenge,
 	client Client,
-	retry bool,
+	retryOf *RemoteLoginState,
+	discover bool,
 ) (string, error) {
+	retry := retryOf != nil
 	// Counted at entry, before any validation or the Redis write, so a flow
 	// that dies on an unrelated error here still lands in the census. A retry
 	// leg is the same login and is not counted again.
@@ -872,7 +1210,8 @@ func (m *ChallengeManager) mintAuthorization(
 		return "", fmt.Errorf("generate nonce: %w", err)
 	}
 	codeChallenge := s256Challenge(verifier)
-	redirectURI := m.callbackURL(canonicalCallbackRouteBase)
+	origin := m.origins.ForClient(client.CallbackBaseURL)
+	redirectURI := RemoteLoginCallbackURL(origin)
 	stateParam := stateID
 	if client.LegacyCallbackUrl {
 		// Upstream was registered against the legacy oauth_proxy_servers
@@ -882,7 +1221,7 @@ func (m *ChallengeManager) mintAuthorization(
 		// bare stateID, same as the non-legacy path: with the proxy gone,
 		// /oauth/callback serves only these forwards, so there is nothing to
 		// tell them apart from and no envelope is needed.
-		redirectURI = m.legacyCallbackURL()
+		redirectURI = LegacyProxyCallbackURL(origin)
 	}
 
 	// Parse the upstream authorize URL before the cache write so a malformed
@@ -894,15 +1233,66 @@ func (m *ChallengeManager) mintAuthorization(
 		return "", fmt.Errorf("parse authorization_endpoint: %w", err)
 	}
 
-	scopes, widened := client.RequestedScopes()
-	if len(widened) > 0 {
-		m.logger.DebugContext(ctx, "requested scope widens the client's configured scope",
+	var (
+		scopes      []string
+		omitScope   bool
+		resolution  ScopeResolution
+		resource    ResourceScopes
+		resolved    protectedresource.LoginResolution
+		resourceURL string
+	)
+	if retry {
+		// The retry leg is the same login: it asks for what the first leg did.
+		scopes = slices.Clone(retryOf.Scopes)
+		omitScope = retryOf.OmitScope
+	} else {
+		resource, resolved, resourceURL = m.loginResourceScopes(ctx, parent, client, discover)
+		resolution = client.RequestedScopes(resource)
+		scopes = resolution.Scopes
+		omitScope = resolution.Source == remotesessionmetrics.ScopeSourceIssuerOmitted
+		trace.SpanFromContext(ctx).SetAttributes(attr.OAuthScopeSource(resolution.Source), attr.OAuthResourceProbeOutcome(resolved.Outcome))
+		m.scopeMetrics.Record(ctx, resolution.Source, resolved.Outcome)
+		if resolved.ProbeDuration > 0 {
+			m.scopeMetrics.RecordProbe(ctx, resolved.Outcome, resolved.ProbeDuration)
+		}
+		m.logger.InfoContext(ctx, "resolved login scope",
+			attr.SlogProjectID(parent.ProjectID.String()),
+			attr.SlogOrganizationID(parent.OrganizationID),
+			attr.SlogOAuthIssuer(client.IssuerURL),
+			attr.SlogRemoteSessionClientID(client.ID.String()),
+			attr.SlogOAuthResource(resourceURL),
+			attr.SlogOAuthScopeSource(resolution.Source),
+			attr.SlogOAuthResourceProbeOutcome(resolved.Outcome),
+			attr.SlogOAuthScope(strings.Join(scopes, " ")),
+			attr.SlogOAuthResourceProbeDuration(resolved.ProbeDuration),
+		)
+	}
+	if len(resolution.Unadvertised) > 0 {
+		m.logger.InfoContext(ctx, "resource scope pin requests scopes the resource does not advertise",
 			attr.SlogProjectID(parent.ProjectID.String()),
 			attr.SlogOrganizationID(parent.OrganizationID),
 			attr.SlogOAuthIssuer(client.IssuerURL),
 			attr.SlogRemoteSessionClientID(client.ID.String()),
 			attr.SlogOAuthScope(strings.Join(scopes, " ")),
-			attr.SlogOAuthScopeAdded(strings.Join(widened, " ")),
+			attr.SlogOAuthScopeUnadvertised(resolution.Unadvertised),
+			attr.SlogOAuthResourceScopesSupported(resource.ScopesSupported),
+			attr.SlogOAuthResourceProbeOutcome(resolved.Outcome),
+		)
+	}
+	if len(resolution.Widened) > 0 {
+		// Widening an operator's pin is worth seeing; widening a discovered base is routine.
+		logWidened := m.logger.DebugContext
+		if resolution.Source == remotesessionmetrics.ScopeSourceResourcePin {
+			logWidened = m.logger.InfoContext
+		}
+		logWidened(ctx, "requested scope widens the chosen scope base",
+			attr.SlogProjectID(parent.ProjectID.String()),
+			attr.SlogOrganizationID(parent.OrganizationID),
+			attr.SlogOAuthIssuer(client.IssuerURL),
+			attr.SlogRemoteSessionClientID(client.ID.String()),
+			attr.SlogOAuthScopeSource(resolution.Source),
+			attr.SlogOAuthScope(strings.Join(scopes, " ")),
+			attr.SlogOAuthScopeAdded(strings.Join(resolution.Widened, " ")),
 		)
 	}
 	// The resource stays on the session: a grant without one is unroutable.
@@ -930,13 +1320,17 @@ func (m *ChallengeManager) mintAuthorization(
 		McpServerID:           parent.McpServerID,
 		MetaMcpServerID:       parent.MetaMcpServerID,
 		FinalRedirectURI:      parent.FinalRedirectURI,
+		ConsentURL:            parent.ConsentURL,
 		AutoRefresh:           parent.AutoRefresh,
 		Authority:             parent.Authority,
 		Scopes:                scopes,
 		OmitResource:          omitResource,
 		ResourceRetried:       retry,
+		OmitScope:             omitScope,
 		ExpectedIssuer:        expectedIssuer,
 		Nonce:                 nonce,
+		BrowserCookieID:       parent.BrowserCookieID,
+		BrowserHash:           parent.BrowserHash,
 		CreatedAt:             time.Now(),
 	}
 	if err := m.cache.Store(ctx, state); err != nil {
@@ -953,8 +1347,13 @@ func (m *ChallengeManager) mintAuthorization(
 	// Harmless to a plain OAuth server and required for an OpenID one to
 	// bind the ID token to this request.
 	q.Set("nonce", nonce)
-	if len(scopes) > 0 {
+	switch {
+	case len(scopes) > 0:
 		q.Set("scope", strings.Join(scopes, " "))
+	case omitScope:
+		// The operator chose to send no scope; one baked into the
+		// authorization endpoint's query would defeat that.
+		q.Del("scope")
 	}
 	if client.Audience != "" {
 		q.Set("audience", client.Audience)
@@ -1135,7 +1534,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	if err != nil && authMethod == TokenEndpointAuthMethodPrivateKeyJWT {
 		return none, oops.E(oops.CodeUnauthorized, err, "the remote session client's assertion audience is misconfigured").LogError(ctx, logger)
 	}
-	tok, err := m.exchangeCode(ctx, doer, state, tokenEndpointClientAuth{
+	tok, err := m.exchangeCode(ctx, doer, state, TokenEndpointClientAuth{
 		Method:                authMethod,
 		RemoteSessionClientID: client.ID,
 		OrganizationID:        client.OrganizationID.String,
@@ -1154,7 +1553,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnauthorized, err, "upstream token exchange failed").LogError(ctx, logger)
 	}
 	// The pair is live upstream from this line on, and every path out of here
-	// that does not store it strands it: unreachable through Gram, and outside
+	// that does not store it strands it: unreachable through Speakeasy, and outside
 	// the reach of every revoke path since no row points at it. So arm the
 	// revocation on the exchange rather than on the first thing done with the
 	// result — encrypting it can fail too — and disarm it once the row is
@@ -1242,7 +1641,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	}
 
 	// The upstream exchange has already happened, so the token pair exists
-	// either way; this transaction decides whether Gram stores it. The
+	// either way; this transaction decides whether Speakeasy stores it. The
 	// client-row lock serializes the write against the issuer-delete orphan
 	// cascade, which locks the same row before sweeping the client's
 	// sessions: a callback that acquires the lock after that cascade
@@ -1344,6 +1743,9 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		}
 	}
 	redirect := fmt.Sprintf("%s/%s/%s/connect?state=%s", strings.TrimRight(redirectBaseURL, "/"), routeBase, mcpSlug, url.QueryEscape(state.ParentChallengeID))
+	if state.ConsentURL != "" {
+		redirect = state.ConsentURL
+	}
 	if state.FinalRedirectURI != "" {
 		redirect = state.FinalRedirectURI
 	}
@@ -1427,7 +1829,7 @@ func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slo
 
 	unsupported := false
 	client.IssuerResourceIndicatorSupported = &unsupported
-	authURL, err := m.mintAuthorization(ctx, state.parent(), client, true)
+	authURL, err := m.mintAuthorization(ctx, state.parent(), client, &state, false)
 	if err != nil {
 		return none, oops.E(oops.CodeUnexpected, err, "build authorization url for retry").LogError(ctx, logger)
 	}
@@ -1443,25 +1845,6 @@ func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slo
 // the post-callback bounce.
 const canonicalCallbackRouteBase = "mcp"
 
-// callbackURL is the route-base-scoped path the upstream provider redirects
-// back to after the user authenticates. Empty routeBase falls back to "mcp"
-// for back-compat with callers that haven't been threaded with a RouteBase
-// yet (and for in-flight states minted before this parameter landed).
-func (m *ChallengeManager) callbackURL(routeBase string) string {
-	if routeBase == "" {
-		routeBase = canonicalCallbackRouteBase
-	}
-	return strings.TrimRight(m.serverURL.String(), "/") + "/" + routeBase + "/remote_login_callback"
-}
-
-// legacyCallbackURL is the oauth_proxy_servers-era redirect_uri. Used only for
-// clients flagged LegacyCallbackUrl whose upstream registration still points at
-// this path; HandleLegacyProxyCallback forwards them into
-// /mcp/remote_login_callback.
-func (m *ChallengeManager) legacyCallbackURL() string {
-	return strings.TrimRight(m.serverURL.String(), "/") + "/oauth/callback"
-}
-
 // HandleLegacyProxyCallback is the shim behind `GET /oauth/callback`, the
 // oauth_proxy_servers-era redirect_uri that clients flagged LegacyCallbackUrl
 // still send upstream. The proxy that once shared this path is gone, so every
@@ -1469,7 +1852,9 @@ func (m *ChallengeManager) legacyCallbackURL() string {
 // code, error) unchanged to the canonical /mcp/remote_login_callback, where the
 // remote-session flow finishes the exchange.
 func (m *ChallengeManager) HandleLegacyProxyCallback(w http.ResponseWriter, r *http.Request) error {
-	target := strings.TrimRight(m.serverURL.String(), "/") + "/" + canonicalCallbackRouteBase + "/remote_login_callback"
+	// The query carries no client, so forward to the pinned origin. Every
+	// platform host serves the remote-login callback.
+	target := RemoteLoginCallbackURL(m.origins.Outbound)
 	if raw := r.URL.RawQuery; raw != "" {
 		target += "?" + raw
 	}
@@ -1481,7 +1866,7 @@ func (m *ChallengeManager) exchangeCode(
 	ctx context.Context,
 	doer httpDoer,
 	state RemoteLoginState,
-	clientAuth tokenEndpointClientAuth,
+	clientAuth TokenEndpointClientAuth,
 	audience string,
 	code string,
 ) (tokenResponse, error) {
@@ -1497,7 +1882,7 @@ func (m *ChallengeManager) exchangeCode(
 		form.Set("resource", state.Resource)
 	}
 
-	req, err := newTokenEndpointRequest(ctx, state.TokenEndpoint, form, clientAuth)
+	req, err := NewTokenEndpointRequest(ctx, state.TokenEndpoint, form, clientAuth)
 	if err != nil {
 		return tokenResponse{}, fmt.Errorf("new token request: %w", err)
 	}

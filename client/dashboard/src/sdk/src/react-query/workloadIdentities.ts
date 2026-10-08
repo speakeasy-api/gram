@@ -59,7 +59,7 @@ export type WorkloadIdentitiesQueryError =
  * list workloadIdentities
  *
  * @remarks
- * Read the whole trust policy: every trusted issuer and every admitted subject, at both the organization and project tiers, with the agent each subject resolves to. Requires workload:read.
+ * Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.
  */
 export function useWorkloadIdentities(
   request?: ListWorkloadIdentitiesRequest | undefined,
@@ -85,7 +85,7 @@ export function useWorkloadIdentities(
  * list workloadIdentities
  *
  * @remarks
- * Read the whole trust policy: every trusted issuer and every admitted subject, at both the organization and project tiers, with the agent each subject resolves to. Requires workload:read.
+ * Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.
  */
 export function useWorkloadIdentitiesSuspense(
   request?: ListWorkloadIdentitiesRequest | undefined,

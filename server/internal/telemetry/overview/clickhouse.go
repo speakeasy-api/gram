@@ -18,6 +18,7 @@ import (
 type ClickHouseReader interface {
 	GetOverviewSummary(context.Context, repo.GetOverviewSummaryParams) (*repo.OverviewSummary, error)
 	GetActiveCounts(context.Context, repo.GetActiveCountsParams) (*repo.ActiveCounts, error)
+	GetUnifiedActiveServerCount(context.Context, repo.GetTopServersParams) (uint64, error)
 	GetTopServers(context.Context, repo.GetTopServersParams) ([]repo.TopServer, error)
 	GetTopUsers(context.Context, repo.GetTopUsersParams) ([]repo.TopUser, error)
 	GetLLMClientBreakdown(context.Context, repo.GetLLMClientBreakdownParams) ([]repo.LLMClientUsage, error)
@@ -27,12 +28,15 @@ type ClickHouseReader interface {
 // the equal-length comparison window preceding it, and whether session capture
 // is the organization's metrics mode.
 type Params struct {
-	ProjectID       string
-	TimeStart       int64
-	TimeEnd         int64
-	ComparisonStart int64
-	ComparisonEnd   int64
-	SessionMode     bool
+	ProjectID         string
+	TimeStart         int64
+	TimeEnd           int64
+	ComparisonStart   int64
+	ComparisonEnd     int64
+	SessionMode       bool
+	HostedMCPMatchers []repo.HostedMCPMatcher
+	MCPServerMatchers []repo.MCPServerMatcher
+	MetaMCPMatchers   []repo.MetaMCPMatcher
 }
 
 // Result is the ClickHouse half of a project overview. TopUsers and LLMClients
@@ -43,6 +47,7 @@ type Result struct {
 	ToolMetrics           *repo.OverviewSummary
 	ToolMetricsComparison *repo.OverviewSummary
 	ActiveCounts          *repo.ActiveCounts
+	UnifiedActiveServers  uint64
 	TopServers            []repo.TopServer
 	TopUsers              []repo.TopUser
 	LLMClients            []repo.LLMClientUsage
@@ -64,7 +69,7 @@ func FetchClickHouse(
 	eg.Go(func() error {
 		var queryErr error
 		result.ToolMetrics, queryErr = reader.GetOverviewSummary(egCtx, repo.GetOverviewSummaryParams{
-			// Org-scope read: Gram-hosted sources stay counted, matching the
+			// Org-scope read: Speakeasy-hosted sources stay counted, matching the
 			// summaries fast path.
 			ExcludedHookSources: nil,
 			GramProjectID:       params.ProjectID,
@@ -92,7 +97,7 @@ func FetchClickHouse(
 	eg.Go(func() error {
 		var queryErr error
 		result.ToolMetricsComparison, queryErr = reader.GetOverviewSummary(egCtx, repo.GetOverviewSummaryParams{
-			// Org-scope read: Gram-hosted sources stay counted, matching the
+			// Org-scope read: Speakeasy-hosted sources stay counted, matching the
 			// summaries fast path.
 			ExcludedHookSources: nil,
 			GramProjectID:       params.ProjectID,
@@ -139,14 +144,33 @@ func FetchClickHouse(
 
 	eg.Go(func() error {
 		var queryErr error
+		result.UnifiedActiveServers, queryErr = reader.GetUnifiedActiveServerCount(egCtx, repo.GetTopServersParams{
+			GramProjectID:     params.ProjectID,
+			TimeStart:         params.TimeStart,
+			TimeEnd:           params.TimeEnd,
+			HostedMCPMatchers: params.HostedMCPMatchers,
+			MCPServerMatchers: params.MCPServerMatchers,
+			MetaMCPMatchers:   params.MetaMCPMatchers,
+			Limit:             0,
+		})
+		if queryErr != nil {
+			return oops.E(oops.CodeUnexpected, queryErr, "error retrieving active server count")
+		}
+		return nil
+	})
+
+	eg.Go(func() error {
+		var queryErr error
 		result.TopServers, queryErr = reader.GetTopServers(egCtx, repo.GetTopServersParams{
-			GramProjectID:  params.ProjectID,
-			TimeStart:      params.TimeStart,
-			TimeEnd:        params.TimeEnd,
-			ExternalUserID: "",
-			APIKeyID:       "",
-			ToolsetSlug:    "",
-			Limit:          10,
+			GramProjectID:     params.ProjectID,
+			TimeStart:         params.TimeStart,
+			TimeEnd:           params.TimeEnd,
+			HostedMCPMatchers: params.HostedMCPMatchers,
+			MCPServerMatchers: params.MCPServerMatchers,
+			MetaMCPMatchers:   params.MetaMCPMatchers,
+			// Fetch extra rows so alternate reported names can fold before the
+			// API trims to ten, while keeping the backend read bounded.
+			Limit: 50,
 		})
 		if queryErr != nil {
 			return oops.E(oops.CodeUnexpected, queryErr, "error retrieving top servers")
@@ -194,6 +218,7 @@ func FetchClickHouse(
 	if err := eg.Wait(); err != nil {
 		return Result{}, fmt.Errorf("fetch project overview ClickHouse data: %w", err)
 	}
+	result.ActiveCounts.ActiveServersCount = result.UnifiedActiveServers
 
 	return result, nil
 }

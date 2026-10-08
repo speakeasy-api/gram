@@ -40,7 +40,7 @@ func (s *Service) upsertShadowMCPInventoryURLs(ctx context.Context, orgID string
 		// IsGramHostedMCPURLForOrg variant would re-query custom_domains for
 		// each external URL in the inventory.
 		//
-		// Without the host list every Gram-hosted entry would read as external
+		// Without the host list every Speakeasy-hosted entry would read as external
 		// and be recorded as shadow inventory. This capture is best-effort
 		// telemetry, so skipping the batch beats writing wrong rows.
 		trustedHosts, err := s.shadowMCPClient.TrustedMCPHostsForOrg(asyncCtx, orgID)

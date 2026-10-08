@@ -101,9 +101,11 @@ export function OrgSidebar({
     (route) => route.active,
   );
 
-  const secureActive = [orgRoutes.auditLogs, orgRoutes.deviceAgent].some(
-    (r) => r.active,
-  );
+  const secureActive = [
+    orgRoutes.workloadIssuers,
+    orgRoutes.auditLogs,
+    orgRoutes.deviceAgent,
+  ].some((r) => r.active);
 
   const platformAdminActive = [
     orgRoutes.platformAdminOverview,
@@ -135,6 +137,7 @@ export function OrgSidebar({
     orgRoutes.encryptionKeys,
     orgRoutes.data,
     orgRoutes.dataExports,
+    orgRoutes.workloadIssuers,
     orgRoutes.auditLogs,
     orgRoutes.deviceAgent,
     orgRoutes.access,
@@ -226,6 +229,10 @@ export function OrgSidebar({
                 Icon={(p) => <Icon {...p} name="shield-check" />}
                 items={[
                   { item: orgRoutes.auditLogs, scope: orgReadOrAdmin },
+                  {
+                    item: orgRoutes.workloadIssuers,
+                    scope: ["workload:read", "workload:write"],
+                  },
                   ...(isDeviceAgentEnabled
                     ? [{ item: orgRoutes.deviceAgent, scope: orgReadOrAdmin }]
                     : []),

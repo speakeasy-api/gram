@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -130,8 +129,7 @@ func TestEngineFilter_logsSingleAggregateChallenge(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"proj_allowed"}, resourceIDs)
 
-	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
-	require.NoError(t, err)
+	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
 	message := &authzv1.Challenge{}
 	require.NoError(t, proto.Unmarshal(rows[0].Message, message))
@@ -160,8 +158,7 @@ func TestEngineFilter_logsDenyWhenNoMatches(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, resourceIDs)
 
-	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
-	require.NoError(t, err)
+	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
 	message := &authzv1.Challenge{}
 	require.NoError(t, proto.Unmarshal(rows[0].Message, message))
@@ -184,9 +181,7 @@ func TestEngineFilter_skipsLogWhenNoChecks(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, resourceIDs)
 
-	count, err := testrepo.New(conn).CountPublishOutboxRows(t.Context())
-	require.NoError(t, err)
-	require.Zero(t, count)
+	require.Empty(t, listChallengeOutboxRows(t, conn))
 }
 
 func TestEngineRequire_projectWriteBlocklistBlocksAccess(t *testing.T) {
@@ -653,9 +648,7 @@ func TestEngineFindMatched_emptyInputReturnsEmptySlice(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, matched)
 
-	count, err := testrepo.New(conn).CountPublishOutboxRows(t.Context())
-	require.NoError(t, err)
-	require.Zero(t, count)
+	require.Empty(t, listChallengeOutboxRows(t, conn))
 }
 
 func TestEngineFindMatched_missingGrantsReturnsError(t *testing.T) {
@@ -703,8 +696,7 @@ func TestEngineFindMatched_logsSingleAggregateChallenge(t *testing.T) {
 	// A batched FindMatched must emit exactly one challenge log entry for
 	// the whole input, not N per check — the per-check granularity lives in
 	// the returned slice, not in the outbox.
-	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
-	require.NoError(t, err)
+	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
 	message := &authzv1.Challenge{}
 	require.NoError(t, proto.Unmarshal(rows[0].Message, message))
@@ -764,9 +756,7 @@ func TestEngineEvaluate_neverLogsChallenge(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, allowed)
 
-	count, err := testrepo.New(conn).CountPublishOutboxRows(t.Context())
-	require.NoError(t, err)
-	require.Zero(t, count)
+	require.Empty(t, listChallengeOutboxRows(t, conn))
 }
 
 func enterpriseSessionCtx(t *testing.T) context.Context {
@@ -851,6 +841,7 @@ func TestPrepareContext_adminImpersonationGrantsAllScopes(t *testing.T) {
 		ScopeMCPRead, ScopeMCPWrite, ScopeMCPConnect,
 		ScopeEnvironmentRead, ScopeEnvironmentWrite,
 		ScopeSkillRead, ScopeSkillWrite,
+		ScopeAssistantRead, ScopeAssistantWrite,
 	} {
 		err := engine.Require(ctx, Check{Scope: scope, ResourceID: "org_customer"})
 		require.NoError(t, err, "admin impersonation should satisfy scope %s", scope)
@@ -921,6 +912,73 @@ func TestEngineRequire_skillBlocklistExpansion(t *testing.T) {
 		require.ErrorAs(t, err, &oopsErr)
 		require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 	}
+}
+
+func projectAssistantGrant(scope Scope, projectID string) Grant {
+	return NewGrantWithSelector(scope, Selector{
+		SelectorKeyResourceKind: ResourceKindAssistant,
+		SelectorKeyResourceID:   WildcardResource,
+		SelectorKeyProjectID:    projectID,
+	})
+}
+
+func requireForbidden(t *testing.T, err error) {
+	t.Helper()
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestEngineRequire_assistantProjectGrantCoversProjectAssistants(t *testing.T) {
+	t.Parallel()
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{projectAssistantGrant(ScopeAssistantWrite, "project_a")})
+
+	require.NoError(t, engine.Require(ctx, AssistantCheck(ScopeAssistantWrite, "assistant_1", "project_a")))
+	require.NoError(t, engine.Require(ctx, AssistantCheck(ScopeAssistantRead, "assistant_2", "project_a")))
+	require.NoError(t, engine.Require(ctx, AssistantCheck(ScopeAssistantWrite, "project_a", "project_a")))
+	requireForbidden(t, engine.Require(ctx, AssistantCheck(ScopeAssistantRead, "assistant_3", "project_b")))
+}
+
+func TestEngineRequire_assistantGrantNarrowedToOneAssistant(t *testing.T) {
+	t.Parallel()
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	ctx := GrantsToContext(enterpriseSessionCtx(t), []Grant{NewGrant(ScopeAssistantWrite, "assistant_1")})
+
+	require.NoError(t, engine.Require(ctx, AssistantCheck(ScopeAssistantWrite, "assistant_1", "project_a")))
+	require.NoError(t, engine.Require(ctx, AssistantCheck(ScopeAssistantRead, "assistant_1", "project_a")))
+	requireForbidden(t, engine.Require(ctx, AssistantCheck(ScopeAssistantWrite, "assistant_2", "project_a")))
+	// Project-level operations such as creating an assistant need a project-wide grant.
+	requireForbidden(t, engine.Require(ctx, AssistantCheck(ScopeAssistantWrite, "project_a", "project_a")))
+
+	allowed, err := engine.Filter(ctx, []Check{
+		AssistantCheck(ScopeAssistantRead, "assistant_1", "project_a"),
+		AssistantCheck(ScopeAssistantRead, "assistant_2", "project_a"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"assistant_1"}, allowed)
+}
+
+func TestEngineRequire_assistantBlocklistExpansion(t *testing.T) {
+	t.Parallel()
+	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
+	blockedWriteCtx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeAssistantWrite, WildcardResource),
+		NewGrant(ScopeAssistantBlockedWrite, "assistant_1"),
+	})
+
+	require.NoError(t, engine.Require(blockedWriteCtx, AssistantCheck(ScopeAssistantWrite, "assistant_2", "project_a")))
+	require.NoError(t, engine.Require(blockedWriteCtx, AssistantCheck(ScopeAssistantRead, "assistant_1", "project_a")))
+	requireForbidden(t, engine.Require(blockedWriteCtx, AssistantCheck(ScopeAssistantWrite, "assistant_1", "project_a")))
+
+	blockedProjectCtx := GrantsToContext(enterpriseSessionCtx(t), []Grant{
+		NewGrant(ScopeAssistantWrite, WildcardResource),
+		projectAssistantGrant(ScopeAssistantBlockedRead, "project_a"),
+	})
+	for _, scope := range []Scope{ScopeAssistantRead, ScopeAssistantWrite} {
+		requireForbidden(t, engine.Require(blockedProjectCtx, AssistantCheck(scope, "assistant_1", "project_a")))
+	}
+	require.NoError(t, engine.Require(blockedProjectCtx, AssistantCheck(ScopeAssistantRead, "assistant_9", "project_b")))
 }
 
 func TestCanUseOverride_devPlusAdmin(t *testing.T) {

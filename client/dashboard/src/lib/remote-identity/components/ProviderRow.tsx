@@ -10,6 +10,7 @@ import {
   Command,
   CommandEmpty,
   CommandGroup,
+  CommandInput,
   CommandItem,
   CommandList,
 } from "@/components/ui/Command";
@@ -19,6 +20,7 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/HoverCard";
 import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import {
   Popover,
   PopoverContent,
@@ -49,10 +51,12 @@ import {
   X,
 } from "lucide-react";
 import type * as React from "react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Link } from "react-router";
+import { ScopeMultiSelect } from "./ScopeMultiSelect";
 import type {
   ClientOption,
+  ProviderGroup,
   ProviderOption,
   RegistrationChoice,
   RegistrationMethod,
@@ -130,6 +134,68 @@ function ProviderItem({
   );
 }
 
+/** What a tier says when it has no options to show. */
+function emptyTierMessage(group: ProviderGroup, searching: boolean): string {
+  if (group.isLoading) return "Loading\u2026";
+  if (group.isError) return "Failed to load";
+  return searching ? "No matches" : "None yet";
+}
+
+function ProviderGroupItems({
+  group,
+  searching,
+  selectedId,
+  onSelect,
+}: {
+  group: ProviderGroup;
+  searching: boolean;
+  selectedId: string | undefined;
+  onSelect: (id: string) => void;
+}): JSX.Element | null {
+  const empty = group.options.length === 0;
+  // A search that turns up nothing in a tier drops the tier, so the menu
+  // collapses to the tiers that matched (or to the empty state).
+  if (empty && searching && !group.isLoading && !group.isError) return null;
+
+  return (
+    <CommandGroup heading={group.tier}>
+      {!empty && group.isError ? (
+        // Rows can still show (the one in use is always offered), but the
+        // tier is incomplete, so say so rather than pass it off as the list.
+        <Text variant="small" className="text-destructive px-2 py-1.5">
+          Failed to load the rest
+        </Text>
+      ) : null}
+      {empty ? (
+        <Text muted variant="small" className="px-2 py-1.5">
+          {emptyTierMessage(group, searching)}
+        </Text>
+      ) : (
+        group.options.map((option) => (
+          <ProviderItem
+            key={option.id}
+            option={option}
+            selected={option.id === selectedId}
+            onSelect={() => onSelect(option.id)}
+          />
+        ))
+      )}
+      {group.hasMore ? (
+        <CommandItem
+          value={`__load_more__${group.tier}`}
+          disabled={group.loadingMore}
+          onSelect={group.loadMore}
+          className="text-muted-foreground cursor-pointer text-xs"
+        >
+          {group.loadingMore
+            ? "Loading\u2026"
+            : `More ${group.tier.toLowerCase()} providers`}
+        </CommandItem>
+      ) : null}
+    </CommandGroup>
+  );
+}
+
 /**
  * One Remote Identity Provider, the client the server uses with it, and how
  * to get a new one — the whole User Identity decision on a single settings
@@ -165,7 +231,13 @@ export function UserIdentityRow({
           </div>
           <div className="flex min-w-0 flex-col gap-0.5">
             <div className="flex items-center gap-2">
-              <Popover open={providerOpen} onOpenChange={setProviderOpen}>
+              <Popover
+                open={providerOpen}
+                onOpenChange={(open) => {
+                  setProviderOpen(open);
+                  if (!open) draft.setProviderSearch("");
+                }}
+              >
                 <PopoverTrigger asChild>
                   <ScopeTrigger
                     // Held while discovery is still running: this control is
@@ -187,29 +259,28 @@ export function UserIdentityRow({
                   </ScopeTrigger>
                 </PopoverTrigger>
                 <PopoverContent align="start" className="w-80 p-0">
-                  <Command>
+                  {/* Searched on the server, so cmdk must not filter again. */}
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder="Search identity providers…"
+                      value={draft.providerSearch}
+                      onValueChange={draft.setProviderSearch}
+                      className="h-9"
+                    />
                     <CommandList>
-                      <CommandEmpty>No identity providers.</CommandEmpty>
+                      <CommandEmpty>No identity providers match.</CommandEmpty>
                       {draft.providerGroups.map((group) => (
-                        <CommandGroup key={group.tier} heading={group.tier}>
-                          {group.options.length === 0 ? (
-                            <Text muted variant="small" className="px-2 py-1.5">
-                              None yet
-                            </Text>
-                          ) : (
-                            group.options.map((option) => (
-                              <ProviderItem
-                                key={option.id}
-                                option={option}
-                                selected={option.id === selected?.id}
-                                onSelect={() => {
-                                  draft.selectProvider(option.id);
-                                  setProviderOpen(false);
-                                }}
-                              />
-                            ))
-                          )}
-                        </CommandGroup>
+                        <ProviderGroupItems
+                          key={group.tier}
+                          group={group}
+                          searching={draft.providerSearch.trim() !== ""}
+                          selectedId={selected?.id}
+                          onSelect={(id) => {
+                            draft.selectProvider(id);
+                            setProviderOpen(false);
+                            draft.setProviderSearch("");
+                          }}
+                        />
                       ))}
                     </CommandList>
                   </Command>
@@ -257,6 +328,13 @@ export function UserIdentityRow({
           </Button>
         ) : null}
       </div>
+
+      {draft.providerLoadFailed ? (
+        <Alert variant="error" dismissible={false}>
+          Couldn&apos;t load this server&apos;s identity providers. Refresh the
+          page to try again.
+        </Alert>
+      ) : null}
 
       {draft.providerUnreachable ? (
         <Alert variant="warning" dismissible={false}>
@@ -623,6 +701,40 @@ function RegistrationMethodField({
   );
 }
 
+/** The scopes a manual client requests: advertised ones to pick, or typed. */
+function ScopeField({
+  draft,
+  disabled,
+  providerName,
+}: {
+  draft: UserIdentityDraft;
+  disabled: boolean;
+  providerName: string;
+}): JSX.Element {
+  const id = useId();
+  const labelId = `${id}-label`;
+  return (
+    <>
+      <Label id={labelId} htmlFor={id} className="block leading-normal">
+        Scope
+      </Label>
+      <ScopeMultiSelect
+        id={id}
+        labelId={labelId}
+        options={draft.scopeOptions}
+        value={draft.scopes}
+        onValueChange={draft.setScopes}
+        placeholder="Default scopes"
+        disabled={disabled}
+      />
+      <Text muted small className="block">
+        Choose from the scopes this server and {providerName} advertise, or type
+        one to add it. Leave blank to request the default scopes.
+      </Text>
+    </>
+  );
+}
+
 function ManualCredentialsFields({
   draft,
   disabled,
@@ -667,20 +779,11 @@ function ManualCredentialsFields({
         </div>
       </div>
       <AdvancedOptions>
-        <Text small className="block font-medium">
-          Scope
-        </Text>
-        <Input
-          value={draft.scopeText}
-          onChange={draft.setScopeText}
-          placeholder="read write"
+        <ScopeField
+          draft={draft}
           disabled={disabled}
-          aria-label="Scope"
+          providerName={providerName}
         />
-        <Text muted small className="block">
-          Space-separated. Leave blank to request the scopes {providerName}{" "}
-          advertises.
-        </Text>
       </AdvancedOptions>
       {registrationGuideUrl ? (
         <Button variant="secondary" size="sm" asChild>

@@ -13,8 +13,10 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import BookDemo from "@/pages/demo/BookDemo";
 import SwitchOrg from "@/pages/demo/SwitchOrg";
+import { useOrganizationHostMove } from "@/hooks/useOrganizationHostMove";
 import { useTrialNow } from "@/hooks/useTrialNow";
 import { getTrialLifecycleFromDates } from "@/lib/trial-status";
+import { organizationHostRedirectTarget } from "@/lib/organization-host";
 import { isGramSessionUnauthorizedError } from "@/lib/route-errors";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
@@ -33,7 +35,11 @@ import {
 } from "react-router";
 import { orgRoutePaths } from "@/routes";
 import { isPortablePath, resolvePortablePath } from "@/lib/portable-path";
-import { safeRedirectPath, UNAUTHENTICATED_PATHS } from "@/lib/session-expired";
+import {
+  isServerRenderedPath,
+  safeRedirectPath,
+  UNAUTHENTICATED_PATHS,
+} from "@/lib/session-expired";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
@@ -195,6 +201,36 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     }
   }, [session?.session, isImpersonating]);
 
+  // An organization that lives on another platform host is used there, on the
+  // same page. auth.info names that host only for an ordinary session whose
+  // active organization belongs elsewhere; session cookies are host-only, so
+  // the session is handed over with a session transfer.
+  // A URL naming another of the user's organizations switches scope first;
+  // the move then follows the organization the switch selects.
+  const urlNamesOtherOrganization = Boolean(
+    session?.organizations.some(
+      (organization) =>
+        organization.slug === orgSlug &&
+        organization.id !== session.activeOrganizationId,
+    ),
+  );
+  const sessionAuthorized =
+    Boolean(session?.session) && !isGramSessionUnauthorizedError(error);
+  const organizationHostTarget =
+    sessionAuthorized &&
+    session?.activeOrganizationId &&
+    !isImpersonating &&
+    !urlNamesOtherOrganization
+      ? organizationHostRedirectTarget(
+          session.activeOrganizationDashboardUrl,
+          window.location,
+        )
+      : undefined;
+  const movingHost = useOrganizationHostMove(
+    session?.activeOrganizationId,
+    organizationHostTarget,
+  );
+
   // you need something like this so you don't redirect with empty session too soon
   // isLoading is not synchronized with the session data actually being populated, so we need to wait for the session to actually finish loading
   // !! Very important that auth.info returns an error if there's no session
@@ -214,7 +250,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     return <AppLoadingShell />;
   }
 
-  // A portable "/~" path (an external link that cannot know the viewer's
+  // A portable "/@self" path (an external link that cannot know the viewer's
   // slugs) matches no route, so the gates below must resolve it before route
   // matching gets a say. Logged out it bounces through login carrying the
   // full destination — the same shape LoginCheck produces for slugged paths.
@@ -231,6 +267,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
         {children}
       </SessionContext.Provider>
     );
+  }
+
+  if (movingHost) {
+    return <AuthPendingScreen />;
   }
 
   // Show book demo page if organization is not whitelisted
@@ -270,14 +310,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  // Fully authenticated: expand "/~" into the active org and the project the
-  // user last visited, keeping the destination's own query and hash.
+  // Fully authenticated: expand "/@self" into the active org, keeping the
+  // destination's own query and hash.
   if (session.organization) {
-    const resolved = resolvePortablePath(
-      location,
-      session.organization,
-      localStorage.getItem(PREFERRED_PROJECT_KEY),
-    );
+    const resolved = resolvePortablePath(location, session.organization);
     if (resolved) {
       return <Navigate to={resolved} replace />;
     }
@@ -318,6 +354,9 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // freshly authenticated user to a foreign origin.
   const redirectParam = safeRedirectPath(searchParams.get("redirect"));
   if (redirectParam) {
+    if (isServerRenderedPath(redirectParam)) {
+      return <ServerRenderedRedirect to={redirectParam} />;
+    }
     return <Navigate to={redirectParam} replace />;
   } else if (isSlugExempt) {
     // Fall through to render children
@@ -381,6 +420,16 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     </SessionContext.Provider>
   );
 };
+
+// A return target the server renders (see isServerRenderedPath) is loaded
+// with a full navigation. A router <Navigate> would keep the dashboard in
+// charge of a path it has no route for.
+function ServerRenderedRedirect({ to }: { to: string }): JSX.Element {
+  useEffect(() => {
+    window.location.replace(to);
+  }, [to]);
+  return <AuthPendingScreen />;
+}
 
 function OrganizationScopeSwitch({
   organizationId,

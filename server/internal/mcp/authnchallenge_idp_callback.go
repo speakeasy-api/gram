@@ -165,8 +165,8 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 				return finishFederation(oops.CodeUnauthorized, remotesessions.ErrFederatedIdentity, "Invalid login response", false)
 			}
 		}
-		callbackURL, callbackErr := endpoint.IDPCallbackURL(s.serverURL.String())
-		if callbackErr != nil || federation.OrganizationID != endpoint.OrganizationID || federation.IssuerID != trustedIssuerID || federation.ClientID != trustedClientID || federation.Configuration != configuration || federation.CallbackURL != callbackURL || challengeState.CreatedAt.IsZero() || time.Since(challengeState.CreatedAt) > challengeState.TTL() {
+		_, callbackErr := recordedIDPCallbackOrigin(endpoint, federation.CallbackURL)
+		if callbackErr != nil || federation.OrganizationID != endpoint.OrganizationID || federation.IssuerID != trustedIssuerID || federation.ClientID != trustedClientID || federation.Configuration != configuration || challengeState.CreatedAt.IsZero() || time.Since(challengeState.CreatedAt) > challengeState.TTL() {
 			return finishFederation(oops.CodeFailedPrecondition, remotesessions.ErrFederatedConfiguration, "Login configuration changed or expired. Restart login", false)
 		}
 		if q.Get("federated_start") == "1" && q.Get("code") == "" && q.Get("error") == "" {
@@ -425,7 +425,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	// The mint-time origin puts the consent page back on the host the user
 	// started on, without a fresh custom_domains lookup, or on the
 	// authentication host when the endpoint's issuer lives there.
-	consentURL, err := endpoint.ConsentURL(s.authorizationServerBaseURL(endpoint, baseURL), challengeState.ID)
+	consentURL, err := s.consentURL(endpoint, s.authorizationServerBaseURL(endpoint, baseURL), challengeState.ID)
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		return oops.E(oops.CodeUnexpected, err, "build consent URL").LogError(ctx, logger)

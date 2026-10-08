@@ -84,7 +84,7 @@ type LogChatSessionMoveEvent struct {
 	// TargetSessionID is the native session id minted for the continuation,
 	// when the daemon knew it at launch time. Empty for targets whose ids are
 	// minted server-side (Cursor).
-	TargetSessionID string //nolint:glint // auditeventurnnaming: native harness session id, not a Gram resource with a URN
+	TargetSessionID string //nolint:glint // auditeventurnnaming: native harness session id, not a Speakeasy resource with a URN
 	// SourceSurface is the harness the session originated in, when known.
 	SourceSurface string
 	// DeviceSerial and DeviceHostname attribute the machine the move happened
@@ -163,7 +163,7 @@ type LogChatSessionRecallEvent struct {
 
 	// SourceSessionID is the native harness session id the recalled chat was
 	// captured from, when known.
-	SourceSessionID string //nolint:glint // auditeventurnnaming: native harness session id, not a Gram resource with a URN
+	SourceSessionID string //nolint:glint // auditeventurnnaming: native harness session id, not a Speakeasy resource with a URN
 
 	// The remaining fields describe the digest that was served — counts and
 	// sizes only. Like the handoff-export event this entry records that content

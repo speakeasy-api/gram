@@ -1,5 +1,46 @@
 # cli
 
+## 0.19.1
+
+### Patch Changes
+
+- 35b67b5: User-facing text now names the product Speakeasy instead of Gram across the dashboard, admin dashboard, CLI help and output, server error messages, consent pages, MCP server info, and API descriptions. HTTP header names, environment variables, package names, and code identifiers are unchanged.
+
+## 0.19.0
+
+### Minor Changes
+
+- 9a02108: Rename Gram Functions and the CLI's settings to Speakeasy names. Every old name keeps working as a deprecated alias.
+  
+  - **SDK package:** the Functions SDK is published as `@speakeasy-api/functions`. Its main class is `Functions`, and the MCP helpers are `fromFunctions` and `withFunctions`. `Gram`, `fromGram` and `withGram` stay exported as deprecated aliases of the same objects. `@gram-ai/functions` depends on `@speakeasy-api/functions` at the same version and re-exports it, including the `/mcp` and `/build` subpaths and the `gf` command, so existing imports are unchanged. New projects from `speakeasy functions init` and `@gram-ai/create-function` use `@speakeasy-api/functions`. The `@gram-ai/create-function` template is now `--template functions`, and `--template gram` still works.
+  - **Project files:** projects default to `speakeasy.config.*`, a `src/functions.ts` entrypoint and a `speakeasy.deploy.json` deployment file. `gram.config.*`, `src/gram.ts` and `gram.deploy.json` are still read when only they exist, with a one-line note for the old config and deployment file names. Builds write `dist/functions.zip` and remove a `dist/gram.zip` left by an older SDK. `speakeasy push --config` is now optional.
+  - **Environment variables:** `SPEAKEASY_AI_API_KEY`, `SPEAKEASY_AI_API_URL`, `SPEAKEASY_AI_SITE_URL`, `SPEAKEASY_AI_ORG`, `SPEAKEASY_AI_PROJECT`, `SPEAKEASY_AI_PROFILE`, `SPEAKEASY_AI_PROFILE_PATH`, `SPEAKEASY_AI_LOG_LEVEL`, `SPEAKEASY_AI_LOG_PRETTY` and `SPEAKEASY_AI_FUNCTIONS_SDK_VERSION` win over their `GRAM_*` names in the CLI, which prints one deprecation line per run when only a `GRAM_*` name is set. The SDK reads `SPEAKEASY_AI_CLI_PATH` and `SPEAKEASY_AI_DEV` before `GRAM_CLI_PATH` and `GRAM_DEV`. Plain `SPEAKEASY_*` variables, which belong to the Speakeasy SDK generator, are never read. Functions that opt in to the caller's email receive it as `SPEAKEASY_AI_USER_EMAIL` as well as `GRAM_USER_EMAIL`.
+  - **CLI profile:** the default profile file is `$XDG_CONFIG_HOME/speakeasy-ai/profile.json` (`~/.config/speakeasy-ai/profile.json`). Until it exists, the CLI reads `~/.gram/profile.json`, and the first save copies your profiles across without deleting the old file. `speakeasy auth clear` empties both.
+  - **CLI text:** help, errors and prompts no longer mention Gram, and help lists only the `SPEAKEASY_AI_*` variable names.
+
+## 0.18.0
+
+### Minor Changes
+
+- 261c304: Rename the CLI command to `speakeasy`. Install it with `brew install speakeasy-api/tap/cli` or `npm i -g @speakeasy-api/cli`. The `speakeasy-api/tap/gram` Homebrew formula keeps installing the CLI as `gram` for now; running it as `gram` prints a deprecation notice and otherwise works as before. Profiles stay in `~/.gram/profile.json`.
+- 261c304: Add `speakeasy functions` commands for Gram Functions projects:
+  
+  - `speakeasy functions init [dir]` creates a project from a built-in template (`--template functions` or `--template mcp`). It prompts for missing values on a terminal, and `--yes` uses the defaults. `--git` and `--install` control git init and the dependency install with the detected package manager.
+  - `speakeasy functions build` builds the project with the `@gram-ai/functions` version it depends on. It needs Node.js 22.18.0 or later and `@gram-ai/functions` 0.19.0 or later, and says what to install when either is missing.
+  - `speakeasy functions dev` runs the project's `dev` script and passes arguments after `--` to it.
+  - `speakeasy functions push` builds, stages and deploys the project with your `speakeasy auth` profile. `--slug`, `--project`, `--scale` and `--memory-mib` override the project config, and `--no-build` deploys the existing build.
+  - `speakeasy functions stage` adds a built zip file to the deployment file without deploying, the same as `speakeasy stage function`, which keeps working.
+  
+  `speakeasy push` now deploys to the API URL saved by `speakeasy auth` when neither `--api-url` nor `GRAM_API_URL` is set, instead of always using `https://app.getgram.ai`.
+
+## 0.17.0
+
+### Minor Changes
+
+- 1cad72d: Add ChatGPT Desktop as an MCP client on the hosted install page and in
+  `gram install chatgpt-desktop`, with Developer mode and custom connector steps
+  matched to the server's authentication.
+
 ## 0.16.0
 
 ### Minor Changes

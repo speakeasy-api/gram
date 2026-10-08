@@ -10,6 +10,7 @@ import { remoteSessionClientsDelete } from "../funcs/remoteSessionClientsDelete.
 import { remoteSessionClientsDetachKeySet } from "../funcs/remoteSessionClientsDetachKeySet.js";
 import { remoteSessionClientsDetachUserSessionIssuer } from "../funcs/remoteSessionClientsDetachUserSessionIssuer.js";
 import { remoteSessionClientsGet } from "../funcs/remoteSessionClientsGet.js";
+import { remoteSessionClientsGetNewClientCallbackUrl } from "../funcs/remoteSessionClientsGetNewClientCallbackUrl.js";
 import { remoteSessionClientsList } from "../funcs/remoteSessionClientsList.js";
 import { remoteSessionClientsPrepareEMA } from "../funcs/remoteSessionClientsPrepareEMA.js";
 import { remoteSessionClientsReadEMA } from "../funcs/remoteSessionClientsReadEMA.js";
@@ -17,6 +18,7 @@ import { remoteSessionClientsUnlinkEMA } from "../funcs/remoteSessionClientsUnli
 import { remoteSessionClientsUpdate } from "../funcs/remoteSessionClientsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { IdentityChainingPreparation } from "../models/components/identitychainingpreparation.js";
+import { NewClientCallbackURLResult } from "../models/components/newclientcallbackurlresult.js";
 import { RemoteSessionClient } from "../models/components/remotesessionclient.js";
 import {
   AttachRemoteSessionClientKeySetRequest,
@@ -46,6 +48,10 @@ import {
   DetachUserSessionIssuerRequest,
   DetachUserSessionIssuerSecurity,
 } from "../models/operations/detachusersessionissuer.js";
+import {
+  GetNewRemoteSessionClientCallbackUrlRequest,
+  GetNewRemoteSessionClientCallbackUrlSecurity,
+} from "../models/operations/getnewremotesessionclientcallbackurl.js";
 import {
   GetRemoteSessionClientRequest,
   GetRemoteSessionClientSecurity,
@@ -136,7 +142,7 @@ export class RemoteSessionClients extends ClientSDK {
    * createCimd remoteSessionClients
    *
    * @remarks
-   * Register a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the client carries no secret and authenticates with token_endpoint_auth_method=none. The owning issuer must advertise client_id_metadata_document_supported.
+   * Register a remote_session_client in Client ID Metadata Document (CIMD) mode. Speakeasy generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the client carries no secret and authenticates with token_endpoint_auth_method=none. The owning issuer must advertise client_id_metadata_document_supported.
    */
   async createCimd(
     request: CreateCimdRemoteSessionClientRequest,
@@ -241,6 +247,25 @@ export class RemoteSessionClients extends ClientSDK {
     PageIterator<ListRemoteSessionClientsResponse, { cursor: string }>
   > {
     return unwrapResultIterator(remoteSessionClientsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getNewClientCallbackUrl remoteSessionClients
+   *
+   * @remarks
+   * Get the redirect URI a remote_session_client created now in the caller's project registers with its upstream provider.
+   */
+  async getNewClientCallbackUrl(
+    request?: GetNewRemoteSessionClientCallbackUrlRequest | undefined,
+    security?: GetNewRemoteSessionClientCallbackUrlSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<NewClientCallbackURLResult> {
+    return unwrapAsync(remoteSessionClientsGetNewClientCallbackUrl(
       this,
       request,
       security,

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -381,19 +382,21 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	if plan.Kind == gateway.ToolKindExternalMCP {
 		scanToolName = descriptor.URN.Name
 	}
-	decision := s.scanEvaluator.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
-		Surface:        mcpriskscan.SurfaceInstances,
-		Method:         mcpriskscan.MethodToolsCall,
-		OrganizationID: descriptor.OrganizationID,
-		ProjectID:      descriptor.ProjectID,
-		ServerID:       "",
-		MetaServerID:   "",
-		ToolsetID:      scanToolsetID,
-		ToolName:       scanToolName,
-		ResourceURI:    "",
-		PromptName:     "",
-		ChatID:         chatID,
-	}, mcpriskscan.BorrowPayload(requestBodyBytes)))
+	requestSubject := mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
+		Surface:         mcpriskscan.SurfaceInstances,
+		Method:          mcpriskscan.MethodToolsCall,
+		OrganizationID:  descriptor.OrganizationID,
+		ProjectID:       descriptor.ProjectID,
+		ServerID:        "",
+		MetaServerID:    "",
+		ToolsetID:       scanToolsetID,
+		ToolName:        scanToolName,
+		ResourceURI:     "",
+		PromptName:      "",
+		ChatID:          chatID,
+		ToolAnnotations: nil,
+	}, mcpriskscan.BorrowPayload(requestBodyBytes))
+	decision := s.scanEvaluator.Scan(ctx, requestSubject)
 	if decision.Denied() {
 		return oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
 	}
@@ -408,6 +411,14 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	}, plan, attrRecorder)
 	if err != nil {
 		return fmt.Errorf("failed to proxy tool call: %w", err)
+	}
+	if plan.Kind != gateway.ToolKindPrompt {
+		responsePayload := instanceResponsePayload(plan.Kind, interceptor.headers.Get("content-type"), interceptor.buffer.Bytes())
+		decision = s.scanEvaluator.Scan(ctx, mcpriskscan.NewResponse(requestSubject, responsePayload))
+		if decision.Denied() {
+			interceptor.buffer.Reset()
+			return oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+		}
 	}
 
 	// Write the modified response to the original response writer
@@ -528,6 +539,21 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	}()
 
 	return nil
+}
+
+func instanceResponsePayload(kind gateway.ToolKind, contentType string, body []byte) mcpriskscan.Payload {
+	if mediaType, _, err := mime.ParseMediaType(contentType); err == nil && mediaType == "text/event-stream" {
+		return mcpriskscan.Payload{}
+	}
+	if kind == gateway.ToolKindExternalMCP {
+		payload, err := mcpriskscan.ParseToolResultPayload(body)
+		if err != nil {
+			return mcpriskscan.Payload{}
+		}
+		return payload
+	}
+	// Invalid bytes are replaced, not dropped, so one stray byte cannot hide the text around it.
+	return mcpriskscan.TextResponsePayload([]byte(strings.ToValidUTF8(string(body), "\uFFFD")))
 }
 
 // ResponseInterceptor completely intercepts the response, allowing modifications before sending to client

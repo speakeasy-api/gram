@@ -108,6 +108,40 @@ describe("buildUpdateIssuerForm", () => {
 
   // Without a discovery for the current URL the server must keep the metadata
   // it already has (COALESCE narg semantics), so the arrays are omitted.
+  it("omits the scope override unless the caller supplies it", () => {
+    const form = buildUpdateIssuerForm(baseState);
+
+    expect("scopeOverride" in form).toBe(false);
+  });
+
+  it("sets the scope override from the picked scopes, trimmed", () => {
+    const form = buildUpdateIssuerForm({
+      ...baseState,
+      scopeOverride: [" openid", "mcp_api ", " ", "refresh_token"],
+    });
+
+    expect(form.scopeOverride).toEqual(["openid", "mcp_api", "refresh_token"]);
+  });
+
+  it("clears the scope override with an empty array when emptied", () => {
+    const form = buildUpdateIssuerForm({ ...baseState, scopeOverride: [] });
+
+    expect(form.scopeOverride).toEqual([]);
+  });
+
+  // Omitted keeps the stored value; an explicit boolean sets it either way.
+  it("omits the omit-scope-fallback switch unless the caller supplies it", () => {
+    expect("omitScopeFallback" in buildUpdateIssuerForm(baseState)).toBe(false);
+    expect(
+      buildUpdateIssuerForm({ ...baseState, omitScopeFallback: true })
+        .omitScopeFallback,
+    ).toBe(true);
+    expect(
+      buildUpdateIssuerForm({ ...baseState, omitScopeFallback: false })
+        .omitScopeFallback,
+    ).toBe(false);
+  });
+
   it("omits the RFC 8414 arrays when no discovery has run", () => {
     const form = buildUpdateIssuerForm(baseState);
 
@@ -251,6 +285,16 @@ describe("buildUpdateIssuerForm", () => {
 
 describe("buildCreateIssuerForm", () => {
   const { id: _id, ...createState } = baseState;
+
+  it("forwards the omit-scope-fallback switch only when set", () => {
+    expect(
+      buildCreateIssuerForm(createState).omitScopeFallback,
+    ).toBeUndefined();
+    expect(
+      buildCreateIssuerForm({ ...createState, omitScopeFallback: true })
+        .omitScopeFallback,
+    ).toBe(true);
+  });
 
   it("forwards the discovery-only capabilities from a matching snapshot", () => {
     const form = buildCreateIssuerForm({

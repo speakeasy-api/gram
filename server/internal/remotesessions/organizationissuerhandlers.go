@@ -170,6 +170,7 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
 		ScopeOverride:                              scopeOverride(payload.ScopeOverride),
+		OmitScopeFallback:                          conv.PtrToPGBool(payload.OmitScopeFallback),
 		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
 		Metadata:                                   nil,
 		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
@@ -223,11 +224,15 @@ func (s *Service) ListIssuers(ctx context.Context, payload *orgissuersgen.ListIs
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 	}
 
+	// Goa validates the enum; empty means every tier.
+	tier := conv.PtrValOr(payload.Tier, "")
 	rows, err := repo.New(s.db).ListOrganizationRemoteSessionIssuers(ctx, repo.ListOrganizationRemoteSessionIssuersParams{
-		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
-		IncludeGlobal:  true,
-		Cursor:         cursor,
-		LimitValue:     limit,
+		OrganizationID:         conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeOrganizational:  tier == "" || tier == "organization",
+		IncludeProjectSpecific: tier == "" || tier == "project",
+		IncludeGlobal:          tier == "" || tier == "platform",
+		Cursor:                 cursor,
+		LimitValue:             limit,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list organization admin remote session issuers").LogError(ctx, s.logger)
@@ -582,6 +587,7 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
 		ScopeOverride:                              payload.ScopeOverride,
+		OmitScopeFallback:                          conv.PtrToPGBool(payload.OmitScopeFallback),
 		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
 		Oidc:                                       conv.PtrToPGBool(payload.Oidc),
 		Passthrough:                                conv.PtrToPGBool(payload.Passthrough),

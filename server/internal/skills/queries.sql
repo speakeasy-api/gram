@@ -1876,6 +1876,29 @@ WHERE prev.id = sd.id
   AND sd.revoked_at IS NULL
 RETURNING sqlc.embed(sd), prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id;
 
+-- name: HasPublishedPluginDistributionForSkills :one
+-- Reports whether a change to any of the skills can move a published
+-- marketplace package: the project has a marketplace connection and a live
+-- plugin carries one of the skills. latest_only narrows the check to
+-- distributions that follow the latest valid version, the only ones a new or
+-- restored version changes.
+SELECT (
+  EXISTS (
+    SELECT 1
+    FROM skill_distributions sd
+    JOIN plugins p ON p.id = sd.plugin_id AND p.project_id = sd.project_id AND p.deleted IS FALSE
+    WHERE sd.project_id = @project_id
+      AND sd.skill_id = ANY(@skill_ids::uuid[])
+      AND sd.channel = 'plugin'
+      AND sd.assistant_id IS NULL
+      AND sd.revoked_at IS NULL
+      AND (NOT @latest_only::bool OR sd.pinned_version_id IS NULL)
+  )
+  AND EXISTS (
+    SELECT 1 FROM plugin_github_connections c WHERE c.project_id = @project_id
+  )
+)::bool AS published;
+
 -- name: ListPendingSkillObservations :many
 -- One keyset page of activations still awaiting efficacy enqueue, ordered on
 -- the unique (seen_at, id) key so the caller can page through the whole pending

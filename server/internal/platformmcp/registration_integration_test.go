@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -530,11 +529,7 @@ func TestPostgresOAuthStoreGenerationRotationRevokesGenerationCommittedWhileWait
 		_, rotateErr := store.RotateConnectionGeneration(ctx, organizationID, connection.ID, finalGeneration.String(), now.Add(2*time.Minute))
 		rotationResult <- rotateErr
 	}()
-	select {
-	case rotateErr := <-rotationResult:
-		require.FailNow(t, "generation rotation did not wait for the connection lock", "error: %v", rotateErr)
-	case <-time.After(100 * time.Millisecond):
-	}
+	testenv.WaitForBackendsBlockedBy(t, ctx, conn, testenv.BackendPID(blockingTx), 1)
 
 	require.NoError(t, blockingTx.Commit(ctx))
 	require.NoError(t, <-rotationResult)
@@ -586,7 +581,7 @@ func TestRegistrationStoreAllowsFreshOrganizationTarget(t *testing.T) {
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 1})
+	store, err := NewRegistrationStore(conn)
 	require.NoError(t, err)
 
 	eligible, err := store.EligibleCatalogRegistrationTarget(ctx, principal.OrganizationID, project)
@@ -602,7 +597,7 @@ func TestRegistrationStoreRejectsProjectOutsideOrganization(t *testing.T) {
 	require.NoError(t, err)
 
 	_, project := seedRegistrationLifecycle(t, ctx, conn)
-	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 1})
+	store, err := NewRegistrationStore(conn)
 	require.NoError(t, err)
 
 	eligible, err := store.EligibleCatalogRegistrationTarget(ctx, "org_"+uuid.NewString(), project)
@@ -637,7 +632,7 @@ func TestRegistrationStoreAllowsLegacyToolsetBackedServer(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 1})
+	store, err := NewRegistrationStore(conn)
 	require.NoError(t, err)
 	eligible, err := store.EligibleCatalogRegistrationTarget(ctx, principal.OrganizationID, project)
 	require.NoError(t, err)
@@ -654,200 +649,31 @@ func TestRegistrationStoreAllowsLegacyToolsetBackedServer(t *testing.T) {
 	require.Equal(t, receiptResultRegistered, completed.ResultCode)
 }
 
-func TestRegistrationStoreEnforcesActiveRegistrationCap(t *testing.T) {
+func TestRegistrationStoreRegistersManyServersInOneProject(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_registration_cap")
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_registration_many")
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 1})
+	store, err := NewRegistrationStore(conn)
 	require.NoError(t, err)
 
-	registeredRequest := registrationRequest(project, "registered", "registered-key")
-	registeredReceipt, err := store.BeginReceipt(ctx, principal, project, registeredRequest, time.Now().UTC())
-	require.NoError(t, err)
-	registeredReceipt, err = store.ConvergeRegistration(ctx, principal, project, registeredRequest, registeredReceipt)
-	require.NoError(t, err)
-	registeredReceipt, err = store.CompleteRegistrationWithRemoteURL(ctx, principal, project, registeredRequest, registeredReceipt, "https://reviewed.example.test/registered")
-	require.NoError(t, err)
-
-	reusedRequest := registeredRequest
-	reusedRequest.IdempotencyKey = "reused-key"
-	reusedReceipt, err := store.BeginReceipt(ctx, principal, project, reusedRequest, time.Now().UTC())
-	require.NoError(t, err)
-	reusedReceipt, err = store.ConvergeRegistration(ctx, principal, project, reusedRequest, reusedReceipt)
-	require.NoError(t, err)
-	require.Equal(t, registeredReceipt.RegistrationID, reusedReceipt.RegistrationID)
-
-	deniedRequest := registrationRequest(project, "denied", "denied-key")
-	deniedReceipt, err := store.BeginReceipt(ctx, principal, project, deniedRequest, time.Now().UTC())
-	require.NoError(t, err)
-	deniedReceipt, err = store.ConvergeRegistration(ctx, principal, project, deniedRequest, deniedReceipt)
-	require.ErrorIs(t, err, ErrRegistrationCap)
-	require.Equal(t, receiptStatusSucceeded, deniedReceipt.Status)
-	require.Equal(t, receiptResultActiveCap, deniedReceipt.ResultCode)
-	require.False(t, deniedReceipt.RegistrationID.Valid)
-
-	storedDeniedReceipt, err := platformrepo.New(conn).GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
-		OrganizationID: principal.OrganizationID,
-		UserID:         conv.ToPGText(principal.UserID),
-		SubjectUrn:     userSubjectURN(principal.UserID),
-		ProjectID:      project.ID,
-		Operation:      operationRegisterCatalogMCP,
-		IdempotencyKey: deniedRequest.IdempotencyKey,
-	})
-	require.NoError(t, err)
-	require.Equal(t, receiptStatusSucceeded, storedDeniedReceipt.Status)
-	require.Equal(t, receiptResultActiveCap, storedDeniedReceipt.ResultCode.String)
-	require.False(t, storedDeniedReceipt.RegistrationID.Valid)
-
-	registrations, err := platformrepo.New(conn).CountActiveRegisteredPlatformMCPCatalogRegistrations(ctx, platformrepo.CountActiveRegisteredPlatformMCPCatalogRegistrationsParams{
-		OrganizationID: principal.OrganizationID,
-		ProjectID:      project.ID,
-	})
-	require.NoError(t, err)
-	require.EqualValues(t, 1, registrations)
-	_, err = platformrepo.New(conn).GetActivePlatformMCPCatalogRegistration(ctx, platformrepo.GetActivePlatformMCPCatalogRegistrationParams{
-		OrganizationID:   principal.OrganizationID,
-		ProjectID:        project.ID,
-		SourceKind:       deniedRequest.SourceKind,
-		CatalogProvider:  deniedRequest.CatalogProvider,
-		CatalogReference: deniedRequest.CatalogReference,
-	})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
-	auditCount, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionPlatformMcpRegistrationCreate)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, auditCount)
-
-	replayedReceipt, err := store.BeginReceipt(ctx, principal, project, deniedRequest, time.Now().UTC())
-	require.NoError(t, err)
-	require.True(t, replayedReceipt.Replayed)
-	require.Equal(t, deniedReceipt.ID, replayedReceipt.ID)
-	replayedReceipt, err = store.ConvergeRegistration(ctx, principal, project, deniedRequest, replayedReceipt)
-	require.ErrorIs(t, err, ErrRegistrationCap)
-	require.True(t, replayedReceipt.Replayed)
-	require.Equal(t, receiptResultActiveCap, replayedReceipt.ResultCode)
-}
-
-func TestRegistrationStoreSerializesCapRejectionsForDistinctCandidates(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_registration_cap_concurrent")
-	require.NoError(t, err)
-
-	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 1})
-	require.NoError(t, err)
-
-	registeredRequest := registrationRequest(project, "registered", "registered-key")
-	registeredReceipt, err := store.BeginReceipt(ctx, principal, project, registeredRequest, time.Now().UTC())
-	require.NoError(t, err)
-	registeredReceipt, err = store.ConvergeRegistration(ctx, principal, project, registeredRequest, registeredReceipt)
-	require.NoError(t, err)
-	_, err = store.CompleteRegistrationWithRemoteURL(ctx, principal, project, registeredRequest, registeredReceipt, "https://reviewed.example.test/registered")
-	require.NoError(t, err)
-
-	requests := []CatalogRegistrationRequest{
-		registrationRequest(project, "first", "first-key"),
-		registrationRequest(project, "second", "second-key"),
+	registrationIDs := make(map[uuid.UUID]struct{})
+	for i := range 6 {
+		name := fmt.Sprintf("server-%d", i)
+		request := registrationRequest(project, name, name+"-key")
+		receipt, err := store.BeginReceipt(ctx, principal, project, request, time.Now().UTC())
+		require.NoError(t, err)
+		receipt, err = store.ConvergeRegistration(ctx, principal, project, request, receipt)
+		require.NoError(t, err)
+		receipt, err = store.CompleteRegistrationWithRemoteURL(ctx, principal, project, request, receipt, "https://reviewed.example.test/"+name)
+		require.NoError(t, err)
+		require.Equal(t, receiptResultRegistered, receipt.ResultCode)
+		registrationIDs[receipt.RegistrationID.UUID] = struct{}{}
 	}
-	errorsByRequest := make(chan error, len(requests))
-	var start sync.WaitGroup
-	start.Add(1)
-	for _, request := range requests {
-		go func(request CatalogRegistrationRequest) {
-			start.Wait()
-			receipt, err := store.BeginReceipt(ctx, principal, project, request, time.Now().UTC())
-			if err == nil {
-				_, err = store.ConvergeRegistration(ctx, principal, project, request, receipt)
-			}
-			errorsByRequest <- err
-		}(request)
-	}
-	start.Done()
-	for range requests {
-		require.ErrorIs(t, <-errorsByRequest, ErrRegistrationCap)
-	}
-
-	registrations, err := platformrepo.New(conn).CountActiveRegisteredPlatformMCPCatalogRegistrations(ctx, platformrepo.CountActiveRegisteredPlatformMCPCatalogRegistrationsParams{
-		OrganizationID: principal.OrganizationID,
-		ProjectID:      project.ID,
-	})
-	require.NoError(t, err)
-	require.EqualValues(t, 1, registrations)
-}
-
-func TestRegistrationStoreDoesNotCountPendingRegistrationsTowardActiveCap(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_registration_pending_cap")
-	require.NoError(t, err)
-
-	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 1})
-	require.NoError(t, err)
-
-	pendingRequest := registrationRequest(project, "pending", "pending-key")
-	pendingReceipt, err := store.BeginReceipt(ctx, principal, project, pendingRequest, time.Now().UTC())
-	require.NoError(t, err)
-	pendingReceipt, err = store.ConvergeRegistration(ctx, principal, project, pendingRequest, pendingReceipt)
-	require.NoError(t, err)
-	require.True(t, pendingReceipt.RegistrationID.Valid)
-
-	secondRequest := registrationRequest(project, "second", "second-key")
-	secondReceipt, err := store.BeginReceipt(ctx, principal, project, secondRequest, time.Now().UTC())
-	require.NoError(t, err)
-	secondReceipt, err = store.ConvergeRegistration(ctx, principal, project, secondRequest, secondReceipt)
-	require.NoError(t, err)
-	require.True(t, secondReceipt.RegistrationID.Valid)
-
-	completeRequests := []struct {
-		request CatalogRegistrationRequest
-		receipt OperationReceipt
-		remote  string
-	}{
-		{request: pendingRequest, receipt: pendingReceipt, remote: "https://reviewed.example.test/pending"},
-		{request: secondRequest, receipt: secondReceipt, remote: "https://reviewed.example.test/second"},
-	}
-	completeErrors := make(chan error, len(completeRequests))
-	var start sync.WaitGroup
-	start.Add(1)
-	for _, complete := range completeRequests {
-		go func(complete struct {
-			request CatalogRegistrationRequest
-			receipt OperationReceipt
-			remote  string
-		}) {
-			start.Wait()
-			_, err := store.CompleteRegistrationWithRemoteURL(ctx, principal, project, complete.request, complete.receipt, complete.remote)
-			completeErrors <- err
-		}(complete)
-	}
-	start.Done()
-
-	var succeeded, capped int
-	for range completeRequests {
-		err := <-completeErrors
-		if err == nil {
-			succeeded++
-			continue
-		}
-		require.ErrorIs(t, err, ErrRegistrationCap)
-		capped++
-	}
-	require.Equal(t, 1, succeeded)
-	require.Equal(t, 1, capped)
-
-	registrations, err := platformrepo.New(conn).CountActiveRegisteredPlatformMCPCatalogRegistrations(ctx, platformrepo.CountActiveRegisteredPlatformMCPCatalogRegistrationsParams{
-		OrganizationID: principal.OrganizationID,
-		ProjectID:      project.ID,
-	})
-	require.NoError(t, err)
-	require.EqualValues(t, 1, registrations)
+	require.Len(t, registrationIDs, 6)
 }
 
 func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *testing.T) {
@@ -858,7 +684,7 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	store, err := NewRegistrationStore(conn)
 	require.NoError(t, err)
 	request := CatalogRegistrationRequest{
 		ProjectSlug:      project.Slug,
@@ -1372,16 +1198,14 @@ func seedRegistrationLifecycle(t *testing.T, ctx context.Context, conn *pgxpool.
 	})
 	require.NoError(t, err)
 
-	return Principal{
+	principal := Principal{
 		UserID:         userID,
 		OrganizationID: organizationID,
 		ConnectionID:   connectionID.String(),
 		Generation:     generation.String(),
-	}, ResolvedProject{
-		ID:   projectRow.ID,
-		Name: projectRow.Name,
-		Slug: projectRow.Slug,
 	}
+	project := ResolvedProject{ID: projectRow.ID, Name: projectRow.Name, Slug: projectRow.Slug}
+	return principal, project
 }
 
 func TestPlatformMCPInventoryReturnsDashboardManagedRemoteUpstreamURL(t *testing.T) {
@@ -1536,7 +1360,7 @@ func TestSetupHandoffRoundTripsWithoutAConnection(t *testing.T) {
 	}
 	require.False(t, assistant.HasConnection())
 
-	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	store, err := NewRegistrationStore(conn)
 	require.NoError(t, err)
 
 	request := registrationRequest(project, "assistant-handoff", "assistant-handoff-key")
@@ -1622,7 +1446,7 @@ func TestAssistantReadinessIsAttributedAndReadWithoutAConnection(t *testing.T) {
 		ClientID:       AssistantClientID,
 		Surface:        SurfaceProjectAssistant,
 	}
-	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	store, err := NewRegistrationStore(conn)
 	require.NoError(t, err)
 
 	request := registrationRequest(project, "assistant-readiness", "assistant-readiness-key")
@@ -1693,7 +1517,7 @@ func TestRegistrationStoreWritesWithoutAConnection(t *testing.T) {
 	}
 	require.False(t, assistant.HasConnection())
 
-	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	store, err := NewRegistrationStore(conn)
 	require.NoError(t, err)
 
 	request := registrationRequest(project, "assistant-registered", "assistant-key")
@@ -1724,4 +1548,43 @@ func TestRegistrationStoreWritesWithoutAConnection(t *testing.T) {
 	require.NoError(t, err, "replaying the same key must return the original receipt, not a unique violation")
 	require.True(t, replay.Replayed)
 	require.Equal(t, receipt.ID, replay.ID)
+}
+
+func TestFindReceiptIsExistingOnlyAndUserScoped(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_find_receipt")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	store, err := NewRegistrationStore(conn)
+	require.NoError(t, err)
+	request := registrationRequest(project, "reviewed", "find-only-key")
+	now := time.Now().UTC()
+	_, found, err := store.FindReceipt(ctx, principal, project, request, now)
+	require.NoError(t, err)
+	require.False(t, found)
+	receipt, err := store.BeginReceipt(ctx, principal, project, request, now)
+	require.NoError(t, err)
+	require.False(t, receipt.Replayed)
+	existing, found, err := store.FindReceipt(ctx, principal, project, request, now)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, receipt.ID, existing.ID)
+	require.True(t, existing.Replayed)
+	other := principal
+	other.UserID = "other-user"
+	_, found, err = store.FindReceipt(ctx, other, project, request, now)
+	require.NoError(t, err)
+	require.False(t, found)
+	changed := registrationRequest(project, "different", request.IdempotencyKey)
+	_, _, err = store.FindReceipt(ctx, principal, project, changed, now)
+	require.ErrorIs(t, err, ErrRegistrationConflict)
+	_, found, err = store.FindReceipt(ctx, principal, project, request, now.Add(25*time.Hour))
+	require.NoError(t, err)
+	require.False(t, found)
+	// Expiry discovery must leave the row intact; only BeginReceipt can reclaim it.
+	existing, found, err = store.FindReceipt(ctx, principal, project, request, now)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, receipt.ID, existing.ID)
 }

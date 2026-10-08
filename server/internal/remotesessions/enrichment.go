@@ -446,7 +446,7 @@ func (e *SessionEnricher) userinfo(ctx context.Context, target enrichmentTarget,
 }
 
 // jwtAccessToken verifies signed access-token claims. Explicit access-token
-// types require RFC 9068 claims; Gram's generic-type compatibility path
+// types require RFC 9068 claims; Speakeasy's generic-type compatibility path
 // additionally requires a recorded resource distinct from the OAuth client.
 // ran is false when nothing was examined: an opaque token, an issuer with no
 // key set, or a key set that could not be consulted.
@@ -472,7 +472,7 @@ func (e *SessionEnricher) jwtAccessToken(ctx context.Context, target enrichmentT
 	var all map[string]json.RawMessage
 	header, err := verifyIssuerSignedJWTWithKeyPolicy(ctx, e.keys, target.jwksURI, target.issuerID.String(), transport, accessToken, jwks.AllowedSignatureAlgorithms(), validateJWTVerificationKeyStrength, &claims, &all)
 	if err != nil {
-		if ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || errors.Is(err, errJWTKeySetUnavailable) {
+		if ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || errors.Is(err, ErrJWTKeySetUnavailable) {
 			return out
 		}
 		out.ran = true
@@ -488,7 +488,7 @@ func (e *SessionEnricher) jwtAccessToken(ctx context.Context, target enrichmentT
 	}
 	typ = strings.ToLower(typ)
 	dedicatedType := typ == "at+jwt" || typ == "application/at+jwt"
-	// Gram compatibility: generic/missing typ is only accepted for a distinct resource audience.
+	// Speakeasy compatibility: generic/missing typ is only accepted for a distinct resource audience.
 	genericType := !typePresent || typ == "jwt" || typ == "application/jwt"
 	if !dedicatedType && !genericType {
 		e.rejectJWTAccessToken(ctx, target, &out, "wrong token type")
@@ -499,7 +499,7 @@ func (e *SessionEnricher) jwtAccessToken(ctx context.Context, target enrichmentT
 	if target.resourceIndicatorUnsupported {
 		resource = ""
 	}
-	// Gram compatibility: without a recorded resource, a dedicated token may use the client audience.
+	// Speakeasy compatibility: without a recorded resource, a dedicated token may use the client audience.
 	expectedAudience := conv.Default(resource, target.externalClientID)
 	if genericType && (resource == "" || resource == target.externalClientID) {
 		e.rejectJWTAccessToken(ctx, target, &out, "ambiguous token type")
@@ -510,7 +510,7 @@ func (e *SessionEnricher) jwtAccessToken(ctx context.Context, target enrichmentT
 		e.rejectJWTAccessToken(ctx, target, &out, "missing required claims")
 		return out
 	}
-	// RFC 9068 §4: require the expected resource audience (Gram fallback above).
+	// RFC 9068 §4: require the expected resource audience (Speakeasy fallback above).
 	if expectedAudience == "" || !claims.Audience.Contains(expectedAudience) {
 		e.rejectJWTAccessToken(ctx, target, &out, "audience mismatch",
 			attr.SlogOAuthExpectedAudience(expectedAudience),
@@ -533,7 +533,7 @@ func (e *SessionEnricher) jwtAccessToken(ctx context.Context, target enrichmentT
 			return out
 		}
 	} else {
-		// Gram binding policy: a client the token does name must be this OAuth client.
+		// Speakeasy binding policy: a client the token does name must be this OAuth client.
 		for _, name := range []string{"client_id", "azp"} {
 			if _, present := all[name]; present && claimString(all, name) != target.externalClientID {
 				e.rejectJWTAccessToken(ctx, target, &out, "client mismatch")
@@ -619,7 +619,7 @@ func (e *SessionEnricher) introspect(ctx context.Context, target enrichmentTarge
 		form := url.Values{}
 		form.Set("token", token)
 		form.Set("token_type_hint", hint)
-		req, err := newTokenEndpointRequest(ctx, target.introspectionEndpoint, form, tokenEndpointClientAuth{
+		req, err := NewTokenEndpointRequest(ctx, target.introspectionEndpoint, form, TokenEndpointClientAuth{
 			Method:                authMethod,
 			RemoteSessionClientID: uuid.Nil,
 			OrganizationID:        "",
@@ -700,7 +700,7 @@ func (e *SessionEnricher) decodeIntrospection(ctx context.Context, target enrich
 	if typ, _ := header.ExtraHeaders[jose.HeaderType].(string); !strings.EqualFold(strings.TrimPrefix(typ, "application/"), "token-introspection+jwt") {
 		return nil, errors.New("introspection jwt typ is not token-introspection+jwt")
 	}
-	if !issuerURLsEqual(claims.Issuer, target.issuerURL) {
+	if !IssuerURLsEqual(claims.Issuer, target.issuerURL) {
 		return nil, fmt.Errorf("introspection jwt issuer %q is not the grant's issuer", truncateForMessage(claims.Issuer))
 	}
 	now := time.Now()

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 func TestResourceIndicatorRuntimeNormalization(t *testing.T) {
@@ -46,24 +47,30 @@ func TestResolveClientRuntimeScopesAndAttachments(t *testing.T) {
 	unrelated.ClientID = "unrelated"
 	unrelated.UserSessionIssuerIds = []uuid.UUID{otherLogin}
 	unrelated.ResourceIdentifier = pgtype.Text{String: "https://mcp.example/", Valid: true}
-	id, scopes, state := resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{unrelated, client}, nil)
+	id, scopes, state := resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{unrelated, client}, nil, allClients(remotesessions.ResourceScopes{}))
 	require.Equal(t, "attached", id)
 	require.Equal(t, ClientBindingSingle, state)
 	require.Equal(t, []string{"read", "openid", "offline_access"}, scopes)
-	_, _, state = resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{unrelated}, nil)
+	_, _, state = resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{unrelated}, nil, allClients(remotesessions.ResourceScopes{}))
 	require.Equal(t, ClientBindingMissing, state)
 
+	// With discovery on the client's own scope beats the issuer override;
+	// off, the override still wins, as before the rollout flag.
 	client.IssuerScopeOverride = []string{"pinned"}
-	_, scopes, _ = resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, nil)
+	_, scopes, _ = resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, nil, allClients(remotesessions.ResourceScopes{UseDiscovered: true}))
+	require.Equal(t, []string{"read", "openid", "offline_access"}, scopes)
+	_, scopes, _ = resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, nil, allClients(remotesessions.ResourceScopes{}))
+	require.Equal(t, []string{"pinned"}, scopes)
+	client.Scope = nil
+	_, scopes, _ = resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, nil, allClients(remotesessions.ResourceScopes{}))
 	require.Equal(t, []string{"pinned"}, scopes)
 	client.IssuerScopeOverride = nil
-	client.Scope = nil
-	_, scopes, _ = resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, nil)
+	_, scopes, _ = resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, nil, allClients(remotesessions.ResourceScopes{}))
 	require.Equal(t, client.IssuerScopesSupported, scopes)
 
 	// Resource-matched clients use the same trailing-slash normalization as runtime.
 	server.UserSessionIssuerID = uuid.NullUUID{}
-	id, _, state = resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client, unrelated}, nil)
+	id, _, state = resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client, unrelated}, nil, allClients(remotesessions.ResourceScopes{}))
 	require.Equal(t, "unrelated", id)
 	require.Equal(t, ClientBindingSingle, state)
 }
@@ -83,19 +90,19 @@ func TestResolveClientBindingsRespectLoginIssuer(t *testing.T) {
 
 	// Another login's binding must neither win nor create false ambiguity.
 	for _, bindings := range [][]repo.ListEMABindingsRow{{foreign, binding}, {binding, foreign}} {
-		id, scopes, state := resolveClient(server, binding.Resource, clients, bindings)
+		id, scopes, state := resolveClient(server, binding.Resource, clients, bindings, allClients(remotesessions.ResourceScopes{}))
 		require.Equal(t, "attached", id)
 		require.Equal(t, ClientBindingBound, state)
 		require.Equal(t, []string{"read"}, scopes)
 	}
 	// Even a foreign binding to the same client must not contribute scopes.
 	foreign.RemoteSessionClientID.UUID = client.ID
-	_, scopes, state := resolveClient(server, binding.Resource, clients, []repo.ListEMABindingsRow{foreign, binding})
+	_, scopes, state := resolveClient(server, binding.Resource, clients, []repo.ListEMABindingsRow{foreign, binding}, allClients(remotesessions.ResourceScopes{}))
 	require.Equal(t, ClientBindingBound, state)
 	require.Equal(t, []string{"read"}, scopes)
 
 	// With only foreign bindings, use the server's attached fallback client.
-	id, scopes, state := resolveClient(server, binding.Resource, clients, []repo.ListEMABindingsRow{foreign})
+	id, scopes, state := resolveClient(server, binding.Resource, clients, []repo.ListEMABindingsRow{foreign}, allClients(remotesessions.ResourceScopes{}))
 	require.Equal(t, "attached", id)
 	require.Equal(t, ClientBindingSingle, state)
 	require.Equal(t, []string{"fallback"}, scopes)
@@ -111,7 +118,7 @@ func TestResolveClientAggregatesEffectiveBindingScopes(t *testing.T) {
 	fallback.RequestedScopes = nil
 	fallback.Resource = "https://mcp.example"
 	for _, bindings := range [][]repo.ListEMABindingsRow{{binding, fallback}, {fallback, binding}} {
-		id, scopes, state := resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, bindings)
+		id, scopes, state := resolveClient(server, "https://mcp.example", []repo.ListIssuerClientsRow{client}, bindings, allClients(remotesessions.ResourceScopes{}))
 		require.Equal(t, "bound", id)
 		require.Equal(t, ClientBindingBound, state)
 		require.Equal(t, []string{"openid", "read", "write"}, scopes)
@@ -125,7 +132,7 @@ func TestResolveClientIgnoresBindingsToAnotherProjectsClient(t *testing.T) {
 	foreign := repo.ListIssuerClientsRow{ID: uuid.New(), RemoteSessionIssuerID: issuer, ProjectID: uuid.NullUUID{UUID: otherProject, Valid: true}, ClientID: "other-project"}
 	binding := repo.ListEMABindingsRow{ProjectID: project, RemoteSessionIssuerID: issuer, Resource: "https://mcp.example", RemoteSessionClientID: uuid.NullUUID{UUID: foreign.ID, Valid: true}, RequestedScopes: []string{"read"}}
 
-	id, scopes, state := resolveClient(server, binding.Resource, []repo.ListIssuerClientsRow{foreign}, []repo.ListEMABindingsRow{binding})
+	id, scopes, state := resolveClient(server, binding.Resource, []repo.ListIssuerClientsRow{foreign}, []repo.ListEMABindingsRow{binding}, allClients(remotesessions.ResourceScopes{}))
 	require.Empty(t, id)
 	require.Empty(t, scopes)
 	require.Equal(t, ClientBindingMissing, state)

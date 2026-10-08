@@ -533,6 +533,9 @@ func TestListRemoteSessionIssuers(t *testing.T) {
 	result, err := ti.service.ListRemoteSessionIssuers(ctx, &gen.ListRemoteSessionIssuersPayload{
 		Cursor:           nil,
 		Limit:            nil,
+		Search:           nil,
+		UpstreamHost:     nil,
+		Tier:             nil,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -564,6 +567,9 @@ func TestListRemoteSessionIssuers_PaginationTraversal(t *testing.T) {
 		result, err := ti.service.ListRemoteSessionIssuers(ctx, &gen.ListRemoteSessionIssuersPayload{
 			Cursor:           cursor,
 			Limit:            &pageSize,
+			Search:           nil,
+			UpstreamHost:     nil,
+			Tier:             nil,
 			SessionToken:     nil,
 			ApikeyToken:      nil,
 			ProjectSlugInput: nil,
@@ -594,6 +600,9 @@ func TestListRemoteSessionIssuers_RBACForbidden(t *testing.T) {
 	_, err := ti.service.ListRemoteSessionIssuers(ctx, &gen.ListRemoteSessionIssuersPayload{
 		Cursor:           nil,
 		Limit:            nil,
+		Search:           nil,
+		UpstreamHost:     nil,
+		Tier:             nil,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -1004,7 +1013,9 @@ func TestDeleteRemoteSessionIssuer(t *testing.T) {
 func TestDeleteRemoteSessionIssuer_SerializedAgainstClientBinding(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
+	// probeTimeout bounds the server lock probe, independently of goroutine scheduling.
+	const probeTimeout = 100 * time.Millisecond
+	ctx, ti := newTestServiceWithConfig(t, testServiceConfig{lockTimeout: probeTimeout})
 
 	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayload("idp-delete-lock"))
 	require.NoError(t, err)
@@ -1015,24 +1026,21 @@ func TestDeleteRemoteSessionIssuer_SerializedAgainstClientBinding(t *testing.T) 
 	tx := testenv.BeginTx(t, ctx, ti.conn)
 	require.NoError(t, repo.New(tx).LockRemoteSessionIssuerForClientBinding(ctx, issuerID))
 
-	done := make(chan error, 1)
-	go func() {
-		done <- ti.service.DeleteRemoteSessionIssuer(ctx, &gen.DeleteRemoteSessionIssuerPayload{
-			ID:               created.ID,
-			SessionToken:     nil,
-			ApikeyToken:      nil,
-			ProjectSlugInput: nil,
-		})
-	}()
-
-	require.Never(t, func() bool { return len(done) > 0 }, 500*time.Millisecond, 25*time.Millisecond,
-		"delete completed while another transaction held the client-binding lock")
-
+	probeErr := ti.service.DeleteRemoteSessionIssuer(ctx, &gen.DeleteRemoteSessionIssuerPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	testenv.RequireLockNotAvailable(t, probeErr)
 	require.NoError(t, tx.Rollback(ctx))
-
-	require.Eventually(t, func() bool { return len(done) > 0 }, 30*time.Second, 25*time.Millisecond,
-		"delete did not complete after the client-binding lock was released")
-	require.NoError(t, <-done)
+	probeErr = ti.service.DeleteRemoteSessionIssuer(ctx, &gen.DeleteRemoteSessionIssuerPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, probeErr)
 }
 
 // TestDeleteRemoteSessionIssuer_NotFound proves deleting an issuer the project
@@ -1867,6 +1875,9 @@ func TestListRemoteSessionIssuers_InheritsPlatformIssuer(t *testing.T) {
 	result, err := ti.service.ListRemoteSessionIssuers(ctx, &gen.ListRemoteSessionIssuersPayload{
 		Cursor:           nil,
 		Limit:            nil,
+		Search:           nil,
+		UpstreamHost:     nil,
+		Tier:             nil,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -2206,7 +2217,7 @@ func TestDiscoverIssuerMetadata_MetadataIsTheMergedDocument(t *testing.T) {
 }
 
 // A member the sanitizer blanks is reported, so an operator can tell a
-// provider that advertises nothing from one whose value Gram refused.
+// provider that advertises nothing from one whose value Speakeasy refused.
 func TestFetchRemoteSessionIssuerMetadata_WarnsAboutDroppedPlaintextUserinfoEndpoint(t *testing.T) {
 	t.Parallel()
 

@@ -14,10 +14,24 @@ const mocks = vi.hoisted(() => ({
   mutateCreate: vi.fn(),
   mutateUpdate: vi.fn(),
   customizeSheetCategories: [] as string[],
+  step: null as string | null,
 }));
 
 vi.mock("@/hooks/useFeatureFlagVariant", () => ({
   useFeatureFlagVariant: () => mocks.flagResult() as FeatureFlagVariantResult,
+}));
+
+vi.mock("@gram/client/react-query/getHooksStatus.js", () => ({
+  useGetHooksStatus: () => ({
+    data: {
+      configured: true,
+      agentHooksKey: true,
+      anthropicInferenceHooks: false,
+    },
+    isPending: false,
+    isSuccess: true,
+    isError: false,
+  }),
 }));
 
 const LLM_VARIANT: FeatureFlagVariantResult = {
@@ -69,6 +83,7 @@ vi.mock("@/components/require-scope", () => ({
 
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: vi.fn(),
+  useProjectSlugForRequests: () => "test-project",
 }));
 
 vi.mock("@/routes", () => ({
@@ -76,7 +91,8 @@ vi.mock("@/routes", () => ({
 }));
 
 vi.mock("nuqs", () => ({
-  useQueryState: () => [null, vi.fn()],
+  useQueryState: (name: string) =>
+    name === "step" ? [mocks.step, vi.fn()] : [null, vi.fn()],
 }));
 
 vi.mock("@/components/shadow-mcp/ShadowMCPPolicyServerSelector", () => ({
@@ -145,6 +161,7 @@ afterEach(cleanup);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.step = null;
   mocks.customizeSheetCategories.length = 0;
   mocks.flagResult.mockReturnValue(LLM_VARIANT);
   vi.mocked(useSdkClient).mockReturnValue({
@@ -166,13 +183,27 @@ function renderEditor(
       <TooltipProvider>
         <StandardPolicyEditor
           policy={policy}
-          initialCategories={initialCategories}
+          prefill={
+            initialCategories
+              ? { categories: new Set(initialCategories), mcpServerIds: [] }
+              : undefined
+          }
         />
       </TooltipProvider>
     </QueryClientProvider>
   );
   const view = render(tree());
   return { ...view, rerender: () => view.rerender(tree()) };
+}
+
+// The scope choice lives on the Scope step; Create stays disabled for a new
+// policy until one is made there.
+function chooseClientSessions(rerender: () => void) {
+  mocks.step = "scope";
+  rerender();
+  fireEvent.click(screen.getByText("Client sessions"));
+  mocks.step = null;
+  rerender();
 }
 
 function updateBody() {
@@ -256,10 +287,13 @@ describe("StandardPolicyEditor under the LLM analyzer", () => {
   });
 
   it("enables Create with only PII selected and submits an entity-less payload", () => {
-    renderEditor(null);
+    const { rerender } = renderEditor(null);
 
     fireEvent.click(screen.getByRole("switch", { name: "PII built-in rule" }));
     expect(screen.getByText(LLM_ANALYZER_NOTICE)).toBeTruthy();
+    // A new policy also needs a scope before it can be created.
+    expect(createButton().disabled).toBe(true);
+    chooseClientSessions(rerender);
     expect(createButton().disabled).toBe(false);
 
     fireEvent.click(createButton());
@@ -431,8 +465,9 @@ describe("StandardPolicyEditor with the LLM analyzer flag off", () => {
   });
 
   it("still sends the entity list and threshold", () => {
-    renderEditor(null, new Set<RuleCategory>(["pii"]));
+    const { rerender } = renderEditor(null, new Set<RuleCategory>(["pii"]));
 
+    chooseClientSessions(rerender);
     fireEvent.click(createButton());
 
     const body =

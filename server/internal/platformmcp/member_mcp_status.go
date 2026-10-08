@@ -112,7 +112,7 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 		output.NextAction = "ask_administrator"
 		return output, nil
 	}
-	output.ConnectionURL = s.serverURL.JoinPath("mcp", target.endpointSlug).String()
+	output.ConnectionURL = platformBaseURL(ctx, s.serverURL).JoinPath("mcp", target.endpointSlug).String()
 	if target.remoteSessionIssuerID == uuid.Nil {
 		output.State = MCPConnectionStateNotApplicable
 		output.Reason = "authorization_not_required"

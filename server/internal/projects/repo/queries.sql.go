@@ -276,7 +276,7 @@ SELECT
     p.slug as project_slug,
     
     -- Organization metadata fields
-    om.id, om.name, om.slug, om.gram_account_type, om.workos_id, om.workos_updated_at, om.workos_last_event_id, om.svix_app_id, om.webhooks_enabled, om.whitelisted, om.free_trial_started_at, om.free_trial_ends_at, om.scim_enabled, om.sso_enabled, om.verified_domains, om.creation_source, om.created_at, om.updated_at, om.disabled_at
+    om.id, om.name, om.slug, om.gram_account_type, om.workos_id, om.workos_updated_at, om.workos_last_event_id, om.svix_app_id, om.webhooks_enabled, om.whitelisted, om.free_trial_started_at, om.free_trial_ends_at, om.scim_enabled, om.sso_enabled, om.verified_domains, om.creation_source, om.default_host, om.created_at, om.updated_at, om.disabled_at
     
 FROM projects p
 INNER JOIN organization_metadata om ON p.organization_id = om.id
@@ -304,6 +304,7 @@ type GetProjectWithOrganizationMetadataRow struct {
 	SsoEnabled         pgtype.Bool
 	VerifiedDomains    []string
 	CreationSource     pgtype.Text
+	DefaultHost        pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DisabledAt         pgtype.Timestamptz
@@ -332,6 +333,7 @@ func (q *Queries) GetProjectWithOrganizationMetadata(ctx context.Context, id uui
 		&i.SsoEnabled,
 		&i.VerifiedDomains,
 		&i.CreationSource,
+		&i.DefaultHost,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -534,6 +536,30 @@ func (q *Queries) ListProjectsByOrganizationPage(ctx context.Context, arg ListPr
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockOtherActiveProject = `-- name: LockOtherActiveProject :one
+SELECT id
+FROM projects
+WHERE organization_id = $1
+  AND deleted IS FALSE
+  AND id <> $2
+LIMIT 1
+FOR SHARE
+`
+
+type LockOtherActiveProjectParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// FOR SHARE waits for an in-flight project delete, then rechecks the row, so a
+// concurrently deleted project is not reported as still active.
+func (q *Queries) LockOtherActiveProject(ctx context.Context, arg LockOtherActiveProjectParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockOtherActiveProject, arg.OrganizationID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const lockProjectForEMADeletion = `-- name: LockProjectForEMADeletion :one

@@ -224,7 +224,7 @@ linters:
     custom:
       glint:
         type: module
-        description: Gram-specific lint rules.
+        description: Speakeasy-specific lint rules.
         original-url: github.com/speakeasy-api/gram/glint
         settings:
           rules:

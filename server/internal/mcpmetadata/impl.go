@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
@@ -61,6 +62,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -94,6 +96,19 @@ type securityInput struct {
 	SystemName  string
 	DisplayName string
 	Sensitive   bool
+}
+
+// speakeasyAIEnvironmentInput is the security input that selects the
+// environment of a Speakeasy-key MCP server. Its header keeps the "AI"
+// initialism that the generic title-casing in toolconfig.ToHTTPHeader drops.
+const speakeasyAIEnvironmentInput = "speakeasy_ai_environment"
+
+// HTTPHeader returns the HTTP header the input is sent as.
+func (i securityInput) HTTPHeader() string {
+	if i.SystemName == speakeasyAIEnvironmentInput {
+		return "Speakeasy-AI-Environment"
+	}
+	return toolconfig.ToHTTPHeader(i.SystemName)
 }
 
 type IDEInstallLinkConfig struct {
@@ -217,6 +232,12 @@ type Service struct {
 	legacyFallback       *mcpmetrics.LegacyFallbackCounter
 	metaInstallAdmission func(context.Context, string) error
 
+	// publicationRequests and publisher refresh plugin packages after a
+	// metadata write changes what they render. publisher is nil when GitHub
+	// publishing is not configured.
+	publicationRequests plugins.PublicationRequests
+	publisher           plugins.PluginPublishSignaler
+
 	// Hosted install page script (embedded and served with cache-busting hash)
 	installPageScriptHash string
 	installPageScriptData []byte
@@ -265,9 +286,17 @@ func NewService(
 		legacyFallback: mcpmetrics.NewLegacyFallbackCounter(meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcpmetadata"), logger),
 
 		metaInstallAdmission:  metaInstallAdmission,
+		publicationRequests:   plugins.PublicationRequests{Enabled: false},
+		publisher:             nil,
 		installPageScriptHash: scriptHashStr,
 		installPageScriptData: hostedPageScriptData,
 	}
+}
+
+func (s *Service) WithPluginPublication(publicationRequests bool, publisher plugins.PluginPublishSignaler) *Service {
+	s.publicationRequests.Enabled = publicationRequests
+	s.publisher = publisher
+	return s
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -334,6 +363,22 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		attr.SlogProjectID(authCtx.ProjectID.String()),
 		attr.SlogProjectSlug(conv.PtrValOr(authCtx.ProjectSlug, "")),
 	)
+
+	// A user-provided variable is supplied through an MCP-<name> request
+	// header (or MCP-<display name>), and the hosted runtime never reads a
+	// standard MCP request header such as Mcp-Name as a variable, so such a
+	// name could never receive a value.
+	for _, config := range payload.EnvironmentConfigs {
+		if config == nil || config.ProvidedBy != providedByUser {
+			continue
+		}
+		if httpheaders.IsReservedVariableHeaderName(config.VariableName) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "variable name %q is reserved: its %s request header is a standard MCP protocol header", config.VariableName, httpheaders.VariableHeaderName(config.VariableName)).LogWarn(ctx, logger)
+		}
+		if config.HeaderDisplayName != nil && httpheaders.IsReservedVariableHeaderName(*config.HeaderDisplayName) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "header display name %q for variable %q is reserved: its %s request header is a standard MCP protocol header", *config.HeaderDisplayName, config.VariableName, httpheaders.VariableHeaderName(*config.HeaderDisplayName)).LogWarn(ctx, logger)
+		}
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -497,6 +542,13 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		return nil, err
 	}
 
+	packageChanged := payload.EnvironmentConfigs != nil && renderedHeadersChanged(backend, existing, metadata)
+	if packageChanged {
+		if err := s.requestPluginPublicationForBackend(ctx, dbtx, authCtx, backend); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "enqueue MCP metadata plugin publication").LogError(ctx, logger)
+		}
+	}
+
 	switch {
 	case backend.toolset != nil:
 		if err := s.audit.LogMCPMetadataUpdate(ctx, dbtx, audit.LogMCPMetadataUpdateEvent{
@@ -538,6 +590,10 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "save MCP server metadata").LogError(ctx, logger)
+	}
+
+	if packageChanged {
+		s.publishPluginsForBackend(ctx, authCtx, backend)
 	}
 
 	return metadata, nil
@@ -632,7 +688,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	authHeaders := make([]*types.McpExportAuthHeader, 0, len(securityInputs))
 	for _, input := range securityInputs {
 		authHeaders = append(authHeaders, &types.McpExportAuthHeader{
-			Name:        toolconfig.ToHTTPHeader(input.SystemName),
+			Name:        input.HTTPHeader(),
 			DisplayName: input.DisplayName,
 		})
 	}
@@ -857,7 +913,7 @@ func buildCursorInstallURL(toolsetName, mcpURL string, inputs []securityInput) (
 	}
 
 	for _, input := range inputs {
-		headerKey := toolconfig.ToHTTPHeader(input.SystemName)
+		headerKey := input.HTTPHeader()
 		config.Headers[headerKey] = fmt.Sprintf("{{%s}}", input.DisplayName)
 	}
 
@@ -887,7 +943,7 @@ func buildVSCodeInstallURL(toolsetName, mcpURL string, inputs []securityInput) (
 	}
 
 	for _, input := range inputs {
-		headerKey := toolconfig.ToHTTPHeader(input.SystemName)
+		headerKey := input.HTTPHeader()
 		config.Headers[headerKey] = fmt.Sprintf("your-%s-value", input.DisplayName)
 	}
 
@@ -973,18 +1029,17 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeBadRequest, nil, "unsupported install page network")
 	}
 	privateNetworkInstall := network == "private"
+	// Set by dashboard links: resolve the slug on the signed-in org's custom domain.
+	orgDomainInstall := !privateNetworkInstall && r.URL.Query().Get("domain") == "custom" && customdomains.FromContext(ctx) == nil
 
 	// We get the authCtx now, because we need session information in order to look up private servers
 	// but we don't check that auth is ok unless we encounter a private toolset on lookup
 	authCtx, authOk := contextvalues.GetAuthContext(ctx)
 
-	if privateNetworkInstall && (authCtx == nil || authCtx.ActiveOrganizationID == "") {
-		if s.serverURL != nil {
-			loginURL := s.serverURL.JoinPath("login")
-			query := loginURL.Query()
-			query.Set("redirect", r.URL.RequestURI())
-			loginURL.RawQuery = query.Encode()
-			http.Redirect(w, r, loginURL.String(), http.StatusFound)
+	if (privateNetworkInstall || orgDomainInstall) && (authCtx == nil || authCtx.ActiveOrganizationID == "") {
+		// Login cannot give a signed-in visitor an organization; redirecting would loop.
+		if authCtx == nil && s.serverURL != nil {
+			http.Redirect(w, r, s.loginRedirectURL(r), http.StatusFound)
 			return nil
 		}
 		return s.serveNotFoundPage(w, mcpSlug)
@@ -997,11 +1052,14 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 			return err
 		}
 		ic, err = s.resolvePrivateInstallContext(ctx, mcpSlug, authCtx.ActiveOrganizationID)
+	} else if orgDomainInstall {
+		ic, err = s.resolveOrgCustomDomainInstallContext(ctx, mcpSlug, authCtx.ActiveOrganizationID)
 	} else {
 		ic, err = s.resolveInstallContext(ctx, mcpSlug)
 	}
 	switch {
 	case errors.Is(err, errToolsetNotFound):
+		s.logger.InfoContext(ctx, "serving not found page: install target not resolved", attr.SlogToolsetMCPSlug(mcpSlug), attr.SlogError(err))
 		return s.serveNotFoundPage(w, mcpSlug)
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger, attr.SlogToolsetMCPSlug(mcpSlug))
@@ -1011,8 +1069,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		// If no auth context, redirect to login page
 		if authCtx == nil {
 			if s.serverURL != nil {
-				loginURL := s.serverURL.String() + "/login"
-				http.Redirect(w, r, loginURL, http.StatusFound)
+				http.Redirect(w, r, s.loginRedirectURL(r), http.StatusFound)
 				return nil
 			}
 			// Fallback if serverURL is nil
@@ -1039,7 +1096,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 			attr.SlogError(metadataErr))
 	}
 
-	// Private installs must keep using the authenticated Gram-hosted renderer:
+	// Private installs must keep using the authenticated Speakeasy-hosted renderer:
 	// an external override cannot securely derive the live organization ingress.
 	if !privateNetworkInstall && metadataRecord != nil {
 		if overrideURL := conv.FromPGText[string](metadataRecord.InstallationOverrideUrl); overrideURL != nil && *overrideURL != "" {
@@ -1070,10 +1127,30 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	}
 }
 
-// resolveInstallContext tries the mcp_endpoints → mcp_server resolution path
-// first, then falls back to the legacy toolsets.mcp_slug lookup only for a
-// plain namespace miss. Policy denials are authoritative 404s and never fall
-// through to an unrelated legacy toolset.
+// loginRedirectURL returns the dashboard login URL that brings the visitor back
+// to this install page afterwards. It stays on the platform host the request
+// arrived on, because the session cookie is host-only. The return target is
+// the request's own path and query, never an absolute URL, so it cannot send
+// the visitor to another origin.
+func (s *Service) loginRedirectURL(r *http.Request) string {
+	loginURL := s.serverURL.JoinPath("login")
+	serverBase := s.serverURL.String()
+	if base, err := url.Parse(requestorigin.PlatformHostBaseURL(r.Context(), serverBase, serverBase)); err == nil {
+		loginURL = base.JoinPath("login")
+	}
+	redirect := *r.URL
+	if customdomains.FromContext(r.Context()) != nil {
+		// The slug only exists on the custom domain the visitor is leaving.
+		redirectQuery := redirect.Query()
+		redirectQuery.Set("domain", "custom")
+		redirect.RawQuery = redirectQuery.Encode()
+	}
+	query := loginURL.Query()
+	query.Set("redirect", redirect.RequestURI())
+	loginURL.RawQuery = query.Encode()
+	return loginURL.String()
+}
+
 func (s *Service) resolvePrivateInstallContext(ctx context.Context, mcpSlug, organizationID string) (*installContext, error) {
 	ingress, err := networkingress_repo.New(s.db).GetNetworkIngressByOrganization(ctx, organizationID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -1134,6 +1211,10 @@ func (s *Service) resolvePrivateInstallContext(ctx context.Context, mcpSlug, org
 	}, nil
 }
 
+// resolveInstallContext tries the mcp_endpoints → mcp_server resolution path
+// first, then falls back to the legacy toolsets.mcp_slug lookup only for a
+// plain namespace miss. Policy denials are authoritative 404s and never fall
+// through to an unrelated legacy toolset.
 func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*installContext, error) {
 	endpoint, server, metaServer, err := mcpendpoints.BySlugAndCustomDomain(ctx, s.db, s.logger, mcpSlug)
 	switch {
@@ -1143,54 +1224,8 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 		return nil, fmt.Errorf("%w: endpoint is not available on this network surface", errToolsetNotFound)
 	case err != nil:
 		return nil, fmt.Errorf("resolve mcp endpoint: %w", err)
-	case metaServer != nil:
-		mode, err := networkaccess.Effective(metaServer.NetworkAccessMode)
-		if err != nil {
-			return nil, fmt.Errorf("%w: invalid network access mode", errToolsetNotFound)
-		}
-		if err := s.requireMetaInstallAdmission(ctx, mode, metaServer.OrganizationID); err != nil {
-			return nil, err
-		}
-		org, err := s.orgsRepo.GetOrganizationMetadata(ctx, metaServer.OrganizationID)
-		if err != nil {
-			return nil, fmt.Errorf("load organization: %w", err)
-		}
-		return &installContext{
-			toolset:        nil,
-			mcpServer:      nil,
-			metaServer:     metaServer,
-			mcpEndpoint:    endpoint,
-			organization:   org,
-			mcpURLOverride: "",
-		}, nil
 	default:
-		var bridgeToolset *toolsets_repo.Toolset
-		if server.ToolsetID.Valid {
-			ts, err := s.toolsetRepo.GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
-				ID:        server.ToolsetID.UUID,
-				ProjectID: server.ProjectID,
-			})
-			switch {
-			case errors.Is(err, pgx.ErrNoRows):
-				// Bridge target gone — render as Remote-MCP-flavored.
-			case err != nil:
-				return nil, fmt.Errorf("load toolset for mcp_server: %w", err)
-			default:
-				bridgeToolset = &ts
-			}
-		}
-		org, err := s.lookupInstallOrganization(ctx, bridgeToolset, server)
-		if err != nil {
-			return nil, err
-		}
-		return &installContext{
-			toolset:        bridgeToolset,
-			mcpServer:      server,
-			metaServer:     nil,
-			mcpEndpoint:    endpoint,
-			organization:   org,
-			mcpURLOverride: "",
-		}, nil
+		return s.endpointInstallContext(ctx, endpoint, server, metaServer, "")
 	}
 
 	toolset, err := s.loadToolsetFromContextAndSlug(ctx, mcpSlug)
@@ -1220,9 +1255,90 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 	}, nil
 }
 
-// requireMetaInstallAdmission keeps existing public-only gateways independent
-// of the private-ingress rollout while applying one fail-closed admission gate
-// to every non-public Meta MCP install surface.
+// resolveOrgCustomDomainInstallContext resolves a slug in the organization's
+// custom-domain namespace for a session-gated page opened on the platform host.
+func (s *Service) resolveOrgCustomDomainInstallContext(ctx context.Context, mcpSlug, organizationID string) (*installContext, error) {
+	domain, err := s.domainsRepo.GetCustomDomainByOrganization(ctx, organizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, fmt.Errorf("%w: organization has no custom domain", errToolsetNotFound)
+	case err != nil:
+		return nil, fmt.Errorf("load organization custom domain: %w", err)
+	}
+	if !domain.Verified || !domain.Activated {
+		return nil, fmt.Errorf("%w: custom domain is not active", errToolsetNotFound)
+	}
+	result, err := mcpendpoints.Resolve(ctx, s.db, s.logger, mcpendpoints.ResolutionInput{
+		Slug:                 mcpSlug,
+		NamespaceKind:        mcpendpoints.NamespaceCustomDomain,
+		CustomDomainID:       uuid.NullUUID{UUID: domain.ID, Valid: true},
+		ExpectedOrganization: organizationID,
+		Surface:              networkaccess.SurfacePublic,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("resolve custom-domain mcp endpoint: %w", err)
+	}
+	if !result.Found || !result.Allowed || result.Endpoint == nil {
+		return nil, fmt.Errorf("%w: endpoint is not available on the custom domain", errToolsetNotFound)
+	}
+	mcpURL, err := mcpEndpointURL("https://"+domain.Domain, result.Endpoint)
+	if err != nil {
+		return nil, err
+	}
+	return s.endpointInstallContext(ctx, result.Endpoint, result.Server, result.MetaServer, mcpURL)
+}
+
+// endpointInstallContext builds the install context for a resolver-admitted endpoint.
+func (s *Service) endpointInstallContext(ctx context.Context, endpoint *mcpendpoints_repo.McpEndpoint, server *mcpservers_repo.McpServer, metaServer *metamcp_repo.MetaMcpServer, mcpURLOverride string) (*installContext, error) {
+	if metaServer != nil {
+		org, err := s.orgsRepo.GetOrganizationMetadata(ctx, metaServer.OrganizationID)
+		if err != nil {
+			return nil, fmt.Errorf("load organization: %w", err)
+		}
+		return &installContext{
+			toolset:        nil,
+			mcpServer:      nil,
+			metaServer:     metaServer,
+			mcpEndpoint:    endpoint,
+			organization:   org,
+			mcpURLOverride: mcpURLOverride,
+		}, nil
+	}
+
+	if server == nil {
+		return nil, fmt.Errorf("%w: endpoint has no backend", errToolsetNotFound)
+	}
+	var bridgeToolset *toolsets_repo.Toolset
+	if server.ToolsetID.Valid {
+		ts, err := s.toolsetRepo.GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
+			ID:        server.ToolsetID.UUID,
+			ProjectID: server.ProjectID,
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			// Bridge target gone — render as Remote-MCP-flavored.
+		case err != nil:
+			return nil, fmt.Errorf("load toolset for mcp_server: %w", err)
+		default:
+			bridgeToolset = &ts
+		}
+	}
+	org, err := s.lookupInstallOrganization(ctx, bridgeToolset, server)
+	if err != nil {
+		return nil, err
+	}
+	return &installContext{
+		toolset:        bridgeToolset,
+		mcpServer:      server,
+		metaServer:     nil,
+		mcpEndpoint:    endpoint,
+		organization:   org,
+		mcpURLOverride: mcpURLOverride,
+	}, nil
+}
+
+// requireMetaInstallAdmission gates the private-network gateway install page on
+// the private-ingress rollout; the public page relies on the resolver's mode check.
 func (s *Service) requireMetaInstallAdmission(ctx context.Context, mode networkaccess.Mode, organizationID string) error {
 	if mode.IsPublicOnly() {
 		return nil
@@ -1504,7 +1620,7 @@ func (s *Service) renderRemoteMcpInstallPage(ctx context.Context, w http.Respons
 	tunneledPublic := mcpServer.TunneledMcpServerID.Valid && mcpServer.Visibility == mcpservers.VisibilityPublic
 
 	return s.writeInstallPage(ctx, w, hostedPageRenderInputs{
-		// Remote-MCP-backed installs don't expose Gram-side env vars or a tools
+		// Remote-MCP-backed installs don't expose Speakeasy-side env vars or a tools
 		// list yet: the page renders the URL + branding only.
 		MCPName:        conv.FromPGTextOrEmpty[string](mcpServer.Name),
 		MCPSlug:        endpoint.Slug,
@@ -1527,7 +1643,7 @@ func (s *Service) renderRemoteMcpInstallPage(ctx context.Context, w http.Respons
 
 // renderMetaMcpInstallPage renders the install page for a gateway
 // (meta_mcp_servers) endpoint. Gateways carry no branding metadata and expose
-// no Gram-side env vars or tool list, so the page is the URL plus defaults.
+// no Speakeasy-side env vars or tool list, so the page is the URL plus defaults.
 func (s *Service) renderMetaMcpInstallPage(ctx context.Context, w http.ResponseWriter, ic *installContext) error {
 	metaServer := ic.metaServer
 	endpoint := ic.mcpEndpoint
@@ -1725,7 +1841,10 @@ func (s *Service) resolveToolsetMCPURL(ctx context.Context, toolset toolsets_rep
 // resolveMcpEndpointURL builds the MCP URL advertised by an endpoint-routed
 // install from the current request origin. A domain-root endpoint remains bare.
 func (s *Service) resolveMcpEndpointURL(ctx context.Context, endpoint *mcpendpoints_repo.McpEndpoint) (string, error) {
-	baseURL := requestorigin.BaseURL(ctx, s.serverURL.String())
+	return mcpEndpointURL(requestorigin.BaseURL(ctx, s.serverURL.String()), endpoint)
+}
+
+func mcpEndpointURL(baseURL string, endpoint *mcpendpoints_repo.McpEndpoint) (string, error) {
 	if endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool {
 		return baseURL, nil
 	}
@@ -1895,7 +2014,7 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 // resolveSecurityMode determines the security mode based on toolset and
 // mcp_server configuration. OAuth wins regardless of public/private: when
 // OAuth applies, identity auth is delegated to the OAuth flow and the install
-// instructions must not ask the user for an Authorization/GRAM_KEY header.
+// instructions must not ask the user for an Authorization/SPEAKEASY_AI_API_KEY header.
 //
 // When an mcp_servers row is present (server non-nil) it governs: OAuth is
 // decided by the wrapper's user_session_issuer with the toolset's external
@@ -1937,13 +2056,13 @@ func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails 
 	case securityModeGram:
 		return []securityInput{
 			{
-				SystemName:  "gram_environment",
-				DisplayName: "gram-environment",
+				SystemName:  speakeasyAIEnvironmentInput,
+				DisplayName: "speakeasy-ai-environment",
 				Sensitive:   false,
 			},
 			{
 				SystemName:  "authorization",
-				DisplayName: "gram-key",
+				DisplayName: "speakeasy-ai-api-key",
 				Sensitive:   true,
 			},
 		}

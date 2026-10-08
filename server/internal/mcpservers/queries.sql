@@ -44,6 +44,18 @@ WHERE toolset_id = @toolset_id::uuid AND project_id = @project_id AND deleted IS
 ORDER BY created_at, id
 LIMIT 1;
 
+-- name: ListEnabledMCPServersByToolsetID :many
+-- At most two rows are needed: zero means the legacy route has no attributable
+-- wrapper, one is unambiguous, and two means callers must reject attribution.
+SELECT *
+FROM mcp_servers
+WHERE toolset_id = @toolset_id::uuid
+  AND project_id = @project_id
+  AND deleted IS FALSE
+  AND visibility <> 'disabled'
+ORDER BY created_at, id
+LIMIT 2;
+
 -- name: LockMCPServerByIDAndProjectID :one
 SELECT *
 FROM mcp_servers

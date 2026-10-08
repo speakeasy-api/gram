@@ -109,20 +109,9 @@ func admitWorkloadSessionInTx(ctx context.Context, tx accessrepo.DBTX) (authz.Wo
 	// agent whose owner has left the organization stops vouching for anything.
 	// Their own grants are not loaded, which is where a workload departs from a
 	// principal credential — it acts as itself, not on the owner's behalf.
-	ownerPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, agent.OwnerUserID)
-	ownerPrincipals, err := authz.ResolveUserPrincipals(ctx, tx, authCtx.ActiveOrganizationID, agent.OwnerUserID)
+	_, ownerEligible, err := ResolveEligibleUser(ctx, tx, authCtx.ActiveOrganizationID, agent.OwnerUserID)
 	if err != nil {
-		if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
-			return authz.WorkloadSessionAdmission{}, oops.C(oops.CodeUnauthorized)
-		}
 		return authz.WorkloadSessionAdmission{}, fmt.Errorf("resolve assigned agent owner: %w", err)
-	}
-	ownerEligible := false
-	for _, principal := range ownerPrincipals {
-		if principal.String() == ownerPrincipal.String() {
-			ownerEligible = true
-			break
-		}
 	}
 	if !ownerEligible {
 		return authz.WorkloadSessionAdmission{}, oops.C(oops.CodeUnauthorized)

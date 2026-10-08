@@ -16,7 +16,10 @@ pin = true
 "github:speakeasy-api/openapi" = "1.24.0"
 # Keep in sync with speakeasyVersion in .speakeasy/workflow.yaml, otherwise the
 # installed version and the version generation runs on can mismatch.
-"github:speakeasy-api/speakeasy" = "1.796.1"
+# Installed as speakeasy-sdks, not speakeasy: the AI Control Plane CLI built
+# from cli/ is also called speakeasy, and the repo pin would otherwise shadow
+# it in every worktree. Tasks call speakeasy-sdks.
+"github:speakeasy-api/speakeasy" = { version = "1.796.1", rename_exe = "speakeasy-sdks" }
 "github:FiloSottile/mkcert" = "1.4.4"
 apko = "1.2.31"
 flyctl = "0.4.77"
@@ -60,6 +63,9 @@ pitchfork = "2.22.0"
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.
 [env]
+# Share Go compilation caches across worktrees, including nested tool builds.
+GOFLAGS = "-trimpath"
+
 ###########################
 ## Runtime configuration ##
 ###########################
@@ -113,21 +119,15 @@ TEMPORAL_TASK_QUEUE = "main"
 ##     "<namespace>.<account>.tmprl.cloud:7233".
 TEMPORAL_ADDRESS = "{{env.TEMPORAL_HOST}}:{{env.TEMPORAL_PORT}}"
 
-##############################
-## Presidio configuration   ##
-##############################
-PRESIDIO_PORT = "5050"
-PRESIDIO_ANALYZER_URL = "http://127.0.0.1:{{env.PRESIDIO_PORT}}"
-
 ## Fine-tuned risk LLM analyzer (OpenAI-compatible chat endpoint, URL includes
 ## /v1). An empty URL disables it; real values belong in mise.local.toml.
 ## Runbook: server/internal/scanners/llmanalyzer/README.md (Local development).
 GRAM_RISK_LLM_URL = ""
-GRAM_RISK_LLM_MODEL = "risk-judge-4b"
+GRAM_RISK_LLM_MODEL = "risk-judge-9b"
 GRAM_RISK_LLM_API_KEY = ""
 
 ##########################################
-## Gram server, admin and worker config ##
+## Speakeasy server, admin and worker config ##
 ##########################################
 ## Setting this to 1 will run the server and worker in a single process.
 ## This is useful when debugging during local development. It can also be used
@@ -189,7 +189,7 @@ GRAM_DEVIDP_EXTERNAL_URL = "http://{{env.GRAM_DEVIDP_HOST}}:{{env.GRAM_DEVIDP_PO
 GRAM_DEVIDP_DB = "file:{{ config_root }}/local/devidp/devidp.db"
 GRAM_IDP_BASE_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/oauth2-1"
 GRAM_IDP_CLIENT_ID = "gram-local-dev"
-## Shared secret used by Gram clients to authenticate to dev-idp. `./zero`
+## Shared secret used by Speakeasy clients to authenticate to dev-idp. `./zero`
 ## generates a per-checkout value in mise.local.toml.
 GRAM_IDP_CLIENT_SECRET = "unset"
 ## Upstream WorkOS API key, used only by dev-idp's workos backend.
@@ -201,7 +201,7 @@ WORKOS_API_KEY = "unset"
 ##   WORKOS_API_KEY = "sk_test_..."
 ## See CONTRIBUTING.md "Local auth and identity" for details.
 GRAM_DEVIDP_BACKEND = "local"
-## Points the Gram server at the dev-idp's WorkOS surface. Constant across
+## Points the Speakeasy server at the dev-idp's WorkOS surface. Constant across
 ## backends — the backend flag decides what serves it.
 WORKOS_API_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/workos"
 ## Real WorkOS API the workos backend proxies to.
@@ -231,14 +231,10 @@ GRAM_PYSTREAMS_DETECT_BLOCKING = "1"
 OTLP_GRPC_HOST = "localhost"
 OTLP_GRPC_PORT = "4317"
 OTLP_HTTP_PORT = "4318"
+## Shared otlp-sink ACKs and drops so exporters do not retry into a closed port.
 OTEL_EXPORTER_OTLP_ENDPOINT = "http://{{env.OTLP_GRPC_HOST}}:{{env.OTLP_GRPC_PORT}}"
 OTEL_EXPORTER_OTLP_PROTOCOL = "grpc"
 OTEL_RESOURCE_ATTRIBUTES = "worktree=main"
-## Where the shared collector's demo-activity pipeline posts rewritten Claude
-## Code logs (see local/otel/gram-demo-forward.yaml). host.docker.internal
-## because localhost inside that container is the container; the port follows
-## this worktree's, which git:workinit remaps for parallel trees.
-GRAM_DEMO_OTLP_LOGS_ENDPOINT = "https://host.docker.internal:{{env.GRAM_SERVER_PORT}}/rpc/hooks.otel/v1/logs"
 ## Change these to 0 to disable OpenTelemetry traces and metrics to be emitted.
 GRAM_ENABLE_OTEL_TRACES = 1
 GRAM_ENABLE_OTEL_METRICS = 1
@@ -246,15 +242,18 @@ GRAM_ENABLE_OTEL_METRICS = 1
 ################################
 ## Local development settings ##
 ################################
-GRAFANA_PORT = "13000"
-TEMPO_HTTP_PORT = "13200"
-LOKI_HTTP_PORT = "13100"
-PROMETHEUS_PORT = "9099"
 LITELLM_PORT = "4001"
 GRAM_LOG_PRETTY = { default = "1" }
-## Default Gram API URL baked into the dashboard's inlined Elements code and
-## used by the CLI to point to the correct Gram API server
+## Default Speakeasy API URL baked into the dashboard's inlined Elements code and
+## used by the CLI to point to the correct Speakeasy API server
 GRAM_API_URL = "{{env.GRAM_SERVER_URL}}"
+## The speakeasy CLI reads SPEAKEASY_AI_* names before the deprecated GRAM_*
+## ones and warns when only GRAM_* is set. Mirror the values it uses so local
+## runs stay quiet while the server keeps its GRAM_* names.
+SPEAKEASY_AI_API_KEY = "{{env.GRAM_API_KEY}}"
+SPEAKEASY_AI_API_URL = "{{env.GRAM_API_URL}}"
+SPEAKEASY_AI_SITE_URL = "{{env.GRAM_SITE_URL}}"
+SPEAKEASY_AI_LOG_PRETTY = { default = "{{env.GRAM_LOG_PRETTY}}" }
 VITE_DEV_HOSTNAMES = "localhost"
 ## Base URL of the CDN serving the dashboard's static assets (e.g.
 ## https://cdn.dev.getgram.ai). Not a build-time setting: the dashboard
@@ -277,7 +276,7 @@ PUBSUB_EMULATOR_PORT = "8088"
 PUBSUB_EMULATOR_HOST = "localhost:{{env.PUBSUB_EMULATOR_PORT}}"
 
 ####################################
-## Gram Functions runner settings ##
+## Speakeasy Functions runner settings ##
 ####################################
 ## Where to deploy functions.
 ## Allowed values: local, flyio.
@@ -297,7 +296,7 @@ GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
 # GRAM_FUNCTIONS_FLYIO_REGION = "sjc"
 
 ########################################
-## Gram Assistant runtime settings ##
+## Speakeasy Assistant runtime settings ##
 ########################################
 ## Where assistant runtimes run.
 ## Allowed values: local, flyio, gke.

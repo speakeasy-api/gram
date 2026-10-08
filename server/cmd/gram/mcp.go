@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
@@ -22,18 +24,22 @@ import (
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 
+	"github.com/speakeasy-api/gram/server/internal/agentmanagement"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -44,6 +50,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
+	oauthregistration "github.com/speakeasy-api/gram/server/internal/oauth/registration"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -207,6 +216,19 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err != nil {
 		return fmt.Errorf("invalid authentication host url: %w", err)
 	}
+	platformHosts, err := parsePlatformHosts(c, authenticationHost)
+	if err != nil {
+		return err
+	}
+	callbackOrigins, err := callbackOriginsFromCLI(c, serverURL, serviceEnv, platformHosts)
+	if err != nil {
+		return err
+	}
+	orgHosts, err := orgHostResolverFromCLI(c, serverURL, siteURL, serviceEnv, platformHosts)
+	if err != nil {
+		return err
+	}
+	identityResolver.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 
 	enc, err := encryption.New(c.String("encryption-key"))
 	if err != nil {
@@ -221,7 +243,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if serviceEnv == "local" {
 		openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 	} else {
-		openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, serviceEnv, c.String("openrouter-provisioning-key"), nil, productFeatures, billingTracker, enc)
+		openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, serviceEnv, c.String("openrouter-provisioning-key"), productFeatures, billingTracker, enc)
 	}
 
 	tigrisStore, stop, err := newTigrisStore(ctx, c, logger)
@@ -252,13 +274,35 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err != nil {
 		return fmt.Errorf("create pubsub client: %w", err)
 	}
+	pubsubShutdown := len(shutdown.funcs)
 	shutdown.funcs = append(shutdown.funcs, stop)
-	publishers, stop, err := newPublishers(ctx, psbroker)
+	publishers, stopPublishers, err := newPublishers(ctx, psbroker)
 	if err != nil {
 		return fmt.Errorf("create publishers: %w", err)
 	}
-	publishersShutdown := len(shutdown.funcs)
-	shutdown.funcs = append(shutdown.funcs, stop)
+	enforcementDispatcher, enforcementShutdown := newRiskEnforcementDispatcher(
+		ctx,
+		logger,
+		tracerProvider,
+		meterProvider,
+		redisClient,
+		psbroker,
+		featureFlags,
+	)
+	// Shutdown funcs run concurrently, so everything publishing through
+	// psbroker stops in order inside its close.
+	var drainRisk func(context.Context) error
+	stopPubSub := shutdown.funcs[pubsubShutdown]
+	shutdown.funcs[pubsubShutdown] = func(ctx context.Context) error {
+		var errs []error
+		if drainRisk != nil {
+			errs = append(errs, drainRisk(ctx))
+		}
+		if enforcementShutdown != nil {
+			errs = append(errs, enforcementShutdown(ctx))
+		}
+		return errors.Join(append(errs, stopPublishers(ctx), stopPubSub(ctx))...)
+	}
 
 	logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
 	toolIOLogsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs)
@@ -279,23 +323,21 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completions)
 	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
-		c, logger, tracerProvider, meterProvider, db, redisClient, featureFlags, completions, publishers, shadowMCPClient,
+		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, publishers, shadowMCPClient, toolIOLogsEnabled,
 	)
 	if err != nil {
 		return err
 	}
-	shutdown.funcs = append(shutdown.funcs, mcpRiskScanner.Shutdown)
-	// Shutdown funcs run concurrently, so flag findings drain inside the
-	// publishers' stop instead of racing it.
-	stopPublishers := shutdown.funcs[publishersShutdown]
-	shutdown.funcs[publishersShutdown] = func(ctx context.Context) error {
-		return errors.Join(mcpRiskEvaluator.Drain(ctx), stopPublishers(ctx))
+	drainRisk = func(ctx context.Context) error {
+		return errors.Join(mcpRiskEvaluator.Drain(ctx), mcpRiskScanner.Shutdown(ctx))
 	}
 	slackClient := slack_client.NewSlackClient(guardianPolicy)
 	// Listing and reading triggers works without Temporal; scheduling one
 	// returns an error from the trigger tool instead of dispatching.
-	triggerApp := newTriggersApp(logger, db, enc, nil, telemLogger, auditLogger, serverURL, siteURL, slackClient, cacheImpl)
-	assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)
+	assistantIdentities := newAssistantIdentities(c, auditLogger)
+	triggerApp := newTriggersApp(logger, db, enc, nil, telemLogger, auditLogger, serverURL, siteURL, platformHosts, slackClient, cacheImpl, assistantIdentities)
+	principalCredentials := principalcredential.New(callerAssertions, db)
+	assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine, principalCredentials, cacheImpl)
 	platformExtras := append([]platformtools.ExternalTool{}, platformtoolsruntime.MemoryExternalTools(memoryService)...)
 	platformExtras = append(platformExtras, platformtoolsruntime.AssistantSkillTools(logger, db)...)
 
@@ -311,7 +353,8 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err != nil {
 		return fmt.Errorf("build tunnel http client: %w", err)
 	}
-	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, auditLogger, clientAssertionSigner)
+	protectedResources := protectedresource.NewProber(db, guardianPolicy)
+	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags)
 	if err != nil {
 		return err
 	}
@@ -322,14 +365,45 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		Posthog: posthogClient, Features: featureFlags, ServerURL: serverURL, SiteURL: siteURL,
 		Encryption: enc, Guardian: guardianPolicy, Functions: functionsOrchestrator,
 		BillingTracker: billingTracker, Billing: billingRepo, Telemetry: telemLogger, TelemetryService: telemSvc,
-		RAG: ragService, Triggers: triggerApp, Authz: authzEngine, AssistantTokens: assistantTokenManager,
+		RAG: ragService, Triggers: triggerApp, Authz: authzEngine, AssistantTokens: assistantTokenManager, PrincipalCredentials: principalCredentials,
 		ShadowMCP: shadowMCPClient, MCPRisk: mcpRiskEvaluator, Audit: auditLogger,
 		PlatformExtras: platformExtras, PlatformFeatureChecker: productFeatures.PlatformFeatureCheck,
-		PlatformToolsets: map[string]platformtools.Toolset{}, Identity: identityResolver, Challenges: remoteSessionDeps.Challenges,
+		PlatformToolsets: map[string]platformtools.Toolset{}, Identity: identityResolver, Challenges: remoteSessionDeps.Challenges, CallbackOrigins: callbackOrigins, PlatformHosts: platformHosts,
+		ProtectedResources: protectedResources,
 	})
 	if err != nil {
 		return err
 	}
+	// Consent runs on this tier in production. Compose the same attachment
+	// service and transactional owner authorizer as gram start, without mounting
+	// its dashboard RPC routes or introducing a Temporal client.
+	identityCommitter := remotesessions.NewIdentityCommitter(logger, db, enc, auditLogger, serverURL, guardianPolicy, tunnelHTTPClient, oauthregistration.NewMetrics(logger, meterProvider))
+	identityCommitter.SetCallbackOrigins(callbackOrigins)
+	remoteSessionsRefresher := remotesessions.NewRefreshService(logger, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, cacheImpl,
+		remotesessions.WithRefreshIDTokenVerifier(remoteSessionDeps.Verifier),
+		remotesessions.WithRefreshIssuerMetadataRefresher(remoteSessionDeps.Refresher),
+		remotesessions.WithRefreshSessionEnricher(remoteSessionDeps.Enricher),
+		remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner))
+	remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, enc, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remoteSessionsRefresher, productFeatures)
+	remoteSessionsService.SetCallbackOrigins(callbackOrigins)
+	remoteSessionsService.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		if !ok || authCtx == nil {
+			return oops.C(oops.CodeNotFound)
+		}
+		for _, flag := range []feature.Flag{feature.FlagAgentManagement, feature.FlagAgentIdentityCredentials} {
+			evaluation, err := feature.EvaluateFlag(ctx, featureFlags, flag, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
+			if err != nil || evaluation != feature.EvaluationEnabled {
+				return oops.C(oops.CodeNotFound)
+			}
+		}
+		_, _, err := agentmanagement.NewAuthorizer(authzEngine).RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentAuthorize)
+		if err != nil {
+			return fmt.Errorf("authorize attachment owner: %w", err)
+		}
+		return nil
+	})
+	mcpService.SetConsentBindingService(remoteSessionsService)
 	mcpService.StartRemoteSessionRecheck(ctx)
 
 	// Private ingress expansion is never admitted here: the lifecycle
@@ -342,7 +416,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return fmt.Errorf("build MCP server runtime: %w", err)
 	}
 
-	mux, err := newMCPServerMux(c, logger, db, serverURL, authenticationHost, chatSessions, publishers)
+	mux, err := newMCPServerMux(c, logger, db, serverURL, authenticationHost, platformHosts, chatSessions, publishers)
 	if err != nil {
 		return err
 	}
@@ -423,10 +497,11 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 // newMCPServerMux builds the public listener middleware chain for the MCP
 // tier. It mirrors the public-route portion of the `gram start` chain and
 // omits the marketplace, hooks, and management-API layers.
-func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serverURL *url.URL, authenticationHost *mcp.AuthenticationHost, chatSessions middleware.ChatSessionValidator, publishers *background.Publishers) (goahttp.Muxer, error) {
+func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serverURL *url.URL, authenticationHost *mcp.AuthenticationHost, platformHosts map[string]string, chatSessions middleware.ChatSessionValidator, publishers *background.Publishers) (goahttp.Muxer, error) {
 	mux := goahttp.NewMuxer()
 	mux.Use(middleware.NetworkServingPolicyVersion)
 	mux.Use(middleware.StripPrivateIngressHeaders)
+	mux.Use(middleware.SpeakeasyAIHeaders(otel.GetMeterProvider()))
 	mux.Use(func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodGet && r.URL.Path == "/healthz" {
@@ -447,12 +522,8 @@ func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serv
 	mux.Use(middleware.MCPProtocolVersionTelemetry)
 	mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
 	mux.Use(middleware.NewRecovery(logger))
-	platformHosts, err := parsePlatformHosts(c, authenticationHost)
-	if err != nil {
-		return nil, err
-	}
 	mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), platformOrigins(platformHosts), chatSessions))
-	mcpSecurity, err := middleware.MCPSecurity(logger, append([]string{c.String("server-url"), c.String("site-url")}, platformOrigins(platformHosts)...))
+	mcpSecurity, err := middleware.MCPSecurity(logger, append([]string{c.String("server-url"), c.String("site-url")}, platformOrigins(platformHosts)...), mcp.ServesInstallPage)
 	if err != nil {
 		return nil, fmt.Errorf("configure mcp security middleware: %w", err)
 	}

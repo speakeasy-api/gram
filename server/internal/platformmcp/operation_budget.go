@@ -37,19 +37,48 @@ const (
 const (
 	PluginAssignmentMutationConnectionLimitName   = "platform-mcp-plugin-assignment-mutation-connection"
 	PluginAssignmentMutationOrganizationLimitName = "platform-mcp-plugin-assignment-mutation-organization"
+	PluginMetadataMutationConnectionLimitName     = "platform-mcp-plugin-metadata-mutation-connection"
+	PluginMetadataMutationOrganizationLimitName   = "platform-mcp-plugin-metadata-mutation-organization"
 	AccessRoleMutationConnectionLimitName         = "platform-mcp-access-role-mutation-connection"
 	AccessRoleMutationOrganizationLimitName       = "platform-mcp-access-role-mutation-organization"
 	ShadowAccessDecisionConnectionLimitName       = "platform-mcp-shadow-access-decision-connection"
 	ShadowAccessDecisionOrganizationLimitName     = "platform-mcp-shadow-access-decision-organization"
+	ToolExposureReadConnectionLimitName           = "platform-mcp-tool-exposure-read-connection"
+	ToolExposureReadOrganizationLimitName         = "platform-mcp-tool-exposure-read-organization"
+	ToolExposureMutationConnectionLimitName       = "platform-mcp-tool-exposure-mutation-connection"
+	ToolExposureMutationOrganizationLimitName     = "platform-mcp-tool-exposure-mutation-organization"
+	DataExportToggleConnectionLimitName           = "platform-mcp-data-export-toggle-connection"
+	DataExportToggleOrganizationLimitName         = "platform-mcp-data-export-toggle-organization"
+	PluginRepublishConnectionLimitName            = "platform-mcp-plugin-republish-connection"
+	PluginRepublishOrganizationLimitName          = "platform-mcp-plugin-republish-organization"
+	ProjectMutationConnectionLimitName            = "platform-mcp-project-mutation-connection"
+	ProjectMutationOrganizationLimitName          = "platform-mcp-project-mutation-organization"
 )
 
 const (
-	// DocsQueriesPerConnectionPerMinute and DocsQueriesPerOrganizationPerMinute
-	// bound documentation search. Retrieval is in-process and cheap, so these
-	// exist to stop a loop from spending the caller's context on repeated
-	// queries rather than to protect a backend.
-	DocsQueriesPerConnectionPerMinute   = 10
-	DocsQueriesPerOrganizationPerMinute = 100
+	// DocsQueriesPerConnectionPerMinute allows iterative documentation research
+	// over the bounded in-process corpus without throttling ordinary reading.
+	DocsQueriesPerConnectionPerMinute = 120
+
+	// DocsQueriesPerOrganizationPerMinute leaves room for concurrent researchers
+	// while retaining a ceiling on repeated in-process retrieval.
+	DocsQueriesPerOrganizationPerMinute = 1200
+
+	// SkillsOperationsPerConnectionPerMinute leaves room for reviewing dozens of
+	// suggestions, including the reads and approvals sharing this allowance.
+	SkillsOperationsPerConnectionPerMinute = 120
+
+	// SkillsOperationsPerOrganizationPerMinute allows multiple connections to
+	// review skills concurrently while retaining an organization-wide ceiling.
+	SkillsOperationsPerOrganizationPerMinute = 1200
+
+	// LifecycleOperationsPerConnectionPerMinute supports read/change/read across
+	// several servers. The moderate ceiling also bounds client-admission writes.
+	LifecycleOperationsPerConnectionPerMinute = 30
+
+	// LifecycleOperationsPerOrganizationPerMinute leaves room for concurrent
+	// administrators without removing the shared metadata/admission ceiling.
+	LifecycleOperationsPerOrganizationPerMinute = 300
 
 	// DiagnosticQueriesPer* bound the summary reads: the project overview and
 	// the per-MCP diagnosis. They are generous because an administrator
@@ -71,16 +100,71 @@ const (
 	RiskMutationsPerConnectionPerMinute   = 5
 	RiskMutationsPerOrganizationPerMinute = 50
 
-	// PluginAssignmentMutationsPer* bound the access-affecting replacement of one
-	// plugin's complete assignment set on an independent allowance.
-	PluginAssignmentMutationsPerConnectionPerMinute   = 5
-	PluginAssignmentMutationsPerOrganizationPerMinute = 50
-	AccessRoleMutationsPerConnectionPerMinute         = 5
-	AccessRoleMutationsPerOrganizationPerMinute       = 50
-	ShadowAccessDecisionsPerConnectionPerMinute       = 5
-	ShadowAccessDecisionsPerOrganizationPerMinute     = 50
-	ReviewRequestsPerConnectionPerMinute              = 5
-	ReviewRequestsPerOrganizationPerMinute            = 50
+	// PluginAssignmentMutationsPerConnectionPerMinute supports rolling out
+	// assignments across dozens of plugins while bounding access-affecting writes.
+	PluginAssignmentMutationsPerConnectionPerMinute = 30
+
+	// PluginAssignmentMutationsPerOrganizationPerMinute allows concurrent
+	// administrators to manage assignments under an organization-wide ceiling.
+	PluginAssignmentMutationsPerOrganizationPerMinute = 300
+
+	// AccessRoleMutationsPerConnectionPerMinute supports creating, updating and
+	// assigning roles in one bulk administration workflow.
+	AccessRoleMutationsPerConnectionPerMinute = 30
+
+	// AccessRoleMutationsPerOrganizationPerMinute bounds access-role changes
+	// across concurrent administrators independently of other mutation budgets.
+	AccessRoleMutationsPerOrganizationPerMinute = 300
+
+	ShadowAccessDecisionsPerConnectionPerMinute   = 5
+	ShadowAccessDecisionsPerOrganizationPerMinute = 50
+	ReviewRequestsPerConnectionPerMinute          = 5
+	ReviewRequestsPerOrganizationPerMinute        = 50
+
+	// PluginMetadataMutationsPer* bound creating and renaming plugins together
+	// on their own allowance. This is what stops a conversational create loop;
+	// there is no separate cap on how many plugins a project holds, because the
+	// dashboard has none and the two paths must refuse the same requests.
+	PluginMetadataMutationsPerConnectionPerMinute   = 5
+	PluginMetadataMutationsPerOrganizationPerMinute = 50
+
+	// ToolExposureReadsPerConnectionPerMinute allows paging through bounded
+	// project tool definitions without spending the separate mutation allowance.
+	ToolExposureReadsPerConnectionPerMinute = 120
+
+	// ToolExposureReadsPerOrganizationPerMinute supports concurrent tool
+	// inventory inspection while retaining an organization-wide read ceiling.
+	ToolExposureReadsPerOrganizationPerMinute = 1200
+
+	// ToolExposureMutationsPer* bound adding and removing a server's tools on
+	// their own allowance. Both tools share it, so alternating between them
+	// cannot multiply the permitted write rate: each allowed call takes the
+	// toolset row lock, appends a version, and republishes every plugin
+	// carrying the server.
+	ToolExposureMutationsPerConnectionPerMinute   = 5
+	ToolExposureMutationsPerOrganizationPerMinute = 50
+
+	// DataExportTogglesPer* bound pausing and resuming data export routes on
+	// their own allowance. Both tools share it, so alternating between them
+	// cannot multiply the permitted write rate. A person handling an incident
+	// pauses a handful of routes, never dozens a minute; each allowed call
+	// takes the route row lock and writes an audit entry.
+	DataExportTogglesPerConnectionPerMinute   = 5
+	DataExportTogglesPerOrganizationPerMinute = 50
+
+	// PluginRepublishesPer* bound republish_plugin on its own allowance. Each
+	// allowed call can regenerate every package in a project, so it is metered
+	// like the other package-affecting writes rather than like a read.
+	PluginRepublishesPerConnectionPerMinute   = 5
+	PluginRepublishesPerOrganizationPerMinute = 50
+
+	// ProjectMutationsPer* bound creating and renaming projects on their own
+	// allowance, shared by both tools so alternating between them cannot
+	// multiply the write rate. A person sets up a handful of projects at a
+	// time; a loop creating them by the dozen is a runaway agent, and every
+	// created project is a row an administrator has to delete by hand.
+	ProjectMutationsPerConnectionPerMinute   = 5
+	ProjectMutationsPerOrganizationPerMinute = 50
 
 	// DrilldownRowsPerConnectionPerWindow and
 	// DrilldownMetricQueriesPerConnectionPerWindow are the second cap the
@@ -107,7 +191,7 @@ var (
 	ErrOperationBudgetUnavailable = errors.New("platform mcp operation budget unavailable")
 )
 
-// Limiter is the narrow Platform MCP boundary around Gram's shared rate limiter.
+// Limiter is the narrow Platform MCP boundary around Speakeasy's shared rate limiter.
 // It lets unit tests deterministically model an allowance, a throttle, or a
 // backing-store failure without depending on Redis.
 type Limiter interface {
@@ -228,7 +312,7 @@ type OperationBudgets struct {
 	// AccessRoleMutations independently meters custom MCP access-role writes.
 	AccessRoleMutations OperationBudget
 	// Diagnostics meters the observability reads. They are bounded aggregate
-	// queries over Gram-owned telemetry, so the cost being metered is the
+	// queries over Speakeasy-owned telemetry, so the cost being metered is the
 	// ClickHouse scan, not an external egress.
 	Diagnostics OperationBudget
 	// SensitiveDiagnostics meters the bounded drill-downs. It is separate from

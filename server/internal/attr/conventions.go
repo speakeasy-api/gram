@@ -14,6 +14,9 @@ type Key = attribute.Key
 const (
 	RegistryEntryIDKey               = attribute.Key("gram.registry.entry.id")
 	RegistryUpdatedAtKey             = attribute.Key("gram.registry.entry.updated_at")
+	RegistryInvalidPathsKey          = attribute.Key("gram.registry.entry.invalid_paths") // JSON Pointers to the record fields that failed validation
+	RegistryEntryNameKey             = attribute.Key("gram.registry.entry.name")
+	RegistrySeedOutcomeKey           = attribute.Key("gram.registry.seed.outcome")
 	AdminOIDCSubjectKey              = attribute.Key("gram.admin.oidc_subject")
 	AuthSourceKey                    = attribute.Key("gram.auth.source")
 	AuthorizationOrganizationIDKey   = attribute.Key("gram.authorization.organization_id")
@@ -180,6 +183,7 @@ const (
 	DeviceIDKey          = attribute.Key("gram.device_id")
 	AccountEmailKey      = attribute.Key("gram.account_email")
 	ChatIDKey            = attribute.Key("gram.chat.id")
+	ChatExternalIDKey    = attribute.Key("gram.chat.external_id")
 	ChatContentPartIDKey = attribute.Key("gram.chat.content_part_id")
 	MessageIDKey         = attribute.Key("gram.message.id")
 	// Chat-analysis score event attributes: stamped on the synthetic
@@ -243,7 +247,7 @@ const (
 	// Chart the admitted_* values as a group; there is no single value
 	// meaning "admitted".
 	//
-	// "admitted_platform_assistant" is a document Gram publishes for one of
+	// "admitted_platform_assistant" is a document Speakeasy publishes for one of
 	// its own assistants, admitted on every issuer that accepts CIMD at all
 	// and recorded under whichever mode that issuer runs.
 	//
@@ -314,6 +318,8 @@ const (
 	FunctionsRunnerVersionKey      = attribute.Key("gram.functions.runner_version")
 	FunctionsRuntimeKey            = attribute.Key("gram.functions.runtime")
 	HTTPEncodingStyleKey           = attribute.Key("gram.http.encoding.style")
+	HTTPHeaderAliasNameKey         = attribute.Key("gram.http.header_alias.name")
+	HTTPHeaderAliasFormKey         = attribute.Key("gram.http.header_alias.form")
 	HTTPParamNameKey               = attribute.Key("gram.http.param.name")
 	HTTPParamValueKey              = attribute.Key("gram.http.param.value")
 	HTTPResponseExternalKey        = attribute.Key("gram.http.response.external")
@@ -345,7 +351,7 @@ const (
 	McpRequestedProtocolVersionKey = attribute.Key("gram.mcp.requested_protocol_version")
 	// McpNegotiatedProtocolVersionKey is the MCP protocol revision actually in
 	// effect for a request. Under the handshake-based revisions this is what
-	// the serving side answered at `initialize` — which on Gram's own hosted
+	// the serving side answered at `initialize` — which on Speakeasy's own hosted
 	// and platform paths is the surface's mcpversions.Served* constant,
 	// answered unconditionally regardless of what the client asked for, and on
 	// the proxy paths is whatever the upstream server answered. Under
@@ -361,6 +367,11 @@ const (
 	// third-party-facing /mcp/{slug} and /x/mcp/{slug} paths (all backends), or
 	// "platform" for the assistant-token-only /platform/mcp/{toolsetSlug} path.
 	McpSurfaceKey = attribute.Key("gram.mcp.surface")
+	// McpRejectionReasonKey is the bounded reason an inbound MCP request was
+	// rejected before dispatch: "authentication" for the Session OAuth gate
+	// (whose detail stays on gram.oauth.failure_reason), or the request
+	// validation failure class such as "header_mismatch".
+	McpRejectionReasonKey = attribute.Key("gram.mcp.rejection_reason")
 	// McpKillswitchSurfaceKey is the kill-switch enforcement surface a covered
 	// MCP tools/call reached: "hosted" or "private_proxy".
 	McpKillswitchSurfaceKey = attribute.Key("gram.mcp.killswitch.surface")
@@ -397,8 +408,8 @@ const (
 	OAuthClientSecretGeneratedKey = attribute.Key("gram.oauth.client_secret_generated")
 	// OAuthErrorKey / OAuthErrorDescriptionKey carry the `error` /
 	// `error_description` parameters from RFC 6749 / RFC 7591 error responses
-	// — the ones Gram emits across DCR registration, /authorize, /token, and
-	// /revoke, and the ones an upstream authorization server answers Gram
+	// — the ones Speakeasy emits across DCR registration, /authorize, /token, and
+	// /revoke, and the ones an upstream authorization server answers Speakeasy
 	// with (IdP and remote-login callbacks, token refresh).
 	OAuthErrorKey            = attribute.Key("gram.oauth.error")
 	OAuthErrorDescriptionKey = attribute.Key("gram.oauth.error_description")
@@ -419,7 +430,7 @@ const (
 	// OAuthAssertionAudienceKey records which accepted audience form a verified client assertion carried.
 	OAuthAssertionAudienceKey = attribute.Key("gram.oauth.assertion_audience")
 
-	// OAuthExpectedAudienceKey records the audience Gram required of an upstream JWT access token.
+	// OAuthExpectedAudienceKey records the audience Speakeasy required of an upstream JWT access token.
 	OAuthExpectedAudienceKey = attribute.Key("gram.oauth.expected_audience")
 
 	// OAuthTokenAudienceKey records the aud values an upstream JWT access token carried.
@@ -472,7 +483,23 @@ const (
 	OAuthScopeKey                 = attribute.Key("gram.oauth.scope")
 	// OAuthScopeAddedKey lists the scopes the dance appended on top of a
 	// client's configured scope because the issuer advertises them.
-	OAuthScopeAddedKey                = attribute.Key("gram.oauth.scope_added")
+	OAuthScopeAddedKey = attribute.Key("gram.oauth.scope_added")
+	// OAuthScopeComparisonKey is how a protected resource's scopes_supported
+	// relates to its authorization server's.
+	OAuthScopeComparisonKey = attribute.Key("gram.oauth.scope_comparison")
+	// OAuthResourceScopesSupportedKey lists the scopes an RFC 9728 document advertises.
+	OAuthResourceScopesSupportedKey = attribute.Key("gram.oauth.resource_scopes_supported")
+	// OAuthScopeSourceKey names which precedence step produced a login's scope request.
+	OAuthScopeSourceKey = attribute.Key("gram.oauth.scope_source")
+	// OAuthScopeUnadvertisedKey lists pinned scopes the resource's advertised list lacks.
+	OAuthScopeUnadvertisedKey = attribute.Key("gram.oauth.scope_unadvertised")
+	// OAuthResourceProbeOutcomeKey is how a login resolved its resource's metadata.
+	OAuthResourceProbeOutcomeKey = attribute.Key("gram.oauth.resource_probe_outcome")
+
+	// OAuthResourceProbeDurationMsKey is how long a login's probe of its resource took, in milliseconds.
+	OAuthResourceProbeDurationMsKey = attribute.Key("gram.oauth.resource_probe_duration_ms")
+	// OAuthIssuerScopesSupportedKey lists the scopes an RFC 8414 document advertises.
+	OAuthIssuerScopesSupportedKey     = attribute.Key("gram.oauth.issuer_scopes_supported")
 	OAuthTokenEndpointKey             = attribute.Key("gram.oauth.token_endpoint")
 	OAuthVersionKey                   = attribute.Key("gram.oauth.version")
 	OAuthStatusKey                    = attribute.Key("gram.oauth.status")
@@ -610,11 +637,16 @@ const (
 	RiskLLMModelKey                = attribute.Key("gram.risk.llm.model")
 	RiskLLMFindingCountKey         = attribute.Key("gram.risk.llm.finding_count")
 	RiskLLMPublishFailedCountKey   = attribute.Key("gram.risk.llm.publish_failed_count")
+	RiskLLMCompletionKey           = attribute.Key("gram.risk.llm.completion")
 	SecretNameKey                  = attribute.Key("gram.secret.name")
 	SecurityPlacementKey           = attribute.Key("gram.security.placement")
 	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
 	SecurityTypeKey                = attribute.Key("gram.security.type")
 	SessionIDKey                   = attribute.Key("gram.session.id")
+	SessionTransferSourceHostKey   = attribute.Key("gram.session_transfer.source_host")
+	SessionTransferTargetHostKey   = attribute.Key("gram.session_transfer.target_host")
+	TransferFailureReasonKey       = attribute.Key("gram.session_transfer.failure_reason")
+	TransferSigninErrorKey         = attribute.Key("gram.session_transfer.signin_error")
 	SlackEventFullKey              = attribute.Key("gram.slack.event.full")
 	SlackEventTypeKey              = attribute.Key("gram.slack.event.type")
 	SlackTeamIDKey                 = attribute.Key("gram.slack.team.id")
@@ -693,7 +725,7 @@ const (
 	AgentDeviceSerialKey      = attribute.Key("gram.agent.device.serial")
 	AgentDeviceHostnameKey    = attribute.Key("gram.agent.device.hostname")
 	AgentDeviceEnvironmentKey = attribute.Key("gram.agent.device.environment")
-	// HookBlockReasonKey is set on hook telemetry entries when the Gram hook
+	// HookBlockReasonKey is set on hook telemetry entries when the Speakeasy hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
 	HookBlockReasonKey                   = attribute.Key("gram.hook.block_reason")
@@ -752,6 +784,22 @@ const (
 	TelemetryCHRowCountKey         = attribute.Key("gram.telemetry.ch.row_count")
 	InferenceInputCountKey         = attribute.Key("gram.inference.input_count")
 	InferenceAcceptedMessagesKey   = attribute.Key("gram.inference.accepted_messages")
+	// InferenceConversationOutcomeKey records how an Anthropic inference frame
+	// was mapped to a stored conversation: "session" (the frame's session id
+	// named an existing chat), "adopted_prefix" (the chat already holding the
+	// transcript's prefix was reused) or "new".
+	InferenceConversationOutcomeKey = attribute.Key("gram.inference.conversation_outcome")
+	// InferenceApplicationKey is the product surface an Anthropic inference
+	// frame's advisory source.application maps to (claude-chat-web,
+	// claude-code-web, claude-design, anthropic-inference). Metrics fold any
+	// other value to "other"; logs carry the mapped value as stored.
+	InferenceApplicationKey = attribute.Key("gram.inference.application")
+	// InferenceHasSessionIDKey reports whether an Anthropic inference frame
+	// carried a session id.
+	InferenceHasSessionIDKey = attribute.Key("gram.inference.has_session_id")
+	// InferenceMessageCountKey is the number of conversation messages in an
+	// Anthropic inference frame.
+	InferenceMessageCountKey = attribute.Key("gram.inference.message_count")
 	// TelemetryLogIDKey carries the telemetry_logs row id on records relayed
 	// to a customer OTLP destination. Delivery is at-least-once, so this is
 	// the key a destination dedupes redeliveries on.
@@ -865,7 +913,7 @@ const (
 	// path rejected a request before proxying. Closed set, see
 	// mcpmetrics.TunnelPublicRejectReason.
 	TunnelPublicRejectionReasonKey = attribute.Key("gram.tunnel_public.rejection_reason")
-	// TunnelAnonymousSessionHashKey carries a sha256 prefix of a Gram-minted
+	// TunnelAnonymousSessionHashKey carries a sha256 prefix of a Speakeasy-minted
 	// anonymous tunnel session id. The raw id is bearer-like and must never
 	// be logged.
 	TunnelAnonymousSessionHashKey = attribute.Key("gram.tunneled_mcp_server.anonymous_session_hash")
@@ -1459,6 +1507,9 @@ func SlogAssetURL(v string) slog.Attr      { return slog.String(string(AssetURLK
 
 func ChatID(v string) attribute.KeyValue { return ChatIDKey.String(v) }
 func SlogChatID(v string) slog.Attr      { return slog.String(string(ChatIDKey), v) }
+func SlogChatExternalID(v string) slog.Attr {
+	return slog.String(string(ChatExternalIDKey), v)
+}
 
 func ChatContentPartID(v string) attribute.KeyValue { return ChatContentPartIDKey.String(v) }
 func SlogChatContentPartID(v string) slog.Attr {
@@ -1692,7 +1743,11 @@ func SlogHTTPStatusCodePattern(v string) slog.Attr {
 }
 
 func HTTPParamName(v string) attribute.KeyValue { return HTTPParamNameKey.String(v) }
-func SlogHTTPParamName(v string) slog.Attr      { return slog.String(string(HTTPParamNameKey), v) }
+
+func HTTPHeaderAliasName(v string) attribute.KeyValue { return HTTPHeaderAliasNameKey.String(v) }
+
+func HTTPHeaderAliasForm(v string) attribute.KeyValue { return HTTPHeaderAliasFormKey.String(v) }
+func SlogHTTPParamName(v string) slog.Attr            { return slog.String(string(HTTPParamNameKey), v) }
 
 func HTTPParamValue(v any) attribute.KeyValue { return HTTPParamValueKey.String(fmt.Sprintf("%v", v)) }
 func SlogHTTPParamValue(v any) slog.Attr      { return slog.Any(string(HTTPParamValueKey), v) }
@@ -1981,6 +2036,45 @@ func SlogOAuthScope(v string) slog.Attr      { return slog.String(string(OAuthSc
 
 func OAuthScopeAdded(v string) attribute.KeyValue { return OAuthScopeAddedKey.String(v) }
 func SlogOAuthScopeAdded(v string) slog.Attr      { return slog.String(string(OAuthScopeAddedKey), v) }
+
+func SlogOAuthScopeComparison[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthScopeComparisonKey), string(v))
+}
+
+func OAuthResourceScopesSupported(v []string) attribute.KeyValue {
+	return OAuthResourceScopesSupportedKey.StringSlice(v)
+}
+
+func OAuthScopeSource[V ~string](v V) attribute.KeyValue {
+	return OAuthScopeSourceKey.String(string(v))
+}
+func SlogOAuthScopeSource[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthScopeSourceKey), string(v))
+}
+
+func SlogOAuthScopeUnadvertised(v []string) slog.Attr {
+	return slog.Any(string(OAuthScopeUnadvertisedKey), v)
+}
+
+func OAuthResourceProbeOutcome[V ~string](v V) attribute.KeyValue {
+	return OAuthResourceProbeOutcomeKey.String(string(v))
+}
+func SlogOAuthResourceProbeOutcome[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthResourceProbeOutcomeKey), string(v))
+}
+func SlogOAuthResourceProbeDuration(v time.Duration) slog.Attr {
+	return slog.Float64(string(OAuthResourceProbeDurationMsKey), float64(v)/float64(time.Millisecond))
+}
+func SlogOAuthResourceScopesSupported(v []string) slog.Attr {
+	return slog.Any(string(OAuthResourceScopesSupportedKey), v)
+}
+
+func OAuthIssuerScopesSupported(v []string) attribute.KeyValue {
+	return OAuthIssuerScopesSupportedKey.StringSlice(v)
+}
+func SlogOAuthIssuerScopesSupported(v []string) slog.Attr {
+	return slog.Any(string(OAuthIssuerScopesSupportedKey), v)
+}
 
 func OAuthTokenEndpoint(v string) attribute.KeyValue { return OAuthTokenEndpointKey.String(v) }
 func SlogOAuthTokenEndpoint(v string) slog.Attr {
@@ -2562,6 +2656,10 @@ func SlogRiskLLMPublishFailedCount(v int) slog.Attr {
 	return slog.Int(string(RiskLLMPublishFailedCountKey), v)
 }
 
+// SlogRiskLLMCompletion is the raw reply text of a risk model call, logged
+// only when it could not be parsed as a verdict.
+func SlogRiskLLMCompletion(v string) slog.Attr { return slog.String(string(RiskLLMCompletionKey), v) }
+
 func SecretName(v string) attribute.KeyValue { return SecretNameKey.String(v) }
 func SlogSecretName(v string) slog.Attr      { return slog.String(string(SecretNameKey), v) }
 
@@ -2579,6 +2677,22 @@ func SlogSecurityType(v string) slog.Attr      { return slog.String(string(Secur
 
 func SessionID(v string) attribute.KeyValue { return SessionIDKey.String(v) }
 func SlogSessionID(v string) slog.Attr      { return slog.String(string(SessionIDKey), v) }
+
+func TransferFailureReason(v string) attribute.KeyValue { return TransferFailureReasonKey.String(v) }
+func SlogTransferFailureReason(v string) slog.Attr {
+	return slog.String(string(TransferFailureReasonKey), v)
+}
+
+func TransferSigninError(v string) attribute.KeyValue { return TransferSigninErrorKey.String(v) }
+func SlogTransferSigninError(v string) slog.Attr {
+	return slog.String(string(TransferSigninErrorKey), v)
+}
+
+func SourceHost(v string) attribute.KeyValue { return SessionTransferSourceHostKey.String(v) }
+func SlogSourceHost(v string) slog.Attr      { return slog.String(string(SessionTransferSourceHostKey), v) }
+
+func TargetHost(v string) attribute.KeyValue { return SessionTransferTargetHostKey.String(v) }
+func SlogTargetHost(v string) slog.Attr      { return slog.String(string(SessionTransferTargetHostKey), v) }
 
 func SlackEventFull(v any) attribute.KeyValue { return SlackEventFullKey.String(fmt.Sprintf("%v", v)) }
 func SlogSlackEventFull(v any) slog.Attr      { return slog.Any(string(SlackEventFullKey), v) }
@@ -2680,6 +2794,13 @@ func SlogMcpMethod(v string) slog.Attr      { return slog.String(string(McpMetho
 
 func McpSurface(v string) attribute.KeyValue { return McpSurfaceKey.String(v) }
 func SlogMcpSurface(v string) slog.Attr      { return slog.String(string(McpSurfaceKey), v) }
+
+func McpRejectionReason[V ~string](v V) attribute.KeyValue {
+	return McpRejectionReasonKey.String(string(v))
+}
+func SlogMcpRejectionReason[V ~string](v V) slog.Attr {
+	return slog.String(string(McpRejectionReasonKey), string(v))
+}
 
 func McpEntryPoint[V ~string](v V) attribute.KeyValue { return McpEntryPointKey.String(string(v)) }
 
@@ -3196,5 +3317,34 @@ func SlogInferenceAcceptedMessages(v int) slog.Attr {
 	return slog.Int(string(InferenceAcceptedMessagesKey), v)
 }
 
+func InferenceConversationOutcome(v string) attribute.KeyValue {
+	return InferenceConversationOutcomeKey.String(v)
+}
+
+func SlogInferenceConversationOutcome(v string) slog.Attr {
+	return slog.String(string(InferenceConversationOutcomeKey), v)
+}
+
+func InferenceApplication(v string) attribute.KeyValue { return InferenceApplicationKey.String(v) }
+func SlogInferenceApplication(v string) slog.Attr {
+	return slog.String(string(InferenceApplicationKey), v)
+}
+
+func InferenceHasSessionID(v bool) attribute.KeyValue { return InferenceHasSessionIDKey.Bool(v) }
+func SlogInferenceHasSessionID(v bool) slog.Attr {
+	return slog.Bool(string(InferenceHasSessionIDKey), v)
+}
+
+func SlogInferenceMessageCount(v int) slog.Attr {
+	return slog.Int(string(InferenceMessageCountKey), v)
+}
+
 func SlogRegistryEntryID(v string) slog.Attr   { return slog.String(string(RegistryEntryIDKey), v) }
 func SlogRegistryUpdatedAt(v string) slog.Attr { return slog.String(string(RegistryUpdatedAtKey), v) }
+func SlogRegistryInvalidPaths(v []string) slog.Attr {
+	return slog.Any(string(RegistryInvalidPathsKey), v)
+}
+func SlogRegistryEntryName(v string) slog.Attr { return slog.String(string(RegistryEntryNameKey), v) }
+func SlogRegistrySeedOutcome(v string) slog.Attr {
+	return slog.String(string(RegistrySeedOutcomeKey), v)
+}

@@ -19,14 +19,29 @@ import (
 // it trusts, the subjects those issuers may present, and the agent each
 // admitted workload inherits its policy from.
 type Service interface {
-	// Read the whole trust policy: every trusted issuer and every admitted
-	// subject, at both the organization and project tiers, with the agent each
-	// subject resolves to. Requires workload:read.
+	// Read the whole trust policy: every trusted issuer and every admitted subject
+	// at the organization tier, plus the selected project's tier when the caller
+	// names a project, with the agent each subject resolves to. Requires
+	// workload:read.
 	List(context.Context, *ListPayload) (res *WorkloadIdentityPolicy, err error)
+	// List the platforms the catalog offers to trust without looking anything up,
+	// each with the guided setup that connects it. The same for every
+	// organization. Requires workload:read.
+	ListPlatforms(context.Context, *ListPlatformsPayload) (res *WorkloadPlatformCatalog, err error)
+	// List the token endpoints an external platform can be pointed at: one per
+	// user session issuer in shared mode, at the organization level and in each
+	// project, with the issuer it serves. Issuers this deployment does not serve a
+	// shared authorization server for are left out. Requires workload:read.
+	ListTokenEndpoints(context.Context, *ListTokenEndpointsPayload) (res *types.WorkloadTokenEndpoints, err error)
 	// Trust an external issuer to vouch for workloads. Requires workload:write.
 	// Returns the whole policy, so a caller replaces its view rather than merging
 	// into it.
 	RegisterIssuer(context.Context, *RegisterIssuerPayload) (res *WorkloadIdentityPolicy, err error)
+	// Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields
+	// are left unchanged. The issuer URL and the wildcard admission setting are
+	// fixed at registration. Requires workload:write. Returns the whole policy, so
+	// a caller replaces its view rather than merging into it.
+	UpdateIssuer(context.Context, *UpdateIssuerPayload) (res *WorkloadIdentityPolicy, err error)
 	// Stop trusting an issuer. Every subject admitted under it is withdrawn in the
 	// same transaction, so no admission can outlive the issuer it names. Requires
 	// workload:write.
@@ -36,6 +51,13 @@ type Service interface {
 	// without an agent is refused at the token endpoint, so that half-configured
 	// state is not reachable. Requires workload:write.
 	AdmitSubject(context.Context, *AdmitSubjectPayload) (res *WorkloadIdentityPolicy, err error)
+	// Edit an admitted subject's label, tags, or assigned agent. Omitted fields
+	// are left unchanged. The subject, match kind, issuer, and tier are fixed at
+	// admission. The agent assignment is shared by every admission of the same
+	// subject under the same issuer, at either tier, so reassigning it through one
+	// admission reassigns it for both. Requires workload:write. Returns the whole
+	// policy, so a caller replaces its view rather than merging into it.
+	UpdateSubject(context.Context, *UpdateSubjectPayload) (res *WorkloadIdentityPolicy, err error)
 	// Withdraw an admitted subject and its agent assignment, stopping it
 	// authenticating. Requires workload:write.
 	WithdrawSubject(context.Context, *WithdrawSubjectPayload) (res *WorkloadIdentityPolicy, err error)
@@ -61,7 +83,7 @@ const ServiceName = "workloadIdentities"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"list", "registerIssuer", "withdrawIssuer", "admitSubject", "withdrawSubject"}
+var MethodNames = [9]string{"list", "listPlatforms", "listTokenEndpoints", "registerIssuer", "updateIssuer", "withdrawIssuer", "admitSubject", "updateSubject", "withdrawSubject"}
 
 // AdmitSubjectPayload is the payload type of the workloadIdentities service
 // admitSubject method.
@@ -83,16 +105,37 @@ type AdmitSubjectPayload struct {
 	MatchKind string
 	// Optional label, for platforms whose subjects are not self-describing.
 	Name *string
+	// Free-form labels for finding the admitted workload in a long list. Flat
+	// strings, not key/value pairs. Trimmed and de-duplicated on write, then
+	// limited to 40 tags of at most 64 characters each.
+	Tags []string
 	// The agent whose policy the admitted workload inherits.
 	AgentID string
 	// Admit the subject for the selected project alone rather than the whole
-	// organization. Defaults to false.
+	// organization. Requires a caller that names a project; a dashboard session
+	// does not. Defaults to false.
 	ProjectScoped bool
 }
 
 // ListPayload is the payload type of the workloadIdentities service list
 // method.
 type ListPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListPlatformsPayload is the payload type of the workloadIdentities service
+// listPlatforms method.
+type ListPlatformsPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListTokenEndpointsPayload is the payload type of the workloadIdentities
+// service listTokenEndpoints method.
+type ListTokenEndpointsPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -113,12 +156,63 @@ type RegisterIssuerPayload struct {
 	// an https URL on a fully qualified domain name.
 	JwksURI string
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
-	// Defaults to false, and is re-checked on every lookup, so clearing it revokes
-	// wildcard rules already written.
-	AllowWildcardAdmission bool
+	// Defaults to true. Checked when a wildcard rule is admitted and again on
+	// every lookup, so clearing it makes wildcard rules already written inert
+	// immediately.
+	AllowWildcardAdmission *bool
+	// What the platform is and what runs on it, in the operator's words. Trimmed
+	// on write; blank is stored as none. At most 500 characters after trimming.
+	Description *string
+	// Free-form labels for grouping and filtering trusted platforms. Flat strings,
+	// not key/value pairs. Trimmed and de-duplicated on write, then limited to 40
+	// tags of at most 64 characters each.
+	Tags []string
 	// Register the issuer for the selected project alone rather than the whole
-	// organization. Defaults to false.
+	// organization. Requires a caller that names a project; a dashboard session
+	// does not. Defaults to false.
 	ProjectScoped bool
+}
+
+// UpdateIssuerPayload is the payload type of the workloadIdentities service
+// updateIssuer method.
+type UpdateIssuerPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The workload issuer id.
+	ID string
+	// The label an operator works with. Unique within its tier.
+	Name *string
+	// Where the issuer publishes the keys its assertions are signed with. Must be
+	// an https URL on a fully qualified domain name.
+	JwksURI *string
+	// What the platform is and what runs on it, in the operator's words. Trimmed
+	// on write; blank clears it. At most 500 characters after trimming.
+	Description *string
+	// Replaces the issuer's tags; an empty list clears them. Trimmed and
+	// de-duplicated on write, then limited to 40 tags of at most 64 characters
+	// each.
+	Tags []string `json:"tags,omitzero"`
+}
+
+// UpdateSubjectPayload is the payload type of the workloadIdentities service
+// updateSubject method.
+type UpdateSubjectPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The admission id.
+	ID string
+	// Optional label, for platforms whose subjects are not self-describing.
+	// Trimmed on write; blank clears it.
+	Name *string
+	// Replaces the admission's tags; an empty list clears them. Trimmed and
+	// de-duplicated on write, then limited to 40 tags of at most 64 characters
+	// each.
+	Tags []string `json:"tags,omitzero"`
+	// The agent whose policy the admitted workload inherits. Shared with any
+	// admission of the same subject under the same issuer at the other tier.
+	AgentID *string
 }
 
 // WithdrawIssuerPayload is the payload type of the workloadIdentities service
@@ -148,6 +242,115 @@ type WorkloadIdentityPolicy struct {
 	Issuers []*types.WorkloadIssuer
 	// Admitted subjects.
 	Admissions []*types.WorkloadAdmission
+}
+
+// A platform the catalog offers to trust, with what the operator supplies and
+// the guided setup that connects it.
+type WorkloadPlatform struct {
+	// Identifies the entry permanently.
+	Key string
+	// What the operator sees.
+	DisplayName string
+	// What connecting the platform does.
+	Description string
+	// The platform's logo, a path on the dashboard's origin. Empty where it has
+	// none.
+	Icon string
+	// False for a platform listed but not offered.
+	Enabled bool
+	// The issuer identifier its tokens carry.
+	Issuer *WorkloadPlatformConstant
+	// Where it publishes its signing keys.
+	JwksURI *WorkloadPlatformConstant
+	// What the operator supplies.
+	Variables []*WorkloadPlatformVariable
+	// The access rule it produces.
+	Subject *WorkloadPlatformSubject
+	// The guided setup. Empty for a platform without one, which is listed as
+	// coming soon and cannot be opened.
+	Steps []*WorkloadPlatformStep
+}
+
+// One piece of a guided setup step. Which fields are set depends on type; the
+// rest are empty.
+type WorkloadPlatformBlock struct {
+	// The kind of content.
+	Type string
+	// A text block's Markdown, or what a checklist item without a value asks the
+	// operator to do. Raw HTML in it must not be rendered.
+	Markdown string
+	// An image's path on the dashboard's origin.
+	Src string
+	// An image's alternative text.
+	Alt string
+	// Shown under an image.
+	Caption string
+	// A link's https target.
+	Href string
+	// A link's or computed value's label, or the console field or control a
+	// checklist item names.
+	Label string
+	// The variable key a field collects.
+	Variable string
+	// The value a computed block or checklist item shows.
+	Value string
+	// Shown under a computed value or checklist item.
+	Help string
+}
+
+// WorkloadPlatformCatalog is the result type of the workloadIdentities service
+// listPlatforms method.
+type WorkloadPlatformCatalog struct {
+	// The catalog entries.
+	Platforms []*WorkloadPlatform
+}
+
+// A value a catalog platform supplies, the same for every customer.
+type WorkloadPlatformConstant struct {
+	// The value, with {key} placeholders for platform-tier variables.
+	Value string
+	// Whether the operator sees the value.
+	Visibility string
+}
+
+// One screen of a guided setup.
+type WorkloadPlatformStep struct {
+	// Stable within the platform; used in the dashboard URL.
+	ID string
+	// Heads the step.
+	Title string
+	// collect steps gather values, the create step writes the rows, connect steps
+	// describe the platform's side.
+	Phase string
+	// Rendered in order.
+	Blocks []*WorkloadPlatformBlock
+}
+
+// The access rule a catalog platform produces.
+type WorkloadPlatformSubject struct {
+	// The subject with {key} placeholders for rule-tier variables; the stem, for a
+	// wildcard rule.
+	Template string
+	// Whether the rule is the filled template followed by *.
+	Wildcard bool
+}
+
+// Something the operator supplies when connecting a catalog platform.
+type WorkloadPlatformVariable struct {
+	// Names the variable in templates, as {key}.
+	Key string
+	// Whether it is supplied once per trusted platform or once per access rule.
+	Tier string
+	// The field's label.
+	Label string
+	// Where the operator finds the value. Empty where there is no help.
+	Help string
+	// Shown in the empty field. Empty where there is none.
+	Placeholder string
+	// A regular expression the whole value must match.
+	Pattern string
+	// Shown when the value does not match. Empty where there is none.
+	PatternMessage string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

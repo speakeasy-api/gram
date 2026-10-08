@@ -1,9 +1,11 @@
 import { getCursorInstallCommand } from "@/lib/cursor-install-command";
 import { describe, expect, it } from "vitest";
 import { ACTIVE_AGENT_PROVIDER_IDS } from "@/components/agent-providers/agent-providers";
-import { AGENT_PLATFORMS, platformSteps } from "./setup-data";
+import { getAgentPlatforms, platformSteps } from "./setup-data";
 
-describe("AGENT_PLATFORMS", () => {
+const AGENT_PLATFORMS = getAgentPlatforms("https://app.getgram.ai");
+
+describe("getAgentPlatforms", () => {
   it("does not offer OpenClaw as a setup platform", () => {
     // The other-platforms card is the device agent's rollout and the agent
     // does not cover OpenClaw, so listing it offered a walkthrough nothing
@@ -35,7 +37,7 @@ describe("AGENT_PLATFORMS", () => {
       CLAUDE_CODE_ENHANCED_TELEMETRY_BETA: "1",
       OTEL_EXPORTER_OTLP_ENDPOINT: "https://app.getgram.ai/otel",
       OTEL_EXPORTER_OTLP_HEADERS:
-        "Gram-Project={{GRAM_PROJECT_SLUG}},Gram-Key={{GRAM_API_KEY}}",
+        "Speakeasy-AI-Project={{GRAM_PROJECT_SLUG}},Speakeasy-AI-Key={{GRAM_API_KEY}}",
       OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf",
       OTEL_LOGS_EXPORTER: "otlp",
       OTEL_METRICS_EXPORTER: "otlp",
@@ -65,6 +67,7 @@ describe("AGENT_PLATFORMS", () => {
     );
     expect(step.fields).toEqual([
       { label: "Additional allowed domains", value: "app.getgram.ai" },
+      { label: "Additional allowed domains", value: "ai.speakeasy.com" },
     ]);
     expect(step.afterFields).toContain("Start a new Cowork session");
     expect(step.afterFields).toContain(
@@ -91,7 +94,8 @@ describe("AGENT_PLATFORMS", () => {
         { label: "OTLP protocol", value: "http/json" },
         {
           label: "OTLP headers",
-          value: "Gram-Project=default,Gram-Key={{GRAM_API_KEY}}",
+          value:
+            "Speakeasy-AI-Project=default,Speakeasy-AI-Key={{GRAM_API_KEY}}",
           requiresApiKey: true,
         },
       ],
@@ -156,6 +160,30 @@ describe("AGENT_PLATFORMS", () => {
     expect(copy).not.toContain("every install");
   });
 
+  it("tells admins to key Claude Code settings by the marketplace name", () => {
+    const platform = AGENT_PLATFORMS.find(({ id }) => id === "claude")!;
+    const managed = platform.setupSteps.find(
+      ({ title }) => title === "Update Managed settings on Claude.ai",
+    );
+    const personal = platformSteps(platform, false).find(({ code }) =>
+      code?.includes("extraKnownMarketplaces"),
+    );
+    for (const step of [managed, personal]) {
+      expect(step?.code).toContain('"{{GRAM_MARKETPLACE_NAME}}": {');
+      expect(step?.code).toContain('"autoUpdate": true');
+      expect(step?.code).toContain('"FORCE_AUTOUPDATE_PLUGINS": "1"');
+      expect(step?.code).toContain(
+        '"{{GRAM_CLAUDE_PLUGIN_NAME}}@{{GRAM_MARKETPLACE_NAME}}": true',
+      );
+      expect(JSON.stringify(step?.description)).toContain(
+        "Use this exact marketplace name.",
+      );
+    }
+    expect(managed?.helpLink?.url).toBe(
+      "https://code.claude.com/docs/en/plugins/org#require-a-marketplace-and-its-plugins",
+    );
+  });
+
   it("uses the staged Cursor installer with required hook validation", () => {
     const platform = AGENT_PLATFORMS.find(({ id }) => id === "cursor")!;
     const step = platformSteps(platform, false).find(({ code }) =>
@@ -211,4 +239,38 @@ describe("AGENT_PLATFORMS", () => {
       for (const step of orgSteps) expect(personal).not.toContain(step);
     },
   );
+
+  it("names the host the reader is on in every copy-paste setup value", () => {
+    const platforms = getAgentPlatforms("https://ai.speakeasy.com");
+
+    const claudeSettings = JSON.parse(
+      platforms
+        .find(({ id }) => id === "claude")!
+        .setupSteps.find(({ code }) =>
+          code?.includes("OTEL_EXPORTER_OTLP_ENDPOINT"),
+        )!.code!,
+    ) as { env: Record<string, string> };
+    expect(claudeSettings.env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe(
+      "https://ai.speakeasy.com/otel",
+    );
+
+    const cowork = platforms.find(({ id }) => id === "claude-cowork")!;
+    const fieldValue = (title: string, label: string) =>
+      cowork.setupSteps
+        .find((step) => step.title === title)
+        ?.fields?.find((field) => field.label === label)?.value;
+    expect(fieldValue("Enable OTEL export", "OTLP endpoint")).toBe(
+      "https://ai.speakeasy.com/rpc/hooks.otel",
+    );
+    // The allowlist takes bare hostnames. It lists every prod host, because
+    // published plugin hooks send to whichever one the server URL named at
+    // their last publish.
+    expect(
+      cowork.setupSteps
+        .find(
+          (step) => step.title === "Verify hook and bootstrap network access",
+        )
+        ?.fields?.map((field) => field.value),
+    ).toEqual(["ai.speakeasy.com", "app.getgram.ai"]);
+  });
 });

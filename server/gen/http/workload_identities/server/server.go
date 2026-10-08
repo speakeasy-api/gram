@@ -18,12 +18,16 @@ import (
 
 // Server lists the workloadIdentities service endpoint HTTP handlers.
 type Server struct {
-	Mounts          []*MountPoint
-	List            http.Handler
-	RegisterIssuer  http.Handler
-	WithdrawIssuer  http.Handler
-	AdmitSubject    http.Handler
-	WithdrawSubject http.Handler
+	Mounts             []*MountPoint
+	List               http.Handler
+	ListPlatforms      http.Handler
+	ListTokenEndpoints http.Handler
+	RegisterIssuer     http.Handler
+	UpdateIssuer       http.Handler
+	WithdrawIssuer     http.Handler
+	AdmitSubject       http.Handler
+	UpdateSubject      http.Handler
+	WithdrawSubject    http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -54,16 +58,24 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"List", "GET", "/rpc/workloadIdentities.list"},
+			{"ListPlatforms", "GET", "/rpc/workloadIdentities.listPlatforms"},
+			{"ListTokenEndpoints", "GET", "/rpc/workloadIdentities.listTokenEndpoints"},
 			{"RegisterIssuer", "POST", "/rpc/workloadIdentities.registerIssuer"},
+			{"UpdateIssuer", "POST", "/rpc/workloadIdentities.updateIssuer"},
 			{"WithdrawIssuer", "DELETE", "/rpc/workloadIdentities.withdrawIssuer"},
 			{"AdmitSubject", "POST", "/rpc/workloadIdentities.admitSubject"},
+			{"UpdateSubject", "POST", "/rpc/workloadIdentities.updateSubject"},
 			{"WithdrawSubject", "DELETE", "/rpc/workloadIdentities.withdrawSubject"},
 		},
-		List:            NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
-		RegisterIssuer:  NewRegisterIssuerHandler(e.RegisterIssuer, mux, decoder, encoder, errhandler, formatter),
-		WithdrawIssuer:  NewWithdrawIssuerHandler(e.WithdrawIssuer, mux, decoder, encoder, errhandler, formatter),
-		AdmitSubject:    NewAdmitSubjectHandler(e.AdmitSubject, mux, decoder, encoder, errhandler, formatter),
-		WithdrawSubject: NewWithdrawSubjectHandler(e.WithdrawSubject, mux, decoder, encoder, errhandler, formatter),
+		List:               NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
+		ListPlatforms:      NewListPlatformsHandler(e.ListPlatforms, mux, decoder, encoder, errhandler, formatter),
+		ListTokenEndpoints: NewListTokenEndpointsHandler(e.ListTokenEndpoints, mux, decoder, encoder, errhandler, formatter),
+		RegisterIssuer:     NewRegisterIssuerHandler(e.RegisterIssuer, mux, decoder, encoder, errhandler, formatter),
+		UpdateIssuer:       NewUpdateIssuerHandler(e.UpdateIssuer, mux, decoder, encoder, errhandler, formatter),
+		WithdrawIssuer:     NewWithdrawIssuerHandler(e.WithdrawIssuer, mux, decoder, encoder, errhandler, formatter),
+		AdmitSubject:       NewAdmitSubjectHandler(e.AdmitSubject, mux, decoder, encoder, errhandler, formatter),
+		UpdateSubject:      NewUpdateSubjectHandler(e.UpdateSubject, mux, decoder, encoder, errhandler, formatter),
+		WithdrawSubject:    NewWithdrawSubjectHandler(e.WithdrawSubject, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -73,9 +85,13 @@ func (s *Server) Service() string { return "workloadIdentities" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.List = m(s.List)
+	s.ListPlatforms = m(s.ListPlatforms)
+	s.ListTokenEndpoints = m(s.ListTokenEndpoints)
 	s.RegisterIssuer = m(s.RegisterIssuer)
+	s.UpdateIssuer = m(s.UpdateIssuer)
 	s.WithdrawIssuer = m(s.WithdrawIssuer)
 	s.AdmitSubject = m(s.AdmitSubject)
+	s.UpdateSubject = m(s.UpdateSubject)
 	s.WithdrawSubject = m(s.WithdrawSubject)
 }
 
@@ -85,9 +101,13 @@ func (s *Server) MethodNames() []string { return workloadidentities.MethodNames[
 // Mount configures the mux to serve the workloadIdentities endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountListHandler(mux, h.List)
+	MountListPlatformsHandler(mux, h.ListPlatforms)
+	MountListTokenEndpointsHandler(mux, h.ListTokenEndpoints)
 	MountRegisterIssuerHandler(mux, h.RegisterIssuer)
+	MountUpdateIssuerHandler(mux, h.UpdateIssuer)
 	MountWithdrawIssuerHandler(mux, h.WithdrawIssuer)
 	MountAdmitSubjectHandler(mux, h.AdmitSubject)
+	MountUpdateSubjectHandler(mux, h.UpdateSubject)
 	MountWithdrawSubjectHandler(mux, h.WithdrawSubject)
 }
 
@@ -149,6 +169,113 @@ func NewListHandler(
 	})
 }
 
+// MountListPlatformsHandler configures the mux to serve the
+// "workloadIdentities" service "listPlatforms" endpoint.
+func MountListPlatformsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/workloadIdentities.listPlatforms", f)
+}
+
+// NewListPlatformsHandler creates a HTTP handler which loads the HTTP request
+// and calls the "workloadIdentities" service "listPlatforms" endpoint.
+func NewListPlatformsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListPlatformsRequest(mux, decoder)
+		encodeResponse = EncodeListPlatformsResponse(encoder)
+		encodeError    = EncodeListPlatformsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listPlatforms")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "workloadIdentities")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListTokenEndpointsHandler configures the mux to serve the
+// "workloadIdentities" service "listTokenEndpoints" endpoint.
+func MountListTokenEndpointsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/workloadIdentities.listTokenEndpoints", f)
+}
+
+// NewListTokenEndpointsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "workloadIdentities" service "listTokenEndpoints"
+// endpoint.
+func NewListTokenEndpointsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListTokenEndpointsRequest(mux, decoder)
+		encodeResponse = EncodeListTokenEndpointsResponse(encoder)
+		encodeError    = EncodeListTokenEndpointsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listTokenEndpoints")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "workloadIdentities")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
 // MountRegisterIssuerHandler configures the mux to serve the
 // "workloadIdentities" service "registerIssuer" endpoint.
 func MountRegisterIssuerHandler(mux goahttp.Muxer, h http.Handler) {
@@ -179,6 +306,59 @@ func NewRegisterIssuerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "registerIssuer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "workloadIdentities")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateIssuerHandler configures the mux to serve the
+// "workloadIdentities" service "updateIssuer" endpoint.
+func MountUpdateIssuerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/workloadIdentities.updateIssuer", f)
+}
+
+// NewUpdateIssuerHandler creates a HTTP handler which loads the HTTP request
+// and calls the "workloadIdentities" service "updateIssuer" endpoint.
+func NewUpdateIssuerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateIssuerRequest(mux, decoder)
+		encodeResponse = EncodeUpdateIssuerResponse(encoder)
+		encodeError    = EncodeUpdateIssuerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateIssuer")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "workloadIdentities")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -285,6 +465,59 @@ func NewAdmitSubjectHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "admitSubject")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "workloadIdentities")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateSubjectHandler configures the mux to serve the
+// "workloadIdentities" service "updateSubject" endpoint.
+func MountUpdateSubjectHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/workloadIdentities.updateSubject", f)
+}
+
+// NewUpdateSubjectHandler creates a HTTP handler which loads the HTTP request
+// and calls the "workloadIdentities" service "updateSubject" endpoint.
+func NewUpdateSubjectHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateSubjectRequest(mux, decoder)
+		encodeResponse = EncodeUpdateSubjectResponse(encoder)
+		encodeError    = EncodeUpdateSubjectError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateSubject")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "workloadIdentities")
 		payload, err := decodeRequest(r)
 		if err != nil {

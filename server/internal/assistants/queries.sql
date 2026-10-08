@@ -122,6 +122,21 @@ WHERE project_id = @project_id
 ORDER BY id
 FOR NO KEY UPDATE;
 
+-- name: ListAttachmentTargetIDs :many
+-- Resolves the toolsets and MCP servers a write would attach so the handler
+-- can authorize them first. Read-only: the write locks them itself.
+SELECT t.id
+FROM toolsets t
+WHERE t.project_id = @project_id
+  AND t.slug = ANY(@toolset_slugs::TEXT[])
+  AND t.deleted IS FALSE
+UNION ALL
+SELECT ms.id
+FROM mcp_servers ms
+WHERE ms.project_id = @project_id
+  AND ms.slug = ANY(@mcp_server_slugs::TEXT[])
+  AND ms.deleted IS FALSE;
+
 -- name: ResolveEnvironmentsForWrite :many
 SELECT id, slug
 FROM environments
@@ -345,9 +360,9 @@ WHERE id = ANY(@toolset_ids::UUID[])
 
 -- name: LoadAssistantMcpServers :many
 -- Hydrates assistant_mcp_servers with the fronting mcp_servers row, its
--- Gram-hosted endpoint slug (custom_domain_id IS NULL), and the bound
+-- Speakeasy-hosted endpoint slug (custom_domain_id IS NULL), and the bound
 -- environment. Soft-deleted servers are skipped so the runtime never targets a
--- dead endpoint; a row whose server has no Gram-hosted endpoint yields a NULL
+-- dead endpoint; a row whose server has no Speakeasy-hosted endpoint yields a NULL
 -- endpoint_slug and is filtered out in Go. Visibility is returned rather than
 -- filtered here so API reads still show disabled attachments while the runtime
 -- resolver skips them. Mirrors LoadAssistantToolsets: one read supplies
@@ -379,7 +394,7 @@ ORDER BY ams.created_at;
 -- Besides resolving slugs to ids, this returns everything attach-time
 -- validation needs to reject servers the assistant runtime cannot reach:
 -- the backend kind (tunnelled servers have no serving path), visibility,
--- and whether a Gram-hosted endpoint exists to build the /mcp/{slug} URL.
+-- and whether a Speakeasy-hosted endpoint exists to build the /mcp/{slug} URL.
 SELECT
   ms.id,
   ms.slug,
@@ -554,7 +569,7 @@ RETURNING sd.*, prev.updated_at AS previous_updated_at, resolved.id AS resolved_
 -- name: UpsertAssistantChat :exec
 -- user_id is the conversation owner — stamped on first insert so reads can
 -- scope to the user who started the chat. The dashboard source passes the
--- Gram user id; external-source turns (Slack/cron/wake) pass NULL. On conflict
+-- Speakeasy user id; external-source turns (Slack/cron/wake) pass NULL. On conflict
 -- the existing user_id is preserved when already set so a later NULL-user-id
 -- retry doesn't unclaim the chat; pre-existing rows with NULL user_id are
 -- backfilled on first owned send so dashboard ownership checks accept the
@@ -1051,6 +1066,7 @@ WHERE project_id = @project_id
 UPDATE assistant_thread_events
 SET
   status = @pending_status,
+  attempts = GREATEST(0, attempts - CASE WHEN @restore_attempt::boolean THEN 1 ELSE 0 END),
   last_error = @last_error,
   updated_at = clock_timestamp()
 WHERE id = @event_id

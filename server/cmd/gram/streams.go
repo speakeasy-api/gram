@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/pubsub/v2"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/urfave/cli/v2"
@@ -34,6 +35,7 @@ import (
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	pluginsv1 "github.com/speakeasy-api/gram/infra/gen/gram/plugins/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	roledistributionv1 "github.com/speakeasy-api/gram/infra/gen/gram/role_distribution/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -64,6 +66,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
+	"github.com/speakeasy-api/gram/server/internal/roledistribution"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
@@ -72,6 +75,7 @@ import (
 	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 	"github.com/speakeasy-api/gram/server/internal/subscribers"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -79,6 +83,24 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 	"github.com/speakeasy-api/gram/server/internal/webhooks/svixrelay"
+)
+
+const (
+	// spanEventWriterBatchMessages gives a single receiver headroom above a
+	// sizing target of 1,000 spans per second while keeping insert batches bounded.
+	spanEventWriterBatchMessages = 2000
+
+	// spanEventWriterBatchBytes flushes large spans when their batch payload
+	// reaches the 10 MiB insert budget.
+	spanEventWriterBatchBytes = 10 * constants.MiB
+
+	// spanEventWriterBatchLatency bounds the wait for a partial batch so sparse
+	// traffic and byte-limited deliveries are acknowledged promptly.
+	spanEventWriterBatchLatency = time.Second
+
+	// spanEventWriterOutstandingBatches allows one batch to fill while another
+	// is being inserted and acknowledged by the Pub/Sub service.
+	spanEventWriterOutstandingBatches = 2
 )
 
 func newStreamsCommand() *cli.Command {
@@ -254,6 +276,7 @@ func newStreamsCommand() *cli.Command {
 
 	flags = append(flags, stripeFlags()...)
 	flags = append(flags, networkIngressQueueFlags()...)
+	flags = append(flags, pluginPublicationEmitFlag())
 	flags = append(flags, pluginPublicationConsumeFlag())
 	flags = append(flags, gcpFlags()...)
 	flags = append(flags, svixFlags()...)
@@ -381,7 +404,7 @@ func newStreamsCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
 			} else {
-				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), nil, productFeatures, billingTracker, encryptionClient)
+				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), productFeatures, billingTracker, encryptionClient)
 			}
 
 			completionsClient := openrouter.NewUnifiedClient(
@@ -647,6 +670,19 @@ func newStreamsCommand() *cli.Command {
 			// Start subscription receivers in this block
 			{
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
+				roleDistributionGuard := admission.NewGuard(featureFlags, admission.NewReportMetrics(meterProvider, logger))
+				roleDistributionHandler := roledistribution.NewHandler(logger, roledistribution.Processors{
+					Setup: func(ctx context.Context, roleURN, organizationID string) (bool, error) {
+						return roledistribution.ProcessRoleDistributionSetup(ctx, db, plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)}, roleDistributionGuard, roleURN, organizationID)
+					},
+					GlobalFanout: func(ctx context.Context, roleID uuid.UUID, cursor string) error {
+						return roledistribution.ProcessGlobalFanout(ctx, db, roleID, cursor)
+					},
+					OrganizationBootstrap: func(ctx context.Context, organizationID, cursor string) error {
+						return roledistribution.ProcessOrganizationBootstrap(ctx, db, organizationID, cursor)
+					},
+				})
+				mustReceive(rg, &roledistributionv1.RoleDistributionSetupRequestedV1{}, &roledistributionv1.RoleDistributionSetupHandler{}, streams.HandlerFunc[*roledistributionv1.RoleDistributionSetupRequestedV1](roleDistributionHandler.HandleRoleDistributionSetupRequested))
 				if c.Bool(pluginPublicationConsumeFlagName) {
 					publicationHandler := plugins.NewPublicationHandler(logger, db, (&background.TemporalPluginPublisher{TemporalEnv: temporalEnv}).SignalPluginPublish)
 					organizationPublicationHandler := plugins.NewOrganizationPublicationHandler(logger, db)
@@ -705,7 +741,14 @@ func newStreamsCommand() *cli.Command {
 				// Event feed tee: mirror the normalized OTEL topics into the
 				// otel_logs / otel_traces ClickHouse tables.
 				mustReceiveBatch(rg, &otelv1.LogRecord{}, &otelv1.LogEventCHWriter{}, otelsvc.NewLogEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
-				mustReceiveBatch(rg, &otelv1.Span{}, &otelv1.SpanEventCHWriter{}, otelsvc.NewSpanEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+				spanEventReceiveSettings := pubsub.DefaultReceiveSettings
+				spanEventReceiveSettings.MaxOutstandingMessages = spanEventWriterOutstandingBatches * spanEventWriterBatchMessages
+				spanEventReceiveSettings.MaxOutstandingBytes = spanEventWriterOutstandingBatches * spanEventWriterBatchBytes
+				mustReceiveBatch(rg, &otelv1.Span{}, &otelv1.SpanEventCHWriter{}, otelsvc.NewSpanEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{
+					MaxMessages: spanEventWriterBatchMessages,
+					MaxBytes:    spanEventWriterBatchBytes,
+					MaxLatency:  spanEventWriterBatchLatency,
+				}, gcp.WithPubSubReceiveSettings(&spanEventReceiveSettings))
 
 				// Agent session tee: project the same normalized OTEL topics into
 				// agent_events, in agent vocabulary, for the semantic query layer.

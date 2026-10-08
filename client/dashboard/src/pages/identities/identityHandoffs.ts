@@ -58,7 +58,7 @@ export function identityHandoffs(
       subjectUrn: userId ? `user:${userId}` : undefined,
       status: "active",
     }),
-    // Audit logs key on the Gram user id, which is what its actor facet holds.
+    // Audit logs key on the Speakeasy user id, which is what its actor facet holds.
     auditLogs: query(orgRoutes.auditLogs.href(), { actor: userId }),
     // Agent sessions has no user dimension of its own; its search covers the
     // chat's user id and name, so the address is the closest honest filter.
@@ -88,9 +88,15 @@ export function identityHandoffs(
         : routes.costs.href(),
       {},
     ),
-    riskEvents: query(routes.riskEvents.href(), {
-      user_id: externalUserId ?? email,
-    }),
+    // Every id the person reports, matched whole, so the list agrees with
+    // the identity's own Findings. Only an id-less person falls back to the
+    // address, which Risk Events matches as a substring.
+    riskEvents: query(
+      routes.riskEvents.href(),
+      identity.externalUserIds.length > 0
+        ? { identifier: identity.externalUserIds.join(",") }
+        : { user_id: email },
+    ),
     challenges: query(`${orgRoutes.access.href()}/challenges`, {
       identity: principalUrn,
     }),

@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	assistantidentityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -17,6 +19,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -292,6 +296,187 @@ func TestListChats_RegularUser_SeesOnlyOwnChats(t *testing.T) {
 	require.Equal(t, authCtx.UserID, conv.PtrValOr(result.Chats[0].UserID, ""))
 }
 
+// A chat is one row however many assistant threads it carries, and the
+// assistant reported for it is always one recorded under the listed project.
+// A thread whose project_id points elsewhere while its chat_id points here is
+// an inconsistent relationship, and it must neither surface its assistant nor
+// add a row.
+func TestListChats_OneRowPerChat_ReportsOnlyThisProjectsAssistant(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	queries := repo.New(ti.conn)
+
+	foreignProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Foreign Project",
+		Slug:           "foreign-" + uuid.NewString()[:8],
+		OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+	foreignAssistant, err := queries.SeedAssistant(ctx, repo.SeedAssistantParams{
+		ProjectID:      foreignProject.ID,
+		OrganizationID: ti.orgID,
+		Name:           "Foreign Assistant",
+	})
+	require.NoError(t, err)
+	localAssistant, err := queries.SeedAssistant(ctx, repo.SeedAssistantParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		Name:           "Local Assistant",
+	})
+	require.NoError(t, err)
+
+	// One chat in the listed project with a thread from each project on it.
+	sharedChat := seedChat(t, ctx, ti, "", "ext-shared", "shared chat")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   foreignAssistant,
+		ProjectID:     foreignProject.ID,
+		CorrelationID: "foreign-on-shared",
+		ChatID:        sharedChat,
+	}))
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   localAssistant,
+		ProjectID:     ti.projectID,
+		CorrelationID: "local-on-shared",
+		ChatID:        sharedChat,
+	}))
+	// And one chat whose only thread is the foreign one.
+	foreignOnlyChat := seedChat(t, ctx, ti, "", "ext-foreign-only", "foreign only chat")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   foreignAssistant,
+		ProjectID:     foreignProject.ID,
+		CorrelationID: "foreign-on-foreign-only",
+		ChatID:        foreignOnlyChat,
+	}))
+	// And one chat whose thread is recorded under this project but points at
+	// the foreign project's assistant: assistant_threads has no composite
+	// (project_id, assistant_id) key, so the row is insertable.
+	crossAssistantChat := seedChat(t, ctx, ti, "", "ext-cross-assistant", "cross assistant chat")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   foreignAssistant,
+		ProjectID:     ti.projectID,
+		CorrelationID: "local-thread-foreign-assistant",
+		ChatID:        crossAssistantChat,
+	}))
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 3, result.Total, "total counts chats, not assistant threads")
+	require.Len(t, result.Chats, 3, "one row per chat however many threads it carries")
+	byID := map[string]*gen.ChatOverview{}
+	for _, chat := range result.Chats {
+		byID[chat.ID] = chat
+	}
+	shared, ok := byID[sharedChat.String()]
+	require.True(t, ok)
+	require.NotNil(t, shared.AssistantID)
+	require.Equal(t, localAssistant.String(), *shared.AssistantID, "the assistant recorded under this project is the one reported")
+	require.NotNil(t, shared.AssistantName)
+	require.Equal(t, "Local Assistant", *shared.AssistantName)
+	foreignOnly, ok := byID[foreignOnlyChat.String()]
+	require.True(t, ok)
+	require.Nil(t, foreignOnly.AssistantID, "a thread from another project never surfaces its assistant")
+	require.Nil(t, foreignOnly.AssistantName)
+	crossAssistant, ok := byID[crossAssistantChat.String()]
+	require.True(t, ok)
+	require.Nil(t, crossAssistant.AssistantID, "a thread here pointing at another project's assistant surfaces neither its id nor its name")
+	require.Nil(t, crossAssistant.AssistantName)
+	loadedCross, err := ti.service.LoadChat(ctx, &gen.LoadChatPayload{ID: crossAssistantChat.String()})
+	require.NoError(t, err)
+	require.Nil(t, loadedCross.AssistantID, "loading the chat reports the same attribution as listing it")
+	require.Nil(t, loadedCross.AssistantName)
+
+	// Narrowing to the foreign assistant admits only the chat whose thread is
+	// recorded here (the admission filter is project-scoped), and even that row
+	// reports no assistant because the assistant itself is not this project's.
+	payload := defaultPayload()
+	foreignAssistantID := foreignAssistant.String()
+	payload.AssistantID = &foreignAssistantID
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, crossAssistantChat.String(), result.Chats[0].ID)
+	require.Nil(t, result.Chats[0].AssistantID)
+	require.Nil(t, result.Chats[0].AssistantName)
+}
+
+// An assistant session reports the agent its assistant acts as, so the
+// session can name that agent; an assistant without one reports none.
+func TestListChats_ReportsAssistantAgentIdentity(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	queries := repo.New(ti.conn)
+
+	agentBacked, err := queries.SeedAssistant(ctx, repo.SeedAssistantParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		Name:           "Agent-backed Assistant",
+	})
+	require.NoError(t, err)
+	legacy, err := queries.SeedAssistant(ctx, repo.SeedAssistantParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		Name:           "Legacy Assistant",
+	})
+	require.NoError(t, err)
+	_, err = orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: ti.orgID,
+		UserID:         conv.ToPGText(authCtx.UserID),
+	})
+	require.NoError(t, err)
+	agent, err := agentrepo.New(ti.conn).CreateAgent(ctx, agentrepo.CreateAgentParams{
+		OrganizationID: ti.orgID,
+		OwnerUserID:    authCtx.UserID,
+		ProjectID:      uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		Name:           "Assistant Agent",
+	})
+	require.NoError(t, err)
+	_, err = assistantidentityrepo.New(ti.conn).CreateAssistantBinding(ctx, assistantidentityrepo.CreateAssistantBindingParams{
+		OrganizationID: ti.orgID,
+		ProjectID:      ti.projectID,
+		AssistantID:    agentBacked,
+		AgentID:        agent.ID,
+	})
+	require.NoError(t, err)
+
+	agentChat := seedChat(t, ctx, ti, authCtx.UserID, "", "agent-backed chat")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   agentBacked,
+		ProjectID:     ti.projectID,
+		CorrelationID: "agent-backed",
+		ChatID:        agentChat,
+	}))
+	legacyChat := seedChat(t, ctx, ti, authCtx.UserID, "", "legacy chat")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   legacy,
+		ProjectID:     ti.projectID,
+		CorrelationID: "legacy",
+		ChatID:        legacyChat,
+	}))
+	plainChat := seedChat(t, ctx, ti, authCtx.UserID, "", "plain chat")
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	byID := map[string]*gen.ChatOverview{}
+	for _, chat := range result.Chats {
+		byID[chat.ID] = chat
+	}
+	require.Equal(t, agent.ID.String(), conv.PtrValOr(byID[agentChat.String()].AssistantAgentID, ""))
+	require.Nil(t, byID[legacyChat.String()].AssistantAgentID)
+	require.Nil(t, byID[plainChat.String()].AssistantAgentID)
+
+	loaded, err := ti.service.LoadChat(ctx, &gen.LoadChatPayload{ID: agentChat.String()})
+	require.NoError(t, err)
+	require.Equal(t, agent.ID.String(), conv.PtrValOr(loaded.AssistantAgentID, ""))
+	loaded, err = ti.service.LoadChat(ctx, &gen.LoadChatPayload{ID: legacyChat.String()})
+	require.NoError(t, err)
+	require.Nil(t, loaded.AssistantAgentID)
+}
+
 // TestListChats_ChatRead_SeesAllChats verifies that a caller holding an
 // unrestricted chat:read (here alongside org:admin) sees every chat in the
 // project, regardless of which user or external user owns them.
@@ -415,7 +600,7 @@ func TestListChats_OrgAdmin_FilterByExternalUserID(t *testing.T) {
 }
 
 // TestListChats_OrgAdmin_FilterByUserID verifies that an org admin can narrow
-// results to a specific Gram user via the payload filter.
+// results to a specific Speakeasy user via the payload filter.
 func TestListChats_OrgAdmin_FilterByUserID(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
@@ -511,7 +696,7 @@ func TestListChats_Filter_SearchResolvedUserEmail(t *testing.T) {
 	require.NotNil(t, authCtx.Email)
 
 	now := time.Now().UTC()
-	chatID, err := repo.New(ti.conn).UpsertExternalChat(ctx, repo.UpsertExternalChatParams{
+	upserted, err := repo.New(ti.conn).UpsertExternalChat(ctx, repo.UpsertExternalChatParams{
 		ID:             uuid.New(),
 		ProjectID:      ti.projectID,
 		OrganizationID: ti.orgID,
@@ -530,7 +715,7 @@ func TestListChats_Filter_SearchResolvedUserEmail(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Total)
 	require.Len(t, result.Chats, 1)
-	require.Equal(t, chatID.String(), result.Chats[0].ID)
+	require.Equal(t, upserted.ID.String(), result.Chats[0].ID)
 
 	payload.Offset = 1
 	result, err = ti.service.ListChats(ctx, payload)
@@ -816,6 +1001,64 @@ func TestListChats_SortByLastMessageTimestampAscending(t *testing.T) {
 	require.Len(t, result.Chats, 2)
 	require.Equal(t, firstActiveChat.String(), result.Chats[0].ID)
 	require.Equal(t, lastActiveChat.String(), result.Chats[1].ID)
+}
+
+// TestListChats_SortByNumMessages verifies that the message count is computed
+// before paging when it drives the order, and that every page row reports it.
+func TestListChats_SortByNumMessages(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := externalUserCtx(t, ti, "ext-num-messages")
+	r := repo.New(ti.conn)
+
+	now := time.Now().UTC()
+	seedWithMessages := func(title string, count int) uuid.UUID {
+		chatID := seedChat(t, ctx, ti, "", "ext-num-messages", title)
+		for i := range count {
+			_, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+				ChatID:    chatID,
+				ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+				CreatedAt: pgtype.Timestamptz{Time: now.Add(time.Duration(i-count) * time.Minute), InfinityModifier: pgtype.Finite, Valid: true},
+			})
+			require.NoError(t, err)
+		}
+		return chatID
+	}
+	oneMessage := seedWithMessages("one", 1)
+	threeMessages := seedWithMessages("three", 3)
+	twoMessages := seedWithMessages("two", 2)
+
+	payload := defaultPayload()
+	payload.SortBy = "num_messages"
+	payload.SortOrder = "desc"
+	payload.Limit = 2
+
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 3, result.Total)
+	require.Len(t, result.Chats, 2)
+	require.Equal(t, threeMessages.String(), result.Chats[0].ID)
+	require.Equal(t, 3, result.Chats[0].NumMessages)
+	require.Equal(t, twoMessages.String(), result.Chats[1].ID)
+	require.Equal(t, 2, result.Chats[1].NumMessages)
+
+	payload.Offset = 2
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 3, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, oneMessage.String(), result.Chats[0].ID)
+	require.Equal(t, 1, result.Chats[0].NumMessages)
+
+	payload.Offset = 0
+	payload.SortOrder = "asc"
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Len(t, result.Chats, 2)
+	require.Equal(t, oneMessage.String(), result.Chats[0].ID)
+	require.Equal(t, 1, result.Chats[0].NumMessages)
+	require.Equal(t, twoMessages.String(), result.Chats[1].ID)
+	require.Equal(t, 2, result.Chats[1].NumMessages)
 }
 
 // TestListChats_Pagination verifies that limit/offset correctly pages through results and that

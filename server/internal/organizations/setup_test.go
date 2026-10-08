@@ -3,6 +3,7 @@ package organizations_test
 import (
 	"context"
 	"log"
+	"net/url"
 	"os"
 	"sync"
 	"testing"
@@ -22,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/svix/svixtest"
@@ -30,7 +32,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// seedLocalRole inserts an organization_roles row and returns its Gram local
+// testPlatformHost is the extra platform host that organizations in these
+// tests can record as their default host.
+const testPlatformHost = "https://platform.example.test"
+
+// testOrgHosts resolves request-less links the way a deployment with no
+// legacy default host override does: organizations without a default host use
+// the server and site URLs the tests configure.
+func testOrgHosts(t *testing.T) *orghost.Resolver {
+	t.Helper()
+	serverURL, err := url.Parse("http://localhost:35291")
+	require.NoError(t, err)
+	siteURL, err := url.Parse("http://localhost:5173")
+	require.NoError(t, err)
+	return orghost.New(orghost.Config{
+		ServerURL:                  serverURL,
+		SiteURL:                    siteURL,
+		PlatformHosts:              map[string]string{"platform.example.test": testPlatformHost},
+		LegacyDefaultHost:          nil,
+		NewOrganizationDefaultHost: nil,
+	})
+}
+
+// seedLocalRole inserts an organization_roles row and returns its Speakeasy local
 // UUID — the same identifier the dashboard receives from access.listRoles and
 // sends back in invite payloads.
 func seedLocalRole(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, slug, name string) string {
@@ -291,7 +315,7 @@ func newTestOrganizationsServiceWithOptions(t *testing.T, featureStub orgFeature
 	if useRealFeatures {
 		featureChecker = features
 	}
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, invite, featureChecker, nil, authzEngine, nil, trialNotifier, trialBundleSeeder, posthog, nil, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, invite, featureChecker, nil, authzEngine, nil, trialNotifier, trialBundleSeeder, posthog, nil, "http://localhost:5173", testOrgHosts(t), auditLogger, svixClient)
 
 	return ctx, &testInstance{
 		service:  svc,
@@ -355,7 +379,7 @@ func newTestOrganizationsServiceWithEmailEnabled(t *testing.T, emailEnabled bool
 		"setup_task_assignment": "setup-task-assignment-test-id",
 	}), emailEnabled)
 	trialNotifier := &fakeTrialNotifier{}
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, enabledFeatures(), nil, authzEngine, emailService, trialNotifier, productfeatures.SeedEnterpriseTrialBundleTx, nil, nil, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, enabledFeatures(), nil, authzEngine, emailService, trialNotifier, productfeatures.SeedEnterpriseTrialBundleTx, nil, nil, "http://localhost:5173", testOrgHosts(t), auditLogger, svixClient)
 
 	return ctx, &testInstance{
 		service: svc,

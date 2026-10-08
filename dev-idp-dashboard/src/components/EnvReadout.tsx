@@ -20,7 +20,7 @@ import {
  * documented variable. Each row has an (i) info button that opens a popover
  * with the full documentation — layout never shifts. Built as its own
  * component so we can grow the popover (links to source, examples, "where
- * this is read in Gram", etc.) without touching the home page.
+ * this is read in Speakeasy", etc.) without touching the home page.
  */
 export function EnvReadout() {
   const { data, isLoading, error } = useGramMode();

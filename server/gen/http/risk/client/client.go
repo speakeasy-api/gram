@@ -25,6 +25,10 @@ type Client struct {
 	// listRiskPolicies endpoint.
 	ListRiskPoliciesDoer goahttp.Doer
 
+	// ListMCPPlatformToolsets Doer is the HTTP client used to make requests to the
+	// listMCPPlatformToolsets endpoint.
+	ListMCPPlatformToolsetsDoer goahttp.Doer
+
 	// ListRiskPoliciesForMcpServer Doer is the HTTP client used to make requests
 	// to the listRiskPoliciesForMcpServer endpoint.
 	ListRiskPoliciesForMcpServerDoer goahttp.Doer
@@ -65,6 +69,10 @@ type Client struct {
 	// unmaskRiskResult endpoint.
 	UnmaskRiskResultDoer goahttp.Doer
 
+	// RevealRiskResultPayload Doer is the HTTP client used to make requests to the
+	// revealRiskResultPayload endpoint.
+	RevealRiskResultPayloadDoer goahttp.Doer
+
 	// ListRiskResultsByChat Doer is the HTTP client used to make requests to the
 	// listRiskResultsByChat endpoint.
 	ListRiskResultsByChatDoer goahttp.Doer
@@ -104,6 +112,10 @@ type Client struct {
 	// GetRiskSignals Doer is the HTTP client used to make requests to the
 	// getRiskSignals endpoint.
 	GetRiskSignalsDoer goahttp.Doer
+
+	// GetRiskMcpServerCounts Doer is the HTTP client used to make requests to the
+	// getRiskMcpServerCounts endpoint.
+	GetRiskMcpServerCountsDoer goahttp.Doer
 
 	// GetRiskAnalysisStatus Doer is the HTTP client used to make requests to the
 	// getRiskAnalysisStatus endpoint.
@@ -243,6 +255,7 @@ func NewClient(
 	return &Client{
 		CreateRiskPolicyDoer:               doer,
 		ListRiskPoliciesDoer:               doer,
+		ListMCPPlatformToolsetsDoer:        doer,
 		ListRiskPoliciesForMcpServerDoer:   doer,
 		ListBuiltinExclusionsDoer:          doer,
 		GetRiskPolicyDoer:                  doer,
@@ -253,6 +266,7 @@ func NewClient(
 		ListRiskResultsDoer:                doer,
 		ListRiskResultsForAgentDoer:        doer,
 		UnmaskRiskResultDoer:               doer,
+		RevealRiskResultPayloadDoer:        doer,
 		ListRiskResultsByChatDoer:          doer,
 		MarkRiskResultsFalsePositiveDoer:   doer,
 		UnmarkRiskResultsFalsePositiveDoer: doer,
@@ -263,6 +277,7 @@ func NewClient(
 		GetRiskUserBreakdownDoer:           doer,
 		GetRiskRuleBreakdownDoer:           doer,
 		GetRiskSignalsDoer:                 doer,
+		GetRiskMcpServerCountsDoer:         doer,
 		GetRiskAnalysisStatusDoer:          doer,
 		GetRiskPolicyStatusDoer:            doer,
 		CreateRiskPolicyBypassRequestDoer:  doer,
@@ -343,6 +358,30 @@ func (c *Client) ListRiskPolicies() goa.Endpoint {
 		resp, err := c.ListRiskPoliciesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "listRiskPolicies", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListMCPPlatformToolsets returns an endpoint that makes HTTP requests to the
+// risk service listMCPPlatformToolsets server.
+func (c *Client) ListMCPPlatformToolsets() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListMCPPlatformToolsetsRequest(c.encoder)
+		decodeResponse = DecodeListMCPPlatformToolsetsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListMCPPlatformToolsetsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListMCPPlatformToolsetsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "listMCPPlatformToolsets", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -588,6 +627,30 @@ func (c *Client) UnmaskRiskResult() goa.Endpoint {
 	}
 }
 
+// RevealRiskResultPayload returns an endpoint that makes HTTP requests to the
+// risk service revealRiskResultPayload server.
+func (c *Client) RevealRiskResultPayload() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRevealRiskResultPayloadRequest(c.encoder)
+		decodeResponse = DecodeRevealRiskResultPayloadResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRevealRiskResultPayloadRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RevealRiskResultPayloadDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "revealRiskResultPayload", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // ListRiskResultsByChat returns an endpoint that makes HTTP requests to the
 // risk service listRiskResultsByChat server.
 func (c *Client) ListRiskResultsByChat() goa.Endpoint {
@@ -823,6 +886,30 @@ func (c *Client) GetRiskSignals() goa.Endpoint {
 		resp, err := c.GetRiskSignalsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "getRiskSignals", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetRiskMcpServerCounts returns an endpoint that makes HTTP requests to the
+// risk service getRiskMcpServerCounts server.
+func (c *Client) GetRiskMcpServerCounts() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRiskMcpServerCountsRequest(c.encoder)
+		decodeResponse = DecodeGetRiskMcpServerCountsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRiskMcpServerCountsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetRiskMcpServerCountsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "getRiskMcpServerCounts", err)
 		}
 		return decodeResponse(resp)
 	}

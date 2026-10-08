@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type MouseEvent,
   type ReactNode,
 } from "react";
 import { CodeBlock } from "@/components/code";
@@ -185,14 +186,108 @@ export function RevealAllToggle({
   );
 }
 
+// The inline red redaction chip for a masked value inside a dark payload block
+// or a transcript excerpt. Shared by the finding drawer's payload and context
+// views so masked spans read identically everywhere.
+export function RedactionChip({
+  label,
+  title,
+  locked = false,
+  selected = false,
+  onClick,
+}: {
+  label: string;
+  /** Usually the redaction fingerprint. */
+  title?: string;
+  /** The caller lacks chat:read, so the value can never be revealed. */
+  locked?: boolean;
+  /** Outlines the chip for the finding currently in view. */
+  selected?: boolean;
+  onClick?: () => void;
+}): JSX.Element {
+  const className = cn(
+    "bg-destructive inline-flex items-center gap-1 px-1.5 align-[1px] font-mono text-[10px] leading-[1.6] tracking-[0.06em] text-white uppercase",
+    selected &&
+      "outline-1 outline-offset-2 outline-[var(--color-feedback-orange-400)] outline-solid",
+    onClick && "hover:bg-destructive/80 cursor-pointer",
+  );
+  const content = (
+    <>
+      {locked && (
+        <Lock
+          role="img"
+          aria-label={REVEAL_DENIED_REASON}
+          className="size-2.5 shrink-0"
+        />
+      )}
+      <span>{label}</span>
+    </>
+  );
+  if (!onClick) {
+    return (
+      <span className={className} title={title}>
+        {content}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className={className}
+      title={title}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+    >
+      {content}
+    </button>
+  );
+}
+
+// A revealed flagged value: orange underline with a wash that is stronger for
+// the finding currently in view.
+export function RevealedSpan({
+  children,
+  selected = false,
+  onClick,
+}: {
+  children: ReactNode;
+  selected?: boolean;
+  onClick?: () => void;
+}): JSX.Element {
+  const className = cn(
+    "border-b border-[var(--color-feedback-orange-400)] px-px",
+    selected
+      ? "bg-[var(--color-feedback-orange-400)]/32"
+      : "bg-[var(--color-feedback-orange-400)]/12",
+  );
+  if (!onClick) return <span className={className}>{children}</span>;
+  return (
+    <button
+      type="button"
+      className={cn(className, "cursor-pointer text-left")}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function MaskedMatch({
   resultId,
   matchRedacted,
+  chatId,
   tone = "default",
   wrap = false,
 }: {
   resultId: string | undefined;
   matchRedacted: string | undefined;
+  /** The finding's chat; when set, reveal needs chat:read on it. */
+  chatId?: string;
   /**
    * "contrast" renders for a dark code-block backdrop (the Watchdog drawer's
    * evidence card): the masked state becomes a red redaction chip and the
@@ -208,12 +303,14 @@ export function MaskedMatch({
 }): JSX.Element {
   const contrast = tone === "contrast";
   const { hasScope } = useRBAC();
-  const canReveal = hasScope(REVEAL_SCOPE);
+  const canReveal = hasScope(REVEAL_SCOPE, chatId);
   const ctx = useRevealAll();
   const generation = ctx?.generation;
   const revealAll = ctx?.revealAll ?? false;
   const [revealed, setRevealed] = useState(revealAll);
-  const { value, isLoading, reveal } = useUnmaskedMatch(resultId ?? "");
+  const { value, evidenceNotStored, isLoading, reveal } = useUnmaskedMatch(
+    resultId ?? "",
+  );
   // Only sync when the global toggle actually fires (generation changes).
   // Depending on the context object would clobber per-row clicks on every
   // render. Starts at `undefined` (never equal to a real generation number)
@@ -227,14 +324,13 @@ export function MaskedMatch({
     if (lastSyncedGeneration.current === generation) return;
     lastSyncedGeneration.current = generation;
     setRevealed(revealAll);
-    if (revealAll) reveal();
-  }, [generation, revealAll, reveal]);
+    if (revealAll && canReveal) reveal();
+  }, [generation, revealAll, canReveal, reveal]);
 
   if (!resultId || !matchRedacted) return <span>-</span>;
 
-  // Without chat:read the plaintext can never be revealed — keep the
-  // fingerprint on screen so a reviewer can still correlate and inspect the
-  // finding before suppressing it. Reveal-all must not flip this open.
+  // Without chat:read the plaintext can never be revealed, so say which
+  // permission is missing. Reveal-all must not flip this open.
   if (!canReveal) {
     return (
       <LockedRedactedMatch
@@ -243,6 +339,10 @@ export function MaskedMatch({
         wrap={wrap}
       />
     );
+  }
+
+  if (evidenceNotStored) {
+    return <EvidenceNotStored contrast={contrast} />;
   }
 
   if (!revealed || value === null) {
@@ -272,6 +372,11 @@ export function MaskedMatch({
     );
   }
 
+  const hide = (e: MouseEvent) => {
+    e.stopPropagation();
+    setRevealed(false);
+  };
+
   return (
     <span
       className={cn(
@@ -280,33 +385,38 @@ export function MaskedMatch({
       )}
     >
       <SimpleTooltip tooltip={value}>
+        {/* Clicking the value hides it, unless the click ended a text selection. */}
         <span
           className={cn(
-            "min-w-0 font-mono text-xs",
+            "min-w-0 cursor-pointer font-mono text-xs",
             wrap
               ? "break-all whitespace-pre-wrap"
               : "overflow-x-auto whitespace-nowrap",
             contrast && "text-background",
           )}
+          onClick={(e) => {
+            if (window.getSelection()?.toString()) e.stopPropagation();
+            else hide(e);
+          }}
         >
           {value}
         </span>
       </SimpleTooltip>
-      <button
-        type="button"
-        className={cn(
-          "shrink-0",
-          contrast
-            ? "text-background/60 hover:text-background"
-            : "text-muted-foreground hover:text-foreground",
-        )}
-        onClick={(e) => {
-          e.stopPropagation();
-          setRevealed(false);
-        }}
-      >
-        <Eye className="h-3 w-3" />
-      </button>
+      <SimpleTooltip tooltip="Hide">
+        <button
+          type="button"
+          aria-label="Hide match"
+          className={cn(
+            "shrink-0",
+            contrast
+              ? "text-background/60 hover:text-background"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+          onClick={hide}
+        >
+          <Eye className="h-3 w-3" />
+        </button>
+      </SimpleTooltip>
     </span>
   );
 }
@@ -317,6 +427,24 @@ function prettyJSON(s: string): string {
   } catch {
     return s;
   }
+}
+
+// Shown for MCP findings recorded before evidence storage existed.
+function EvidenceNotStored({
+  contrast = false,
+}: {
+  contrast?: boolean;
+}): JSX.Element {
+  return (
+    <span
+      className={cn(
+        "text-xs font-medium",
+        contrast ? "text-background/70" : "text-muted-foreground",
+      )}
+    >
+      Evidence not stored
+    </span>
+  );
 }
 
 // Static fingerprint for callers who lack chat:read. The lock explains why
@@ -332,8 +460,17 @@ function LockedRedactedMatch({
   wrap?: boolean;
 }): JSX.Element {
   return (
-    <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
+    <SimpleTooltip
+      tooltip={
+        <span className="flex flex-col gap-1">
+          <span>{REVEAL_DENIED_REASON}</span>
+          <span className="font-mono opacity-70">{matchRedacted}</span>
+        </span>
+      }
+    >
+      {/* Focusable so keyboard users can reach the fingerprint too. */}
       <span
+        tabIndex={0}
         className={cn(
           "inline-flex max-w-full min-w-0 gap-1 text-xs",
           wrap ? "items-start" : "items-center",
@@ -345,15 +482,8 @@ function LockedRedactedMatch({
           aria-label={REVEAL_DENIED_REASON}
           className="h-3 w-3 shrink-0"
         />
-        <span
-          className={cn(
-            "min-w-0 font-mono",
-            wrap
-              ? "break-all whitespace-pre-wrap"
-              : "overflow-x-auto whitespace-nowrap",
-          )}
-        >
-          {matchRedacted}
+        <span className="min-w-0 truncate">
+          Requires <span className="font-mono">{REVEAL_SCOPE}</span>
         </span>
       </span>
     </SimpleTooltip>
@@ -397,7 +527,9 @@ export function EventMatchDialog({
   const { hasScope } = useRBAC();
   const canReveal = hasScope(REVEAL_SCOPE);
   const [open, setOpen] = useState(false);
-  const { value, isLoading, reveal } = useUnmaskedMatch(resultId ?? "");
+  const { value, evidenceNotStored, isLoading, reveal } = useUnmaskedMatch(
+    resultId ?? "",
+  );
 
   const summary = rationale?.trim() ? rationale.trim() : null;
 
@@ -470,7 +602,11 @@ export function EventMatchDialog({
             <p className="text-sm">{summary}</p>
           </div>
         ) : null}
-        {value === null ? (
+        {evidenceNotStored ? (
+          <div className="text-muted-foreground py-8 text-sm">
+            Evidence not stored
+          </div>
+        ) : value === null ? (
           <div className="text-muted-foreground flex items-center gap-2 py-8 text-sm">
             <Loader2 className="h-4 w-4 animate-spin" />
             <span>{isLoading ? "Revealing…" : "No event content."}</span>

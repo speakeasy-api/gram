@@ -4,6 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RiskEventsRow } from "./RiskEvents";
+import type { MCPFindingNames } from "./mcp-finding-context";
 
 const hasScope = vi.fn<(scope: string) => boolean>();
 
@@ -49,14 +50,15 @@ function finding(overrides: Partial<RiskResult> = {}): RiskResult {
   };
 }
 
-function renderRow(result: RiskResult) {
+function renderRow(result: RiskResult, mcpFindingNames?: MCPFindingNames) {
   render(
     <TooltipProvider>
       <RiskEventsRow
         result={result}
         policyName="Secrets policy"
         policyScore={9.1}
-        onSelectChat={vi.fn<(chatId: string | null) => void>()}
+        mcpFindingNames={mcpFindingNames}
+        onSelect={vi.fn<(findingId: string) => void>()}
         selection={{
           selectedIds: new Set(),
           selectedCount: 0,
@@ -121,5 +123,38 @@ describe("RiskEventsRow with an LLM analyzer finding", () => {
       screen.getByText("The risk analysis could not be completed."),
     ).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/llm|analyzer/i);
+  });
+});
+
+describe("RiskEventsRow with an MCP finding", () => {
+  it("replaces the untitled session with server, tool, and outcome context", () => {
+    hasScope.mockReturnValue(true);
+    renderRow(
+      finding({
+        chatTitle: undefined,
+        source: "gitleaks",
+        ruleId: "secret.github_pat",
+        matchRedacted: "<redacted len=40 sha=0123abcd>",
+        userId: "operator@example.test",
+        metaMcpServerId: "gateway-1",
+        toolsetId: "toolset-1",
+        toolName: "create_issue",
+        mediationSurface: "hosted_mcp",
+        mcpMethod: "tools/call",
+        enforcementOutcome: "logged",
+      }),
+      {
+        serverNames: new Map([["gateway-1", "Issue tracker gateway"]]),
+        toolsetNames: new Map([["toolset-1", "Issue tools"]]),
+      },
+    );
+
+    expect(screen.getByText("MCP")).toBeTruthy();
+    expect(screen.getByText("Issue tracker gateway")).toBeTruthy();
+    expect(screen.getByText("create_issue · Hosted MCP")).toBeTruthy();
+    expect(screen.getByText("Logged")).toBeTruthy();
+    expect(screen.getByText("operator@example.test")).toBeTruthy();
+    expect(screen.getByText("Click to reveal")).toBeTruthy();
+    expect(screen.queryByText("Untitled")).toBeNull();
   });
 });

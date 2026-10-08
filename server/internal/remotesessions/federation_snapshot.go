@@ -26,6 +26,7 @@ type federatedClientSnapshot struct {
 	TokenEndpointAuthAudienceFormat pgtype.Text        `json:"TokenEndpointAuthAudienceFormat"`
 	ClientIDMetadataUri             pgtype.Text        `json:"ClientIDMetadataUri"`
 	LegacyCallbackUrl               bool               `json:"LegacyCallbackUrl"`
+	CallbackBaseUrl                 pgtype.Text        `json:"CallbackBaseUrl"`
 	ResourceIdentifier              pgtype.Text        `json:"ResourceIdentifier"`
 	ResourceName                    pgtype.Text        `json:"ResourceName"`
 	ResourceDocumentation           pgtype.Text        `json:"ResourceDocumentation"`
@@ -33,6 +34,7 @@ type federatedClientSnapshot struct {
 	ResourceTosUri                  pgtype.Text        `json:"ResourceTosUri"`
 	UpstreamRejectedAt              pgtype.Timestamptz `json:"UpstreamRejectedAt"`
 	IdentityProviderConnectionID    uuid.NullUUID      `json:"IdentityProviderConnectionID"`
+	CredentialOwner                 string             `json:"CredentialOwner"`
 	CreatedAt                       pgtype.Timestamptz `json:"CreatedAt"`
 	UpdatedAt                       pgtype.Timestamptz `json:"UpdatedAt"`
 	DeletedAt                       pgtype.Timestamptz `json:"DeletedAt"`
@@ -75,6 +77,7 @@ type federatedIssuerSnapshot struct {
 	BackchannelLogoutSupported                 pgtype.Bool        `json:"BackchannelLogoutSupported"`
 	AuthorizationResponseIssParameterSupported pgtype.Bool        `json:"AuthorizationResponseIssParameterSupported"`
 	ScopeOverride                              []string           `json:"ScopeOverride"`
+	OmitScopeFallback                          pgtype.Bool        `json:"OmitScopeFallback"`
 	ResourceIndicatorSupported                 pgtype.Bool        `json:"ResourceIndicatorSupported"`
 	Oidc                                       bool               `json:"Oidc"`
 	Passthrough                                bool               `json:"Passthrough"`

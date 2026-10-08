@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -122,7 +123,7 @@ func (s *Service) claimProtectedResource(ctx context.Context, dbtx pgx.Tx, authC
 	}
 
 	if s.beforeClaim != nil {
-		s.beforeClaim(previousURL)
+		s.beforeClaim(dbtx.Conn().PgConn().PID(), previousURL)
 	}
 	claim := claimOn(resourceURL)
 	claimed := make([]resourceClient, 0, len(clients))
@@ -168,15 +169,25 @@ func (s *Service) refreshProtectedResourceDisplay(ctx context.Context, logger *s
 		return
 	}
 
+	projectID := *authCtx.ProjectID
 	doc, _, err := wellknown.DiscoverProtectedResourceMetadata(ctx, s.policy, resourceURL)
-	switch {
-	case err != nil:
+	if err != nil {
 		logger.WarnContext(ctx, "re-probe protected resource metadata", attr.SlogError(err))
-		return
-	case !doc.IdentifiesResource(resourceURL):
-		logger.WarnContext(ctx, "protected resource metadata names another resource", attr.SlogURLFull(resourceURL))
+		if typed, ok := errors.AsType[*wellknown.ProtectedResourceDiscoveryError](err); ok {
+			if err := protectedresource.RecordFetchError(ctx, s.db, projectID, authCtx.ActiveOrganizationID, resourceURL, typed); err != nil {
+				logger.ErrorContext(ctx, "record protected resource fetch error", attr.SlogError(err))
+			}
+		}
 		return
 	}
+	if err := protectedresource.Record(ctx, s.db, projectID, authCtx.ActiveOrganizationID, resourceURL, doc); err != nil {
+		logger.ErrorContext(ctx, "record protected resource", attr.SlogError(err))
+	}
+	if !doc.ValidForResource(resourceURL) {
+		logger.WarnContext(ctx, "protected resource metadata resource or location mismatch", attr.SlogURLFull(urls.DiagnosticURL(resourceURL)))
+		return
+	}
+	logScopeComparison(ctx, logger, projectID, serverID, resourceURL, doc, clients)
 	display := displayFromDocument(resourceURL, doc)
 
 	for _, rc := range clients {

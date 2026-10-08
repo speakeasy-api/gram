@@ -33,6 +33,8 @@ describe("agent policy scope catalog", () => {
   // direction and a missing capability in the other.
   it("offers exactly the agent-runtime-safe scopes", () => {
     expect(AGENT_POLICY_SCOPES.map((scope) => scope.slug).sort()).toEqual([
+      "assistant:read",
+      "assistant:write",
       "environment:read",
       "environment:write",
       "mcp:connect",
@@ -387,6 +389,26 @@ describe("stored constraints the editor cannot show", () => {
     expect(agentPolicyViewFromGrants([plain]).draft).toEqual({
       "risk_policy:evaluate": null,
     });
+  });
+
+  it("edits a grant naming one assistant and writes it back unchanged", () => {
+    const own = storedGrant("grant_own", "assistant:write", {
+      resourceKind: "assistant",
+      resourceId: "assistant_one",
+    });
+    const view = agentPolicyViewFromGrants([own]);
+    expect(view.preserved).toEqual([]);
+    expect(view.draft).toEqual({
+      "assistant:write": [
+        { resourceKind: "assistant", resourceId: "assistant_one" },
+      ],
+    });
+    expect(
+      diffAgentPolicyGrants(
+        view.editable,
+        agentPolicyGrantsFromDraft(view.draft),
+      ),
+    ).toEqual({ create: [], remove: [] });
   });
 
   it("locks a grant whose resource kind does not match its scope", () => {

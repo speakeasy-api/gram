@@ -28,9 +28,11 @@ import (
 // row with null plugin columns when the caller has no assignment there.
 //
 // Each project's marketplace name is resolved the same way the publish path
-// resolves it: the per-project override (project_marketplace_settings) when set,
-// else the shared `naming` default — the bare org-derived name for the org's
-// default project, project-scoped (`<org>-<project>-speakeasy`) for the rest.
+// resolves it, through naming.ResolveMarketplaceName: the per-project override
+// (project_marketplace_settings) when set, else the name the project last
+// published under (recorded in its published hooks config snapshot), else the
+// computed name: the bare org-derived name for the org's default project,
+// project-scoped (`<org>-<project>-speakeasy`) for the rest.
 // Matching the publish path exactly matters because tools resolve marketplaces
 // by that name — any mismatch silently fails to enable plugins. The
 // observability slug stays org-derived; plugin slugs are scoped within a
@@ -63,13 +65,18 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 			continue
 		}
 
-		// The per-project override, when set, is the name the project actually
-		// published under (UpdateMarketplaceSettings republishes on change), so
-		// prefer it over the org-derived default.
-		name := naming.MarketplaceName(row.OrganizationName, row.ProjectSlug, row.IsDefaultProject)
-		if row.MarketplaceNameOverride.Valid && row.MarketplaceNameOverride.String != "" {
-			name = row.MarketplaceNameOverride.String
-		}
+		// Resolve through the same function the publish path uses: the
+		// per-project override (UpdateMarketplaceSettings republishes on
+		// change), else the name the project last published under, else the
+		// computed name. The published name is frozen, so an org rename, a slug
+		// change, or a new default project never moves it here either.
+		name := naming.ResolveMarketplaceName(
+			conv.FromPGTextOrEmpty[string](row.MarketplaceNameOverride),
+			row.PublishedHooksConfig,
+			row.OrganizationName,
+			row.ProjectSlug,
+			row.IsDefaultProject,
+		)
 		owner, seen := marketplaceOwner[name]
 		if !seen {
 			owner = row.ProjectID

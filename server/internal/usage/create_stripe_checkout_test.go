@@ -844,7 +844,7 @@ func TestExpireLifecycleStaleCheckoutSessionAcceptsConcurrentExpiration(t *testi
 	}
 
 	replaceKey, err := ti.service.expireLifecycleStaleCheckoutSession(
-		t.Context(), metadata, "cus_test", ti.orgID, ti.orgSlug, "https://example.test/billing",
+		t.Context(), metadata, "cus_test", ti.orgID, ti.orgSlug,
 		stripeCheckoutIntent{idempotencyKey: "checkout-session:org:3:4:new-lifecycle"}, now,
 	)
 	require.NoError(t, err)
@@ -888,7 +888,7 @@ func TestExpireLifecycleStaleCheckoutSessionRejectsUnconfirmedConcurrentExpirati
 			ti.stripe.checkoutGetErr = test.queryErr
 
 			_, err := ti.service.expireLifecycleStaleCheckoutSession(
-				t.Context(), metadata, "cus_test", ti.orgID, ti.orgSlug, "https://example.test/billing",
+				t.Context(), metadata, "cus_test", ti.orgID, ti.orgSlug,
 				stripeCheckoutIntent{idempotencyKey: "checkout-session:org:3:4:new-lifecycle"}, now,
 			)
 			require.Error(t, err)
@@ -1256,22 +1256,23 @@ func TestCreateStripeCheckoutStartsImmediatelyWhenTrialDemoted(t *testing.T) {
 	require.Nil(t, checkouts[0].TrialEnd)
 }
 
-func TestCreateStripeCheckoutRejectsTrialUnderStripeMinimum(t *testing.T) {
+func TestCreateStripeCheckoutStartsPaygWhenTrialAtStripeMinimum(t *testing.T) {
 	t.Parallel()
 
 	ti := newStripeCheckoutTestInstance(t)
+	now := time.Date(2026, time.October, 5, 0, 0, 0, 0, time.UTC)
+	ti.service.now = func() time.Time { return now }
 	require.NoError(t, trialsrepo.New(ti.db).CreateTrial(t.Context(), trialsrepo.CreateTrialParams{
 		OrganizationID: ti.orgID,
 		Tier:           "enterprise",
-		EndsAt:         pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		EndsAt:         pgtype.Timestamptz{Time: now.Add(48 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
 	}))
 
 	_, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
-	require.Error(t, err)
-	requireOopsCode(t, err, oops.CodeConflict)
-	uniqueCustomers, _, checkouts := ti.stripe.snapshot()
-	require.Zero(t, uniqueCustomers)
-	require.Empty(t, checkouts)
+	require.NoError(t, err)
+	_, _, checkouts := ti.stripe.snapshot()
+	require.Len(t, checkouts, 1)
+	require.Nil(t, checkouts[0].TrialEnd)
 }
 
 func TestCreateStripeCheckoutReusesStoredCustomer(t *testing.T) {
@@ -1604,22 +1605,7 @@ func TestCreateStripeCheckoutWaitsForBillingMetadataOrganizationLock(t *testing.
 	// The deadline guards the test; cancellation follows an observed lock wait.
 	probeCtx, cancelProbe := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancelProbe()
-	poll := time.NewTicker(10 * time.Millisecond)
-	defer poll.Stop()
-	for {
-		blocked, err := testrepo.New(ti.db).IsQueryBlockedOnLockFixture(probeCtx, "%LockBillingMetadataOrganization%")
-		require.NoError(t, err)
-		if blocked {
-			break
-		}
-		select {
-		case <-done:
-			require.FailNow(t, "Checkout returned before waiting for the billing metadata organization lock", "%v", checkoutErr)
-		case <-probeCtx.Done():
-			require.FailNow(t, "Checkout did not reach the billing metadata organization lock", "%v", probeCtx.Err())
-		case <-poll.C:
-		}
-	}
+	testenv.WaitForQueryBlockedBy(t, probeCtx, ti.service.db, testenv.BackendPID(holder), "%LockBillingMetadataOrganization%")
 	cancel()
 	select {
 	case <-done:

@@ -2,6 +2,9 @@ import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { RequireScope } from "@/components/require-scope";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
+import { Label } from "@/components/ui/Label";
+import { MultiSelect } from "@/components/ui/MultiSelect";
+import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
@@ -13,7 +16,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { ExistingIssuerLink } from "../../ExistingIssuerLink";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   EndpointsFields,
@@ -49,6 +52,28 @@ export function SettingsTab({
   const [tunneledMcpServerId, setTunneledMcpServerId] = useState(
     issuer.tunneledMcpServerId ?? "",
   );
+  // Seeded from the saved override: buildUpdateIssuerForm always sends it and
+  // reads a blank field as "clear", so any other seed would drop the override
+  // on the next unrelated save.
+  const [scopeOverride, setScopeOverride] = useState<string[]>(
+    issuer.scopeOverride ?? [],
+  );
+  // Typed scopes join the list so the menu shows every selection.
+  const scopeOptions = useMemo(
+    () =>
+      [...new Set([...(issuer.scopesSupported ?? []), ...scopeOverride])].map(
+        (scope) => ({ label: scope, value: scope }),
+      ),
+    [issuer.scopesSupported, scopeOverride],
+  );
+  // Undefined until the operator flips the switch, so it tracks the saved
+  // value and a save only sends the flag when it was deliberately changed:
+  // an unrelated save must not write false over a NULL the issuer never set.
+  const [omitScopeFallback, setOmitScopeFallback] = useState<
+    boolean | undefined
+  >(undefined);
+  const omitScopeFallbackChecked =
+    omitScopeFallback ?? issuer.omitScopeFallback ?? false;
   const [showDelete, setShowDelete] = useState(false);
   const isPlatformAdmin = useIsPlatformAdmin();
   const { hasAnyScope } = useRBAC();
@@ -122,6 +147,7 @@ export function SettingsTab({
       await invalidateAllOrganizationRemoteSessionIssuer(queryClient, {
         refetchType: "all",
       });
+      setOmitScopeFallback(undefined);
       toast.success("Provider updated");
     },
     onError: (error) => {
@@ -219,6 +245,12 @@ export function SettingsTab({
           registrationEndpoint,
           jwksUri,
           discoveredSnapshot,
+          scopeOverride,
+          omitScopeFallback:
+            omitScopeFallback !== undefined &&
+            omitScopeFallback !== (issuer.omitScopeFallback ?? false)
+              ? omitScopeFallback
+              : undefined,
           tunneledMcpServerId:
             isPlatformAdmin && issuer.projectId
               ? tunneledMcpServerId
@@ -340,6 +372,55 @@ export function SettingsTab({
             </Text>
           </div>
         )}
+      </SettingsSection>
+
+      <SettingsSection
+        title="Scopes"
+        description="When set, the override is requested exactly as chosen in place of this provider's supported scopes."
+      >
+        <div className="flex flex-col gap-1.5">
+          <Label id="scope-override-label" htmlFor="scope-override">
+            Scope override
+          </Label>
+          <MultiSelect
+            id="scope-override"
+            aria-labelledby="scope-override-label"
+            options={scopeOptions}
+            value={scopeOverride}
+            onValueChange={setScopeOverride}
+            placeholder="No override"
+            emptyIndicator="Type a scope to add it."
+            badgeClassName="normal-case tracking-normal"
+            maxCount={8}
+            creatable
+            caseSensitiveCreate
+            hideSelectAll
+          />
+          <Text small muted>
+            Choose from the scopes this provider advertises, or type one to add
+            it.
+          </Text>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-3">
+            <Switch
+              aria-labelledby="omit-scope-fallback-label"
+              checked={omitScopeFallbackChecked}
+              onCheckedChange={setOmitScopeFallback}
+            />
+            <Label id="omit-scope-fallback-label">
+              Request default scopes when the MCP server advertises none
+            </Label>
+          </div>
+          <Text small muted>
+            When the MCP server names no scopes (none advertised, pinned, or
+            demanded in its challenge) and no client scope or override is set,
+            every scope the authorization server lists is requested. Turn this
+            on to send no scope parameter instead so the authorization server
+            applies its defaults. Some authorization servers reject a request
+            without a scope.
+          </Text>
+        </div>
       </SettingsSection>
 
       <SettingsSection

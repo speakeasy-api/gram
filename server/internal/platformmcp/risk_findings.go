@@ -208,16 +208,21 @@ func (s *RiskFindingsService) List(ctx context.Context, principal Principal, inp
 	if err != nil || orgSlug == "" {
 		return zero, ErrUnavailable
 	}
-	for _, flag := range []feature.Flag{feature.FlagRiskWatchdog, feature.FlagRiskListFromClickHouse} {
-		evaluation, err := feature.EvaluateFlag(ctx, s.flags, flag, principal.OrganizationID, feature.OrgProjectGroups(orgSlug, project.Slug))
-		if err != nil {
-			return zero, fmt.Errorf("%w: evaluate findings capability", ErrUnavailable)
-		}
-		if evaluation != feature.EvaluationEnabled {
-			return zero, ErrRiskFeatureNotEnabled
-		}
+	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagRiskWatchdog, principal.OrganizationID, feature.OrgProjectGroups(orgSlug, project.Slug))
+	if err != nil {
+		return zero, fmt.Errorf("%w: evaluate findings capability", ErrUnavailable)
 	}
-	params := chrepo.RiskSignalWindowParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID.String(), From: from, To: to}
+	if evaluation != feature.EvaluationEnabled {
+		return zero, ErrRiskFeatureNotEnabled
+	}
+	params := chrepo.RiskSignalWindowParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID.String(),
+		MCPServerID:    "",
+		WideFrom:       time.Time{},
+		From:           from,
+		To:             to,
+	}
 	policies, err := s.policies.ListRiskFindingPolicies(ctx, riskrepo.ListRiskFindingPoliciesParams{
 		ProjectID:      project.ID,
 		OrganizationID: principal.OrganizationID,

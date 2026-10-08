@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -50,7 +52,7 @@ type remotePolicyLookup struct {
 	policy policycore.Policy
 }
 
-func (l remotePolicyLookup) ListEnabledForMCPServer(context.Context, string, uuid.UUID, uuid.UUID, string) ([]policycore.Policy, error) {
+func (l remotePolicyLookup) ListEnabledForMCP(context.Context, string, uuid.UUID, policycore.MCPTarget) ([]policycore.Policy, error) {
 	return []policycore.Policy{l.policy}, nil
 }
 
@@ -58,6 +60,18 @@ type remotePolicyDetector struct{}
 
 func (remotePolicyDetector) ScanMCPPolicy(context.Context, policycore.Policy, risk.MCPScanRequest) ([]scanners.Finding, error) {
 	return []scanners.Finding{{RuleID: "remote.block", Description: "Blocked remote input", Tags: []string{}, Source: "gitleaks", Confidence: 1}}, nil
+}
+
+type remoteResponsePolicyDetector struct{}
+
+func (remoteResponsePolicyDetector) ScanMCPPolicy(_ context.Context, _ policycore.Policy, request risk.MCPScanRequest) ([]scanners.Finding, error) {
+	if request.MessageType != message.ToolResponse {
+		return nil, nil
+	}
+	return []scanners.Finding{{
+		RuleID: "remote.response", Description: "Blocked remote output", Match: "person@example.com",
+		StartPos: 0, EndPos: 18, Tags: []string{}, Source: "presidio", Confidence: 1,
+	}}, nil
 }
 
 type findingChannel chan *riskv1.Finding
@@ -118,7 +132,7 @@ func TestProxyManagerRiskScanFlagPublishesAndAllowsUpstream(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		upstreamCalls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":7,"result":{"content":[]}}`)
+		_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":7,"result":{"content":[{"type":"text","text":"person@example.com"}]}}`)
 	}))
 	t.Cleanup(upstream.Close)
 	projectID := uuid.MustParse(riskScanProjectID)
@@ -134,7 +148,7 @@ func TestProxyManagerRiskScanFlagPublishesAndAllowsUpstream(t *testing.T) {
 			Name:           "Remote flag policy",
 			Action:         "flag",
 		}},
-		remotePolicyDetector{},
+		remoteResponsePolicyDetector{},
 		published,
 		mcpriskscan.DefaultPolicyConfig,
 	)
@@ -147,13 +161,127 @@ func TestProxyManagerRiskScanFlagPublishesAndAllowsUpstream(t *testing.T) {
 	require.NoError(t, built.Post(rr, req))
 	require.Equal(t, http.StatusOK, rr.Code)
 	require.Equal(t, int32(1), upstreamCalls.Load())
+	require.Contains(t, rr.Body.String(), "person@example.com")
 	select {
 	case finding := <-published:
 		require.Equal(t, riskv1.Finding_ENFORCEMENT_OUTCOME_LOGGED, finding.GetEnforcementOutcome())
 		require.Equal(t, riskScanServerID, finding.GetExecution().GetMcpServerId())
 		require.Equal(t, "lookup", finding.GetExecution().GetToolName())
+		require.Equal(t, mcpriskscan.PhaseResponse, finding.GetExecution().GetPhase())
 	case <-time.After(time.Second):
 		t.Fatal("flag finding was not published")
+	}
+}
+
+func TestProxyManagerRiskScanWithholdsRemoteResponse(t *testing.T) {
+	t.Parallel()
+	var upstreamCalls atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		upstreamCalls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":7,"result":{"content":[{"type":"text","text":"person@example.com"}]}}`)
+	}))
+	t.Cleanup(upstream.Close)
+	projectID := uuid.MustParse(riskScanProjectID)
+	published := make(findingChannel, 1)
+	userMessage := "Remove personal data before continuing."
+	evaluator := mcpriskscan.NewPolicyEvaluator(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		remotePolicyLookup{policy: policycore.Policy{
+			ID:             uuid.New(),
+			ProjectID:      projectID,
+			OrganizationID: "org-test",
+			Name:           "Remote response policy",
+			Action:         "block",
+			UserMessage:    &userMessage,
+		}},
+		remoteResponsePolicyDetector{},
+		published,
+		mcpriskscan.DefaultPolicyConfig,
+	)
+	built := newRiskScanTestProxyWithEvaluator(t, upstream.URL, evaluator, nil, false)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/sample", strings.NewReader(riskScanRequest))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	rr := httptest.NewRecorder()
+
+	require.NoError(t, built.Post(rr, req))
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, int32(1), upstreamCalls.Load())
+	var envelope struct {
+		Error struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &envelope))
+	require.Equal(t, proxy.RejectCodeForbidden, envelope.Error.Code)
+	require.Equal(t, userMessage, envelope.Error.Message)
+	require.NotContains(t, rr.Body.String(), "person@example.com")
+	select {
+	case finding := <-published:
+		require.Equal(t, riskv1.Finding_ENFORCEMENT_OUTCOME_WITHHELD, finding.GetEnforcementOutcome())
+		require.Equal(t, mcpriskscan.PhaseResponse, finding.GetExecution().GetPhase())
+	case <-time.After(time.Second):
+		t.Fatal("withheld finding was not published")
+	}
+}
+
+func TestToolsCallRiskScanFailsClosedWhenResultPayloadIsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		message jsonrpc.Message
+	}{
+		{name: "unexpected message type", message: &jsonrpc.Request{Method: "notifications/progress"}},
+		{name: "unparseable tool result", message: &jsonrpc.Response{Result: json.RawMessage(`{"content":[`)}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			projectID := uuid.MustParse(riskScanProjectID)
+			config := mcpriskscan.DefaultPolicyConfig
+			config.FailMode = mcpriskscan.FailClosed
+			evaluator := mcpriskscan.NewPolicyEvaluator(
+				testenv.NewLogger(t),
+				testenv.NewTracerProvider(t),
+				testenv.NewMeterProvider(t),
+				remotePolicyLookup{policy: policycore.Policy{
+					ID:             uuid.New(),
+					ProjectID:      projectID,
+					OrganizationID: "org-test",
+					Name:           "Remote response policy",
+					Action:         "block",
+				}},
+				remoteResponsePolicyDetector{},
+				gcp.NewNoopPublisher[*riskv1.Finding](),
+				config,
+			)
+			interceptor := NewToolsCallRiskScanInterceptor(evaluator, mcpriskscan.Event{
+				Surface: mcpriskscan.SurfaceRemoteMCP, Method: mcpriskscan.MethodToolsCall,
+				OrganizationID: "org-test", ProjectID: projectID.String(), ServerID: riskScanServerID,
+			})
+			request := &proxy.ToolsCallRequest{
+				Params: &mcp.CallToolParamsRaw{Name: "lookup", Arguments: json.RawMessage(`{}`)},
+				UserRequest: &proxy.UserRequest{
+					UserHTTPRequest: httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp", nil),
+				},
+			}
+			require.NoError(t, interceptor.InterceptToolsCallRequest(t.Context(), request))
+
+			err := interceptor.InterceptToolsCallResponse(t.Context(), &proxy.ToolsCallResponse{
+				Request:       request,
+				Result:        &mcp.CallToolResult{},
+				RemoteMessage: &proxy.RemoteMessage{Message: test.message},
+			})
+			var rejection *proxy.RejectError
+			require.ErrorAs(t, err, &rejection)
+			require.Contains(t, rejection.Message, "evaluation did not complete")
+		})
 	}
 }
 
@@ -186,7 +314,7 @@ func TestToolsCallRiskScanNoopDoesNotRejectUnclassifiedCall(t *testing.T) {
 func TestProxyManagerRiskScanPreservesJSONExchange(t *testing.T) {
 	t.Parallel()
 	assertRiskScanRelay(t, false, riskScanRequest, http.StatusOK, "application/json",
-		" {\n\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"done\"}]}}\n", true)
+		" {\n\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"done\"}]}}\n", true, "done")
 }
 
 func TestProxyManagerRiskScanPreservesTunnelSSEExchange(t *testing.T) {
@@ -194,25 +322,25 @@ func TestProxyManagerRiskScanPreservesTunnelSSEExchange(t *testing.T) {
 	assertRiskScanRelay(t, true, riskScanRequest, http.StatusOK, "text/event-stream",
 		": keepalive\n\nevent: message\nid: progress\ndata: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{\"progressToken\":\"p\",\"progress\":0.5}}\n\n"+
 			"event: message\nid: unrelated\ndata: {\"jsonrpc\":\"2.0\",\"id\":99,\"result\":{\"content\":[]}}\n\n"+
-			"event: message\nid: terminal\ndata: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"done\"}]}}\n\n", true)
+			"event: message\nid: terminal\ndata: {\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"done\"}]}}\n\n", true, "done")
 }
 
 func TestProxyManagerRiskScanPreservesUpstreamRejection(t *testing.T) {
 	t.Parallel()
 	assertRiskScanRelay(t, false, riskScanRequest, http.StatusForbidden, "application/json",
-		`{"jsonrpc":"2.0","id":7,"error":{"code":-32000,"message":"upstream rejected"}}`, true)
+		`{"jsonrpc":"2.0","id":7,"error":{"code":-32000,"message":"upstream rejected"}}`, true, "upstream rejected")
 }
 
 func TestProxyManagerRiskScanPreservesUnreadableUpstreamResponse(t *testing.T) {
 	t.Parallel()
-	assertRiskScanRelay(t, false, riskScanRequest, http.StatusBadGateway, "application/json", "not-json\n", true)
+	assertRiskScanRelay(t, false, riskScanRequest, http.StatusBadGateway, "application/json", "not-json\n", true, "")
 }
 
 func TestProxyManagerRiskScanSkipsMalformedPublicCall(t *testing.T) {
 	t.Parallel()
 	assertRiskScanRelay(t, false, `{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":42}}`,
 		http.StatusBadRequest, "application/json",
-		`{"jsonrpc":"2.0","id":7,"error":{"code":-32602,"message":"invalid tool name"}}`, false)
+		`{"jsonrpc":"2.0","id":7,"error":{"code":-32602,"message":"invalid tool name"}}`, false, "")
 }
 
 func TestProxyManagerRiskScanRunsAfterSessionSelection(t *testing.T) {
@@ -225,7 +353,7 @@ func TestProxyManagerRiskScanSkipsMalformedStrictCall(t *testing.T) {
 	assertRiskScanSelectionRejection(t, `{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":42}}`, proxy.RejectCodeInvalidParams)
 }
 
-func assertRiskScanRelay(t *testing.T, tunnel bool, request string, status int, contentType, response string, scanned bool) {
+func assertRiskScanRelay(t *testing.T, tunnel bool, request string, status int, contentType, response string, scanned bool, responsePayload string) {
 	t.Helper()
 	recorded := &recordingRemoteRiskScan{events: nil, payloads: nil, calls: atomic.Int32{}}
 	type forwardedRequest struct {
@@ -268,8 +396,12 @@ func assertRiskScanRelay(t *testing.T, tunnel bool, request string, status int, 
 		t.Fatal("request did not reach upstream")
 	}
 	if scanned {
-		require.Equal(t, [][]byte{[]byte(`{"query": "sample"}`)}, recorded.payloads)
-		require.Len(t, recorded.events, 1)
+		wantPayloads := [][]byte{[]byte(`{"query": "sample"}`)}
+		if responsePayload != "" {
+			wantPayloads = append(wantPayloads, []byte(responsePayload))
+		}
+		require.Equal(t, wantPayloads, recorded.payloads)
+		require.Len(t, recorded.events, len(wantPayloads))
 		event := recorded.events[0]
 		require.Equal(t, mcpriskscan.SurfaceRemoteMCP, event.Surface)
 		require.Equal(t, mcpriskscan.MethodToolsCall, event.Method)
@@ -281,6 +413,10 @@ func assertRiskScanRelay(t *testing.T, tunnel bool, request string, status int, 
 		require.Equal(t, "lookup", event.ToolName)
 		require.Equal(t, mcpriskscan.PhaseRequest, event.Phase())
 		require.NotEmpty(t, event.ExecutionID())
+		if responsePayload != "" {
+			require.Equal(t, mcpriskscan.PhaseResponse, recorded.events[1].Phase())
+			require.Equal(t, event.ExecutionID(), recorded.events[1].ExecutionID())
+		}
 	} else {
 		require.Empty(t, recorded.events)
 	}
@@ -327,7 +463,7 @@ func newRiskScanTestProxyWithEvaluator(t *testing.T, upstreamURL string, evaluat
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
 	require.NoError(t, err)
 	manager := NewProxyManager(logger, tracerProvider, testenv.NewMeterProvider(t),
-		nil, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, evaluator)
+		nil, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, evaluator, nil)
 	if tunnel {
 		return manager.BuildTarget(logger, proxy.ServerIdentity{
 			RemoteMCPServerID:   "",

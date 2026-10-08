@@ -225,9 +225,9 @@ function ExistingConfigReview({
       <Dialog.Header>
         <Dialog.Title>Review OAuth metadata</Dialog.Title>
         <Dialog.Description>
-          Gram always hosts protected-resource metadata for this MCP server.
-          Switching authorization-server metadata keeps existing tokens and
-          registrations. Some clients may ask users to authenticate again.
+          Speakeasy always hosts protected-resource metadata for this MCP
+          server. Switching authorization-server metadata keeps existing tokens
+          and registrations. Some clients may ask users to authenticate again.
         </Dialog.Description>
       </Dialog.Header>
       <div className="min-h-0 overflow-y-auto">
@@ -253,7 +253,7 @@ function ExistingConfigReview({
           {stage === "clear" && (
             <Stack gap={2}>
               <Text>
-                Confirm the authorization-server metadata Gram should host.
+                Confirm the authorization-server metadata Speakeasy should host.
               </Text>
               <Label htmlFor="existing-oauth-metadata">
                 OAuth Metadata JSON
@@ -288,8 +288,8 @@ function ExistingConfigReview({
                 <>
                   <Button variant="secondary" onClick={() => setStage("clear")}>
                     {config.providerHosted
-                      ? "Use Gram-hosted metadata"
-                      : "Keep Gram-hosted metadata"}
+                      ? "Use Speakeasy-hosted metadata"
+                      : "Keep Speakeasy-hosted metadata"}
                   </Button>
                   <Button onClick={() => void review()} disabled={pending}>
                     {pending ? "Reviewing..." : "Review update"}
@@ -303,7 +303,9 @@ function ExistingConfigReview({
               )}
               {stage === "clear" && (
                 <Button onClick={() => void update(false)} disabled={pending}>
-                  {pending ? "Updating..." : "Confirm Gram-hosted metadata"}
+                  {pending
+                    ? "Updating..."
+                    : "Confirm Speakeasy-hosted metadata"}
                 </Button>
               )}
             </div>

@@ -89,6 +89,7 @@ func (e *mcpOAuthTokenError) Error() string {
 }
 
 type mcpAuthEventPayload struct {
+	ResumeUserID     string `json:"_gram_resume_user_id,omitempty"`
 	GramEventKind    string `json:"gram_event_kind"`
 	Status           string `json:"status"`
 	ServerID         string `json:"mcp_server_id"`
@@ -104,7 +105,7 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	authedCtx, claims, err := s.core.assistantTokens.Authorize(ctx, token)
+	authedCtx, claims, err := s.core.assistantTokens.AuthorizeRuntime(ctx, token)
 	if err != nil {
 		return fmt.Errorf("authorize assistant runtime token: %w", err)
 	}
@@ -151,10 +152,10 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 	}
 
 	attemptID := uuid.NewString()
-	if s.core.serverURL == nil {
+	if s.core.mcpAuthOrigin() == nil {
 		return oops.E(oops.CodeUnexpected, nil, "assistant mcp auth callback base url not configured").LogError(ctx, s.logger)
 	}
-	redirectURI := s.core.serverURL.JoinPath("rpc", "assistantMcpAuth", principal.AssistantID.String(), "oauth", "callback").String()
+	redirectURI := s.core.mcpAuthRedirectURI(principal.AssistantID)
 	codeVerifier, codeChallenge, err := newPKCEPair()
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "generate PKCE verifier").LogError(ctx, s.logger)
@@ -268,6 +269,7 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 	}
 
 	payload := mcpAuthEventPayload{
+		ResumeUserID:     claims.UserID,
 		GramEventKind:    mcpAuthEventKind,
 		Status:           mcpAuthStatusSuccess,
 		ServerID:         claims.ServerID,
@@ -557,7 +559,7 @@ func (s *Service) completeMCPAuthClientRegistration(
 		registrationCtx,
 		registrationEndpoint,
 		redirectURI,
-		"Gram Assistant "+assistantID.String(),
+		"Speakeasy Assistant "+assistantID.String(),
 	)
 	cancel()
 	if err != nil {
@@ -625,10 +627,10 @@ func (s *Service) upsertMCPAuthCIMDClient(
 	usableAfter pgtype.Timestamptz,
 	claimLease pgtype.Interval,
 ) (mcpAuthClientCredentials, error) {
-	if s.core.serverURL == nil {
+	if s.core.mcpAuthOrigin() == nil {
 		return mcpAuthClientCredentials{}, fmt.Errorf("assistant mcp auth callback base url not configured")
 	}
-	clientID := AssistantClientMetadataDocumentURL(s.core.serverURL, assistantID)
+	clientID := AssistantClientMetadataDocumentURL(s.core.mcpAuthOrigin(), assistantID)
 	persistenceCtx, persistenceCancel := context.WithTimeout(context.WithoutCancel(ctx), mcpOAuthPersistenceMax)
 	defer persistenceCancel()
 	row, err := queries.UpsertAssistantMCPOAuthClientCIMD(persistenceCtx, assistantrepo.UpsertAssistantMCPOAuthClientCIMDParams{

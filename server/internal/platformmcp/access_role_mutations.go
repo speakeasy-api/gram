@@ -68,7 +68,7 @@ type CreateMCPAccessRoleInput struct {
 	ProjectID      string              `json:"project_id" jsonschema:"explicit project ID that owns every configured MCP in rules"`
 	Name           string              `json:"name" jsonschema:"display name for the new custom role"`
 	Description    string              `json:"description,omitempty" jsonschema:"optional description for the new custom role"`
-	Rules          []MCPAccessRoleRule `json:"rules" jsonschema:"MCP access rules generated only for configured MCP IDs in this project"`
+	Rules          []MCPAccessRoleRule `json:"rules" jsonschema:"MCP access rules generated only for configured MCP IDs in this project; an empty list creates a role with no grants"`
 	IdempotencyKey string              `json:"idempotency_key" jsonschema:"stable unique key for safely retrying this exact write"`
 	Confirmed      bool                `json:"confirmed" jsonschema:"set true only after the user confirms this exact project, role, and MCP access delta"`
 }
@@ -106,6 +106,7 @@ type UpdateMCPAccessRoleOutput struct {
 // AccessRoleMutationBackend matches the transaction-scoped access manager API.
 type AccessRoleMutationBackend interface {
 	MutationReady() bool
+	PrepareRoleUpdate(context.Context, string) (context.Context, error)
 	GetRoleByIDTx(context.Context, pgx.Tx, string, string) (*accessgen.Role, error)
 	CreateRoleTx(context.Context, pgx.Tx, string, string, access.RoleAuditActor, *accessgen.CreateRolePayload) (access.RoleCreateResult, access.RoleReconciliation, error)
 	UpdateRoleTx(context.Context, pgx.Tx, string, string, access.RoleAuditActor, *accessgen.UpdateRolePayload) (access.RoleUpdateResult, access.RoleReconciliation, error)
@@ -179,9 +180,6 @@ func (s *AccessRoleMutationService) Create(ctx context.Context, principal Princi
 	if err != nil {
 		return CreateMCPAccessRoleOutput{}, err
 	}
-	if len(rules) == 0 {
-		return CreateMCPAccessRoleOutput{}, accessRoleMutationInvalid("At least one MCP access rule is required to create an MCP access role.")
-	}
 	normalized := normalizedCreateMCPAccessRole{ProjectID: project.ID.String(), Name: name, Description: description, Rules: rules}
 	receipt, err := s.receipts.ExecuteCreate(ctx, principal, project, idempotencyKey, normalized, func(ctx context.Context, tx pgx.Tx) (AccessRoleMutationReceiptResult, error) {
 		result, _, err := s.backend.CreateRoleTx(ctx, tx, principal.OrganizationID, workosOrgID, access.RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), DisplayName: nil}, &accessgen.CreateRolePayload{ApikeyToken: nil, SessionToken: nil, Name: name, Description: conv.PtrEmpty(description), Grants: accessRoleRulesToGenGrants(rules, project.ID), MemberIds: nil, AgentIds: nil})
@@ -248,6 +246,10 @@ func (s *AccessRoleMutationService) Update(ctx context.Context, principal Princi
 	normalized := normalizedUpdateMCPAccessRole{
 		ProjectID: project.ID.String(), RoleID: roleID, ExpectedVersion: input.ExpectedVersion,
 		AddRules: addRules, RemoveRules: removeRules,
+	}
+	ctx, err = s.backend.PrepareRoleUpdate(ctx, principal.OrganizationID)
+	if err != nil {
+		return UpdateMCPAccessRoleOutput{}, classifyAccessRoleBackendError(err)
 	}
 	receipt, err := s.receipts.ExecuteUpdate(ctx, principal, project, input.IdempotencyKey, normalized, func(ctx context.Context, tx pgx.Tx) (AccessRoleMutationReceiptResult, error) {
 		roleUUID, parseErr := uuid.Parse(roleID)

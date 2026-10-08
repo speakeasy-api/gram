@@ -62,6 +62,11 @@ func ListRemoteSessionClientsRemoteSessionClientsPath() string {
 	return "/rpc/remoteSessionClients.list"
 }
 
+// GetNewClientCallbackURLRemoteSessionClientsPath returns the URL path to the remoteSessionClients service getNewClientCallbackUrl HTTP endpoint.
+func GetNewClientCallbackURLRemoteSessionClientsPath() string {
+	return "/rpc/remoteSessionClients.newClientCallbackUrl"
+}
+
 // GetRemoteSessionClientRemoteSessionClientsPath returns the URL path to the remoteSessionClients service getRemoteSessionClient HTTP endpoint.
 func GetRemoteSessionClientRemoteSessionClientsPath() string {
 	return "/rpc/remoteSessionClients.get"

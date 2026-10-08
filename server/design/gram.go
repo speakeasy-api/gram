@@ -23,12 +23,12 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/chat"
 	_ "github.com/speakeasy-api/gram/server/design/chatsessions"
 	_ "github.com/speakeasy-api/gram/server/design/cliauth"
+	_ "github.com/speakeasy-api/gram/server/design/dashboards"
 	_ "github.com/speakeasy-api/gram/server/design/dataexports"
 	_ "github.com/speakeasy-api/gram/server/design/deployments"
 	_ "github.com/speakeasy-api/gram/server/design/deviceintegrations"
 	_ "github.com/speakeasy-api/gram/server/design/domains"
 	_ "github.com/speakeasy-api/gram/server/design/environments"
-	_ "github.com/speakeasy-api/gram/server/design/explore"
 	_ "github.com/speakeasy-api/gram/server/design/external"
 	_ "github.com/speakeasy-api/gram/server/design/externalcredentials"
 	_ "github.com/speakeasy-api/gram/server/design/externalkeys"
@@ -53,6 +53,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/modelkeys"
 	_ "github.com/speakeasy-api/gram/server/design/networkingress"
 	_ "github.com/speakeasy-api/gram/server/design/oktaresourceconnections"
+	_ "github.com/speakeasy-api/gram/server/design/oktaserversuggestions"
 	_ "github.com/speakeasy-api/gram/server/design/organizations"
 	_ "github.com/speakeasy-api/gram/server/design/otel"
 	_ "github.com/speakeasy-api/gram/server/design/packages"
@@ -90,18 +91,19 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/usersessionissuerscimdclients"
 	_ "github.com/speakeasy-api/gram/server/design/usersessions"
 	_ "github.com/speakeasy-api/gram/server/design/variations"
+	_ "github.com/speakeasy-api/gram/server/design/widgets"
 	_ "github.com/speakeasy-api/gram/server/design/workloadpolicy"
 )
 
 var _ = API("gram", func() {
-	Title("Gram API Description")
-	Description("Gram is the tools platform for AI agents")
+	Title("Speakeasy API Description")
+	Description("Speakeasy is the tools platform for AI agents")
 	Meta("openapi:example", "false")
 	Randomizer(expr.NewDeterministicRandomizer())
 
 	Server("gram", func() {
 		Host("production", func() {
-			Description("Gram production API base URL")
+			Description("Speakeasy production API base URL")
 			URI("https://app.getgram.ai")
 		})
 	})

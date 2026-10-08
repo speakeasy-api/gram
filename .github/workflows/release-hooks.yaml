@@ -48,7 +48,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -126,7 +126,7 @@ jobs:
           cache: false
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-      - name: Generate GitHub App Token for Gram Bot
+      - name: Generate GitHub App Token for Speakeasy Bot
         id: bot-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
@@ -198,7 +198,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Generate GitHub App Token for Gram Bot
+      - name: Generate GitHub App Token for Speakeasy Bot
         id: bot-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:

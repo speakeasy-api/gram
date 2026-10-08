@@ -42,16 +42,16 @@ import (
 )
 
 // verifyRatePerMin and verifyRateBurst bound how often one organization can run
-// the verify probe. Verify makes an authenticated outbound call using Gram's own
+// the verify probe. Verify makes an authenticated outbound call using Speakeasy's own
 // identity against a caller-supplied service account, so an unbounded endpoint
-// would double as an oracle for which service accounts Gram can impersonate.
+// would double as an oracle for which service accounts Speakeasy can impersonate.
 const (
 	verifyRatePerMin = 10
 	verifyRateBurst  = 5
 )
 
-// impersonationRole is the IAM role a customer must grant Gram's own service
-// account on the service account they want Gram to impersonate.
+// impersonationRole is the IAM role a customer must grant Speakeasy's own service
+// account on the service account they want Speakeasy to impersonate.
 const impersonationRole = "roles/iam.serviceAccountTokenCreator"
 
 type Service struct {
@@ -162,10 +162,10 @@ type impersonationDecision struct {
 }
 
 // resolveOrgImpersonationTarget validates the service account an organization
-// credential wants Gram to impersonate, returning the trimmed target and
+// credential wants Speakeasy to impersonate, returning the trimmed target and
 // whether the row should record an exemption from the own-project refusal.
 //
-// Two callers may name a service account in Gram's own project. A platform
+// Two callers may name a service account in Speakeasy's own project. A platform
 // administrator may, which is how Speakeasy staff dogfood the feature against
 // an internal service account. And anyone may keep one a platform administrator
 // already approved, so long as they submit it unchanged: the update payload
@@ -175,9 +175,9 @@ type impersonationDecision struct {
 //
 // Carrying the exemption forward does not let it be laundered onto a different
 // identity, because it is pinned to the target rather than to the credential.
-// Naming any other service account in Gram's own project is screened as an
+// Naming any other service account in Speakeasy's own project is screened as an
 // ordinary caller and refused, so the edit path cannot be used to probe which
-// internal service accounts Gram can impersonate. Moving the target away and
+// internal service accounts Speakeasy can impersonate. Moving the target away and
 // back refuses too: the intervening write records no exemption.
 func (s *Service) resolveOrgImpersonationTarget(ctx context.Context, logger *slog.Logger, raw string, isPlatformAdmin bool, prior priorTarget) (impersonationDecision, error) {
 	target := strings.TrimSpace(raw)
@@ -699,10 +699,10 @@ func (s *Service) GetGcpIamCredential(ctx context.Context, payload *gen.GetGcpIa
 	return mv.BuildGcpIamCredentialView(row.ExternalCredential, row.GcpIamCredential), nil
 }
 
-// VerifyGcpIamCredential probes that Gram can impersonate the service account the
+// VerifyGcpIamCredential probes that Speakeasy can impersonate the service account the
 // credential names. Unlike the platform equivalent this is a real authorization
 // check rather than a "who am I": impersonation only succeeds when the customer
-// has granted Gram's service account roles/iam.serviceAccountTokenCreator on the
+// has granted Speakeasy's service account roles/iam.serviceAccountTokenCreator on the
 // target. The probe is ephemeral — nothing is persisted — and a resolution
 // failure is a reportable outcome (verified=false), not a request error.
 func (s *Service) VerifyGcpIamCredential(ctx context.Context, payload *gen.VerifyGcpIamCredentialPayload) (*gen.VerifyCredentialResult, error) {
@@ -738,7 +738,7 @@ func (s *Service) VerifyGcpIamCredential(ctx context.Context, payload *gen.Verif
 
 	// Rows written before this tier became impersonation-only can name no target,
 	// or name one alongside Workload Identity Federation columns. Neither can be
-	// probed honestly: an empty target would resolve Gram's own ambient identity
+	// probed honestly: an empty target would resolve Speakeasy's own ambient identity
 	// and report success, and a WIF row's real resolution mode is WIF (which
 	// gcpauth reports as unsupported), so probing its impersonation hop in
 	// isolation would claim the credential works when nothing else can use it.
@@ -760,10 +760,10 @@ func (s *Service) VerifyGcpIamCredential(ctx context.Context, payload *gen.Verif
 
 	// Re-screen the stored target. The write-time guard was added with this
 	// endpoint, so rows created earlier were never screened and would otherwise
-	// make verify an oracle for which service accounts in Gram's own project Gram
+	// make verify an oracle for which service accounts in Speakeasy's own project Speakeasy
 	// can impersonate. A screening the server cannot evaluate is an error rather
 	// than an unverified result: reporting "not verified" would blame the
-	// customer's configuration for a fault on Gram's side.
+	// customer's configuration for a fault on Speakeasy's side.
 	//
 	// A row a platform administrator exempted is forgiven the own-project
 	// refusal, so probing it reports what it can actually do rather than a
@@ -960,7 +960,7 @@ type awsColumns struct {
 // resolveAwsColumns validates the AWS form and produces the subtype column
 // values. The authentication approach is inferred from which fields are set:
 // assume_role_arn + oidc_audience assumes the role with a web identity;
-// assume_role_arn alone assumes the role with a Gram-generated ExternalId
+// assume_role_arn alone assumes the role with a Speakeasy-generated ExternalId
 // (preserved on update); no fields records a KMS key-policy grant.
 func (s *Service) resolveAwsColumns(ctx context.Context, logger *slog.Logger, in awsCredentialInput, existingExternalID pgtype.Text) (awsColumns, error) {
 	arn := conv.PtrToPGTextTrimmed(in.assumeRoleArn)
@@ -995,7 +995,7 @@ func (s *Service) resolveAwsColumns(ctx context.Context, logger *slog.Logger, in
 		}
 	}
 
-	// sts_region only applies when Gram assumes a role; reject it for the
+	// sts_region only applies when Speakeasy assumes a role; reject it for the
 	// key-policy grant approach (no assume_role_arn).
 	if region.Valid && !arn.Valid {
 		return cols, oops.E(oops.CodeBadRequest, nil, "sts_region requires assume_role_arn").LogError(ctx, logger)

@@ -637,7 +637,7 @@ func TestRefreshRemoteSessionIssuerMetadata_ClearsWithdrawnEndpoint(t *testing.T
 	require.Empty(t, result.Issuer.ScopesSupported, "a withdrawn *_supported array is cleared to empty, not left stale")
 }
 
-// Refresh writes only RFC 8414-derived columns. Gram's own behavior and display
+// Refresh writes only RFC 8414-derived columns. Speakeasy's own behavior and display
 // fields are not discoverable and must survive untouched.
 func TestRefreshRemoteSessionIssuerMetadata_LeavesGramOwnedFieldsAlone(t *testing.T) {
 	t.Parallel()
@@ -709,7 +709,7 @@ func TestRefreshRemoteSessionIssuerMetadata_HandlesAbsentSupportedArrays(t *test
 }
 
 // An upstream that is unreachable or erroring is not caller error on refresh:
-// the caller supplied only an id, and Gram chose the URL from the stored row.
+// the caller supplied only an id, and Speakeasy chose the URL from the stored row.
 // Reporting a transient outage as 4xx would make SDK retry policies treat it as
 // terminal.
 func TestRefreshRemoteSessionIssuerMetadata_UnreachableUpstreamIsGatewayError(t *testing.T) {

@@ -7,6 +7,7 @@ SELECT
   , o.org_url
   , o.agent_id
   , o.agent_app_id
+  , o.remote_session_issuer_id
 FROM identity_provider_connections AS c
 JOIN okta_identity_provider_connections AS o
   ON o.identity_provider_connection_id = c.id
@@ -47,6 +48,7 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
+  , i.issuer
   , i.metadata_fetched_at
   , i.grant_types_supported
   , i.authorization_grant_profiles_supported
@@ -104,6 +106,7 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
+  , i.issuer
   , i.metadata_fetched_at
   , i.grant_types_supported
   , i.authorization_grant_profiles_supported
@@ -163,6 +166,7 @@ SELECT
   , c.resource_identifier
   , i.scope_override AS issuer_scope_override
   , i.scopes_supported AS issuer_scopes_supported
+  , i.omit_scope_fallback AS issuer_omit_scope_fallback
   , (
       SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
       FROM remote_session_client_user_session_issuers AS link
@@ -188,6 +192,25 @@ WHERE c.deleted IS FALSE
     OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id))
   )
 ORDER BY c.remote_session_issuer_id, c.project_id NULLS LAST, c.created_at, c.id;
+
+-- name: ListRemoteProtectedResourceScopes :many
+-- What the cached protected resource rows say about scopes, for any of the
+-- given projects and upstream URLs; callers match rows back to servers.
+SELECT
+    rpr.project_id
+  , rpr.resource_identifier
+  , rpr.scope_override
+  , rpr.challenge_scopes
+  , rpr.scopes_supported
+  , rpr.metadata_fetched_at
+FROM remote_protected_resources AS rpr
+JOIN projects AS p
+  ON p.id = rpr.project_id
+ AND p.organization_id = @organization_id
+ AND p.deleted IS FALSE
+WHERE rpr.project_id = ANY (@project_ids::uuid[])
+  AND rpr.resource_identifier = ANY (@resource_identifiers::text[])
+  AND rpr.deleted IS FALSE;
 
 -- name: ListEMABindings :many
 SELECT
@@ -244,8 +267,28 @@ WHERE organization_id = @organization_id
   AND resource = @resource
 FOR UPDATE;
 
--- A row is the confirmation. Repeating it updates the audience and keeps the
--- recorded app instance unless a new one is given.
+-- The observer's unlocked first read rejects stale attempts without taking a lock.
+-- Concurrently locked rows are skipped by GetResourceConnectionForObservation.
+-- name: GetResourceConnection :one
+SELECT *
+FROM okta_resource_connections
+WHERE organization_id = @organization_id
+  AND identity_provider_connection_id = @identity_provider_connection_id
+  AND remote_session_issuer_id = @remote_session_issuer_id
+  AND resource = @resource;
+
+-- Skips a row another observer or a confirmation holds, so the proxied
+-- request never waits on readiness bookkeeping.
+-- name: GetResourceConnectionForObservation :one
+SELECT *
+FROM okta_resource_connections
+WHERE id = @id
+  AND organization_id = @organization_id
+FOR UPDATE SKIP LOCKED;
+
+-- A row is the confirmation. Repeating it updates the audience, keeps the
+-- recorded app instance unless a new one is given, and clears the observed
+-- result so a stale failure does not outlive the fix it was confirmed for.
 -- name: UpsertResourceConnection :one
 INSERT INTO okta_resource_connections (
   organization_id,
@@ -265,8 +308,22 @@ INSERT INTO okta_resource_connections (
 ON CONFLICT (organization_id, identity_provider_connection_id, remote_session_issuer_id, resource) DO UPDATE
 SET audience = EXCLUDED.audience,
     okta_application_id = COALESCE(EXCLUDED.okta_application_id, okta_resource_connections.okta_application_id),
+    observed_result = NULL,
+    observed_at = NULL,
     updated_at = clock_timestamp()
 RETURNING *;
+
+-- Records an exchange observation. updated_at stays the confirmation time,
+-- so an attempt that started before the latest confirmation or observation
+-- never lands.
+-- name: RecordObservation :execrows
+UPDATE okta_resource_connections
+SET observed_result = @observed_result,
+    observed_at = @observed_at
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND updated_at < @observed_at
+  AND (observed_at IS NULL OR observed_at < @observed_at);
 
 -- Reset withdraws the confirmation for the upstream; every server sharing it
 -- reads as unconfirmed again. Observed evidence goes with the row.
@@ -292,6 +349,14 @@ SET grant_types_supported = @grant_types_supported::text[],
     authorization_grant_profiles_supported = @authorization_grant_profiles_supported::text[],
     metadata_fetched_at = clock_timestamp()
 WHERE id = @id;
+
+-- Test fixture: an issuer identifier, e.g. to match a confirmed audience.
+-- name: SetIssuerURLFixture :execrows
+UPDATE remote_session_issuers
+SET issuer = @issuer
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id;
 
 -- Test fixture: a snapshot row for an identity provider app instance.
 -- name: CreateOktaApplicationFixture :one

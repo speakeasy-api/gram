@@ -88,7 +88,7 @@ WHERE id = @id
 
 -- name: GetPluginWithCounts :one
 SELECT
-  p.*,
+  sqlc.embed(p),
   (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
   (
     SELECT count(*)
@@ -397,6 +397,21 @@ SELECT EXISTS (
     )
 )::bool;
 
+-- name: HasPluginMembershipForToolset :one
+-- A toolset reaches a package directly while it is MCP-enabled, or through an
+-- enabled MCP server it backs, mirroring the package-generation queries. The toolset must belong to
+-- the project, but its own deleted flag is ignored so a deletion can still be
+-- traced to the plugins that carried it.
+SELECT EXISTS (
+  SELECT 1 FROM plugin_servers ps
+  JOIN plugins p ON p.id = ps.plugin_id AND p.project_id = @project_id AND p.deleted IS FALSE
+  JOIN toolsets t ON t.id = @toolset_id::uuid AND t.project_id = p.project_id
+  LEFT JOIN mcp_servers s ON s.id = ps.mcp_server_id AND s.project_id = p.project_id
+    AND s.deleted IS FALSE AND s.visibility <> 'disabled'
+  WHERE ps.deleted IS FALSE
+    AND ((ps.toolset_id = t.id AND t.mcp_enabled IS TRUE) OR s.toolset_id = t.id)
+)::bool;
+
 
 -- name: AddPluginAssignment :one
 -- Scoped to the org: the row is inserted only when @plugin_id resolves to a
@@ -432,6 +447,45 @@ WHERE p.id = pa.plugin_id
   AND pa.plugin_id = @plugin_id
   AND pa.organization_id = @organization_id
   AND p.project_id = @project_id;
+
+-- name: ListPluginsForRoleDeletion :many
+-- Discover across the organization's projects, including archived plugins.
+-- Each subsequent assignment deletion is scoped to the discovered project.
+SELECT p.*
+FROM plugins p
+JOIN plugin_assignments pa ON pa.plugin_id = p.id AND pa.organization_id = p.organization_id
+WHERE pa.organization_id = @organization_id
+  AND pa.principal_urn = @principal_urn
+ORDER BY p.id;
+
+-- name: ListPluginsForGlobalRoleDeletion :many
+-- Global role deletion discovers this exact principal across organizations.
+-- Each subsequent assignment deletion retains that plugin's tenant/project scope.
+SELECT p.*
+FROM plugins p
+JOIN plugin_assignments pa ON pa.plugin_id = p.id AND pa.organization_id = p.organization_id
+WHERE pa.principal_urn = @principal_urn
+ORDER BY p.id;
+
+-- name: RemoveDeletedRolePluginAssignment :execrows
+DELETE FROM plugin_assignments pa
+USING plugins p
+WHERE p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND pa.organization_id = @organization_id
+  AND p.project_id = @project_id
+  AND pa.plugin_id = @plugin_id
+  AND pa.principal_urn = @principal_urn;
+
+-- name: ListPluginAudienceForRoleDeletionAudit :many
+-- Include archived plugins: cleanup changes their audience too.
+SELECT pa.principal_urn
+FROM plugin_assignments pa
+JOIN plugins p ON p.id = pa.plugin_id AND p.organization_id = pa.organization_id
+WHERE pa.organization_id = @organization_id
+  AND p.project_id = @project_id
+  AND pa.plugin_id = @plugin_id
+ORDER BY pa.principal_urn;
 
 -- name: ListPluginsWithServersForProject :many
 -- Used during plugin generation: returns all active plugin servers joined with
@@ -497,7 +551,7 @@ ORDER BY t.id, ec.variable_name ASC;
 -- inside the selection keeps endpoint choice and URL-host construction in
 -- lockstep, so a dangling custom-domain endpoint is never picked and emitted as
 -- a (wrong) platform URL. A server backed by an unproxied MCP server never has
--- an mcp_endpoints row (Gram never proxies it), so it's resolved instead via
+-- an mcp_endpoints row (Speakeasy never proxies it), so it's resolved instead via
 -- unproxied_mcp_servers, exposing the vendor's own URL. Servers with neither a
 -- usable endpoint nor an unproxied backing are dropped unless their stored
 -- network mode needs fail-closed validation. Private-only endpoints are picked
@@ -904,7 +958,9 @@ WHERE marketplace_token = @marketplace_token;
 -- config just published; all are always overwritten so subsequent rollout runs
 -- can detect independently whether the MCP or hooks component changed (including
 -- hooks config drift a version bump can't capture, e.g. a marketplace rename or
--- browser-login toggle).
+-- browser-login toggle). published_hooks_config also records, under
+-- published_marketplace_name, the marketplace name the repo was published under,
+-- which freezes the project's marketplace name.
 INSERT INTO plugin_github_connections (project_id, installation_id, repo_owner, repo_name, marketplace_token, published_mcp_fingerprints, published_hooks_version, published_hooks_config)
 VALUES (@project_id, @installation_id, @repo_owner, @repo_name, @marketplace_token, @published_mcp_fingerprints, @published_hooks_version, @published_hooks_config)
 ON CONFLICT (project_id) DO UPDATE
@@ -917,6 +973,36 @@ ON CONFLICT (project_id) DO UPDATE
       published_hooks_config = EXCLUDED.published_hooks_config,
       updated_at = clock_timestamp()
 RETURNING *;
+
+-- name: RecordPublishedMarketplaceName :exec
+-- Records the marketplace.json name a project's repo is known to hold, under
+-- the published_marketplace_name key of published_hooks_config, without a
+-- republish. The publish path calls it when it skips an unchanged publish:
+-- matching shared MCP fingerprints prove the repo already carries that name.
+-- It writes only while the recorded name still equals the one the caller read
+-- (NULL when none was recorded), so it never overwrites a name that a
+-- concurrent publish recorded. updated_at stays the last-published timestamp.
+-- The key is not a hooks config field, so this never reads as a hooks change.
+UPDATE plugin_github_connections
+SET published_hooks_config = jsonb_set(
+    COALESCE(published_hooks_config, '{}'::jsonb),
+    '{published_marketplace_name}',
+    to_jsonb(@marketplace_name::text)
+  )
+WHERE project_id = @project_id
+  AND published_hooks_config ->> 'published_marketplace_name' IS NOT DISTINCT FROM sqlc.narg('recorded_marketplace_name')::text;
+
+-- name: ForgetPublishedMarketplaceName :exec
+-- Drops the recorded published marketplace name when it is the override an
+-- admin just cleared. That name came from the override, not from the project's
+-- default, so the project returns to its computed name and records it on its
+-- next publish. A recorded name that differs from the cleared override is
+-- still live in the repo (the override never published), so it stays.
+-- updated_at stays the last-published timestamp.
+UPDATE plugin_github_connections
+SET published_hooks_config = published_hooks_config - 'published_marketplace_name'
+WHERE project_id = @project_id
+  AND published_hooks_config ->> 'published_marketplace_name' = @cleared_override::text;
 
 -- name: GetGitHubConnectionOwner :one
 -- Resolves which project currently owns a given installation/repo pair, and
@@ -1070,3 +1156,147 @@ WHERE sd.project_id = @project_id
   AND sd.assistant_id IS NULL
   AND sd.revoked_at IS NULL
 ORDER BY p.slug ASC, s.name ASC;
+
+-- name: SetPluginAutoCreatedFixture :exec
+-- Fixture for verifying read-only plugin origin metadata in inventory responses.
+UPDATE plugins SET auto_created = @auto_created WHERE id = @id AND project_id = @project_id;
+
+-- Test fixtures for role setup lifecycle and transactional fault injection.
+
+-- name: DisableRoleSetupOrganizationFixture :exec
+UPDATE organization_metadata SET disabled_at = clock_timestamp() WHERE id = $1;
+
+-- name: DeleteRoleSetupRoleFixture :exec
+UPDATE organization_roles SET deleted_at = clock_timestamp() WHERE 'role:organization:' || id::text = @role_urn::text AND organization_id = @organization_id;
+
+-- name: DeleteRoleSetupWorkOSRoleFixture :exec
+UPDATE organization_roles SET workos_deleted_at = clock_timestamp() WHERE 'role:organization:' || id::text = @role_urn::text AND organization_id = @organization_id;
+
+-- name: DeleteRoleSetupProjectFixture :exec
+UPDATE projects SET deleted_at = clock_timestamp() WHERE id = $1;
+
+-- name: RestoreRoleSetupProjectFixture :exec
+UPDATE projects SET deleted_at = NULL WHERE id = $1;
+
+-- name: AgeDeletedRoleSetupProjectFixture :exec
+UPDATE projects SET created_at = '1990-01-01', deleted_at = clock_timestamp() WHERE id = $1;
+
+-- name: AgeRoleSetupProjectFixture :exec
+UPDATE projects SET created_at = '2000-01-01' WHERE id = $1;
+
+-- name: CreateRoleSetupGlobalRoleFixture :exec
+INSERT INTO global_roles (id, workos_slug, workos_name, workos_created_at, workos_updated_at) VALUES ($1,'setup-global','Global Engineering',clock_timestamp(),clock_timestamp());
+
+-- name: CreateRoleSetupCatalogRegistrationFixture :exec
+INSERT INTO platform_mcp_catalog_registrations (organization_id,project_id,source_kind,catalog_provider,catalog_reference,status,mcp_server_id) VALUES ($1,$2,'remote','direct-remote-url-v1','https://example.com/mcp','active',$3);
+
+-- name: DeleteRoleSetupCatalogRegistrationFixture :exec
+DELETE FROM platform_mcp_catalog_registrations WHERE mcp_server_id = $1 AND project_id = $2;
+
+-- name: CreateRoleSetupPublicationFailureFunctionFixture :exec
+CREATE FUNCTION reject_setup_publication() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.topic = 'gram.plugins.v1.PublicationRequested' THEN RAISE EXCEPTION 'injected publication failure'; END IF; RETURN NEW; END $$;
+
+-- name: CreateRoleSetupPublicationFailureTriggerFixture :exec
+CREATE TRIGGER reject_setup_publication BEFORE INSERT ON publish_outbox FOR EACH ROW EXECUTE FUNCTION reject_setup_publication();
+
+-- name: DropRoleSetupPublicationFailureTriggerFixture :exec
+DO $$ BEGIN
+  DROP TRIGGER reject_setup_publication ON publish_outbox;
+END $$;
+
+-- name: CreateRoleSetupPauseFunctionFixture :exec
+CREATE FUNCTION test_pause_plugin_write() RETURNS trigger LANGUAGE plpgsql AS $$
+ BEGIN
+   IF TG_ARGV[0] = '' OR NEW.slug = TG_ARGV[0] THEN
+     PERFORM pg_advisory_xact_lock(8241243);
+   END IF;
+   RETURN NEW;
+ END $$;
+
+-- name: CreateRoleSetupPauseAllTriggerFixture :exec
+CREATE TRIGGER test_pause_plugin_write BEFORE INSERT OR UPDATE ON plugins FOR EACH ROW EXECUTE FUNCTION test_pause_plugin_write('');
+
+-- name: CreateRoleSetupPauseSalesTriggerFixture :exec
+CREATE TRIGGER test_pause_plugin_write BEFORE INSERT OR UPDATE ON plugins FOR EACH ROW EXECUTE FUNCTION test_pause_plugin_write('sales-team');
+
+-- name: LockRoleSetupPauseFixture :exec
+SELECT pg_advisory_xact_lock(8241243);
+
+-- name: GetRoleSetupBlockedPIDFixture :one
+SELECT COALESCE((SELECT pid FROM pg_catalog.pg_stat_activity WHERE datname = current_database() AND @blocker::int = ANY(pg_blocking_pids(pid)) ORDER BY pid LIMIT 1), 0)::integer AS pid;
+
+-- name: ListRoleDeliveryServers :many
+-- Keep ineligible live backends as removal candidates. Only additions require eligibility.
+SELECT m.id, m.project_id, COALESCE(NULLIF(m.name, ''), NULLIF(m.slug, ''), m.id::text)::text AS name,
+  'mcp_server'::text AS backend_kind, COALESCE(m.toolset_id, m.id)::uuid AS resource_id, m.toolset_id AS legacy_toolset_id,
+  (m.visibility <> 'disabled' AND (m.unproxied_mcp_server_id IS NOT NULL OR EXISTS (
+    SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = m.id AND e.project_id = p.id AND e.deleted IS FALSE
+  )))::boolean AS eligible
+FROM mcp_servers m JOIN projects p ON p.id = m.project_id
+WHERE p.organization_id = @organization_id AND p.id = @project_id
+  AND p.deleted IS FALSE AND m.deleted IS FALSE
+UNION ALL
+SELECT t.id, t.project_id, t.name, 'toolset'::text, t.id, t.id,
+  (t.mcp_enabled AND COALESCE(t.mcp_slug, '') <> '' AND NOT EXISTS (
+    SELECT 1 FROM mcp_servers m WHERE m.toolset_id = t.id AND m.project_id = p.id AND m.deleted IS FALSE
+  ))::boolean
+FROM toolsets t JOIN projects p ON p.id = t.project_id
+WHERE p.organization_id = @organization_id AND p.id = @project_id
+  AND p.deleted IS FALSE AND t.deleted IS FALSE
+ORDER BY id;
+
+-- name: HasRoleDeliveryMembership :one
+-- A legacy toolset membership and its typed MCP wrapper are the same delivery.
+-- Setup/eligibility preserve deleted history; explicit new grants/audiences do not.
+SELECT EXISTS (
+  SELECT 1 FROM plugin_servers ps JOIN plugins p ON p.id = ps.plugin_id
+  WHERE p.id = @plugin_id AND p.organization_id = @organization_id AND p.project_id = @project_id
+    AND ((ps.toolset_id = sqlc.narg('toolset_id')::uuid)
+      OR (ps.mcp_server_id = sqlc.narg('mcp_server_id')::uuid)
+      OR (ps.toolset_id = sqlc.narg('legacy_toolset_id')::uuid)
+      OR (ps.mcp_server_id IN (
+        SELECT m.id FROM mcp_servers m
+        WHERE m.toolset_id = sqlc.narg('toolset_id')::uuid
+          AND m.project_id = @project_id AND m.deleted IS FALSE
+      ))
+      OR (ps.toolset_id IN (
+        SELECT m.toolset_id FROM mcp_servers m
+        WHERE m.id = sqlc.narg('mcp_server_id')::uuid
+          AND m.project_id = @project_id AND m.deleted IS FALSE
+      )))
+    AND (ps.deleted IS FALSE OR @preserve_removal::boolean)
+);
+
+-- name: ListRoleDeliveryProjects :many
+-- Organization-scoped discovery; every subsequent content write uses the discovered project.
+SELECT p.id, p.slug, o.slug AS organization_slug
+FROM projects p JOIN organization_metadata o ON o.id = p.organization_id
+WHERE p.organization_id = @organization_id AND p.deleted IS FALSE AND o.disabled_at IS NULL
+ORDER BY p.id;
+
+-- name: ListRoleDeliveryPlugins :many
+-- Organization-scoped role event discovery; locks and writes retain exact project scope.
+SELECT p.id, p.project_id
+FROM plugins p JOIN projects project ON project.id = p.project_id
+WHERE p.organization_id = @organization_id AND project.organization_id = @organization_id
+  AND p.deleted IS FALSE AND project.deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM plugin_assignments a WHERE a.plugin_id = p.id
+    AND a.organization_id = @organization_id AND a.principal_urn = @principal_urn)
+ORDER BY p.project_id, p.id;
+
+-- name: ListProjectRoleDeliveryPluginsForUpdate :many
+SELECT p.id FROM plugins p
+WHERE p.organization_id = @organization_id AND p.project_id = @project_id AND p.deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM plugin_assignments a WHERE a.plugin_id = p.id AND a.organization_id = @organization_id
+    AND (a.principal_urn LIKE 'role:organization:%' OR a.principal_urn LIKE 'role:global:%'))
+ORDER BY p.id FOR UPDATE OF p;
+
+-- name: LockRoleDeliveryPlugin :one
+SELECT id FROM plugins
+WHERE id = @plugin_id AND organization_id = @organization_id AND project_id = @project_id AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: LockRoleDeliveryProject :one
+SELECT id FROM projects
+WHERE id = @project_id AND organization_id = @organization_id AND deleted IS FALSE
+FOR SHARE;

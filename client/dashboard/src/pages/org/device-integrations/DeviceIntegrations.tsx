@@ -53,7 +53,7 @@ export function MdmIntegrationsTab(): React.JSX.Element {
           <CoveragePipeline sources={sources} sinks={sinks} />
           <ProviderGroup
             title="Device inventory sources"
-            description="Connect your MDM so Gram knows which devices exist and which are running the agent. Each source pulls its device list on a schedule; together they form the fleet above."
+            description="Connect your MDM so Speakeasy knows which devices exist and which are running the agent. Each source pulls its device list on a schedule; together they form the fleet above."
             providers={sources}
           />
           <ProviderGroup

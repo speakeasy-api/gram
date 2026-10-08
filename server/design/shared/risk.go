@@ -67,7 +67,7 @@ func RiskPolicyAudienceTypeEnum() {
 }
 
 // RiskPolicyShadowMCPDispositionEnum constrains the default disposition of a
-// shadow MCP blocking policy. `block_all` blocks every non-Gram-hosted server
+// shadow MCP blocking policy. `block_all` blocks every non-Speakeasy-hosted server
 // unless explicitly allowed (the original behavior); `allow_all` permits every
 // server unless it appears on the policy's blocked-URL list. The disposition is
 // immutable after create — switching posture requires deleting and recreating
@@ -181,7 +181,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.")
 	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.")
 	Attribute("enabled", Boolean, "Whether the policy is active.")
-	Attribute("action", String, "Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session).", func() {
+	Attribute("action", String, "Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.", func() {
 		RiskPolicyActionEnum()
 		Default("flag")
 	})
@@ -190,8 +190,8 @@ var RiskPolicy = Type("RiskPolicy", func() {
 		Default("everyone")
 	})
 	Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs the policy applies to. Contains user:all when audience_type is everyone.")
-	Attribute("mcp_scope", RiskMCPScope, "Optional MCP server and tool restriction. Null applies the policy to every MCP server.")
-	Attribute("shadow_mcp_disposition", String, "Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.", func() {
+	Attribute("mcp_scope", RiskMCPScope, "Optional MCP server and tool restriction. Null applies the policy to every MCP server. When set, the action must be flag or block.")
+	Attribute("shadow_mcp_disposition", String, "Default disposition for shadow MCP blocking policies: block_all blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.", func() {
 		RiskPolicyShadowMCPDispositionEnum()
 	})
 	Attribute("auto_name", Boolean, "Whether the policy name is auto-generated. When true, the name is regenerated on each update.")
@@ -279,12 +279,12 @@ var RiskExclusion = Type("RiskExclusion", func() {
 // riskExecutionAttributes describes mediated execution metadata without
 // implying that a finding has a durable chat anchor or revealable payload.
 func riskExecutionAttributes() {
-	Attribute("execution_id", String, "Identity of the concrete mediated execution.")
+	Attribute("execution_id", String, "The mediated MCP execution (tool call, resource read or prompt get) that raised this finding. Filter listResults by it to list that execution's non-dismissed findings.")
 	Attribute("mcp_server_id", String, "Concrete MCP server that executed the operation.")
 	Attribute("meta_mcp_server_id", String, "Outer gateway that routed the execution, when present.")
 	Attribute("toolset_id", String, "Toolset serving the execution, when present.")
 	Attribute("tool_name", String, "Name of the concrete tool, when applicable.")
-	Attribute("phase", String, "Execution phase inspected by risk.")
+	Attribute("phase", String, "Which phase of the mediated MCP execution was scanned: its request or its response.")
 	Attribute("mediation_surface", String, "Concrete mediation surface where the execution was observed.")
 	Attribute("mcp_method", String, "MCP method or equivalent mediated operation.")
 	Attribute("principal_kind", String, "Credential provenance class resolved by MCP identity.")

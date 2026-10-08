@@ -10,7 +10,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/database"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -20,7 +19,7 @@ import (
 // ShouldProcessEvent guard; this routine only applies the teardown.
 type deprovisionOrganizationAccessParams struct {
 	organizationID string
-	// gramUserID may be empty when the WorkOS user has no local Gram user.
+	// gramUserID may be empty when the WorkOS user has no local Speakeasy user.
 	gramUserID string
 	// workosUserID may be empty (e.g. a relationship row created before the
 	// user ever logged in); it is then resolved from the users row so role
@@ -42,7 +41,7 @@ type deprovisionOrganizationAccessParams struct {
 // without waiting out the cache TTL, plus an identity map refresh so the
 // ClickHouse fold stops resolving the departed member's emails before the
 // sync schedule's next tick.
-func deprovisionOrganizationAccess(ctx context.Context, dbtx database.DBTX, p deprovisionOrganizationAccessParams) (postCommitEffects, error) {
+func deprovisionOrganizationAccess(ctx context.Context, dbtx pgx.Tx, p deprovisionOrganizationAccessParams) (postCommitEffects, error) {
 	var effects postCommitEffects
 
 	repo := orgrepo.New(dbtx)

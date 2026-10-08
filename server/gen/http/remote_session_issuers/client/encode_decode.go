@@ -1043,6 +1043,15 @@ func EncodeListRemoteSessionIssuersRequest(encoder func(*http.Request) goahttp.E
 		if p.Limit != nil {
 			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
 		}
+		if p.Search != nil {
+			values.Add("search", *p.Search)
+		}
+		if p.UpstreamHost != nil {
+			values.Add("upstream_host", *p.UpstreamHost)
+		}
+		if p.Tier != nil {
+			values.Add("tier", *p.Tier)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -2007,6 +2016,7 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 		IntrospectionEndpoint:             v.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        v.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: v.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          v.OmitScopeFallback,
 		ResourceIndicatorSupported:                 v.ResourceIndicatorSupported,
 		CreatedAt:                                  *v.CreatedAt,
 		UpdatedAt:                                  *v.UpdatedAt,

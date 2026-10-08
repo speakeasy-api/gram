@@ -5,6 +5,7 @@ import {
   useIdentityProviderConnection,
 } from "@gram/client/react-query/identityProviderConnection.js";
 import { invalidateAllIdentityProviderConnectionApplications } from "@gram/client/react-query/identityProviderConnectionApplications.js";
+import { invalidateAllOktaServerSuggestions } from "@gram/client/react-query/oktaServerSuggestions.js";
 import { invalidateAllOktaResourceConnections } from "@gram/client/react-query/oktaResourceConnections.js";
 
 export const SESSION_SECURITY = { sessionHeaderGramSession: "" } as const;
@@ -35,5 +36,6 @@ export function invalidateIdentityProviderQueries(
     invalidateAllIdentityProviderConnection(client),
     invalidateAllIdentityProviderConnectionApplications(client),
     invalidateAllOktaResourceConnections(client),
+    invalidateAllOktaServerSuggestions(client),
   ]).then(() => undefined);
 }

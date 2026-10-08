@@ -23,6 +23,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -233,10 +234,10 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 // single per-backend dispatch shared by the /mcp (routeBase "mcp") and /x/mcp
 // (routeBase "x/mcp") well-known surfaces:
 //
-//   - Issuer-gated (any backend): emit the Gram-hosted metadata shape rooted
+//   - Issuer-gated (any backend): emit the Speakeasy-hosted metadata shape rooted
 //     at the resolved endpoint's URL on routeBase's surface.
 //   - Remote-backed, not issuer-gated: 404 — the upstream remote MCP server
-//     publishes its own .well-known and Gram is not its authorization server.
+//     publishes its own .well-known and Speakeasy is not its authorization server.
 //   - Toolset-backed, not issuer-gated: reuse the legacy wellknown resolver
 //     (oauth_proxy_server_id / external_oauth_server_id).
 func (s *Service) ServeWellKnownProtectedResourceForServer(
@@ -431,7 +432,7 @@ func (s *Service) ServeGetProtectedResource(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build resource URL").LogError(ctx, s.logger)
 	}
-	issuer, err := s.issuerURL(endpoint, baseURL)
+	issuer, err := s.protectedResourceAuthorizationServer(ctx, endpoint, baseURL)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build authorization server issuer").LogError(ctx, s.logger)
 	}
@@ -459,27 +460,6 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build OAuth server URLs").LogError(ctx, s.logger)
 	}
-	// Advertised only when the issuer admits at least some CIMD client. A
-	// `disabled` issuer omits the field: claiming support while admitting
-	// nothing would steer spec-compliant clients into a guaranteed-failure
-	// flow instead of letting them fall back to dynamic client registration,
-	// which is still open on this issuer.
-	//
-	// This is advisory, not a control. The response carries cache headers
-	// (writeJSONMetadata), and clients typically cache authorization-server
-	// metadata for their whole process lifetime, so a mode flip reaches them
-	// well after the fact — some will keep attempting CIMD regardless.
-	// /authorize enforcement is the actual gate.
-	var cimdSupported *bool
-	mode, recognized := admission.ResolveMode(endpoint.CIMDAdmissionModeRaw.String, endpoint.CIMDAdmissionModeRaw.Valid)
-	if !recognized {
-		s.logger.ErrorContext(ctx, "unrecognized cimd admission mode stored on issuer, failing closed",
-			attr.SlogCIMDAdmissionMode(endpoint.CIMDAdmissionModeRaw.String),
-		)
-	}
-	if mode != admission.ModeDisabled {
-		cimdSupported = conv.PtrEmpty(true)
-	}
 	grantTypes := []string{
 		oauthwire.GrantTypeAuthorizationCode,
 		oauthwire.GrantTypeRefreshToken,
@@ -492,7 +472,35 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 	if !slices.Contains(grantTypes, oauthwire.GrantTypeJWTBearer) && s.workloadAssertionGrantAdvertised(endpoint) {
 		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
 	}
-	return writeJSONMetadata(ctx, w, r, s.logger, oauthAuthorizationServerMetadata{
+	return writeJSONMetadata(ctx, w, r, s.logger, s.authorizationServerMetadata(ctx, urls, endpoint.CIMDAdmissionModeRaw, grantTypes, grantProfiles))
+}
+
+// authorizationServerMetadata builds an RFC 8414 metadata document for an
+// authorization server at urls, whose issuer has the stored CIMD admission
+// mode cimdAdmissionModeRaw and which supports grantTypes.
+func (s *Service) authorizationServerMetadata(ctx context.Context, urls AuthorizationServerURLs, cimdAdmissionModeRaw pgtype.Text, grantTypes, grantProfiles []string) oauthAuthorizationServerMetadata {
+	// Advertised only when the issuer admits at least some CIMD client. A
+	// `disabled` issuer omits the field: claiming support while admitting
+	// nothing would steer spec-compliant clients into a guaranteed-failure
+	// flow instead of letting them fall back to dynamic client registration,
+	// which is still open on this issuer.
+	//
+	// This is advisory, not a control. The response carries cache headers
+	// (writeJSONMetadata), and clients typically cache authorization-server
+	// metadata for their whole process lifetime, so a mode flip reaches them
+	// well after the fact — some will keep attempting CIMD regardless.
+	// /authorize enforcement is the actual gate.
+	var cimdSupported *bool
+	mode, recognized := admission.ResolveMode(cimdAdmissionModeRaw.String, cimdAdmissionModeRaw.Valid)
+	if !recognized {
+		s.logger.ErrorContext(ctx, "unrecognized cimd admission mode stored on issuer, failing closed",
+			attr.SlogCIMDAdmissionMode(cimdAdmissionModeRaw.String),
+		)
+	}
+	if mode != admission.ModeDisabled {
+		cimdSupported = conv.PtrEmpty(true)
+	}
+	return oauthAuthorizationServerMetadata{
 		AuthorizationEndpoint:                      urls.Authorize,
 		AuthorizationGrantProfilesSupported:        grantProfiles,
 		AuthorizationResponseIssParameterSupported: true,
@@ -510,7 +518,7 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 		TokenEndpoint:                              urls.Token,
 		TokenEndpointAuthMethodsSupported:          usersessions.SupportedAuthMethods,
 		TokenEndpointAuthSigningAlgValuesSupported: clientAssertionSigningAlgorithms(),
-	})
+	}
 }
 
 // writeJSONMetadata is the shared write path for issuer-gated metadata
@@ -526,7 +534,7 @@ func writeJSONMetadata(ctx context.Context, w http.ResponseWriter, r *http.Reque
 
 // ServeWellKnownProtectedResourceForMetaServer serves RFC 9728
 // protected-resource metadata for a meta-MCP-backed endpoint. Issuer-gated
-// meta servers get Gram-hosted metadata; a meta server without an issuer has
+// meta servers get Speakeasy-hosted metadata; a meta server without an issuer has
 // no OAuth surface, matching the remote/tunneled arms of the generic
 // dispatcher.
 func (s *Service) ServeWellKnownProtectedResourceForMetaServer(

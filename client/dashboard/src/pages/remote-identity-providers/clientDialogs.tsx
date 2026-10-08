@@ -178,7 +178,7 @@ export function RotateClientDialog({
         if (!open) onClose();
       }}
       title={`Rotate client "${clientLabel}"?`}
-      description="Gram registers a new client with the identity provider and replaces this client's ID and secret in place. Its attachments are kept, but every session minted against the old client is revoked, so users reconnect once."
+      description="Speakeasy registers a new client with the identity provider and replaces this client's ID and secret in place. Its attachments are kept, but every session minted against the old client is revoked, so users reconnect once."
       confirmLabel="Rotate client"
       isPending={rotate.isPending}
       impact={{

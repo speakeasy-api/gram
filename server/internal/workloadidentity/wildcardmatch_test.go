@@ -100,9 +100,9 @@ func TestIsAdmitted_WildcardDoesNotReachAnotherTenantOfTheSharedIssuer(t *testin
 	require.False(t, admitted)
 }
 
-// The Gram organization boundary, which the test above does not cover: that one
+// The Speakeasy organization boundary, which the test above does not cover: that one
 // varies the WIMSE subject's Anthropic organization while both rows stay in one
-// Gram tenant. Here the subject matches the wildcard exactly and only the
+// Speakeasy tenant. Here the subject matches the wildcard exactly and only the
 // querying organization differs, so the row can only be refused by the
 // organization predicate in the lookup.
 func TestIsAdmitted_AWildcardNeverReachesAnotherGramOrganization(t *testing.T) {
@@ -113,7 +113,7 @@ func TestIsAdmitted_AWildcardNeverReachesAnotherGramOrganization(t *testing.T) {
 	allowWildcardAdmission(t, conn, f.issuerID, true)
 	seedAdmissionRule(t, conn, f.tenant.organizationID, organizationTier(), f.issuerID, fleetRule, workloadidentity.MatchKindWildcard)
 
-	// A second Gram tenant asking about a subject the first one's rule covers.
+	// A second Speakeasy tenant asking about a subject the first one's rule covers.
 	other := newTenant(t, conn)
 	params := f.params()
 	params.OrganizationID = other.organizationID
@@ -178,7 +178,7 @@ func TestResolveAssignedAgent_WildcardAssignmentCoversTheFleet(t *testing.T) {
 	allowWildcardAdmission(t, conn, f.issuerID, true)
 	seedAssignmentRule(t, conn, f.tenant.organizationID, f.issuerID, fleetRule, workloadidentity.MatchKindWildcard, f.agentID)
 
-	// The POC shape: every Claude Tag channel maps to one Gram agent.
+	// The POC shape: every Claude Tag channel maps to one Speakeasy agent.
 	for _, subject := range []string{channelOne, channelTwo} {
 		params := f.params()
 		params.Subject = subject
@@ -249,6 +249,7 @@ func TestResolveAssignedAgent_WildcardIsInertWhenTheIssuerDoesNotPermitIt(t *tes
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 	f := newAssignmentFixture(t, conn)
+	allowWildcardAdmission(t, conn, f.issuerID, false)
 	seedAssignmentRule(t, conn, f.tenant.organizationID, f.issuerID, fleetRule, workloadidentity.MatchKindWildcard, f.agentID)
 
 	params := f.params()

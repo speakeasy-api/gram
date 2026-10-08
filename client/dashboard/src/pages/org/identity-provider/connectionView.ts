@@ -35,6 +35,13 @@ export function connectionStep(
   return "connected";
 }
 
+/** Older OIN connections still authenticate with a private key. */
+export function usesClientSecret(
+  connection: Pick<OktaIdentityProviderConnection, "listingMode" | "jwksUrl">,
+): boolean {
+  return connection.listingMode === "oin" && !connection.jwksUrl;
+}
+
 /** Mirrors the server: a verification has completed, whether or not it found gaps. */
 export function isConnectionChecked(connection: {
   status: OktaIdentityProviderConnectionStatus;
@@ -62,6 +69,8 @@ export type ChecklistGroup = {
   id: ChecklistGroupId;
   title: string;
   description: string;
+  /** Replaces the description once every step is complete; none hides it. */
+  completeDescription?: string;
   items: IdentityProviderConnectionChecklistItem[];
   /** Steps completed according to the server’s verification evidence. */
   completedCount: number;
@@ -69,17 +78,18 @@ export type ChecklistGroup = {
 
 const CHECKLIST_GROUPS: Record<
   ChecklistGroupId,
-  { title: string; description: string }
+  { title: string; description: string; completeDescription?: string }
 > = {
   connect: {
     title: "Connect",
     description:
       "Set up an API Services app so Speakeasy can connect to Okta, then paste its Client ID to verify access.",
+    completeDescription: "Okta connection and required access verified.",
   },
   cross_app_access: {
     title: "Cross App Access setup",
     description:
-      "Required for Enterprise Managed Auth: connecting Okta and syncing applications alone does not give AI agents access to your MCP servers. Register the Speakeasy AI agent once, then connect it to each MCP server.",
+      "Enterprise Managed Auth lets your AI agents reach MCP servers with the identity Okta gives them. Register the Speakeasy AI agent in Okta once, then connect it to each server below.",
   },
 };
 
@@ -134,6 +144,8 @@ export const VERIFICATION_REASON_LABELS: Record<VerificationReasons, string> = {
     "Okta did not apply the required token protection (DPoP). Check the app’s DPoP setting in Okta.",
   key_not_fetched:
     "Okta has not retrieved the public signing key. Check that the app uses the public key URL (JWKS) on the Okta Setup tab.",
+  secret_rejected:
+    "Okta rejected the client ID or client secret. Check both values against the Speakeasy app in Okta.",
   "read_failed:okta.apps.read":
     "Speakeasy could not read applications from Okta.",
   "read_failed:okta.users.read": "Speakeasy could not read users from Okta.",
@@ -142,7 +154,7 @@ export const VERIFICATION_REASON_LABELS: Record<VerificationReasons, string> = {
 
 export const LAST_ERROR_LABELS: Record<LastError, string> = {
   credential_rejected:
-    "Okta rejected the connection. Check the Client ID and that the app uses the public key URL (JWKS) on the Okta Setup tab.",
+    "Okta rejected the connection's credentials. Check the Client ID, and either the client secret (Okta Integration Network installs) or that the app uses the public key URL (JWKS).",
   okta_unreachable: "Okta could not be reached during the last verification.",
 };
 

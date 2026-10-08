@@ -18,15 +18,17 @@ type RiskOverviewWindowParams struct {
 	ProjectID      string
 	From           time.Time
 	To             time.Time
+	// MCPServerID narrows the read to one concrete MCP server. Empty means no
+	// narrowing.
+	MCPServerID string
 }
 
 // overviewFindings returns the base builder every overview read shares:
 // tenant + window scoped, live findings only.
 //
-// risk_findings is append-only: a manual dismiss/undo (enqueueFalsePositiveMirror)
-// appends a fresh row for an id that may already have one, rather than
-// updating in place, and Pub/Sub's at-least-once delivery can also redeliver
-// an identical row. Deduping to one row per id is therefore required for
+// risk_findings is append-only: a manual dismiss/undo appends a fresh row for
+// an id that may already have one, rather than updating in place, and Pub/Sub
+// at-least-once delivery can also redeliver an identical row. Deduping to one row per id is therefore required for
 // correctness, not just cheapness — collapsing straight to a count would
 // double-count an id with two rows and, worse, a stale first row would still
 // satisfy "false_positive_at IS NULL" even after a second row dismissed it.
@@ -45,7 +47,7 @@ func overviewFindings(p RiskOverviewWindowParams, columns ...string) squirrel.Se
 		Where("created_at >= ?", p.From).
 		Where("created_at < ?", p.To)
 
-	return sq.Select(columns...).
+	sb := sq.Select(columns...).
 		FromSelect(latest, "latest").
 		Where("rn = 1").
 		Where("dead_letter_reason = ''").
@@ -54,6 +56,7 @@ func overviewFindings(p RiskOverviewWindowParams, columns ...string) squirrel.Se
 		// false_positive_at-only rows written before the suppression
 		// convergence age out under the table's 90-day TTL.
 		Where("false_positive_at IS NULL")
+	return withMCPServerFilter(sb, p.MCPServerID)
 }
 
 // RiskOverviewFindingCounts are the window-wide headline stats.

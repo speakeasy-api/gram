@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/managedrows"
-	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -31,7 +30,7 @@ import (
 // requireOrgAccess). Gating the link is not an inherited default: a set is
 // always backed by a customer-provisioned KMS key, because
 // json_web_key_sets.external_key_id is NOT NULL and chains to an external_keys
-// row with provider IN ('aws_kms','gcp_kms'). There is no Gram-managed key
+// row with provider IN ('aws_kms','gcp_kms'). There is no Speakeasy-managed key
 // path, so an organization without the entitlement has no set to attach and
 // this refusal is the honest answer rather than an upsell.
 //
@@ -310,7 +309,7 @@ func (s *Service) settleClientKeySet(
 	// did not happen is a false record, and a dashboard replaying its own
 	// optimistic state should not inflate the log.
 	if sameKeySet(existing.JsonWebKeySetID, target) {
-		view, err := mv.BuildRemoteSessionClientView(existing, userSessionIssuerIDs)
+		view, err := s.clientView(existing, userSessionIssuerIDs)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
 		}
@@ -344,7 +343,7 @@ func (s *Service) settleClientKeySet(
 		return nil, oops.E(oops.CodeUnexpected, err, "set remote session client json web key set").LogError(ctx, logger)
 	}
 
-	view, err := mv.BuildRemoteSessionClientView(updated, userSessionIssuerIDs)
+	view, err := s.clientView(updated, userSessionIssuerIDs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build remote session client view").LogError(ctx, logger)
 	}

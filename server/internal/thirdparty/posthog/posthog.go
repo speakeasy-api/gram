@@ -208,7 +208,7 @@ func (p *Posthog) FlagVariant(ctx context.Context, flag feature.Flag, distinctID
 
 func (p *Posthog) IsFlagEnabledLocal(ctx context.Context, flag feature.Flag, distinctID string, groups, personProperties map[string]string) (bool, error) {
 	if p.disabled {
-		p.logger.InfoContext(ctx, "posthog is disabled, returning false")
+		p.logger.DebugContext(ctx, "posthog is disabled, returning false")
 		return false, nil
 	}
 	if !p.localEvaluation {

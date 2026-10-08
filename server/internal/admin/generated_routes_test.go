@@ -43,9 +43,12 @@ func TestGeneratedAdminRoutes_ExposeExactMigratedMounts(t *testing.T) {
 		"TriggerOrganizationChatAnalysis":       "POST /admin/organization.chatAnalysisTrigger",
 		"GetStripeCustomer":                     "GET /admin/organization.stripeCustomer",
 		"SetStripeCustomer":                     "POST /admin/organization.setStripeCustomer",
+		"GetStripeSubscriptionCandidate":        "GET /admin/organization.stripeSubscriptionCandidate",
+		"SetStripeSubscription":                 "POST /admin/organization.setStripeSubscription",
 		"OpenOrganizationInDashboard":           "POST /admin/organization.open-dashboard",
 		"GetMeterUsage":                         "GET /admin/organizations.getMeterUsage",
 		"GetSpendBreakdown":                     "GET /admin/organization.spendBreakdown",
+		"ListCustomerUsage":                     "GET /admin/organizations.customerUsage",
 	}
 	got := map[string]string{}
 	for _, mount := range server.Mounts {
@@ -71,12 +74,14 @@ func TestGeneratedAdminBillingRoutes_MapUnavailable(t *testing.T) {
 	handler := SessionMiddleware(mux)
 
 	for name, request := range map[string]*http.Request{
-		"summary":             httptest.NewRequest(http.MethodGet, "/admin/organization.paygBillingSummary?organization_id=org_test", nil),
-		"get customer":        httptest.NewRequest(http.MethodGet, "/admin/organization.stripeCustomer?organization_id=org_test&stripe_customer_id=cus_test", nil),
-		"set customer":        httptest.NewRequest(http.MethodPost, "/admin/organization.setStripeCustomer", bytes.NewBufferString(`{"organization_id":"org_test","stripe_customer_id":"cus_test"}`)),
-		"get subscription":    httptest.NewRequest(http.MethodGet, "/admin/organization.stripeSubscription?organization_id=org_test", nil),
-		"cancel subscription": httptest.NewRequest(http.MethodPost, "/admin/organization.cancelStripeSubscription", bytes.NewBufferString(`{"organization_id":"org_test"}`)),
-		"resume subscription": httptest.NewRequest(http.MethodPost, "/admin/organization.resumeStripeSubscription", bytes.NewBufferString(`{"organization_id":"org_test"}`)),
+		"summary":                    httptest.NewRequest(http.MethodGet, "/admin/organization.paygBillingSummary?organization_id=org_test", nil),
+		"get customer":               httptest.NewRequest(http.MethodGet, "/admin/organization.stripeCustomer?organization_id=org_test&stripe_customer_id=cus_test", nil),
+		"set customer":               httptest.NewRequest(http.MethodPost, "/admin/organization.setStripeCustomer", bytes.NewBufferString(`{"organization_id":"org_test","stripe_customer_id":"cus_test"}`)),
+		"get subscription candidate": httptest.NewRequest(http.MethodGet, "/admin/organization.stripeSubscriptionCandidate?organization_id=org_test&stripe_subscription_id=sub_test", nil),
+		"set subscription":           httptest.NewRequest(http.MethodPost, "/admin/organization.setStripeSubscription", bytes.NewBufferString(`{"organization_id":"org_test","stripe_subscription_id":"sub_test"}`)),
+		"get subscription":           httptest.NewRequest(http.MethodGet, "/admin/organization.stripeSubscription?organization_id=org_test", nil),
+		"cancel subscription":        httptest.NewRequest(http.MethodPost, "/admin/organization.cancelStripeSubscription", bytes.NewBufferString(`{"organization_id":"org_test"}`)),
+		"resume subscription":        httptest.NewRequest(http.MethodPost, "/admin/organization.resumeStripeSubscription", bytes.NewBufferString(`{"organization_id":"org_test"}`)),
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -100,17 +105,21 @@ func TestGeneratedAdminRoutes_AuthenticateBeforeDecode(t *testing.T) {
 	unauthenticatedHandler := handler
 
 	for name, request := range map[string]*http.Request{
-		"session":             httptest.NewRequest(http.MethodGet, "/admin/session.get", nil),
-		"features get":        httptest.NewRequest(http.MethodGet, "/admin/organization.features", nil),
-		"features set":        httptest.NewRequest(http.MethodPost, "/admin/organization.features", bytes.NewBufferString(`{`)),
-		"settings get":        httptest.NewRequest(http.MethodGet, "/admin/organization.chatAnalysisSettings", nil),
-		"settings set":        httptest.NewRequest(http.MethodPost, "/admin/organization.chatAnalysisSettings", bytes.NewBufferString(`{`)),
-		"set Stripe customer": httptest.NewRequest(http.MethodPost, "/admin/organization.setStripeCustomer", bytes.NewBufferString(`{`)),
-		"get Stripe customer": httptest.NewRequest(http.MethodGet, "/admin/organization.stripeCustomer", nil),
-		"meter usage":         httptest.NewRequest(http.MethodGet, "/admin/organizations.getMeterUsage", nil),
-		"spend breakdown":     httptest.NewRequest(http.MethodGet, "/admin/organization.spendBreakdown", nil),
-		"analysis trigger":    httptest.NewRequest(http.MethodPost, "/admin/organization.chatAnalysisTrigger", bytes.NewBufferString(`{`)),
-		"open dashboard":      httptest.NewRequest(http.MethodPost, "/admin/organization.open-dashboard", nil),
+		"session":                           httptest.NewRequest(http.MethodGet, "/admin/session.get", nil),
+		"features get":                      httptest.NewRequest(http.MethodGet, "/admin/organization.features", nil),
+		"features set":                      httptest.NewRequest(http.MethodPost, "/admin/organization.features", bytes.NewBufferString(`{`)),
+		"settings get":                      httptest.NewRequest(http.MethodGet, "/admin/organization.chatAnalysisSettings", nil),
+		"settings set":                      httptest.NewRequest(http.MethodPost, "/admin/organization.chatAnalysisSettings", bytes.NewBufferString(`{`)),
+		"set Stripe customer":               httptest.NewRequest(http.MethodPost, "/admin/organization.setStripeCustomer", bytes.NewBufferString(`{`)),
+		"get Stripe customer":               httptest.NewRequest(http.MethodGet, "/admin/organization.stripeCustomer", nil),
+		"set Stripe subscription":           httptest.NewRequest(http.MethodPost, "/admin/organization.setStripeSubscription", bytes.NewBufferString(`{`)),
+		"get Stripe subscription candidate": httptest.NewRequest(http.MethodGet, "/admin/organization.stripeSubscriptionCandidate", nil),
+		"meter usage":                       httptest.NewRequest(http.MethodGet, "/admin/organizations.getMeterUsage", nil),
+		"spend breakdown":                   httptest.NewRequest(http.MethodGet, "/admin/organization.spendBreakdown", nil),
+		// An invalid interval must still read as unauthenticated, not as a bad request.
+		"customer usage":   httptest.NewRequest(http.MethodGet, "/admin/organizations.customerUsage?interval=yearly", nil),
+		"analysis trigger": httptest.NewRequest(http.MethodPost, "/admin/organization.chatAnalysisTrigger", bytes.NewBufferString(`{`)),
+		"open dashboard":   httptest.NewRequest(http.MethodPost, "/admin/organization.open-dashboard", nil),
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

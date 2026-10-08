@@ -210,7 +210,7 @@ func TestSetHostedNetworkAccessInTransaction(t *testing.T) {
 	server, err = mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 	require.Equal(t, "dual", server.NetworkAccessMode.String)
-	stored, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: created.Slug})
+	stored, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(created.Slug)})
 	require.NoError(t, err)
 	require.Equal(t, types.NetworkAccessMode("dual"), *stored.NetworkAccessMode)
 }
@@ -223,7 +223,7 @@ func TestHostedNetworkAccessRejectsPrivateModeWithoutIngress(t *testing.T) {
 	mode := types.NetworkAccessMode("private_only")
 	_, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: created.Slug, NetworkAccessMode: &mode})
 	require.ErrorContains(t, err, "online private network ingress is required")
-	stored, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: created.Slug})
+	stored, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(created.Slug)})
 	require.NoError(t, err)
 	require.Equal(t, types.NetworkAccessMode("public_only"), *stored.NetworkAccessMode)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

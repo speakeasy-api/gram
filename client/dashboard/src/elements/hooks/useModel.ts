@@ -4,7 +4,7 @@ import { LanguageModel } from "ai";
 import { useAuth } from "./useAuth";
 import { useElements } from "./useElements";
 
-// Creates an OpenRouter client to be used for "internal Gram" usage, such as follow-on suggestions
+// Creates an OpenRouter client to be used for "internal Speakeasy" usage, such as follow-on suggestions
 export const useModel = (model = "openai/gpt-5.4-mini"): LanguageModel => {
   const { config } = useElements();
 

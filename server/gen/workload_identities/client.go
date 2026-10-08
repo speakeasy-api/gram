@@ -10,27 +10,36 @@ package workloadidentities
 import (
 	"context"
 
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
 // Client is the "workloadIdentities" service client.
 type Client struct {
-	ListEndpoint            goa.Endpoint
-	RegisterIssuerEndpoint  goa.Endpoint
-	WithdrawIssuerEndpoint  goa.Endpoint
-	AdmitSubjectEndpoint    goa.Endpoint
-	WithdrawSubjectEndpoint goa.Endpoint
+	ListEndpoint               goa.Endpoint
+	ListPlatformsEndpoint      goa.Endpoint
+	ListTokenEndpointsEndpoint goa.Endpoint
+	RegisterIssuerEndpoint     goa.Endpoint
+	UpdateIssuerEndpoint       goa.Endpoint
+	WithdrawIssuerEndpoint     goa.Endpoint
+	AdmitSubjectEndpoint       goa.Endpoint
+	UpdateSubjectEndpoint      goa.Endpoint
+	WithdrawSubjectEndpoint    goa.Endpoint
 }
 
 // NewClient initializes a "workloadIdentities" service client given the
 // endpoints.
-func NewClient(list, registerIssuer, withdrawIssuer, admitSubject, withdrawSubject goa.Endpoint) *Client {
+func NewClient(list, listPlatforms, listTokenEndpoints, registerIssuer, updateIssuer, withdrawIssuer, admitSubject, updateSubject, withdrawSubject goa.Endpoint) *Client {
 	return &Client{
-		ListEndpoint:            list,
-		RegisterIssuerEndpoint:  registerIssuer,
-		WithdrawIssuerEndpoint:  withdrawIssuer,
-		AdmitSubjectEndpoint:    admitSubject,
-		WithdrawSubjectEndpoint: withdrawSubject,
+		ListEndpoint:               list,
+		ListPlatformsEndpoint:      listPlatforms,
+		ListTokenEndpointsEndpoint: listTokenEndpoints,
+		RegisterIssuerEndpoint:     registerIssuer,
+		UpdateIssuerEndpoint:       updateIssuer,
+		WithdrawIssuerEndpoint:     withdrawIssuer,
+		AdmitSubjectEndpoint:       admitSubject,
+		UpdateSubjectEndpoint:      updateSubject,
+		WithdrawSubjectEndpoint:    withdrawSubject,
 	}
 }
 
@@ -56,6 +65,52 @@ func (c *Client) List(ctx context.Context, p *ListPayload) (res *WorkloadIdentit
 	return ires.(*WorkloadIdentityPolicy), nil
 }
 
+// ListPlatforms calls the "listPlatforms" endpoint of the "workloadIdentities"
+// service.
+// ListPlatforms may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListPlatforms(ctx context.Context, p *ListPlatformsPayload) (res *WorkloadPlatformCatalog, err error) {
+	var ires any
+	ires, err = c.ListPlatformsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*WorkloadPlatformCatalog), nil
+}
+
+// ListTokenEndpoints calls the "listTokenEndpoints" endpoint of the
+// "workloadIdentities" service.
+// ListTokenEndpoints may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListTokenEndpoints(ctx context.Context, p *ListTokenEndpointsPayload) (res *types.WorkloadTokenEndpoints, err error) {
+	var ires any
+	ires, err = c.ListTokenEndpointsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.WorkloadTokenEndpoints), nil
+}
+
 // RegisterIssuer calls the "registerIssuer" endpoint of the
 // "workloadIdentities" service.
 // RegisterIssuer may return the following errors:
@@ -73,6 +128,29 @@ func (c *Client) List(ctx context.Context, p *ListPayload) (res *WorkloadIdentit
 func (c *Client) RegisterIssuer(ctx context.Context, p *RegisterIssuerPayload) (res *WorkloadIdentityPolicy, err error) {
 	var ires any
 	ires, err = c.RegisterIssuerEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*WorkloadIdentityPolicy), nil
+}
+
+// UpdateIssuer calls the "updateIssuer" endpoint of the "workloadIdentities"
+// service.
+// UpdateIssuer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateIssuer(ctx context.Context, p *UpdateIssuerPayload) (res *WorkloadIdentityPolicy, err error) {
+	var ires any
+	ires, err = c.UpdateIssuerEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
@@ -119,6 +197,29 @@ func (c *Client) WithdrawIssuer(ctx context.Context, p *WithdrawIssuerPayload) (
 func (c *Client) AdmitSubject(ctx context.Context, p *AdmitSubjectPayload) (res *WorkloadIdentityPolicy, err error) {
 	var ires any
 	ires, err = c.AdmitSubjectEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*WorkloadIdentityPolicy), nil
+}
+
+// UpdateSubject calls the "updateSubject" endpoint of the "workloadIdentities"
+// service.
+// UpdateSubject may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateSubject(ctx context.Context, p *UpdateSubjectPayload) (res *WorkloadIdentityPolicy, err error) {
+	var ires any
+	ires, err = c.UpdateSubjectEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

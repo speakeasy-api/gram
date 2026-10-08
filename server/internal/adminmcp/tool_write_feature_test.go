@@ -43,7 +43,7 @@ func TestFeatureWriteApprovalAndExecution(t *testing.T) {
 
 	_, err = writer.prepare(ctx, PrepareFeatureInput{OrganizationID: f.orgA, Feature: "logs", Enabled: true})
 	require.Error(t, err, "retry keys are mandatory")
-	for _, unreviewed := range []string{"sso", "remote_session_auto_refresh", "skills", ""} {
+	for _, unreviewed := range []string{"custom_model_keys", "remote_session_auto_refresh_enforced", "session_portability", "platform_mcp", "skills", ""} {
 		_, err = writer.prepare(ctx, PrepareFeatureInput{OrganizationID: f.orgA, Feature: unreviewed, Enabled: true, RetryKey: "not-supported-" + unreviewed})
 		require.Error(t, err, "unreviewed feature %q stays disabled", unreviewed)
 	}
@@ -56,13 +56,23 @@ func TestFeatureWriteApprovalAndExecution(t *testing.T) {
 	approval.operations = map[WriteOperation]approvableOperation{OperationSetOrganizationFeature: writer} //nolint:exhaustive // Only selected write operations are enabled by this test.
 	handler := middleware.AdminOriginCheck(nil)(approval.Handler())
 
-	// Sequential, not subtests: both features share one organisation so each
-	// run can check that the other feature is left alone.
-	writable := []productfeatures.Feature{productfeatures.FeatureLogs, productfeatures.FeatureConsentToolFiltering}
-	for i, feature := range writable {
+	// Sequential, not subtests: features share one organisation so each
+	// run can check that the other features are left alone.
+	writable := []productfeatures.Feature{productfeatures.FeatureLogs, productfeatures.FeatureConsentToolFiltering, productfeatures.FeatureRemoteSessionAutoRefresh, productfeatures.FeatureSSO, productfeatures.FeatureSCIM}
+	// New organizations already enable role distribution by default. Start both
+	// exact targets from the same off state for this approval lifecycle test.
+	for _, orgID := range []string{f.orgA, f.orgB} {
+		for _, feature := range writable {
+			if !state(orgID, feature) {
+				continue
+			}
+			_, err := featurerepo.New(f.db).DeleteFeature(t.Context(), featurerepo.DeleteFeatureParams{OrganizationID: orgID, FeatureName: string(feature)})
+			require.NoError(t, err)
+		}
+	}
+	for _, feature := range writable {
 		func() {
 			t.Logf("feature %s", feature)
-			untouched := writable[1-i]
 			input := PrepareFeatureInput{OrganizationID: f.orgA, Feature: string(feature), Enabled: true, RetryKey: "feature-" + string(feature)}
 			prepared, err := writer.prepare(ctx, input)
 			require.NoError(t, err)
@@ -104,7 +114,11 @@ func TestFeatureWriteApprovalAndExecution(t *testing.T) {
 			require.JSONEq(t, `{"changed":true}`, string(result.Result))
 			require.True(t, state(f.orgA, feature))
 			require.False(t, state(f.orgB, feature), "execution cannot affect a second tenant")
-			require.False(t, state(f.orgA, untouched), "execution changes only the stored feature")
+			for _, untouched := range writable {
+				if untouched != feature {
+					require.False(t, state(f.orgA, untouched), "execution changes only the stored feature")
+				}
+			}
 			cached, err := features.IsFeatureEnabled(ctx, f.orgA, feature)
 			require.NoError(t, err)
 			require.True(t, cached)
@@ -166,18 +180,30 @@ func TestFeatureWriteStaleStateAndDisabledSwitch(t *testing.T) {
 }
 
 // A stored proposal naming a feature outside the allowlist can only come from
-// direct database access. Approval refuses it, and execution refuses it even
+// direct database access or a retired rollout. Approval refuses it, and execution refuses it even
 // when approval was bypassed.
 func TestFeatureWriteRejectsUnreviewedStoredFeature(t *testing.T) {
 	t.Parallel()
+	assertStoredFeatureRejected(t, "custom_model_keys")
+}
+
+func TestFeatureWriteRejectsRetiredStoredFeature(t *testing.T) {
+	t.Parallel()
+	assertStoredFeatureRejected(t, "automatic-role-distribution")
+}
+
+func assertStoredFeatureRejected(t *testing.T, feature string) {
+	t.Helper()
 	f := newProposalFixture(t, "admin_mcp_feature_unreviewed")
 	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
 	writer := &featureWriter{store: f.store, writes: writes}
 	tools := newWriteTools(f.store, writes, "", map[WriteOperation]operationWriter{OperationSetOrganizationFeature: writer}) //nolint:exhaustive // Only the implemented operation is dispatched.
 	ctx := writeContext(t, f)
+	before, err := featurerepo.New(f.db).IsFeatureEnabled(t.Context(), featurerepo.IsFeatureEnabledParams{OrganizationID: f.orgA, FeatureName: feature})
+	require.NoError(t, err)
 	unreviewed := func(key string) NewProposal {
 		p := featureProposal(f.orgA, key, true)
-		p.Arguments = json.RawMessage(`{"feature":"sso","enabled":true}`)
+		p.Arguments = json.RawMessage(`{"feature":"` + feature + `","enabled":true}`)
 		return p
 	}
 
@@ -193,7 +219,41 @@ func TestFeatureWriteRejectsUnreviewedStoredFeature(t *testing.T) {
 	_, err = tools.execute(ctx, ProposalIDInput{ProposalID: q.ID.String()})
 	require.ErrorIs(t, err, ErrProposalInvalidated)
 	require.Equal(t, 0, countWriteEvents(t, f.db, q.ID, "executed"))
-	enabled, err := featurerepo.New(f.db).IsFeatureEnabled(t.Context(), featurerepo.IsFeatureEnabledParams{OrganizationID: f.orgA, FeatureName: "sso"})
+	enabled, err := featurerepo.New(f.db).IsFeatureEnabled(t.Context(), featurerepo.IsFeatureEnabledParams{OrganizationID: f.orgA, FeatureName: feature})
 	require.NoError(t, err)
-	require.False(t, enabled)
+	require.Equal(t, before, enabled)
+}
+
+func TestFeatureWriteRequiresStaffWriteAuthority(t *testing.T) {
+	t.Parallel()
+	writer := &featureWriter{writes: WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}}} //nolint:exhaustive // Only feature writes are enabled.
+	for _, tc := range []struct {
+		name string
+		ctx  func(*testing.T) context.Context
+		want error
+	}{
+		{"unauthenticated", func(t *testing.T) context.Context { t.Helper(); return t.Context() }, ErrWriteIdentity},
+		{"read only staff", func(t *testing.T) context.Context { t.Helper(); return writePrincipalContext(t, []string{ScopeRead}) }, ErrWriteScope},
+		{"nonstaff principal", func(t *testing.T) context.Context {
+			t.Helper()
+			return context.WithValue(t.Context(), principalKey{}, Principal{Subject: "user:nonstaff", Scopes: []string{ScopeRead, ScopeWrite}})
+		}, ErrWriteIdentity},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := writer.prepare(tc.ctx(t), PrepareFeatureInput{OrganizationID: "org_role_rollout", Feature: string(productfeatures.FeatureSSO), Enabled: true, RetryKey: "denied"})
+			require.ErrorIs(t, err, tc.want)
+		})
+	}
+}
+
+func TestFeatureWriteRejectsRetiredRoleDistributionFlag(t *testing.T) {
+	t.Parallel()
+	writer := &featureWriter{writes: WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}}} //nolint:exhaustive // Only feature writes are enabled.
+	for _, enabled := range []bool{false, true} {
+		_, ok := writableFeature("automatic-role-distribution")
+		require.False(t, ok)
+		_, err := writer.prepare(writePrincipalContext(t, []string{ScopeRead, ScopeWrite}), PrepareFeatureInput{OrganizationID: "org_retired_flag", Feature: "automatic-role-distribution", Enabled: enabled, RetryKey: "retired"})
+		require.ErrorContains(t, err, "available for this write")
+	}
 }

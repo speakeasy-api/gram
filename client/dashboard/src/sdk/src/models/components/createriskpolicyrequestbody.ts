@@ -22,7 +22,7 @@ import {
 } from "./riskpolicymodelconfig.js";
 
 /**
- * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
+ * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.
  */
 export const CreateRiskPolicyRequestBodyAction = {
   Flag: "flag",
@@ -31,7 +31,7 @@ export const CreateRiskPolicyRequestBodyAction = {
   Quarantine: "quarantine",
 } as const;
 /**
- * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
+ * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.
  */
 export type CreateRiskPolicyRequestBodyAction = ClosedEnum<
   typeof CreateRiskPolicyRequestBodyAction
@@ -62,20 +62,20 @@ export const PolicyType = {
 export type PolicyType = ClosedEnum<typeof PolicyType>;
 
 /**
- * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
+ * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
  */
 export const ShadowMcpDisposition = {
   BlockAll: "block_all",
   AllowAll: "allow_all",
 } as const;
 /**
- * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
+ * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
  */
 export type ShadowMcpDisposition = ClosedEnum<typeof ShadowMcpDisposition>;
 
 export type CreateRiskPolicyRequestBody = {
   /**
-   * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
+   * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.
    */
   action?: CreateRiskPolicyRequestBodyAction | undefined;
   /**
@@ -149,7 +149,7 @@ export type CreateRiskPolicyRequestBody = {
    */
   shadowMcpBlockedUrls?: Array<string> | undefined;
   /**
-   * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
+   * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
    */
   shadowMcpDisposition?: ShadowMcpDisposition | undefined;
   /**

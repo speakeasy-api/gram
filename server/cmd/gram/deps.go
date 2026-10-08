@@ -58,6 +58,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -75,6 +76,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -381,7 +383,7 @@ func newAssetStorage(ctx context.Context, logger *slog.Logger, opts assetStorage
 	switch opts.assetsBackend {
 	case "fs":
 		assetsURI := filepath.Clean(opts.assetsURI)
-		if err := os.MkdirAll(assetsURI, 0750); err != nil && !errors.Is(err, fs.ErrExist) {
+		if err := os.MkdirAll(assetsURI, 0o750); err != nil && !errors.Is(err, fs.ErrExist) {
 			return nil, shutdown, fmt.Errorf("create assets directory: %w", err)
 		}
 
@@ -451,7 +453,7 @@ type temporalClientOptions struct {
 }
 
 func newTemporalClient(logger *slog.Logger, meterProvider metric.MeterProvider, opts temporalClientOptions) (*temporal.Environment, func(context.Context) error, error) {
-	var nilShutdownFunc = noopShutdown
+	nilShutdownFunc := noopShutdown
 	if opts.address == "" || opts.namespace == "" {
 		return nil, nilShutdownFunc, nil
 	}
@@ -505,6 +507,9 @@ func newTemporalClient(logger *slog.Logger, meterProvider metric.MeterProvider, 
 
 func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath string) *feature.InMemory {
 	inmem := &feature.InMemory{}
+	// Local dev has no Presidio HTTP analyzer, so realtime scans must take the
+	// Pub/Sub lanes to pystreams. A CSV row can still turn this off.
+	inmem.SetFlag(feature.FlagRiskEnforcementPubsub, feature.AnyDistinctID, true)
 
 	if csvPath == "" {
 		logger.DebugContext(ctx, "newLocalFeatureFlags: no csv path provided, using empty in-memory feature flag provider")
@@ -884,7 +889,6 @@ func newAdminOpenRouter(
 		db,
 		env,
 		provisioningKey,
-		nil,
 		productfeatures.NewClient(logger, tracerProvider, db, redisClient),
 		nil,
 		encryptionClient,
@@ -1015,7 +1019,7 @@ func newFunctionOrchestrator(
 			return nil, nilShutdown, fmt.Errorf("--functions-local-runner-root must be set in local environment")
 		}
 
-		if err := os.MkdirAll(codeRootDir, 0750); err != nil && !errors.Is(err, fs.ErrExist) {
+		if err := os.MkdirAll(codeRootDir, 0o750); err != nil && !errors.Is(err, fs.ErrExist) {
 			return nil, nilShutdown, fmt.Errorf("create local functions root directory: %w", err)
 		}
 
@@ -1146,8 +1150,10 @@ func newTriggersApp(
 	auditLogger *audit.Logger,
 	serverURL *url.URL,
 	siteURL *url.URL,
+	platformHosts map[string]string,
 	slackClient *slack_client.SlackClient,
 	cacheImpl cache.Cache,
+	identities *assistantidentity.Service,
 ) *bgtriggers.App {
 	envEntries := environments.NewEnvironmentEntries(logger, db, enc, nil)
 	return bgtriggers.NewApp(
@@ -1179,10 +1185,22 @@ func newTriggersApp(
 		auditLogger,
 		serverURL,
 		siteURL,
+		platformHosts,
 		slackClient,
 		cacheImpl,
+		identities,
 		bgtriggers.NewNoopDispatcher(logger),
 	)
+}
+
+// newAssistantIdentities binds assistant trigger workloads to the deployment's
+// Speakeasy signing issuer, the same origin mcpauthz.New takes.
+func newAssistantIdentities(c *cli.Context, auditLogger *audit.Logger) *assistantidentity.Service {
+	issuerURL := c.String("authz-issuer-url")
+	inv.Require("assistant identity issuer",
+		"authz-issuer-url is a Speakeasy issuer origin", mcpauthz.ValidateIssuerOrigin(issuerURL, c.String("environment") == "local"),
+	)
+	return assistantidentity.New(issuerURL, auditLogger)
 }
 
 func newAuditLogger() *audit.Logger {
@@ -1489,7 +1507,7 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 // cloud account authenticate through.
 //
 // Local development gets a stub. The real resolver screens every customer
-// supplied service account against Gram's own project, which requires Gram to be
+// supplied service account against Speakeasy's own project, which requires Speakeasy to be
 // running as a user managed service account. A developer machine authenticates
 // with a personal Google login instead, so the screening cannot be evaluated and
 // every credential and key write fails closed. Stubbing the resolver is what
@@ -1518,7 +1536,7 @@ const defaultLocalSigningAlgorithm = jose.RS256
 //
 // The algorithm it signs with is configurable, and deliberately independent of
 // what any key records. Reporting back whatever the caller expected would make
-// the stand-in agree with Gram by construction, and agreeing by construction is
+// the stand-in agree with Speakeasy by construction, and agreeing by construction is
 // precisely what the verify probe exists to disprove: comparing the key's real
 // algorithm against the recorded one is the check that catches a key pointed at
 // the wrong row. Keeping the two independent is what leaves the mismatch outcome

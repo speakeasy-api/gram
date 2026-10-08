@@ -26,6 +26,7 @@ var (
 	AssetV1                                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.asset_event_v1", "Emitted when changes to assets are made")
 	AwsIamCredentialV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.aws_iam_credential_event_v1", "Emitted when changes to AWS IAM external credentials are made")
 	AwsKmsKeyV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.aws_kms_key_event_v1", "Emitted when changes to AWS KMS external keys are made")
+	AssistantIdentityV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_identity_event_v1", "Emitted when workload identity is configured for an assistant")
 	AssistantToolCallV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_tool_call_event_v1", "Emitted when an assistant executes a tool call")
 	AssistantWakeV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_wake_event_v1", "Emitted when an assistant wake is scheduled or canceled")
 	BillingMetadataV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.billing_metadata_event_v1", "Emitted when changes to billing metadata are made")
@@ -53,9 +54,11 @@ var (
 	MetaMcpServerV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.meta_mcp_server_event_v1", "Emitted when changes to meta MCP servers or their memberships are made")
 	ModelProviderKeyV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.model_provider_key_event_v1", "Emitted when changes to customer model provider keys are made")
 	NetworkIngressV1                       = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.network_ingress_event_v1", "Emitted when changes to private network ingress desired state are made")
-	OktaResourceConnectionV1               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.okta_resource_connection_event_v1", "Emitted when an organization confirms or resets a Cross App Access resource connection")
+	OktaResourceConnectionV1               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.okta_resource_connection_event_v1", "Emitted when an organization confirms or resets a Cross App Access resource connection, or an exchange changes its observed result")
+	OktaServerSuggestionV1                 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.okta_server_suggestion_event_v1", "Emitted when an organization dismisses or restores an MCP server suggestion derived from its Okta applications")
 	OpenRouterAPIKeyV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.openrouter_api_key_event_v1", "Emitted when changes to the organization's platform OpenRouter key are made")
 	OrganizationHooksFailOpenV1            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_hooks_fail_open_event_v1", "Emitted when the organization's hooks fail-open setting is toggled")
+	OrganizationAccessV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_access_event_v1", "Emitted when staff enable or disable organization access, or change its demo-access whitelisting")
 	OrganizationBillingV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_billing_event_v1", "Emitted when the organization's billing state changes")
 	OrganizationDeviceAgentConfigurationV1 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_device_agent_configuration_event_v1", "Emitted when the organization's device-agent configuration is changed")
 	OrganizationEnterpriseTrialV1          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_enterprise_trial_event_v1", "Emitted when the organization's enterprise trial is armed, started, extended, given a new end date, demoted, re-armed, or converted")
@@ -71,7 +74,9 @@ var (
 	UnproxiedMcpServerV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.unproxied_mcp_server_event_v1", "Emitted when changes to unproxied MCP servers are made")
 	PluginV1                               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.plugin_event_v1", "Emitted when changes to plugins are made")
 	ProjectV1                              = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.project_event_v1", "Emitted when changes to projects are made")
-	QueryV1                                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.query_event_v1", "Emitted when changes to saved queries are made")
+	QueryV1                                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.query_event_v1", "Emitted when changes to saved queries are made") // Retired: saved queries were replaced by widgets; kept so the webhook contract keeps working.
+	WidgetV1                               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.widget_event_v1", "Emitted when changes to widgets are made")
+	DashboardV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.dashboard_event_v1", "Emitted when changes to dashboards are made")
 	RemoteMcpServerV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_mcp_server_event_v1", "Emitted when changes to remote MCP servers are made")
 	RemoteMcpServerHeaderV1                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_mcp_server_header_event_v1", "Emitted when changes to remote MCP server headers are made")
 	RemoteSessionClientV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_session_client_event_v1", "Emitted when changes to remote session clients are made")
@@ -79,7 +84,7 @@ var (
 	RemoteSessionIssuerV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_session_issuer_event_v1", "Emitted when changes to remote session issuers are made")
 	RiskPolicyV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.risk_policy_event_v1", "Emitted when changes to risk policies are made")
 	RiskExclusionV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.risk_exclusion_event_v1", "Emitted when changes to risk exclusions are made")
-	RiskResultV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.risk_result_event_v1", "Emitted when a risk result's match is unmasked")
+	RiskResultV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.risk_result_event_v1", "Emitted when a risk result's match is unmasked, its scanned payload is revealed, or it is dismissed or restored")
 	AccessRuleV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.access_rule_event_v1", "Emitted when changes to access rules are made")
 	AccessRequestV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.access_request_event_v1", "Emitted when changes to access requests are made")
 	ShadowMCPAccessRuleV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.shadow_mcp_access_rule_event_v1", "Deprecated: use audit_log.access_rule_event_v1.")
@@ -114,7 +119,7 @@ type AuditLogCreatedPayloadV1 struct {
 
 	// ActingSurface is how the change was made — a dashboard session, an API
 	// key, Platform MCP, a project assistant — drawn from a closed server-side
-	// set. Every record Gram writes carries one, and 'unknown' means no surface
+	// set. Every record Speakeasy writes carries one, and 'unknown' means no surface
 	// was identifiable rather than that the field was omitted.
 	//
 	// It is optional in the schema even so. This payload is published under 62

@@ -22,12 +22,12 @@ import { BusinessMemories } from "./businessmemories.js";
 import { Chat } from "./chat.js";
 import { ChatSessions } from "./chatsessions.js";
 import { CliAuth } from "./cliauth.js";
+import { Dashboards } from "./dashboards.js";
 import { DataExports } from "./dataexports.js";
 import { Deployments } from "./deployments.js";
 import { DeviceIntegrations } from "./deviceintegrations.js";
 import { Domains } from "./domains.js";
 import { Environments } from "./environments.js";
-import { Explore } from "./explore.js";
 import { External } from "./external.js";
 import { ExternalCredentials } from "./externalcredentials.js";
 import { ExternalKeys } from "./externalkeys.js";
@@ -52,6 +52,7 @@ import { MetaMcp } from "./metamcp.js";
 import { ModelKeys } from "./modelkeys.js";
 import { NetworkIngress } from "./networkingress.js";
 import { OktaResourceConnections } from "./oktaresourceconnections.js";
+import { OktaServerSuggestions } from "./oktaserversuggestions.js";
 import { OrganizationAssets } from "./organizationassets.js";
 import { OrganizationRemoteSessionClients } from "./organizationremotesessionclients.js";
 import { OrganizationRemoteSessionIssuers } from "./organizationremotesessionissuers.js";
@@ -90,6 +91,7 @@ import { UserSessionIssuers } from "./usersessionissuers.js";
 import { UserSessionIssuersCimdClients } from "./usersessionissuerscimdclients.js";
 import { UserSessions } from "./usersessions.js";
 import { Variations } from "./variations.js";
+import { Widgets } from "./widgets.js";
 import { WorkloadIdentities } from "./workloadidentities.js";
 
 export class Gram extends ClientSDK {
@@ -199,6 +201,11 @@ export class Gram extends ClientSDK {
     return (this._cliAuth ??= new CliAuth(this._options));
   }
 
+  private _dashboards?: Dashboards;
+  get dashboards(): Dashboards {
+    return (this._dashboards ??= new Dashboards(this._options));
+  }
+
   private _dataExports?: DataExports;
   get dataExports(): DataExports {
     return (this._dataExports ??= new DataExports(this._options));
@@ -222,11 +229,6 @@ export class Gram extends ClientSDK {
   private _environments?: Environments;
   get environments(): Environments {
     return (this._environments ??= new Environments(this._options));
-  }
-
-  private _explore?: Explore;
-  get explore(): Explore {
-    return (this._explore ??= new Explore(this._options));
   }
 
   private _external?: External;
@@ -345,6 +347,13 @@ export class Gram extends ClientSDK {
   private _oktaResourceConnections?: OktaResourceConnections;
   get oktaResourceConnections(): OktaResourceConnections {
     return (this._oktaResourceConnections ??= new OktaResourceConnections(
+      this._options,
+    ));
+  }
+
+  private _oktaServerSuggestions?: OktaServerSuggestions;
+  get oktaServerSuggestions(): OktaServerSuggestions {
+    return (this._oktaServerSuggestions ??= new OktaServerSuggestions(
       this._options,
     ));
   }
@@ -548,6 +557,11 @@ export class Gram extends ClientSDK {
   private _variations?: Variations;
   get variations(): Variations {
     return (this._variations ??= new Variations(this._options));
+  }
+
+  private _widgets?: Widgets;
+  get widgets(): Widgets {
+    return (this._widgets ??= new Widgets(this._options));
   }
 
   private _workloadIdentities?: WorkloadIdentities;

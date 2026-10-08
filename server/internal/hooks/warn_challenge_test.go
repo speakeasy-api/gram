@@ -168,7 +168,7 @@ func TestClaude_PreToolUse_Warn_FallsBackToBlockWhenNoLink(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	// Force warnDenyReason to return ok=false: no site URL means no ack link.
-	ti.service.siteURL = nil
+	ti.service.orgHosts = nil
 	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
 		Action:       "warn",
 		PolicyID:     uuid.NewString(),
@@ -378,7 +378,7 @@ func TestIngest_CanonicalAcknowledgedPermissionWarn_StillRunsShadowMCPGuard(t *t
 			CallFingerprint: "canonical-perm-warn-shadow",
 		},
 		// A shadow-MCP blocking policy is enabled; with no bypass grant and a
-		// non-Gram-hosted server the guard must deny.
+		// non-Speakeasy-hosted server the guard must deny.
 		shadowPolicy: &risk.ShadowMCPPolicy{ID: uuid.NewString(), Name: "shadow guard"},
 	}
 
@@ -409,7 +409,7 @@ func TestIngest_CanonicalWarnFallsBackToBlockWithoutAckLink(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
-	ti.service.siteURL = nil
+	ti.service.orgHosts = nil
 	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
 		Action:          "warn",
 		PolicyID:        uuid.NewString(),

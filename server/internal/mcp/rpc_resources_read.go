@@ -208,19 +208,21 @@ func handleResourcesRead(
 	if payload.mcpServerID != nil {
 		serverID = payload.mcpServerID.String()
 	}
-	decision := scan.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
-		Surface:        mcpriskscan.SurfaceHostedMCP,
-		Method:         mcpriskscan.MethodResourcesRead,
-		OrganizationID: descriptor.OrganizationID,
-		ProjectID:      descriptor.ProjectID,
-		ServerID:       serverID,
-		MetaServerID:   payload.metaMcpServerID,
-		ToolsetID:      toolset.ID,
-		ToolName:       "",
-		ResourceURI:    descriptor.URI,
-		PromptName:     "",
-		ChatID:         payload.chatID,
-	}, mcpriskscan.BorrowPayload(nil)))
+	requestSubject := mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
+		Surface:         mcpriskscan.SurfaceHostedMCP,
+		Method:          mcpriskscan.MethodResourcesRead,
+		OrganizationID:  descriptor.OrganizationID,
+		ProjectID:       descriptor.ProjectID,
+		ServerID:        serverID,
+		MetaServerID:    payload.metaMcpServerID,
+		ToolsetID:       toolset.ID,
+		ToolName:        "",
+		ResourceURI:     descriptor.URI,
+		PromptName:      "",
+		ChatID:          payload.chatID,
+		ToolAnnotations: nil,
+	}, mcpriskscan.BorrowPayload(nil))
+	decision := scan.Scan(ctx, requestSubject)
 	if decision.Denied() {
 		return nil, oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
 	}
@@ -260,6 +262,15 @@ func handleResourcesRead(
 	}
 
 	if isMCPPassthrough(resourceDef.Meta) {
+		responsePayload, parseErr := mcpriskscan.ParseResourceResultPayload(rw.body.Bytes())
+		if parseErr != nil {
+			responsePayload = mcpriskscan.Payload{}
+		}
+		decision = scan.Scan(ctx, mcpriskscan.NewResponse(requestSubject, responsePayload))
+		if decision.Denied() {
+			discardWithheldBody(rw.body)
+			return nil, oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+		}
 		// For MCP passthrough tools, return the raw result we get from the underlying mcp server
 		bs, err := json.Marshal(result[json.RawMessage]{
 			ID:             req.ID,
@@ -294,6 +305,15 @@ func handleResourcesRead(
 		content.Blob = base64.StdEncoding.EncodeToString(rw.body.Bytes())
 	} else {
 		content.Text = rw.body.String()
+	}
+	responsePayload := mcpriskscan.TextResponsePayload(nil)
+	if !isBinary {
+		responsePayload = mcpriskscan.TextResponsePayload(rw.body.Bytes())
+	}
+	decision = scan.Scan(ctx, mcpriskscan.NewResponse(requestSubject, responsePayload))
+	if decision.Denied() {
+		discardWithheldBody(rw.body)
+		return nil, oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
 	}
 
 	bs, err := json.Marshal(result[resourceReadResult]{

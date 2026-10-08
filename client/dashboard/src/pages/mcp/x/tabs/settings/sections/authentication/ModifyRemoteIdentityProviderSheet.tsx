@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useRBAC } from "@/hooks/useRBAC";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
@@ -19,11 +20,15 @@ import {
   type UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat as AuthAudienceFormat,
 } from "@gram/client/models/components/updateremotesessionclientform.js";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { invalidateAllGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import {
   invalidateAllMcpServers,
   useMcpServers,
 } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
+import { invalidateAllOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
+import { invalidateAllRemoteSessionIssuer } from "@gram/client/react-query/remoteSessionIssuer.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -31,6 +36,10 @@ import { Stack } from "@/components/ui/Stack";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import {
+  IssuerScopeOverrideAlert,
+  LegacyCallbackAlert,
+} from "@/pages/remote-identity-providers/clientAlerts";
 import {
   ClientAssertionAudienceField,
   ClientCredentialsFields,
@@ -140,6 +149,40 @@ function ModifyRemoteIdentityProviderSheetBody({
 }) {
   const client = useSdkClient();
   const queryClient = useQueryClient();
+
+  // Migrating saves on its own, independent of the form below, the way the
+  // client detail page does it. The project update endpoint requires
+  // project:write, so the button hides without it.
+  const { hasAnyScope } = useRBAC();
+  const migrate = useMutation({
+    mutationFn: async (clientId: string) => {
+      await client.remoteSessionClients.update({
+        updateRemoteSessionClientForm: {
+          id: clientId,
+          legacyCallbackUrl: false,
+        },
+      });
+    },
+    onSuccess: async () => {
+      // The client detail page reads the organization-scoped queries, so
+      // refresh those as well as this project's list.
+      await Promise.all([
+        invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
+        invalidateAllOrganizationRemoteSessionClient(queryClient, {
+          refetchType: "all",
+        }),
+        invalidateAllOrganizationRemoteSessionClients(queryClient, {
+          refetchType: "all",
+        }),
+      ]);
+      toast.success("Client migrated to the new callback URL");
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to migrate client",
+      );
+    },
+  });
 
   // Issuer URL + endpoints + discovery state come from the shared hook. The
   // loaded record seeds the snapshot so the Discover/Reset slot and the
@@ -262,7 +305,7 @@ function ModifyRemoteIdentityProviderSheetBody({
       // NULL"; an omitted field keeps the existing value. Send the trimmed
       // input directly (including "") so blanking out a field in the UI
       // actually clears the saved record — especially registration_endpoint,
-      // which is the signal Gram uses for "DCR is supported on this issuer".
+      // which is the signal Speakeasy uses for "DCR is supported on this issuer".
       await client.remoteSessionIssuers.update({
         updateRemoteSessionIssuerForm: {
           id: issuer.id,
@@ -343,11 +386,14 @@ function ModifyRemoteIdentityProviderSheetBody({
     onSuccess: async () => {
       await Promise.all([
         invalidateAllRemoteSessionIssuers(queryClient, { refetchType: "all" }),
+        invalidateAllRemoteSessionIssuer(queryClient, { refetchType: "all" }),
         invalidateAllRemoteSessionClients(queryClient, { refetchType: "all" }),
         // Also invalidate MCP server queries so the sidebar readiness bar
         // refreshes (AGE-3279).
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        // Issuer overrides feed the scopes a sign-in would request.
+        invalidateAllGetRemoteMcpServerScopes(queryClient),
       ]);
       toast.success("Identity provider updated");
       onClose();
@@ -499,6 +545,16 @@ function ModifyRemoteIdentityProviderSheetBody({
           onResetEndpoints={handleResetEndpoints}
         />
 
+        {primaryClient && (
+          <LegacyCallbackAlert
+            legacyCallbackUrl={primaryClient.legacyCallbackUrl}
+            callbackUrl={primaryClient.callbackUrl}
+            onMigrate={() => migrate.mutate(primaryClient.id)}
+            isMigrating={migrate.isPending}
+            canMigrate={hasAnyScope(["project:write"])}
+          />
+        )}
+
         {isLoadingClient ? (
           <Text muted small>
             Loading client credentials…
@@ -510,6 +566,9 @@ function ModifyRemoteIdentityProviderSheetBody({
             tokenEndpointAuthMethod={tokenEndpointAuthMethod}
             allowPrivateKeyJwt={primaryClient?.jsonWebKeySetId != null}
             clientIdEditable={false}
+            callbackURL={
+              primaryClient ? (primaryClient.callbackUrl ?? null) : undefined
+            }
             clientSecretLabel="Client Secret (leave blank to keep existing)"
             clientSecretPlaceholder="Type a new secret to rotate"
             onClientIdChange={() => undefined}
@@ -535,6 +594,7 @@ function ModifyRemoteIdentityProviderSheetBody({
           audienceOverride={audienceOverride}
           onScopeOverrideChange={setScopeOverride}
           onAudienceOverrideChange={setAudienceOverride}
+          scopeWarning={<IssuerScopeOverrideAlert issuer={issuer} />}
         />
 
         {submitError && (

@@ -84,17 +84,23 @@ type userSessionRefreshReplay struct {
 }
 
 type userSessionRefreshReplayPayload struct {
-	AccessExpiresAt        time.Time           `json:"access_expires_at"`
-	AudienceURN            string              `json:"audience_urn"`
-	AuthorizationExpiresAt time.Time           `json:"authorization_expires_at"`
-	ClientID               uuid.UUID           `json:"client_id"`
-	EndpointIssuer         string              `json:"endpoint_issuer"`
-	ErrorDescription       string              `json:"error_description"`
-	FailureReason          string              `json:"failure_reason"`
-	JTI                    string              `json:"jti"`
-	ReplayKey              string              `json:"replay_key"`
-	Response               tokenResponse       `json:"response"`
-	Subject                *urn.SessionSubject `json:"subject,omitempty"`
+	AccessExpiresAt time.Time `json:"access_expires_at"`
+	// AudienceURN is the audience the access token was minted for: the
+	// endpoint's issuer audience, or for a resource-bound session its resource.
+	AudienceURN            string    `json:"audience_urn"`
+	AuthorizationExpiresAt time.Time `json:"authorization_expires_at"`
+	ClientID               uuid.UUID `json:"client_id"`
+	EndpointIssuer         string    `json:"endpoint_issuer"`
+	ErrorDescription       string    `json:"error_description"`
+	FailureReason          string    `json:"failure_reason"`
+	JTI                    string    `json:"jti"`
+	ReplayKey              string    `json:"replay_key"`
+	// Resource is the RFC 8707 resource a resource-bound session is bound to,
+	// empty for an issuer-scoped one. A replay is served only where the
+	// session's own resource is.
+	Resource string              `json:"resource,omitempty"`
+	Response tokenResponse       `json:"response"`
+	Subject  *urn.SessionSubject `json:"subject,omitempty"`
 }
 
 type mintSessionParams struct {
@@ -112,8 +118,10 @@ type mintSessionParams struct {
 }
 
 type mintedSession struct {
-	ID                     uuid.UUID
-	AccessExpiresAt        time.Time
+	ID              uuid.UUID
+	AccessExpiresAt time.Time
+	// Audience is the audience the access token was minted for.
+	Audience               string
 	AuthorizationExpiresAt time.Time
 	Body                   []byte
 	EndpointIssuer         string
@@ -127,6 +135,12 @@ type sessionIssuancePolicy string
 const (
 	sessionIssuancePolicyIssuerScoped   sessionIssuancePolicy = "issuer_scoped"
 	sessionIssuancePolicyResourceScoped sessionIssuancePolicy = "resource_scoped"
+	// sessionIssuancePolicyResourceBound is a shared authorization server's
+	// authorization-code session: refreshable like an issuer-scoped one, but
+	// bound to the one MCP server its resource names, through both the access
+	// token's audience and the session row, so a refresh mints for that server
+	// again.
+	sessionIssuancePolicyResourceBound sessionIssuancePolicy = "resource_bound"
 	// sessionIssuancePolicyWorkload is a resource-scoped session for a
 	// workload: no client, no refresh token, and an agent-shaped delegated
 	// policy with no authorizer.
@@ -134,6 +148,11 @@ const (
 )
 
 const idJAGRefreshTokenHashPrefix = "id-jag:"
+
+// tokenFormMaxBytes caps a token request's form body. Token requests carry a
+// handful of fields, the largest an assertion of a few KiB; 16 KiB leaves room
+// without letting one request hold a large buffer.
+const tokenFormMaxBytes = 16 << 10 // 16 KiB
 
 type mintUserSessionAccessTokenParams struct {
 	AccessExpiresAt time.Time
@@ -269,7 +288,7 @@ func (s *Service) tokenGrantFor(r *http.Request, grantType string, creds present
 func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	ctx := r.Context()
 
-	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+	r.Body = http.MaxBytesReader(w, r.Body, tokenFormMaxBytes)
 	if err := r.ParseForm(); err != nil {
 		return writeTokenError(ctx, w, s.logger, http.StatusBadRequest, "invalid_request", "failed to parse form")
 	}
@@ -305,7 +324,7 @@ func (s *Service) serveTokenGrant(
 	// the contract stay aligned across custom domains. Computed before client
 	// authentication because an assertion's aud is checked against URLs
 	// derived from it.
-	baseURL := s.BaseURLForRequest(r)
+	baseURL := s.resourceBaseURL(r, endpoint)
 
 	switch {
 	case grant.clientAuth == tokenClientAuthRequired && grant.authenticated != nil:
@@ -383,7 +402,7 @@ func (s *Service) authenticateTokenClient(
 	// consultation, so it costs one in-memory comparison.
 	//
 	// `presets` deliberately does NOT enforce here. Preset membership is
-	// implicit and Gram-mutable — removing a catalog entry de-admits it on
+	// implicit and Speakeasy-mutable — removing a catalog entry de-admits it on
 	// every presets-mode issuer at deploy — so enforcing at /token would let
 	// a one-line catalog edit terminate live sessions fleet-wide, surfacing
 	// as a mid-session failure no client recovers from. Admission for
@@ -410,7 +429,11 @@ func (s *Service) authenticateTokenClient(
 	// Authentication is decided by the method the row persisted, not by
 	// whether the row is CIMD-resolved or carries a secret, so one rule
 	// serves every registration source. Shared with the revocation endpoint.
-	if reason := s.authenticateOAuthClient(ctx, logger, endpoint, clientAssertionAtToken, clientRow, creds, baseURL); reason != "" {
+	urls, err := s.requestAuthorizationServerURLs(ctx, endpoint, baseURL)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build authorization server URLs").LogError(ctx, logger)
+	}
+	if reason := s.authenticateOAuthClient(ctx, logger, endpoint.UserSessionIssuerID, urls, clientAssertionAtToken, clientRow, creds); reason != "" {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, reason)
 		return nil, writeTokenError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", clientAuthFailureDescription)
 	}
@@ -418,7 +441,7 @@ func (s *Service) authenticateTokenClient(
 
 	// Shadow AI blocking DOES enforce here, unlike `presets` admission above,
 	// and for the opposite reason: it is a decision an administrator of this
-	// organization made about this tool, not implicit membership Gram can
+	// organization made about this tool, not implicit membership Speakeasy can
 	// change under them. An admin who blocks a tool expects its outstanding
 	// refresh tokens to stop working rather than to keep it connected until
 	// they happen to expire.
@@ -475,10 +498,14 @@ func (s *Service) handleTokenJWTBearerGrant(
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "resource_mismatch")
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
+	assertionAudience := canonicalResource
+	if shared := endpoint.servingSharedAuthorizationServer(); shared != nil {
+		assertionAudience = shared.issuer
+	}
 	result, err := s.idJAGValidator.Validate(ctx, req.Assertion, idjag.Request{
 		OrganizationID:      endpoint.OrganizationID,
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
-		Audience:            canonicalResource,
+		Audience:            assertionAudience,
 		Resource:            canonicalResource,
 		ClientID:            clientRow.ClientID,
 	})
@@ -588,6 +615,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	}
 	if err := oauthwire.ValidateResourceIndicators(req.Resources, canonicalResource); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "resource_mismatch")
+		s.recordSharedTokenResourceMismatch(ctx, logger, endpoint, req.Resources)
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
@@ -777,6 +805,12 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		toolSelection = encoded
 	}
 
+	policy, audience, err := s.authorizationCodeIssuancePolicy(endpoint)
+	if err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
+		return oops.E(oops.CodeUnexpected, err, "select session issuance policy").LogError(ctx, logger)
+	}
+
 	// Consume only after retryable preflight work. Exactly one exchange wins,
 	// and the consumed value must be the immutable grant we just validated.
 	if err := consumeGrant(); err != nil {
@@ -784,7 +818,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	}
 
 	minted, err := s.mintSession(ctx, endpoint, clientRow, admissionQueries, mintSessionParams{
-		Audience:               "",
+		Audience:               audience,
 		AuthorizationExpiresAt: nil,
 		AuthorizerUserID:       authorizerUserID,
 		BaseURL:                baseURL,
@@ -792,7 +826,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		DelegatedGrantsVersion: delegatedGrantsVersion,
 		DesiredSessionDuration: desiredSessionDuration,
 		Replayable:             false,
-		Policy:                 sessionIssuancePolicyIssuerScoped,
+		Policy:                 policy,
 		Subject:                subject,
 		ToolSelection:          toolSelection,
 	}, logger)
@@ -864,11 +898,12 @@ func (s *Service) handleTokenRefreshTokenGrant(
 	}
 	if err := oauthwire.ValidateResourceIndicators(req.Resources, canonicalResource); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "resource_mismatch")
+		s.recordSharedTokenResourceMismatch(ctx, logger, endpoint, req.Resources)
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
 	refreshTokenHash := sha256Hex(req.RefreshToken)
-	replayKey := "userSessionRefreshReplay:" + endpoint.UserSessionIssuerID.String() + ":" + refreshTokenHash
+	replayKey := refreshTokenReplayKey(endpoint.UserSessionIssuerID, refreshTokenHash)
 	lockKey := "lock:" + replayKey
 	lockOwner, err := generateOpaqueToken()
 	if err != nil {
@@ -1094,6 +1129,21 @@ func (s *Service) rotateRefreshToken(
 		return true, oops.E(oops.CodeUnexpected, err, "revoke old refresh token").LogError(ctx, logger)
 	}
 
+	// A session is refreshed only by the authorization server that minted it:
+	// a shared one's session at the resource it is bound to, a per-endpoint
+	// one's (with no resource) on a per-endpoint route. A per-endpoint route
+	// would otherwise mint an issuer-scoped token, usable on every server of
+	// the issuer, from a token bound to one. Rolled back rather than burned, so
+	// a client that sent its refresh token to the wrong place keeps it.
+	sessionResource, err := s.sharedSessionResource(endpoint)
+	if err != nil {
+		return true, oops.E(oops.CodeUnexpected, err, "build session resource").LogError(ctx, logger)
+	}
+	if oldSession.Resource.String != sessionResource {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_resource_mismatch")
+		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "refresh_token was issued for a different resource")
+	}
+
 	// Client mismatches and expired grants are terminal. Commit their
 	// revocation so a leaked or dead token cannot be retried by another leader.
 	if !oldSession.UserSessionClientID.Valid || oldSession.UserSessionClientID.UUID != clientRow.ID {
@@ -1170,8 +1220,12 @@ func (s *Service) rotateRefreshToken(
 		ctx = admittedAgentContext
 	}
 
+	policy, audience, err := s.authorizationCodeIssuancePolicy(endpoint)
+	if err != nil {
+		return true, oops.E(oops.CodeUnexpected, err, "select session issuance policy").LogError(ctx, logger)
+	}
 	minted, err := s.mintSession(ctx, endpoint, clientRow, txRepo, mintSessionParams{
-		Audience:               "",
+		Audience:               audience,
 		AuthorizationExpiresAt: &authorizationExpiresAt,
 		AuthorizerUserID:       oldSession.AuthorizerUserID,
 		BaseURL:                baseURL,
@@ -1179,7 +1233,7 @@ func (s *Service) rotateRefreshToken(
 		DelegatedGrantsVersion: oldSession.DelegatedGrantsVersion,
 		DesiredSessionDuration: nil,
 		Replayable:             true,
-		Policy:                 sessionIssuancePolicyIssuerScoped,
+		Policy:                 policy,
 		Subject:                oldSession.SubjectUrn,
 		ToolSelection:          oldSession.ToolSelection,
 	}, logger)
@@ -1198,7 +1252,7 @@ func (s *Service) rotateRefreshToken(
 	published := true
 	if cacheErr := s.storeRefreshTokenReplay(postCommitCtx, replayKey, userSessionRefreshReplayPayload{
 		AccessExpiresAt:        minted.AccessExpiresAt,
-		AudienceURN:            endpoint.AudienceURN,
+		AudienceURN:            minted.Audience,
 		AuthorizationExpiresAt: minted.AuthorizationExpiresAt,
 		ClientID:               clientRow.ID,
 		EndpointIssuer:         minted.EndpointIssuer,
@@ -1206,6 +1260,7 @@ func (s *Service) rotateRefreshToken(
 		FailureReason:          "",
 		JTI:                    minted.JTI,
 		ReplayKey:              "",
+		Resource:               sessionResource,
 		Response:               minted.Response,
 		Subject:                &minted.Subject,
 	}); cacheErr != nil {
@@ -1291,6 +1346,17 @@ func (s *Service) writeRefreshTokenReplay(
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_client_mismatch")
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token was issued to a different client")
 	}
+	// Re-signing below moves an issuer-scoped session between surfaces of the
+	// same issuer. A resource-bound session must not move at all, so a replay
+	// is served only for the resource the rotation was for.
+	sessionResource, err := s.sharedSessionResource(endpoint)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build session resource").LogError(ctx, logger)
+	}
+	if payload.Resource != sessionResource {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_resource_mismatch")
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "refresh_token was issued for a different resource")
+	}
 	if now := time.Now(); !payload.AccessExpiresAt.After(now) || !payload.AuthorizationExpiresAt.After(now) {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_expired")
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token has expired")
@@ -1342,10 +1408,14 @@ func (s *Service) writeRefreshTokenReplay(
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay failed", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_resign_error")
 		return oops.E(oops.CodeUnexpected, err, "build replay endpoint issuer URL").LogError(ctx, logger)
 	}
-	if payload.EndpointIssuer != endpointIssuer || payload.AudienceURN != endpoint.AudienceURN {
+	audience := endpoint.AudienceURN
+	if sessionResource != "" {
+		audience = sessionResource
+	}
+	if payload.EndpointIssuer != endpointIssuer || payload.AudienceURN != audience {
 		accessToken, _, mintErr := s.mintUserSessionAccessToken(mintUserSessionAccessTokenParams{
 			AccessExpiresAt: payload.AccessExpiresAt,
-			AudienceURN:     endpoint.AudienceURN,
+			AudienceURN:     audience,
 			ClientID:        clientRow.ClientID,
 			Issuer:          endpointIssuer,
 			JTI:             payload.JTI,
@@ -1374,6 +1444,29 @@ func (s *Service) writeRefreshTokenReplay(
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay served", clientRow.ClientID, presentedAuthMethod, "refresh_token", "")
 	s.metrics.RecordOAuthRefreshTokenReplayServed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug)
 	return nil
+}
+
+// refreshTokenReplayKey is the replay cache key of the refresh token whose
+// hash is refreshTokenHash, scoped to the issuer.
+func refreshTokenReplayKey(issuerID uuid.UUID, refreshTokenHash string) string {
+	return "userSessionRefreshReplay:" + issuerID.String() + ":" + refreshTokenHash
+}
+
+// decodeRefreshTokenReplay decrypts a refresh replay entry and checks it was
+// stored under replayKey, for callers that only read it.
+func (s *Service) decodeRefreshTokenReplay(replay userSessionRefreshReplay, replayKey string) (userSessionRefreshReplayPayload, error) {
+	var payload userSessionRefreshReplayPayload
+	plaintext, err := s.enc.Decrypt(replay.Ciphertext)
+	if err != nil {
+		return payload, fmt.Errorf("decrypt refresh token replay response: %w", err)
+	}
+	if err := json.Unmarshal([]byte(plaintext), &payload); err != nil {
+		return payload, fmt.Errorf("unmarshal refresh token replay response: %w", err)
+	}
+	if subtle.ConstantTimeCompare([]byte(payload.ReplayKey), []byte(replayKey)) != 1 {
+		return payload, errors.New("refresh token replay response key mismatch")
+	}
+	return payload, nil
 }
 
 func (s *Service) storeRefreshTokenReplay(
@@ -1417,6 +1510,7 @@ func (s *Service) storeRefreshTokenReplayFailure(
 		FailureReason:          failureReason,
 		JTI:                    "",
 		ReplayKey:              replayKey,
+		Resource:               "",
 		Response: tokenResponse{
 			AccessToken:            "",
 			TokenType:              "",
@@ -1478,7 +1572,7 @@ const accessTokenLifetime = 1 * time.Hour
 // Lifetimes:
 //   - authorization: the subject's consent choice, capped by the issuer's
 //     session_duration, and fixed for the lifetime of the grant.
-//   - refresh token: the remaining authorization lifetime. Gram does not
+//   - refresh token: the remaining authorization lifetime. Speakeasy does not
 //     impose a separate refresh-token idle timeout.
 //   - access token: min(accessTokenLifetime, remaining authorization).
 //
@@ -1486,7 +1580,8 @@ const accessTokenLifetime = 1 * time.Hour
 // caller computes from custom-domain context so it matches what the AS
 // metadata document advertises). Issuer-scoped sessions retain the endpoint's
 // issuer audience and are refreshable. Resource-scoped sessions use the exact
-// MCP resource URL and are not refreshable.
+// MCP resource URL and are not refreshable. Resource-bound sessions use the
+// exact MCP resource URL, record it on the session, and are refreshable.
 // Params.DesiredSessionDuration is used only for an initial authorization: nil
 // means "no explicit choice", falling back to the issuer's session_duration.
 // Params.AuthorizationExpiresAt is used only for rotation and is carried from
@@ -1509,11 +1604,18 @@ func (s *Service) mintSession(
 	audience := endpoint.AudienceURN
 	refreshable := true
 	storesRefreshHash := true
+	resource := ""
 	switch params.Policy {
 	case sessionIssuancePolicyIssuerScoped:
 		if params.Audience != "" {
 			return nil, oops.E(oops.CodeUnexpected, nil, "issuer-scoped session must not override its audience").LogError(ctx, logger)
 		}
+	case sessionIssuancePolicyResourceBound:
+		if params.Audience == "" {
+			return nil, oops.E(oops.CodeUnexpected, nil, "resource-bound session requires its resource").LogError(ctx, logger)
+		}
+		audience = params.Audience
+		resource = params.Audience
 	case sessionIssuancePolicyResourceScoped:
 		if params.Audience == "" || params.AuthorizationExpiresAt != nil || params.DesiredSessionDuration != nil || params.Replayable || params.AuthorizerUserID.Valid || params.DelegatedGrants != nil || params.DelegatedGrantsVersion.Valid || params.ToolSelection != nil {
 			return nil, oops.E(oops.CodeUnexpected, nil, "invalid resource-scoped session issuance parameters").LogError(ctx, logger)
@@ -1657,6 +1759,7 @@ func (s *Service) mintSession(
 		ExpiresAt:              pgtype.Timestamptz{Time: accessExpiresAt, InfinityModifier: 0, Valid: true},
 		RefreshExpiresAt:       pgtype.Timestamptz{Time: *params.AuthorizationExpiresAt, InfinityModifier: 0, Valid: true},
 		ToolSelection:          params.ToolSelection,
+		Resource:               conv.ToPGTextEmpty(resource),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -1680,6 +1783,7 @@ func (s *Service) mintSession(
 	return &mintedSession{
 		ID:                     session.ID,
 		AccessExpiresAt:        accessExpiresAt,
+		Audience:               audience,
 		AuthorizationExpiresAt: *params.AuthorizationExpiresAt,
 		Body:                   body,
 		EndpointIssuer:         issuerURL,
@@ -1744,4 +1848,19 @@ func writeTokenError(ctx context.Context, w http.ResponseWriter, logger *slog.Lo
 func verifyPKCES256(verifier, challenge string) bool {
 	sum := sha256.Sum256([]byte(verifier))
 	return base64.RawURLEncoding.EncodeToString(sum[:]) == challenge
+}
+
+// authorizationCodeIssuancePolicy is the issuance policy of the sessions an
+// authorization code and its refreshes mint for the endpoint, with the audience
+// it requires. A shared authorization server binds them to the endpoint's
+// resource; a per-endpoint one keeps them issuer-scoped.
+func (s *Service) authorizationCodeIssuancePolicy(endpoint *ResolvedMcpEndpoint) (sessionIssuancePolicy, string, error) {
+	resource, err := s.sharedSessionResource(endpoint)
+	if err != nil {
+		return "", "", err
+	}
+	if resource == "" {
+		return sessionIssuancePolicyIssuerScoped, "", nil
+	}
+	return sessionIssuancePolicyResourceBound, resource, nil
 }

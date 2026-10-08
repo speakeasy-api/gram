@@ -1,3 +1,4 @@
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
@@ -18,6 +19,11 @@ const mocks = vi.hoisted(() => ({
   clients: vi.fn(),
   siblings: vi.fn(),
   issuers: vi.fn(),
+  issuersByIds: vi.fn(),
+  hostIssuers: vi.fn(),
+  tierSearch: vi.fn(),
+  tierHasMore: vi.fn(),
+  tierLoadMore: vi.fn(),
   source: vi.fn(),
   rbac: vi.fn(),
   hasScope: vi.fn(),
@@ -34,12 +40,17 @@ const mocks = vi.hoisted(() => ({
   detach: vi.fn(),
   userSessionIssuer: vi.fn(),
   toastSuccess: vi.fn(),
+  scopes: vi.fn(),
+  setPin: vi.fn(),
+  invalidateScopes: vi.fn(),
+  setScopesData: vi.fn(),
+  toastError: vi.fn(),
 }));
 
 vi.mock("sonner", () => ({
   toast: {
     success: mocks.toastSuccess,
-    error: vi.fn(),
+    error: mocks.toastError,
     warning: vi.fn(),
   },
 }));
@@ -105,7 +116,61 @@ vi.mock("@gram/client/react-query/getRemoteMcpServer.js", () => ({
 }));
 
 vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
-  useRemoteSessionIssuers: () => mocks.issuers(),
+  useRemoteSessionIssuers: (request?: { upstreamHost?: string }) => {
+    const listed = mocks.issuers();
+    const host = request?.upstreamHost;
+    if (!host) return listed;
+    const hostItems = mocks.hostIssuers(host);
+    if (hostItems === "error") return { data: undefined, isError: true };
+    if (hostItems) return { data: { result: { items: hostItems } } };
+    // Stands in for the server's upstream_host filter: the issuer's host is
+    // the given host or one of its parent domains.
+    const items = (
+      (listed.data?.result.items ?? []) as Array<{ issuer: string }>
+    ).filter((issuer) => {
+      const issuerHost = new URL(issuer.issuer).host;
+      return issuerHost === host || host.endsWith(`.${issuerHost}`);
+    });
+    return { data: { result: { items } }, isLoading: false };
+  },
+  // Stands in for the server's tier and search filters over the listing.
+  useRemoteSessionIssuersInfinite: (request: {
+    tier: "project" | "organization" | "platform";
+    search?: string;
+  }) => {
+    mocks.tierSearch(request.tier, request.search);
+    const items = (
+      (mocks.issuers().data?.result.items ?? []) as Array<{
+        projectId?: string;
+        organizationId?: string;
+        name?: string;
+        slug: string;
+        issuer: string;
+      }>
+    ).filter((issuer) => {
+      const tier = issuer.projectId
+        ? "project"
+        : issuer.organizationId
+          ? "organization"
+          : "platform";
+      const q = request.search?.toLowerCase();
+      return (
+        tier === request.tier &&
+        (!q ||
+          [issuer.name ?? "", issuer.slug, issuer.issuer].some((field) =>
+            field.toLowerCase().includes(q),
+          ))
+      );
+    });
+    return {
+      data: { pages: [{ result: { items } }] },
+      isLoading: false,
+      isError: false,
+      hasNextPage: !!mocks.tierHasMore(request.tier),
+      isFetchingNextPage: false,
+      fetchNextPage: () => mocks.tierLoadMore(request.tier),
+    };
+  },
   invalidateAllRemoteSessionIssuers: vi.fn(),
 }));
 
@@ -134,6 +199,10 @@ vi.mock("@/lib/remote-identity/queries/useAllRemoteSessionClients", () => ({
   useAllRemoteSessionClients: () => mocks.clients(),
 }));
 
+vi.mock("@/lib/remote-identity/queries/useRemoteSessionIssuersByIds", () => ({
+  useRemoteSessionIssuersByIds: (ids: string[]) => mocks.issuersByIds(ids),
+}));
+
 vi.mock("@/lib/remote-identity/queries/useUpstreamProbe", () => ({
   useUpstreamProbe: (...args: unknown[]) => mocks.authenticationProbe(...args),
 }));
@@ -141,6 +210,21 @@ vi.mock("@/lib/remote-identity/queries/useUpstreamProbe", () => ({
 vi.mock("@/lib/remote-identity/queries/useProtectedResourceMetadata", () => ({
   useProtectedResourceMetadata: (...args: unknown[]) =>
     mocks.protectedResourceMetadata(...args),
+}));
+
+vi.mock("@gram/client/react-query/getRemoteMcpServerScopes.js", () => ({
+  useGetRemoteMcpServerScopes: (...args: unknown[]) => mocks.scopes(...args),
+  setGetRemoteMcpServerScopesData: (...args: unknown[]) =>
+    mocks.setScopesData(...args),
+  invalidateAllGetRemoteMcpServerScopes: (...args: unknown[]) =>
+    mocks.invalidateScopes(...args),
+}));
+
+vi.mock("@gram/client/react-query/setRemoteMcpServerScopePin.js", () => ({
+  useSetRemoteMcpServerScopePinMutation: () => ({
+    mutateAsync: mocks.setPin,
+    isPending: false,
+  }),
 }));
 
 vi.mock("@gram/client/react-query/createRemoteMcpServerHeader.js", () => ({
@@ -170,19 +254,33 @@ vi.mock("@gram/client/react-query/deleteRemoteMcpServerHeader.js", () => ({
   }),
 }));
 
-function renderIdentity(): ReturnType<typeof render> {
+function renderIdentity(): ReturnType<typeof render> & {
+  rerenderIdentity: () => void;
+} {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  // A fresh element each time, or React would skip the re-render.
+  const tree = () => (
     <MemoryRouter>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <RemoteMcpIdentitySectionBody target={target} />
         </TooltipProvider>
       </QueryClientProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+  const result = render(tree());
+  return { ...result, rerenderIdentity: () => result.rerender(tree()) };
+}
+
+function addCustomHeader(name: string, value: string): void {
+  fireEvent.click(screen.getByText("Custom Headers"));
+  fireEvent.click(screen.getByRole("button", { name: "Add header" }));
+  const names = screen.getAllByLabelText("Header name");
+  fireEvent.change(names.at(-1)!, { target: { value: name } });
+  const values = screen.getAllByLabelText("Header value");
+  fireEvent.change(values.at(-1)!, { target: { value } });
 }
 
 function configuredHeader(overrides: Record<string, unknown> = {}) {
@@ -196,6 +294,104 @@ function configuredHeader(overrides: Record<string, unknown> = {}) {
     updatedAt: new Date(0),
     ...overrides,
   };
+}
+
+function serverScopes(overrides: Record<string, unknown> = {}) {
+  return {
+    resourceUrl: "https://mcp.linear.app/mcp",
+    pinnedScopes: ["read"],
+    advertisedScopesKnown: true,
+    advertisedScopes: ["read", "write"],
+    challengeScopes: [],
+    discoveryEnabled: true,
+    sharedServerCount: 0,
+    clients: [
+      {
+        clientId: "client-1",
+        scopeSource: "resource_pin",
+        requestedScopes: ["read"],
+        unadvertisedPinnedScopes: [],
+        pinWouldDecide: true,
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function sharedSource(): void {
+  mocks.siblings.mockReturnValue({
+    data: {
+      mcpServers: [
+        { id: "mcp-server-1", remoteMcpServerId: "remote-source-1" },
+        { id: "mcp-server-2", remoteMcpServerId: "remote-source-1" },
+      ],
+    },
+    isLoading: false,
+    isError: false,
+  });
+}
+
+function connectClient(): void {
+  mocks.clients.mockReturnValue({
+    items: [
+      {
+        id: "client-1",
+        clientId: "dashboard-client",
+        remoteSessionIssuerId: "provider-1",
+        userSessionIssuerIds: ["user-session-issuer-1"],
+        scope: [],
+      },
+    ],
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
+  mocks.issuers.mockReturnValue({
+    data: {
+      result: {
+        items: [
+          {
+            id: "provider-1",
+            name: "Example provider",
+            issuer: "https://id.example",
+            slug: "example",
+            projectId: "project-1",
+            authorizationEndpoint: "https://id.example/authorize",
+            tokenEndpoint: "https://id.example/token",
+            scopesSupported: ["profile"],
+          },
+        ],
+      },
+    },
+  });
+}
+
+function autoConfigurableProvider(): void {
+  mocks.issuers.mockReturnValue({
+    data: {
+      result: {
+        items: [
+          {
+            id: "provider-1",
+            name: "Linear",
+            issuer: "https://mcp.linear.app",
+            slug: "linear",
+            projectId: "project-1",
+            clientIdMetadataDocumentSupported: true,
+            authorizationEndpoint: "https://mcp.linear.app/authorize",
+            tokenEndpoint: "https://mcp.linear.app/token",
+          },
+        ],
+      },
+    },
+  });
+}
+
+// Save, then confirm if the change is destructive enough to ask.
+function confirmSave(): void {
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  const confirm = screen.queryByRole("button", { name: "Save changes" });
+  if (confirm) fireEvent.click(confirm);
 }
 
 const target: AuthTarget = {
@@ -249,6 +445,17 @@ beforeEach(() => {
     isError: false,
   });
   mocks.issuers.mockReturnValue({ data: { result: { items: [] } } });
+  // No host override: host lookups filter the listing above.
+  mocks.hostIssuers.mockImplementation(() => undefined);
+  mocks.tierHasMore.mockImplementation(() => false);
+  // By default a lookup by id finds whatever the listing holds.
+  mocks.issuersByIds.mockImplementation((ids: string[]) => ({
+    items: (
+      (mocks.issuers().data?.result.items ?? []) as Array<{ id: string }>
+    ).filter((issuer) => ids.includes(issuer.id)),
+    isLoading: false,
+    isError: false,
+  }));
   mocks.sessions.mockReturnValue({ data: { subjects: 1 } });
   mocks.protectedResourceMetadata.mockReturnValue({
     status: "idle",
@@ -275,6 +482,17 @@ beforeEach(() => {
   mocks.invalidateHeaders.mockResolvedValue(undefined);
   mocks.detach.mockResolvedValue({});
   mocks.authenticationProbe.mockReturnValue("available");
+  mocks.scopes.mockReturnValue({ data: undefined, isError: false });
+  mocks.setPin.mockImplementation(
+    async ({
+      request,
+    }: {
+      request: { setServerScopePinRequestBody: { scopes: string[] } };
+    }) =>
+      serverScopes({
+        pinnedScopes: request.setServerScopePinRequestBody.scopes,
+      }),
+  );
 });
 
 afterEach(() => {
@@ -295,7 +513,12 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(
       screen.getByRole("radio", { name: /Service Account/ }),
     ).toBeDefined();
-    expect(screen.getByRole("radio", { name: /No Identity/ })).toBeDefined();
+    expect(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /static headers/,
+      }),
+    ).toBeDefined();
   });
 
   it("configures User Identity inline without OAuth vocabulary", async () => {
@@ -432,7 +655,10 @@ describe("RemoteMcpIdentitySectionBody", () => {
     ).toBe(true);
     expect(
       screen
-        .getByRole("radio", { name: /Manual/ })
+        .getByRole("radio", {
+          name: "Manual",
+          description: /client ID and secret/,
+        })
         .getAttribute("aria-checked"),
     ).toBe("true");
   });
@@ -471,6 +697,54 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
   });
 
+  it("searches each provider tier on the server from the menu", async () => {
+    const catalog = Array.from({ length: 3 }, (_, index) => ({
+      id: `platform-${index}`,
+      name: `Catalog ${index}`,
+      issuer: `https://catalog-${index}.example.test`,
+      slug: `catalog-${index}`,
+    }));
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            ...catalog,
+            {
+              id: "provider-own",
+              name: "Own provider",
+              issuer: "https://own.example.test",
+              slug: "own",
+              projectId: "project-1",
+            },
+          ],
+        },
+      },
+    });
+    mocks.tierHasMore.mockImplementation((tier: string) => tier === "platform");
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByLabelText("Identity provider"));
+
+    // Every tier is its own query, so the catalog cannot crowd out the
+    // project's own provider, and a tier with more pages offers them.
+    expect(screen.getByText("Own provider")).toBeDefined();
+    expect(screen.getByText("Catalog 0")).toBeDefined();
+    fireEvent.click(screen.getByText("More platform providers"));
+    expect(mocks.tierLoadMore).toHaveBeenCalledWith("platform");
+
+    fireEvent.change(
+      screen.getByPlaceholderText("Search identity providers…"),
+      { target: { value: "own" } },
+    );
+    await waitFor(() =>
+      expect(mocks.tierSearch).toHaveBeenCalledWith("platform", "own"),
+    );
+    expect(mocks.tierSearch).toHaveBeenCalledWith("project", "own");
+    await waitFor(() => expect(screen.queryByText("Catalog 0")).toBeNull());
+    expect(screen.getByText("Own provider")).toBeDefined();
+  });
+
   it("holds the provider control while discovery is still running", () => {
     mocks.protectedResourceMetadata.mockReturnValue({
       status: "loading",
@@ -488,6 +762,101 @@ describe("RemoteMcpIdentitySectionBody", () => {
     ) as HTMLButtonElement;
     expect(trigger.textContent).toContain("Checking");
     expect(trigger.disabled).toBe(true);
+  });
+
+  it("suggests a same-site provider the issuer listing does not contain", async () => {
+    // The listing page is empty, standing in for a catalog large enough to
+    // push the matching provider off it; only the host lookup finds it.
+    mocks.hostIssuers.mockImplementation((host: string) =>
+      host === "mcp.linear.app"
+        ? [
+            {
+              id: "provider-linear",
+              name: "Linear",
+              issuer: "https://linear.app",
+              slug: "linear",
+              projectId: "project-1",
+              clientIdMetadataDocumentSupported: true,
+              authorizationEndpoint: "https://linear.app/authorize",
+              tokenEndpoint: "https://linear.app/token",
+            },
+          ]
+        : undefined,
+    );
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+    expect(screen.queryByText("Will be created")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    expect(mocks.commit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commitServerIdentityConfigurationForm: expect.objectContaining({
+          providerId: "provider-linear",
+        }),
+      }),
+    );
+  });
+
+  it("does not offer to create an advertised provider the project already has", () => {
+    mocks.protectedResourceMetadata.mockReturnValue({
+      status: "available",
+      metadata: { authorizationServers: ["https://auth.example.test"] },
+    });
+    mocks.hostIssuers.mockImplementation((host: string) =>
+      host === "auth.example.test"
+        ? [
+            {
+              id: "provider-known",
+              name: "Known provider",
+              issuer: "https://auth.example.test/oauth",
+              slug: "known",
+            },
+          ]
+        : undefined,
+    );
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+    expect(screen.queryByText("Will be created")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Identity provider"));
+    expect(screen.getByText("Known provider")).toBeDefined();
+  });
+
+  it("does not offer to create a provider when the known-provider lookup fails", () => {
+    mocks.protectedResourceMetadata.mockReturnValue({
+      status: "available",
+      metadata: { authorizationServers: ["https://auth.example.test"] },
+    });
+    mocks.hostIssuers.mockImplementation((host: string) =>
+      host === "auth.example.test" ? "error" : undefined,
+    );
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+    expect(screen.queryByText("Will be created")).toBeNull();
+    expect(
+      screen.getByText(/Couldn.t load this server.s identity providers/),
+    ).toBeDefined();
+  });
+
+  it("does not call the upstream unreachable when our own lookup failed", () => {
+    mocks.protectedResourceMetadata.mockReturnValue({
+      status: "unavailable",
+      metadata: null,
+    });
+    mocks.hostIssuers.mockImplementation(() => "error");
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+    expect(
+      screen.getByText(/Couldn.t load this server.s identity providers/),
+    ).toBeDefined();
+    expect(screen.queryByText(/Couldn.t reach the upstream/)).toBeNull();
   });
 
   it("offers the discovered provider as one that will be created", () => {
@@ -523,7 +892,10 @@ describe("RemoteMcpIdentitySectionBody", () => {
     await waitFor(() =>
       expect(
         screen
-          .getByRole("radio", { name: /Manual/ })
+          .getByRole("radio", {
+            name: "Manual",
+            description: /client ID and secret/,
+          })
           .getAttribute("aria-checked"),
       ).toBe("true"),
     );
@@ -590,6 +962,80 @@ describe("RemoteMcpIdentitySectionBody", () => {
     ).toBe(false);
   });
 
+  it("will not remove the credential when Agent to User cannot commit a client", async () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    addCustomHeader("X-Team", "eng");
+
+    // No provider is picked, so Save would delete the credential and then
+    // skip the client: the server would be left with no identity.
+    const save = screen.getByRole("button", { name: "Save" });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(save);
+    await Promise.resolve();
+    expect(mocks.remove).not.toHaveBeenCalled();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("commits the client before removing the credential on Agent to User", async () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+    autoConfigurableProvider();
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    confirmSave();
+
+    await waitFor(() => expect(mocks.remove).toHaveBeenCalledOnce());
+    expect(mocks.commit).toHaveBeenCalledOnce();
+    expect(mocks.remove).toHaveBeenCalledWith({ request: { id: "header-1" } });
+    expect(mocks.commit.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.remove.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("keeps the credential and skips headers when Agent to User fails to commit", async () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+    autoConfigurableProvider();
+    mocks.commit.mockRejectedValue(new Error("commit refused"));
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    addCustomHeader("X-Team", "eng");
+    confirmSave();
+
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalled());
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+    expect(mocks.remove).not.toHaveBeenCalled();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.setPin).not.toHaveBeenCalled();
+    expect(mocks.toastSuccess).not.toHaveBeenCalled();
+  });
+
   it("stays Linked when the provider already in force is re-picked", async () => {
     mocks.clients.mockReturnValue({
       items: [
@@ -642,6 +1088,41 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(mocks.commit).not.toHaveBeenCalled();
   });
 
+  it("shows the linked provider when the issuer listing does not contain it", () => {
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "client-1",
+          clientId: "dashboard-client",
+          remoteSessionIssuerId: "provider-far",
+          userSessionIssuerIds: ["user-session-issuer-1"],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    // The listing is empty, standing in for a linked issuer pushed past the
+    // first page by the platform catalog; only the lookup by id finds it.
+    mocks.issuersByIds.mockReturnValue({
+      items: [
+        {
+          id: "provider-far",
+          name: "Far provider",
+          issuer: "https://id.example",
+          slug: "far",
+        },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+
+    renderIdentity();
+
+    expect(mocks.issuersByIds).toHaveBeenCalledWith(["provider-far"]);
+    expect(screen.getByText("Far provider")).toBeDefined();
+  });
+
   it("holds a mode change as a draft until Save", async () => {
     mocks.clients.mockReturnValue({
       items: [
@@ -675,7 +1156,8 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     // The choice is not a one-way door, and picking a card writes nothing.
     const none = screen.getByRole("radio", {
-      name: /No Identity/,
+      name: "Manual",
+      description: /static headers/,
     }) as HTMLButtonElement;
     expect(none.disabled).toBe(false);
     fireEvent.click(none);
@@ -824,6 +1306,55 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
   });
 
+  it("holds Save while a replacement client is incomplete, even with header edits", async () => {
+    connectClient();
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("button", { name: "Clear connection" }));
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /client ID and secret/,
+      }),
+    );
+    addCustomHeader("X-Team", "eng");
+
+    const save = screen.getByRole("button", { name: "Save" });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      screen.getByText(
+        "Finish the User Identity change, or cancel it, to save.",
+      ),
+    ).toBeDefined();
+    fireEvent.click(save);
+    await Promise.resolve();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("saves header edits when a cleared client is put back unchanged", async () => {
+    connectClient();
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("button", { name: "Clear connection" }));
+    // The only existing client is the connected one, so nothing changed.
+    expect(
+      screen
+        .getByRole("radio", { name: /Existing client/ })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    addCustomHeader("X-Team", "eng");
+
+    expect(
+      screen.queryByText(
+        "Finish the User Identity change, or cancel it, to save.",
+      ),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce());
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
   it("restores the connected client on cancel", () => {
     mocks.clients.mockReturnValue({
       items: [
@@ -937,7 +1468,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
   });
 
-  it("sends the scopes typed for a manual client", async () => {
+  it("sends the scopes chosen and typed for a manual client", async () => {
     mocks.issuers.mockReturnValue({
       data: {
         result: {
@@ -951,22 +1482,55 @@ describe("RemoteMcpIdentitySectionBody", () => {
               clientIdMetadataDocumentSupported: true,
               authorizationEndpoint: "https://mcp.linear.app/authorize",
               tokenEndpoint: "https://mcp.linear.app/token",
+              scopesSupported: ["read", "admin"],
             },
           ],
         },
       },
     });
+    // The provider matches by host, so the provider probe stays off and only
+    // the scope probe, enabled in manual mode, reads the resource's scopes.
+    mocks.protectedResourceMetadata.mockImplementation(
+      (_id: unknown, enabled: unknown) =>
+        enabled
+          ? { status: "available", metadata: { scopesSupported: ["issues"] } }
+          : { status: "idle", metadata: null },
+    );
 
     renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
-    fireEvent.click(screen.getByRole("radio", { name: /Manual/ }));
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /client ID and secret/,
+      }),
+    );
     fireEvent.change(screen.getByLabelText("Client ID"), {
       target: { value: "manual-client" },
     });
     fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
-    fireEvent.change(screen.getByLabelText("Scope"), {
-      target: { value: "read  write read" },
-    });
+    fireEvent.click(screen.getByRole("combobox", { name: "Scope" }));
+
+    // The resource's scopes lead, followed by the provider's.
+    expect(
+      screen
+        .getAllByRole("option", { name: /not selected/ })
+        .map((option) => option.textContent),
+    ).toEqual(["issues", "read", "admin"]);
+
+    fireEvent.click(screen.getByRole("option", { name: /^read,/ }));
+    const search = screen.getByPlaceholderText("Search options...");
+    fireEvent.change(search, { target: { value: "write  read" } });
+    fireEvent.click(screen.getByRole("option", { name: /Create new option/ }));
+    // Scopes are case-sensitive: Read is not the advertised read.
+    fireEvent.change(search, { target: { value: "Read" } });
+    fireEvent.click(screen.getByRole("option", { name: /Create new option/ }));
+
+    // A typed scope joins the menu, so it can be found and removed there.
+    expect(
+      screen.getByRole("option", { name: /^write, selected/ }),
+    ).toBeDefined();
+
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
@@ -976,7 +1540,109 @@ describe("RemoteMcpIdentitySectionBody", () => {
           clientMode: "manual",
           clientConfiguration: expect.objectContaining({
             clientId: "manual-client",
-            scope: ["read", "write"],
+            scope: ["read", "write", "Read"],
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("requests the default scopes when a manual client chooses none", async () => {
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            {
+              id: "provider-1",
+              name: "Linear",
+              issuer: "https://mcp.linear.app",
+              slug: "linear",
+              projectId: "project-1",
+              authorizationEndpoint: "https://mcp.linear.app/authorize",
+              tokenEndpoint: "https://mcp.linear.app/token",
+              scopesSupported: ["read", "admin"],
+            },
+          ],
+        },
+      },
+    });
+    // Only the scope probe answers; the save-time probe stays unavailable,
+    // so the resource's scopes can only come from what the field loaded.
+    mocks.protectedResourceMetadata.mockImplementation(
+      (_id: unknown, enabled: unknown) =>
+        enabled
+          ? { status: "available", metadata: { scopesSupported: ["issues"] } }
+          : { status: "idle", metadata: null },
+    );
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /client ID and secret/,
+      }),
+    );
+    fireEvent.change(screen.getByLabelText("Client ID"), {
+      target: { value: "manual-client" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    expect(mocks.commit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commitServerIdentityConfigurationForm: expect.objectContaining({
+          clientMode: "manual",
+          clientConfiguration: expect.objectContaining({ scope: ["issues"] }),
+        }),
+      }),
+    );
+    // The new client changes what the pin view resolves.
+    await waitFor(() => expect(mocks.invalidateScopes).toHaveBeenCalled());
+  });
+
+  it("drops scopes chosen for a manual client when Auto-Configure is saved", async () => {
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            {
+              id: "provider-1",
+              name: "Linear",
+              issuer: "https://mcp.linear.app",
+              slug: "linear",
+              projectId: "project-1",
+              authorizationEndpoint: "https://mcp.linear.app/authorize",
+              tokenEndpoint: "https://mcp.linear.app/token",
+              registrationEndpoint: "https://mcp.linear.app/register",
+              scopesSupported: ["read", "write", "admin"],
+            },
+          ],
+        },
+      },
+    });
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /client ID and secret/,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
+    fireEvent.click(screen.getByRole("combobox", { name: "Scope" }));
+    fireEvent.click(screen.getByRole("option", { name: /^admin,/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Auto-Configure/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    expect(mocks.commit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commitServerIdentityConfigurationForm: expect.objectContaining({
+          clientMode: "auto",
+          clientConfiguration: expect.objectContaining({
+            scope: ["read", "write", "admin"],
           }),
         }),
       }),
@@ -1217,7 +1883,12 @@ describe("RemoteMcpIdentitySectionBody", () => {
       screen.getByText(/Could not determine the current identity/i),
     ).toBeDefined();
     expect(screen.getByText("Identity is unavailable.")).toBeDefined();
-    expect(screen.queryByRole("radio", { name: /No Identity/ })).toBeNull();
+    expect(
+      screen.queryByRole("radio", {
+        name: "Manual",
+        description: /static headers/,
+      }),
+    ).toBeNull();
   });
 
   it("says why identity is locked when the issuer fails to load", () => {
@@ -1290,7 +1961,12 @@ describe("RemoteMcpIdentitySectionBody", () => {
     });
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /No Identity/ }));
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /static headers/,
+      }),
+    );
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(mocks.remove).not.toHaveBeenCalled();
 
@@ -1328,7 +2004,12 @@ describe("RemoteMcpIdentitySectionBody", () => {
     });
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /No Identity/ }));
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /static headers/,
+      }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     const dialog = screen.getByRole("dialog");
@@ -1348,7 +2029,12 @@ describe("RemoteMcpIdentitySectionBody", () => {
     });
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /No Identity/ }));
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /static headers/,
+      }),
+    );
     fireEvent.click(screen.getByText("Custom Headers"));
     fireEvent.click(
       screen.getByRole("button", { name: "Remove header Authorization" }),
@@ -1377,7 +2063,12 @@ describe("RemoteMcpIdentitySectionBody", () => {
     mocks.remove.mockRejectedValue(new Error("delete refused"));
 
     renderIdentity();
-    fireEvent.click(screen.getByRole("radio", { name: /No Identity/ }));
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /static headers/,
+      }),
+    );
     fireEvent.click(screen.getByText("Custom Headers"));
     fireEvent.click(
       screen.getByRole("button", { name: "Remove header Authorization" }),
@@ -1410,5 +2101,365 @@ describe("RemoteMcpIdentitySectionBody", () => {
         .getByRole("link", { name: "Remote Identity Providers" })
         .getAttribute("href"),
     ).toBe("/remote-identity-providers");
+  });
+
+  describe("pinned scopes", () => {
+    it("shows the pin under the connected provider for a writer", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+
+      renderIdentity();
+
+      expect(mocks.scopes).toHaveBeenCalledWith(
+        { mcpServerId: "mcp-server-1" },
+        undefined,
+        expect.objectContaining({ enabled: true }),
+      );
+      expect(
+        screen.getByRole("combobox", { name: "Pinned scopes" }),
+      ).toBeDefined();
+      expect(screen.getByText("read")).toBeDefined();
+      expect(screen.getByText("Sign-ins request these scopes.")).toBeDefined();
+    });
+
+    it("neither fetches nor shows the pin without mcp:write", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+      mocks.rbac.mockReturnValue({
+        isLoading: false,
+        hasScope: () => false,
+        hasAllScopes: () => false,
+        hasAnyScope: () => false,
+      });
+
+      renderIdentity();
+
+      for (const call of mocks.scopes.mock.calls) {
+        expect(call[2]).toMatchObject({ enabled: false });
+      }
+      expect(
+        screen.queryByRole("combobox", { name: "Pinned scopes" }),
+      ).toBeNull();
+    });
+
+    it("saves an added scope with the section's Save", async () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+
+      renderIdentity();
+      const save = screen.getByRole("button", { name: "Save" });
+      expect((save as HTMLButtonElement).disabled).toBe(true);
+
+      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
+      // Advertised scopes and the provider's are both offered.
+      expect(
+        screen
+          .getAllByRole("option", { name: /not selected/ })
+          .map((option) => option.textContent),
+      ).toEqual(["write", "profile"]);
+      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => expect(mocks.setPin).toHaveBeenCalledOnce());
+      expect(mocks.setPin).toHaveBeenCalledWith({
+        request: {
+          setServerScopePinRequestBody: {
+            mcpServerId: "mcp-server-1",
+            scopes: ["read", "write"],
+          },
+        },
+      });
+      expect(mocks.commit).not.toHaveBeenCalled();
+      await waitFor(() =>
+        expect(mocks.toastSuccess).toHaveBeenCalledWith(
+          "Pinned scopes updated",
+        ),
+      );
+    });
+
+    it("writes the saved pin into the view without a refetch", async () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+
+      renderIdentity();
+      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
+      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() =>
+        expect(mocks.toastSuccess).toHaveBeenCalledWith(
+          "Pinned scopes updated",
+        ),
+      );
+      expect(mocks.setScopesData).toHaveBeenCalledOnce();
+      expect(mocks.setScopesData).toHaveBeenCalledWith(
+        expect.anything(),
+        [{ mcpServerId: "mcp-server-1" }],
+        serverScopes({ pinnedScopes: ["read", "write"] }),
+      );
+      expect(mocks.invalidateScopes).not.toHaveBeenCalled();
+    });
+
+    it("leaves the pin view alone when headers are saved", async () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+
+      renderIdentity();
+      addCustomHeader("X-Team", "eng");
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() =>
+        expect(mocks.toastSuccess).toHaveBeenCalledWith(
+          "Upstream headers updated",
+        ),
+      );
+      expect(mocks.create).toHaveBeenCalledOnce();
+      expect(mocks.invalidateScopes).not.toHaveBeenCalled();
+    });
+
+    it("keeps the saved pin when headers save alongside it", async () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+
+      renderIdentity();
+      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
+      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
+      addCustomHeader("X-Team", "eng");
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() =>
+        expect(mocks.toastSuccess).toHaveBeenCalledWith(
+          "Upstream headers updated",
+        ),
+      );
+      expect(mocks.toastSuccess).toHaveBeenCalledWith("Pinned scopes updated");
+      expect(mocks.create).toHaveBeenCalledOnce();
+      expect(mocks.setScopesData).toHaveBeenCalledOnce();
+      expect(mocks.invalidateScopes).not.toHaveBeenCalled();
+    });
+
+    it("lets a pin-only edit through a locked identity", async () => {
+      sharedSource();
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+
+      renderIdentity();
+      expect(
+        (
+          screen.getByRole("radio", {
+            name: /Service Account/,
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(true);
+      const field = screen.getByRole("combobox", { name: "Pinned scopes" });
+      expect((field as HTMLButtonElement).disabled).toBe(false);
+      const save = screen.getByRole("button", { name: "Save" });
+      expect((save as HTMLButtonElement).disabled).toBe(true);
+
+      fireEvent.click(field);
+      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
+      expect((save as HTMLButtonElement).disabled).toBe(false);
+      fireEvent.click(save);
+
+      await waitFor(() => expect(mocks.setPin).toHaveBeenCalledOnce());
+      expect(mocks.setPin).toHaveBeenCalledWith({
+        request: {
+          setServerScopePinRequestBody: {
+            mcpServerId: "mcp-server-1",
+            scopes: ["read", "write"],
+          },
+        },
+      });
+      expect(mocks.commit).not.toHaveBeenCalled();
+      expect(mocks.create).not.toHaveBeenCalled();
+    });
+
+    it("keeps Save shut under a locked identity once headers are also edited", () => {
+      sharedSource();
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+
+      renderIdentity();
+      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
+      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
+      addCustomHeader("X-Team", "eng");
+
+      const save = screen.getByRole("button", { name: "Save" });
+      expect((save as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it("saves a cleared pin with the flag off", async () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({
+        data: serverScopes({ discoveryEnabled: false }),
+        isError: false,
+      });
+
+      renderIdentity();
+      const field = screen.getByRole("combobox", { name: "Pinned scopes" });
+      expect((field as HTMLButtonElement).disabled).toBe(true);
+      const save = screen.getByRole("button", { name: "Save" });
+      expect((save as HTMLButtonElement).disabled).toBe(true);
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Clear pinned scopes" }),
+      );
+      expect((save as HTMLButtonElement).disabled).toBe(false);
+      fireEvent.click(save);
+
+      await waitFor(() => expect(mocks.setPin).toHaveBeenCalledOnce());
+      expect(mocks.setPin).toHaveBeenCalledWith({
+        request: {
+          setServerScopePinRequestBody: {
+            mcpServerId: "mcp-server-1",
+            scopes: [],
+          },
+        },
+      });
+    });
+
+    it("drops a draft edited back to the saved pin", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+
+      const { rerenderIdentity } = renderIdentity();
+      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
+      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
+      fireEvent.click(screen.getByRole("option", { name: /^write, selected/ }));
+      const save = screen.getByRole("button", { name: "Save" });
+      expect((save as HTMLButtonElement).disabled).toBe(true);
+
+      // A refetch now shows through instead of a stale draft.
+      mocks.scopes.mockReturnValue({
+        data: serverScopes({ pinnedScopes: ["read", "admin"] }),
+        isError: false,
+      });
+      rerenderIdentity();
+      expect(
+        screen.getByRole("option", { name: /^admin, selected/ }),
+      ).toBeDefined();
+    });
+
+    it("saves headers even when the pin save fails", async () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+      mocks.setPin.mockRejectedValue(new Error("pin refused"));
+
+      renderIdentity();
+      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
+      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
+      addCustomHeader("X-Team", "eng");
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() =>
+        expect(mocks.toastSuccess).toHaveBeenCalledWith(
+          "Upstream headers updated",
+        ),
+      );
+      expect(mocks.create).toHaveBeenCalledOnce();
+      expect(mocks.toastError).toHaveBeenCalledWith("pin refused");
+      expect(mocks.toastSuccess).not.toHaveBeenCalledWith(
+        "Pinned scopes updated",
+      );
+    });
+
+    it("saves the pin even when the header save fails", async () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+      mocks.create.mockRejectedValue(new Error("header refused"));
+
+      renderIdentity();
+      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
+      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
+      addCustomHeader("X-Team", "eng");
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() =>
+        expect(mocks.toastSuccess).toHaveBeenCalledWith(
+          "Pinned scopes updated",
+        ),
+      );
+      await waitFor(() =>
+        expect(mocks.toastError).toHaveBeenCalledWith("header refused"),
+      );
+      expect(mocks.toastSuccess).not.toHaveBeenCalledWith(
+        "Upstream headers updated",
+      );
+    });
+
+    it("says so when the pin cannot be loaded", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: undefined, isError: true });
+
+      renderIdentity();
+
+      expect(screen.getByText("Couldn't load pinned scopes.")).toBeDefined();
+      expect(
+        screen.queryByRole("combobox", { name: "Pinned scopes" }),
+      ).toBeNull();
+    });
+
+    it("explains a refusal: the pin needs edit access to every server on the URL", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({
+        data: undefined,
+        isError: true,
+        error: new GramError("permission denied", {
+          response: new Response(null, { status: 403 }),
+          request: new Request("https://app.getgram.ai/rpc/example"),
+          body: "",
+        }),
+      });
+
+      renderIdentity();
+
+      expect(
+        screen.getByText(
+          "Pinned scopes are shared by every MCP server that uses this URL. You need edit access to all of them to view or change the pin.",
+        ),
+      ).toBeDefined();
+      expect(screen.queryByText("Couldn't load pinned scopes.")).toBeNull();
+    });
+
+    it("says the pin is loading until it arrives", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: undefined, isError: false });
+
+      renderIdentity();
+
+      expect(screen.getByText("Loading pinned scopes…")).toBeDefined();
+      expect(
+        screen.queryByRole("combobox", { name: "Pinned scopes" }),
+      ).toBeNull();
+      expect(screen.queryByText("Couldn't load pinned scopes.")).toBeNull();
+    });
+
+    it("shows no loading line outside User Identity", () => {
+      mocks.scopes.mockReturnValue({ data: undefined, isError: false });
+
+      renderIdentity();
+
+      expect(screen.queryByText("Loading pinned scopes…")).toBeNull();
+    });
+
+    it("clears the pin with an empty list", async () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+
+      renderIdentity();
+      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
+      fireEvent.click(screen.getByRole("option", { name: /^read, selected/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => expect(mocks.setPin).toHaveBeenCalledOnce());
+      expect(mocks.setPin).toHaveBeenCalledWith({
+        request: {
+          setServerScopePinRequestBody: {
+            mcpServerId: "mcp-server-1",
+            scopes: [],
+          },
+        },
+      });
+    });
   });
 });

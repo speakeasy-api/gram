@@ -25,6 +25,37 @@ var MarkEnterpriseTrialConvertedResult = Type("MarkEnterpriseTrialConvertedResul
 	})
 })
 
+var AdminUserOrganization = Type("AdminUserOrganization", func() {
+	Required("id", "name", "slug")
+	Attribute("id", String)
+	Attribute("name", String)
+	Attribute("slug", String)
+	Attribute("disabled_at", String, func() { Format(FormatDateTime) })
+})
+var AdminUser = Type("AdminUser", func() {
+	Required("id", "display_name", "email", "organizations", "organization_count")
+	Attribute("id", String)
+	Attribute("display_name", String)
+	Attribute("email", String)
+	Attribute("last_login", String, func() { Format(FormatDateTime) })
+	Attribute("organizations", ArrayOf(AdminUserOrganization))
+	Attribute("organization_count", Int64)
+})
+var AdminListUsersResult = Type("AdminListUsersResult", func() {
+	Required("users", "total", "page", "limit")
+	Attribute("users", ArrayOf(AdminUser))
+	Attribute("total", Int64)
+	Attribute("page", Int)
+	Attribute("limit", Int)
+})
+var AdminListUserOrganizationsResult = Type("AdminListUserOrganizationsResult", func() {
+	Required("organizations", "total", "page", "limit")
+	Attribute("organizations", ArrayOf(AdminUserOrganization))
+	Attribute("total", Int64)
+	Attribute("page", Int)
+	Attribute("limit", Int)
+})
+
 var AdminOrganization = Type("AdminOrganization", func() {
 	Description("Organization details surfaced to admin operators.")
 	Required("id", "name", "slug", "account_type", "whitelisted", "member_count", "created_at", "updated_at")
@@ -32,7 +63,7 @@ var AdminOrganization = Type("AdminOrganization", func() {
 	Attribute("id", String, "The ID of the organization")
 	Attribute("name", String, "The name of the organization")
 	Attribute("slug", String, "The slug of the organization")
-	Attribute("account_type", String, "Gram account type (e.g. free, pro, payg, enterprise).")
+	Attribute("account_type", String, "Speakeasy account type (e.g. free, pro, payg, enterprise).")
 	Attribute("workos_id", String, "WorkOS organization ID, if linked.")
 	Attribute("workos_dashboard_url", String, func() {
 		Description("Link to the organization in the WorkOS dashboard. Absent when the organization is not linked to WorkOS or the deployment has no WorkOS environment configured.")
@@ -223,6 +254,15 @@ var AdminStripeCustomer = Type("AdminStripeCustomer", func() {
 	Attribute("livemode", Boolean)
 })
 
+var AdminStripeSubscriptionCandidate = Type("AdminStripeSubscriptionCandidate", func() {
+	Description("Live Stripe subscription details shown before recording the subscription on a PAYG organization.")
+	Required("id", "customer_id", "status")
+
+	Attribute("id", String, "Stripe subscription ID returned by Stripe.")
+	Attribute("customer_id", String, "Stripe customer that owns the subscription.")
+	Attribute("status", String, "Stripe subscription status.")
+})
+
 var AdminStripeSubscription = Type("AdminStripeSubscription", func() {
 	Attribute("status", String, func() {
 		Enum("incomplete", "incomplete_expired", "trialing", "active", "past_due", "canceled", "unpaid", "paused")
@@ -306,33 +346,43 @@ var AdminSpendBreakdownResponse = Type("AdminSpendBreakdownResponse", func() {
 	Required("window", "billing_cycles", "currency", "pricing_basis", "queried_at", "total_cost_usd", "products")
 })
 
+var AdminCustomerUsageProductCost = Type("AdminCustomerUsageProductCost", func() {
+	Attribute("product_id", String, func() { Enum("agent_session_storage", "risk_content_scans", "mcp_egress") })
+	Attribute("cost_usd", String, "Exact estimated cost at current PAYG list prices")
+	Required("product_id", "cost_usd")
+})
+
+var AdminCustomerUsage = Type("AdminCustomerUsage", func() {
+	Description("One paying organization's estimated usage at current PAYG list prices.")
+	Attribute("organization_id", String)
+	Attribute("name", String)
+	Attribute("slug", String)
+	Attribute("account_type", String, func() { Enum("enterprise", "pro", "payg") })
+	Attribute("trial_state", String, func() {
+		Enum("none", "running", "ending_soon", "expired", "demoted", "converted")
+	})
+	Attribute("current_cycle", usage.MeterUsageWindow, "The billing cycle containing queried_at")
+	Attribute("window", usage.MeterUsageWindow, "From the first chart bucket's start to the last bucket's end")
+	Attribute("products", ArrayOf(usage.SpendProduct), "The three metered products in stable display order. quantity and cost_usd cover the current cycle to date. buckets are the chart buckets for the requested interval: billing cycles for monthly, days or Monday-start weeks of the current cycle otherwise.")
+	Attribute("previous_period", usage.MeterUsageWindow, "The start of the previous billing cycle, cut to the same number of elapsed days as the current one. Absent when the organization did not exist before the current cycle.")
+	Attribute("previous_period_costs", ArrayOf(AdminCustomerUsageProductCost), "Per-product costs over previous_period. Empty when previous_period is absent.")
+	Attribute("error", String, "Why this organization's usage could not be read. products is empty when set.")
+	Required("organization_id", "name", "slug", "account_type", "trial_state", "current_cycle", "window", "products", "previous_period_costs")
+})
+
+var AdminCustomerUsageResponse = Type("AdminCustomerUsageResponse", func() {
+	Attribute("interval", String, func() { Enum("daily", "weekly", "monthly") })
+	Attribute("currency", String, func() { Enum("USD") })
+	Attribute("pricing_basis", String, func() { Enum("current_payg_list_price") })
+	Attribute("queried_at", String, "Retrieval timestamp used to distinguish current and future buckets", func() { Format(FormatDateTime) })
+	Attribute("customers", ArrayOf(AdminCustomerUsage), "Every qualifying organization, ordered by name")
+	Required("interval", "currency", "pricing_basis", "queried_at", "customers")
+})
+
 var AdminSession = Type("AdminSession", func() {
 	Attribute("email", String)
 	Attribute("name", String)
 	Required("email")
-})
-
-var AdminOnboardingTask = Type("AdminOnboardingTask", func() {
-	Attribute("key", String)
-	Attribute("title", String)
-	Attribute("description", String)
-	Attribute("hidden", Boolean)
-	Required("key", "title", "description", "hidden")
-})
-
-var AdminOnboardingPreset = Type("AdminOnboardingPreset", func() {
-	Attribute("key", String)
-	Attribute("title", String)
-	Attribute("visible_task_keys", ArrayOf(String))
-	Required("key", "title", "visible_task_keys")
-})
-
-var AdminOnboardingConfiguration = Type("AdminOnboardingConfiguration", func() {
-	Attribute("organization_id", String)
-	Attribute("preset", String, "Absent for legacy organizations.")
-	Attribute("tasks", ArrayOf(AdminOnboardingTask))
-	Attribute("presets", ArrayOf(AdminOnboardingPreset))
-	Required("organization_id", "tasks", "presets")
 })
 
 var AdminChatAnalysisSettings = Type("AdminChatAnalysisSettings", func() {
@@ -778,6 +828,46 @@ var _ = Service("admin", func() {
 		Meta("openapi:operationId", "adminListOrganizationActivity")
 	})
 
+	Method("listUsers", func() {
+		Description("Staff-only active user discovery.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("q", String)
+
+			Attribute("page", Int, func() { Minimum(1) })
+			Attribute("limit", Int, func() { Minimum(1); Maximum(100) })
+		})
+		Result(AdminListUsersResult)
+		HTTP(func() {
+			GET("/admin/users.list")
+			Param("q")
+			Param("page")
+			Param("limit")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "adminListUsers")
+	})
+
+	Method("listUserOrganizations", func() {
+		Description("Staff-only active user discovery.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("user_id", String)
+			Required("user_id")
+			Attribute("page", Int, func() { Minimum(1) })
+			Attribute("limit", Int, func() { Minimum(1); Maximum(100) })
+		})
+		Result(AdminListUserOrganizationsResult)
+		HTTP(func() {
+			GET("/admin/users.organizations.list")
+			Param("user_id")
+			Param("page")
+			Param("limit")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "adminListUserOrganizations")
+	})
+
 	Method("listOrganizations", func() {
 		Description("Lists organizations for platform admin operations with optional search and filters. Defaults to created_at descending, with id ascending to break ties.")
 
@@ -869,7 +959,7 @@ var _ = Service("admin", func() {
 	// mid-block makes goa reorder every declaration below it. A new method goes
 	// after this one.
 	Method("createOrganization", func() {
-		Description("Creates an organization in WorkOS and in Gram, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID, so both writers converge on one row.")
+		Description("Creates an organization in WorkOS and in Speakeasy, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Speakeasy ID is derived from the WorkOS ID, so both writers converge on one row.")
 
 		Payload(func() {
 			security.AdminAuthPayload()
@@ -1106,27 +1196,6 @@ var _ = Service("admin", func() {
 		Meta("openapi:operationId", "adminMarkEnterpriseTrialConverted")
 	})
 
-	Method("getOrganizationOnboarding", func() {
-		Payload(func() { security.AdminAuthPayload(); Attribute("organization_id", String); Required("organization_id") })
-		Result(AdminOnboardingConfiguration)
-		HTTP(func() { GET("/admin/organization.onboarding"); Param("organization_id"); Response(StatusOK) })
-		Meta("openapi:operationId", "adminGetOrganizationOnboarding")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminOrganizationOnboarding"}`)
-	})
-
-	Method("setOrganizationOnboarding", func() {
-		Payload(func() {
-			security.AdminAuthPayload()
-			Attribute("organization_id", String)
-			Attribute("visible_task_keys", ArrayOf(String), "Complete explicit selection; an empty array selects no tasks.")
-			Attribute("preset", String, "A key from presets. Omit to preserve the saved preset. Null/reset is not supported.")
-			Required("organization_id", "visible_task_keys")
-		})
-		Result(AdminOnboardingConfiguration)
-		HTTP(func() { POST("/admin/organization.onboarding"); Response(StatusOK) })
-		Meta("openapi:operationId", "adminSetOrganizationOnboarding")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"SetAdminOrganizationOnboarding"}`)
-	})
 	remoteSessionIssuerMethods()
 	platformAssetMethods()
 
@@ -1236,6 +1305,76 @@ var _ = Service("admin", func() {
 
 	supportMatrixMethods()
 	supportCoverageMethods()
+	mcpServerHealthMethods()
 	registryDesign()
+	onboardingStackMethods()
+	onboardingPlaybookMethods()
+
+	Method("getStripeSubscriptionCandidate", func() {
+		Description("Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id", "stripe_subscription_id")
+			Attribute("organization_id", String)
+			Attribute("stripe_subscription_id", String, func() {
+				Pattern(`^sub_[A-Za-z0-9_]+$`)
+				MaxLength(255)
+			})
+		})
+		Result(AdminStripeSubscriptionCandidate)
+		declareUnavailable()
+		HTTP(func() {
+			GET("/admin/organization.stripeSubscriptionCandidate")
+			Param("organization_id")
+			Param("stripe_subscription_id")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
+		Meta("openapi:operationId", "adminGetStripeSubscriptionCandidate")
+	})
+
+	Method("setStripeSubscription", func() {
+		Description("Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id", "stripe_subscription_id")
+			Attribute("organization_id", String)
+			Attribute("stripe_subscription_id", String, func() {
+				Pattern(`^sub_[A-Za-z0-9_]+$`)
+				MaxLength(255)
+			})
+			Meta("openapi:typename", "SetStripeSubscriptionRequestBody")
+		})
+		Result(AdminOrganization)
+		declareUnavailable()
+		HTTP(func() {
+			POST("/admin/organization.setStripeSubscription")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
+		Meta("openapi:operationId", "adminSetStripeSubscription")
+	})
+
+	// Appended, not inserted: see the note above extendTrial. New methods go last.
+	Method("listCustomerUsage", func() {
+		Description("Returns estimated usage at current PAYG list prices for every active paying organization: enterprise organizations not on a running or ending trial, and pro or payg organizations that never trialled.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("interval", String, "Chart bucketing. monthly gives one bucket per billing cycle over the last six cycles. daily and weekly bucket the current cycle.", func() {
+				Enum("daily", "weekly", "monthly")
+				Default("monthly")
+			})
+		})
+		Result(AdminCustomerUsageResponse)
+		declareUnavailable()
+		HTTP(func() {
+			GET("/admin/organizations.customerUsage")
+			Param("interval")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
+		Meta("openapi:operationId", "adminListCustomerUsage")
+		Meta("openapi:extension:x-speakeasy-name-override", "listCustomerUsage")
+	})
 
 })

@@ -55,7 +55,7 @@ type ProcessDeployment struct {
 	projects       *projectsRepo.Queries
 	billingRepo    billing.Repository
 	externalmcp    *externalmcpRepo.Queries
-	registryClient *externalmcp.RegistryClient
+	catalog        *externalmcp.CatalogService
 }
 
 func NewProcessDeployment(
@@ -67,7 +67,7 @@ func NewProcessDeployment(
 	features feature.Provider,
 	assetStorage assets.BlobStore,
 	billingRepo billing.Repository,
-	registryClient *externalmcp.RegistryClient,
+	catalog *externalmcp.CatalogService,
 ) *ProcessDeployment {
 	return &ProcessDeployment{
 		logger:         logger,
@@ -85,7 +85,7 @@ func NewProcessDeployment(
 		projects:       projectsRepo.New(db),
 		billingRepo:    billingRepo,
 		externalmcp:    externalmcpRepo.New(db),
-		registryClient: registryClient,
+		catalog:        catalog,
 	}
 }
 
@@ -433,7 +433,7 @@ func (p *ProcessDeployment) doExternalMCPs(
 
 	for _, mcp := range externalMCPs {
 		pool.Go(func() error {
-			processor := externalmcp.NewToolExtractor(p.logger, p.guardianPolicy, p.db, p.registryClient)
+			processor := externalmcp.NewToolExtractor(p.logger, p.guardianPolicy, p.db, p.catalog)
 
 			return processor.Do(ctx, externalmcp.ToolExtractorTask{
 				OrgSlug:      orgSlug,

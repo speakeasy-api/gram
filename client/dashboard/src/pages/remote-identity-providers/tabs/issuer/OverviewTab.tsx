@@ -69,6 +69,14 @@ function DocumentationUrlValue({ value }: { value: string | undefined }) {
   );
 }
 
+// NULL and false both read as the default: the issuer's supported scopes are
+// requested when a sign-in has no other scope source.
+function scopeFallbackLabel(omitScopeFallback: boolean | undefined): string {
+  return omitScopeFallback
+    ? "Authorization server defaults"
+    : "Every advertised scope";
+}
+
 export function OverviewTab({
   issuer,
 }: {
@@ -130,6 +138,12 @@ export function OverviewTab({
 
       <InfoSection title="Identity Provider Details">
         <InfoField label="Scopes">{list(issuer.scopesSupported)}</InfoField>
+        <InfoField label="Scope Override">
+          {list(issuer.scopeOverride ?? undefined)}
+        </InfoField>
+        <InfoField label="Scope fallback">
+          <InfoText>{scopeFallbackLabel(issuer.omitScopeFallback)}</InfoText>
+        </InfoField>
         <InfoField label="Grant Types">
           {list(issuer.grantTypesSupported)}
         </InfoField>

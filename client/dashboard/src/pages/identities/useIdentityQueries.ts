@@ -2,7 +2,7 @@ import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useGramContext } from "@gram/client/react-query/_context.js";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 import {
   fetchIdentityPeers,
@@ -23,7 +23,10 @@ import {
   buildGetUserMetricsSummaryQuery,
   useGetUserMetricsSummary,
 } from "@gram/client/react-query/getUserMetricsSummary.js";
-import { useRiskUserBreakdown } from "@gram/client/react-query/riskUserBreakdown.js";
+import { buildRiskUserBreakdownQuery } from "@gram/client/react-query/riskUserBreakdown.js";
+import type { RiskOverviewCategory } from "@gram/client/models/components/riskoverviewcategory.js";
+import type { RiskRuleBreakdownEntry } from "@gram/client/models/components/riskrulebreakdownentry.js";
+import type { RiskUserBreakdownResult } from "@gram/client/models/components/riskuserbreakdownresult.js";
 import { useShadowMCPInventoryServersForUser } from "@gram/client/react-query/shadowMCPInventoryServersForUser.js";
 import { useIdentityAccess } from "@gram/client/react-query/identityAccess.js";
 
@@ -38,7 +41,7 @@ type RetryableQuery = { isError: boolean; refetch: () => unknown };
 /**
  * A retry that re-runs only the reads which actually failed.
  *
- * Several queries on these pages are held behind `enabled` — no Gram user id,
+ * Several queries on these pages are held behind `enabled` — no Speakeasy user id,
  * no chat:read, no org:admin — and `refetch()` ignores `enabled` and fires
  * anyway. A retry button that called it blindly would ask for audit logs with
  * no actor filter, or for chats the caller may not filter by user, and render
@@ -77,7 +80,7 @@ export function useIdentityProject(): { slug: string; id: string } {
 /**
  * Whether telemetry can be asked about this identity at all.
  *
- * The summary endpoint keys on a Gram user id or an agent-reported id, and an
+ * The summary endpoint keys on a Speakeasy user id or an agent-reported id, and an
  * identity carrying neither — an api-key subject, say — is not a subject it
  * can answer for. No request is made, so the tiles have nothing to show and
  * must say that rather than stand at zero.
@@ -87,7 +90,7 @@ export function hasMetricsSubject(identity: IdentityModel): boolean {
 }
 
 /**
- * Telemetry keys usage on either the Gram user id or the id an agent reported,
+ * Telemetry keys usage on either the Speakeasy user id or the id an agent reported,
  * and the endpoint takes exactly one of them, so prefer the directory user and
  * fall back to the agent identifier for subjects with no directory row.
  */
@@ -297,26 +300,104 @@ export function useIdentityAuditLogs(
   });
 }
 
+export type IdentityRisk = {
+  data:
+    | {
+        findings: number;
+        categories: RiskOverviewCategory[];
+        rules: RiskRuleBreakdownEntry[];
+      }
+    | undefined;
+  isLoading: boolean;
+  isError: boolean;
+  refetch: () => Promise<unknown>;
+};
+
+/**
+ * Findings by category and rule across every agent id. The endpoint takes one
+ * id; a finding belongs to one id, so summing counts each once.
+ */
 export function useIdentityRisk(
   identity: IdentityModel,
   from: Date,
   to: Date,
-): ReturnType<typeof useRiskUserBreakdown> {
+): IdentityRisk {
+  const client = useGramContext();
   const { slug: gramProject } = useIdentityProject();
   const canReadRisk = useCanReadRisk();
-  const externalUserId = identity.externalUserIds[0];
-  return useRiskUserBreakdown(
-    { externalUserId: externalUserId ?? "", from, to, gramProject },
-    undefined,
-    {
+  return useQueries({
+    queries: identity.externalUserIds.map((externalUserId) => ({
+      ...buildRiskUserBreakdownQuery(client, {
+        externalUserId,
+        from,
+        to,
+        gramProject,
+      }),
       ...OFF,
-      enabled: canReadRisk && !!externalUserId,
+      enabled: canReadRisk,
+    })),
+    combine: (results) => {
+      const loaded = results.flatMap((r) => (r.data ? [r.data] : []));
+      return {
+        // Only once every id has answered: a sum missing one would pass for
+        // the whole count. A failed refresh keeps its earlier data, so a
+        // total that went stale still shows, flagged as such.
+        data:
+          loaded.length > 0 && loaded.length === results.length
+            ? sumBreakdowns(loaded)
+            : undefined,
+        isLoading: results.some((r) => r.isLoading),
+        isError: results.some((r) => r.isError),
+        // Only the failed reads: see retryFailed.
+        refetch: () =>
+          Promise.all(results.filter((r) => r.isError).map((r) => r.refetch())),
+      };
     },
-  );
+  });
+}
+
+function sumBreakdowns(
+  breakdowns: RiskUserBreakdownResult[],
+): NonNullable<IdentityRisk["data"]> {
+  const categories = new Map<string, RiskOverviewCategory>();
+  const rules = new Map<string, RiskRuleBreakdownEntry>();
+  for (const b of breakdowns) {
+    for (const c of b.categories) {
+      const seen = categories.get(c.category);
+      categories.set(c.category, {
+        ...c,
+        findings: (seen?.findings ?? 0) + Number(c.findings),
+      });
+    }
+    for (const r of b.rules) {
+      const key = `${r.source}\u0000${r.ruleId}`;
+      const seen = rules.get(key);
+      rules.set(key, {
+        ...r,
+        findings: (seen?.findings ?? 0) + Number(r.findings),
+      });
+    }
+  }
+  const byFindings = (a: { findings: number }, b: { findings: number }) =>
+    b.findings - a.findings;
+  return {
+    findings: breakdowns.reduce((sum, b) => sum + Number(b.findings), 0),
+    categories: [...categories.values()].sort(byFindings),
+    rules: [...rules.values()].sort(byFindings),
+  };
+}
+
+/** Which of an identity's ids the risk panels matched on, for a footer. */
+export function riskMatchedOnLabel(externalUserIds: string[]): string {
+  if (externalUserIds.length === 0) {
+    return "This identity reports no agent identifier, so risk cannot key on it.";
+  }
+  if (externalUserIds.length === 1) return `Matched on ${externalUserIds[0]}`;
+  return `Matched on all ${externalUserIds.length} identifiers this identity reports`;
 }
 
 /**
- * The org member row for this identity, matched on the Gram user id and then
+ * The org member row for this identity, matched on the Speakeasy user id and then
  * on any address the subject is known by. It carries the canonical principal
  * URN and the role ids, neither of which the resolver returns.
  */
@@ -346,8 +427,8 @@ export function useIdentityMember(identity: IdentityModel): {
 
 /**
  * The principal challenges and grants are recorded against, which the member
- * row states outright. The Gram user id is the fallback for a subject with no
- * member row: the authz engine mints `user:<gram user id>` principals, so the
+ * row states outright. The Speakeasy user id is the fallback for a subject with no
+ * member row: the authz engine mints `user:<speakeasy user id>` principals, so the
  * WorkOS id — which only role ASSIGNMENTS key on — would match no challenge.
  */
 export function useIdentityPrincipalUrn(
@@ -364,9 +445,9 @@ export function useIdentityPrincipalUrn(
  * the same scope. Plugin membership decides what a resource is distributed
  * through, not who may use it, so it does not widen this.
  *
- * The endpoint takes the Gram user id — not the principal URN the panels
+ * The endpoint takes the Speakeasy user id — not the principal URN the panels
  * beside it use — and resolves that user's principals itself inside the active
- * organization. A subject with neither a member row nor a Gram user id has no
+ * organization. A subject with neither a member row nor a Speakeasy user id has no
  * id to ask about, so the read stays off rather than asking about "".
  */
 export function useIdentityAccessibleResources(
@@ -478,7 +559,7 @@ export function useIdentityPeers(
   const organization = useOrganization();
   const { slug: projectSlug } = useIdentityProject();
   // An identity known only by the id an agent reported for itself is absent
-  // from the internal roster, which groups by Gram user id — it lives under
+  // from the internal roster, which groups by Speakeasy user id — it lives under
   // external_user_id instead. Anyone with a directory row or an address is
   // found the usual way; only the pure-agent case switches, and it also puts
   // that agent among agents rather than ranking it against people.

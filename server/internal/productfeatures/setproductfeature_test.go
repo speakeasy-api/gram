@@ -2,6 +2,7 @@ package productfeatures_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -594,4 +595,35 @@ func TestProductFeaturesClient_SkillsAlwaysEnabled(t *testing.T) {
 	enabled, err := client.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureSkills)
 	require.NoError(t, err)
 	require.True(t, enabled)
+}
+
+func TestProductFeaturesService_RejectsRetiredRoleDistributionFlag(t *testing.T) {
+	t.Parallel()
+	for _, staff := range []bool{false, true} {
+		t.Run(fmt.Sprintf("staff=%v", staff), func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestProductFeaturesService(t)
+			if staff {
+				ctx = withPlatformAdmin(t, ctx)
+			}
+			err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+				OrganizationID: requestedOrganizationID(ctx),
+				FeatureName:    gen.ProductFeatureName("automatic-role-distribution"), Enabled: true,
+			})
+			requireOopsCode(t, err, oops.CodeInvalid)
+			enabled, err := repo.New(ti.conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{OrganizationID: activeOrganizationID(t, ctx), FeatureName: "automatic-role-distribution"})
+			require.NoError(t, err)
+			require.False(t, enabled)
+		})
+	}
+}
+
+func TestMutatorRejectsRetiredRoleDistributionFlag(t *testing.T) {
+	t.Parallel()
+	mutator := productfeatures.NewMutator(nil, nil)
+	for _, enabled := range []bool{false, true} {
+		changed, err := mutator.ApplyFeatureChangeTx(t.Context(), nil, "org_retired_flag", productfeatures.Feature("automatic-role-distribution"), enabled, productfeatures.MutationActor{})
+		require.False(t, changed)
+		requireOopsCode(t, err, oops.CodeInvalid)
+	}
 }

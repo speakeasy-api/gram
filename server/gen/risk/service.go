@@ -21,6 +21,8 @@ type Service interface {
 	CreateRiskPolicy(context.Context, *CreateRiskPolicyPayload) (res *types.RiskPolicy, err error)
 	// List all risk analysis policies for the current project.
 	ListRiskPolicies(context.Context, *ListRiskPoliciesPayload) (res *ListRiskPoliciesResult, err error)
+	// List code-owned Platform MCP toolsets available as risk policy scope targets.
+	ListMCPPlatformToolsets(context.Context, *ListMCPPlatformToolsetsPayload) (res *ListMCPPlatformToolsetsResult, err error)
 	// List enabled MCP-scoped risk policies that apply to an MCP server and
 	// optional tool. Policies without an MCP scope are excluded.
 	ListRiskPoliciesForMcpServer(context.Context, *ListRiskPoliciesForMcpServerPayload) (res *ListRiskPoliciesResult, err error)
@@ -47,10 +49,17 @@ type Service interface {
 	// `match` value — a non-sensitive server URL or command identifier — is passed
 	// through verbatim.
 	ListRiskResultsForAgent(context.Context, *ListRiskResultsForAgentPayload) (res *ListRiskResultsForAgentResult, err error)
-	// Return the plaintext match for a single risk result, on demand. Gated on the
-	// chat:read scope for the result's chat (not org:admin) — reveal is a
-	// discrete, audited access event distinct from listing redacted results.
+	// Return the plaintext match for a single risk result on demand. Every finding
+	// requires chat:read for its attributed chat. MCP findings with an empty or
+	// invalid chat ID require an unrestricted chat:read grant and use encrypted
+	// stored evidence. Every successful reveal is audited.
 	UnmaskRiskResult(context.Context, *UnmaskRiskResultPayload) (res *RiskUnmaskResultResult, err error)
+	// Return the full scanned payload of the MCP tool call phase a risk result was
+	// raised on, so its findings can be shown in context. Positions of every
+	// finding with the same execution_id and phase index into the returned
+	// payload. Requires an unrestricted chat:read grant. Every successful reveal
+	// is audited.
+	RevealRiskResultPayload(context.Context, *RevealRiskResultPayloadPayload) (res *RiskRevealPayloadResult, err error)
 	// List risk results grouped by chat session for the current project.
 	ListRiskResultsByChat(context.Context, *ListRiskResultsByChatPayload) (res *ListRiskResultsByChatResult, err error)
 	// Mark one or more risk results as manually-reviewed false positives. Distinct
@@ -85,6 +94,10 @@ type Service interface {
 	// score — plus window-level KPI stats and the exposure breakdown by category.
 	// Powers the Watchdog page. Served from the ClickHouse findings store.
 	GetRiskSignals(context.Context, *GetRiskSignalsPayload) (res *RiskSignalsResult, err error)
+	// Get live finding counts per concrete MCP server over a window, largest
+	// first. Powers the MCP server filter pickers on Risk Events and Watchdog.
+	// Served from the ClickHouse findings store.
+	GetRiskMcpServerCounts(context.Context, *GetRiskMcpServerCountsPayload) (res *RiskMcpServerCountsResult, err error)
 	// Get the run state of the project's risk analysis coordinator, which produces
 	// the findings behind the Watchdog page. Analysis is signal-driven, not
 	// scheduled: the coordinator wakes within about 30 seconds of new chat traffic
@@ -207,7 +220,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [51]string{"createRiskPolicy", "listRiskPolicies", "listRiskPoliciesForMcpServer", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listSessionQuarantines", "releaseSessionQuarantine", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskSignals", "getRiskAnalysisStatus", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
+var MethodNames = [54]string{"createRiskPolicy", "listRiskPolicies", "listMCPPlatformToolsets", "listRiskPoliciesForMcpServer", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listSessionQuarantines", "releaseSessionQuarantine", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "revealRiskResultPayload", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskSignals", "getRiskMcpServerCounts", "getRiskAnalysisStatus", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
 
 // AcknowledgeRiskPolicyChallengePayload is the payload type of the risk
 // service acknowledgeRiskPolicyChallenge method.
@@ -366,7 +379,7 @@ type CreateRiskPolicyPayload struct {
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
-	// the hook session).
+	// the hook session). MCP-scoped policies support flag and block only.
 	Action string
 	// Policy audience type: everyone or targeted.
 	AudienceType string
@@ -374,14 +387,15 @@ type CreateRiskPolicyPayload struct {
 	// server stores user:all.
 	AudiencePrincipalUrns []string
 	// Optional MCP server and tool restriction. Omit or send an empty server list
-	// to apply the policy to every MCP server.
+	// to apply the policy to every MCP server. When a non-empty scope is set, the
+	// action must be flag or block.
 	McpScope *types.RiskMCPScope
 	// Complete desired canonical URL allow set for this policy. Omit or send empty
 	// to create no URL-specific allow decisions.
 	ShadowMcpAllowedUrls []string `json:"shadow_mcp_allowed_urls"`
 	// Default disposition for shadow MCP blocking policies: block_all (default)
-	// blocks every non-Gram-hosted server unless allowed, allow_all permits every
-	// server unless blocked. Only valid with the shadow_mcp source and block
+	// blocks every non-Speakeasy-hosted server unless allowed, allow_all permits
+	// every server unless blocked. Only valid with the shadow_mcp source and block
 	// action. Immutable after create — switching requires delete + recreate.
 	ShadowMcpDisposition *string
 	// For allow_all policies: complete desired canonical URL block set. Omit or
@@ -530,6 +544,18 @@ type GetRiskBlockPayload struct {
 	ID string
 }
 
+// GetRiskMcpServerCountsPayload is the payload type of the risk service
+// getRiskMcpServerCounts method.
+type GetRiskMcpServerCountsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Inclusive start of the window. Defaults to 7 days before to.
+	From *string
+	// Exclusive end of the window. Defaults to now.
+	To *string
+}
+
 // GetRiskOverviewPayload is the payload type of the risk service
 // getRiskOverview method.
 type GetRiskOverviewPayload struct {
@@ -612,6 +638,9 @@ type GetRiskSignalsPayload struct {
 	From *string
 	// Exclusive end of the signals window. Defaults to now.
 	To *string
+	// Optional concrete MCP server ID. When set, every signal, KPI and exposure
+	// figure is computed from findings on that server only.
+	McpServerID *string
 }
 
 // GetRiskUserBreakdownPayload is the payload type of the risk service
@@ -674,6 +703,21 @@ type ListDismissedRiskResultsPayload struct {
 	// Only return results suppressed for these reasons. Omitted or empty means all
 	// reasons.
 	Reasons []string
+}
+
+// ListMCPPlatformToolsetsPayload is the payload type of the risk service
+// listMCPPlatformToolsets method.
+type ListMCPPlatformToolsetsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListMCPPlatformToolsetsResult is the result type of the risk service
+// listMCPPlatformToolsets method.
+type ListMCPPlatformToolsetsResult struct {
+	// The available Platform MCP policy scope targets.
+	Toolsets []*RiskMCPPlatformToolset
 }
 
 // ListRiskCategoriesPayload is the payload type of the risk service
@@ -831,7 +875,8 @@ type ListRiskResultsForAgentPayload struct {
 type ListRiskResultsForAgentResult struct {
 	// The list of risk results with match content redacted to opaque fingerprints.
 	Results []*types.RiskResultRedacted
-	// Total number of findings across all enabled policies.
+	// Total number of findings matching the filters across all non-deleted
+	// policies.
 	TotalCount int64
 	// Cursor for the next page of results.
 	NextCursor *string
@@ -849,6 +894,16 @@ type ListRiskResultsPayload struct {
 	ChatID *string
 	// Optional concrete MCP server ID to match exactly.
 	McpServerID *string
+	// Optional risk result ID; returns that one finding even when it is not on a
+	// loaded page, such as from a shared link. A dismissed finding, such as a
+	// false positive, is not returned.
+	ResultID *string
+	// Optional ID of one mediated MCP execution (tool call, resource read or
+	// prompt get), the execution_id a result carries; returns the live findings on
+	// that execution across its request and response phases. Findings that were
+	// dismissed, auto-excluded by exclusion rules, or raised under deleted
+	// policies are omitted.
+	ExecutionID *string
 	// Optional rule category key to filter by (e.g. secrets, pii, financial).
 	Category *string
 	// Optional rule identifier substring to filter by (case-insensitive, e.g.
@@ -886,7 +941,8 @@ type ListRiskResultsPayload struct {
 type ListRiskResultsResult struct {
 	// The list of risk results.
 	Results []*types.RiskResult
-	// Total number of findings across all enabled policies.
+	// Total number of findings matching the filters across all non-deleted
+	// policies.
 	TotalCount int64
 	// Cursor for the next page of results.
 	NextCursor *string
@@ -990,6 +1046,16 @@ type ReleaseSessionQuarantinePayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 	// The session quarantine ID.
+	ID string
+}
+
+// RevealRiskResultPayloadPayload is the payload type of the risk service
+// revealRiskResultPayload method.
+type RevealRiskResultPayloadPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The risk result ID.
 	ID string
 }
 
@@ -1099,6 +1165,39 @@ type RiskExposureSlice struct {
 	Share float64
 }
 
+type RiskMCPPlatformTool struct {
+	// The Platform MCP tool name.
+	Name string
+	// MCP behavior annotations from the code-owned descriptor.
+	Annotations *types.ToolAnnotations
+}
+
+type RiskMCPPlatformToolset struct {
+	// The stable policy-scope identity for this Platform MCP toolset.
+	ID string
+	// The reserved Platform MCP toolset slug.
+	Slug string
+	// The display name for this Platform MCP toolset.
+	Name string
+	// The code-owned tools in this Platform MCP toolset.
+	Tools []*RiskMCPPlatformTool
+}
+
+type RiskMcpServerCount struct {
+	// Concrete MCP server ID.
+	McpServerID string
+	// Deduplicated live findings on this server in the window.
+	Findings int64
+}
+
+// RiskMcpServerCountsResult is the result type of the risk service
+// getRiskMcpServerCounts method.
+type RiskMcpServerCountsResult struct {
+	// Per-server finding counts, largest first. Servers with no findings are
+	// omitted.
+	Servers []*RiskMcpServerCount
+}
+
 type RiskOverviewCategory struct {
 	// Policy category key.
 	Category string
@@ -1185,6 +1284,26 @@ type RiskPolicyBypassRequest struct {
 	UpdatedAt string
 }
 
+// RiskRevealPayloadResult is the result type of the risk service
+// revealRiskResultPayload method.
+type RiskRevealPayloadResult struct {
+	// The risk result ID.
+	ID string
+	// Whether the payload was revealed or its evidence is unavailable or expired.
+	RevealState string
+	// The mediated execution the payload belongs to.
+	ExecutionID *string
+	// Execution phase the payload was scanned in (request or response).
+	Phase *string
+	// The exact text the scanners inspected: the tools/call arguments JSON for a
+	// request, or the extracted result text for a response. Empty when
+	// reveal_state is evidence_not_stored.
+	Payload string
+	// When the stored payload is deleted. Absent when reveal_state is
+	// evidence_not_stored.
+	ExpiresAt *string
+}
+
 type RiskRuleBreakdownEntry struct {
 	// Rule identifier (e.g. 'secret.aws-access-key'). Empty when the finding has
 	// no rule_id (treat as 'unspecified').
@@ -1247,6 +1366,12 @@ type RiskSignal struct {
 	FirstSeen string
 	// Event time of the latest finding in the window.
 	LastSeen string
+	// Concrete MCP server IDs the findings in this signal were observed on. Empty
+	// when no finding carries server attribution.
+	McpServerIds []string
+	// Concrete tool names the findings in this signal were observed on. Empty when
+	// no finding carries tool attribution.
+	ToolNames []string
 	// Top users by finding count within the signal.
 	TopUsers []*RiskSignalTopUser
 	// Deduplicated finding counts per equal-width time bucket across the window,
@@ -1307,6 +1432,9 @@ type RiskUnmaskResultResult struct {
 	// The plaintext matched secret or sensitive data for this result. Empty string
 	// when the finding has no top-level match (e.g. a spans-only finding).
 	Match string
+	// Whether plaintext was revealed or the MCP finding evidence is unavailable or
+	// expired.
+	RevealState string
 }
 
 // RiskUserBreakdownResult is the result type of the risk service
@@ -1604,7 +1732,7 @@ type UpdateRiskPolicyPayload struct {
 	// Whether the policy is active.
 	Enabled *bool
 	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
-	// the hook session).
+	// the hook session). MCP-scoped policies support flag and block only.
 	Action *string
 	// Policy audience type: everyone or targeted. Omit to preserve the current
 	// audience type.
@@ -1613,7 +1741,8 @@ type UpdateRiskPolicyPayload struct {
 	// principals.
 	AudiencePrincipalUrns []string
 	// Optional MCP server and tool restriction. Omit to preserve; send an empty
-	// server list to clear and apply the policy to every MCP server.
+	// server list to clear and apply the policy to every MCP server. When the
+	// resulting policy keeps an MCP scope, the action must be flag or block.
 	McpScope *types.RiskMCPScope
 	// Complete desired canonical URL allow set for this policy. Omit to preserve;
 	// send empty to clear.

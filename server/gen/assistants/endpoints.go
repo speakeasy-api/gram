@@ -16,15 +16,16 @@ import (
 
 // Endpoints wraps the "assistants" service endpoints.
 type Endpoints struct {
-	ListAssistants         goa.Endpoint
-	GetAssistant           goa.Endpoint
-	CreateAssistant        goa.Endpoint
-	UpdateAssistant        goa.Endpoint
-	DeleteAssistant        goa.Endpoint
-	SendMessage            goa.Endpoint
-	InterruptTurn          goa.Endpoint
-	GetManagedAssistant    goa.Endpoint
-	EnsureManagedAssistant goa.Endpoint
+	ListAssistants           goa.Endpoint
+	GetAssistant             goa.Endpoint
+	CreateAssistant          goa.Endpoint
+	UpgradeAssistantIdentity goa.Endpoint
+	UpdateAssistant          goa.Endpoint
+	DeleteAssistant          goa.Endpoint
+	SendMessage              goa.Endpoint
+	InterruptTurn            goa.Endpoint
+	GetManagedAssistant      goa.Endpoint
+	EnsureManagedAssistant   goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "assistants" service with endpoints.
@@ -32,15 +33,16 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListAssistants:         NewListAssistantsEndpoint(s, a.APIKeyAuth),
-		GetAssistant:           NewGetAssistantEndpoint(s, a.APIKeyAuth),
-		CreateAssistant:        NewCreateAssistantEndpoint(s, a.APIKeyAuth),
-		UpdateAssistant:        NewUpdateAssistantEndpoint(s, a.APIKeyAuth),
-		DeleteAssistant:        NewDeleteAssistantEndpoint(s, a.APIKeyAuth),
-		SendMessage:            NewSendMessageEndpoint(s, a.APIKeyAuth),
-		InterruptTurn:          NewInterruptTurnEndpoint(s, a.APIKeyAuth),
-		GetManagedAssistant:    NewGetManagedAssistantEndpoint(s, a.APIKeyAuth),
-		EnsureManagedAssistant: NewEnsureManagedAssistantEndpoint(s, a.APIKeyAuth),
+		ListAssistants:           NewListAssistantsEndpoint(s, a.APIKeyAuth),
+		GetAssistant:             NewGetAssistantEndpoint(s, a.APIKeyAuth),
+		CreateAssistant:          NewCreateAssistantEndpoint(s, a.APIKeyAuth),
+		UpgradeAssistantIdentity: NewUpgradeAssistantIdentityEndpoint(s, a.APIKeyAuth),
+		UpdateAssistant:          NewUpdateAssistantEndpoint(s, a.APIKeyAuth),
+		DeleteAssistant:          NewDeleteAssistantEndpoint(s, a.APIKeyAuth),
+		SendMessage:              NewSendMessageEndpoint(s, a.APIKeyAuth),
+		InterruptTurn:            NewInterruptTurnEndpoint(s, a.APIKeyAuth),
+		GetManagedAssistant:      NewGetManagedAssistantEndpoint(s, a.APIKeyAuth),
+		EnsureManagedAssistant:   NewEnsureManagedAssistantEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -49,6 +51,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListAssistants = m(e.ListAssistants)
 	e.GetAssistant = m(e.GetAssistant)
 	e.CreateAssistant = m(e.CreateAssistant)
+	e.UpgradeAssistantIdentity = m(e.UpgradeAssistantIdentity)
 	e.UpdateAssistant = m(e.UpdateAssistant)
 	e.DeleteAssistant = m(e.DeleteAssistant)
 	e.SendMessage = m(e.SendMessage)
@@ -159,6 +162,41 @@ func NewCreateAssistantEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.CreateAssistant(ctx, p)
+	}
+}
+
+// NewUpgradeAssistantIdentityEndpoint returns an endpoint function that calls
+// the method "upgradeAssistantIdentity" of service "assistants".
+func NewUpgradeAssistantIdentityEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpgradeAssistantIdentityPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UpgradeAssistantIdentity(ctx, p)
 	}
 }
 

@@ -58,6 +58,7 @@ type RemoteSessionClient struct {
 	TokenEndpointAuthAudienceFormat pgtype.Text
 	ClientIDMetadataUri             pgtype.Text
 	LegacyCallbackUrl               bool
+	CallbackBaseUrl                 pgtype.Text
 	ResourceIdentifier              pgtype.Text
 	ResourceName                    pgtype.Text
 	ResourceDocumentation           pgtype.Text
@@ -65,6 +66,7 @@ type RemoteSessionClient struct {
 	ResourceTosUri                  pgtype.Text
 	UpstreamRejectedAt              pgtype.Timestamptz
 	IdentityProviderConnectionID    uuid.NullUUID
+	CredentialOwner                 string
 	CreatedAt                       pgtype.Timestamptz
 	UpdatedAt                       pgtype.Timestamptz
 	DeletedAt                       pgtype.Timestamptz
@@ -125,6 +127,7 @@ type RemoteSessionIssuer struct {
 	BackchannelLogoutSupported                 pgtype.Bool
 	AuthorizationResponseIssParameterSupported pgtype.Bool
 	ScopeOverride                              []string
+	OmitScopeFallback                          pgtype.Bool
 	ResourceIndicatorSupported                 pgtype.Bool
 	Oidc                                       bool
 	Passthrough                                bool

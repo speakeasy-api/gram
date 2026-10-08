@@ -66,7 +66,7 @@ var (
 	ErrClientRotationInProgress = errors.New("remotesessions: client registration rotation already in progress")
 
 	// ErrIssuerHasNoRegistrationEndpoint reports that the client's issuer
-	// publishes no RFC 7591 registration endpoint, so Gram has nowhere to
+	// publishes no RFC 7591 registration endpoint, so Speakeasy has nowhere to
 	// re-register the client.
 	ErrIssuerHasNoRegistrationEndpoint = errors.New("remotesessions: issuer publishes no registration endpoint to re-register at")
 
@@ -172,7 +172,9 @@ type ClientRotator struct {
 	// re-registers the client by hand.
 	tunnels *tunnelrouting.HTTPClient
 
-	serverURL   *url.URL
+	// origins decides the redirect_uri a re-registration submits. A rotation
+	// keeps the client's recorded origin, so it never moves an existing row.
+	origins     CallbackOrigins
 	locks       cache.Cache
 	revoker     *UpstreamRevoker
 	auditLogger *audit.Logger
@@ -192,7 +194,7 @@ func NewClientRotator(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Cli
 		enc:         enc,
 		policy:      policy,
 		tunnels:     tunnels,
-		serverURL:   serverURL,
+		origins:     DefaultCallbackOrigins(serverURL),
 		locks:       locks,
 		revoker:     revoker,
 		auditLogger: auditLogger,
@@ -342,7 +344,7 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	// its users just re-established, and probing the replacement only to hand
 	// back the caller's snapshot would send its user out with the dead
 	// client_id. This runs before every refusal below: a row another caller
-	// already repaired is the one to use even when Gram could not rotate it
+	// already repaired is the one to use even when Speakeasy could not rotate it
 	// again, such as an issuer whose metadata has since lost its registration
 	// endpoint.
 	if params.Trigger != RotationTriggerManual {
@@ -420,7 +422,7 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	// the rotator's own system path: it re-registers a client an administrator
 	// already authorized, at the endpoint the issuer row already carries, so
 	// it does not widen who can create a tunnel binding.
-	registered, err := RegisterDynamicClient(ctx, r.policy, r.tunnels, r.serverURL, ProxyRegisterRequest{
+	registered, err := RegisterDynamicClient(ctx, r.policy, r.tunnels, r.origins.ForClient(current.CallbackBaseUrl), ProxyRegisterRequest{
 		RegistrationEndpoint:    endpoint,
 		Scope:                   conv.PtrEmpty(strings.Join(current.Scope, " ")),
 		TokenEndpointAuthMethod: conv.PtrEmpty(current.TokenEndpointAuthMethod.String),
@@ -676,7 +678,7 @@ func (r *ClientRotator) upstreamRecognizesClient(ctx context.Context, row repo.G
 
 	probeCtx, cancel := context.WithTimeout(ctx, registrationProbeTimeout)
 	defer cancel()
-	req, err := newTokenEndpointRequest(probeCtx, tokenEndpoint, form, tokenEndpointClientAuth{
+	req, err := NewTokenEndpointRequest(probeCtx, tokenEndpoint, form, TokenEndpointClientAuth{
 		Method:                method,
 		RemoteSessionClientID: client.ID,
 		OrganizationID:        client.OrganizationID.String,

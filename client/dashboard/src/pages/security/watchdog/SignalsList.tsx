@@ -7,7 +7,7 @@ import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { Sparkline } from "@/pages/costs/Sparkline";
 import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
-import { RULE_CATEGORY_META, type RuleCategory } from "../policy-data";
+import { ruleCategoryLabel } from "../policy-data";
 import { CategoryLabel } from "../risk-ui";
 import { getRuleTitleFallback, scoreToRating } from "../risk-utils";
 import {
@@ -56,17 +56,68 @@ export function SignalTrend({
   );
 }
 
-function groupLabel(group: SignalGroup, mode: SignalGroupMode): string {
+function serverLabel(
+  serverId: string,
+  serverNames: ReadonlyMap<string, string> | null,
+): string {
+  return serverNames?.get(serverId) ?? serverId.slice(0, 8);
+}
+
+function groupLabel(
+  group: SignalGroup,
+  mode: SignalGroupMode,
+  serverNames: ReadonlyMap<string, string> | null,
+): string {
   switch (mode) {
     case "severity":
       return SEVERITY_GROUP_LABEL[group.key as SignalSeverity] ?? group.key;
     case "category":
-      return RULE_CATEGORY_META[group.key as RuleCategory]?.label ?? group.key;
+      return ruleCategoryLabel(group.key);
     case "team":
     case "app":
     case "principal":
       return group.key === UNATTRIBUTED_GROUP_KEY ? "Unattributed" : group.key;
+    case "server":
+      return group.key === UNATTRIBUTED_GROUP_KEY
+        ? "No MCP server"
+        : serverLabel(group.key, serverNames);
   }
+}
+
+const MAX_SERVER_LABELS = 2;
+
+/** `server · tool` line under a signal, capped so a wide signal stays one row. */
+function SignalServers({
+  signal,
+  serverNames,
+}: {
+  signal: RiskSignal;
+  serverNames: ReadonlyMap<string, string>;
+}): JSX.Element {
+  const shown = signal.mcpServerIds.slice(0, MAX_SERVER_LABELS);
+  const hidden = signal.mcpServerIds.length - shown.length;
+  const names = shown.map((id) => serverLabel(id, serverNames)).join(", ");
+  const tools = signal.toolNames.slice(0, 3).join(", ");
+  const toolOverflow = signal.toolNames.length - 3;
+  // Servers and tools are separate lists, so they only read as `server · tool`
+  // when there is one server; across several, the tools are labeled as a
+  // separate list rather than implied to belong to each server.
+  const toolsLabel = signal.mcpServerIds.length > 1 ? "tools: " : "";
+  return (
+    <div className="text-muted-foreground flex min-w-0 items-center gap-2 font-mono text-xs">
+      <span
+        aria-hidden
+        className="bg-[var(--color-brand-blue-500)] size-2 shrink-0"
+      />
+      <span className="truncate">
+        {names}
+        {hidden > 0 ? ` +${hidden}` : ""}
+        {tools
+          ? ` · ${toolsLabel}${tools}${toolOverflow > 0 ? ` +${toolOverflow}` : ""}`
+          : ""}
+      </span>
+    </div>
+  );
 }
 
 function SignalRow({
@@ -74,11 +125,13 @@ function SignalRow({
   active,
   selection,
   onSelect,
+  serverNames,
 }: {
   signal: RiskSignal;
   active: boolean;
   selection: RowSelection<RiskSignal>;
   onSelect: (signal: RiskSignal) => void;
+  serverNames: ReadonlyMap<string, string> | null;
 }): JSX.Element {
   const rating = scoreToRating(signal.riskScore);
   const usersLine =
@@ -164,6 +217,9 @@ function SignalRow({
               </span>
             ))}
           </div>
+          {serverNames && signal.mcpServerIds.length > 0 ? (
+            <SignalServers signal={signal} serverNames={serverNames} />
+          ) : null}
         </div>
         <div className="flex w-54 shrink-0 flex-col justify-center gap-1 px-4 py-3">
           <div className="flex items-baseline justify-between">
@@ -192,17 +248,21 @@ export function SignalsList({
   selectedKey,
   selection,
   onSelect,
+  serverNames = null,
 }: {
   groups: SignalGroup[];
   mode: SignalGroupMode;
   selectedKey: string | null;
   selection: RowSelection<RiskSignal>;
   onSelect: (signal: RiskSignal) => void;
+  // Set only when MCP-scoped guardrails are enabled; turns on the server/tool
+  // line under each signal and names the server groups.
+  serverNames?: ReadonlyMap<string, string> | null;
 }): JSX.Element {
   return (
     <div className="space-y-6">
       {groups.map((group) => {
-        const label = groupLabel(group, mode);
+        const label = groupLabel(group, mode, serverNames);
         return (
           <div key={group.key} className="space-y-2">
             {label && (
@@ -218,6 +278,7 @@ export function SignalsList({
                   active={signal.key === selectedKey}
                   selection={selection}
                   onSelect={onSelect}
+                  serverNames={serverNames}
                 />
               ))}
             </div>

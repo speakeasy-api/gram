@@ -112,7 +112,7 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit identity configuration").LogError(ctx, logger)
 	}
-	result, err := serverIdentityResultView(res, req.clientMode)
+	result, err := s.serverIdentityResultView(res, req.clientMode)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
 	}
@@ -312,8 +312,8 @@ func identityOopsError(err error, message string) *oops.ShareableError {
 	return oops.E(code, err, "%s", refusal.Message)
 }
 
-func serverIdentityResultView(res IdentityResult, clientMode string) (*gen.CommitServerIdentityConfigurationResult, error) {
-	clientView, err := mv.BuildRemoteSessionClientView(res.Client, res.Bindings)
+func (s *Service) serverIdentityResultView(res IdentityResult, clientMode string) (*gen.CommitServerIdentityConfigurationResult, error) {
+	clientView, err := s.clientView(res.Client, res.Bindings)
 	if err != nil {
 		return nil, fmt.Errorf("build remote session client view: %w", err)
 	}
@@ -481,6 +481,7 @@ func createServerIdentityProviderParams(projectID uuid.UUID, organizationID stri
 		BackchannelLogoutSupported:                 conv.PtrToPGBool(form.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(form.AuthorizationResponseIssParameterSupported),
 		ScopeOverride:                              scopeOverride(form.ScopeOverride),
+		OmitScopeFallback:                          conv.PtrToPGBool(form.OmitScopeFallback),
 		ResourceIndicatorSupported:                 conv.PtrToPGBool(form.ResourceIndicatorSupported),
 		Metadata:                                   nil,
 		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},

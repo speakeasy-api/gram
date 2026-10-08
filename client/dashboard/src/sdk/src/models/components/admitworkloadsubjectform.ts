@@ -41,13 +41,17 @@ export type AdmitWorkloadSubjectForm = {
    */
   name?: string | undefined;
   /**
-   * Admit the subject for the selected project alone rather than the whole organization. Defaults to false.
+   * Admit the subject for the selected project alone rather than the whole organization. Requires a caller that names a project; a dashboard session does not. Defaults to false.
    */
   projectScoped?: boolean | undefined;
   /**
    * The sub claim the issuer must assert, stored and compared exactly as supplied.
    */
   subject: string;
+  /**
+   * Free-form labels for finding the admitted workload in a long list. Flat strings, not key/value pairs. Trimmed and de-duplicated on write, then limited to 40 tags of at most 64 characters each.
+   */
+  tags?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -63,6 +67,7 @@ export type AdmitWorkloadSubjectForm$Outbound = {
   name?: string | undefined;
   project_scoped: boolean;
   subject: string;
+  tags?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -80,6 +85,7 @@ export const AdmitWorkloadSubjectForm$outboundSchema: z.ZodMiniType<
     name: z.optional(z.string()),
     projectScoped: z._default(z.boolean(), false),
     subject: z.string(),
+    tags: z.optional(z.array(z.string())),
   }),
   z.transform((v) => {
     return remap$(v, {

@@ -22,12 +22,28 @@ var (
 
 // Assertion is an internal-only result, never a management API model.
 type Assertion struct {
-	value     string
-	expiresAt time.Time
+	value      string
+	expiresAt  time.Time
+	subject    string
+	sessionID  uuid.UUID
+	obtainedAt time.Time
 }
 
-func (a Assertion) Value() string                { return a.value }
-func (a Assertion) ExpiresAt() time.Time         { return a.expiresAt }
+func (a Assertion) Value() string        { return a.value }
+func (a Assertion) ExpiresAt() time.Time { return a.expiresAt }
+
+// Subject is the verified upstream subject the retained assertion restates,
+// distinct from the Speakeasy human it was retained for. Empty when unrecorded.
+func (a Assertion) Subject() string { return a.subject }
+
+// SessionID identifies the retained trusted issuer session the assertion came
+// from. uuid.Nil when the store does not report one.
+func (a Assertion) SessionID() uuid.UUID { return a.sessionID }
+
+// ObtainedAt is when the human's latest sign-in retained the credential this
+// assertion came from; zero when unrecorded. Routine refreshes keep it.
+func (a Assertion) ObtainedAt() time.Time { return a.obtainedAt }
+
 func (a Assertion) String() string               { return "[redacted delegation assertion]" }
 func (a Assertion) GoString() string             { return a.String() }
 func (a Assertion) MarshalJSON() ([]byte, error) { return []byte("{}"), nil }
@@ -55,6 +71,7 @@ type OfflineStatus struct {
 }
 
 type delegationCredential struct {
+	id              uuid.UUID
 	generation      int64
 	claim           uuid.UUID
 	assertion       string
@@ -337,6 +354,44 @@ func (s *Service) RecordOfflineRefusal(ctx context.Context, p Provider, humanID 
 	return ErrTemporary
 }
 
+// Check reports whether the retained credential still belongs to the current
+// trusted registration, after the caller proves current authority. It neither
+// renews nor returns the credential and never contacts the provider. Callers
+// releasing state derived from an earlier assertion use it so a changed
+// registration revokes that state too.
+func (s *Service) Check(ctx context.Context, b Binding, authority Authorizer) error {
+	if authority == nil || !validDelegationBinding(b) {
+		return ErrConfiguration
+	}
+	if err := authority.AuthorizeDelegation(ctx, b); err != nil {
+		if definitiveDelegationFailure(err) {
+			return ErrConfiguration
+		}
+		return ErrTemporary
+	}
+	p, err := s.loadBinding(ctx, b.OrganizationID, b.IssuerID, b.ClientID)
+	if err != nil {
+		if definitiveDelegationFailure(err) {
+			return ErrConfiguration
+		}
+		return ErrTemporary
+	}
+	if p == nil || p.DelegationConfigurationHash() == "" {
+		return ErrConfiguration
+	}
+	c, err := s.store.load(ctx, b)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrReauthentication
+	}
+	if err != nil {
+		return ErrTemporary
+	}
+	if c.config != p.DelegationConfigurationHash() || c.status == "configuration_failure" {
+		return ErrConfiguration
+	}
+	return nil
+}
+
 // Resolve returns an assertion only after the caller proves current authority.
 // It performs no proactive refresh and never falls back to another provider.
 func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) (Assertion, error) {
@@ -576,7 +631,11 @@ func (s *Service) assertion(c delegationCredential) (Assertion, error) {
 	if err != nil {
 		return Assertion{}, err
 	}
-	return Assertion{value: value, expiresAt: c.assertionExpiry}, nil
+	subject, err := s.decrypt(c.subject)
+	if err != nil {
+		return Assertion{}, err
+	}
+	return Assertion{value: value, expiresAt: c.assertionExpiry, subject: subject, sessionID: c.id, obtainedAt: c.obtainedAt}, nil
 }
 func clearDelegationSecrets(c delegationCredential) delegationCredential {
 	c.assertion = ""

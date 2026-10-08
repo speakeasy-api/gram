@@ -1,0 +1,13 @@
+{
+  "include": ["*.ts"],
+  "compilerOptions": {
+    "noEmit": true,
+    "module": "nodenext",
+    "target": "esnext",
+    "lib": ["esnext"],
+    "types": ["node"],
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true
+  }
+}

@@ -34,16 +34,16 @@ type PluginServerInfo struct {
 	Policy      string
 	// Resolved MCP URL (e.g. https://app.getgram.ai/mcp/{slug}).
 	MCPURL string
-	// IsPublic indicates whether the toolset is publicly accessible (no Gram API key needed).
+	// IsPublic indicates whether the toolset is publicly accessible (no Speakeasy API key needed).
 	IsPublic bool
 	// IsOAuth indicates the toolset uses OAuth (proxy or external). OAuth servers are emitted
 	// as stdio mcp-remote entries instead of HTTP-with-headers entries.
 	IsOAuth bool
 	// IsUnproxied indicates the server is an unproxied MCP server: MCPURL
-	// points directly at the vendor, never through Gram's gateway. No
-	// Authorization header may be attached — the Gram API key would leak to
+	// points directly at the vendor, never through Speakeasy's gateway. No
+	// Authorization header may be attached — the Speakeasy API key would leak to
 	// the vendor's own server, which was never meant to receive it, and
-	// Gram has no way to inject vendor-specific credentials on its behalf.
+	// Speakeasy has no way to inject vendor-specific credentials on its behalf.
 	IsUnproxied bool
 	// EnvConfigs are user-facing environment variables for public servers.
 	EnvConfigs []ServerEnvConfig
@@ -80,13 +80,13 @@ type GenerateConfig struct {
 	OrgID string
 	// Base server URL (e.g. https://app.getgram.ai).
 	ServerURL string
-	// APIKey is the plaintext consumer-scoped Gram API key to inject into
+	// APIKey is the plaintext consumer-scoped Speakeasy API key to inject into
 	// MCP server configs. If empty, configs will use placeholder variables.
 	APIKey string
 	// HooksAPIKey controls whether the observability plugin is emitted.
 	HooksAPIKey string
 	// ProjectSlug is the publishing project's slug. The Cursor hooks endpoint
-	// requires it via the Gram-Project header, and it scopes the default
+	// requires it via the Speakeasy-AI-Project header, and it scopes the default
 	// marketplace name for non-default projects.
 	ProjectSlug string
 	// IsDefaultProject reports whether this is the org's default project (its
@@ -102,12 +102,15 @@ type GenerateConfig struct {
 	Version string
 	// MarketplaceName is the identifier users type into Claude Code or Codex
 	// (e.g. `<plugin>@<marketplace>`) and the `name` field in the generated
-	// marketplace.json. Empty falls back to DefaultMarketplaceName.
+	// marketplace.json. The service resolves it with
+	// naming.ResolveMarketplaceName: the per-project override, else the name
+	// the project last published under, else the computed name. Empty falls
+	// back to the computed naming.MarketplaceName.
 	MarketplaceName string
 	// BrowserLogin lets the generated plugin mint per-user hooks keys via the
 	// interactive dashboard browser flow (localhost callback token exchange).
 	// Off by default: the runtime authenticates only through explicit
-	// GRAM_HOOKS_* env credentials, a previously cached key, or the baked
+	// SPEAKEASY_AI_HOOKS_* env credentials, a previously cached key, or the baked
 	// org-wide key instead of opening a browser.
 	BrowserLogin bool
 	// HooksOrgName overrides the org name used to derive the observability
@@ -180,7 +183,7 @@ func PublishedHooksFiles() (map[string][]byte, error) {
 // dogfood senders exercise the exact scripts -- canonical payloads,
 // /rpc/hooks.ingest, ratchet and org-key recovery -- customers run. The
 // configuration is fully environment-driven: no org, no baked key, no
-// project; every value resolves from GRAM_HOOKS_* variables at run time.
+// project; every value resolves from SPEAKEASY_AI_HOOKS_* variables at run time.
 // The rendered manifests carry org-derived names that make no sense without
 // an org, so manifests are dropped from the returned map; consumers that
 // need one (cmd/export-hook-plugin for `claude --plugin-dir`) supply their
@@ -231,26 +234,14 @@ func DogfoodPluginFiles() (map[string][]byte, error) {
 	return files, nil
 }
 
-// DefaultMarketplaceName returns the marketplace identifier used when no
-// per-project override is configured: the slugified org name with a
-// "-speakeasy" suffix. Shows up as the `name` field in the generated
-// Claude/Cursor/Codex marketplace.json and as the marketplace half of
-// `<plugin>@<marketplace>` install strings. Suffixing by org keeps the
-// default unique across customers so Claude Code installs from two Gram
-// orgs don't collide on the marketplace identifier.
-//
-// Delegates to naming.MarketplaceName so the publish path and the device-agent
-// endpoint stay on the identical formula — the cross-surface contract that
-// package documents. A per-project override (resolveMarketplaceName) layers on
-// top of this default. The default project keeps the bare org-derived name;
-// non-default projects are scoped by their slug so an org's projects don't
-// collide on a single marketplace identifier.
-func DefaultMarketplaceName(orgName, projectSlug string, isDefaultProject bool) string {
-	return naming.MarketplaceName(orgName, projectSlug, isDefaultProject)
-}
-
+// resolveMarketplaceName returns the marketplace name generated files carry:
+// the `name` field of every marketplace.json and the marketplace half of
+// `<plugin>@<marketplace>` install strings. The service stores the fully
+// resolved name (naming.ResolveMarketplaceName) in cfg.MarketplaceName; an
+// empty value, as in package tests and the dogfood harness, falls back to the
+// computed name.
 func resolveMarketplaceName(cfg GenerateConfig) string {
-	return conv.Default(cfg.MarketplaceName, DefaultMarketplaceName(cfg.OrgName, cfg.ProjectSlug, cfg.IsDefaultProject))
+	return conv.Default(cfg.MarketplaceName, naming.MarketplaceName(cfg.OrgName, cfg.ProjectSlug, cfg.IsDefaultProject))
 }
 
 // pluginManifestVersion returns the version to stamp into generated MCP
@@ -291,10 +282,17 @@ func hooksManifestVersion(cfg GenerateConfig) string {
 // (HooksAPIKey, APIKey) and the manifest version (tracked separately via
 // published_hooks_version) — only fields that change generated hook *content*
 // belong here. Fields are the resolved/effective values that actually appear in
-// output: the resolved marketplace name folds in the override, org name, project
-// slug, and default-project flag, while OrgName/OrgEmail/ProjectSlug also appear
-// directly in plugin metadata and runtime configuration. ServerURL/OrgID are
-// written to the generated runtime configuration.
+// output: the resolved marketplace name folds in the override, the frozen
+// published name, org name, project slug, and default-project flag, while
+// OrgName/OrgEmail/ProjectSlug also appear directly in plugin metadata and
+// runtime configuration. ServerURL/OrgID are written to the generated runtime
+// configuration.
+//
+// The stored snapshot also carries naming.PublishedMarketplaceNameKey, the
+// marketplace name the whole repo was last published under. It is not a field
+// here on purpose: hooksConfigHash covers only these fields, so the publish
+// path can record that name on every publish (including carried, skipped, and
+// observability-disabled ones) without it ever reading as a hooks change.
 type HooksConfig struct {
 	MarketplaceName string `json:"marketplace_name"`
 	// OrgName's tag is also read by naming.PublishedHooksOrgName, which every
@@ -311,8 +309,9 @@ type HooksConfig struct {
 }
 
 // hooksConfigSnapshot extracts the hook-output-affecting config from cfg. The
-// marketplace name is resolved (override or org default) so the snapshot records
-// exactly what was baked into the generated hooks.
+// marketplace name is the resolved one (override, frozen published name, or
+// computed name) so the snapshot records exactly what was baked into the
+// generated hooks.
 func hooksConfigSnapshot(cfg GenerateConfig) HooksConfig {
 	return HooksConfig{
 		MarketplaceName: resolveMarketplaceName(cfg),
@@ -386,7 +385,7 @@ const platformMCPGeneratorVersion = "4"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "44"
+const hooksGeneratorVersion = "49"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -564,7 +563,7 @@ var CursorObservabilityHookEvents = []string{
 // event names. Copilot only invokes the hooks runtime for events listed here,
 // so an event missing from this list is silently dropped client-side. Copilot's
 // four remaining events (preCompact, errorOccurred, subagentStart,
-// userPromptTransformed) have no Gram canonical type and are deliberately
+// userPromptTransformed) have no Speakeasy canonical type and are deliberately
 // unregistered.
 var CopilotObservabilityHookEvents = []string{
 	"sessionStart",
@@ -880,6 +879,18 @@ func escapeMarkdownCell(s string) string {
 	return s
 }
 
+// claudeCodeRequireMarketplaceDocsURL documents that managed settings key a
+// marketplace by its marketplace.json name.
+const claudeCodeRequireMarketplaceDocsURL = "https://code.claude.com/docs/en/plugins/org#require-a-marketplace-and-its-plugins"
+
+// claudeCodeSettingsSnippet is the fenced settings.json block every README
+// shows for Claude Code: it registers the marketplace with autoUpdate on and
+// enables one plugin, so no `/plugin marketplace add` or `/plugin install`
+// step is needed. The key order matches the dashboard's snippet.
+func claudeCodeSettingsSnippet(marketplaceName, marketplaceURL, plugin string) string {
+	return fmt.Sprintf("```json\n{\n  \"env\": {\n    \"FORCE_AUTOUPDATE_PLUGINS\": \"1\"\n  },\n  \"extraKnownMarketplaces\": {\n    \"%s\": {\n      \"autoUpdate\": true,\n      \"source\": {\n        \"source\": \"git\",\n        \"url\": \"%s\"\n      }\n    }\n  },\n  \"enabledPlugins\": {\n    \"%s@%s\": true\n  }\n}\n```\n\n", marketplaceName, marketplaceURL, plugin, marketplaceName)
+}
+
 func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	var b strings.Builder
 
@@ -910,14 +921,28 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 
 	b.WriteString("## Installation\n\n")
 	b.WriteString("### Claude Code\n\n")
+	enabledPlugin := "<plugin-slug>"
+	pluginNote := " Replace `<plugin-slug>` with the plugin to enable."
+	if cfg.HooksAPIKey != "" {
+		enabledPlugin = ClaudeObservabilitySlug(cfg)
+		pluginNote = ""
+	}
+	// Claude Code has no plugins.required key and no CLI step is needed:
+	// settings register the marketplace in extraKnownMarketplaces with
+	// autoUpdate on and enable plugins in enabledPlugins, both keyed by the
+	// marketplace.json name. Claude Code applies autoUpdate only from the
+	// entry keyed by that exact name.
+	marketplaceName := resolveMarketplaceName(cfg)
+	fmt.Fprintf(&b, "Merge this into `~/.claude/settings.json` for just you, or into managed settings for your organization (the Claude admin console, MDM, or `managed-settings.json`). Replace `<marketplace-url>` with the marketplace URL from the Speakeasy dashboard and keep it private.%s\n\n", pluginNote)
+	b.WriteString(claudeCodeSettingsSnippet(marketplaceName, "<marketplace-url>", enabledPlugin))
+	fmt.Fprintf(&b, "Keep the marketplace name `%s` exactly as shown, including after `@`. Restart Claude Code, then check `/plugin`. See [Require a marketplace and its plugins](%s).\n", marketplaceName, claudeCodeRequireMarketplaceDocsURL)
+	b.WriteString("\n### Claude Cowork\n\n")
 	b.WriteString("1. Go to your organization's [Claude admin console](https://claude.ai)\n")
 	b.WriteString("2. Navigate to **Settings → Plugin Marketplaces**\n")
 	b.WriteString("3. Click **Add Marketplace** and paste this repository's URL\n")
 	b.WriteString("4. Plugins will be automatically available to members of your organization\n")
 	if cfg.HooksAPIKey != "" {
-		obs := ClaudeObservabilitySlug(cfg)
-		fmt.Fprintf(&b, "\nMark the `%s` plugin as required so observability is on by default for all team members:\n\n", obs)
-		fmt.Fprintf(&b, "```json\n{\n  \"plugins\": {\n    \"required\": [\"%s@%s\"]\n  }\n}\n```\n", obs, resolveMarketplaceName(cfg))
+		fmt.Fprintf(&b, "\nMark the `%s` plugin as **Required** so observability is on by default for all team members.\n", enabledPlugin)
 	}
 	b.WriteString("\n### Cursor\n\n")
 	b.WriteString("1. Open your team's [Cursor dashboard](https://cursor.com/dashboard)\n")
@@ -1042,7 +1067,7 @@ func generateOpenCodePlugin(files map[string][]byte, p PluginInfo, cfg GenerateC
 }
 
 // codexAuthPolicy picks ON_INSTALL when the user will be prompted for a
-// secret (public server env vars or a Gram API key the published config
+// secret (public server env vars or a Speakeasy API key the published config
 // can't bake in) and ON_USE when nothing needs to be collected. A baked-in
 // APIKey plus all-public-no-env servers means the plugin is install-silent.
 func codexAuthPolicy(p PluginInfo, cfg GenerateConfig) string {
@@ -1133,7 +1158,7 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 
 		switch {
 		case s.IsUnproxied:
-			// Never attach the Gram API key: MCPURL points straight at the
+			// Never attach the Speakeasy API key: MCPURL points straight at the
 			// vendor's own server, which was never meant to receive it.
 		case s.IsOAuth:
 			// OAuth servers handle identity at the HTTP layer — no auth credential needed.
@@ -1147,7 +1172,7 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 		case cfg.APIKey != "":
 			entry.HTTPHeaders = map[string]string{"Authorization": "Bearer " + cfg.APIKey}
 		default:
-			entry.BearerTokenEnvVar = "GRAM_API_KEY"
+			entry.BearerTokenEnvVar = "SPEAKEASY_AI_API_KEY"
 		}
 
 		mcpServers[keys[i]] = entry
@@ -1252,7 +1277,7 @@ func hooksOptionalSubtreePrefixes(orgName string) []string {
 }
 
 // generateClaudeObservabilityPlugin emits the per-org observability plugin
-// containing Gram hooks for Claude Code. The generated runtime configuration
+// containing Speakeasy hooks for Claude Code. The generated runtime configuration
 // carries the org's hooks-scoped API key so no per-machine setup is required.
 func generateClaudeObservabilityPlugin(files map[string][]byte, cfg GenerateConfig) error {
 	return generateClaudeObservabilityPluginInDir(files, ClaudeObservabilitySlug(cfg), cfg)
@@ -1599,7 +1624,10 @@ func generateCopilotObservabilityPluginInDir(files map[string][]byte, subdir str
 // The NDJSON frame protocol (seq-tagged request/reply over stdio) is the
 // agenthooks serve-mode contract; the shim owns the per-hook timeout policy
 // OpenCode lacks. The body mirrors agenthooks' canonical opencode shim
-// (install/render_opencode.go), adding the x-gram-agent-* request headers.
+// (install/render_opencode.go), adding the speakeasy-ai-agent-* request
+// headers. It also sends the deprecated x-gram-agent-* names, because a LiteLLM
+// proxy only forwards the headers its config lists and older configs list
+// those.
 const opencodeObservabilityShim = `// Generated by Speakeasy. Proxies OpenCode plugin hooks to the Speakeasy
 // hooks binary over NDJSON stdio (agenthooks serve --provider=opencode).
 import { spawn, type ChildProcess } from "node:child_process"
@@ -1730,6 +1758,9 @@ const legacy = async (ctx: any) => {
       const messageID = input?.message?.id
       if (messageID) output.headers = {
         ...output.headers,
+        "speakeasy-ai-agent-provider": "opencode",
+        "speakeasy-ai-agent-session-id": input.sessionID,
+        "speakeasy-ai-agent-turn-id": messageID,
         "x-gram-agent-provider": "opencode",
         "x-gram-agent-session-id": input.sessionID,
         "x-gram-agent-turn-id": messageID,
@@ -1864,6 +1895,9 @@ const setup = async (ctx: any) => {
   await ctx.session.hook("model.request", (ev: any) => {
     const messageID = turn.get(ev.sessionID)
     if (!messageID) return
+    ev.headers["speakeasy-ai-agent-provider"] = "opencode"
+    ev.headers["speakeasy-ai-agent-session-id"] = ev.sessionID
+    ev.headers["speakeasy-ai-agent-turn-id"] = messageID
     ev.headers["x-gram-agent-provider"] = "opencode"
     ev.headers["x-gram-agent-session-id"] = ev.sessionID
     ev.headers["x-gram-agent-turn-id"] = messageID
@@ -2414,7 +2448,7 @@ func codexHookCommandStringWindows(timeoutSeconds int, async, failOpen bool) str
 }
 
 // GenerateCodexInstallScript produces a bash install script that:
-//   - Registers the Gram marketplace with the Codex CLI
+//   - Registers the Speakeasy marketplace with the Codex CLI
 //   - Patches ~/.codex/config.toml with feature flags, plugin state, and OTLP export
 //   - Pre-approves all hook events so users skip the manual Settings → Hooks step
 //
@@ -2835,7 +2869,7 @@ if OTEL_ENDPOINT_BASE and OTEL_API_KEY:
     else:
         content = ensure_dotted_table_entry(content, "otel", "environment", '"prod"')
 
-    headers = '{ "Gram-Project" = ' + json.dumps(OTEL_PROJECT) + ', "Gram-Key" = ' + json.dumps(OTEL_API_KEY) + ' }'
+    headers = '{ "Speakeasy-AI-Project" = ' + json.dumps(OTEL_PROJECT) + ', "Speakeasy-AI-Key" = ' + json.dumps(OTEL_API_KEY) + ' }'
     for exporter_key, signal in [
         ("exporter", "logs"),
         ("trace_exporter", "traces"),
@@ -2879,7 +2913,7 @@ for state_key, trusted_hash, trusted_hash_windows in [
         content = content.rstrip('\n') + '\n' + entry
     else:
         # The hook command (and therefore its trusted_hash) changes between
-        # plugin versions. Refresh the hash on this Gram-managed entry so an
+        # plugin versions. Refresh the hash on this Speakeasy-managed entry so an
         # upgraded install does not get flagged as modified/untrusted.
         content = re.sub(
             re.escape(section) + r'([^\[]*?trusted_hash\s*=\s*")[^"]*(")',
@@ -3164,7 +3198,7 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	// Collect userConfig entries across all servers that need user-provided values.
 	userConfig := make(map[string]userConfigEntry)
 
-	// Determine if any private server needs a Gram API key prompt.
+	// Determine if any private server needs a Speakeasy API key prompt.
 	needsGramKeyPrompt := false
 	for _, s := range p.Servers {
 		if !s.IsUnproxied && !s.IsPublic && !s.IsOAuth && cfg.APIKey == "" {
@@ -3180,7 +3214,7 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	}
 
 	if needsGramKeyPrompt {
-		userConfig["GRAM_API_KEY"] = userConfigEntry{
+		userConfig["SPEAKEASY_AI_API_KEY"] = userConfigEntry{
 			Description: "Your Speakeasy API key for authenticating MCP server connections",
 			Sensitive:   true,
 		}
@@ -3210,7 +3244,7 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 		var headers map[string]string
 
 		if s.IsUnproxied {
-			// Never attach the Gram API key: MCPURL points straight at the
+			// Never attach the Speakeasy API key: MCPURL points straight at the
 			// vendor's own server, which was never meant to receive it.
 		} else if s.IsOAuth {
 			// OAuth servers handle identity at the HTTP layer — no Authorization header needed.
@@ -3222,7 +3256,7 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 		} else if cfg.APIKey != "" {
 			headers = map[string]string{"Authorization": "Bearer " + cfg.APIKey}
 		} else {
-			headers = map[string]string{"Authorization": "Bearer ${user_config.GRAM_API_KEY}"}
+			headers = map[string]string{"Authorization": "Bearer ${user_config.SPEAKEASY_AI_API_KEY}"}
 		}
 
 		mcpServers[s.DisplayName] = claudeMCPServer{
@@ -3283,7 +3317,7 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 		var headers map[string]string
 
 		if s.IsUnproxied {
-			// Never attach the Gram API key: MCPURL points straight at the
+			// Never attach the Speakeasy API key: MCPURL points straight at the
 			// vendor's own server, which was never meant to receive it.
 		} else if s.IsOAuth {
 			// OAuth servers handle identity at the HTTP layer — no Authorization header needed.
@@ -3295,7 +3329,7 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 		} else if cfg.APIKey != "" {
 			headers = map[string]string{"Authorization": "Bearer " + cfg.APIKey}
 		} else {
-			headers = map[string]string{"Authorization": "Bearer ${env:GRAM_API_KEY}"}
+			headers = map[string]string{"Authorization": "Bearer ${env:SPEAKEASY_AI_API_KEY}"}
 		}
 
 		mcpServers[s.DisplayName] = cursorMCPServer{
@@ -3336,7 +3370,7 @@ func generateOpenCodePluginInDir(files map[string][]byte, subdir string, p Plugi
 		var headers map[string]string
 
 		if s.IsUnproxied {
-			// Never attach the Gram API key: MCPURL points straight at the
+			// Never attach the Speakeasy API key: MCPURL points straight at the
 			// vendor's own server, which was never meant to receive it.
 		} else if s.IsOAuth {
 			// OpenCode auto-detects OAuth on remote servers and runs the
@@ -3349,7 +3383,7 @@ func generateOpenCodePluginInDir(files map[string][]byte, subdir string, p Plugi
 		} else if cfg.APIKey != "" {
 			headers = map[string]string{"Authorization": "Bearer " + cfg.APIKey}
 		} else {
-			headers = map[string]string{"Authorization": "Bearer ${env:GRAM_API_KEY}"}
+			headers = map[string]string{"Authorization": "Bearer ${env:SPEAKEASY_AI_API_KEY}"}
 		}
 
 		mcpServers[s.DisplayName] = opencodeMCPServer{

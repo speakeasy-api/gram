@@ -20,9 +20,21 @@ type Client struct {
 	// List Doer is the HTTP client used to make requests to the list endpoint.
 	ListDoer goahttp.Doer
 
+	// ListPlatforms Doer is the HTTP client used to make requests to the
+	// listPlatforms endpoint.
+	ListPlatformsDoer goahttp.Doer
+
+	// ListTokenEndpoints Doer is the HTTP client used to make requests to the
+	// listTokenEndpoints endpoint.
+	ListTokenEndpointsDoer goahttp.Doer
+
 	// RegisterIssuer Doer is the HTTP client used to make requests to the
 	// registerIssuer endpoint.
 	RegisterIssuerDoer goahttp.Doer
+
+	// UpdateIssuer Doer is the HTTP client used to make requests to the
+	// updateIssuer endpoint.
+	UpdateIssuerDoer goahttp.Doer
 
 	// WithdrawIssuer Doer is the HTTP client used to make requests to the
 	// withdrawIssuer endpoint.
@@ -31,6 +43,10 @@ type Client struct {
 	// AdmitSubject Doer is the HTTP client used to make requests to the
 	// admitSubject endpoint.
 	AdmitSubjectDoer goahttp.Doer
+
+	// UpdateSubject Doer is the HTTP client used to make requests to the
+	// updateSubject endpoint.
+	UpdateSubjectDoer goahttp.Doer
 
 	// WithdrawSubject Doer is the HTTP client used to make requests to the
 	// withdrawSubject endpoint.
@@ -57,16 +73,20 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListDoer:            doer,
-		RegisterIssuerDoer:  doer,
-		WithdrawIssuerDoer:  doer,
-		AdmitSubjectDoer:    doer,
-		WithdrawSubjectDoer: doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		ListDoer:               doer,
+		ListPlatformsDoer:      doer,
+		ListTokenEndpointsDoer: doer,
+		RegisterIssuerDoer:     doer,
+		UpdateIssuerDoer:       doer,
+		WithdrawIssuerDoer:     doer,
+		AdmitSubjectDoer:       doer,
+		UpdateSubjectDoer:      doer,
+		WithdrawSubjectDoer:    doer,
+		RestoreResponseBody:    restoreBody,
+		scheme:                 scheme,
+		host:                   host,
+		decoder:                dec,
+		encoder:                enc,
 	}
 }
 
@@ -94,6 +114,54 @@ func (c *Client) List() goa.Endpoint {
 	}
 }
 
+// ListPlatforms returns an endpoint that makes HTTP requests to the
+// workloadIdentities service listPlatforms server.
+func (c *Client) ListPlatforms() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListPlatformsRequest(c.encoder)
+		decodeResponse = DecodeListPlatformsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListPlatformsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListPlatformsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("workloadIdentities", "listPlatforms", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListTokenEndpoints returns an endpoint that makes HTTP requests to the
+// workloadIdentities service listTokenEndpoints server.
+func (c *Client) ListTokenEndpoints() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListTokenEndpointsRequest(c.encoder)
+		decodeResponse = DecodeListTokenEndpointsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListTokenEndpointsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListTokenEndpointsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("workloadIdentities", "listTokenEndpoints", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // RegisterIssuer returns an endpoint that makes HTTP requests to the
 // workloadIdentities service registerIssuer server.
 func (c *Client) RegisterIssuer() goa.Endpoint {
@@ -113,6 +181,30 @@ func (c *Client) RegisterIssuer() goa.Endpoint {
 		resp, err := c.RegisterIssuerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("workloadIdentities", "registerIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateIssuer returns an endpoint that makes HTTP requests to the
+// workloadIdentities service updateIssuer server.
+func (c *Client) UpdateIssuer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateIssuerRequest(c.encoder)
+		decodeResponse = DecodeUpdateIssuerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateIssuerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateIssuerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("workloadIdentities", "updateIssuer", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -161,6 +253,30 @@ func (c *Client) AdmitSubject() goa.Endpoint {
 		resp, err := c.AdmitSubjectDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("workloadIdentities", "admitSubject", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateSubject returns an endpoint that makes HTTP requests to the
+// workloadIdentities service updateSubject server.
+func (c *Client) UpdateSubject() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateSubjectRequest(c.encoder)
+		decodeResponse = DecodeUpdateSubjectResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateSubjectRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateSubjectDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("workloadIdentities", "updateSubject", err)
 		}
 		return decodeResponse(resp)
 	}

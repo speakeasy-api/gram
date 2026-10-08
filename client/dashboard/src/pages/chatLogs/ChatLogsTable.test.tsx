@@ -6,6 +6,10 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatLogsTable } from "./ChatLogsTable";
 
+vi.mock("@gram/client/react-query/_context.js", () => ({
+  useGramContext: () => ({}),
+}));
+
 vi.mock("@/components/ui/Button", () => ({
   Button: ({
     children,
@@ -250,5 +254,66 @@ describe("ChatLogsTable", () => {
 
     expect(screen.getByText("Ada Lovelace")).toBeTruthy();
     expect(screen.queryByText("user_01HXXXXXXXXXXXXXXXXXXXXXXX")).toBeNull();
+  });
+  it("links an agent-backed assistant session to its agent and names who it acted for", () => {
+    renderTable(
+      <ChatLogsTable
+        chats={[
+          {
+            ...makeChat("chat_01HXQ1P84WV3S9J7Z52DKVE7NE"),
+            userId: "gram-user-1",
+            assistantId: "assistant-1",
+            assistantName: "Helper",
+            assistantAgentId: "agent-1",
+          },
+        ]}
+        onDeleteChat={() => {
+          /* test stub */
+        }}
+        onSelectChat={() => {
+          /* test stub */
+        }}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    const agentLink = screen.getByRole("link", { name: /Helper/ });
+    expect(agentLink.getAttribute("href")).toContain(
+      encodeURIComponent("agent:agent-1"),
+    );
+    expect(screen.getByText("for")).toBeTruthy();
+    const delegateLink = screen.getByRole("link", { name: "Ada Lovelace" });
+    expect(delegateLink.getAttribute("href")).toContain(
+      encodeURIComponent("user:gram-user-1"),
+    );
+  });
+
+  it("links an assistant session without an agent identity to the assistant", () => {
+    renderTable(
+      <ChatLogsTable
+        chats={[
+          {
+            ...makeChat("chat_01HXQ1P84WV3S9J7Z52DKVE7NE"),
+            assistantId: "assistant-1",
+            assistantName: "Helper",
+          },
+        ]}
+        onDeleteChat={() => {
+          /* test stub */
+        }}
+        onSelectChat={() => {
+          /* test stub */
+        }}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    const assistantLink = screen.getByRole("link", { name: /Helper/ });
+    expect(assistantLink.getAttribute("href")).toContain(
+      "/assistants/assistant-1",
+    );
+    expect(screen.queryByText("for")).toBeNull();
   });
 });

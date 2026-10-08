@@ -1,42 +1,27 @@
 package proxy
 
 import (
-	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
+
+	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 )
-
-// MCP 2026-07-28 mirrors selected JSON-RPC fields into HTTP headers. The body
-// remains the source of truth, so the final request sent upstream must reject
-// any disagreement after interceptors and configured headers have run.
-const (
-	headerMCPMethod = "Mcp-Method"
-	headerMCPName   = "Mcp-Name"
-
-	base64SentinelPrefix = "=?base64?"
-	base64SentinelSuffix = "?="
-
-	methodPromptsGet = "prompts/get"
-)
-
-func mirroredNameSource(method string) (string, bool) {
-	switch method {
-	case methodToolsCall, methodPromptsGet:
-		return "name", true
-	case methodResourcesRead:
-		return "uri", true
-	default:
-		return "", false
-	}
-}
 
 // validateMirroredHeaders compares the headers on the fully constructed
-// upstream request with the final decoded body. Absent headers remain valid for
-// protocol revisions that predate request metadata.
+// upstream request with the final decoded body. MCP 2026-07-28 mirrors
+// selected JSON-RPC fields into HTTP headers and the body remains the source
+// of truth, so the request sent upstream must reject any disagreement after
+// interceptors and configured headers have run.
+//
+// The wire format (header names, Base64 sentinel, which params field Mcp-Name
+// mirrors) is shared with Speakeasy's terminating surfaces through httpheaders.
+// Treating an absent header as valid is this intermediary's own policy: the
+// proxy relays protocol revisions that predate request metadata, and it never
+// answers a protocol version itself.
 func validateMirroredHeaders(r *http.Request, req *UserRequest) *RejectError {
 	if r == nil || req == nil || len(req.JSONRPCMessages) != 1 {
 		return nil
@@ -46,15 +31,15 @@ func validateMirroredHeaders(r *http.Request, req *UserRequest) *RejectError {
 		return nil
 	}
 
-	method, methodPresent, rejection := singleMirroredHeader(r, headerMCPMethod)
+	method, methodPresent, rejection := singleMirroredHeader(r, httpheaders.MethodHeader)
 	if rejection != nil {
 		return rejection
 	}
 	if methodPresent && method != rpcReq.Method {
-		return headerMismatch(headerMCPMethod, method, rpcReq.Method)
+		return headerMismatch(httpheaders.MethodHeader, method, rpcReq.Method)
 	}
 
-	name, namePresent, rejection := singleMirroredHeader(r, headerMCPName)
+	name, namePresent, rejection := singleMirroredHeader(r, httpheaders.NameHeader)
 	if rejection != nil {
 		return rejection
 	}
@@ -62,46 +47,42 @@ func validateMirroredHeaders(r *http.Request, req *UserRequest) *RejectError {
 		return nil
 	}
 
-	source, mirrored := mirroredNameSource(rpcReq.Method)
+	source, mirrored := httpheaders.MirroredNameField(rpcReq.Method)
 	if !mirrored {
 		return nil
 	}
 
 	var params map[string]json.RawMessage
 	if err := json.Unmarshal(rpcReq.Params, &params); err != nil {
-		return unverifiableHeader(headerMCPName, "request params are not a JSON object")
+		return unverifiableHeader(httpheaders.NameHeader, "request params are not a JSON object")
 	}
 	var want string
 	if err := json.Unmarshal(params[source], &want); err != nil {
-		return unverifiableHeader(headerMCPName, fmt.Sprintf("request params carry no string %q to compare against", source))
+		return unverifiableHeader(httpheaders.NameHeader, fmt.Sprintf("request params carry no string %q to compare against", source))
 	}
 	if name != want {
-		return headerMismatch(headerMCPName, name, want)
+		return headerMismatch(httpheaders.NameHeader, name, want)
 	}
 	return nil
 }
 
 func singleMirroredHeader(r *http.Request, name string) (string, bool, *RejectError) {
-	values := r.Header.Values(name)
-	switch len(values) {
-	case 0:
-		return "", false, nil
-	case 1:
-		decoded, err := decodeMirroredHeaderValue(values[0])
-		if err != nil {
-			return "", true, &RejectError{
-				Code:    RejectCodeHeaderMismatch,
-				Message: fmt.Sprintf("malformed %s header", name),
-				Data:    nil,
-			}
-		}
-		return decoded, true, nil
-	default:
+	value, present, err := httpheaders.MirroredValue(r.Header, name)
+	switch {
+	case errors.Is(err, httpheaders.ErrRepeatedHeader):
 		return "", true, &RejectError{
 			Code:    RejectCodeHeaderMismatch,
 			Message: fmt.Sprintf("%s header is repeated", name),
 			Data:    nil,
 		}
+	case err != nil:
+		return "", true, &RejectError{
+			Code:    RejectCodeHeaderMismatch,
+			Message: fmt.Sprintf("malformed %s header", name),
+			Data:    nil,
+		}
+	default:
+		return value, present, nil
 	}
 }
 
@@ -111,18 +92,6 @@ func unverifiableHeader(header, reason string) *RejectError {
 		Message: fmt.Sprintf("header mismatch: %s header cannot be verified — %s", header, reason),
 		Data:    nil,
 	}
-}
-
-func decodeMirroredHeaderValue(value string) (string, error) {
-	if !strings.HasPrefix(value, base64SentinelPrefix) || !strings.HasSuffix(value, base64SentinelSuffix) {
-		return value, nil
-	}
-	encoded := strings.TrimSuffix(strings.TrimPrefix(value, base64SentinelPrefix), base64SentinelSuffix)
-	decoded, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
-		return "", fmt.Errorf("decode base64 header value: %w", err)
-	}
-	return string(decoded), nil
 }
 
 func headerMismatch(header, headerValue, bodyValue string) *RejectError {

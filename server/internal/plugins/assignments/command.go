@@ -14,6 +14,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/directory"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -33,6 +35,7 @@ type Input struct {
 }
 
 type Result struct {
+	ContentChanged     bool
 	Plugin             pluginsrepo.Plugin
 	Assignments        []pluginsrepo.PluginAssignment
 	PrincipalURNs      []string
@@ -48,7 +51,7 @@ func Lock(ctx context.Context, tx pgx.Tx, organizationID string, projectID, plug
 	}
 	var plugin pluginsrepo.Plugin
 	err := tx.QueryRow(ctx, `
-SELECT id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE id = $1
   AND organization_id = $2
@@ -62,6 +65,7 @@ FOR UPDATE`, pluginID, organizationID, projectID).Scan(
 		&plugin.Slug,
 		&plugin.Description,
 		&plugin.IsDefault,
+		&plugin.AutoCreated,
 		&plugin.CreatedAt,
 		&plugin.UpdatedAt,
 		&plugin.DeletedAt,
@@ -104,6 +108,7 @@ type Guard func(ctx context.Context, tx pgx.Tx, plugin pluginsrepo.Plugin, curre
 type BeforeReplace func(ctx context.Context, plugin pluginsrepo.Plugin, current, desired []string) error
 
 type Dependencies struct {
+	DeliveryGuard *admission.Guard
 	Guard         Guard
 	BeforeReplace BeforeReplace
 }
@@ -223,7 +228,11 @@ func Replace(ctx context.Context, tx pgx.Tx, logger *audit.Logger, plugin plugin
 	}); err != nil {
 		return Result{}, fmt.Errorf("audit plugin assignments set: %w", err)
 	}
-	return Result{Plugin: plugin, Assignments: created, PrincipalURNs: desired, PreviousPrincipals: current}, nil
+	changed, err := roledelivery.AudienceChanged(ctx, tx, input.OrganizationID, input.ProjectID, plugin.ID, current, desired, dependencies.DeliveryGuard)
+	if err != nil {
+		return Result{}, fmt.Errorf("deliver role audience servers: %w", err)
+	}
+	return Result{ContentChanged: changed, Plugin: plugin, Assignments: created, PrincipalURNs: desired, PreviousPrincipals: current}, nil
 }
 
 type principalKind uint8

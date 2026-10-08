@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #MISE dir="{{ config_root }}"
-#MISE description="Check that a Gram host returns every expected security response header"
+#MISE description="Check that a Speakeasy host returns every expected security response header"
 #USAGE arg "<target>" help="Host to check: dev, prod, or a full URL" default="dev"
 
 # Headers reach the browser from two layers: this dashboard nginx config,

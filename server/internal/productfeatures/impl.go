@@ -128,6 +128,10 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 
 	// Staff-managed entitlements (SSO, SCIM, ...) must not be self-granted by
 	// organization admins; org-settable operational toggles need org:admin only.
+	// Retired rollout flags cannot be changed, including by staff.
+	if feature == Feature("automatic-role-distribution") {
+		return oops.E(oops.CodeInvalid, nil, "unknown product feature")
+	}
 	if feature.RequiresPlatformAdmin() {
 		if _, _, err := auth.RequirePlatformAdmin(ctx, s.logger); err != nil {
 			return err

@@ -1,8 +1,8 @@
 {
   "type": "module",
-  "name": "@gram-ai/functions",
-  "version": "0.18.3",
-  "description": "",
+  "name": "@speakeasy-api/functions",
+  "version": "0.20.0",
+  "description": "Build MCP tools in TypeScript and deploy them with the Speakeasy CLI.",
   "author": "Georges Haidar <georges@speakeasyapi.dev>",
   "main": "dist/index.js",
   "keywords": [],
@@ -15,9 +15,6 @@
     "type": "git",
     "url": "https://github.com/speakeasy-api/gram.git",
     "directory": "ts-framework/functions"
-  },
-  "bin": {
-    "gf": "./dist/bin/cli.js"
   },
   "scripts": {
     "test": "vitest run",
@@ -44,6 +41,9 @@
     "./build": {
       "import": "./dist/build/index.js",
       "types": "./dist/build/index.d.ts"
+    },
+    "./gf": {
+      "import": "./dist/bin/cli.js"
     }
   },
   "peerDependencies": {
@@ -56,8 +56,8 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.7.0",
-    "@logtape/logtape": "^2.3.5",
-    "@logtape/pretty": "^2.3.4",
+    "@logtape/logtape": "^2.3.10",
+    "@logtape/pretty": "^2.3.10",
     "@stricli/core": "^1.3.0",
     "archiver": "^8.0.0",
     "esbuild": "^0.28.1",

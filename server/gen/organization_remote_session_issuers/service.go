@@ -95,7 +95,7 @@ type Service interface {
 	// organizational and project-specific issuers in the caller's organization.
 	// Only RFC 8414-derived columns are written — endpoints, the *_supported
 	// arrays, client_id_metadata_document_supported, and the documentation URLs.
-	// Gram behavior and display fields (oidc, passthrough, name, slug, logo,
+	// Speakeasy behavior and display fields (oidc, passthrough, name, slug, logo,
 	// client setup documentation) are left alone. Requires org:admin.
 	RefreshIssuerMetadata(context.Context, *RefreshIssuerMetadataPayload) (res *types.RemoteSessionIssuerRefresh, err error)
 }
@@ -219,6 +219,11 @@ type CreateIssuerPayload struct {
 	// authorize redirect in place of the resolved scope set. Omit or send an empty
 	// array to leave it unset.
 	ScopeOverride []string
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Omit to leave it unset: such a login requests the provider's whole
+	// scopes_supported.
+	OmitScopeFallback *bool
 	// Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it
 	// unset: the parameter is then sent, and a login or refresh the issuer answers
 	// with invalid_target is retried once without it. Set false to never send it.
@@ -288,7 +293,10 @@ type ListIssuersPayload struct {
 	// Pagination cursor.
 	Cursor *string
 	// Page size (default 50, max 100).
-	Limit        *int
+	Limit *int
+	// Only issuers from one tier: organizational (organization), project-specific
+	// (project), or from the platform catalog (platform). Omitted lists all three.
+	Tier         *string
 	SessionToken *string
 	ApikeyToken  *string
 }
@@ -504,6 +512,11 @@ type UpdateIssuerPayload struct {
 	// Set or clear the operator-pinned scope request. Omitting the field (or
 	// sending null) leaves the stored value unchanged; an empty array clears it.
 	ScopeOverride []string `json:"scope_override"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Omit or send null to keep the stored value; false restores the
+	// default.
+	OmitScopeFallback *bool
 	// Whether the issuer accepts the RFC 8707 resource parameter. Omitting the
 	// field leaves the stored value unchanged.
 	ResourceIndicatorSupported *bool

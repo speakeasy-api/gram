@@ -28,9 +28,9 @@ type RemoteSessionClient struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID string
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string
 	ClientIDIssuedAt    *string
 	// Null when the secret does not expire.
@@ -54,7 +54,14 @@ type RemoteSessionClient struct {
 	Scope []string
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string
-	CreatedAt string
-	UpdatedAt string
+	Audience *string
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string
+	CreatedAt   string
+	UpdatedAt   string
 }

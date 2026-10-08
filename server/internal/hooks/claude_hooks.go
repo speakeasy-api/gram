@@ -975,7 +975,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 			}
 		}
 		if blockID, err := uuid.NewV7(); err == nil && !s.isHookDuplicate(ctx) && s.repo != nil && strings.TrimSpace(ev.Context.OrganizationID) != "" && ev.Context.ProjectID != uuid.Nil {
-			userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+			userReason = appendBlockURL(userReason, s.blockViewURL(ctx, ev.Context.OrganizationID, blockID))
 			userID := ev.Context.User.ID
 			userEmail := ev.Context.User.Email
 			asyncCtx := context.WithoutCancel(ctx)
@@ -1034,7 +1034,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
 			}
 			if blockID, err := uuid.NewV7(); err == nil {
-				userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+				userReason = appendBlockURL(userReason, s.blockViewURL(ctx, ev.Context.OrganizationID, blockID))
 				// Prefer the email from the session metadata fetched above,
 				// falling back to the raw payload when it wasn't cached.
 				userEmail := conv.PtrValOr(payload.UserEmail, "")
@@ -1186,7 +1186,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		// Permit-by-default: only a blocked-list URL match denies. Servers
 		// missing from the inventory, local stdio servers, and unrecognizable
 		// entries are all allowed — the fail-closed reasons below are
-		// block_all concepts. Gram-hosted URLs stay allowed even if listed.
+		// block_all concepts. Speakeasy-hosted URLs stay allowed even if listed.
 		if matched != nil && matched.URL != "" && !s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID) {
 			if blockedURL, blocked := shadowmcp.BlockedURLMatch(policy.BlockedURLs, matched.URL); blocked {
 				detail = fmt.Sprintf("MCP server %q is blocked by policy (URL: %s)", serverPrefix, blockedURL)
@@ -1197,9 +1197,9 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		case matched == nil:
 			detail = fmt.Sprintf("MCP server %q is not in the active configuration", serverPrefix)
 		case matched.URL != "" && !s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID):
-			detail = fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", serverPrefix, matched.URL)
+			detail = fmt.Sprintf("MCP server %q is not Speakeasy-hosted (URL: %s)", serverPrefix, matched.URL)
 		case matched.URL == "" && matched.Command != "":
-			// Local stdio servers have no URL, so the Gram-hosted check above
+			// Local stdio servers have no URL, so the Speakeasy-hosted check above
 			// can't apply. Treat them as shadow MCPs until explicitly approved
 			// by command.
 			detail = fmt.Sprintf("MCP server %q is a local stdio server (command: %s)", serverPrefix, matched.Command)
@@ -1318,7 +1318,7 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		s.logger.WarnContext(ctx, "tool call block: invalid project id; skipping durable block link",
 			attr.SlogEvent("claude_hook_block_invalid_project"), attr.SlogError(parseErr))
 	} else if blockID, err := uuid.NewV7(); err == nil {
-		userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+		userReason = appendBlockURL(userReason, s.blockViewURL(ctx, metadata.GramOrgID, blockID))
 		asyncCtx := context.WithoutCancel(ctx)
 		metaCopy := metadata
 		go func() {
@@ -1466,11 +1466,8 @@ func (s *Service) recordShadowMCPBlockFinding(
 	}
 
 	// Use UUIDv7 so the row sorts in insertion order alongside scanner
-	// findings: ListRiskResultsByProjectFound paginates with ORDER BY id
-	// DESC, which only behaves as "most recent first" when every inserted
-	// id is time-ordered. uuid.New() (v4) is random and would interleave
-	// hook-time block rows at arbitrary positions in the Recent Findings
-	// table.
+	// findings: finding listings break ties on id DESC, which only reads as
+	// "most recent first" when every inserted id is time-ordered.
 	resultID, err := uuid.NewV7()
 	if err != nil {
 		s.logger.WarnContext(ctx, "shadow-mcp block: failed to generate uuidv7",

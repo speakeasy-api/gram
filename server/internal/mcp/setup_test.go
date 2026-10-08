@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -45,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistant_platform_mcp_adapter"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -61,6 +63,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
@@ -99,20 +102,21 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service             *mcp.Service
-	conn                *pgxpool.Pool
-	sessionManager      *sessions.Manager
-	serverURL           *url.URL
-	siteURL             *url.URL
-	logger              *slog.Logger
-	tracerProvider      trace.TracerProvider
-	cacheAdapter        cache.Cache
-	chatSessionsManager *chatsessions.Manager
-	authnChallengeCache cache.TypedCacheObject[mcp.AuthnChallengeState]
-	enc                 *encryption.Client
-	authzEngine         *authz.Engine
-	audit               *audit.Logger
-	tunnelRoutes        route.Store
+	principalCredentials *principalcredential.Issuer
+	service              *mcp.Service
+	conn                 *pgxpool.Pool
+	sessionManager       *sessions.Manager
+	serverURL            *url.URL
+	siteURL              *url.URL
+	logger               *slog.Logger
+	tracerProvider       trace.TracerProvider
+	cacheAdapter         cache.Cache
+	chatSessionsManager  *chatsessions.Manager
+	authnChallengeCache  cache.TypedCacheObject[mcp.AuthnChallengeState]
+	enc                  *encryption.Client
+	authzEngine          *authz.Engine
+	audit                *audit.Logger
+	tunnelRoutes         route.Store
 	// features is the injectable flag provider wired into the service; tests
 	// enable flag-gated behavior (e.g. the Platform MCP assistant toolset
 	// variant) with SetFlagVariant.
@@ -446,17 +450,25 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	redisClient, err2 := infra.NewRedisClient(t, 0)
 	require.NoError(t, err2)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
-	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine)
+	principalCredentials := principalcredential.New(callerAssertions, conn)
+	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine, principalCredentials, cache.NewRedisCacheAdapter(redisClient))
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, nil)
 	auditLogger := audit.NewLogger()
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
 	idTokenKeys, err := remotesessions.NewIDTokenKeyResolver(logger, guardianPolicy, meterProvider, ratelimit.NewRedisStore(redisClient))
 	require.NoError(t, err)
-	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, conn, enc, guardianPolicy, nil, cacheAdapter, serverURL, remotesessions.WithIDTokenVerifier(remotesessions.NewIDTokenVerifier(idTokenKeys)))
+	features := &feature.InMemory{}
+	// One prober shared by login and proxy, as in production.
+	protectedResources := protectedresource.NewProber(conn, guardianPolicy)
+	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, conn, enc, guardianPolicy, nil, cacheAdapter, serverURL,
+		remotesessions.WithIDTokenVerifier(remotesessions.NewIDTokenVerifier(idTokenKeys)),
+		remotesessions.WithFeatureFlags(features),
+		remotesessions.WithProtectedResourceProber(protectedResources),
+	)
 	mcpToolExecutionCheckpoint, err := mcptoolexecution.NewCheckpoint(conn, mcptoolexecution.DefaultEvaluationTimeout, meterProvider, logger)
 	require.NoError(t, err)
 	scanEvaluator := mcpriskscan.NewNoop(tracerProvider, meterProvider, logger)
-	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, conn, guardianPolicy, authzEngine, posthog, telemLogger, billingStub, billingStub, mcpservers.NewToolDispositionCache(logger, conn, cacheAdapter), toolcallobserver.NoopSuccessRecorder{}, toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache()), mcpToolExecutionCheckpoint, scanEvaluator)
+	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, conn, guardianPolicy, authzEngine, posthog, telemLogger, billingStub, billingStub, mcpservers.NewToolDispositionCache(logger, conn, cacheAdapter), toolcallobserver.NoopSuccessRecorder{}, toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache()), mcpToolExecutionCheckpoint, scanEvaluator, protectedResources)
 	managedLogsTools := platformtoolsruntime.ManagedAssistantLogsTools(telemService)
 	efficacySignaler := background.NewThrottledSignaler(
 		&background.TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
@@ -484,29 +496,32 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 		),
 	})
 	tunnelRoutes := route.NewRouteTable()
-	features := &feature.InMemory{}
-	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, authzEngine, assistantTokens, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime)
+	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime)
 	require.NoError(t, err)
+	// Identity chaining runs as in production, so gate tests without bindings
+	// prove it leaves their behavior unchanged.
+	svc.SetIdentityChainer(identitychaining.New(logger, conn, enc, remoteChallengeMgr, remotesessions.NewDelegationService(conn, enc, remoteChallengeMgr), idTokenKeys, cacheAdapter))
 
 	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](logger, cacheAdapter, cache.SuffixNone)
 
 	return ctx, &testInstance{
-		service:             svc,
-		conn:                conn,
-		sessionManager:      sessionManager,
-		serverURL:           serverURL,
-		siteURL:             siteURL,
-		logger:              logger,
-		tracerProvider:      tracerProvider,
-		cacheAdapter:        cacheAdapter,
-		chatSessionsManager: chatSessionsManager,
-		authnChallengeCache: authnCache,
-		enc:                 enc,
-		authzEngine:         authzEngine,
-		audit:               auditLogger,
-		tunnelRoutes:        tunnelRoutes,
-		features:            features,
-		efficacySignaler:    efficacySignaler,
+		principalCredentials: principalCredentials,
+		service:              svc,
+		conn:                 conn,
+		sessionManager:       sessionManager,
+		serverURL:            serverURL,
+		siteURL:              siteURL,
+		logger:               logger,
+		tracerProvider:       tracerProvider,
+		cacheAdapter:         cacheAdapter,
+		chatSessionsManager:  chatSessionsManager,
+		authnChallengeCache:  authnCache,
+		enc:                  enc,
+		authzEngine:          authzEngine,
+		audit:                auditLogger,
+		tunnelRoutes:         tunnelRoutes,
+		features:             features,
+		efficacySignaler:     efficacySignaler,
 	}
 }
 

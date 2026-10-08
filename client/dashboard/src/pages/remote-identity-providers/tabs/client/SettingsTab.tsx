@@ -1,4 +1,7 @@
+import { PlatformAdminOnlyPanel } from "@/components/platform-admin-only-panel";
 import { RequireScope } from "@/components/require-scope";
+import { Switch } from "@/components/ui/Switch";
+import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
@@ -27,6 +30,7 @@ import {
   narrowTokenEndpointAuthMethod,
   parseScopes,
 } from "../../../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
+import { IssuerScopeOverrideAlert } from "../../clientAlerts";
 import { DeleteClientDialog, RotateClientDialog } from "../../clientDialogs";
 import { KeySetField } from "./KeySetField";
 
@@ -50,6 +54,14 @@ export function SettingsTab({
   const [scope, setScope] = useState((client.scope ?? []).join(", "));
   const [audience, setAudience] = useState(client.audience ?? "");
   const [clientSecret, setClientSecret] = useState("");
+  // Undefined until a platform admin flips the switch, so the switch tracks
+  // the saved value (including a Migrate from the warning above) and a save
+  // only sends the flag when it was deliberately changed.
+  const isPlatformAdmin = useIsPlatformAdmin();
+  const [legacyCallbackMode, setLegacyCallbackMode] = useState<
+    boolean | undefined
+  >(undefined);
+  const legacyCallbackChecked = legacyCallbackMode ?? client.legacyCallbackUrl;
   const [showDelete, setShowDelete] = useState(false);
   const [showRotate, setShowRotate] = useState(false);
   // A rotation re-registers the client at the issuer's published registration
@@ -98,6 +110,7 @@ export function SettingsTab({
         refetchType: "all",
       });
       setClientSecret("");
+      setLegacyCallbackMode(undefined);
       toast.success("Client updated");
     },
     onError: (error) => {
@@ -119,6 +132,12 @@ export function SettingsTab({
           scope: parseScopes(scope),
           audience: audience.trim() || undefined,
           clientSecret: clientSecretUpdateValue(authMethod, clientSecret),
+          legacyCallbackUrl:
+            isPlatformAdmin &&
+            legacyCallbackMode !== undefined &&
+            legacyCallbackMode !== client.legacyCallbackUrl
+              ? legacyCallbackMode
+              : undefined,
         },
       },
     });
@@ -154,6 +173,8 @@ export function SettingsTab({
         <div className="flex flex-col gap-1.5">
           <Label>Scopes (comma-separated)</Label>
           <Input value={scope} onChange={setScope} />
+          {/* Only warn once there are client scopes to be overridden. */}
+          {scope.trim() && <IssuerScopeOverrideAlert issuer={issuer} />}
         </div>
         <div className="flex flex-col gap-1.5">
           <Label>Audience</Label>
@@ -179,6 +200,26 @@ export function SettingsTab({
             </Text>
           </div>
         )}
+        <PlatformAdminOnlyPanel>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-3">
+              <Switch
+                aria-labelledby="legacy-callback-mode-label"
+                checked={legacyCallbackChecked}
+                onCheckedChange={setLegacyCallbackMode}
+              />
+              <Label id="legacy-callback-mode-label">
+                Legacy callback compatibility mode
+              </Label>
+            </div>
+            <Text small muted>
+              On for apps registered with the identity provider under the legacy
+              /oauth/callback URL. Turn it off once the app has the
+              /mcp/remote_login_callback URL registered. Saved with your other
+              changes.
+            </Text>
+          </div>
+        </PlatformAdminOnlyPanel>
         <div>
           <RequireScope scope="org:admin" level="component">
             <Button
@@ -252,7 +293,7 @@ export function SettingsTab({
 }
 
 // RegistrationStatus explains what a rotation would do for this client: whether
-// the identity provider publishes a registration endpoint Gram can re-register
+// the identity provider publishes a registration endpoint Speakeasy can re-register
 // it at, whether the provider has already stopped recognizing it, and when its
 // secret expires.
 function RegistrationStatus({
@@ -266,7 +307,7 @@ function RegistrationStatus({
     return (
       <Text small muted>
         {client.clientIdMetadataUri
-          ? "This client uses a client ID metadata document hosted by Gram. It is never registered with the identity provider, so it cannot expire and has nothing to rotate."
+          ? "This client uses a client ID metadata document hosted by Speakeasy. It is never registered with the identity provider, so it cannot expire and has nothing to rotate."
           : "This client authenticates with a signed assertion bound to a key set, which dynamic registration cannot reproduce. Manage its key set instead of rotating it."}
       </Text>
     );
@@ -288,17 +329,17 @@ function RegistrationStatus({
   if (issuerRegistrationEndpoint) {
     return (
       <Text small muted>
-        Gram re-registers this client at {issuerRegistrationEndpoint} if the
-        identity provider stops recognizing it or its secret expires; rotate now
-        to replace it ahead of time.{expiryNote}
+        Speakeasy re-registers this client at {issuerRegistrationEndpoint} if
+        the identity provider stops recognizing it or its secret expires; rotate
+        now to replace it ahead of time.{expiryNote}
       </Text>
     );
   }
   return (
     <Text small muted>
-      The identity provider publishes no registration endpoint, so Gram cannot
-      re-register this client; replace its credentials by hand if the provider
-      stops recognizing them.{expiryNote}
+      The identity provider publishes no registration endpoint, so Speakeasy
+      cannot re-register this client; replace its credentials by hand if the
+      provider stops recognizing them.{expiryNote}
     </Text>
   );
 }

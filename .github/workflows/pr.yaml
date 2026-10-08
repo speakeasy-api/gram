@@ -261,7 +261,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -302,7 +302,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -338,6 +338,10 @@ jobs:
 
       - name: Check formatting
         run: hk check --all
+
+      # Blocks added lines that use the old product name; see lint:brand.
+      - name: Check product naming
+        run: mise run lint:brand --base "origin/${{ github.base_ref || 'main' }}"
 
       - name: Prune aube store
         if: success()
@@ -484,7 +488,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -622,7 +626,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -761,7 +765,7 @@ jobs:
     if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
     services:
       clickhouse:
-        image: clickhouse/clickhouse-server:26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd
+        image: clickhouse/clickhouse-server:26.4.5.143-distroless@sha256:d7c4cf5575c3d0d49cf1beb7ce8d938d64f707789d9fa3fa538c7d3f898b0649
         env:
           CLICKHOUSE_DB: gram
           CLICKHOUSE_USER: gram
@@ -769,24 +773,37 @@ jobs:
           CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
         ports:
           - 9000:9000
-        options: >-
-          --health-cmd "clickhouse-client --user gram --password gram --query 'SELECT 1'"
-          --health-interval 10s
-          --health-start-period 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
           env: false
+
+      # The distroless image has no shell for a service --health-cmd, and its
+      # init runs a localhost-only bootstrap server first. Dial the container
+      # hostname so readiness requires the final network listener.
+      - name: Wait for ClickHouse
+        env:
+          CLICKHOUSE_CONTAINER: ${{ job.services.clickhouse.id }}
+        run: |
+          host="$(docker inspect --format '{{.Config.Hostname}}' "$CLICKHOUSE_CONTAINER")"
+          for _ in $(seq 1 60); do
+            if docker exec "$CLICKHOUSE_CONTAINER" \
+              clickhouse-client --host "$host" --user gram --password gram --query 'SELECT 1' >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::ClickHouse did not become ready"
+          docker logs "$CLICKHOUSE_CONTAINER"
+          exit 1
 
       - name: Bootstrap local ClickHouse principals
         env:
@@ -822,7 +839,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -886,7 +903,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -998,7 +1015,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1053,7 +1070,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1117,7 +1134,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1218,7 +1235,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1288,7 +1305,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1345,7 +1362,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1403,7 +1420,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1448,7 +1465,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1490,7 +1507,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1546,9 +1563,13 @@ jobs:
       # the rest of the suite.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5]
     env:
       GOMAXPROCS: 8
+      # Packages that each get the last shards to themselves, so a slow one
+      # cannot stretch a shard that also carries a normal share of the suite.
+      # Keep the matrix one shard larger than this list per entry.
+      SHARD_ISOLATE: github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis
       # The runner VM is destroyed after the job, and the reaper is the one
       # container that would still publish a host port (a recurring source of
       # "address already in use" container-start flakes).
@@ -1558,7 +1579,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1586,7 +1607,7 @@ jobs:
       - name: Install discovery wire-test dependencies on its shard
         shell: bash
         run: |
-          packages=$(cd server && go run github.com/speakeasy-api/gram/ci/cmd/shard -i "${{ matrix.shard }}/${{ strategy.job-total }}" -tags=inv.debug ./...)
+          packages=$(cd server && go run github.com/speakeasy-api/gram/ci/cmd/shard -i "${{ matrix.shard }}/${{ strategy.job-total }}" -isolate "$SHARD_ISOLATE" -tags=inv.debug ./...)
           if grep -qx 'github.com/speakeasy-api/gram/server/internal/mcpregistry' <<< "$packages"; then
             aube install --frozen-lockfile --filter . --filter 'dashboard...'
           fi
@@ -1596,7 +1617,7 @@ jobs:
         # Bound package concurrency so eight race-enabled binaries plus their
         # containers do not compete for this runner's eight CPUs during startup.
         # Keep within-package parallelism and race detection; do not retry failures.
-        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }} -p=2 -race -tags=inv.debug ./...
+        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }} --shard-isolate="$SHARD_ISOLATE" -p=2 -race -tags=inv.debug ./...
 
   # Standalone gate for the demo seed: TestDemoSeedSafety proves the seed
   # cannot touch other tenants' data, cleans up stray demo-org rows, and stays
@@ -1615,7 +1636,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1658,7 +1679,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1727,7 +1748,7 @@ jobs:
           done
           echo "All login attempts failed"
           exit 1
-      # The Gram admin dashboard. It ships as its own image because it is
+      # The Speakeasy admin dashboard. It ships as its own image because it is
       # served from the admin origin (same host as the admin API) rather than
       # the app origin. The `pnpm build` step above already produced its dist,
       # so this only packages it; it needs no CDN asset upload.
@@ -1843,7 +1864,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1910,7 +1931,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -1964,7 +1985,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -2023,7 +2044,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -2084,7 +2105,7 @@ jobs:
       - name: Test Go server
         run: mise run test:functions
 
-      - name: Build Gram Functions host
+      - name: Build Speakeasy Functions host
         env:
           MELANGE_PRIVATE_KEY: ${{ secrets.MELANGE_PRIVATE_KEY }}
         run: |
@@ -2127,7 +2148,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -2306,7 +2327,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true
@@ -2330,11 +2351,13 @@ jobs:
       - name: Install dependencies
         run: aube install --frozen-lockfile
 
-      - name: Test TypeScript framework
-        run: aube run --filter "./ts-framework/**" --if-present test
-
+      # Build first: the @gram-ai/functions compat tests import the built
+      # @speakeasy-api/functions package.
       - name: Build TypeScript framework
         run: aube run --filter "./ts-framework/**" --if-present build
+
+      - name: Test TypeScript framework
+        run: aube run --filter "./ts-framework/**" --if-present test
 
       - name: Prune aube store
         if: success()
@@ -2368,7 +2391,7 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
         with:
           minimum_release_age: 1d
           install: true

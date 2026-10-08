@@ -121,7 +121,7 @@ func newDisableTestProvisioner(t *testing.T, orgID string) (*OpenRouter, *disabl
 	guardianPolicy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 
-	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, nil, testenv.NewEncryptionClient(t))
+	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, testenv.NewEncryptionClient(t))
 	provisioner.baseURL = upstream.server.URL
 
 	return provisioner, upstream, repo.New(conn)
@@ -280,7 +280,9 @@ func TestAddAPIKeyDisableCauseSerializesConcurrentSameCause(t *testing.T) {
 	var releaseOnce sync.Once
 	release := func() { releaseOnce.Do(func() { close(releasePatch) }) }
 	t.Cleanup(release)
-	require.Never(t, func() bool { return len(upstream.recorded()) > 1 }, 50*time.Millisecond, 5*time.Millisecond)
+	holderPID, err := testrepo.New(provisioner.db).GetAdvisoryLockHolderFixture(ctx, "openrouter-chat-billing:"+orgID)
+	require.NoError(t, err)
+	testenv.WaitForBackendsBlockedBy(t, ctx, provisioner.db, uint32(holderPID), 1)
 	release()
 
 	require.NoError(t, <-errs)
@@ -329,7 +331,9 @@ func TestAddAPIKeyDisableCauseCanonicalizesConcurrentDifferentCauses(t *testing.
 	var releaseOnce sync.Once
 	release := func() { releaseOnce.Do(func() { close(releasePatch) }) }
 	t.Cleanup(release)
-	require.Never(t, func() bool { return len(upstream.recorded()) > 1 }, 50*time.Millisecond, 5*time.Millisecond)
+	holderPID, err := testrepo.New(provisioner.db).GetAdvisoryLockHolderFixture(ctx, "openrouter-chat-billing:"+orgID)
+	require.NoError(t, err)
+	testenv.WaitForBackendsBlockedBy(t, ctx, provisioner.db, uint32(holderPID), 1)
 	release()
 
 	first, second := <-results, <-results
@@ -377,7 +381,7 @@ func TestDisableAPIKey_DisablesKeyUpstream(t *testing.T) {
 }
 
 // The lockdown binds at key resolution, so a disabled key must never reach a
-// completion. This is what turns a demotion into an error Gram can explain.
+// completion. This is what turns a demotion into an error Speakeasy can explain.
 func TestDisableAPIKey_PersistsAdminLockBeforeFailedReconciliation(t *testing.T) {
 	t.Parallel()
 
@@ -611,6 +615,8 @@ func TestReinstateAPIKeyLimit_DoesNotEnableAfterLegacyClassificationWins(t *test
 
 	patchStarted := make(chan struct{})
 	releasePatch := make(chan struct{})
+	release := sync.OnceFunc(func() { close(releasePatch) })
+	t.Cleanup(release)
 	var patchOnce sync.Once
 	upstream.interceptPatch(func() {
 		patchOnce.Do(func() { close(patchStarted) })
@@ -623,11 +629,7 @@ func TestReinstateAPIKeyLimit_DoesNotEnableAfterLegacyClassificationWins(t *test
 		refreshDone <- refreshErr
 	}()
 
-	select {
-	case <-patchStarted:
-		// The legacy implementation reads before joining the classifier's lock.
-	case <-time.After(150 * time.Millisecond):
-	}
+	testenv.WaitForBackendsBlockedBy(t, ctx, provisioner.db, testenv.BackendPID(classifier), 1)
 	require.NoError(t, testrepo.New(classifier).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
 		OrganizationID: orgID, KeyType: string(KeyTypeInternal), Disabled: true, DisableCauses: []string{string(DisableCauseAdminLock)},
 	}))
@@ -638,7 +640,7 @@ func TestReinstateAPIKeyLimit_DoesNotEnableAfterLegacyClassificationWins(t *test
 	case <-time.After(time.Second):
 		require.FailNow(t, "reinstate did not reach upstream after classification committed")
 	}
-	close(releasePatch)
+	release()
 	require.NoError(t, <-refreshDone)
 
 	patches := upstream.recorded()

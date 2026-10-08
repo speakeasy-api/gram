@@ -74,7 +74,7 @@ type CreateRemoteSessionClientRequestBody struct {
 	UserSessionIssuerIds []string `form:"user_session_issuer_ids,omitempty" json:"user_session_issuer_ids,omitempty" xml:"user_session_issuer_ids,omitempty"`
 	// client_id supplied by the caller.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
-	// client_secret supplied by the caller. Gram encrypts before persisting.
+	// client_secret supplied by the caller. Speakeasy encrypts before persisting.
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Omit to default
 	// to client_secret_basic.
@@ -120,7 +120,7 @@ type CreateCimdRequestBody struct {
 type UpdateRemoteSessionClientRequestBody struct {
 	// The remote_session_client id.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Rotate the client secret. Gram re-encrypts before persisting.
+	// Rotate the client secret. Speakeasy re-encrypts before persisting.
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
 	// Change how the client authenticates at the issuer's token endpoint.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
@@ -133,6 +133,11 @@ type UpdateRemoteSessionClientRequestBody struct {
 	// Replace the upstream OAuth audience sent for this client. Omit to leave
 	// unchanged.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Platform admins only. Set true to run the client in compatibility mode with
+	// the legacy callback URL, or false to migrate it to the current callback URL
+	// once that URL is registered with the identity provider. Omit to leave
+	// unchanged.
+	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
 }
 
 // AttachUserSessionIssuerRequestBody is the type of the "remoteSessionClients"
@@ -257,9 +262,9 @@ type CreateRemoteSessionClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
@@ -283,9 +288,16 @@ type CreateRemoteSessionClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // CreateCimdResponseBody is the type of the "remoteSessionClients" service
@@ -309,9 +321,9 @@ type CreateCimdResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
@@ -335,9 +347,16 @@ type CreateCimdResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateRemoteSessionClientResponseBody is the type of the
@@ -362,9 +381,9 @@ type UpdateRemoteSessionClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
@@ -388,9 +407,16 @@ type UpdateRemoteSessionClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // AttachUserSessionIssuerResponseBody is the type of the
@@ -415,9 +441,9 @@ type AttachUserSessionIssuerResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
@@ -441,9 +467,16 @@ type AttachUserSessionIssuerResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // DetachUserSessionIssuerResponseBody is the type of the
@@ -468,9 +501,9 @@ type DetachUserSessionIssuerResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
@@ -494,9 +527,16 @@ type DetachUserSessionIssuerResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // AttachKeySetResponseBody is the type of the "remoteSessionClients" service
@@ -520,9 +560,9 @@ type AttachKeySetResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
@@ -546,9 +586,16 @@ type AttachKeySetResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // DetachKeySetResponseBody is the type of the "remoteSessionClients" service
@@ -572,9 +619,9 @@ type DetachKeySetResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
@@ -598,9 +645,16 @@ type DetachKeySetResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListRemoteSessionClientsResponseBody is the type of the
@@ -610,6 +664,14 @@ type ListRemoteSessionClientsResponseBody struct {
 	Items []*RemoteSessionClientResponseBody `form:"items" json:"items" xml:"items"`
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// GetNewClientCallbackURLResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body.
+type GetNewClientCallbackURLResponseBody struct {
+	// The redirect URI to register on the upstream provider's OAuth app.
+	CallbackURL string `form:"callback_url" json:"callback_url" xml:"callback_url"`
 }
 
 // GetRemoteSessionClientResponseBody is the type of the "remoteSessionClients"
@@ -633,9 +695,9 @@ type GetRemoteSessionClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
@@ -659,9 +721,16 @@ type GetRemoteSessionClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // PrepareEMAUnauthorizedResponseBody is the type of the "remoteSessionClients"
@@ -2757,6 +2826,196 @@ type ListRemoteSessionClientsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetNewClientCallbackURLUnauthorizedResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "unauthorized" error.
+type GetNewClientCallbackURLUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetNewClientCallbackURLForbiddenResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "forbidden" error.
+type GetNewClientCallbackURLForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetNewClientCallbackURLBadRequestResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "bad_request" error.
+type GetNewClientCallbackURLBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetNewClientCallbackURLNotFoundResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "not_found" error.
+type GetNewClientCallbackURLNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetNewClientCallbackURLConflictResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "conflict" error.
+type GetNewClientCallbackURLConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetNewClientCallbackURLUnsupportedMediaResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "unsupported_media" error.
+type GetNewClientCallbackURLUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetNewClientCallbackURLInvalidResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "invalid" error.
+type GetNewClientCallbackURLInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetNewClientCallbackURLInvariantViolationResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "invariant_violation" error.
+type GetNewClientCallbackURLInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetNewClientCallbackURLUnexpectedResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "unexpected" error.
+type GetNewClientCallbackURLUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetNewClientCallbackURLGatewayErrorResponseBody is the type of the
+// "remoteSessionClients" service "getNewClientCallbackUrl" endpoint HTTP
+// response body for the "gateway_error" error.
+type GetNewClientCallbackURLGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetRemoteSessionClientUnauthorizedResponseBody is the type of the
 // "remoteSessionClients" service "getRemoteSessionClient" endpoint HTTP
 // response body for the "unauthorized" error.
@@ -3158,9 +3417,9 @@ type RemoteSessionClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
-	// When set, the client is in Client ID Metadata Document (CIMD) mode: Gram
-	// hosts its OAuth client metadata document at this URL and uses it as the
-	// client_id. Null for non-CIMD clients.
+	// When set, the client is in Client ID Metadata Document (CIMD) mode:
+	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
+	// as the client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	ClientIDIssuedAt    *string `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
 	// Null when the secret does not expire.
@@ -3184,9 +3443,16 @@ type RemoteSessionClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// The redirect URI this client registers with its upstream provider. It never
+	// changes after the client is created. Absent on global clients.
+	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
+	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // NewPrepareEMAResponseBody builds the HTTP response body from the result of
@@ -3306,6 +3572,8 @@ func NewCreateRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *C
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CallbackURL:                     res.CallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}
@@ -3349,6 +3617,8 @@ func NewCreateCimdResponseBody(res *types.RemoteSessionClient) *CreateCimdRespon
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CallbackURL:                     res.CallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}
@@ -3393,6 +3663,8 @@ func NewUpdateRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *U
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CallbackURL:                     res.CallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}
@@ -3437,6 +3709,8 @@ func NewAttachUserSessionIssuerResponseBody(res *types.RemoteSessionClient) *Att
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CallbackURL:                     res.CallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}
@@ -3481,6 +3755,8 @@ func NewDetachUserSessionIssuerResponseBody(res *types.RemoteSessionClient) *Det
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CallbackURL:                     res.CallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}
@@ -3524,6 +3800,8 @@ func NewAttachKeySetResponseBody(res *types.RemoteSessionClient) *AttachKeySetRe
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CallbackURL:                     res.CallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}
@@ -3567,6 +3845,8 @@ func NewDetachKeySetResponseBody(res *types.RemoteSessionClient) *DetachKeySetRe
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CallbackURL:                     res.CallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}
@@ -3615,6 +3895,16 @@ func NewListRemoteSessionClientsResponseBody(res *remotesessionclients.ListRemot
 	return body
 }
 
+// NewGetNewClientCallbackURLResponseBody builds the HTTP response body from
+// the result of the "getNewClientCallbackUrl" endpoint of the
+// "remoteSessionClients" service.
+func NewGetNewClientCallbackURLResponseBody(res *remotesessionclients.NewClientCallbackURLResult) *GetNewClientCallbackURLResponseBody {
+	body := &GetNewClientCallbackURLResponseBody{
+		CallbackURL: res.CallbackURL,
+	}
+	return body
+}
+
 // NewGetRemoteSessionClientResponseBody builds the HTTP response body from the
 // result of the "getRemoteSessionClient" endpoint of the
 // "remoteSessionClients" service.
@@ -3633,6 +3923,8 @@ func NewGetRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *GetR
 		TokenEndpointAuthAudienceFormat: res.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
+		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CallbackURL:                     res.CallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}
@@ -5292,6 +5584,156 @@ func NewListRemoteSessionClientsGatewayErrorResponseBody(res *goa.ServiceError) 
 	return body
 }
 
+// NewGetNewClientCallbackURLUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getNewClientCallbackUrl" endpoint of the
+// "remoteSessionClients" service.
+func NewGetNewClientCallbackURLUnauthorizedResponseBody(res *goa.ServiceError) *GetNewClientCallbackURLUnauthorizedResponseBody {
+	body := &GetNewClientCallbackURLUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetNewClientCallbackURLForbiddenResponseBody builds the HTTP response
+// body from the result of the "getNewClientCallbackUrl" endpoint of the
+// "remoteSessionClients" service.
+func NewGetNewClientCallbackURLForbiddenResponseBody(res *goa.ServiceError) *GetNewClientCallbackURLForbiddenResponseBody {
+	body := &GetNewClientCallbackURLForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetNewClientCallbackURLBadRequestResponseBody builds the HTTP response
+// body from the result of the "getNewClientCallbackUrl" endpoint of the
+// "remoteSessionClients" service.
+func NewGetNewClientCallbackURLBadRequestResponseBody(res *goa.ServiceError) *GetNewClientCallbackURLBadRequestResponseBody {
+	body := &GetNewClientCallbackURLBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetNewClientCallbackURLNotFoundResponseBody builds the HTTP response body
+// from the result of the "getNewClientCallbackUrl" endpoint of the
+// "remoteSessionClients" service.
+func NewGetNewClientCallbackURLNotFoundResponseBody(res *goa.ServiceError) *GetNewClientCallbackURLNotFoundResponseBody {
+	body := &GetNewClientCallbackURLNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetNewClientCallbackURLConflictResponseBody builds the HTTP response body
+// from the result of the "getNewClientCallbackUrl" endpoint of the
+// "remoteSessionClients" service.
+func NewGetNewClientCallbackURLConflictResponseBody(res *goa.ServiceError) *GetNewClientCallbackURLConflictResponseBody {
+	body := &GetNewClientCallbackURLConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetNewClientCallbackURLUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getNewClientCallbackUrl" endpoint of
+// the "remoteSessionClients" service.
+func NewGetNewClientCallbackURLUnsupportedMediaResponseBody(res *goa.ServiceError) *GetNewClientCallbackURLUnsupportedMediaResponseBody {
+	body := &GetNewClientCallbackURLUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetNewClientCallbackURLInvalidResponseBody builds the HTTP response body
+// from the result of the "getNewClientCallbackUrl" endpoint of the
+// "remoteSessionClients" service.
+func NewGetNewClientCallbackURLInvalidResponseBody(res *goa.ServiceError) *GetNewClientCallbackURLInvalidResponseBody {
+	body := &GetNewClientCallbackURLInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetNewClientCallbackURLInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getNewClientCallbackUrl" endpoint of
+// the "remoteSessionClients" service.
+func NewGetNewClientCallbackURLInvariantViolationResponseBody(res *goa.ServiceError) *GetNewClientCallbackURLInvariantViolationResponseBody {
+	body := &GetNewClientCallbackURLInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetNewClientCallbackURLUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getNewClientCallbackUrl" endpoint of the
+// "remoteSessionClients" service.
+func NewGetNewClientCallbackURLUnexpectedResponseBody(res *goa.ServiceError) *GetNewClientCallbackURLUnexpectedResponseBody {
+	body := &GetNewClientCallbackURLUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetNewClientCallbackURLGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getNewClientCallbackUrl" endpoint of the
+// "remoteSessionClients" service.
+func NewGetNewClientCallbackURLGatewayErrorResponseBody(res *goa.ServiceError) *GetNewClientCallbackURLGatewayErrorResponseBody {
+	body := &GetNewClientCallbackURLGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetRemoteSessionClientUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "getRemoteSessionClient" endpoint of the
 // "remoteSessionClients" service.
@@ -5738,6 +6180,7 @@ func NewUpdateRemoteSessionClientPayload(body *UpdateRemoteSessionClientRequestB
 		TokenEndpointAuthMethod:         body.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: body.TokenEndpointAuthAudienceFormat,
 		Audience:                        body.Audience,
+		LegacyCallbackURL:               body.LegacyCallbackURL,
 	}
 	if body.Scope != nil {
 		v.Scope = make([]string, len(body.Scope))
@@ -5814,6 +6257,17 @@ func NewListRemoteSessionClientsPayload(remoteSessionIssuerID *string, userSessi
 	v.UserSessionIssuerID = userSessionIssuerID
 	v.Cursor = cursor
 	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetNewClientCallbackURLPayload builds a remoteSessionClients service
+// getNewClientCallbackUrl endpoint payload.
+func NewGetNewClientCallbackURLPayload(sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessionclients.GetNewClientCallbackURLPayload {
+	v := &remotesessionclients.GetNewClientCallbackURLPayload{}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

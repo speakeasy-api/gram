@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -59,7 +60,7 @@ type Service struct {
 	roleMgr  *RoleManager
 	audit    *audit.Logger
 	email    *email.Service
-	siteURL  *url.URL
+	orgHosts *orghost.Resolver
 	foldGate CanonicalFoldGate
 }
 
@@ -85,7 +86,7 @@ func NewService(
 	authz *authz.Engine,
 	auditLogger *audit.Logger,
 	emailService *email.Service,
-	siteURL *url.URL,
+	orgHosts *orghost.Resolver,
 	foldGate CanonicalFoldGate,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("access"))
@@ -100,7 +101,7 @@ func NewService(
 		roleMgr:  roleMgr,
 		audit:    auditLogger,
 		email:    emailService,
-		siteURL:  siteURL,
+		orgHosts: orgHosts,
 		foldGate: foldGate,
 	}
 }
@@ -119,7 +120,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// ListRoles reads local role records and enriches them with Gram's local grant state.
+// ListRoles reads local role records and enriches them with Speakeasy's local grant state.
 func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.ListRolesResult, error) {
 	// Impersonated orgs without a WorkOS link (e.g. the demo org) can't pass
 	// roleOrgContext, but the listing itself is pure Postgres — serve it.
@@ -169,7 +170,7 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 	return s.roleMgr.ListRoles(ctx, ac.ActiveOrganizationID)
 }
 
-// GetRole returns the role definition enriched with Gram's local grant
+// GetRole returns the role definition enriched with Speakeasy's local grant
 // state so callers see the complete effective role configuration in one place.
 func (s *Service) GetRole(ctx context.Context, payload *gen.GetRolePayload) (*gen.Role, error) {
 	ac, _, err := s.roleOrgContext(ctx)
@@ -306,6 +307,10 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeSkillBlockedWrite, description: "Store exceptions for skill write access.", resourceType: "skill"},
 		{scope: authz.ScopePluginWrite, description: "Manage plugin contents and publish plugins within the project, without editing referenced skills or MCP servers.", resourceType: "project"},
 		{scope: authz.ScopePluginBlockedWrite, description: "Store exceptions for plugin write access.", resourceType: "project"},
+		{scope: authz.ScopeAssistantRead, description: "View and interact with assistants within the project.", resourceType: "assistant"},
+		{scope: authz.ScopeAssistantBlockedRead, description: "Store exceptions for assistant read access.", resourceType: "assistant"},
+		{scope: authz.ScopeAssistantWrite, description: "Create and modify assistants within the project.", resourceType: "assistant"},
+		{scope: authz.ScopeAssistantBlockedWrite, description: "Store exceptions for assistant write access.", resourceType: "assistant"},
 		{scope: authz.ScopeRiskPolicyEvaluate, description: "Evaluate risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBypass, description: "Bypass risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBlock, description: "Block specific shadow MCP servers under allow-by-default risk policies.", resourceType: "risk_policy"},
@@ -498,7 +503,7 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 
 // UpdateMemberRoles replaces all role assignments for a member. It is
 // intentionally stricter than member listing: it only mutates access for users
-// Gram knows are connected to the local organization.
+// Speakeasy knows are connected to the local organization.
 func (s *Service) UpdateMemberRoles(ctx context.Context, payload *gen.UpdateMemberRolesPayload) (*gen.AccessMember, error) {
 	ac, _, err := s.roleOrgContext(ctx)
 	if err != nil {
@@ -708,6 +713,8 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeSkillRead), Selectors: nil},
 		{Scope: string(authz.ScopeSkillWrite), Selectors: nil},
 		{Scope: string(authz.ScopePluginWrite), Selectors: nil},
+		{Scope: string(authz.ScopeAssistantRead), Selectors: nil},
+		{Scope: string(authz.ScopeAssistantWrite), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyBypass), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyBlock), Selectors: nil},
@@ -792,7 +799,7 @@ type challengeUserInfo struct {
 	photoURL *string
 }
 
-// activeOrgMemberUserIDs returns the Gram user IDs of active members of the
+// activeOrgMemberUserIDs returns the Speakeasy user IDs of active members of the
 // organization. The challenge UI uses it to suppress challenges raised by users
 // outside the organization — e.g. Speakeasy staff impersonating a customer org,
 // whose entries otherwise clutter the list while they switch accounts. Always
@@ -1589,8 +1596,8 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 	// project from the tenant-qualified resource rather than trusting browser
 	// state or a client-supplied project id.
 	manageAccessLink := ""
-	if s.siteURL != nil {
-		accessURL := s.siteURL.JoinPath(org.Slug, "access", "roles")
+	if siteURL := s.orgHosts.SiteURL(org.DefaultHost); siteURL != nil {
+		accessURL := siteURL.JoinPath(org.Slug, "access", "roles")
 		q := url.Values{}
 		q.Set("grant_user", ac.UserID)
 		q.Set("scope", payload.Scope)

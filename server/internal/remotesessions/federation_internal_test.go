@@ -70,7 +70,6 @@ func TestFederatedConfiguration(t *testing.T) {
 		mutate func(*FederatedProvider)
 	}{
 		{"exact discovery issuer", func(p *FederatedProvider) { p.metadata.Issuer += "/" }},
-		{"missing response issuer support", func(p *FederatedProvider) { p.metadata.AuthorizationResponseIssParameterSupported = false }},
 		{"missing jwks", func(p *FederatedProvider) { p.metadata.JwksURI = "" }},
 		{"insecure token endpoint", func(p *FederatedProvider) { p.metadata.TokenEndpoint = "http://idp.example.test/token" }},
 		{"endpoint fragment", func(p *FederatedProvider) { p.metadata.AuthorizationEndpoint += "#fragment" }},
@@ -237,7 +236,7 @@ func TestFederatedSignerPreflightAndExchange(t *testing.T) {
 	for _, signer := range []TokenEndpointAssertionSigner{nil, unavailableTokenEndpointAssertionSigner{}} {
 		m := &ChallengeManager{assertions: signer}
 		require.ErrorIs(t, m.preflightFederatedSigner(p), ErrFederatedUnavailable)
-		_, err := newTokenEndpointRequest(t.Context(), p.metadata.TokenEndpoint, url.Values{}, tokenEndpointClientAuth{Method: TokenEndpointAuthMethodPrivateKeyJWT, AssertionSigner: signer})
+		_, err := NewTokenEndpointRequest(t.Context(), p.metadata.TokenEndpoint, url.Values{}, TokenEndpointClientAuth{Method: TokenEndpointAuthMethodPrivateKeyJWT, AssertionSigner: signer})
 		require.ErrorIs(t, classifyFederatedExchangeError(err), ErrFederatedUnavailable)
 	}
 	calls := 0
@@ -250,13 +249,13 @@ func TestFederatedSignerPreflightAndExchange(t *testing.T) {
 		require.Equal(t, "signed-assertion", r.Form.Get("client_assertion"))
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"access_token":"access"}`))}, nil
 	})
-	_, err := m.exchangeCode(t.Context(), doer, RemoteLoginState{TokenEndpoint: p.metadata.TokenEndpoint}, tokenEndpointClientAuth{Method: TokenEndpointAuthMethodPrivateKeyJWT, AssertionSigner: signer}, "", "code")
+	_, err := m.exchangeCode(t.Context(), doer, RemoteLoginState{TokenEndpoint: p.metadata.TokenEndpoint}, TokenEndpointClientAuth{Method: TokenEndpointAuthMethodPrivateKeyJWT, AssertionSigner: signer}, "", "code")
 	require.NoError(t, err)
 	require.Equal(t, 1, calls)
 	failing := federatedAssertionSignerFunc(func(context.Context, ClientAssertionRequest) (string, error) {
 		return "", errors.New("sensitive signing detail")
 	})
-	_, err = m.exchangeCode(t.Context(), doer, RemoteLoginState{TokenEndpoint: p.metadata.TokenEndpoint}, tokenEndpointClientAuth{Method: TokenEndpointAuthMethodPrivateKeyJWT, AssertionSigner: failing}, "", "code")
+	_, err = m.exchangeCode(t.Context(), doer, RemoteLoginState{TokenEndpoint: p.metadata.TokenEndpoint}, TokenEndpointClientAuth{Method: TokenEndpointAuthMethodPrivateKeyJWT, AssertionSigner: failing}, "", "code")
 	require.ErrorIs(t, classifyFederatedExchangeError(err), ErrFederatedSigning)
 	require.NotContains(t, classifyFederatedExchangeError(err).Error(), "sensitive")
 }
@@ -280,4 +279,18 @@ func TestFederatedExchangeErrorClassification(t *testing.T) {
 		require.ErrorIs(t, classifyFederatedExchangeError(test.err), test.want)
 		require.NotContains(t, classifyFederatedExchangeError(test.err).Error(), "detail")
 	}
+}
+
+// RFC 9207 support gates login only: token exchange and refresh never receive
+// an authorization response, so a provider without it still loads.
+func TestFederatedLoginRequiresResponseIssuer(t *testing.T) {
+	t.Parallel()
+	p := federatedFixture(t)
+	p.metadata.AuthorizationResponseIssParameterSupported = false
+	loaded, err := newFederatedProvider(p.organizationID, p.issuer, p.client, p.metadata)
+	require.NoError(t, err, "exchange and refresh do not need response issuer identification")
+	require.ErrorIs(t, loaded.RequireLoginRedirect(), ErrFederatedConfiguration)
+	_, err = loaded.BuildAuthorizationURL("https://gram.example.test/callback", "state", "nonce", strings.Repeat("a", 43))
+	require.ErrorIs(t, err, ErrFederatedConfiguration, "login still refuses a provider without RFC 9207")
+	require.NoError(t, federatedFixture(t).RequireLoginRedirect())
 }

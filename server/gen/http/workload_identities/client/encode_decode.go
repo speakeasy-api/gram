@@ -257,6 +257,483 @@ func DecodeListResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 	}
 }
 
+// BuildListPlatformsRequest instantiates a HTTP request object with method and
+// path set to call the "workloadIdentities" service "listPlatforms" endpoint
+func (c *Client) BuildListPlatformsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListPlatformsWorkloadIdentitiesPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("workloadIdentities", "listPlatforms", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListPlatformsRequest returns an encoder for requests sent to the
+// workloadIdentities listPlatforms server.
+func EncodeListPlatformsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*workloadidentities.ListPlatformsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("workloadIdentities", "listPlatforms", "*workloadidentities.ListPlatformsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListPlatformsResponse returns a decoder for responses returned by the
+// workloadIdentities listPlatforms endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListPlatformsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListPlatformsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListPlatformsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listPlatforms", err)
+			}
+			err = ValidateListPlatformsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listPlatforms", err)
+			}
+			res := NewListPlatformsWorkloadPlatformCatalogOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListPlatformsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listPlatforms", err)
+			}
+			err = ValidateListPlatformsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listPlatforms", err)
+			}
+			return nil, NewListPlatformsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListPlatformsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listPlatforms", err)
+			}
+			err = ValidateListPlatformsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listPlatforms", err)
+			}
+			return nil, NewListPlatformsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListPlatformsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listPlatforms", err)
+			}
+			err = ValidateListPlatformsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listPlatforms", err)
+			}
+			return nil, NewListPlatformsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListPlatformsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listPlatforms", err)
+			}
+			err = ValidateListPlatformsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listPlatforms", err)
+			}
+			return nil, NewListPlatformsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListPlatformsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listPlatforms", err)
+			}
+			err = ValidateListPlatformsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listPlatforms", err)
+			}
+			return nil, NewListPlatformsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListPlatformsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listPlatforms", err)
+			}
+			err = ValidateListPlatformsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listPlatforms", err)
+			}
+			return nil, NewListPlatformsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListPlatformsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listPlatforms", err)
+			}
+			err = ValidateListPlatformsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listPlatforms", err)
+			}
+			return nil, NewListPlatformsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListPlatformsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "listPlatforms", err)
+				}
+				err = ValidateListPlatformsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "listPlatforms", err)
+				}
+				return nil, NewListPlatformsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListPlatformsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "listPlatforms", err)
+				}
+				err = ValidateListPlatformsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "listPlatforms", err)
+				}
+				return nil, NewListPlatformsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("workloadIdentities", "listPlatforms", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListPlatformsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listPlatforms", err)
+			}
+			err = ValidateListPlatformsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listPlatforms", err)
+			}
+			return nil, NewListPlatformsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("workloadIdentities", "listPlatforms", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListTokenEndpointsRequest instantiates a HTTP request object with
+// method and path set to call the "workloadIdentities" service
+// "listTokenEndpoints" endpoint
+func (c *Client) BuildListTokenEndpointsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListTokenEndpointsWorkloadIdentitiesPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("workloadIdentities", "listTokenEndpoints", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListTokenEndpointsRequest returns an encoder for requests sent to the
+// workloadIdentities listTokenEndpoints server.
+func EncodeListTokenEndpointsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*workloadidentities.ListTokenEndpointsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("workloadIdentities", "listTokenEndpoints", "*workloadidentities.ListTokenEndpointsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListTokenEndpointsResponse returns a decoder for responses returned by
+// the workloadIdentities listTokenEndpoints endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeListTokenEndpointsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListTokenEndpointsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListTokenEndpointsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			err = ValidateListTokenEndpointsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			res := NewListTokenEndpointsWorkloadTokenEndpointsOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListTokenEndpointsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			err = ValidateListTokenEndpointsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			return nil, NewListTokenEndpointsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListTokenEndpointsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			err = ValidateListTokenEndpointsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			return nil, NewListTokenEndpointsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListTokenEndpointsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			err = ValidateListTokenEndpointsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			return nil, NewListTokenEndpointsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListTokenEndpointsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			err = ValidateListTokenEndpointsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			return nil, NewListTokenEndpointsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListTokenEndpointsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			err = ValidateListTokenEndpointsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			return nil, NewListTokenEndpointsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListTokenEndpointsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			err = ValidateListTokenEndpointsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			return nil, NewListTokenEndpointsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListTokenEndpointsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			err = ValidateListTokenEndpointsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			return nil, NewListTokenEndpointsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListTokenEndpointsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "listTokenEndpoints", err)
+				}
+				err = ValidateListTokenEndpointsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "listTokenEndpoints", err)
+				}
+				return nil, NewListTokenEndpointsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListTokenEndpointsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "listTokenEndpoints", err)
+				}
+				err = ValidateListTokenEndpointsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "listTokenEndpoints", err)
+				}
+				return nil, NewListTokenEndpointsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("workloadIdentities", "listTokenEndpoints", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListTokenEndpointsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			err = ValidateListTokenEndpointsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "listTokenEndpoints", err)
+			}
+			return nil, NewListTokenEndpointsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("workloadIdentities", "listTokenEndpoints", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildRegisterIssuerRequest instantiates a HTTP request object with method
 // and path set to call the "workloadIdentities" service "registerIssuer"
 // endpoint
@@ -496,6 +973,248 @@ func DecodeRegisterIssuerResponse(decoder func(*http.Response) goahttp.Decoder, 
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("workloadIdentities", "registerIssuer", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpdateIssuerRequest instantiates a HTTP request object with method and
+// path set to call the "workloadIdentities" service "updateIssuer" endpoint
+func (c *Client) BuildUpdateIssuerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateIssuerWorkloadIdentitiesPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("workloadIdentities", "updateIssuer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateIssuerRequest returns an encoder for requests sent to the
+// workloadIdentities updateIssuer server.
+func EncodeUpdateIssuerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*workloadidentities.UpdateIssuerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("workloadIdentities", "updateIssuer", "*workloadidentities.UpdateIssuerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewUpdateIssuerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("workloadIdentities", "updateIssuer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateIssuerResponse returns a decoder for responses returned by the
+// workloadIdentities updateIssuer endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeUpdateIssuerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateIssuerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateIssuerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateIssuer", err)
+			}
+			err = ValidateUpdateIssuerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateIssuer", err)
+			}
+			res := NewUpdateIssuerWorkloadIdentityPolicyOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateIssuerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateIssuer", err)
+			}
+			err = ValidateUpdateIssuerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateIssuer", err)
+			}
+			return nil, NewUpdateIssuerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateIssuerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateIssuer", err)
+			}
+			err = ValidateUpdateIssuerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateIssuer", err)
+			}
+			return nil, NewUpdateIssuerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateIssuerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateIssuer", err)
+			}
+			err = ValidateUpdateIssuerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateIssuer", err)
+			}
+			return nil, NewUpdateIssuerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateIssuerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateIssuer", err)
+			}
+			err = ValidateUpdateIssuerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateIssuer", err)
+			}
+			return nil, NewUpdateIssuerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateIssuerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateIssuer", err)
+			}
+			err = ValidateUpdateIssuerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateIssuer", err)
+			}
+			return nil, NewUpdateIssuerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateIssuerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateIssuer", err)
+			}
+			err = ValidateUpdateIssuerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateIssuer", err)
+			}
+			return nil, NewUpdateIssuerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateIssuerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateIssuer", err)
+			}
+			err = ValidateUpdateIssuerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateIssuer", err)
+			}
+			return nil, NewUpdateIssuerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateIssuerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "updateIssuer", err)
+				}
+				err = ValidateUpdateIssuerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "updateIssuer", err)
+				}
+				return nil, NewUpdateIssuerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateIssuerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "updateIssuer", err)
+				}
+				err = ValidateUpdateIssuerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "updateIssuer", err)
+				}
+				return nil, NewUpdateIssuerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("workloadIdentities", "updateIssuer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateIssuerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateIssuer", err)
+			}
+			err = ValidateUpdateIssuerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateIssuer", err)
+			}
+			return nil, NewUpdateIssuerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("workloadIdentities", "updateIssuer", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -984,6 +1703,248 @@ func DecodeAdmitSubjectResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildUpdateSubjectRequest instantiates a HTTP request object with method and
+// path set to call the "workloadIdentities" service "updateSubject" endpoint
+func (c *Client) BuildUpdateSubjectRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateSubjectWorkloadIdentitiesPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("workloadIdentities", "updateSubject", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateSubjectRequest returns an encoder for requests sent to the
+// workloadIdentities updateSubject server.
+func EncodeUpdateSubjectRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*workloadidentities.UpdateSubjectPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("workloadIdentities", "updateSubject", "*workloadidentities.UpdateSubjectPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewUpdateSubjectRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("workloadIdentities", "updateSubject", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateSubjectResponse returns a decoder for responses returned by the
+// workloadIdentities updateSubject endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeUpdateSubjectResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateSubjectResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateSubjectResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateSubject", err)
+			}
+			err = ValidateUpdateSubjectResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateSubject", err)
+			}
+			res := NewUpdateSubjectWorkloadIdentityPolicyOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateSubjectUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateSubject", err)
+			}
+			err = ValidateUpdateSubjectUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateSubject", err)
+			}
+			return nil, NewUpdateSubjectUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateSubjectForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateSubject", err)
+			}
+			err = ValidateUpdateSubjectForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateSubject", err)
+			}
+			return nil, NewUpdateSubjectForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateSubjectBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateSubject", err)
+			}
+			err = ValidateUpdateSubjectBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateSubject", err)
+			}
+			return nil, NewUpdateSubjectBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateSubjectNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateSubject", err)
+			}
+			err = ValidateUpdateSubjectNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateSubject", err)
+			}
+			return nil, NewUpdateSubjectNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateSubjectConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateSubject", err)
+			}
+			err = ValidateUpdateSubjectConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateSubject", err)
+			}
+			return nil, NewUpdateSubjectConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateSubjectUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateSubject", err)
+			}
+			err = ValidateUpdateSubjectUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateSubject", err)
+			}
+			return nil, NewUpdateSubjectUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateSubjectInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateSubject", err)
+			}
+			err = ValidateUpdateSubjectInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateSubject", err)
+			}
+			return nil, NewUpdateSubjectInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateSubjectInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "updateSubject", err)
+				}
+				err = ValidateUpdateSubjectInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "updateSubject", err)
+				}
+				return nil, NewUpdateSubjectInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateSubjectUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("workloadIdentities", "updateSubject", err)
+				}
+				err = ValidateUpdateSubjectUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("workloadIdentities", "updateSubject", err)
+				}
+				return nil, NewUpdateSubjectUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("workloadIdentities", "updateSubject", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateSubjectGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("workloadIdentities", "updateSubject", err)
+			}
+			err = ValidateUpdateSubjectGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("workloadIdentities", "updateSubject", err)
+			}
+			return nil, NewUpdateSubjectGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("workloadIdentities", "updateSubject", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildWithdrawSubjectRequest instantiates a HTTP request object with method
 // and path set to call the "workloadIdentities" service "withdrawSubject"
 // endpoint
@@ -1236,9 +2197,14 @@ func unmarshalWorkloadIssuerResponseBodyToTypesWorkloadIssuer(v *WorkloadIssuerR
 		Name:                   *v.Name,
 		Issuer:                 *v.Issuer,
 		JwksURI:                *v.JwksURI,
+		Description:            *v.Description,
 		AllowWildcardAdmission: *v.AllowWildcardAdmission,
 		CreatedAt:              *v.CreatedAt,
 		UpdatedAt:              *v.UpdatedAt,
+	}
+	res.Tags = make([]string, len(v.Tags))
+	for i, val := range v.Tags {
+		res.Tags[i] = val
 	}
 
 	return res
@@ -1263,6 +2229,143 @@ func unmarshalWorkloadAdmissionResponseBodyToTypesWorkloadAdmission(v *WorkloadA
 		WildcardActive:   *v.WildcardActive,
 		CreatedAt:        *v.CreatedAt,
 		UpdatedAt:        *v.UpdatedAt,
+	}
+	res.Tags = make([]string, len(v.Tags))
+	for i, val := range v.Tags {
+		res.Tags[i] = val
+	}
+
+	return res
+}
+
+// unmarshalWorkloadPlatformResponseBodyToWorkloadidentitiesWorkloadPlatform
+// builds a value of type *workloadidentities.WorkloadPlatform from a value of
+// type *WorkloadPlatformResponseBody.
+func unmarshalWorkloadPlatformResponseBodyToWorkloadidentitiesWorkloadPlatform(v *WorkloadPlatformResponseBody) *workloadidentities.WorkloadPlatform {
+	res := &workloadidentities.WorkloadPlatform{
+		Key:         *v.Key,
+		DisplayName: *v.DisplayName,
+		Description: *v.Description,
+		Icon:        *v.Icon,
+		Enabled:     *v.Enabled,
+	}
+	res.Issuer = unmarshalWorkloadPlatformConstantResponseBodyToWorkloadidentitiesWorkloadPlatformConstant(v.Issuer)
+	res.JwksURI = unmarshalWorkloadPlatformConstantResponseBodyToWorkloadidentitiesWorkloadPlatformConstant(v.JwksURI)
+	res.Variables = make([]*workloadidentities.WorkloadPlatformVariable, len(v.Variables))
+	for i, val := range v.Variables {
+		if val == nil {
+			res.Variables[i] = nil
+			continue
+		}
+		res.Variables[i] = unmarshalWorkloadPlatformVariableResponseBodyToWorkloadidentitiesWorkloadPlatformVariable(val)
+	}
+	res.Subject = unmarshalWorkloadPlatformSubjectResponseBodyToWorkloadidentitiesWorkloadPlatformSubject(v.Subject)
+	res.Steps = make([]*workloadidentities.WorkloadPlatformStep, len(v.Steps))
+	for i, val := range v.Steps {
+		if val == nil {
+			res.Steps[i] = nil
+			continue
+		}
+		res.Steps[i] = unmarshalWorkloadPlatformStepResponseBodyToWorkloadidentitiesWorkloadPlatformStep(val)
+	}
+
+	return res
+}
+
+// unmarshalWorkloadPlatformConstantResponseBodyToWorkloadidentitiesWorkloadPlatformConstant
+// builds a value of type *workloadidentities.WorkloadPlatformConstant from a
+// value of type *WorkloadPlatformConstantResponseBody.
+func unmarshalWorkloadPlatformConstantResponseBodyToWorkloadidentitiesWorkloadPlatformConstant(v *WorkloadPlatformConstantResponseBody) *workloadidentities.WorkloadPlatformConstant {
+	res := &workloadidentities.WorkloadPlatformConstant{
+		Value:      *v.Value,
+		Visibility: *v.Visibility,
+	}
+
+	return res
+}
+
+// unmarshalWorkloadPlatformVariableResponseBodyToWorkloadidentitiesWorkloadPlatformVariable
+// builds a value of type *workloadidentities.WorkloadPlatformVariable from a
+// value of type *WorkloadPlatformVariableResponseBody.
+func unmarshalWorkloadPlatformVariableResponseBodyToWorkloadidentitiesWorkloadPlatformVariable(v *WorkloadPlatformVariableResponseBody) *workloadidentities.WorkloadPlatformVariable {
+	res := &workloadidentities.WorkloadPlatformVariable{
+		Key:            *v.Key,
+		Tier:           *v.Tier,
+		Label:          *v.Label,
+		Help:           *v.Help,
+		Placeholder:    *v.Placeholder,
+		Pattern:        *v.Pattern,
+		PatternMessage: *v.PatternMessage,
+	}
+
+	return res
+}
+
+// unmarshalWorkloadPlatformSubjectResponseBodyToWorkloadidentitiesWorkloadPlatformSubject
+// builds a value of type *workloadidentities.WorkloadPlatformSubject from a
+// value of type *WorkloadPlatformSubjectResponseBody.
+func unmarshalWorkloadPlatformSubjectResponseBodyToWorkloadidentitiesWorkloadPlatformSubject(v *WorkloadPlatformSubjectResponseBody) *workloadidentities.WorkloadPlatformSubject {
+	res := &workloadidentities.WorkloadPlatformSubject{
+		Template: *v.Template,
+		Wildcard: *v.Wildcard,
+	}
+
+	return res
+}
+
+// unmarshalWorkloadPlatformStepResponseBodyToWorkloadidentitiesWorkloadPlatformStep
+// builds a value of type *workloadidentities.WorkloadPlatformStep from a value
+// of type *WorkloadPlatformStepResponseBody.
+func unmarshalWorkloadPlatformStepResponseBodyToWorkloadidentitiesWorkloadPlatformStep(v *WorkloadPlatformStepResponseBody) *workloadidentities.WorkloadPlatformStep {
+	res := &workloadidentities.WorkloadPlatformStep{
+		ID:    *v.ID,
+		Title: *v.Title,
+		Phase: *v.Phase,
+	}
+	res.Blocks = make([]*workloadidentities.WorkloadPlatformBlock, len(v.Blocks))
+	for i, val := range v.Blocks {
+		if val == nil {
+			res.Blocks[i] = nil
+			continue
+		}
+		res.Blocks[i] = unmarshalWorkloadPlatformBlockResponseBodyToWorkloadidentitiesWorkloadPlatformBlock(val)
+	}
+
+	return res
+}
+
+// unmarshalWorkloadPlatformBlockResponseBodyToWorkloadidentitiesWorkloadPlatformBlock
+// builds a value of type *workloadidentities.WorkloadPlatformBlock from a
+// value of type *WorkloadPlatformBlockResponseBody.
+func unmarshalWorkloadPlatformBlockResponseBodyToWorkloadidentitiesWorkloadPlatformBlock(v *WorkloadPlatformBlockResponseBody) *workloadidentities.WorkloadPlatformBlock {
+	res := &workloadidentities.WorkloadPlatformBlock{
+		Type:     *v.Type,
+		Markdown: *v.Markdown,
+		Src:      *v.Src,
+		Alt:      *v.Alt,
+		Caption:  *v.Caption,
+		Href:     *v.Href,
+		Label:    *v.Label,
+		Variable: *v.Variable,
+		Value:    *v.Value,
+		Help:     *v.Help,
+	}
+
+	return res
+}
+
+// unmarshalWorkloadTokenEndpointResponseBodyToTypesWorkloadTokenEndpoint
+// builds a value of type *types.WorkloadTokenEndpoint from a value of type
+// *WorkloadTokenEndpointResponseBody.
+func unmarshalWorkloadTokenEndpointResponseBodyToTypesWorkloadTokenEndpoint(v *WorkloadTokenEndpointResponseBody) *types.WorkloadTokenEndpoint {
+	res := &types.WorkloadTokenEndpoint{
+		UserSessionIssuerID:   *v.UserSessionIssuerID,
+		UserSessionIssuerSlug: *v.UserSessionIssuerSlug,
+		ProjectID:             *v.ProjectID,
+		ProjectName:           *v.ProjectName,
+		Issuer:                *v.Issuer,
+		TokenEndpoint:         *v.TokenEndpoint,
+		McpHost:               *v.McpHost,
 	}
 
 	return res
