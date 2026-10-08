@@ -17,7 +17,6 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { useOrganization } from "@/contexts/Auth";
-import { useToolMetadata } from "@/hooks/useToolMetadata";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { Disposition } from "@gram/client/models/components/selector.js";
@@ -35,7 +34,7 @@ import {
   type ServerWithProject,
   type ToolLimit,
 } from "./mcpAccessModel";
-import { toolMetadataToServerTools } from "./remoteToolMetadata";
+import { useServerTools, type ToolSource } from "./useServerTools";
 import type { ServerTool } from "./serverMerge";
 
 export type ToolAccessTarget =
@@ -43,54 +42,6 @@ export type ToolAccessTarget =
   | { kind: "server"; entry: ServerWithProject };
 
 export type ToolSheetTab = "tools" | "annotations";
-
-/**
- * Where a server's tool list comes from. Toolset servers know their tools at
- * deploy time; remote servers know them once someone has connected and their
- * tools were stored; tunneled servers resolve them only when called.
- */
-type ToolSource =
-  | { status: "ready"; tools: ServerTool[] }
-  | { status: "loading" }
-  | { status: "error"; retry: () => void }
-  | { status: "needs-connect" }
-  | { status: "dynamic" }
-  | { status: "none" };
-
-function useServerTools(
-  target: ToolAccessTarget,
-  enabled: boolean,
-): ToolSource {
-  const organization = useOrganization();
-  const entry = target.kind === "server" ? target.entry : undefined;
-  const server = entry?.server;
-  const remote = !!server?.dynamicTools && server.remoteBacked;
-  const projectSlug = organization.projects.find(
-    (p) => p.id === entry?.projectId,
-  )?.slug;
-  const metadata = useToolMetadata(server?.id, {
-    enabled: enabled && remote,
-    projectSlug,
-  });
-  const remoteTools = useMemo(
-    () =>
-      server
-        ? toolMetadataToServerTools(
-            server.id,
-            Object.values(metadata.metadataByTool),
-          )
-        : [],
-    [server, metadata.metadataByTool],
-  );
-
-  if (!server) return { status: "none" };
-  if (!server.dynamicTools) return { status: "ready", tools: server.tools };
-  if (!server.remoteBacked) return { status: "dynamic" };
-  if (metadata.isLoading) return { status: "loading" };
-  if (metadata.isError) return { status: "error", retry: metadata.refetch };
-  if (remoteTools.length === 0) return { status: "needs-connect" };
-  return { status: "ready", tools: remoteTools };
-}
 
 /** Edit one server's tool access, or the tool access of All servers. */
 export function ToolAccessSheet({
@@ -160,7 +111,7 @@ function ToolAccessSheetBody({
   const [tab, setTab] = useState<ToolSheetTab>(
     isAllServers ? "annotations" : initialTab,
   );
-  const source = useServerTools(target, true);
+  const source = useServerTools(entry);
   const readyTools = source.status === "ready" ? source.tools : undefined;
   const tools = useMemo(() => readyTools ?? [], [readyTools]);
   const specific = limit.kind !== "all";
@@ -308,7 +259,7 @@ function ToolChecklist({
         </Alert>
       );
     case "needs-connect":
-      return <ConnectPrompt entry={entry} />;
+      return <ConnectPrompt entry={entry} connect={source.connect} />;
     case "ready":
       break;
   }
@@ -427,24 +378,46 @@ function AnnotationChecklist({
 }
 
 /**
- * A remote server lists its tools only once someone has connected to it.
- * The Inspect tab opens in a new tab so unsaved changes to the role survive.
+ * A remote server lists its tools once you have an upstream session with it.
+ * Connect signs in on the server's connect page in a new tab, so unsaved
+ * changes to the role survive; coming back here lists and records the tools.
+ * A server with no connect page points at its settings instead.
  */
-function ConnectPrompt({ entry }: { entry: ServerWithProject }): JSX.Element {
+function ConnectPrompt({
+  entry,
+  connect,
+}: {
+  entry: ServerWithProject;
+  connect: (() => void) | undefined;
+}): JSX.Element {
   const organization = useOrganization();
   const projectSlug = organization.projects.find(
     (p) => p.id === entry.projectId,
   )?.slug;
   const routes = useRoutes({ projectSlug });
+  if (connect) {
+    return (
+      <InlineEmptyState
+        icon="plug-zap"
+        heading="You must connect in order to permission by tool"
+        description="Sign in to this server and its tools are listed here."
+        action={
+          <Button variant="secondary" size="sm" onClick={connect}>
+            <Button.Text>Connect</Button.Text>
+          </Button>
+        }
+      />
+    );
+  }
   return (
     <InlineEmptyState
       icon="plug-zap"
-      heading="You must connect in order to permission by tool"
-      description="This server lists its tools once someone has connected to it."
+      heading="This server's tools can't be listed yet"
+      description="Connect isn't available for this server. Review its authentication settings."
       action={
         <Button variant="secondary" size="sm" asChild>
           <Link
-            to={routes.mcp.x.inspect.href(
+            to={routes.mcp.x.settings.href(
               mcpServerRouteParam({
                 id: entry.server.id,
                 slug: entry.server.slug,
@@ -453,7 +426,7 @@ function ConnectPrompt({ entry }: { entry: ServerWithProject }): JSX.Element {
             target="_blank"
             rel="noopener noreferrer"
           >
-            <Button.Text>Connect</Button.Text>
+            <Button.Text>Open settings</Button.Text>
           </Link>
         </Button>
       }

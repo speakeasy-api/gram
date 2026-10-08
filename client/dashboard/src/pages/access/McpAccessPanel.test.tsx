@@ -12,6 +12,52 @@ import type { RoleGrant } from "./types";
 const inventory = vi.hoisted(() => ({
   groups: [] as ServerGroup[],
 }));
+const live = vi.hoisted(() => ({
+  connect: vi.fn(),
+  needsAuth: true,
+  tools: undefined as
+    | Record<string, { annotations?: { readOnlyHint?: boolean } }>
+    | undefined,
+  lastOptions: undefined as { enabled?: boolean } | undefined,
+}));
+
+vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
+  useGetMcpServer: () => ({
+    data: {
+      id: "remote",
+      userSessionIssuerId: "issuer",
+      visibility: "private",
+    },
+    isLoading: false,
+    isError: false,
+    refetch: () => {},
+  }),
+}));
+vi.mock("@gram/client/react-query/mcpEndpoints.js", () => ({
+  useMcpEndpoints: () => ({
+    data: { mcpEndpoints: [{ slug: "remote-slug" }] },
+    isLoading: false,
+    isError: false,
+    refetch: () => {},
+  }),
+}));
+vi.mock("@/pages/mcp/x/tabs/useRemoteMcpToolConnection", () => ({
+  useRemoteMcpToolConnection: (options: { enabled?: boolean }) => {
+    live.lastOptions = options;
+    return {
+      tools: options.enabled ? live.tools : undefined,
+      metadataByTool: {},
+      loading: !options.enabled,
+      needsAuth: !!options.enabled && live.needsAuth,
+      isError: false,
+      isIssuerGated: true,
+      refetch: () => {},
+      connect: live.connect,
+      sync: () => {},
+      isSyncing: false,
+    };
+  },
+}));
 
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({
@@ -103,11 +149,25 @@ const denySelectors = (grant: RoleGrant | undefined) =>
   grant?.rules.find((r) => r.effect === "deny")?.selectors;
 
 beforeEach(() => {
+  live.connect.mockReset();
+  live.needsAuth = true;
+  live.tools = undefined;
   inventory.groups = [
     {
       projectId: "p-default",
       projectName: "Default",
-      servers: [server("linear", "Linear"), server("slack", "Slack")],
+      servers: [
+        server("linear", "Linear"),
+        server("slack", "Slack"),
+        {
+          id: "remote",
+          name: "Remote Docs",
+          slug: "remote-docs",
+          tools: [],
+          dynamicTools: true,
+          remoteBacked: true,
+        },
+      ],
     },
     {
       projectId: "p-data",
@@ -234,5 +294,32 @@ describe("McpAccessPanel", () => {
     // Nothing is granted, but the server stays chosen and says so.
     expect(onChange.mock.calls.at(-1)?.[0]).toBeUndefined();
     expect(screen.getByText("0 of 1 tools selected")).toBeTruthy();
+  });
+
+  it("signs in from the sheet when a remote server has no tools stored", () => {
+    renderPanel({
+      "mcp:connect": connect([
+        { resourceKind: "mcp", resourceId: "remote", tool: "search" },
+      ]),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "1 Tool" }));
+    expect(live.lastOptions?.enabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+    expect(live.connect).toHaveBeenCalled();
+  });
+
+  it("lists a remote server's tools from a live session", () => {
+    live.needsAuth = false;
+    live.tools = {
+      search: { annotations: { readOnlyHint: true } },
+      purge: {},
+    };
+    renderPanel({
+      "mcp:connect": connect([
+        { resourceKind: "mcp", resourceId: "remote", tool: "search" },
+      ]),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "1 Tool" }));
+    expect(screen.getByText("1 of 2 tools selected")).toBeTruthy();
   });
 });
