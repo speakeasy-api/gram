@@ -1,4 +1,3 @@
-import { useHideInsightsDock } from "@/components/insights-context";
 import { Page } from "@/components/page-layout";
 import { ProjectDashboard } from "@/components/project/ProjectDashboard";
 import { RequireScope } from "@/components/require-scope";
@@ -17,8 +16,6 @@ export default function Home(): JSX.Element {
   const { hasAnyScope, hasAnyScopeInProject, isLoading } = useRBAC();
   const routes = useRoutes();
   const { id: projectId } = useProject();
-  // Home carries its own "Ask anything" widget, so suppress the floating dock.
-  useHideInsightsDock();
 
   // Keep MCP-only users on the MCP page instead of rendering the project
   // overview's project:read fallback.

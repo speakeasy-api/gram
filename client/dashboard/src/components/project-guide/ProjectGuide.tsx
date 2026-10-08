@@ -41,7 +41,6 @@ import {
   type ProjectGuideOutputEntry,
 } from "@/components/project-guide/projectGuideMachine";
 import { useSlugs } from "@/contexts/Sdk";
-import { useHideInsightsDock } from "@/components/insights-context";
 import { useRoutes } from "@/routes";
 import { Icon } from "@/components/ui/Icon";
 import type { IconName } from "@/components/ui/Icon/names";
@@ -82,7 +81,6 @@ function ProjectGuideContent({
   orgSlug: string | undefined;
   projectSlug: string | undefined;
 }): JSX.Element {
-  useHideInsightsDock();
   const routes = useRoutes();
   const navigate = useNavigate();
   const { statusByJourney, isPending: progressPending } =

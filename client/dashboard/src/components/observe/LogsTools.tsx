@@ -779,7 +779,6 @@ export function LogsTools(): JSX.Element {
         mcpConfig={mcpConfig}
         title="Explore Tool Logs"
         subtitle="Ask me about your tool logs! Powered by Elements + platform MCP"
-        hideTrigger={isLogsDisabled}
         suggestions={INSIGHTS_SUGGESTIONS["logs/tools"]}
       />
       {isLogsDisabled ? (

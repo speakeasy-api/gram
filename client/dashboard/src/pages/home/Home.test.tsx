@@ -10,9 +10,7 @@ vi.mock("@/pages/chat/Chat", () => ({
 vi.mock("@/routes", () => ({
   useRoutes: () => ({ mcp: { href: () => "/org/projects/project/mcp" } }),
 }));
-vi.mock("@/components/insights-context", () => ({
-  useHideInsightsDock: () => undefined,
-}));
+vi.mock("@/components/insights-context", () => ({}));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));

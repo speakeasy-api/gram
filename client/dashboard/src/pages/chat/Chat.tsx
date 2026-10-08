@@ -48,10 +48,7 @@ import {
 } from "@/components/brand-mesh";
 import { getIdentityTint, useIsDarkTheme } from "@/components/gradient-colors";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
-import {
-  useHideInsightsDock,
-  useInsightsState,
-} from "@/components/insights-context";
+import { useInsightsState } from "@/components/insights-context";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
 import { useSlugs } from "@/contexts/Sdk";
 import {
@@ -78,8 +75,6 @@ const ICON_BUTTON_CLASS =
 /** Layout route for `/chat`; renders the index (home) or a conversation. */
 export function ChatRoot(): ReactElement {
   const project = useProject();
-  // The page IS the chat, so hide the floating dock across the /chat subtree.
-  useHideInsightsDock();
   return (
     <RequireScope scope="assistant:read" projectId={project.id} level="page">
       <Outlet />

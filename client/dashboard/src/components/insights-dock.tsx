@@ -48,7 +48,6 @@ import {
   HistoryIcon,
   Loader2,
   Maximize2,
-  Sparkles,
   SquarePen,
   Terminal,
   X,
@@ -66,10 +65,10 @@ import type { InsightsConfigOptions } from "./insights-context";
 import { InsightsContext, useInsightsState } from "./insights-context";
 import { InsightsShortcutKeys } from "./insights-dock-shortcut-hint";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/Tooltip";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/Popover";
 import { useAskAiListener } from "./command-palette/askAiBridge";
 
 // Types-only re-export (erased at compile time, won't break Fast Refresh)
@@ -397,54 +396,78 @@ interface InsightsDockProps {
   /** Called when the dock settles back to the resting pill (composer
    *  collapsed, no draft, panel closed). */
   onIdle?: () => void;
+  /** Anchor the card bottom-right, just above the bottom bar's trigger,
+   *  instead of floating bottom-center. */
+  anchorEnd?: boolean;
 }
 
 /**
  * Thin bottom bar (Linear-style) that replaces the resting dock while the dock
- * is turned off (INSIGHTS_DOCK_ENABLED). Sticks to the viewport bottom and
+ * is turned off (INSIGHTS_DOCK_ENABLED). A grey strip with a raised card
+ * button so the entry point stands out from page content. Sticks to the viewport bottom and
  * reserves its own height, so it never covers page content.
  */
 function InsightsBottomBar({
   onOpen,
-  onOpenHistory,
+  onPickHistory,
+  showHistory,
 }: {
   onOpen: () => void;
-  onOpenHistory: () => void;
+  /** Called after a chat is picked from the history popover. */
+  onPickHistory: () => void;
+  /** The history list needs the shared runtime; hide it until mounted. */
+  showHistory: boolean;
 }): ReactElement {
-  const buttonClass =
-    "text-muted-foreground hover:text-foreground hover:bg-muted flex h-7 items-center gap-1.5 px-2 text-sm transition-colors";
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const isMac = isMacPlatform();
   return (
-    <div className="border-border bg-background sticky bottom-0 z-20 flex h-10 shrink-0 items-center justify-end gap-1 border-t px-4">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            onClick={onOpen}
-            aria-keyshortcuts={isMacPlatform() ? "Meta+/" : "Control+/"}
-            className={buttonClass}
+    <div className="border-border bg-muted text-foreground sticky bottom-0 z-20 flex h-14 shrink-0 items-center justify-end gap-1 border-t px-5">
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-keyshortcuts={isMac ? "Meta+/" : "Control+/"}
+        className="group border-border bg-card hover:border-foreground flex h-9 items-center gap-2 border px-3 text-sm font-medium shadow-xs transition-colors"
+      >
+        New Chat
+        <kbd className="text-muted-foreground group-hover:text-foreground ml-1 font-mono text-sm font-normal transition-colors">
+          {isMac ? "⌘/" : "Ctrl /"}
+        </kbd>
+      </button>
+      {showHistory && (
+        <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label="Recent chats"
+              title="Recent chats"
+              className="text-muted-foreground hover:text-foreground hover:bg-card data-[state=open]:bg-card data-[state=open]:text-foreground flex size-9 items-center justify-center transition-colors"
+            >
+              <HistoryIcon className="size-4" strokeWidth={1.75} />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            side="top"
+            align="end"
+            sideOffset={8}
+            className="flex max-h-96 w-80 flex-col p-0"
           >
-            <Sparkles className="size-4" />
-            Project Assistant
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="flex items-center gap-2">
-          New chat
-          <InsightsShortcutKeys />
-        </TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            onClick={onOpenHistory}
-            aria-label="Chat history"
-            className={buttonClass}
-          >
-            <HistoryIcon className="size-4" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="top">Chat history</TooltipContent>
-      </Tooltip>
+            <div className="text-eyebrow border-border shrink-0 border-b px-3 py-2">
+              Recent chats
+            </div>
+            {/* Picking a chat switches the shared runtime; then open the
+                panel on it. */}
+            <div
+              className="min-h-0 flex-1 overflow-y-auto"
+              onClick={() => {
+                setHistoryOpen(false);
+                onPickHistory();
+              }}
+            >
+              <ChatHistory showNewThread={false} />
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
     </div>
   );
 }
@@ -486,6 +509,7 @@ function InsightsDock({
   runtimeReady,
   startExpanded = false,
   onIdle,
+  anchorEnd = false,
 }: InsightsDockProps): ReactElement {
   const [value, setValue] = useState("");
   // Expansion is sticky state, not a focus mirror: it must survive the input
@@ -641,7 +665,8 @@ function InsightsDock({
   return (
     <div
       className={cn(
-        "pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pt-14 pb-12",
+        "pointer-events-none absolute inset-x-0 bottom-0 z-30 flex pt-14",
+        anchorEnd ? "justify-end px-5 pb-3" : "justify-center px-4 pb-12",
       )}
     >
       {/* Frosted veil under the dock: blurs the page content directly behind
@@ -650,6 +675,7 @@ function InsightsDock({
           remains clickable. */}
       <div
         aria-hidden="true"
+        hidden={anchorEnd}
         className="absolute inset-0 backdrop-blur-[2px] [mask-image:radial-gradient(ellipse_55%_95%_at_50%_100%,black_35%,transparent_78%)]"
       />
       <div
@@ -894,19 +920,6 @@ export function InsightsProvider({
 }: InsightsProviderProps): ReactElement {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [override, setOverride] = useState<InsightsConfigOptions | null>(null);
-  // Ref-counted dock hide for pages with their own chat entry (full-page chat,
-  // home widget). Kept separate from `override` so dashboard consumers that
-  // reset the override (ProjectDashboard) can't un-hide the dock.
-  const dockHideCountRef = useRef(0);
-  const [dockHiddenByPage, setDockHiddenByPage] = useState(false);
-  const registerDockHide = useCallback(() => {
-    dockHideCountRef.current += 1;
-    setDockHiddenByPage(dockHideCountRef.current > 0);
-    return () => {
-      dockHideCountRef.current = Math.max(0, dockHideCountRef.current - 1);
-      setDockHiddenByPage(dockHideCountRef.current > 0);
-    };
-  }, []);
   // Bumped whenever the keyboard shortcut fires (with the chat panel closed) so
   // the docked composer grabs focus and expands. Starts at 0; the dock
   // ignores the initial value.
@@ -958,10 +971,6 @@ export function InsightsProvider({
   // resolved when the dock is opened OR when on a chat route, so the page has a
   // live runtime without the user touching the dock first.
   const onChatRoute = /\/chat(\/|$)/.test(pathname);
-  // The add flows (/mcp/add and everything under it) are focused tasks with
-  // their own primary action and a deliberately empty sidebar. The docked
-  // composer sits over that work and competes with it, so hide it there.
-  const onAddFlowRoute = /\/mcp\/add(\/|$)/.test(pathname);
   // On a chat route the page owns the chat and the dock is hidden, so collapse
   // the dock (a maximize leaves it expanded). The shared runtime stays mounted
   // via onChatRoute, so this collapse never unmounts it.
@@ -983,8 +992,6 @@ export function InsightsProvider({
   const suggestions =
     override?.suggestions ?? routeSuggestions ?? defaultSuggestions;
   const contextInfo = override?.contextInfo;
-  const pageHidesTrigger =
-    (override?.hideTrigger ?? false) || dockHiddenByPage || onAddFlowRoute;
   const noToolsetsConfigured = useNoToolsetsConfigured(mcpConfig.projectSlug);
   const organization = useOrganization();
   const targetProjectId = organization.projects.find(
@@ -1037,7 +1044,6 @@ export function InsightsProvider({
     getSkillIds: getSelectedSkillIds,
     onSkillIdsSent: handleSkillIdsSent,
   });
-  const hideTrigger = pageHidesTrigger || !assistantAllowed;
 
   const skillsQuery = useSkillsInfinite(
     { limit: 200, gramProject: mcpConfig.projectSlug },
@@ -1150,7 +1156,7 @@ export function InsightsProvider({
   // including on Home where the floating dock is hidden in favor of the
   // landing widget. Routes that mount their own GramElementsProvider are the
   // exception: wrapping them would nest RemoteThreadListRuntimes before their
-  // useHideInsightsDock layout effect can register with this parent.
+  // own providers mount.
   const pageOwnsRuntime =
     routes.playground.active ||
     routes.assistants.newAssistant.active ||
@@ -1442,12 +1448,12 @@ export function InsightsProvider({
   // closed it focuses the docked composer; with it open it collapses the
   // panel back into the composer pill.
   //
-  // Skips when the dock is hidden via `hideTrigger`, when a modifier
+  // Skips without assistant access, when a modifier
   // mismatch is detected (extra Alt/Shift), or when the user is typing in a
   // contentEditable region — letting Cmd+/ still work in plain inputs since
   // the Cmd/Ctrl modifier means it never inserts text.
   useEffect(() => {
-    if (hideTrigger) return;
+    if (!assistantAllowed) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!e.metaKey && !e.ctrlKey) return;
       if (e.altKey) return;
@@ -1462,16 +1468,18 @@ export function InsightsProvider({
       } else if (INSIGHTS_DOCK_ENABLED) {
         setFocusComposerKey((k) => k + 1);
       } else {
-        summonDock();
+        // With the dock off, the shortcut starts a fresh full-page chat.
+        handleStartFresh();
+        routes.chat.conversation.goTo("new");
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [hideTrigger, isExpanded, summonDock]);
+  }, [assistantAllowed, isExpanded, handleStartFresh, routes]);
 
   const contextValue = useMemo(
     () => ({
-      available: !hideTrigger,
+      available: assistantAllowed,
       isExpanded,
       setIsExpanded,
       setOverride: handleSetOverride,
@@ -1482,17 +1490,15 @@ export function InsightsProvider({
       assistantReady: runtimeMounted,
       assistantNeedsAdmin,
       newConversation: handleStartFresh,
-      registerDockHide,
     }),
     [
-      hideTrigger,
+      assistantAllowed,
       isExpanded,
       handleSetOverride,
       handleSendPrompt,
       runtimeMounted,
       assistantNeedsAdmin,
       handleStartFresh,
-      registerDockHide,
     ],
   );
 
@@ -1678,16 +1684,23 @@ export function InsightsProvider({
 
       {/* Permanently docked "Ask anything" composer — the entry point to
             the Project Assistant. Expands in place into the chat panel.
-            Hidden on pages that opt out via hideTrigger, and while dismissed
+            Hidden without assistant access, and while dismissed
             to the sidebar resume button. While the dock is turned off it
             mounts only when summoned (bottom bar or Cmd+/) or with the
             panel open, and unmounts once it settles back to the resting pill,
             so the resting composer never shows. */}
-      {!hideTrigger &&
+      {assistantAllowed &&
         (INSIGHTS_DOCK_ENABLED
           ? !dockDismissed
           : dockSummoned || isExpanded) && (
-          <div className="pointer-events-none sticky bottom-0 z-30 h-0 shrink-0">
+          // With the bottom bar showing, the rail sits on top of it (h-14) so
+          // the dock keeps its usual gap above the bar, not the viewport.
+          <div
+            className={cn(
+              "pointer-events-none sticky z-30 h-0 shrink-0",
+              INSIGHTS_DOCK_ENABLED ? "bottom-0" : "bottom-14",
+            )}
+          >
             <InsightsDock
               suggestions={suggestions}
               open={isExpanded}
@@ -1701,16 +1714,21 @@ export function InsightsProvider({
               runtimeReady={runtimeMounted}
               startExpanded={!INSIGHTS_DOCK_ENABLED}
               onIdle={INSIGHTS_DOCK_ENABLED ? undefined : unsummonDock}
+              anchorEnd={!INSIGHTS_DOCK_ENABLED}
             />
           </div>
         )}
 
       {/* While the dock is turned off, a thin bottom bar is the entry point:
           it summons the expanded dock or opens chat history. */}
-      {!INSIGHTS_DOCK_ENABLED && !hideTrigger && (
+      {!INSIGHTS_DOCK_ENABLED && assistantAllowed && (
         <InsightsBottomBar
           onOpen={summonDock}
-          onOpenHistory={handleOpenHistory}
+          onPickHistory={() => {
+            setHistoryView(false);
+            setIsExpanded(true);
+          }}
+          showHistory={runtimeMounted}
         />
       )}
     </div>
@@ -1735,7 +1753,7 @@ export function InsightsProvider({
           />
           <StopDictationOnNavigate />
           <OpenPanelOnSend
-            enabled={!isExpanded && !onChatRoute && !hideTrigger}
+            enabled={!isExpanded && !onChatRoute && assistantAllowed}
             onSend={() => setIsExpanded(true)}
           />
           {dockSurface}

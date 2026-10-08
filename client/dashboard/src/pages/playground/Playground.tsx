@@ -20,7 +20,6 @@ import { DEFAULT_MODEL } from "@/lib/models";
 import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { Tool } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
-import { useHideInsightsDock } from "@/components/insights-context";
 import { Confirm } from "@gram/client/models/components/upsertglobaltoolvariationform.js";
 import { queryKeyInstance } from "@gram/client/react-query/instance.js";
 import {
@@ -169,8 +168,6 @@ function PlaygroundEmptyState({ onCreate }: { onCreate: () => void }) {
 export default function Playground(): JSX.Element {
   // The playground hosts its own chat runtime, so hide the floating dock (and
   // keep the shared runtime out of this page's tree — two RemoteThreadListRuntimes
-  // cannot nest).
-  useHideInsightsDock();
   return (
     <RequireScope scope={["mcp:read", "mcp:write", "mcp:connect"]} level="page">
       <ChatProvider>

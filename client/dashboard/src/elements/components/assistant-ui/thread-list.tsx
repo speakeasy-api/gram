@@ -37,9 +37,14 @@ function formatThreadCreatedAt(iso: string | undefined): string | null {
 
 interface ThreadListProps {
   className?: string;
+  /** Render the "New Thread" button above the list. Defaults to true. */
+  showNewThread?: boolean;
 }
 
-export const ThreadList: FC<ThreadListProps> = ({ className }) => {
+export const ThreadList: FC<ThreadListProps> = ({
+  className,
+  showNewThread = true,
+}) => {
   const d = useDensity();
   return (
     <ThreadListPrimitive.Root
@@ -49,15 +54,17 @@ export const ThreadList: FC<ThreadListProps> = ({ className }) => {
         className,
       )}
     >
-      <div
-        className={cn(
-          "aui-thread-list-new-section border-b border-border pb-2",
-          d("py-sm"),
-          d("px-sm"),
-        )}
-      >
-        <ThreadListNew />
-      </div>
+      {showNewThread && (
+        <div
+          className={cn(
+            "aui-thread-list-new-section border-b border-border pb-2",
+            d("py-sm"),
+            d("px-sm"),
+          )}
+        >
+          <ThreadListNew />
+        </div>
+      )}
       <div
         className={cn(
           "aui-thread-list-items-section flex flex-col gap-1",

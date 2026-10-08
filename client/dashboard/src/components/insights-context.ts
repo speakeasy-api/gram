@@ -1,6 +1,6 @@
 import type { InsightsSuggestion } from "@/lib/insights-suggestions";
 import type { ElementsConfig } from "@/elements";
-import { createContext, useContext, useLayoutEffect } from "react";
+import { createContext, useContext } from "react";
 
 /**
  * Per-page overrides for the global AI Insights panel. Pages mount
@@ -13,8 +13,6 @@ export interface InsightsConfigOptions {
   subtitle?: string;
   suggestions?: InsightsSuggestion[];
   contextInfo?: string;
-  /** Hide the trigger button (e.g., when logs are disabled on this page). */
-  hideTrigger?: boolean;
 }
 
 export interface InsightsContextValue {
@@ -38,11 +36,6 @@ export interface InsightsContextValue {
   assistantNeedsAdmin: boolean;
   /** Switch the shared runtime to a fresh empty conversation. */
   newConversation: () => void;
-  /** Hide the floating dock while a caller is mounted (ref-counted). Returns
-   *  an unregister fn. Independent of `setOverride`, so it survives consumers
-   *  that reset the per-page override (e.g. the project dashboard). Prefer the
-   *  `useHideInsightsDock` hook over calling this directly. */
-  registerDockHide: () => () => void;
 }
 
 export const InsightsContext = createContext<InsightsContextValue>({
@@ -54,7 +47,6 @@ export const InsightsContext = createContext<InsightsContextValue>({
   assistantReady: false,
   assistantNeedsAdmin: false,
   newConversation: () => {},
-  registerDockHide: () => () => {},
 });
 
 /**
@@ -63,17 +55,4 @@ export const InsightsContext = createContext<InsightsContextValue>({
  */
 export function useInsightsState(): InsightsContextValue {
   return useContext(InsightsContext);
-}
-
-/**
- * Hide the floating Project Assistant dock for as long as the calling
- * component is mounted. Use on pages that provide their own chat entry point
- * (e.g. the full-page chat, the home page widget). Ref-counted and independent
- * of the per-page `override`, so it survives consumers that reset the override.
- */
-export function useHideInsightsDock(): void {
-  const { registerDockHide } = useInsightsState();
-  // Layout-timed so the dock is hidden before paint — a post-paint effect would
-  // flash the floating dock for one frame when arriving from a dock-visible page.
-  useLayoutEffect(() => registerDockHide(), [registerDockHide]);
 }
