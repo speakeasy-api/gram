@@ -51,6 +51,7 @@ func TestDescribe(t *testing.T) {
 	require.Equal(t, []string{"skill"}, defaultFields(skills), "the skills view opens broken down by skill")
 	skillFields := fieldsByName(skills)
 	require.Equal(t, []string{"count_distinct"}, skillFields["skill"].Aggregations, "skills used is a distinct count")
+	require.Equal(t, "dimension", skillFields["tool_call"].Role, "the invocation's call id tells repeated invocations apart in rows mode")
 	require.Equal(t, []string{"count_distinct"}, skillFields["user"].Aggregations)
 
 	t.Run("it requires an authenticated project", func(t *testing.T) {

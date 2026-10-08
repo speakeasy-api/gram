@@ -61,6 +61,9 @@ var Skills = &Dataset{
 	Description: "One row per skill invocation: a tool call that named a skill, resolved to its latest observation. count counts invocations; skills used is count_distinct over skill, people over user. Claude Code reports the skill when tool details are logged, as do Speakeasy hooks; Codex and generic OpenTelemetry producers report none, so an empty breakdown means skills were not reported, not that none were used.",
 	TimeExpr:    "started_at",
 	Fields: []Field{
+		// An invocation is one tool call, so its id tells two invocations of
+		// the same skill apart in rows mode.
+		{Name: "tool_call", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "tool_call_id", Description: ""},
 		{Name: "skill", Type: TypeString, Role: RoleDimension, Default: true, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "skill_name", Description: ""},
 		{Name: "session", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "session_id", Description: ""},
 		{Name: "user", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "user_email", Description: ""},
