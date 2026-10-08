@@ -89,6 +89,21 @@ func TestReviewedRemoteSessionProviderVerticalSlice(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, platformmcp.ReadinessNeedsConfiguration, readiness.State)
 
+	for _, usable := range []bool{false, true} {
+		governor := &fixedGovernor{issuer: remoteIssuerID, serves: true, usable: usable}
+		result, err := adapter.WithIdentityChaining(governor).ProbeReadiness(ctx, providerProbeRequest(principal, project.ID, registration))
+		require.NoError(t, err)
+		if usable {
+			require.Equal(t, platformmcp.ReadinessReady, result.State)
+			require.Equal(t, platformmcp.ReadinessEvidenceIdentityChainingActive, result.EvidenceCode)
+		} else {
+			require.Equal(t, platformmcp.ReadinessNeedsGramAuthorization, result.State)
+			require.Equal(t, platformmcp.ReadinessEvidenceIdentityChainingConfigured, result.EvidenceCode)
+		}
+		require.Len(t, governor.requests, 1, "chaining does not require an interactive client")
+	}
+	adapter.WithIdentityChaining(nil)
+
 	remoteClientID := seedReviewedRemoteClient(t, ctx, conn, project.ID, principal.OrganizationID, registration.UserSessionIssuerID.UUID, remoteIssuerID)
 	readiness, err = store.ProbeProviderReadiness(ctx, principal, project.ID, registration.ID, adapters)
 	require.NoError(t, err)

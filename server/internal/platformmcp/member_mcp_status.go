@@ -123,6 +123,14 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 	}
 	output.ConnectionURL = platformBaseURL(ctx, s.serverURL).JoinPath("mcp", target.endpointSlug).String()
 	if target.remoteSessionIssuerID == uuid.Nil {
+		// Direct upstreams select chaining bindings by resource, even without an interactive issuer.
+		chained, err := s.memberMCPChainedStatus(ctx, principal, target, &output)
+		if err != nil {
+			return GetMyMCPConnectionStatusOutput{}, err
+		}
+		if chained {
+			return output, nil
+		}
 		output.State = MCPConnectionStateNotApplicable
 		output.Reason = "authorization_not_required"
 		output.NextAction = "use_mcp"
