@@ -87062,6 +87062,8 @@ components:
                 description:
                     type: string
                     description: What the field is and which producers fill it, when the catalog has something to say beyond the name
+                lookup:
+                    $ref: '#/components/schemas/AnalyticsLookup'
                 name:
                     type: string
                     example: user
@@ -87115,6 +87117,19 @@ components:
                 - field
                 - operator
                 - values
+        AnalyticsLookup:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: What the map is and where it is set
+                name:
+                    type: string
+                    example: mcp_server_display_names
+            description: 'A per-project map a dimension reads through at query time: a reported value with an entry shows as its target, the rest show as reported.'
+            required:
+                - name
+                - description
         AnalyticsMeasure:
             type: object
             properties:

@@ -5,9 +5,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/analytics"
+	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 )
@@ -15,7 +17,7 @@ import (
 func TestCompileValues(t *testing.T) {
 	t.Parallel()
 
-	plan, err := CompileValues(Default, "org-1", "project-1", ValuesRequest{Dataset: "tool_calls", Dimension: "tool_name", FromUnixNano: testFrom, ToUnixNano: testTo, Limit: 0})
+	plan, err := CompileValues(Default, Tenant{OrganizationID: "org-1", ProjectID: "project-1"}, nil, ValuesRequest{Dataset: "tool_calls", Dimension: "tool_name", FromUnixNano: testFrom, ToUnixNano: testTo, Limit: 0})
 	require.NoError(t, err)
 	require.Contains(t, plan.SQL, "SELECT tool_name AS value, count() AS n FROM (")
 	require.Contains(t, plan.SQL, "LIMIT 1 BY organization_id, project_id, record_id", "values come from the collapsed rows")
@@ -38,7 +40,7 @@ func TestCompileValues(t *testing.T) {
 	for _, tc := range cases {
 		t.Run("it rejects "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := CompileValues(Default, "org-1", "project-1", tc.req)
+			_, err := CompileValues(Default, Tenant{OrganizationID: "org-1", ProjectID: "project-1"}, nil, tc.req)
 			var invalid *Error
 			require.ErrorAs(t, err, &invalid)
 			require.Equal(t, tc.code, invalid.Code)
@@ -104,6 +106,38 @@ func TestDimensionValues(t *testing.T) {
 		require.Equal(t, "deploy", result.Values[0].Value)
 		require.EqualValues(t, 2, result.Values[0].Count)
 		require.Equal(t, "review", result.Values[1].Value)
+		require.EqualValues(t, 1, result.Values[1].Count)
+	})
+
+	t.Run("it offers MCP servers under the project's display names", func(t *testing.T) {
+		t.Parallel()
+		call := func(recordID, server string, at time.Time) chrepo.AgentEventRow {
+			r := agentEventFixture(ti.organizationID, recordID, "", "", recordID, "tool_call_result", at.UnixNano())
+			r.ProjectID = ti.projectID
+			r.ToolName = "mcp_tool"
+			r.MCPServerName = server
+			return r
+		}
+		require.NoError(t, chrepo.New(ti.ch).InsertAgentEvents(ctx, []chrepo.AgentEventRow{
+			call("m1", "github-mcp", base.Add(10*time.Minute)),
+			call("m2", "gh", base.Add(11*time.Minute)),
+			call("m3", "linear", base.Add(12*time.Minute)),
+		}))
+		projectID, err := uuid.Parse(ti.projectID)
+		require.NoError(t, err)
+		for raw, display := range map[string]string{"github-mcp": "GitHub", "gh": "GitHub"} {
+			_, err := hooksRepo.New(ti.db).UpsertHooksServerNameOverride(ctx, hooksRepo.UpsertHooksServerNameOverrideParams{ProjectID: projectID, RawServerName: raw, DisplayName: display})
+			require.NoError(t, err)
+		}
+
+		result, err := ti.service.DimensionValues(ctx, &gen.DimensionValuesPayload{
+			Dataset: "tool_calls", Dimension: "mcp_server", From: from, To: to, Limit: 0, SessionToken: nil, ProjectSlugInput: nil,
+		})
+		require.NoError(t, err)
+		require.Len(t, result.Values, 2, "two raw names with one display name are one server")
+		require.Equal(t, "GitHub", result.Values[0].Value)
+		require.EqualValues(t, 2, result.Values[0].Count)
+		require.Equal(t, "linear", result.Values[1].Value, "a raw name with no override shows as reported")
 		require.EqualValues(t, 1, result.Values[1].Count)
 	})
 

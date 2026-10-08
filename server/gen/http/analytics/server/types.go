@@ -651,6 +651,15 @@ type AnalyticsFieldResponseBody struct {
 	// What the field is and which producers fill it, when the catalog has
 	// something to say beyond the name
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The map this dimension reads through, when it reads through one
+	Lookup *AnalyticsLookupResponseBody `form:"lookup,omitempty" json:"lookup,omitempty" xml:"lookup,omitempty"`
+}
+
+// AnalyticsLookupResponseBody is used to define fields on response body types.
+type AnalyticsLookupResponseBody struct {
+	Name string `form:"name" json:"name" xml:"name"`
+	// What the map is and where it is set
+	Description string `form:"description" json:"description" xml:"description"`
 }
 
 // AnalyticsDimensionValueResponseBody is used to define fields on response

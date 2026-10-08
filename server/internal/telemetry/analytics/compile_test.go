@@ -20,7 +20,7 @@ func compileTest(t *testing.T, req Request) (*Plan, error) {
 	if req.ToUnixNano == 0 {
 		req.ToUnixNano = testTo
 	}
-	return Compile(Default, "org-1", "project-1", req)
+	return Compile(Default, Tenant{OrganizationID: "org-1", ProjectID: "project-1"}, nil, req)
 }
 
 func TestCompileGrouped(t *testing.T) {
@@ -95,8 +95,8 @@ func TestCompileCountDistinct(t *testing.T) {
 		{Name: "count_distinct_tool_name", Kind: ColumnMeasure},
 		{Name: "people", Kind: ColumnMeasure},
 	}, plan.Columns)
-	require.Contains(t, plan.SQL, "uniqExactIf(tool_name, tool_name != '') AS count_distinct_tool_name", "a collapsed row with no value is not a distinct value")
-	require.Contains(t, plan.SQL, "uniqExactIf(user_email, user_email != '') AS people")
+	require.Contains(t, plan.SQL, "uniqExact(nullIf(tool_name, '')) AS count_distinct_tool_name", "a collapsed row with no value is not a distinct value")
+	require.Contains(t, plan.SQL, "uniqExact(nullIf(user_email, '')) AS people")
 	require.Contains(t, plan.SQL, "ORDER BY people DESC, mcp_server ASC")
 }
 
@@ -129,7 +129,7 @@ func TestCompileSkills(t *testing.T) {
 		{Name: "count_distinct_skill", Kind: ColumnMeasure},
 	}, plan.Columns)
 	require.Contains(t, plan.SQL, "skill_name AS skill")
-	require.Contains(t, plan.SQL, "uniqExactIf(skill_name, skill_name != '') AS count_distinct_skill", "skills used counts the invocations that named one")
+	require.Contains(t, plan.SQL, "uniqExact(nullIf(skill_name, '')) AS count_distinct_skill", "skills used counts the invocations that named one")
 	require.Contains(t, plan.SQL, "HAVING skill_name != ''", "the source keeps only the collapsed calls that named a skill")
 	require.Contains(t, plan.SQL, "WHERE skill_name IN (?,?)")
 	require.Contains(t, plan.SQL, "GROUP BY skill")
@@ -231,4 +231,118 @@ func TestCompileAcceptsAWindowUpToTheDatasetRetention(t *testing.T) {
 		ToUnixNano:   testFrom + Sessions.MaxTimeRangeNanos(),
 	})
 	require.NoError(t, err)
+}
+
+func TestReadExprFoldsThroughALookup(t *testing.T) {
+	t.Parallel()
+
+	plain := Field{Name: "tool_name", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "tool_name", Description: "", Lookup: ""}
+	folded := Field{Name: "mcp_server", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "mcp_server_name", Description: "", Lookup: "names"}
+	maps := LookupMaps{"names": {"github-mcp": "GitHub", "gh": "GitHub", "": "Nothing", "blank": ""}}
+
+	expr, args := readExpr(QueryContext{Tenant: Tenant{OrganizationID: "", ProjectID: ""}, Window: Window{FromUnixNano: 0, ToUnixNano: 0}, Lookups: maps}, &plain)
+	require.Equal(t, "tool_name", expr)
+	require.Nil(t, args)
+
+	expr, args = readExpr(QueryContext{Tenant: Tenant{OrganizationID: "", ProjectID: ""}, Window: Window{FromUnixNano: 0, ToUnixNano: 0}, Lookups: nil}, &folded)
+	require.Equal(t, "mcp_server_name", expr, "no loaded map, no fold")
+	require.Nil(t, args)
+
+	expr, args = readExpr(QueryContext{Tenant: Tenant{OrganizationID: "", ProjectID: ""}, Window: Window{FromUnixNano: 0, ToUnixNano: 0}, Lookups: maps}, &folded)
+	require.Equal(t, "transform(mcp_server_name, ?, ?, mcp_server_name)", expr)
+	require.Equal(t, []any{[]string{"gh", "github-mcp"}, []string{"GitHub", "GitHub"}}, args, "raw values sorted, and never an empty side")
+}
+
+func TestCompileFoldsADimensionThroughItsLookup(t *testing.T) {
+	t.Parallel()
+
+	req := Request{
+		Dataset:      "tool_calls",
+		FromUnixNano: testFrom,
+		ToUnixNano:   testTo,
+		Grain:        "",
+		Dimensions:   []string{"mcp_server"},
+		Measures: []Measure{
+			{Op: "count", Field: "", Alias: ""},
+			{Op: "count_distinct", Field: "mcp_server", Alias: "servers"},
+		},
+		Filters:   []Filter{{Field: "mcp_server", Operator: "equals", Values: []string{"GitHub"}}},
+		OrderBy:   nil,
+		Limit:     0,
+		Ungrouped: false,
+	}
+	tenant := Tenant{OrganizationID: "org-1", ProjectID: "project-1"}
+	maps := LookupMaps{MCPServerDisplayNamesLookup: {"gh": "GitHub", "github-mcp": "GitHub"}}
+	plan, err := Compile(Default, tenant, maps, req)
+	require.NoError(t, err)
+	const fold = "transform(mcp_server_name, ?, ?, mcp_server_name)"
+	require.Contains(t, plan.SQL, fold+" AS mcp_server")
+	require.Contains(t, plan.SQL, "uniqExact(nullIf("+fold+", '')) AS servers", "the distinct count reads the fold once")
+	require.Contains(t, plan.SQL, "WHERE "+fold+" = ?", "the filter compares the folded value")
+	require.Equal(t, []string{"gh", "github-mcp"}, plan.Args[0], "the select list's arrays come first")
+	require.Equal(t, []string{"GitHub", "GitHub"}, plan.Args[1])
+	require.Equal(t, []string{"gh", "github-mcp"}, plan.Args[2], "the distinct count binds its arrays once")
+	require.Equal(t, "org-1", plan.Args[4], "the tenant follows the select list's binds")
+	require.Equal(t, "GitHub", plan.Args[len(plan.Args)-1])
+	require.NotContains(t, plan.SQL, "GROUP BY "+fold, "the group names the alias, not the expression")
+
+	plain, err := compileTest(t, req)
+	require.NoError(t, err)
+	require.NotContains(t, plain.SQL, "transform(", "no loaded map, no fold")
+	require.Contains(t, plain.SQL, "WHERE mcp_server_name = ?")
+
+	in := req
+	in.Filters = []Filter{{Field: "mcp_server", Operator: "in", Values: []string{"GitHub", "linear"}}}
+	plan, err = Compile(Default, tenant, maps, in)
+	require.NoError(t, err)
+	require.Contains(t, plan.SQL, "WHERE "+fold+" IN (?,?)")
+	require.Equal(t, []any{"GitHub", "linear"}, plan.Args[len(plan.Args)-2:])
+}
+
+func TestCompileFoldsAFilterValueThroughItsLookup(t *testing.T) {
+	t.Parallel()
+
+	tenant := Tenant{OrganizationID: "org-1", ProjectID: "project-1"}
+	maps := LookupMaps{MCPServerDisplayNamesLookup: {"gh": "GitHub", "github-mcp": "GitHub"}}
+	req := Request{
+		Dataset:      "tool_calls",
+		FromUnixNano: testFrom,
+		ToUnixNano:   testTo,
+		Grain:        "",
+		Dimensions:   []string{"mcp_server"},
+		Measures:     []Measure{{Op: "count", Field: "", Alias: ""}},
+		Filters:      []Filter{{Field: "mcp_server", Operator: "equals", Values: []string{"gh"}}},
+		OrderBy:      nil,
+		Limit:        0,
+		Ungrouped:    false,
+	}
+
+	plan, err := Compile(Default, tenant, maps, req)
+	require.NoError(t, err)
+	require.Contains(t, plan.SQL, "IN (?,?)", "equals on a raw name compares against the name and what it folds to")
+	require.Equal(t, []any{"gh", "GitHub"}, plan.Args[len(plan.Args)-2:], "a saved filter on a raw name keeps matching once the name is overridden")
+
+	chained := LookupMaps{MCPServerDisplayNamesLookup: {"alpha": "beta", "beta": "gamma"}}
+	display := req
+	display.Filters = []Filter{{Field: "mcp_server", Operator: "equals", Values: []string{"beta"}}}
+	plan, err = Compile(Default, tenant, chained, display)
+	require.NoError(t, err)
+	require.Equal(t, []any{"beta", "gamma"}, plan.Args[len(plan.Args)-2:], "a display name that is also a raw name still matches what folds to it")
+
+	two := req
+	two.Filters = []Filter{{Field: "mcp_server", Operator: "equals", Values: []string{"gh", "github-mcp"}}}
+	_, err = Compile(Default, tenant, maps, two)
+	require.ErrorContains(t, err, "equals takes exactly one value", "the guard reads the request, not the folded list")
+
+	in := req
+	in.Filters = []Filter{{Field: "mcp_server", Operator: "in", Values: []string{"gh", "github-mcp", "linear", "GitHub"}}}
+	plan, err = Compile(Default, tenant, maps, in)
+	require.NoError(t, err)
+	require.Contains(t, plan.SQL, "IN (?,?,?,?)", "each value and its fold, once")
+	require.Equal(t, []any{"gh", "GitHub", "github-mcp", "linear"}, plan.Args[len(plan.Args)-4:])
+
+	plain, err := Compile(Default, tenant, nil, req)
+	require.NoError(t, err)
+	require.Contains(t, plain.SQL, "WHERE mcp_server_name = ?")
+	require.Equal(t, "gh", plain.Args[len(plain.Args)-1], "no loaded map, the value is read as given")
 }

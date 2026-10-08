@@ -146,11 +146,11 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 	}
 	require.NoError(t, chrepo.New(conn).InsertAgentEvents(t.Context(), rows))
 
-	scope := Scope{OrganizationID: orgID, ProjectID: "project-1", FromUnixNano: base - 1, ToUnixNano: base + int64(time.Hour)}
+	qc := QueryContext{Tenant: Tenant{OrganizationID: orgID, ProjectID: "project-1"}, Window: Window{FromUnixNano: base - 1, ToUnixNano: base + int64(time.Hour)}}
 
 	t.Run("sessions collapses to one row per session with identity-aware counts", func(t *testing.T) {
 		t.Parallel()
-		query, args, err := sessionsSource(scope).ToSql()
+		query, args, err := sessionsSource(qc).ToSql()
 		require.NoError(t, err)
 		result, err := conn.Query(t.Context(), query+" ORDER BY session_id", args...)
 		require.NoError(t, err)
@@ -185,7 +185,7 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 
 	t.Run("tool_calls resolves each call to its terminal observation", func(t *testing.T) {
 		t.Parallel()
-		query, args, err := toolCallsSource(scope).ToSql()
+		query, args, err := toolCallsSource(qc).ToSql()
 		require.NoError(t, err)
 		result, err := conn.Query(t.Context(), query+" ORDER BY tool_call_id", args...)
 		require.NoError(t, err)
@@ -233,7 +233,7 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 
 	t.Run("skills keeps one row per call that named a skill", func(t *testing.T) {
 		t.Parallel()
-		query, args, err := skillsSource(scope).ToSql()
+		query, args, err := skillsSource(qc).ToSql()
 		require.NoError(t, err)
 		result, err := conn.Query(t.Context(), query+" ORDER BY tool_call_id", args...)
 		require.NoError(t, err)
@@ -273,7 +273,7 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		t.Parallel()
 		// Every measure above is idempotent under duplicates by design, so the
 		// collapse cannot be seen through them. Read the scan itself.
-		inner, args, err := dedupedAgentEvents(scope).ToSql()
+		inner, args, err := dedupedAgentEvents(qc).ToSql()
 		require.NoError(t, err)
 		result, err := conn.Query(t.Context(), "SELECT record_id, text FROM ("+inner+") WHERE record_id = 'r1'", args...)
 		require.NoError(t, err)
@@ -288,4 +288,105 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		require.NoError(t, result.Err())
 		require.Equal(t, []string{"re-emitted"}, copies, "one copy survives, and it is the one observed last")
 	})
+}
+
+func TestLookupFoldsADimensionInClickHouse(t *testing.T) {
+	t.Parallel()
+
+	conn := newTestClickhouse(t)
+	orgID := "org-" + uuid.NewString()
+	base := time.Now().Add(-time.Hour).UnixNano()
+	tenant := Tenant{OrganizationID: orgID, ProjectID: "project-1"}
+
+	call := func(id, server string, at int64) chrepo.AgentEventRow {
+		r := agentEventFixture(orgID, id, "s1", "t1", id, "tool_call_result", at)
+		r.ToolName = "mcp_tool"
+		r.MCPServerName = server
+		return r
+	}
+	require.NoError(t, chrepo.New(conn).InsertAgentEvents(t.Context(), []chrepo.AgentEventRow{
+		call("c1", "github-mcp", base+1),
+		call("c2", "gh", base+2),
+		call("c3", "linear", base+3),
+	}))
+
+	servers := func(t *testing.T, maps LookupMaps, filters []Filter) map[string]int64 {
+		t.Helper()
+		plan, err := Compile(Default, tenant, maps, Request{
+			Dataset: "tool_calls", FromUnixNano: base - 1, ToUnixNano: base + int64(time.Hour), Grain: TimeGrainNone,
+			Dimensions: []string{"mcp_server"}, Measures: []Measure{{Op: "count", Field: "", Alias: ""}},
+			Filters: filters, OrderBy: nil, Limit: 0, Ungrouped: false,
+		})
+		require.NoError(t, err)
+		rows, err := plan.Run(t.Context(), conn)
+		require.NoError(t, err)
+		out := map[string]int64{}
+		for _, row := range rows {
+			name, _ := row["mcp_server"].(string)
+			n, _ := row["count"].(int64)
+			out[name] = n
+		}
+		return out
+	}
+	picker := func(t *testing.T, maps LookupMaps) map[string]int64 {
+		t.Helper()
+		plan, err := CompileValues(Default, tenant, maps, ValuesRequest{Dataset: "tool_calls", Dimension: "mcp_server", FromUnixNano: base - 1, ToUnixNano: base + int64(time.Hour), Limit: 0})
+		require.NoError(t, err)
+		values, err := plan.RunValues(t.Context(), conn)
+		require.NoError(t, err)
+		out := map[string]int64{}
+		for _, v := range values {
+			out[v.Value] = v.Count
+		}
+		return out
+	}
+
+	maps := LookupMaps{MCPServerDisplayNamesLookup: {"github-mcp": "GitHub", "gh": "GitHub", "unused": "Nothing"}}
+	require.Equal(t, map[string]int64{"github-mcp": 1, "gh": 1, "linear": 1}, servers(t, nil, nil))
+	require.Equal(t, map[string]int64{"GitHub": 2, "linear": 1}, servers(t, maps, nil))
+	require.Equal(t, map[string]int64{"github-mcp": 1, "gh": 1, "linear": 1}, picker(t, nil))
+	require.Equal(t, map[string]int64{"GitHub": 2, "linear": 1}, picker(t, maps), "the picker offers what a filter will match")
+
+	onRawName := []Filter{{Field: "mcp_server", Operator: "equals", Values: []string{"gh"}}}
+	require.Equal(t, map[string]int64{"gh": 1}, servers(t, nil, onRawName))
+	require.Equal(t, map[string]int64{"GitHub": 2}, servers(t, maps, onRawName), "a filter on the raw name still matches after the override, and reaches every raw name folded with it")
+	require.Equal(t, map[string]int64{"GitHub": 2, "linear": 1}, servers(t, maps, []Filter{{Field: "mcp_server", Operator: "in", Values: []string{"gh", "github-mcp", "linear"}}}))
+}
+
+// A folded dimension named after its column renders
+// transform(x, ?, ?, x) AS x, which ClickHouse resolves: the alias shadows
+// the column for the outer query while the expression reads the source.
+func TestLookupFieldNamedAfterItsColumnRunsInClickHouse(t *testing.T) {
+	t.Parallel()
+
+	conn := newTestClickhouse(t)
+	orgID := "org-" + uuid.NewString()
+	base := time.Now().Add(-time.Hour).UnixNano()
+	tenant := Tenant{OrganizationID: orgID, ProjectID: "project-1"}
+
+	gh := agentEventFixture(orgID, "c1", "s1", "t1", "c1", "tool_call_result", base+1)
+	gh.ToolName, gh.MCPServerName = "mcp_tool", "gh"
+	linear := agentEventFixture(orgID, "c2", "s1", "t1", "c2", "tool_call_result", base+2)
+	linear.ToolName, linear.MCPServerName = "mcp_tool", "linear"
+	require.NoError(t, chrepo.New(conn).InsertAgentEvents(t.Context(), []chrepo.AgentEventRow{gh, linear}))
+
+	named := *ToolCalls
+	named.Fields = append([]Field(nil), ToolCalls.Fields...)
+	for i := range named.Fields {
+		if named.Fields[i].Name == "mcp_server" {
+			named.Fields[i].Name = named.Fields[i].Expr
+		}
+	}
+	plan, err := Compile(MustCatalog(Lookups, &named), tenant, LookupMaps{MCPServerDisplayNamesLookup: {"gh": "GitHub"}}, Request{
+		Dataset: "tool_calls", FromUnixNano: base - 1, ToUnixNano: base + int64(time.Hour), Grain: TimeGrainNone,
+		Dimensions: []string{"mcp_server_name"}, Measures: []Measure{{Op: "count", Field: "", Alias: ""}},
+		Filters: []Filter{{Field: "mcp_server_name", Operator: "equals", Values: []string{"gh"}}}, OrderBy: nil, Limit: 0, Ungrouped: false,
+	})
+	require.NoError(t, err)
+	require.Contains(t, plan.SQL, "transform(mcp_server_name, ?, ?, mcp_server_name) AS mcp_server_name")
+	rows, err := plan.Run(t.Context(), conn)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "GitHub", rows[0]["mcp_server_name"])
+	require.EqualValues(t, 1, rows[0]["count"])
 }

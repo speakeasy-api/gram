@@ -94,7 +94,15 @@ var FieldType = Type("AnalyticsField", func() {
 	Attribute("operators", ArrayOf(String), "Filter operators a dimension admits")
 	Attribute("aggregations", ArrayOf(String), "Ops a field admits: aggregations on a measure, count_distinct on a dimension")
 	Attribute("description", String, "What the field is and which producers fill it, when the catalog has something to say beyond the name")
+	Attribute("lookup", LookupType, "The map this dimension reads through, when it reads through one")
 	Required("name", "type", "role", "default")
+})
+
+var LookupType = Type("AnalyticsLookup", func() {
+	Description("A per-project map a dimension reads through at query time: a reported value with an entry shows as its target, the rest show as reported.")
+	Attribute("name", String, func() { Example("mcp_server_display_names") })
+	Attribute("description", String, "What the map is and where it is set")
+	Required("name", "description")
 })
 
 var DatasetType = Type("AnalyticsDataset", func() {
