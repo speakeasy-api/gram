@@ -68,7 +68,7 @@ WHERE p.id = $3
   AND p.deleted IS FALSE
 ON CONFLICT (plugin_id, principal_urn) DO UPDATE
   SET principal_urn = EXCLUDED.principal_urn
-RETURNING id, plugin_id, organization_id, principal_urn, created_at, updated_at
+RETURNING id, plugin_id, organization_id, principal_urn, install_mode, created_at, updated_at
 `
 
 type AddPluginAssignmentParams struct {
@@ -89,6 +89,7 @@ func (q *Queries) AddPluginAssignment(ctx context.Context, arg AddPluginAssignme
 		&i.PluginID,
 		&i.OrganizationID,
 		&i.PrincipalUrn,
+		&i.InstallMode,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1378,7 +1379,7 @@ func (q *Queries) ListAgentPluginCompatibilityIssuesForProject(ctx context.Conte
 }
 
 const listPluginAssignments = `-- name: ListPluginAssignments :many
-SELECT pa.id, pa.plugin_id, pa.organization_id, pa.principal_urn, pa.created_at, pa.updated_at
+SELECT pa.id, pa.plugin_id, pa.organization_id, pa.principal_urn, pa.install_mode, pa.created_at, pa.updated_at
 FROM plugin_assignments pa
 JOIN plugins p
   ON p.id = pa.plugin_id
@@ -1409,6 +1410,7 @@ func (q *Queries) ListPluginAssignments(ctx context.Context, arg ListPluginAssig
 			&i.PluginID,
 			&i.OrganizationID,
 			&i.PrincipalUrn,
+			&i.InstallMode,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
