@@ -188,7 +188,7 @@ func TestService_ExplainResourceAccess_ShowsEachRoleFromOneGroup(t *testing.T) {
 	use := explainedLevel(t, explainAccess(t, ctx, ti, fixture.serverID, fixture.userID), audienceLevelUse)
 	for _, name := range []string{"Engineer", "Contractors"} {
 		rule := explainedRule(t, use.Rules, name)
-		require.Equal(t, name == "Contractors", rule.ViaDirectoryMapping, "Engineer is also held directly")
+		require.Equal(t, name == "Contractors", rule.ViaDirectoryMapping, "unexpected directory-only marker for %s", name)
 		require.Len(t, rule.DirectorySources, 1)
 		require.Equal(t, "okta/contractors", *rule.DirectorySources[0].DirectoryGroupName)
 	}

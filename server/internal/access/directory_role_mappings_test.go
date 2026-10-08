@@ -17,10 +17,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	thirdpartyworkos "github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -408,6 +410,34 @@ func TestService_SetDirectoryRoleMappings_RequiresLiveAdmin(t *testing.T) {
 		SourceKind: directoryRoleMappingSourceGroup, DirectoryGroupID: &groupID, RoleUrns: []string{},
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestService_DirectoryRoleMappings_UsesTransactionForLiveAuthorization(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	seedMappingAdministrator(t, ctx, ti)
+	orgID := testAccessAuthContext(t, ctx).ActiveOrganizationID
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+	role := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder").String()
+	groupID := seedMappingDirectoryGroup(t, ctx, ti.conn, orgID, "Engineering").String()
+
+	config := ti.conn.Config()
+	config.MaxConns = 1
+	config.MinConns = 0
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+	ti.service.db = pool
+	ti.service.authz = authz.NewEngine(testenv.NewLogger(t), pool, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient())
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	created, err := ti.service.SetDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
+		SourceKind: directoryRoleMappingSourceGroup, DirectoryGroupID: &groupID, RoleUrns: []string{role},
+	})
+	require.NoError(t, err, "the live check must not acquire a second connection while the transaction holds the only one")
+	require.Len(t, created, 1)
+	require.NoError(t, ti.service.DeleteDirectoryRoleMapping(ctx, &gen.DeleteDirectoryRoleMappingPayload{ID: created[0].ID}))
 }
 
 func TestService_SetDirectoryRoleMappings_InvalidSetPreservesCurrent(t *testing.T) {
