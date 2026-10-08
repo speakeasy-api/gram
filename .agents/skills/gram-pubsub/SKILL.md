@@ -312,8 +312,9 @@ loop in the streams process.
 
 ## Go storage subscriptions
 
-Declare `(gcp.pubsub.v1.storage_subscription)` on a dedicated marker, with `topic`
-and a logical `bucket`. It is exclusive with ordinary subscription/topic options.
+Declare `(gcp.pubsub.v1.storage_subscription)` on a dedicated marker, with `topic`.
+The logical `bucket` is optional and defaults to `lake`; set it explicitly to
+select another bucket. It is exclusive with ordinary subscription/topic options.
 Parquet and daily UTC ingestion-time Hive partitions are defaults; hourly and
 external attribute-based partitions are explicit modes. External mode requires
 `partition_attribute` and an ordered `partition_keys` list. Missing/malformed
