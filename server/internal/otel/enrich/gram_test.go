@@ -4,9 +4,7 @@ import (
 	"testing"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -48,18 +46,14 @@ func TestClassificationForGram(t *testing.T) {
 func TestIdentityForGram(t *testing.T) {
 	t.Parallel()
 
-	reader, meterProvider := readableMeter(t)
-	m := NewInstruments(testenv.NewLogger(t), meterProvider)
-
 	// Both halves of a call carry the same identity: the session, the user
 	// and the call id that is the event. The gateway has no turn, and an
-	// external org only when the caller carried one, so those are counted.
-	// Both enrichments run before the counter is read.
+	// external org only when the caller carried one.
 	for name, record := range map[string]*otelv1.InboundLogRecord{
 		"started":   gramStartedRecord(gramIdentity()...),
 		"completed": gramCompletedRecord(gramIdentity()...),
 	} {
-		attrs := identity(t, m, record)
+		attrs := identity(t, record)
 		require.Equal(t, "mcp-session-1", attrs[AgentSessionIDKey].AsString(), name)
 		require.Equal(t, "call-1", attrs[AgentEventIDKey].AsString(), name)
 		require.Equal(t, "ext-user-1", attrs[AgentExternalUserIDKey].AsString(), name)
@@ -67,10 +61,6 @@ func TestIdentityForGram(t *testing.T) {
 		require.NotContains(t, attrs, AgentTurnIDKey, name)
 		require.NotContains(t, attrs, AgentExternalOrgIDKey, name)
 	}
-
-	require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventSurface("claude-code")),
-		"a surface read off the record is not a counter label")
-	require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("session_id")))
 }
 
 func gramIdentity() []*otelv1.InboundLogRecord_KeyValue {
@@ -88,28 +78,22 @@ func TestOperationForGram(t *testing.T) {
 
 	t.Run("a started record names the tool and its server and nothing about how it went", func(t *testing.T) {
 		t.Parallel()
-		reader, meterProvider := readableMeter(t)
-		in := NewInstruments(testenv.NewLogger(t), meterProvider)
 		record := gramStartedRecord(
 			logStringAttribute("gram.tool.name", "list_repos"),
 			logStringAttribute("gram.toolset.slug", "github"),
 		)
 
-		attrs := operation(t, in, record)
+		attrs := operation(t, record)
 		require.Equal(t, "list_repos", attrs[AgentNameKey].AsString())
 		require.Equal(t, "list_repos", attrs[AgentToolNameKey].AsString())
 		require.Equal(t, "list_repos", attrs[AgentMCPToolNameKey].AsString())
 		require.Equal(t, "github", attrs[AgentMCPServerNameKey].AsString())
-		require.NotContains(t, attrs, AgentOutcomeKey)
+		require.NotContains(t, attrs, AgentOutcomeKey, "a call that has not returned has no outcome")
 		require.NotContains(t, attrs, AgentDurationNanoKey)
-		require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventType(dialect.EventTypeToolCall)),
-			"a call that has not returned owes no outcome and no duration")
 	})
 
 	t.Run("a completed record says how the call went and how long it took", func(t *testing.T) {
 		t.Parallel()
-		reader, meterProvider := readableMeter(t)
-		in := NewInstruments(testenv.NewLogger(t), meterProvider)
 		record := gramCompletedRecord(
 			logStringAttribute("gram.tool.name", "list_repos"),
 			logStringAttribute("gram.toolset.slug", "github"),
@@ -118,22 +102,18 @@ func TestOperationForGram(t *testing.T) {
 			inboundTestDoubleAttribute("gram.tool_call.duration", 1.25),
 		)
 
-		attrs := operation(t, in, record)
+		attrs := operation(t, record)
 		require.Equal(t, "list_repos", attrs[AgentToolNameKey].AsString())
 		require.Equal(t, "github", attrs[AgentMCPServerNameKey].AsString())
 		require.Equal(t, dialect.OutcomeOK, attrs[AgentOutcomeKey].AsString())
 		require.Equal(t, int64(1_250_000_000), attrs[AgentDurationNanoKey].AsInt64())
 		require.NotContains(t, attrs, AgentModelKey, "a tool call involves no model")
-		require.NotContains(t, attrs, AgentOutcomeMessageKey)
+		require.NotContains(t, attrs, AgentOutcomeMessageKey, "a call that went fine has no message")
 		require.NotContains(t, attrs, AgentTextKey)
-		require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("outcome_message")), "a call that went fine owes no message")
-		require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("mcp_server_name")))
 	})
 
 	t.Run("a call the gateway refused carries the message the client was given", func(t *testing.T) {
 		t.Parallel()
-		reader, meterProvider := readableMeter(t)
-		in := NewInstruments(testenv.NewLogger(t), meterProvider)
 		record := gramCompletedRecord(
 			logStringAttribute("gram.tool.name", "list_repos"),
 			logStringAttribute("gram.toolset.slug", "github"),
@@ -142,16 +122,13 @@ func TestOperationForGram(t *testing.T) {
 			inboundTestDoubleAttribute("gram.tool_call.duration", 0.01),
 		)
 
-		attrs := operation(t, in, record)
+		attrs := operation(t, record)
 		require.Equal(t, dialect.OutcomeError, attrs[AgentOutcomeKey].AsString())
 		require.Equal(t, "blocked by policy", attrs[AgentOutcomeMessageKey].AsString())
-		require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("outcome_message")))
 	})
 
-	t.Run("a tool that failed on its own is an error with no message, which is counted under other", func(t *testing.T) {
+	t.Run("a tool that failed on its own is an error with no message", func(t *testing.T) {
 		t.Parallel()
-		reader, meterProvider := readableMeter(t)
-		in := NewInstruments(testenv.NewLogger(t), meterProvider)
 		record := gramCompletedRecord(
 			logStringAttribute("gram.tool.name", "list_repos"),
 			logStringAttribute("gram.toolset.slug", "github"),
@@ -161,17 +138,8 @@ func TestOperationForGram(t *testing.T) {
 			inboundTestDoubleAttribute("gram.tool_call.duration", 0.5),
 		)
 
-		attrs := operation(t, in, record)
+		attrs := operation(t, record)
 		require.Equal(t, dialect.OutcomeError, attrs[AgentOutcomeKey].AsString())
 		require.NotContains(t, attrs, AgentOutcomeMessageKey, "the gateway records the tool's error document, not a message about it")
-		// The surface was read off the record, not known from the scope, so
-		// it is not a label: a client can call itself anything, and a
-		// producer-controlled label would make the counter's series unbounded.
-		require.Equal(t, int64(1), counterValue(t, reader, meterAgentAttributeMissing,
-			attr.AgentEventSurface(missingLabelOther),
-			attr.AgentEventType(dialect.EventTypeToolCallResult),
-			attr.AgentEventColumn("outcome_message"),
-		))
-		require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventSurface("my-custom-agent-7")))
 	})
 }
