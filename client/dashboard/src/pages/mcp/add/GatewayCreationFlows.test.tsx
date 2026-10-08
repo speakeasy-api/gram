@@ -103,6 +103,10 @@ vi.mock("@/pages/sources/remote-mcp/useVerifyRemoteMcpUrl", () => ({
 vi.mock("@/pages/sources/remote-mcp/VerifyRemoteMcpUrlButton", () => ({
   VerifyRemoteMcpUrlAlert: () => null,
 }));
+// With no tunnels in the project the page offers only the new-tunnel flow.
+vi.mock("@gram/client/react-query/tunneledMcpServers.js", () => ({
+  useTunneledMcpServers: () => ({ data: { tunneledMcpServers: [] } }),
+}));
 vi.mock("@/pages/sources/tunneled-mcp/TunneledMcpSetupTabs", () => ({
   TunneledMcpSetupTabs: () => null,
 }));

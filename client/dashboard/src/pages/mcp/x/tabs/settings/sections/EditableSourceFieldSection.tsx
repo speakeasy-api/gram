@@ -8,6 +8,15 @@ import { Input } from "@/components/ui/Input";
 import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
+export type SaveConfirmationProps = {
+  value: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+  isPending: boolean;
+  errorMessage: string | undefined;
+};
+
 // One settings section editing a single text field of the source behind an
 // MCP server. Owns its own draft, error, and pending state so sibling sections
 // never reflect each other's activity. Ported from the retired tunneled source
@@ -25,6 +34,7 @@ export function EditableSourceFieldSection({
   save,
   toastMessage,
   fallbackError,
+  confirmSave,
 }: {
   id: string;
   title: string;
@@ -40,10 +50,18 @@ export function EditableSourceFieldSection({
   save: (value: string) => Promise<string>;
   toastMessage: (cleared: boolean) => string;
   fallbackError: string;
+  /**
+   * Renders a confirmation step between Save and the write, for fields whose
+   * change reaches beyond this server. It receives the value frozen at the
+   * moment Save was pressed.
+   */
+  confirmSave?: (props: SaveConfirmationProps) => ReactNode;
 }): JSX.Element {
   const [draft, setDraft] = useState(stored);
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
+  // The value awaiting confirmation; null while no confirmation is open.
+  const [pendingValue, setPendingValue] = useState<string | null>(null);
 
   // Re-sync when the upstream value changes so a stale draft doesn't survive
   // an edit from another tab or a refetch.
@@ -55,8 +73,7 @@ export function EditableSourceFieldSection({
   const saveDisabled =
     !dirty || (requireValue && draft.trim() === "") || saving;
 
-  const handleSave = async () => {
-    const value = draft.trim();
+  const handleSave = async (value: string): Promise<boolean> => {
     setSaving(true);
     setError(undefined);
     try {
@@ -64,13 +81,25 @@ export function EditableSourceFieldSection({
       // leaves the draft dirty whenever normalization is a no-op server-side.
       setDraft(await save(value));
       toast.success(toastMessage(value === ""));
+      return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : fallbackError;
       setError(message);
       toast.error(message);
+      return false;
     } finally {
       setSaving(false);
     }
+  };
+
+  const requestSave = () => {
+    const value = draft.trim();
+    if (confirmSave) {
+      setError(undefined);
+      setPendingValue(value);
+      return;
+    }
+    void handleSave(value);
   };
 
   return (
@@ -103,17 +132,35 @@ export function EditableSourceFieldSection({
             <RequireScope
               scope="mcp:write"
               resourceId={projectId}
+              projectId={projectId}
               level="component"
             >
               <FooterSaveButton
                 pending={saving}
                 disabled={saveDisabled}
-                onClick={() => void handleSave()}
+                onClick={requestSave}
               />
             </RequireScope>
           </SettingsSection.FooterActions>
         </SettingsSection.Footer>
       </SettingsSection.Panel>
+      {confirmSave
+        ? confirmSave({
+            value: pendingValue ?? "",
+            open: pendingValue !== null,
+            onOpenChange: (open) => {
+              if (!open && !saving) setPendingValue(null);
+            },
+            onConfirm: () => {
+              if (pendingValue === null) return;
+              void handleSave(pendingValue).then((saved) => {
+                if (saved) setPendingValue(null);
+              });
+            },
+            isPending: saving,
+            errorMessage: error,
+          })
+        : null}
     </SettingsSection>
   );
 }
