@@ -82,7 +82,7 @@ var Definitions = []Definition{
 	{
 		Category:    CategoryDestructiveTool,
 		Label:       "Destructive Tools",
-		Description: "MCP tool calls whose Gram tool definition is annotated as destructive. Requires Speakeasy hooks and Gram-issued MCP tool metadata.",
+		Description: "MCP tool calls whose Speakeasy tool definition is annotated as destructive. Requires Speakeasy hooks and Speakeasy-issued MCP tool metadata.",
 		Icon:        "shield-alert",
 		Source:      "destructive_tool",
 		RuleIDs:     []string{"destructive_tool.llm"},

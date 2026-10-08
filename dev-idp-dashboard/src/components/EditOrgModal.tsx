@@ -152,7 +152,7 @@ export function EditOrgModal({
           <form.Field name="account_type">
             {(field) => (
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor={field.name}>Gram account type</Label>
+                <Label htmlFor={field.name}>Speakeasy account type</Label>
                 <Select
                   value={field.state.value}
                   onValueChange={(v) => field.handleChange(v ?? "")}

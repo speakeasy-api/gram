@@ -61,9 +61,9 @@ type issuerGatedMcpServerOpts struct {
 	// issuer / authorization_endpoint / token_endpoint / registration_endpoint
 	// out of this document and DCR-registers a remote_session_client.
 	UpstreamMetadata []byte
-	// RemoteSessionCallbackBaseURL, when set, registers the static Gram
+	// RemoteSessionCallbackBaseURL, when set, registers the static Speakeasy
 	// /mcp/remote_login_callback URL. Tests that drive a real upstream
-	// authorize flow should set this to the Gram server URL.
+	// authorize flow should set this to the Speakeasy server URL.
 	RemoteSessionCallbackBaseURL string
 	// AuthnChallengeMode is "chain" or "interactive". Default "interactive".
 	AuthnChallengeMode string

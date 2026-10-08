@@ -18,7 +18,7 @@ var baseInstallFlags = []cli.Flag{
 	flags.Project(),
 	&cli.StringFlag{
 		Name:  "toolset",
-		Usage: "The slug of the Gram toolset to install (e.g., speakeasy-admin). Will automatically look up MCP configuration.",
+		Usage: "The slug of the toolset to install (e.g., speakeasy-admin). Will automatically look up MCP configuration.",
 	},
 	&cli.StringFlag{
 		Name:  "mcp-url",
@@ -49,7 +49,7 @@ var installFlags = append(baseInstallFlags, &cli.StringFlag{
 func newInstallCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "install",
-		Usage: "Install Gram toolsets as MCP servers in various clients",
+		Usage: "Install toolsets as MCP servers in various clients",
 		Subcommands: []*cli.Command{
 			newInstallChatGPTDesktopCommand(),
 			newInstallClaudeCodeCommand(),

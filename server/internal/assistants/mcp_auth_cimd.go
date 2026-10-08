@@ -30,7 +30,7 @@ const (
 	// the assistant is renamed or its callback moves.
 	assistantClientMetadataDocumentMaxAgeSeconds = 3600
 
-	// assistantClientMetadataDocumentPath is the URL path prefix Gram serves
+	// assistantClientMetadataDocumentPath is the URL path prefix Speakeasy serves
 	// assistant CIMD documents under. Distinct from the remote-session path
 	// at /.well-known/oauth-client/{id}. The CIMD draft only requires an
 	// HTTPS URL with a path component.
@@ -40,11 +40,11 @@ const (
 )
 
 // AssistantClientMetadataDocumentURL builds the platform-canonical CIMD
-// document URL for an assistant. serverURL is the Gram deployment's pinned
+// document URL for an assistant. serverURL is the Speakeasy deployment's pinned
 // outbound origin, which stays fixed when the server URL moves; the path
 // component is the assistant's globally unique id. This is the value stored
 // as both client_id and client_id_metadata_uri on a CIMD-mode row and the URL
-// Gram sends upstream as client_id.
+// Speakeasy sends upstream as client_id.
 func AssistantClientMetadataDocumentURL(serverURL *url.URL, assistantID uuid.UUID) string {
 	return strings.TrimRight(serverURL.String(), "/") + assistantClientMetadataDocumentPath + assistantID.String()
 }
@@ -72,7 +72,7 @@ func ParseAssistantClientMetadataDocumentURL(serverURL *url.URL, clientID string
 // assistantClientMetadataDocument is the JSON body served at the assistant
 // CIMD endpoint. Fields follow RFC 7591 client metadata as referenced by the
 // CIMD draft. client_uri smart-links the consent screen back to the assistant
-// in the Gram dashboard.
+// in the Speakeasy dashboard.
 type assistantClientMetadataDocument struct {
 	ClientID                string   `json:"client_id"`
 	ClientName              string   `json:"client_name"`
@@ -86,9 +86,9 @@ type assistantClientMetadataDocument struct {
 func assistantClientName(assistantName string) string {
 	name := strings.TrimSpace(assistantName)
 	if name == "" {
-		return "Gram Assistant"
+		return "Speakeasy Assistant"
 	}
-	return "Gram Assistant: " + name
+	return "Speakeasy Assistant: " + name
 }
 
 func assistantDashboardURI(siteURL *url.URL, orgSlug, projectSlug, assistantID string) string {

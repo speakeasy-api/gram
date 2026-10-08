@@ -13,7 +13,7 @@ export type PrincipalRemoteSessionBinding = {
   id: string;
   principalId: string;
   /**
-   * A remote_session record — Gram's upstream OAuth session for a (principal, remote_session_client) pair. access_token_encrypted and refresh_token_encrypted are never returned.
+   * A remote_session record — Speakeasy's upstream OAuth session for a (principal, remote_session_client) pair. access_token_encrypted and refresh_token_encrypted are never returned.
    */
   remoteSession?: RemoteSession | undefined;
   remoteSessionClientId: string;

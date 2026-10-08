@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-//MISE description="Create a fly.io app to host Gram Functions runner images"
+//MISE description="Create a fly.io app to host Speakeasy Functions runner images"
 //MISE hide=true
 //USAGE flag "--org <org>" required=#true help="The fly.io organization to create the app in"
 //USAGE flag "--image <image>" required=#false help="The image repository to use e.g. registry.fly.io/my-app"

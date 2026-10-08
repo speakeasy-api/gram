@@ -49,11 +49,11 @@ type Record struct {
 	Kind Kind
 
 	// CanonicalURN is the identity URN callers should navigate to. It is the
-	// user URN whenever the subject owns a Gram user row, so links built from
+	// user URN whenever the subject owns a Speakeasy user row, so links built from
 	// an email and from a user id converge on one URL.
 	CanonicalURN urn.Identity
 
-	// UserIDs are the Gram user ids the subject resolves to. Normally one;
+	// UserIDs are the Speakeasy user ids the subject resolves to. Normally one;
 	// an email owned by both a directory row and a linked account resolves
 	// to both, and the first is the directory owner.
 	UserIDs []string
@@ -81,7 +81,7 @@ type Record struct {
 	Directory *directory.UserProfile
 }
 
-// GramUserID is the subject's owning Gram user id, or "" when the identity
+// GramUserID is the subject's owning Speakeasy user id, or "" when the identity
 // resolves to no directory row.
 func (i Record) GramUserID() string {
 	if len(i.UserIDs) == 0 {
@@ -99,7 +99,7 @@ func (i Record) PrimaryEmail() string {
 }
 
 // Resolver maps any identity key to the full set of identifiers the subject
-// is known by across Gram's subsystems.
+// is known by across Speakeasy's subsystems.
 type Resolver struct {
 	logger    *slog.Logger
 	users     *usersRepo.Queries
@@ -117,17 +117,17 @@ func NewResolver(logger *slog.Logger, db *pgxpool.Pool) *Resolver {
 	}
 }
 
-// Subject is the identifier fan-out for one person: the Gram user ids and the
+// Subject is the identifier fan-out for one person: the Speakeasy user ids and the
 // emails their work can be attributed to.
 type Subject struct {
-	// UserIDs are the Gram user ids the identifier resolves to.
+	// UserIDs are the Speakeasy user ids the identifier resolves to.
 	UserIDs []string
 
 	// Emails are every address attributable to the same person.
 	Emails []string
 }
 
-// ExpandIdentifier resolves an email or a Gram user id into every identifier
+// ExpandIdentifier resolves an email or a Speakeasy user id into every identifier
 // the same person's work is recorded under.
 //
 // Personal accounts are the reason the linked-account lookup is here: their
@@ -153,7 +153,7 @@ func (r *Resolver) ExpandIdentifier(ctx context.Context, orgID, identifier strin
 	return r.ExpandUserID(ctx, orgID, identifier), nil
 }
 
-// ExpandEmail folds an address, and ExpandUserID a Gram user id, onto the same
+// ExpandEmail folds an address, and ExpandUserID a Speakeasy user id, onto the same
 // set of identifiers. Callers that already know which namespace they hold — an
 // identity URN carries its kind — must use these rather than the classifier,
 // so a user id shaped like an address cannot resolve against someone else.
@@ -196,7 +196,7 @@ func (r *Resolver) ExpandEmail(ctx context.Context, orgID, email string) Subject
 	return subject
 }
 
-// ExpandUserID folds a Gram user id onto every identifier the same person's
+// ExpandUserID folds a Speakeasy user id onto every identifier the same person's
 // work is recorded under.
 func (r *Resolver) ExpandUserID(ctx context.Context, orgID, userID string) Subject {
 	subject := Subject{
@@ -218,7 +218,7 @@ func (r *Resolver) completeSubject(ctx context.Context, orgID string, subject *S
 	subject.UserIDs = conv.DedupeNonEmpty(subject.UserIDs)
 }
 
-// accountOwner returns the single Gram user who linked an AI provider account
+// accountOwner returns the single Speakeasy user who linked an AI provider account
 // under one of these addresses. No owner and several owners are the same
 // answer: nobody the usage can be attributed to.
 func (r *Resolver) accountOwner(ctx context.Context, orgID string, emails []string) (string, bool) {
@@ -289,7 +289,7 @@ func (r *Resolver) appendLinkedAccountEmails(ctx context.Context, orgID string, 
 }
 
 // isEmailIdentifier reports whether an identifier is an address rather than a
-// Gram user id. A bare "@" test would classify anything containing one as an
+// Speakeasy user id. A bare "@" test would classify anything containing one as an
 // address and fold it against every email-keyed row, so the value is parsed.
 // Only the bare form counts: a display name ("Dev User <dev@example.com>") or a
 // quoted local part is not what any subsystem stores an address under, and

@@ -66,12 +66,13 @@ type Service interface {
 	// removed here; it leaves the list only by leaving Speakeasy's catalog.
 	// Requires a session with the org:admin scope.
 	DeleteAiScanTarget(context.Context, *DeleteAiScanTargetPayload) (res *DeleteAiScanTargetResult, err error)
-	// Resolve display metadata (Gram chat id, generated title, last activity) for
-	// captured agent sessions the calling user owns. Used by the device agent's
-	// session picker to overlay server-generated titles on locally discovered
-	// transcripts; unknown or non-owned session ids are silently omitted, so the
-	// picker degrades gracefully. Requires a per-user key: the fleet-shared org
-	// install key is refused because session metadata is per-user data.
+	// Resolve display metadata (Speakeasy chat id, generated title, last activity)
+	// for captured agent sessions the calling user owns. Used by the device
+	// agent's session picker to overlay server-generated titles on locally
+	// discovered transcripts; unknown or non-owned session ids are silently
+	// omitted, so the picker degrades gracefully. Requires a per-user key: the
+	// fleet-shared org install key is refused because session metadata is per-user
+	// data.
 	GetSessionMeta(context.Context, *GetSessionMetaPayload) (res *GetSessionMetaResult, err error)
 	// Record that a captured agent session was moved to another harness on a
 	// device (session portability). Carries no session content — only the session
@@ -173,7 +174,7 @@ type AgentSessionMeta struct {
 	// The native harness session identifier this entry resolves, echoed from the
 	// request.
 	SessionID string
-	// Gram chat id for the captured session.
+	// Speakeasy chat id for the captured session.
 	ChatID string
 	// Generated (or manually set) chat title. Absent when no title has been
 	// generated yet.
@@ -212,14 +213,15 @@ type AiScanTarget struct {
 }
 
 // How a target detected on a device is recognized again when the same tool
-// calls Gram's MCP gateway. A device signature and a registered OAuth client
-// share no natural join key, so the link is declared here. The three lists are
-// not interchangeable: the first two name credentials Gram verified and can be
-// enforced on, the third names what a client said about itself and is used
-// only to attribute traffic.
+// calls Speakeasy's MCP gateway. A device signature and a registered OAuth
+// client share no natural join key, so the link is declared here. The three
+// lists are not interchangeable: the first two name credentials Speakeasy
+// verified and can be enforced on, the third names what a client said about
+// itself and is used only to attribute traffic.
 type AiScanTargetGatewayClient struct {
-	// Vendor keys from Gram's CIMD client catalog. Vendor-grained: no two targets
-	// may claim the same key, or a block on either would silently cover the other.
+	// Vendor keys from Speakeasy's CIMD client catalog. Vendor-grained: no two
+	// targets may claim the same key, or a block on either would silently cover
+	// the other.
 	CimdVendorKeys []string
 	// Client ids matched literally against the caller's verified client_id, or
 	// CIMD catalog URLs — including the wildcard patterns — matched against the
@@ -260,7 +262,7 @@ type AiScanTargetSignatures struct {
 // createSessionHandoff method.
 type CreateSessionHandoffPayload struct {
 	ApikeyToken *string
-	// Native harness session identifier the handoff was rendered from. Gram
+	// Native harness session identifier the handoff was rendered from. Speakeasy
 	// derives its chat id from this the same way hook ingest does; a
 	// not-yet-captured session can still mint a link.
 	SessionID string
@@ -383,8 +385,8 @@ type GetPluginsResult struct {
 type GetSessionMetaPayload struct {
 	ApikeyToken *string
 	// Native harness session identifiers (e.g. Claude Code session UUIDs, Codex
-	// rollout ids) to resolve. Gram derives its chat ids from these the same way
-	// hook ingest does.
+	// rollout ids) to resolve. Speakeasy derives its chat ids from these the same
+	// way hook ingest does.
 	SessionIds []string
 }
 
@@ -459,15 +461,15 @@ type ReportAIScanPayload struct {
 // reportSessionMoved method.
 type ReportSessionMovedPayload struct {
 	ApikeyToken *string
-	// Native harness session identifier of the moved session. Gram derives its
-	// chat id from this the same way hook ingest does; the move is recorded even
-	// if the session has not been captured yet.
+	// Native harness session identifier of the moved session. Speakeasy derives
+	// its chat id from this the same way hook ingest does; the move is recorded
+	// even if the session has not been captured yet.
 	SessionID string
 	// Harness the session was moved to (e.g. cursor, codex, claude-code).
 	TargetHarness string
 	// Native session id minted for the continuation, when the daemon knows it at
 	// launch time (claude-code targets today; Cursor mints ids server-side so
-	// moves there omit it). Lets Gram link the original session and its
+	// moves there omit it). Lets Speakeasy link the original session and its
 	// continuation.
 	TargetSessionID *string
 	// Harness the session originated in, as detected by the agent (e.g.
@@ -503,8 +505,8 @@ type UpdateConfigurationPayload struct {
 	// sync_interval_seconds, ai_scan_interval_seconds, and disable_ai_scan.
 	// update_channel and blocked_versions can only be set by Speakeasy platform
 	// administrators; per-device identity and secret keys are forbidden, as is
-	// ai_scan, which Gram injects from the organization's scan target list when
-	// serving agents.
+	// ai_scan, which Speakeasy injects from the organization's scan target list
+	// when serving agents.
 	Config map[string]any
 }
 

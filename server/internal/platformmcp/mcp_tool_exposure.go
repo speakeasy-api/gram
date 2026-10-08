@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -154,16 +155,19 @@ type ChangeMCPToolsInput struct {
 // with a non-empty Unchanged), and a refusal, which is returned as an error
 // result and never as this struct.
 type MCPToolExposureMutationOutput struct {
-	Outcome   string   `json:"outcome"`
-	Applied   []string `json:"applied"`
-	Unchanged []string `json:"unchanged"`
+	// RemovedPluginIDs names plugins whose automatic membership this edit removed.
+	RemovedPluginIDs []string `json:"removed_plugin_ids,omitempty"`
+	Outcome          string   `json:"outcome"`
+	Applied          []string `json:"applied"`
+	Unchanged        []string `json:"unchanged"`
 	// Exposure is a fresh read taken after the commit, so a caller reports the
 	// committed list rather than the one it asked for. It is the first page of
 	// that list; a longer list continues through get_mcp's tool_cursor.
 	Exposure      *MCPToolExposure `json:"exposure,omitempty"`
 	SnapshotScope string           `json:"snapshot_scope"`
 	// Distributions names the plugins that carry this server. Changing the
-	// tool list republishes each of them to everyone holding that plugin.
+	// tool list requests publication for those plugins; removed memberships are
+	// reported separately in RemovedPluginIDs.
 	Distributions      []MCPDistribution `json:"distributions"`
 	PublicationRequest string            `json:"publication_request"`
 	PublishSignal      string            `json:"publish_signal"`
@@ -326,8 +330,9 @@ func (s *MCPToolExposureService) ListProjectTools(ctx context.Context, principal
 }
 
 // Exposure reads the first page of one hosted MCP server's tool list. It
-// returns ErrMCPToolExposureMissing when the server has no Gram toolset behind
-// it: a remote, tunneled, or unproxied server's tools come from its upstream.
+// returns ErrMCPToolExposureMissing when the server has no Speakeasy toolset
+// behind it: a remote, tunneled, or unproxied server's tools come from its
+// upstream.
 func (s *MCPToolExposureService) Exposure(ctx context.Context, principal Principal, projectID, mcpID uuid.UUID) (MCPToolExposure, error) {
 	return s.ExposurePage(ctx, principal, projectID, mcpID, "")
 }
@@ -434,9 +439,10 @@ func (s *MCPToolExposureService) RemoveTools(ctx context.Context, principal Prin
 }
 
 type toolExposureReceipt struct {
-	Outcome   string   `json:"outcome"`
-	Applied   []string `json:"applied"`
-	Unchanged []string `json:"unchanged"`
+	RemovedPluginIDs []string `json:"removed_plugin_ids,omitempty"`
+	Outcome          string   `json:"outcome"`
+	Applied          []string `json:"applied"`
+	Unchanged        []string `json:"unchanged"`
 	// ToolsetID is the toolset this change actually wrote, recorded while its
 	// row was still locked. The post-commit reindex is scheduled from here and
 	// never from a later read: a read taken after the transaction can report a
@@ -513,12 +519,15 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 			return encoded, nil
 		},
 		Mutate: func(ctx context.Context, tx pgx.Tx) (toolExposureReceipt, error) {
+			if err := admission.LockProject(ctx, tx, project.ID); err != nil {
+				return toolExposureReceipt{}, fmt.Errorf("lock project admission: %w", err)
+			}
 			txQueries := s.queries.WithTx(tx)
 			// Both rows this change depends on are locked before any of it is
 			// decided, and in the order UpdateToolset takes them: toolsets
 			// first, then mcp_servers. Reversing that pair is an ABBA cycle
-			// with the dashboard, which holds the toolset row and then updates
-			// the hosted server row inside reconcileHostedNetworkAccess — so
+			// with the dashboard, which holds the toolset row and then locks
+			// the hosted server row inside hostedmcp.Sync — so
 			// one side would be aborted with deadlock_detected under
 			// concurrency.
 			//
@@ -603,10 +612,15 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 			if err != nil {
 				return toolExposureReceipt{}, classifyToolExposureError(err)
 			}
+			removedPluginIDs := make([]string, len(applied.RemovedPluginIDs))
+			for i, id := range applied.RemovedPluginIDs {
+				removedPluginIDs[i] = id.String()
+			}
 			result := toolExposureReceipt{
 				Outcome: "no_op", Applied: toolURNStrings(applied.Applied), Unchanged: toolURNStrings(applied.Unchanged),
-				ToolsetID:    row.ToolsetID.String(),
-				VersionAfter: applied.VersionAfter, Publication: string(plugins.ProjectPublicationNotConfigured),
+				ToolsetID:        row.ToolsetID.String(),
+				RemovedPluginIDs: removedPluginIDs,
+				VersionAfter:     applied.VersionAfter, Publication: string(plugins.ProjectPublicationNotConfigured),
 			}
 			if !applied.Changed {
 				return result, nil
@@ -646,7 +660,8 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal, project ResolvedProject, mcpID uuid.UUID, stored toolExposureReceipt, receipt OperationReceipt) MCPToolExposureMutationOutput {
 	output := MCPToolExposureMutationOutput{
 		Outcome: stored.Outcome, Applied: stored.Applied, Unchanged: stored.Unchanged,
-		Distributions: []MCPDistribution{}, PublicationRequest: stored.Publication, PublishSignal: "not_requested",
+		RemovedPluginIDs: stored.RemovedPluginIDs,
+		Distributions:    []MCPDistribution{}, PublicationRequest: stored.Publication, PublishSignal: "not_requested",
 		IndexSignal: "not_required", Receipt: riskMutationToolReceipt(receipt),
 	}
 	if output.Applied == nil {

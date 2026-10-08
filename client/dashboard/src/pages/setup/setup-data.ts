@@ -1,3 +1,7 @@
+import {
+  CLAUDE_CODE_EXACT_NAME_NOTE,
+  CLAUDE_CODE_REQUIRE_MARKETPLACE_DOCS_URL,
+} from "@/lib/claude-code-marketplace";
 import { getCursorInstallCommand } from "@/lib/cursor-install-command";
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import {
@@ -16,7 +20,7 @@ const claudeCodeSettingsJSON = (origin: string) => `{
     "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
     "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": "1",
     "OTEL_EXPORTER_OTLP_ENDPOINT": "${origin}/otel",
-    "OTEL_EXPORTER_OTLP_HEADERS": "Gram-Project={{GRAM_PROJECT_SLUG}},Gram-Key={{GRAM_API_KEY}}",
+    "OTEL_EXPORTER_OTLP_HEADERS": "Speakeasy-AI-Project={{GRAM_PROJECT_SLUG}},Speakeasy-AI-Key={{GRAM_API_KEY}}",
     "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
     "OTEL_LOGS_EXPORTER": "otlp",
     "OTEL_METRICS_EXPORTER": "otlp",
@@ -36,6 +40,10 @@ const claudeCodeSettingsJSON = (origin: string) => `{
     "{{GRAM_CLAUDE_PLUGIN_NAME}}@{{GRAM_MARKETPLACE_NAME}}": true
   }
 }`;
+
+// Every step carrying the settings block reminds the reader that the
+// marketplace keys must stay the marketplace.json name shown in the snippet.
+const claudeCodeMarketplaceNameNote = [` ${CLAUDE_CODE_EXACT_NAME_NOTE}`];
 
 // Setup copy names the host the reader is on (app.getgram.ai or
 // ai.speakeasy.com): every platform host serves the OTLP and hooks endpoints.
@@ -70,6 +78,7 @@ const setupAgentPlatforms = (
                   fallback: "~/.claude/settings.json",
                 },
                 `, preserving existing values. It registers the marketplace, enables the plugin, and configures logs, metrics, and beta traces for export. Higher-precedence policy can override user settings. The API key and token-bearing marketplace URL are secrets: share privately and never commit them. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`,
+                ...claudeCodeMarketplaceNameNote,
               ],
               code: claudeCodeSettingsJSON(origin),
               language: "json",
@@ -111,8 +120,15 @@ const setupAgentPlatforms = (
       },
       {
         title: "Update Managed settings on Claude.ai",
-        description:
+        description: [
           "Merge this block into existing server-managed JSON to register the marketplace, enable the plugin, and configure logs, metrics, and beta trace export for eligible sessions. Treat both the API key and token-bearing marketplace URL as secrets; never commit or distribute them publicly. Settings are fetched at the next startup or hourly poll, not instantly.",
+          ...claudeCodeMarketplaceNameNote,
+        ],
+        helpLink: {
+          url: CLAUDE_CODE_REQUIRE_MARKETPLACE_DOCS_URL,
+          linkLabel: "Require a marketplace and its plugins",
+          sentence: "See {LINK} in the Claude Code docs",
+        },
         screenshot: {
           src: "/setup/claude-managed-settings-editor.png",
           alt: "Claude Code Managed settings JSON editor dialog with Update settings button",
@@ -247,7 +263,8 @@ const setupAgentPlatforms = (
           { label: "OTLP protocol", value: "http/json" },
           {
             label: "OTLP headers",
-            value: "Gram-Project=default,Gram-Key={{GRAM_API_KEY}}",
+            value:
+              "Speakeasy-AI-Project=default,Speakeasy-AI-Key={{GRAM_API_KEY}}",
             requiresApiKey: true,
           },
         ],
@@ -392,7 +409,7 @@ const setupAgentPlatforms = (
         title: "Render the extension into your repo",
         description:
           "Run this from the repo you use Pi in. It writes .pi/extensions/speakeasy-observability/index.ts and speakeasy.json, which map Pi's lifecycle events to Speakeasy's dashboard. Pi loads project-local extensions only after you trust the project, so answer its trust prompt on first start.",
-        code: `GRAM_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
+        code: `SPEAKEASY_AI_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
 speakeasy-hooks install --provider=pi --dir=. --project={{GRAM_PROJECT_SLUG}}`,
         language: "bash",
         requiresApiKey: true,
@@ -413,7 +430,7 @@ speakeasy-hooks install --provider=pi --dir=. --project={{GRAM_PROJECT_SLUG}}`,
         title: "Render the plugin into your repo",
         description:
           "Run this from the repo you use opencode in. It writes .opencode/plugin/agenthooks.ts and speakeasy.json, which map opencode's events to Speakeasy's dashboard.",
-        code: `GRAM_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
+        code: `SPEAKEASY_AI_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
 speakeasy-hooks install --provider=opencode --dir=. --project={{GRAM_PROJECT_SLUG}}`,
         language: "bash",
         requiresApiKey: true,

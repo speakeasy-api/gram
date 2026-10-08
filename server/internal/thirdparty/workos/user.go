@@ -20,7 +20,7 @@ type Member struct {
 	UpdatedAt      string
 }
 
-// User represents a WorkOS user with the fields used by Gram.
+// User represents a WorkOS user with the fields used by Speakeasy.
 type User struct {
 	ID                string
 	FirstName         string

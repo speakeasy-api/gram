@@ -21,6 +21,10 @@ afterEach(() => {
   cleanup();
 });
 
+function bodyText(): string {
+  return document.body.textContent!.replace(/\s+/g, " ");
+}
+
 function openProvider(
   provider: string,
   pluginSlug: string | undefined = "example-plugin",
@@ -31,7 +35,7 @@ function openProvider(
         open
         onOpenChange={vi.fn<() => void>()}
         repoOwner="example-owner"
-        repoName="example-marketplace"
+        repoName="example-org-plugins"
         marketplaceUrl="https://example.invalid/marketplace"
         pluginName="Example plugin"
         pluginSlug={pluginSlug}
@@ -63,16 +67,69 @@ describe("installation instructions", () => {
     ).toBe("https://claude.com/docs/plugins/overview#find-and-add-a-plugin");
   });
 
-  it("qualifies Claude server policy eligibility and activation", () => {
-    const text = openProvider("Claude Code");
-    expect(text).toContain("Owner or Primary Owner");
-    expect(text).toContain(
-      "Endpoint-managed policy files and MDM are a separate mechanism",
+  it("installs Claude Code from settings for the organization or the user", () => {
+    openProvider("Claude Code");
+    let text = bodyText();
+    expect(text).toContain("Add to your Claude Code settings");
+    expect(text).toContain("Restart Claude Code");
+    // The snippet turns auto-update on, so there is no CLI step and no
+    // auto-update warning.
+    expect(text).not.toContain("plugin marketplace add");
+    expect(text).not.toContain("/plugin install");
+    expect(text).not.toContain("Auto-update is off");
+
+    // My organization comes first and is selected by default; its radio is
+    // described by the tagline only, not the revealed snippet.
+    const org = screen.getByRole("radio", { name: /My organization/ });
+    expect(screen.getAllByRole("radio")[0]).toBe(org);
+    expect(org.getAttribute("aria-checked")).toBe("true");
+    const describedBy = org.getAttribute("aria-describedby") ?? "";
+    expect(document.getElementById(describedBy)?.textContent).toBe(
+      "Managed settings, applied to everyone",
     );
-    expect(text).toContain("ANTHROPIC_BASE_URL skip the settings fetch");
-    expect(text).toContain("Start a new session");
-    expect(text).toContain("token-bearing marketplace URL as a secret");
-    expect(text).not.toContain("every Claude Code installation");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Where are managed settings?" }),
+    );
+    text = bodyText();
+    expect(text).toContain("Team or Enterprise Owners");
+    expect(text).toContain("managed-settings.json");
+    expect(text).toContain("Not fetched with a custom ANTHROPIC_BASE_URL");
+
+    fireEvent.click(screen.getByRole("radio", { name: /Just me/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Already have a settings.json?" }),
+    );
+    text = bodyText();
+    expect(text).toContain("~/.claude/settings.json");
+    expect(text).toContain(
+      "Otherwise merge each top-level key into the one in your file.",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Where are managed settings?" }),
+    ).toBeNull();
+  });
+
+  it("keys Claude Code settings by the marketplace name", () => {
+    const text = openProvider("Claude Code");
+    expect(text).toContain(
+      '"extraKnownMarketplaces": { "example-marketplace": { "autoUpdate": true,',
+    );
+    expect(text).toContain(
+      '"enabledPlugins": { "example-plugin@example-marketplace": true }',
+    );
+    // The repository name differs from the marketplace name; only the
+    // marketplace name may key the settings.
+    expect(text).not.toContain("example-org-plugins");
+    expect(text).toContain(
+      "Use this exact marketplace name. Keep the URL private.",
+    );
+    expect(text).not.toContain("<org>-gram");
+    expect(
+      screen.getByRole("link", { name: /Docs/ }).getAttribute("href"),
+    ).toBe(
+      "https://code.claude.com/docs/en/plugins/org#require-a-marketplace-and-its-plugins",
+    );
   });
 
   it("uses team-admin controls, current menus and explicit local snapshot updates for Cursor", () => {

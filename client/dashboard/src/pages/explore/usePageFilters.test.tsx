@@ -128,6 +128,44 @@ describe("usePageFilters", () => {
     ]);
   });
 
+  it("pins the date range and the first two fields; the rest wait behind More filters", () => {
+    const { result } = renderHook(
+      () =>
+        usePageFilters({
+          fields: [
+            { field: "user", label: "User" },
+            { field: "surface", label: "Agent" },
+            { field: "model", label: "Model" },
+            { field: "status", label: "Status" },
+          ],
+        }),
+      { wrapper: wrapper("/page") },
+    );
+    expect(
+      result.current.toolbar.schema.map((dimension) => [
+        dimension.id,
+        dimension.pinned ?? false,
+      ]),
+    ).toEqual([
+      ["date", true],
+      ["user", true],
+      ["surface", true],
+      ["model", false],
+      ["status", false],
+    ]);
+  });
+
+  it("counts a link as saying what to show only when a parameter holds a value", () => {
+    const empty = renderHook(() => usePageFilters(CONFIG), {
+      wrapper: wrapper("/page?user="),
+    });
+    expect(empty.result.current.touched).toBe(false);
+    const picked = renderHook(() => usePageFilters(CONFIG), {
+      wrapper: wrapper("/page?user=amara"),
+    });
+    expect(picked.result.current.touched).toBe(true);
+  });
+
   it("opens on the page's default range, with nothing filtered", () => {
     const { result } = renderHook(() => usePageFilters(CONFIG), {
       wrapper: wrapper("/page"),
@@ -222,5 +260,31 @@ describe("usePageFilters", () => {
       wrapper: wrapper("/page"),
     });
     await waitFor(() => expect(testState.days["sessions/user"]).toBe(30));
+  });
+
+  it("says whether the URL holds any of its values, and sets the whole bar at once", () => {
+    const { result: untouched } = renderHook(() => usePageFilters(CONFIG), {
+      wrapper: wrapper("/page"),
+    });
+    expect(untouched.current.touched).toBe(false);
+
+    const { result } = renderHook(() => usePageFilters(CONFIG), {
+      wrapper: wrapper("/page?user=alice"),
+    });
+    expect(result.current.touched).toBe(true);
+    act(() =>
+      result.current.apply({
+        window: { preset: "30d", customRange: null, customLabel: null },
+        filters: { mcp_server: ["github"] },
+      }),
+    );
+    expect(result.current.context.window?.preset).toBe("30d");
+    // A field the values leave out is cleared.
+    expect(result.current.context.filters).toEqual({ mcp_server: ["github"] });
+
+    // Without a window, the bar returns to the page's default range.
+    act(() => result.current.apply({ filters: {} }));
+    expect(result.current.context.window?.preset).toBe("7d");
+    expect(result.current.context.filters).toEqual({});
   });
 });

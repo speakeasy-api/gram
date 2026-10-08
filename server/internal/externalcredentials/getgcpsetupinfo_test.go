@@ -29,7 +29,7 @@ func TestGetGcpSetupInfo_ReportsGramPrincipal(t *testing.T) {
 	require.Equal(t, "roles/iam.serviceAccountTokenCreator", info.RequiredRole)
 }
 
-// Gram's own identity is fixed for the process lifetime, so it is resolved once
+// Speakeasy's own identity is fixed for the process lifetime, so it is resolved once
 // rather than on every read.
 func TestGetGcpSetupInfo_MemoizesResolution(t *testing.T) {
 	t.Parallel()

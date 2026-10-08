@@ -38,6 +38,7 @@ const sessions: AnalyticsDataset = {
       role: "dimension",
       default: true,
       operators: ["equals", "in"],
+      aggregations: ["count_distinct"],
     },
     {
       name: "surface",
@@ -92,14 +93,23 @@ function spec(overrides: Partial<ExploreSpec> = {}): ExploreSpec {
 }
 
 describe("the describe-to-controls mapping", () => {
-  it("offers count plus every aggregation a measure field declares, in a fixed order", () => {
-    expect(opsForDataset(sessions)).toEqual(["count", "sum", "avg", "p95"]);
+  it("offers count plus every aggregation a field declares, in a fixed order", () => {
+    expect(opsForDataset(sessions)).toEqual([
+      "count",
+      "count_distinct",
+      "sum",
+      "avg",
+      "p95",
+    ]);
     expect(opsForDataset(usage)).toEqual(["count", "sum", "max"]);
     expect(opsForDataset(undefined)).toEqual(["count"]);
   });
 
   it("targets an aggregation at the fields that admit it", () => {
     expect(fieldsForOp(sessions, "count")).toEqual([]);
+    expect(fieldsForOp(sessions, "count_distinct").map((f) => f.name)).toEqual([
+      "user",
+    ]);
     expect(fieldsForOp(sessions, "p95").map((f) => f.name)).toEqual([
       "duration_seconds",
     ]);
@@ -160,6 +170,9 @@ describe("measure and filter drafts", () => {
       "p95_duration_seconds",
     );
     expect(measureLabel({ op: "count", field: "" })).toBe("COUNT");
+    expect(measureLabel({ op: "count_distinct", field: "user" })).toBe(
+      "COUNT_DISTINCT(user)",
+    );
     expect(measureLabel({ op: "avg", field: "turn_count" })).toBe(
       "AVG(turn_count)",
     );
@@ -200,6 +213,7 @@ describe("measure and filter drafts", () => {
     expect(parseLimit("2.5")).toBe(0);
     expect(parseLimit("50")).toBe(50);
     expect(parseLimit("5000")).toBe(1000);
+    expect(parseLimit("5000", true)).toBe(200);
   });
 });
 
@@ -315,6 +329,10 @@ describe("the queries a spec describes", () => {
     expect(body.measures).toBeUndefined();
     expect(body.grain).toBe("none");
     expect(body.dimensions).toEqual(["user"]);
+    expect(
+      queryBodyFromSpec({ ...rows, limit: 500 }).limit,
+      "a limit carried over from a grouped query is clamped to what rows allow",
+    ).toBe(200);
   });
 });
 

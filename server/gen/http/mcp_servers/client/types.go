@@ -135,7 +135,7 @@ type CreateMcpServerResponseBody struct {
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// The ID of the unproxied MCP server used as the backend, if any. A server
-	// backed by an unproxied MCP server is never proxied by Gram.
+	// backed by an unproxied MCP server is never proxied by Speakeasy.
 	UnproxiedMcpServerID *string `form:"unproxied_mcp_server_id,omitempty" json:"unproxied_mcp_server_id,omitempty" xml:"unproxied_mcp_server_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
@@ -173,7 +173,7 @@ type GetMcpServerResponseBody struct {
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// The ID of the unproxied MCP server used as the backend, if any. A server
-	// backed by an unproxied MCP server is never proxied by Gram.
+	// backed by an unproxied MCP server is never proxied by Speakeasy.
 	UnproxiedMcpServerID *string `form:"unproxied_mcp_server_id,omitempty" json:"unproxied_mcp_server_id,omitempty" xml:"unproxied_mcp_server_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
@@ -223,7 +223,7 @@ type UpdateMcpServerResponseBody struct {
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// The ID of the unproxied MCP server used as the backend, if any. A server
-	// backed by an unproxied MCP server is never proxied by Gram.
+	// backed by an unproxied MCP server is never proxied by Speakeasy.
 	UnproxiedMcpServerID *string `form:"unproxied_mcp_server_id,omitempty" json:"unproxied_mcp_server_id,omitempty" xml:"unproxied_mcp_server_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
@@ -2801,7 +2801,7 @@ type McpServerResponseBody struct {
 	// The ID of the toolset used as the backend
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
 	// The ID of the unproxied MCP server used as the backend, if any. A server
-	// backed by an unproxied MCP server is never proxied by Gram.
+	// backed by an unproxied MCP server is never proxied by Speakeasy.
 	UnproxiedMcpServerID *string `form:"unproxied_mcp_server_id,omitempty" json:"unproxied_mcp_server_id,omitempty" xml:"unproxied_mcp_server_id,omitempty"`
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.

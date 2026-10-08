@@ -259,7 +259,7 @@ describe("ClientsAndSessionsTab", () => {
 
   it("reads a connection as one chain: client, server, then upstream", () => {
     // The whole point of the surface. A sessions table shows the inbound half
-    // and leaves an admin unable to see what Gram reaches on the subject's
+    // and leaves an admin unable to see what Speakeasy reaches on the subject's
     // behalf.
     useUserSessionsInfinite.mockReturnValue(
       queryResult([
@@ -294,7 +294,7 @@ describe("ClientsAndSessionsTab", () => {
   });
 
   it("says so when a connection reaches no upstream at all", () => {
-    // Distinct from a missing value: reaching only Gram-native tools is a real
+    // Distinct from a missing value: reaching only Speakeasy-native tools is a real
     // state, and a blank would read as data we failed to load.
     useUserSessionsInfinite.mockReturnValue(
       queryResult([session({ upstreams: [] })]),

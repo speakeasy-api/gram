@@ -15,7 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 )
 
-// grantClaims are the ID-JAG claims Gram binds before forwarding the grant
+// grantClaims are the ID-JAG claims Speakeasy binds before forwarding the grant
 // (draft-ietf-oauth-identity-assertion-authz-grant §3.1).
 type grantClaims struct {
 	jwt.Claims

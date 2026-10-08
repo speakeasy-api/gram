@@ -3,7 +3,7 @@ package gcpauth
 // Credential is the subset of a GCP IAM credential that determines how its
 // identity resolves. All fields empty means the ambient attached identity.
 type Credential struct {
-	// ImpersonateServiceAccount is the service account Gram impersonates: the
+	// ImpersonateServiceAccount is the service account Speakeasy impersonates: the
 	// target for impersonation mode, or the impersonation hop for WIF mode.
 	ImpersonateServiceAccount string
 
@@ -26,11 +26,11 @@ type Credential struct {
 type credentialMode string
 
 const (
-	// modeAmbient uses Gram's own attached identity; no impersonation or WIF
+	// modeAmbient uses Speakeasy's own attached identity; no impersonation or WIF
 	// fields are set.
 	modeAmbient credentialMode = "ambient"
 
-	// modeImpersonation impersonates a target service account from Gram's own
+	// modeImpersonation impersonates a target service account from Speakeasy's own
 	// identity; an impersonation target is set and no WIF fields are.
 	modeImpersonation credentialMode = "impersonation"
 

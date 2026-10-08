@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * A remote_session_issuer record — upstream Authorization Server identity that Gram speaks OAuth to.
+ * A remote_session_issuer record — upstream Authorization Server identity that Speakeasy speaks OAuth to.
  */
 export type RemoteSessionIssuer = {
   /**
@@ -71,7 +71,7 @@ export type RemoteSessionIssuer = {
    */
   jwksCacheExpiresAt?: Date | undefined;
   /**
-   * When Gram last successfully fetched or revalidated the JWK Set. Null until the first successful refresh.
+   * When Speakeasy last successfully fetched or revalidated the JWK Set. Null until the first successful refresh.
    */
   jwksFetchedAt?: Date | undefined;
   /**
@@ -90,6 +90,10 @@ export type RemoteSessionIssuer = {
    * When true, may unlock OIDC-aware behaviour.
    */
   oidc: boolean;
+  /**
+   * When true, a login that would otherwise request the authorization server's whole scopes_supported omits the scope parameter so the server applies its default. Null when unset.
+   */
+  omitScopeFallback?: boolean | undefined;
   /**
    * RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not advertised.
    */
@@ -192,6 +196,7 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
     logo_asset_id: z.optional(z.string()),
     name: z.optional(z.string()),
     oidc: z.boolean(),
+    omit_scope_fallback: z.optional(z.boolean()),
     op_policy_uri: z.optional(z.string()),
     op_tos_uri: z.optional(z.string()),
     organization_id: z.string(),
@@ -238,6 +243,7 @@ export const RemoteSessionIssuer$inboundSchema: z.ZodMiniType<
       "jwks_fetched_at": "jwksFetchedAt",
       "jwks_uri": "jwksUri",
       "logo_asset_id": "logoAssetId",
+      "omit_scope_fallback": "omitScopeFallback",
       "op_policy_uri": "opPolicyUri",
       "op_tos_uri": "opTosUri",
       "organization_id": "organizationId",

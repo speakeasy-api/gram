@@ -94,7 +94,7 @@ export function CreateExternalCredentialSheet({
     resetCreateMutation();
   }, [open, resetCreateMutation]);
 
-  // Impersonation is required: without a target there is nothing Gram could
+  // Impersonation is required: without a target there is nothing Speakeasy could
   // assume and nothing verification could prove.
   const submittable =
     name.trim().length > 0 && impersonateServiceAccount.trim().length > 0;

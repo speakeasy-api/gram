@@ -559,7 +559,7 @@ func (s *Service) completeMCPAuthClientRegistration(
 		registrationCtx,
 		registrationEndpoint,
 		redirectURI,
-		"Gram Assistant "+assistantID.String(),
+		"Speakeasy Assistant "+assistantID.String(),
 	)
 	cancel()
 	if err != nil {

@@ -35,7 +35,7 @@ type UserSessionIssuer struct {
 	// The organization-level or global remote_session_issuer whose assertions this
 	// issuer trusts. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionIssuerID *string
-	// The organization-level remote_session_client Gram uses with the trusted
+	// The organization-level remote_session_client Speakeasy uses with the trusted
 	// issuer. Absent when enterprise-managed authorization is disabled.
 	TrustedRemoteSessionClientID *string
 	CreatedAt                    string

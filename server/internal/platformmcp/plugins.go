@@ -342,7 +342,7 @@ type PluginPublicationEvidence struct {
 // project reports the same attempt. It never carries raw failure text,
 // repository details, or credentials.
 type PluginLastPublish struct {
-	// LastRecordedPublishAt is the last publish Gram successfully recorded,
+	// LastRecordedPublishAt is the last publish Speakeasy successfully recorded,
 	// as RFC 3339. It is written only after a push succeeds and its keys and
 	// fingerprints are saved, so failed attempts and publishes that find
 	// nothing to change never move it, and a push whose recording failed is

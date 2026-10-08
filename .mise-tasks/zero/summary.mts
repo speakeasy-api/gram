@@ -69,7 +69,7 @@ const assistantRuntimeServerURL =
 if (assistantRuntimeServerURL) {
   console.log(
     chalk.greenBright(
-      `⚫︎ Assistant runtimes will reach Gram via ${assistantRuntimeServerURL}`,
+      `⚫︎ Assistant runtimes will reach Speakeasy via ${assistantRuntimeServerURL}`,
     ),
   );
 }
@@ -220,7 +220,7 @@ const gramServerURL =
   process.env["GRAM_SERVER_URL"] ??
   `https://localhost:${process.env["GRAM_SERVER_PORT"] ?? "8080"}`;
 await pokeHTTPService(
-  "Gram server",
+  "Speakeasy server",
   `http://localhost:${gramControlPort}/healthz`,
   gramServerURL,
 );
@@ -229,7 +229,11 @@ const gramHost = process.env["GRAM_HOST"] ?? "localhost";
 const gramSitePort = process.env["GRAM_SITE_PORT"] ?? "5173";
 const gramDashboardURL =
   process.env["GRAM_SITE_URL"] ?? `https://${gramHost}:${gramSitePort}`;
-await pokeHTTPService("Gram dashboard", gramDashboardURL, gramDashboardURL);
+await pokeHTTPService(
+  "Speakeasy dashboard",
+  gramDashboardURL,
+  gramDashboardURL,
+);
 
 const adminHost = process.env["GRAM_ADMIN_HOST"] ?? "localhost";
 const adminControlPort = process.env["GRAM_ADMIN_CONTROL_PORT"] ?? "8084";
@@ -237,7 +241,7 @@ const adminAPIURL =
   process.env["GRAM_ADMIN_BACKEND_URL"] ??
   `https://${adminHost}:${process.env["GRAM_ADMIN_PORT"] ?? "8083"}`;
 await pokeHTTPService(
-  "Gram admin API",
+  "Speakeasy admin API",
   `http://localhost:${adminControlPort}/healthz`,
   adminAPIURL,
 );
@@ -248,7 +252,7 @@ const adminDashboardURL =
   process.env["GRAM_ADMIN_SERVER_URL"] ??
   `https://${adminHost}:${process.env["GRAM_ADMIN_DASHBOARD_PORT"] ?? "5174"}`;
 await pokeHTTPService(
-  "Gram admin dashboard",
+  "Speakeasy admin dashboard",
   adminDashboardURL,
   adminDashboardURL,
 );

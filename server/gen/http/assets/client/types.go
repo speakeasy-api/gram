@@ -40,35 +40,35 @@ type CreateSignedChatAttachmentURLRequestBody struct {
 // UploadImageResponseBody is the type of the "assets" service "uploadImage"
 // endpoint HTTP response body.
 type UploadImageResponseBody struct {
-	// The asset entry that was created in Gram
+	// The asset entry that was created in Speakeasy
 	Asset *AssetResponseBody `form:"asset,omitempty" json:"asset,omitempty" xml:"asset,omitempty"`
 }
 
 // UploadFunctionsResponseBody is the type of the "assets" service
 // "uploadFunctions" endpoint HTTP response body.
 type UploadFunctionsResponseBody struct {
-	// The asset entry that was created in Gram
+	// The asset entry that was created in Speakeasy
 	Asset *AssetResponseBody `form:"asset,omitempty" json:"asset,omitempty" xml:"asset,omitempty"`
 }
 
 // UploadOpenAPIv3ResponseBody is the type of the "assets" service
 // "uploadOpenAPIv3" endpoint HTTP response body.
 type UploadOpenAPIv3ResponseBody struct {
-	// The asset entry that was created in Gram
+	// The asset entry that was created in Speakeasy
 	Asset *AssetResponseBody `form:"asset,omitempty" json:"asset,omitempty" xml:"asset,omitempty"`
 }
 
 // FetchImageFromURLResponseBody is the type of the "assets" service
 // "fetchImageFromURL" endpoint HTTP response body.
 type FetchImageFromURLResponseBody struct {
-	// The asset entry that was created in Gram
+	// The asset entry that was created in Speakeasy
 	Asset *AssetResponseBody `form:"asset,omitempty" json:"asset,omitempty" xml:"asset,omitempty"`
 }
 
 // FetchOpenAPIv3FromURLResponseBody is the type of the "assets" service
 // "fetchOpenAPIv3FromURL" endpoint HTTP response body.
 type FetchOpenAPIv3FromURLResponseBody struct {
-	// The asset entry that was created in Gram
+	// The asset entry that was created in Speakeasy
 	Asset *AssetResponseBody `form:"asset,omitempty" json:"asset,omitempty" xml:"asset,omitempty"`
 }
 
@@ -82,7 +82,7 @@ type ListAssetsResponseBody struct {
 // UploadChatAttachmentResponseBody is the type of the "assets" service
 // "uploadChatAttachment" endpoint HTTP response body.
 type UploadChatAttachmentResponseBody struct {
-	// The asset entry that was created in Gram
+	// The asset entry that was created in Speakeasy
 	Asset *AssetResponseBody `form:"asset,omitempty" json:"asset,omitempty" xml:"asset,omitempty"`
 	// The URL to serve the chat attachment
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`

@@ -1,7 +1,7 @@
 -- name: UpsertUser :one
 -- Login and other IDP upserts mean the user is authenticating now, so clear
 -- WorkOS soft-delete markers left by a prior user.deleted event. Without this,
--- email reuse after WorkOS deletion leaves the Gram user RBAC-inactive.
+-- email reuse after WorkOS deletion leaves the Speakeasy user RBAC-inactive.
 INSERT INTO users (id, email, display_name, photo_url, admin)
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (id) DO UPDATE SET

@@ -89,7 +89,7 @@ func (s *Service) ServeAgentGateway(w http.ResponseWriter, r *http.Request) erro
 		// must not run. Leaving this invalid is what keeps it off.
 		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Name:                "Agent gateway",
-		// NULL serves Gram's built-in gateway instructions.
+		// NULL serves Speakeasy's built-in gateway instructions.
 		Instructions:      pgtype.Text{String: "", Valid: false},
 		Visibility:        visibility.Private,
 		NetworkAccessMode: pgtype.Text{String: "", Valid: false},

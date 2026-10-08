@@ -1,3 +1,4 @@
+import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -82,7 +83,7 @@ type SourceRow = {
   key: string;
   label: string;
   detail: string;
-  /** Gram members in the source, shown as faces in place of the detail. */
+  /** Speakeasy members in the source, shown as faces in place of the detail. */
   members?: FacepileMember[];
   form: Omit<SetDirectoryRoleMappingForm, "roleUrn">;
   mapping: DirectoryRoleMapping | undefined;
@@ -157,7 +158,7 @@ function attributeMappingRows(
 }
 
 /**
- * Maps directory groups to Gram roles, with attribute values as a secondary
+ * Maps directory groups to Speakeasy roles, with attribute values as a secondary
  * option for directories whose groups don't fit. Every group is a row with its
  * own role picker; picking a role saves it. Members who match get that role on
  * top of the roles assigned to them directly. Render it only for org admins:
@@ -214,6 +215,7 @@ export function DirectoryRoleMappings({
           void Promise.all([
             invalidateAllDirectoryRoleMappings(queryClient),
             invalidateAllRoles(queryClient),
+            invalidateAllResourceAudience(queryClient),
           ]).then(() => toast.success("Role created and mapped"));
         },
       },
@@ -551,6 +553,7 @@ function RolePicker({
     Promise.all([
       invalidateAllDirectoryRoleMappings(queryClient),
       invalidateAllRoles(queryClient),
+      invalidateAllResourceAudience(queryClient),
     ]);
   // Returning the refresh keeps the mutation pending until the row reloads.
   const save = useSetDirectoryRoleMappingMutation({
@@ -699,6 +702,7 @@ function RemoveMappingButton({
       Promise.all([
         invalidateAllDirectoryRoleMappings(queryClient),
         invalidateAllRoles(queryClient),
+        invalidateAllResourceAudience(queryClient),
       ]),
     onError: (error) => {
       toast.error(errorMessage(error, "Failed to remove role mapping"));

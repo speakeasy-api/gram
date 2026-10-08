@@ -152,7 +152,7 @@ export function OpenApiSourceInput({
               Direct upload
             </p>
             <CodeBlock language="bash" className="!bg-muted/50 !border-0">
-              {`gram upload --type openapiv3 \\\n  --slug ${documentSlug} \\\n  --name ${shellQuote(cliName)} \\\n  --location ./path/to/spec.yaml`}
+              {`speakeasy upload --type openapiv3 \\\n  --slug ${documentSlug} \\\n  --name ${shellQuote(cliName)} \\\n  --location ./path/to/spec.yaml`}
             </CodeBlock>
           </div>
           <div>
@@ -160,7 +160,7 @@ export function OpenApiSourceInput({
               Or stage and push (useful for CI/CD)
             </p>
             <CodeBlock language="bash" className="!bg-muted/50 !border-0">
-              {`gram stage openapi \\\n  --slug ${documentSlug} \\\n  --name ${shellQuote(cliName)} \\\n  --location ./path/to/spec.yaml\n\ngram push`}
+              {`speakeasy stage openapi \\\n  --slug ${documentSlug} \\\n  --name ${shellQuote(cliName)} \\\n  --location ./path/to/spec.yaml\n\nspeakeasy push`}
             </CodeBlock>
           </div>
         </TabsContent>

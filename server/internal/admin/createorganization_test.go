@@ -57,7 +57,7 @@ type fakeWorkOSCreator struct {
 
 	// updateErr, when set, fails the external_id back-fill. That is the
 	// half-created state: a WorkOS organization exists and carries no
-	// external_id pointing back at Gram.
+	// external_id pointing back at Speakeasy.
 	updateErr error
 
 	// createdNames records every hostname CreateOrganizationWithVerifiedDomain
@@ -160,7 +160,7 @@ func runOrganizationWebhook(t *testing.T, ctx context.Context, conn *pgxpool.Poo
 
 // organizationEvent builds a WorkOS organization event. externalID is passed
 // separately because the two orderings differ precisely there: an event that
-// arrives after the back-fill carries the Gram ID, and one that overtakes it
+// arrives after the back-fill carries the Speakeasy ID, and one that overtakes it
 // carries nothing and makes the sync derive the ID instead.
 func organizationEvent(eventID, kind, workosOrgID, name, externalID string) events.Event {
 	payload := `{"id":"` + workosOrgID + `","object":"organization","name":"` + name +
@@ -197,13 +197,13 @@ func TestCreateOrganization_CreatesInWorkOSAndInGram(t *testing.T) {
 	// The whole idempotency story rests on this equality. A generated ID would
 	// pass every other assertion in this file except the two ordering tests.
 	require.Equal(t, orgid.FromWorkOSID(workosOrgID), res.ID,
-		"the Gram id must be derived from the WorkOS id, not minted")
+		"the Speakeasy id must be derived from the WorkOS id, not minted")
 	require.NotNil(t, res.WorkosID)
 	require.Equal(t, workosOrgID, *res.WorkosID, "the row must be linked to the WorkOS organization")
 
 	require.Equal(t, []string{"example.com"}, fake.names(), "WorkOS must be asked for exactly one verified domain")
 	require.Equal(t, res.ID, fake.externalID(workosOrgID),
-		"external_id must be back-filled with the Gram id, or the sync path resolves this organization by a different route")
+		"external_id must be back-filled with the Speakeasy id, or the sync path resolves this organization by a different route")
 
 	require.Equal(t, "example", res.Name)
 	require.Equal(t, "example", res.Slug)
@@ -684,7 +684,7 @@ func TestCreateOrganization_TwoOrganizationsCanShareAName(t *testing.T) {
 	second, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "duplicate.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
 	require.NoError(t, err)
 
-	require.NotEqual(t, first.ID, second.ID, "two WorkOS organizations must not derive one Gram id")
+	require.NotEqual(t, first.ID, second.ID, "two WorkOS organizations must not derive one Speakeasy id")
 	require.NotEqual(t, first.Slug, second.Slug, "the second organization must get its own slug")
 	require.Equal(t, "example", first.Slug)
 

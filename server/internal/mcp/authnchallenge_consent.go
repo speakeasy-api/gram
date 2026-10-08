@@ -227,7 +227,7 @@ type remoteSessionCard struct {
 
 	// IssuerDisplay is the card's label: the resource's own name when the
 	// client carries one, else the issuer's operator-set display name, else the slug. Issuer
-	// branding is Gram-controlled and tenant-set, unlike the
+	// branding is Speakeasy-controlled and tenant-set, unlike the
 	// attacker-chosen CIMD client_name/logo_uri surfaced via
 	// ClientIDOrigin, so the two stay visually separate on the page.
 	IssuerDisplay string
@@ -291,7 +291,7 @@ type remoteSessionCard struct {
 	// ValidatedAt and ValidatedAgo describe when that validation ran.
 	ValidatedAt  string
 	ValidatedAgo string
-	// ValidationReason is the Gram-authored explanation of a non-valid verdict.
+	// ValidationReason is the Speakeasy-authored explanation of a non-valid verdict.
 	ValidationReason string
 	// ValidationNotice is fixed page copy about a verify that did not run.
 	ValidationNotice string
@@ -505,7 +505,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	// DCR-registered client; the connect page is the dashboard linking the
 	// user's own upstream sessions. Skip the client lookup and label the page
 	// generically.
-	clientName := "Gram"
+	clientName := "Speakeasy"
 	clientIDOrigin := ""
 	loopbackRedirectWarning := false
 	var clientRowID uuid.UUID
@@ -587,7 +587,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	agentSetupURL := ""
 	var agentOptions []consentAgentOption
 	if !challengeState.FirstParty && challengeState.AuthorizerUserID != "" {
-		if enabled, setupURL, _ := s.agentAuthorizationRollout(ctx, logger, endpoint); enabled {
+		if enabled, setupURL, _ := s.agentAuthorizationRollout(ctx, logger, endpoint.OrganizationID); enabled {
 			options, aerr := s.eligibleConsentAgents(ctx, challengeState, endpoint)
 			if aerr != nil {
 				logger.WarnContext(ctx, "eligible agent selection unavailable", attr.SlogError(aerr))
@@ -815,7 +815,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return oops.E(oops.CodeBadRequest, nil, "agent approval action and selection do not match").LogError(ctx, logger)
 	}
 	if selectedAgentID != "" {
-		if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, endpoint); !enabled {
+		if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, endpoint.OrganizationID); !enabled {
 			return oops.E(oops.CodeForbidden, nil, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
 		selectedAgent, err := s.authorizeConsentAgent(ctx, challengeState, endpoint, selectedAgentID)
@@ -932,7 +932,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 			return oops.E(oops.CodeForbidden, ferr, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
-		if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, finalEndpoint); !enabled {
+		if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, finalEndpoint.OrganizationID); !enabled {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 			return oops.E(oops.CodeForbidden, nil, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
@@ -1396,10 +1396,40 @@ func (s *Service) buildRemoteSessionCards(
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}
+	clients = subjectConnectedClients(clients)
 	if len(clients) == 0 {
 		return nil, nil
 	}
 	clients = s.remoteChallengeMgr.WithCatalogBranding(ctx, clients)
+	// Cards read the cached resource row only; the login probes. The row is
+	// the one the login resolves (keyed by the endpoint's server URL) and,
+	// as at login, it decides only for a client whose grant is qualified to
+	// that resource among the bound clients. A gateway, a tunneled or hosted
+	// server, or a client whose grant goes elsewhere is decided by its
+	// authorization server alone; a client's own claimed resource never
+	// stands in, because no login reads it.
+	discoverScopes := s.remoteChallengeMgr.ResourceScopeDiscoveryEnabled(ctx, endpoint.OrganizationID)
+	var serverResource remotesessions.ResourceScopes
+	var serverResourceURL string
+	hasServerResource := false
+	if discoverScopes {
+		serverResource, serverResourceURL, hasServerResource = s.remoteChallengeMgr.CachedResourceScopesForServer(ctx, endpoint.ProjectID, endpoint.McpServerID, true)
+	}
+	// One load decides ownership for every card. A lookup fault logs and
+	// the cards keep their issuers' scopes: the reconnect hint this feeds
+	// is best effort and must not fail the page.
+	var resourceApplies map[uuid.UUID]bool
+	if hasServerResource {
+		boundIDs := make([]uuid.UUID, 0, len(clients))
+		for i := range clients {
+			boundIDs = append(boundIDs, clients[i].ID)
+		}
+		resourceApplies, err = s.remoteChallengeMgr.ResourceAppliesToClients(ctx, endpoint.OrganizationID, boundIDs, serverResourceURL)
+		if err != nil {
+			s.logger.WarnContext(ctx, "decide resource ownership for consent cards; falling back to issuer scopes", attr.SlogError(err))
+			resourceApplies = nil
+		}
+	}
 
 	// Single round-trip for connection state across all cards. Empty when
 	// the subject hasn't been stamped yet (early render before IDP /
@@ -1475,7 +1505,11 @@ func (s *Service) buildRemoteSessionCards(
 			validationReason = inactiveReason(issuerDisplay)
 		}
 		tokenActive, tokenExpiresAt, tokenExpiresIn := tokenLine(renderedAt, state.Token, state.AccessExpiresAt)
-		requested, _ := c.RequestedScopes()
+		resourceScopes := remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: discoverScopes}
+		if resourceApplies[c.ID] {
+			resourceScopes = serverResource
+		}
+		requested := c.RequestedScopes(resourceScopes).Scopes
 		connected := hasSession && state.Status == remotesessions.RemoteSessionActive && !unroutable
 		identityReconnect := connected && !slices.Contains(state.Scopes, "openid") && slices.Contains(requested, "openid")
 		cards = append(cards, remoteSessionCard{
@@ -1581,10 +1615,11 @@ func (s *Service) maybeAutoConnect(
 		return false, nil
 	}
 
-	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+	bound, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
 	}
+	clients := subjectConnectedClients(bound)
 	var client *remotesessions.Client
 	for i := range clients {
 		if clients[i].ID.String() == cards[0].ClientID {
@@ -1621,7 +1656,7 @@ func (s *Service) maybeAutoConnect(
 	// autoRefresh is nil: the subject has not been shown the control yet, so
 	// there is no choice to record. The page's own Connect action is what
 	// authors a stored preference.
-	challengeURL, hop, err := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, clients, nil)
+	challengeURL, hop, err := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, bound, nil)
 	if err != nil {
 		// Already logged. Render the page so the user can connect manually
 		// rather than seeing an error for a step they did not take.

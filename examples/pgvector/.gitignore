@@ -7,5 +7,6 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 *.tsbuildinfo
+speakeasy.deploy.json
 gram.deploy.json
 __MACOSX
