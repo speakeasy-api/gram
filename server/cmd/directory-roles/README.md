@@ -32,7 +32,15 @@ The default role is recorded but is neither imported nor changed. An empty
 assignment list is valid and does not clear mappings.
 
 Configure `GRAM_DATABASE_URL`, `GRAM_REDIS_CACHE_ADDR`, and, if needed,
-`GRAM_REDIS_CACHE_PASSWORD` for the same environment as the Gram server. Supply
+`GRAM_REDIS_CACHE_PASSWORD` for the same environment as the Gram server. For a
+direct remote Redis connection, use `GRAM_DIRECTORY_ROLES_REDIS_URL` with a
+`rediss://` URL instead of the address/password variables; it must verify the
+server certificate. Direct remote PostgreSQL connections require
+`sslmode=verify-full` and may not fall back to plaintext. Plaintext is accepted
+only for literal loopback addresses, `localhost`, or Unix sockets. For remote
+services reached through those local endpoints, use an authorised encrypted
+tunnel or authenticated database proxy, never an unprotected forwarding route.
+Supply
 `GRAM_SUPPORT_SESSION_TOKEN` securely through the environment, not command-line
 flags, inventory files, shell history, or reports. Obtain a current, bounded
 support session for the exact inventory organisation through the existing staff
@@ -73,10 +81,12 @@ mise exec -- go run ./server/cmd/directory-roles shadow < /private/path/inventor
 Redirect stdout to a restricted private file when retaining a report. Import
 fails without committing any mappings if any group or role is absent, deleted,
 ambiguous, or outside the target organisation. Missing roles are reported, never
-created. If an existing mapping points to a missing or deleted role, import fails
-with the source and role listed in `stale_mappings`. Resolve that mapping through
+created. After inventoried roles and groups resolve, any preserved mapping that
+points to a missing or deleted role blocks import and is listed in
+`stale_mappings`. If that role is itself inventoried, the earlier
+`missing_role_slugs` report blocks import first. Resolve the stale mapping through
 the ordinary administrator workflow and repeat the preview; the importer never
-silently removes it. Existing mappings are preserved, new roles are added through the same
+silently removes it. Existing mappings are preserved, new mappings are added through the same
 transactional set writer as the dashboard, and each addition is audited to the
 staff operator. A repeated import adds no rows or audit entries. Every source
 lock is acquired in stable order; any write or audit failure rolls back the
