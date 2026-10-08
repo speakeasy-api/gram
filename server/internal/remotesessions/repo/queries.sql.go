@@ -2915,6 +2915,7 @@ SELECT
     c.json_web_key_set_id                  AS json_web_key_set_id,
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
+    c.upstream_rejected_at                 AS upstream_rejected_at,
     i.id                                   AS issuer_id,
     i.issuer                               AS issuer_url,
     i.metadata                             AS issuer_metadata,
@@ -2962,6 +2963,7 @@ type GetClientCredentialsGrantClientRow struct {
 	JsonWebKeySetID                 uuid.NullUUID
 	ClientScope                     []string
 	ClientAudience                  pgtype.Text
+	UpstreamRejectedAt              pgtype.Timestamptz
 	IssuerID                        uuid.UUID
 	IssuerUrl                       string
 	IssuerMetadata                  []byte
@@ -2991,6 +2993,7 @@ func (q *Queries) GetClientCredentialsGrantClient(ctx context.Context, arg GetCl
 		&i.JsonWebKeySetID,
 		&i.ClientScope,
 		&i.ClientAudience,
+		&i.UpstreamRejectedAt,
 		&i.IssuerID,
 		&i.IssuerUrl,
 		&i.IssuerMetadata,
@@ -7908,6 +7911,7 @@ SELECT
     c.resource_tos_uri                     AS resource_tos_uri,
     c.client_secret_expires_at             AS client_secret_expires_at,
     c.upstream_rejected_at                 AS upstream_rejected_at,
+    c.credential_owner                     AS credential_owner,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     i.tunneled_mcp_server_id               AS tunneled_mcp_server_id,
     i.slug                                 AS issuer_slug,
@@ -7983,6 +7987,7 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 	ResourceTosUri                             pgtype.Text
 	ClientSecretExpiresAt                      pgtype.Timestamptz
 	UpstreamRejectedAt                         pgtype.Timestamptz
+	CredentialOwner                            string
 	RemoteSessionIssuerID                      uuid.UUID
 	TunneledMcpServerID                        uuid.NullUUID
 	IssuerSlug                                 string
@@ -8043,6 +8048,7 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 			&i.ResourceTosUri,
 			&i.ClientSecretExpiresAt,
 			&i.UpstreamRejectedAt,
+			&i.CredentialOwner,
 			&i.RemoteSessionIssuerID,
 			&i.TunneledMcpServerID,
 			&i.IssuerSlug,

@@ -247,6 +247,13 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	if err != nil {
 		return zero, fmt.Errorf("load remote session client for rotation: %w", err)
 	}
+	// A self client's credentials are provisioned by an administrator, and
+	// its upstream rejection marker records a refused client credentials
+	// grant, not a lost dynamic registration. Only an administrator replaces
+	// them.
+	if CredentialOwner(initial.RemoteSessionClient.CredentialOwner) == CredentialOwnerSelf && params.Trigger != RotationTriggerManual {
+		return zero, fmt.Errorf("%w: automatic registration rotation", ErrSelfCredentialClient)
+	}
 
 	releaseAdmission, err := admitRegistration(ctx, r.db)
 	if err != nil {
