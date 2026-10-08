@@ -25,6 +25,7 @@ func main() {
 		LocalMCPCommand:  os.Getenv("TUNNEL_LOCAL_MCP_COMMAND"),
 		StdioMaxSessions: 0,
 		StdioIdleTimeout: 0,
+		StdioCredentials: nil,
 		ServiceVersion:   os.Getenv("TUNNEL_SERVICE_VERSION"),
 		Metadata:         map[string]string{},
 		MinBackoff:       0,
@@ -45,6 +46,39 @@ func main() {
 			os.Exit(2)
 		}
 		cfg.StdioIdleTimeout = d
+	}
+	switch mode := os.Getenv("TUNNEL_STDIO_CREDENTIALS"); mode {
+	case "":
+	case "user":
+		creds := &agent.CredentialsConfig{
+			Issuer:         os.Getenv("TUNNEL_IDENTITY_ISSUER"),
+			Audience:       os.Getenv("TUNNEL_IDENTITY_AUDIENCE"),
+			OrganizationID: os.Getenv("TUNNEL_IDENTITY_ORGANIZATION_ID"),
+			JWKSURL:        os.Getenv("TUNNEL_IDENTITY_JWKS_URL"),
+			AllowInsecure:  false,
+			Root:           os.Getenv("TUNNEL_STDIO_CREDENTIALS_DIR"),
+			MaxAge:         0,
+		}
+		if raw := os.Getenv("TUNNEL_IDENTITY_ALLOW_INSECURE"); raw != "" {
+			allow, err := strconv.ParseBool(raw)
+			if err != nil {
+				logger.Error("tunnel-agent invalid TUNNEL_IDENTITY_ALLOW_INSECURE; expected true or false")
+				os.Exit(2)
+			}
+			creds.AllowInsecure = allow
+		}
+		if raw := os.Getenv("TUNNEL_STDIO_CREDENTIALS_MAX_AGE"); raw != "" {
+			d, err := time.ParseDuration(raw)
+			if err != nil || d <= 0 {
+				logger.Error("tunnel-agent invalid TUNNEL_STDIO_CREDENTIALS_MAX_AGE; expected a positive duration such as 1h")
+				os.Exit(2)
+			}
+			creds.MaxAge = d
+		}
+		cfg.StdioCredentials = creds
+	default:
+		logger.Error("tunnel-agent invalid TUNNEL_STDIO_CREDENTIALS; the only supported value is user")
+		os.Exit(2)
 	}
 	if raw := os.Getenv("TUNNEL_METADATA"); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &cfg.Metadata); err != nil {
@@ -71,7 +105,7 @@ func main() {
 	if cfg.LocalMCPCommand != "" {
 		upstream = slog.String("local_mcp", "stdio")
 	}
-	logger.Info("tunnel-agent starting", slog.String("gateway", cfg.GatewayURL), upstream)
+	logger.Info("tunnel-agent starting", slog.String("gateway", cfg.GatewayURL), upstream, slog.Bool("stdio_credentials", cfg.StdioCredentials != nil))
 	if err := a.Run(ctx); err != nil && ctx.Err() == nil {
 		logger.Error("tunnel-agent exited", slog.Any("error", err))
 		os.Exit(1)

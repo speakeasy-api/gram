@@ -35,7 +35,7 @@ func TestStdioBridgeCloseWaitsForTermIgnoringDescendants(t *testing.T) {
 	t.Parallel()
 	ready := filepath.Join(t.TempDir(), "ready")
 	_, a := newStdioTestServerWithCommand(t, "(trap '' TERM; touch '"+ready+"'; exec sleep 300) & read ignored", 0)
-	sess, err := a.stdio.start()
+	sess, err := a.stdio.start(nil, principal{})
 	require.NoError(t, err)
 	pgid := sess.cmd.Process.Pid
 	// Until the trap is installed, SIGTERM alone would stop the child.

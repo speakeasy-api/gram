@@ -1,0 +1,318 @@
+//go:build linux
+
+package agent
+
+import (
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+	"golang.org/x/sys/unix"
+
+	"github.com/speakeasy-api/gram/tunnel/identity"
+)
+
+// memoryRoot returns a fresh directory on a memory-backed filesystem. CI
+// runs these tests on Linux, where /dev/shm is tmpfs; a host without one
+// fails rather than silently skipping the storage guarantees.
+func memoryRoot(t *testing.T) string {
+	t.Helper()
+	var st unix.Statfs_t
+	require.NoError(t, unix.Statfs("/dev/shm", &st), "credentials tests need /dev/shm")
+	require.Contains(t, []int64{unix.TMPFS_MAGIC, unix.RAMFS_MAGIC}, int64(st.Type), "credentials tests need /dev/shm on tmpfs")
+	root, err := os.MkdirTemp("/dev/shm", "tunnel-agent-test-")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	return root
+}
+
+func discardLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+
+func openTestStore(t *testing.T, root string) *linuxCredentialStore {
+	t.Helper()
+	store, err := openCredentialStore(t.Context(), root, discardLogger())
+	require.NoError(t, err)
+	return store.(*linuxCredentialStore)
+}
+
+func instanceNames(t *testing.T, root string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(filepath.Join(root, credentialBaseName))
+	require.NoError(t, err)
+	var names []string
+	for _, e := range entries {
+		if e.Name() != maintenanceLockName {
+			names = append(names, e.Name())
+		}
+	}
+	return names
+}
+
+func TestCredentialStoreWritesPrivateTokenFiles(t *testing.T) {
+	t.Parallel()
+	root := memoryRoot(t)
+	store := openTestStore(t, root)
+
+	dir, err := store.createSession()
+	require.NoError(t, err)
+	require.NoError(t, dir.writeToken(testTokenA))
+	require.NoError(t, dir.writeToken(testTokenB))
+
+	content, err := os.ReadFile(dir.tokenPath())
+	require.NoError(t, err)
+	require.Equal(t, identity.TokenSHA256(testTokenB), identity.TokenSHA256(string(content)))
+	for path, mode := range map[string]os.FileMode{
+		filepath.Join(root, credentialBaseName): 0o700 | os.ModeDir,
+		filepath.Dir(dir.tokenPath()):           0o700 | os.ModeDir,
+		dir.homePath():                          0o700 | os.ModeDir,
+		dir.tokenPath():                         0o600,
+	} {
+		info, err := os.Lstat(path)
+		require.NoError(t, err)
+		require.Equal(t, mode, info.Mode(), path)
+	}
+	entries, err := os.ReadDir(filepath.Dir(dir.tokenPath()))
+	require.NoError(t, err)
+	require.Len(t, entries, 2, "no temporary token files are left behind")
+
+	require.NoError(t, dir.remove())
+	_, err = os.Stat(filepath.Dir(dir.tokenPath()))
+	require.ErrorIs(t, err, os.ErrNotExist)
+
+	require.NoError(t, store.Close())
+	require.Empty(t, instanceNames(t, root))
+}
+
+func TestCredentialStoreRefusesUnsafeRoots(t *testing.T) {
+	t.Parallel()
+	disk := t.TempDir()
+	var st unix.Statfs_t
+	require.NoError(t, unix.Statfs(disk, &st))
+	if st.Type != unix.TMPFS_MAGIC && st.Type != unix.RAMFS_MAGIC {
+		_, err := openCredentialStore(t.Context(), disk, discardLogger())
+		require.ErrorContains(t, err, "memory-backed")
+	}
+
+	root := memoryRoot(t)
+	target := memoryRoot(t)
+	require.NoError(t, os.Symlink(target, filepath.Join(root, "link")))
+	_, err := openCredentialStore(t.Context(), filepath.Join(root, "link"), discardLogger())
+	require.Error(t, err, "a symlinked root is refused")
+
+	require.NoError(t, os.Symlink(target, filepath.Join(root, credentialBaseName)))
+	_, err = openCredentialStore(t.Context(), root, discardLogger())
+	require.Error(t, err, "a symlinked agent directory is refused")
+
+	open := memoryRoot(t)
+	require.NoError(t, os.Mkdir(filepath.Join(open, credentialBaseName), 0o755))
+	require.NoError(t, os.Chmod(filepath.Join(open, credentialBaseName), 0o755))
+	_, err = openCredentialStore(t.Context(), open, discardLogger())
+	require.ErrorContains(t, err, "permissions")
+}
+
+func TestCredentialTokenRefusedOnDiskBackedDirectory(t *testing.T) {
+	t.Parallel()
+	disk := t.TempDir()
+	var st unix.Statfs_t
+	require.NoError(t, unix.Statfs(disk, &st))
+	if st.Type == unix.TMPFS_MAGIC || st.Type == unix.RAMFS_MAGIC {
+		t.Skip("the test temporary directory is itself memory-backed")
+	}
+	fd, err := unix.Open(disk, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	require.NoError(t, err)
+	d := &linuxCredentialDir{store: nil, name: "x", fd: fd, path: disk}
+	t.Cleanup(func() { _ = unix.Close(fd) })
+	require.ErrorContains(t, d.writeToken(testTokenA), "memory-backed")
+	entries, err := os.ReadDir(disk)
+	require.NoError(t, err)
+	require.Empty(t, entries, "nothing is left on disk")
+}
+
+func TestCredentialStoresShareARootSafely(t *testing.T) {
+	t.Parallel()
+	root := memoryRoot(t)
+	first := openTestStore(t, root)
+	firstDir, err := first.createSession()
+	require.NoError(t, err)
+	require.NoError(t, firstDir.writeToken(testTokenA))
+
+	second := openTestStore(t, root)
+	_, err = os.Stat(firstDir.tokenPath())
+	require.NoError(t, err, "starting a second agent leaves a live agent's files alone")
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "unrelated"), []byte("x"), 0o600))
+	require.NoError(t, second.Close())
+	_, err = os.Stat(firstDir.tokenPath())
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(root, "unrelated"))
+	require.NoError(t, err)
+	require.NoError(t, first.Close())
+}
+
+func TestCredentialStoreScavengesCrashedAgent(t *testing.T) {
+	t.Parallel()
+	root := memoryRoot(t)
+	crashed := openTestStore(t, root)
+	dir, err := crashed.createSession()
+	require.NoError(t, err)
+	require.NoError(t, dir.writeToken(testTokenA))
+	// A crash releases the lock without removing anything.
+	require.NoError(t, unix.Close(crashed.lockFD))
+
+	survivor := openTestStore(t, root)
+	_, err = os.Stat(dir.tokenPath())
+	require.ErrorIs(t, err, os.ErrNotExist, "a dead agent's token is removed at the next start")
+	require.Equal(t, []string{survivor.instName}, instanceNames(t, root))
+	require.NoError(t, survivor.Close())
+}
+
+func TestCredentialStoreScavengingRules(t *testing.T) {
+	t.Parallel()
+	root := memoryRoot(t)
+	store := openTestStore(t, root)
+	base := filepath.Join(root, credentialBaseName)
+	old := time.Now().Add(-2 * tempInstanceGrace)
+
+	young := filepath.Join(base, ".tmp-"+"0123456789abcdef0123456789abcdef")
+	require.NoError(t, os.Mkdir(young, 0o700))
+	aged := filepath.Join(base, ".tmp-"+"fedcba9876543210fedcba9876543210")
+	require.NoError(t, os.Mkdir(aged, 0o700))
+	require.NoError(t, os.Chtimes(aged, old, old))
+	unknown := filepath.Join(base, "not-an-instance")
+	require.NoError(t, os.Mkdir(unknown, 0o700))
+	lockless := filepath.Join(base, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	require.NoError(t, os.Mkdir(lockless, 0o700))
+	// A stale instance whose lock was replaced with a symlink.
+	swapped := filepath.Join(base, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+	require.NoError(t, os.Mkdir(swapped, 0o700))
+	outside := filepath.Join(memoryRoot(t), "victim")
+	require.NoError(t, os.WriteFile(outside, []byte("x"), 0o600))
+	require.NoError(t, os.Symlink(outside, filepath.Join(swapped, instanceLockName)))
+	// A stale instance holding a symlink to a file outside it.
+	stale := filepath.Join(base, "cccccccccccccccccccccccccccccccc")
+	require.NoError(t, os.Mkdir(stale, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(stale, instanceLockName), nil, 0o600))
+	require.NoError(t, os.Symlink(outside, filepath.Join(stale, "escape")))
+
+	store.scavenge()
+
+	for path, wantExists := range map[string]bool{young: true, aged: false, unknown: true, lockless: true, swapped: true, stale: false, outside: true} {
+		_, err := os.Lstat(path)
+		if wantExists {
+			require.NoError(t, err, path)
+		} else {
+			require.ErrorIs(t, err, os.ErrNotExist, path)
+		}
+	}
+	require.NoError(t, store.Close())
+}
+
+func TestCredentialStorePublicationIsSerializedWithScavenging(t *testing.T) {
+	t.Parallel()
+	root := memoryRoot(t)
+	holder := openTestStore(t, root)
+	base := filepath.Join(root, credentialBaseName)
+
+	// A publisher paused between creating its temporary directory and
+	// locking it, past the grace period.
+	unlock, err := holder.lockMaintenance(t.Context())
+	require.NoError(t, err)
+	paused := ".tmp-" + "11111111111111111111111111111111"
+	require.NoError(t, os.Mkdir(filepath.Join(base, paused), 0o700))
+	old := time.Now().Add(-2 * tempInstanceGrace)
+	require.NoError(t, os.Chtimes(filepath.Join(base, paused), old, old))
+
+	started := make(chan *linuxCredentialStore, 2)
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Go(func() { started <- openTestStore(t, root) })
+	}
+	select {
+	case <-started:
+		t.Fatal("scavenging must wait for an in-progress publication")
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	// The paused publisher finishes and goes live.
+	fd, err := unix.Open(filepath.Join(base, paused), unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	require.NoError(t, err)
+	lockFD, err := unix.Openat(fd, instanceLockName, unix.O_RDWR|unix.O_CREAT|unix.O_EXCL|unix.O_CLOEXEC, 0o600)
+	require.NoError(t, err)
+	require.NoError(t, unix.Flock(lockFD, unix.LOCK_EX|unix.LOCK_NB))
+	live := "22222222222222222222222222222222"
+	require.NoError(t, os.Rename(filepath.Join(base, paused), filepath.Join(base, live)))
+	require.NoError(t, os.WriteFile(filepath.Join(base, live, "s-keep"), nil, 0o600))
+	unlock()
+
+	wg.Wait()
+	close(started)
+	for store := range started {
+		t.Cleanup(func() { _ = store.Close() })
+	}
+	_, err = os.Stat(filepath.Join(base, live, "s-keep"))
+	require.NoError(t, err, "a publisher that went live is never scavenged")
+	require.NoError(t, unix.Close(lockFD))
+	require.NoError(t, unix.Close(fd))
+	require.NoError(t, holder.Close())
+}
+
+func TestCredentialsModeEndToEndOnLinux(t *testing.T) {
+	t.Parallel()
+	root := memoryRoot(t)
+	signer := newTestSigner(t)
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	cfg := signer.config()
+	cfg.Root = root
+	// Escapes the process group, as a daemonizing child would.
+	escaped := filepath.Join(t.TempDir(), "escaped.pid")
+	a, err := New(Config{
+		GatewayURL:       "wss://example.test/connect",
+		APIKey:           "gram_tunnel_test",
+		LocalMCPURL:      "",
+		LocalMCPCommand:  "setsid sh -c 'echo $$ > " + escaped + "; exec sleep 300' & exec env " + stdioFixtureEnv + "=1 " + stdioFixtureReadTokenAtStart + "=1 '" + exe + "'",
+		StdioMaxSessions: 0,
+		StdioIdleTimeout: 0,
+		StdioCredentials: &cfg,
+		ServiceVersion:   "1.0.0",
+		Metadata:         map[string]string{},
+		MinBackoff:       0,
+		MaxBackoff:       0,
+	}, discardLogger())
+	require.NoError(t, err)
+	srv := httptest.NewServer(a.handler)
+	t.Cleanup(srv.Close)
+	c := &credentialTestServer{srv: srv, bridge: a.stdio, signer: signer, store: nil, clock: newTestClock(), logs: &syncBuffer{}}
+
+	call := credentialCall{token: testTokenA}
+	call.sid = c.initialize(t, call)
+	require.Equal(t, identity.TokenSHA256(testTokenA), c.toolText(t, call, "token-sha"))
+	tokenPath := a.stdio.session(call.sid).cred.dir.tokenPath()
+	require.Equal(t, root, tokenPath[:len(root)])
+
+	require.Equal(t, http.StatusNoContent, c.do(t, credentialCall{sid: call.sid, method: http.MethodDelete}).StatusCode)
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(tokenPath)
+		return os.IsNotExist(err)
+	}, 30*time.Second, 50*time.Millisecond, "an escaped descendant loses the token file")
+
+	a.stdio.Close()
+	entries, err := os.ReadDir(filepath.Join(root, credentialBaseName))
+	require.NoError(t, err)
+	require.Len(t, entries, 1, "only the maintenance lock remains after shutdown")
+
+	if pid, err := os.ReadFile(escaped); err == nil {
+		var n int
+		if _, err := fmt.Sscan(string(pid), &n); err == nil && n > 0 {
+			_ = unix.Kill(n, unix.SIGKILL)
+		}
+	}
+}
