@@ -33,6 +33,9 @@ import { buildAdminListCustomerUsageQuery } from "@gram/admin-client/react-query
 import type { AdminListCustomerUsageRequest } from "@gram/admin-client/models/operations/adminlistcustomerusage";
 import { buildAdminDescribeMcpServerHealthQuery } from "@gram/admin-client/react-query/adminDescribeMcpServerHealth.core";
 import { buildAdminGetMcpServerToolCallsQuery } from "@gram/admin-client/react-query/adminGetMcpServerToolCalls.core";
+import { buildAdminSetMcpServerScopePinMutation } from "@gram/admin-client/react-query/adminSetMcpServerScopePin";
+import type { SetMcpServerScopePinRequestBody } from "@gram/admin-client/models/components/setmcpserverscopepinrequestbody";
+import type { AdminMcpServerResourceScopes } from "@gram/admin-client/models/components/adminmcpserverresourcescopes";
 import { buildAdminChangeTrialEndDateMutation } from "@gram/admin-client/react-query/adminChangeTrialEndDate";
 import type { ChangeTrialEndDateRequestBody } from "@gram/admin-client/models/components/changetrialenddaterequestbody";
 import {
@@ -299,6 +302,31 @@ function createMcpServerHealthQuery(
     },
     staleTime: 30_000,
   });
+}
+
+// Every window's health read of one server: a pin write changes what each of
+// them reports.
+export function mcpServerHealthServerKey(
+  organizationIdOrSlug: string,
+  projectId: string,
+  mcpServerId: string,
+): readonly [string, string, string, string] {
+  return [
+    "gram-admin-mcp-server-health",
+    organizationIdOrSlug,
+    projectId,
+    mcpServerId,
+  ] as const;
+}
+
+export function adminSetMcpServerScopePin(
+  request: SetMcpServerScopePinRequestBody,
+): Promise<AdminMcpServerResourceScopes> {
+  return redirecting(
+    buildAdminSetMcpServerScopePinMutation(redirectingClient).mutationFn({
+      request,
+    }),
+  );
 }
 
 // Tool call telemetry for the same server, keyed the same way so the two
