@@ -1,3 +1,4 @@
+import { useRBAC } from "@/hooks/useRBAC";
 import { IdentityLink } from "@/components/identity-link";
 import { useHideInsightsDock } from "@/components/insights-context";
 import { Page } from "@/components/page-layout";
@@ -81,6 +82,8 @@ export function MCPTeamAccessTab({
   /** Remote MCP servers only: shows the scopes their sign-ins request. */
   requestedScopes?: { editScopesHref: string };
 }): ReactElement | null {
+  const { hasAnyScope } = useRBAC();
+  const canManage = hasAnyScope(["org:admin"]);
   // The dock floats over the bottom of the page, which here is rows with
   // edit and remove controls and the access check.
   useHideInsightsDock();
@@ -209,6 +212,7 @@ export function MCPTeamAccessTab({
             resourceId={resourceId}
             resourceName={serverName}
             entries={entries}
+            rolePlugins={canManage ? audienceData?.rolePlugins : undefined}
             version={audienceData?.version ?? ""}
             toolCatalog={toolCatalog}
             isLoading={audienceLoading}

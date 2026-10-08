@@ -37,23 +37,33 @@ FROM mcp_servers
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: GetMCPServerByToolsetID :one
--- Deterministic pick until a partial unique index enforces one wrapper per toolset.
+-- The toolset's canonical wrapper (id = toolset id) when it has one, else the
+-- oldest toolset-backed server.
 SELECT *
 FROM mcp_servers
 WHERE toolset_id = @toolset_id::uuid AND project_id = @project_id AND deleted IS FALSE
-ORDER BY created_at, id
+ORDER BY (id = toolset_id) DESC, created_at, id
 LIMIT 1;
 
 -- name: ListEnabledMCPServersByToolsetID :many
 -- At most two rows are needed: zero means the legacy route has no attributable
 -- wrapper, one is unambiguous, and two means callers must reject attribution.
+-- A live canonical wrapper (id = toolset id) is the toolset's hosting wrapper,
+-- so other toolset-backed servers are candidates only when it is absent.
 SELECT *
-FROM mcp_servers
-WHERE toolset_id = @toolset_id::uuid
-  AND project_id = @project_id
-  AND deleted IS FALSE
-  AND visibility <> 'disabled'
-ORDER BY created_at, id
+FROM mcp_servers ms
+WHERE ms.toolset_id = @toolset_id::uuid
+  AND ms.project_id = @project_id
+  AND ms.deleted IS FALSE
+  AND ms.visibility <> 'disabled'
+  AND (
+    ms.id = ms.toolset_id
+    OR NOT EXISTS (
+      SELECT 1 FROM mcp_servers c
+      WHERE c.id = ms.toolset_id AND c.project_id = ms.project_id AND c.deleted IS FALSE
+    )
+  )
+ORDER BY ms.created_at, ms.id
 LIMIT 2;
 
 -- name: LockMCPServerByIDAndProjectID :one

@@ -430,7 +430,7 @@ const getMCPServerByToolsetID = `-- name: GetMCPServerByToolsetID :one
 SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE toolset_id = $1::uuid AND project_id = $2 AND deleted IS FALSE
-ORDER BY created_at, id
+ORDER BY (id = toolset_id) DESC, created_at, id
 LIMIT 1
 `
 
@@ -439,7 +439,8 @@ type GetMCPServerByToolsetIDParams struct {
 	ProjectID uuid.UUID
 }
 
-// Deterministic pick until a partial unique index enforces one wrapper per toolset.
+// The toolset's canonical wrapper (id = toolset id) when it has one, else the
+// oldest toolset-backed server.
 func (q *Queries) GetMCPServerByToolsetID(ctx context.Context, arg GetMCPServerByToolsetIDParams) (McpServer, error) {
 	row := q.db.QueryRow(ctx, getMCPServerByToolsetID, arg.ToolsetID, arg.ProjectID)
 	var i McpServer
@@ -702,12 +703,19 @@ func (q *Queries) ListEffectiveMCPServerToolAnnotations(ctx context.Context, arg
 
 const listEnabledMCPServersByToolsetID = `-- name: ListEnabledMCPServersByToolsetID :many
 SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
-FROM mcp_servers
-WHERE toolset_id = $1::uuid
-  AND project_id = $2
-  AND deleted IS FALSE
-  AND visibility <> 'disabled'
-ORDER BY created_at, id
+FROM mcp_servers ms
+WHERE ms.toolset_id = $1::uuid
+  AND ms.project_id = $2
+  AND ms.deleted IS FALSE
+  AND ms.visibility <> 'disabled'
+  AND (
+    ms.id = ms.toolset_id
+    OR NOT EXISTS (
+      SELECT 1 FROM mcp_servers c
+      WHERE c.id = ms.toolset_id AND c.project_id = ms.project_id AND c.deleted IS FALSE
+    )
+  )
+ORDER BY ms.created_at, ms.id
 LIMIT 2
 `
 
@@ -718,6 +726,8 @@ type ListEnabledMCPServersByToolsetIDParams struct {
 
 // At most two rows are needed: zero means the legacy route has no attributable
 // wrapper, one is unambiguous, and two means callers must reject attribution.
+// A live canonical wrapper (id = toolset id) is the toolset's hosting wrapper,
+// so other toolset-backed servers are candidates only when it is absent.
 func (q *Queries) ListEnabledMCPServersByToolsetID(ctx context.Context, arg ListEnabledMCPServersByToolsetIDParams) ([]McpServer, error) {
 	rows, err := q.db.Query(ctx, listEnabledMCPServersByToolsetID, arg.ToolsetID, arg.ProjectID)
 	if err != nil {
