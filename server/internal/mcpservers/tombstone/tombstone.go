@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -28,13 +29,13 @@ type Locked struct {
 }
 
 // Lock takes the domain -> endpoint -> server locks; pgx.ErrNoRows means the server is gone.
-func Lock(ctx context.Context, tx pgx.Tx, projectID, serverID uuid.UUID) (Locked, error) {
+func Lock(ctx context.Context, tx pgx.Tx, organizationID string, projectID, serverID uuid.UUID) (Locked, error) {
 	endpoints := mcpendpointsrepo.New(tx)
 	domainIDs, err := endpoints.ListCustomDomainIDsByMCPServerID(ctx, mcpendpointsrepo.ListCustomDomainIDsByMCPServerIDParams{McpServerID: serverID, ProjectID: projectID})
 	if err != nil {
 		return Locked{}, fmt.Errorf("list custom domains for mcp server: %w", err)
 	}
-	if err := LockCustomDomains(ctx, tx, domainIDs); err != nil {
+	if _, err := LockCustomDomains(ctx, tx, organizationID, domainIDs); err != nil {
 		return Locked{}, fmt.Errorf("lock custom domains: %w", err)
 	}
 	if _, err := endpoints.LockMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockMCPEndpointsByMCPServerIDParams{McpServerID: serverID, ProjectID: projectID}); err != nil {
@@ -71,7 +72,7 @@ type Result struct {
 
 // Tombstone soft-deletes a locked server and its attachments; the caller audits the server delete.
 func Tombstone(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, locked Locked, input Input) (Result, error) {
-	if tx == nil || auditLogger == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || input.ActorUserID == "" {
+	if tx == nil || auditLogger == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || !ActorPresent(ctx, input.ActorUserID) {
 		return Result{}, errors.New("invalid MCP server tombstone input")
 	}
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID)
@@ -160,17 +161,33 @@ func Tombstone(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, locked
 	return Result{Server: deleted, DetachedPluginServers: len(detachedPluginServers)}, nil
 }
 
-// LockCustomDomains locks live custom domains in id order.
-func LockCustomDomains(ctx context.Context, tx pgx.Tx, domainIDs []uuid.UUID) error {
+// ActorPresent reports whether a write has an actor: a user id, or an agent
+// principal whose audit rows the audit logger attributes to the agent.
+func ActorPresent(ctx context.Context, userID string) bool {
+	if userID != "" {
+		return true
+	}
+	actor, ok := contextvalues.AuthenticatedActor(ctx)
+	return ok && actor.Type == urn.PrincipalTypeAgent
+}
+
+// LockCustomDomains locks the organization's live custom domains in id order
+// and reports the deleted ones; a deleted domain already retired its endpoints.
+func LockCustomDomains(ctx context.Context, tx pgx.Tx, organizationID string, domainIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
 	sorted := slices.Clone(domainIDs)
 	slices.SortFunc(sorted, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
 	repository := customdomainsrepo.New(tx)
+	dead := map[uuid.UUID]bool{}
 	for _, domainID := range slices.Compact(sorted) {
-		if _, err := repository.LockCustomDomainByID(ctx, domainID); err != nil {
-			return fmt.Errorf("lock custom domain %s: %w", domainID, err)
+		_, err := repository.LockCustomDomainByIDAndOrganization(ctx, customdomainsrepo.LockCustomDomainByIDAndOrganizationParams{ID: domainID, OrganizationID: organizationID})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			dead[domainID] = true
+		case err != nil:
+			return nil, fmt.Errorf("lock custom domain %s: %w", domainID, err)
 		}
 	}
-	return nil
+	return dead, nil
 }
 
 // RootDomainIDs returns the distinct, sorted custom domains of endpoints.
@@ -195,7 +212,10 @@ func LogRootAutoClears(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger
 		if !endpoint.CustomDomainID.Valid {
 			continue
 		}
-		domain, err := repository.GetCustomDomainByID(ctx, endpoint.CustomDomainID.UUID)
+		domain, err := repository.GetCustomDomainByIDAndOrganization(ctx, customdomainsrepo.GetCustomDomainByIDAndOrganizationParams{ID: endpoint.CustomDomainID.UUID, OrganizationID: organizationID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue // A deleted domain has no root left to clear.
+		}
 		if err != nil {
 			return fmt.Errorf("load custom domain for MCP root cleanup audit: %w", err)
 		}

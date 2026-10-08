@@ -443,7 +443,7 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 			// Both rows this change depends on are locked before any of it is
 			// decided, and in the order UpdateToolset takes them: toolsets
 			// first, then mcp_servers. Reversing that pair is an ABBA cycle
-			// with the dashboard, which holds the toolset row and then updates
+			// with the dashboard, which holds the toolset row and then locks
 			// the hosted server row inside hostedmcp.Sync — so
 			// one side would be aborted with deadlock_detected under
 			// concurrency.
