@@ -195,9 +195,20 @@ func (m *ChallengeManager) resolveClientCredential(ctx context.Context, req Clie
 		RemoteSessionID:                    uuid.Nil,
 		RemoteSessionUpdatedAt:             time.Time{},
 		RemoteSessionResolvedFromUpdatedAt: time.Time{},
+		GrantGeneration:                    0,
+		AccessExpiresAt:                    clientCredentialExpiry(cred),
 		ClientCredentialErr:                nil,
 		renewal:                            &clientCredentialRenewal{credential: cred, request: req},
 	}, nil
+}
+
+// clientCredentialExpiry is when cred expires, nil when its token endpoint
+// stated no expiry.
+func clientCredentialExpiry(cred ClientCredential) *time.Time {
+	if cred.ExpiresAt().IsZero() {
+		return nil
+	}
+	return new(cred.ExpiresAt())
 }
 
 // RenewClientCredential replaces a self client's credential after the
