@@ -14,8 +14,11 @@ import { Stack } from "@/components/ui/Stack";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
 import { AlertCircle, Loader2 } from "lucide-react";
-import { useState } from "react";
-import { Navigate } from "react-router";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { NewServerGuardrailOutcomeAlert } from "@/pages/security/server-guardrails/NewServerGuardrailOutcomeAlert";
+import { useTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
+import { useState, type ReactNode } from "react";
+import { Navigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { NewServerGuardrailSection } from "@/pages/security/server-guardrails/NewServerGuardrailSection";
 import {
@@ -24,6 +27,8 @@ import {
   type NewServerGuardrailOutcome,
 } from "@/pages/security/server-guardrails/useNewServerGuardrail";
 import { RESOURCE_IDENTIFIER_EXPLAINER } from "./copy";
+import { ExistingTunnelFlow } from "./ExistingTunnelFlow";
+import { EXISTING_TUNNEL_SEARCH_PARAM } from "./existingTunnel";
 import { useCreateTunneledMcpSource } from "./hooks";
 import { TunneledMcpSetupTabs } from "./TunneledMcpSetupTabs";
 import { UserSessionIssuerSelect } from "@/components/user-session-issuer-select";
@@ -59,10 +64,53 @@ export default function CreateTunneledMcp(): JSX.Element | null {
     return <Navigate to={routes.mcp.add.href()} replace />;
   }
 
-  return <CreateTunneledMcpForm />;
+  return <CreateTunneledMcpPage />;
 }
 
-function CreateTunneledMcpForm() {
+type CreateMode = "new" | "existing";
+
+// New tunnel (issues a key) or another MCP server on a tunnel the project
+// already has. The choice is offered only when there is a tunnel to reuse.
+function CreateTunneledMcpPage() {
+  const [searchParams] = useSearchParams();
+  const requestedTunnelId = searchParams.get(EXISTING_TUNNEL_SEARCH_PARAM);
+  const [mode, setMode] = useState<CreateMode>(
+    requestedTunnelId ? "existing" : "new",
+  );
+  const tunnelsQuery = useTunneledMcpServers(undefined, undefined, {
+    throwOnError: false,
+  });
+  const hasTunnels = (tunnelsQuery.data?.tunneledMcpServers.length ?? 0) > 0;
+
+  const modeSwitch = (disabled: boolean): ReactNode =>
+    hasTunnels || requestedTunnelId ? (
+      <SegmentedControl<CreateMode>
+        value={mode}
+        onChange={setMode}
+        disabled={disabled}
+        options={[
+          { value: "new", label: "New tunnel" },
+          { value: "existing", label: "Existing tunnel" },
+        ]}
+      />
+    ) : null;
+
+  if (mode === "existing") {
+    return (
+      <ExistingTunnelFlow
+        modeSwitch={modeSwitch}
+        requestedTunnelId={requestedTunnelId}
+      />
+    );
+  }
+  return <CreateTunneledMcpForm modeSwitch={modeSwitch} />;
+}
+
+function CreateTunneledMcpForm({
+  modeSwitch,
+}: {
+  modeSwitch: (disabled: boolean) => ReactNode;
+}) {
   const flow = useGatewayCreation();
   const creationLocked = flow.createdServerId !== null || flow.isAttaching;
   const routes = useRoutes();
@@ -136,31 +184,14 @@ function CreateTunneledMcpForm() {
       >
         <Stack gap={6}>
           <GatewayAttachmentStatus flow={flow} />
-          {guardrailOutcome?.status === "failed" ? (
-            <Stack gap={2}>
-              <Alert variant="error" dismissible={false}>
-                {guardrailFailureMessage(guardrailOutcome)}
-              </Alert>
-              <div>
-                <Button
-                  variant="secondary"
-                  onClick={() =>
-                    routes.mcp.x.guardrails.goTo(
-                      mcpServerRouteParam(created.mcpServer),
-                    )
-                  }
-                >
-                  <Button.Text>Open Guardrails</Button.Text>
-                </Button>
-              </div>
-            </Stack>
-          ) : null}
-          {guardrailOutcome?.status === "created" ? (
-            <Alert variant="success" dismissible={false}>
-              Guardrail &quot;{guardrailOutcome.name}&quot; created. Review it
-              under the server&apos;s Guardrails tab.
-            </Alert>
-          ) : null}
+          <NewServerGuardrailOutcomeAlert
+            outcome={guardrailOutcome}
+            onOpenGuardrails={() =>
+              routes.mcp.x.guardrails.goTo(
+                mcpServerRouteParam(created.mcpServer),
+              )
+            }
+          />
           <div className="border p-5">
             <Text variant="subheading" className="mb-3">
               Tunnel key
@@ -184,7 +215,7 @@ function CreateTunneledMcpForm() {
               <>
                 <Button
                   variant="primary"
-                  disabled={flow.isAttaching}
+                  disabled={flow.isAttaching || flow.attachmentRefused}
                   onClick={() => {
                     // The one-time key must be copied before leaving this screen.
                     void flow.complete(created.mcpServer.id).catch(() => {});
@@ -245,6 +276,7 @@ function CreateTunneledMcpForm() {
         noValidate
       >
         <Stack gap={4}>
+          {modeSwitch(creationLocked || createSource.isPending)}
           <fieldset disabled={creationLocked} className="contents">
             <Stack gap={1}>
               <label

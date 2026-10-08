@@ -1,8 +1,5 @@
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
-import {
-  deleteSourceCascade,
-  fetchLinkedMcpServers,
-} from "@/pages/mcp/x/tabs/settings/sections/sourceDelete";
+import { fetchLinkedMcpServers } from "@/pages/mcp/x/tabs/settings/sections/sourceDelete";
 import { invalidateWrapperDeleteAuthViews } from "@/pages/mcp/x/tabs/settings/sections/sourceInvalidation";
 import { formatTunneledMcpDisplay } from "@/lib/sources";
 import {
@@ -23,6 +20,7 @@ import {
   type UseMutationResult,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { deleteTunnelAndConfirmedServers } from "./existingTunnel";
 
 export type CreateTunneledMcpSourceVariables = {
   name: string;
@@ -106,6 +104,86 @@ export function useCreateTunneledMcpSource(): UseMutationResult<
   });
 }
 
+export type CreateMcpServerOnExistingTunnelVariables = {
+  tunneledMcpServerId: string;
+  name: string;
+  userSessionIssuerId?: string;
+};
+
+export type CreateMcpServerOnExistingTunnelData = {
+  mcpServer: McpServer;
+  /** False when the server exists but its default endpoint could not be made. */
+  endpointCreated: boolean;
+};
+
+// Creates one more MCP server on a tunnel that already exists. Unlike the new
+// tunnel flow there is no rollback: the tunnel is shared and was not created
+// here, so a failure must never delete it. The server starts disabled, as it
+// does in the new tunnel flow.
+export function useCreateMcpServerOnExistingTunnel(): UseMutationResult<
+  CreateMcpServerOnExistingTunnelData,
+  Error,
+  CreateMcpServerOnExistingTunnelVariables
+> {
+  const client = useSdkClient();
+  const queryClient = useQueryClient();
+  const { orgSlug } = useSlugs();
+
+  return useMutation({
+    mutationFn: async ({ tunneledMcpServerId, name, userSessionIssuerId }) => {
+      const mcpServer = await client.mcpServers.create({
+        createMcpServerForm: {
+          name,
+          tunneledMcpServerId,
+          userSessionIssuerId,
+          visibility: "disabled",
+        },
+      });
+
+      let endpointCreated = false;
+      if (orgSlug) {
+        endpointCreated =
+          (await createDefaultMcpEndpoint(client, mcpServer, orgSlug)) !==
+          undefined;
+      }
+      return { mcpServer, endpointCreated };
+    },
+    onSettled: async () => {
+      // Also after an error: a create whose response was lost may still have
+      // committed, and the page lists the tunnel's servers to show that.
+      await Promise.all([
+        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
+      ]);
+    },
+  });
+}
+
+// Deletes a tunnel no MCP server uses, from the existing-tunnel picker. It
+// never deletes MCP servers: the backend refuses while any still use the
+// tunnel, including ones the caller cannot view.
+export function useDeleteUnusedTunnel(): UseMutationResult<
+  void,
+  Error,
+  { tunneledMcpServerId: string }
+> {
+  const client = useSdkClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ tunneledMcpServerId }) => {
+      await client.tunneledMcp.deleteServer({ id: tunneledMcpServerId });
+    },
+    onSettled: async () => {
+      await Promise.all([
+        invalidateAllTunneledMcpServers(queryClient, { refetchType: "all" }),
+        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+      ]);
+    },
+  });
+}
+
 export type RotateTunneledMcpServerKeyVariables = {
   tunneledMcpServerId: string;
 };
@@ -154,6 +232,8 @@ export function useRotateTunneledMcpServerKey(): UseMutationResult<
 
 export type DeleteTunneledMcpSourceVariables = {
   tunneledMcpServerId: string;
+  /** The MCP servers the user reviewed; nothing else is deleted. */
+  confirmedMcpServerIds: readonly string[];
 };
 
 export function useDeleteTunneledMcpSource(): UseMutationResult<
@@ -165,14 +245,14 @@ export function useDeleteTunneledMcpSource(): UseMutationResult<
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ tunneledMcpServerId }) => {
-      await deleteSourceCascade({
+    mutationFn: async ({ tunneledMcpServerId, confirmedMcpServerIds }) => {
+      await deleteTunnelAndConfirmedServers({
+        confirmedIds: confirmedMcpServerIds,
         listLinked: () =>
           fetchLinkedMcpServers(client, queryClient, { tunneledMcpServerId }),
         deleteMcpServer: (id) => client.mcpServers.delete({ id }),
-        deleteSource: () =>
+        deleteTunnel: () =>
           client.tunneledMcp.deleteServer({ id: tunneledMcpServerId }),
-        sourceLabel: "tunneled MCP source",
       });
     },
     onSuccess: async () => {

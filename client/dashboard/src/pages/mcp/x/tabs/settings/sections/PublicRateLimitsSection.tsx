@@ -1,8 +1,12 @@
+import { SharedTunnelConfirmDialog } from "@/components/mcp/shared-tunnel-impact";
 import { Button } from "@/components/ui/Button";
 import { Field, FieldError } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { RequireScope } from "@/components/require-scope";
-import { getTunneledMcpServerArgs } from "@/lib/sources";
+import {
+  formatTunneledMcpDisplay,
+  getTunneledMcpServerArgs,
+} from "@/lib/sources";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
@@ -62,8 +66,11 @@ function toPublicRateDraft(
 export function PublicRateLimitsSection({
   tunneledMcpServerId,
   projectId,
+  mcpServerId,
 }: {
   tunneledMcpServerId: string;
+  /** The MCP server whose settings page renders this section. */
+  mcpServerId: string;
   /**
    * The server's own project, so the gate matches what saving will target.
    * Required: an omitted id would leave the write ungated by project.
@@ -78,15 +85,28 @@ export function PublicRateLimitsSection({
     <PublicRateLimits
       tunneledMcpServer={tunneledMcpServer}
       projectId={projectId}
+      mcpServerId={mcpServerId}
     />
   );
+}
+
+type PublicRateLimitForm = Partial<Record<PublicRateLimitField, number>>;
+
+function describeRateLimitForm(form: PublicRateLimitForm): string {
+  return PUBLIC_RATE_LIMIT_FIELDS.filter(({ key }) => key in form)
+    .map(({ key, label }) =>
+      form[key] === 0 ? `${label}: default` : `${label}: ${form[key]}`,
+    )
+    .join(", ");
 }
 
 function PublicRateLimits({
   tunneledMcpServer,
   projectId,
+  mcpServerId,
 }: {
   projectId: string;
+  mcpServerId: string;
   tunneledMcpServer: TunneledMcpServer;
 }) {
   const update = useUpdateTunneledMcpServerMutation();
@@ -95,6 +115,10 @@ function PublicRateLimits({
     toPublicRateDraft(tunneledMcpServer),
   );
   const [error, setError] = useState<string>();
+  // The change awaiting confirmation, frozen when Save was pressed.
+  const [pendingForm, setPendingForm] = useState<PublicRateLimitForm | null>(
+    null,
+  );
   // The stored values the draft was last synced from, so a refetch that
   // changes them only replaces an untouched draft and never clobbers edits.
   const syncedFrom = useRef(toPublicRateDraft(tunneledMcpServer));
@@ -140,9 +164,9 @@ function PublicRateLimits({
     dirty = true;
   }
 
-  const handleSave = async () => {
+  const requestSave = () => {
     setError(undefined);
-    let form: Partial<Record<PublicRateLimitField, number>>;
+    let form: PublicRateLimitForm;
     try {
       form = changes();
     } catch (err) {
@@ -151,6 +175,11 @@ function PublicRateLimits({
       return;
     }
     if (Object.keys(form).length === 0) return;
+    setPendingForm(form);
+  };
+
+  const handleSave = async (form: PublicRateLimitForm) => {
+    setError(undefined);
     try {
       await update.mutateAsync({
         request: {
@@ -162,6 +191,7 @@ function PublicRateLimits({
       });
       await invalidateTunneledMcpSourceViews(queryClient);
       toast.success("Anonymous rate limit updated");
+      setPendingForm(null);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to update rate limits";
@@ -213,7 +243,12 @@ function PublicRateLimits({
         </dd>
       </dl>
 
-      <RequireScope scope="mcp:write" resourceId={projectId} level="component">
+      <RequireScope
+        scope="mcp:write"
+        resourceId={projectId}
+        projectId={projectId}
+        level="component"
+      >
         <Stack gap={3}>
           <div className="grid max-w-xl grid-cols-1 gap-3 sm:grid-cols-2">
             {PUBLIC_RATE_LIMIT_FIELDS.map(({ key, label, hint }) => (
@@ -253,7 +288,7 @@ function PublicRateLimits({
             <Button
               variant="primary"
               disabled={!dirty || update.isPending}
-              onClick={() => void handleSave()}
+              onClick={requestSave}
             >
               {update.isPending ? (
                 <Button.LeftIcon>
@@ -267,6 +302,29 @@ function PublicRateLimits({
           </Stack>
         </Stack>
       </RequireScope>
+      <SharedTunnelConfirmDialog
+        open={pendingForm !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingForm(null);
+        }}
+        tunneledMcpServerId={tunneledMcpServer.id}
+        tunnelName={formatTunneledMcpDisplay(tunneledMcpServer)}
+        currentMcpServerId={mcpServerId}
+        title="Change the anonymous rate limit?"
+        description="The limit is one budget for the whole tunnel, shared by anonymous callers of every public MCP server on it."
+        effect="Raising it lets more anonymous load reach the upstream server; lowering it throttles every public server on the tunnel."
+        confirmLabel="Save limit"
+        pendingLabel="Saving"
+        isPending={update.isPending}
+        errorMessage={pendingForm ? error : undefined}
+        onConfirm={() => {
+          if (pendingForm) void handleSave(pendingForm);
+        }}
+      >
+        {pendingForm ? (
+          <Text small>New limit: {describeRateLimitForm(pendingForm)}</Text>
+        ) : null}
+      </SharedTunnelConfirmDialog>
     </div>
   );
 }
