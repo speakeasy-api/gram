@@ -15,7 +15,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -45,17 +44,17 @@ import (
 // dials, so a credential that matches is being returned to the audience it
 // names.
 //
-// A tunneled member is routed by identity alone: only the entry keyed by its
+// A tunneled member is routed by identity alone: only the credential of its
 // own derived remote_session_issuer (mcpserverissuersync.go), accepted when
 // that grant is unqualified or names this member's recorded resource
 // identifier. The identifier cannot select across issuers the way a remote
 // URL does, because a tunnel's dial target is decoupled from the resource it
 // claims — an operator-supplied identifier that collided with a sibling's
 // upstream would otherwise deliver that sibling's bearer to the tunnel.
-func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember, upstreamResource string) (string, error) {
+func routeMetaMemberToken(tokens remotesessions.ClientTokens, member metaMember, upstreamResource string) (string, error) {
 	want := strings.TrimRight(upstreamResource, "/")
 	if member.tunneledServerID.Valid {
-		return tunneledIssuerToken(tokens, member.remoteSessionIssuerID, want), nil
+		return tunneledMemberToken(tokens, member, want)
 	}
 	if want == "" {
 		return "", nil
@@ -78,6 +77,24 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 		// would be a guess. Name the duplication rather than the symptom.
 		return "", fmt.Errorf("%w: %w", errAmbiguousMemberCredential, &metaMemberError{message: fmt.Sprintf("server %q has %d upstream credentials recorded for the same upstream, so none can be chosen; disconnect the duplicates from this gateway's sign-in and reconnect once", member.slug, found)})
 	}
+}
+
+// tunneledMemberToken applies tunneledIssuerToken's identity rule to a
+// gateway's client-keyed credentials. When several gateway clients share the
+// tunnel's issuer, its identity no longer names one credential, so routing
+// fails closed rather than guessing.
+func tunneledMemberToken(tokens remotesessions.ClientTokens, member metaMember, want string) (string, error) {
+	if !member.remoteSessionIssuerID.Valid {
+		return "", nil
+	}
+	entry, count := tokens.ForRemoteIssuer(member.remoteSessionIssuerID.UUID)
+	switch {
+	case count > 1:
+		return "", fmt.Errorf("%w: %w", errAmbiguousMemberCredential, &metaMemberError{message: fmt.Sprintf("server %q shares its authorization server with %d of this gateway's connections, so none can be chosen for it", member.slug, count)})
+	case count == 0 || !grantRoutesToUpstream(entry.Resource, want, true):
+		return "", nil
+	}
+	return entry.Token, nil
 }
 
 // errAmbiguousMemberCredential marks several stored credentials claiming one member's upstream.

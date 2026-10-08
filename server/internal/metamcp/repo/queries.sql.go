@@ -806,8 +806,39 @@ SELECT
     s.id AS mcp_server_id,
     s.visibility AS mcp_server_visibility,
     COALESCE(r.url, t.resource_identifier, '')::text AS upstream_url,
-    (t.id IS NOT NULL)::boolean AS tunneled
+    (t.id IS NOT NULL)::boolean AS tunneled,
+    EXISTS (
+      SELECT 1
+      FROM remote_session_client_user_session_issuers AS l
+      JOIN remote_session_clients AS mc
+        ON mc.id = l.remote_session_client_id
+       AND mc.deleted IS FALSE
+       AND (mc.project_id = p.id OR (mc.project_id IS NULL AND mc.organization_id = p.organization_id))
+      JOIN user_session_issuers AS mi
+        ON mi.id = l.user_session_issuer_id
+       AND mi.deleted IS FALSE
+       AND (mi.project_id = p.id OR (mi.project_id IS NULL AND mi.organization_id = p.organization_id))
+      WHERE l.remote_session_client_id = $1
+        AND l.user_session_issuer_id = s.user_session_issuer_id
+        AND s.user_session_issuer_id <> $2
+    )::boolean AS member_binds_client,
+    (
+      SELECT count(*)
+      FROM remote_session_client_user_session_issuers AS gl
+      JOIN remote_session_clients AS gc
+        ON gc.id = gl.remote_session_client_id
+       AND gc.deleted IS FALSE
+       AND (gc.project_id = p.id OR (gc.project_id IS NULL AND gc.organization_id = p.organization_id))
+      JOIN user_session_issuers AS gi
+        ON gi.id = gl.user_session_issuer_id
+       AND gi.deleted IS FALSE
+       AND (gi.project_id = p.id OR (gi.project_id IS NULL AND gi.organization_id = p.organization_id))
+      WHERE gl.user_session_issuer_id = $2
+        AND gc.remote_session_issuer_id = $3
+    )::integer AS gateway_provider_clients
 FROM meta_mcp_server_members m
+JOIN projects p
+  ON p.id = m.project_id
 JOIN mcp_servers s
   ON s.id = m.mcp_server_id
  AND s.project_id = m.project_id
@@ -821,8 +852,8 @@ LEFT JOIN tunneled_mcp_servers t
   ON t.id = s.tunneled_mcp_server_id
  AND t.project_id = m.project_id
  AND t.deleted IS FALSE
-WHERE m.meta_mcp_server_id = $1
-  AND m.project_id = $2
+WHERE m.meta_mcp_server_id = $4
+  AND m.project_id = $5
   AND m.deleted IS FALSE
   AND s.slug IS NOT NULL
   AND (r.id IS NOT NULL OR t.id IS NOT NULL)
@@ -831,16 +862,20 @@ ORDER BY m.sort_order, m.created_at, m.id
 `
 
 type ListMetaMCPMembersForRemoteSessionIssuerParams struct {
-	MetaMcpServerID       uuid.UUID
-	ProjectID             uuid.UUID
-	RemoteSessionIssuerID uuid.NullUUID
+	RemoteSessionClientID      uuid.UUID
+	GatewayUserSessionIssuerID uuid.NullUUID
+	RemoteSessionIssuerID      uuid.UUID
+	MetaMcpServerID            uuid.UUID
+	ProjectID                  uuid.UUID
 }
 
 type ListMetaMCPMembersForRemoteSessionIssuerRow struct {
-	McpServerID         uuid.UUID
-	McpServerVisibility string
-	UpstreamUrl         string
-	Tunneled            bool
+	McpServerID            uuid.UUID
+	McpServerVisibility    string
+	UpstreamUrl            string
+	Tunneled               bool
+	MemberBindsClient      bool
+	GatewayProviderClients int32
 }
 
 // The meta MCP's proxied (remote or tunneled) members that authenticate
@@ -856,8 +891,23 @@ type ListMetaMCPMembersForRemoteSessionIssuerRow struct {
 // the tunneled server's recorded resource identifier (empty when a tunneled
 // member records none — the claim still lands, minting an unqualified grant).
 // Hosted and unproxied members have no upstream and cannot claim.
+//
+// member_binds_client reports whether the member's own user_session_issuer
+// binds the client being resolved, which associates the member with that
+// exact client. A member gated by the gateway's own issuer is never
+// associated, since that binding is what the association justifies.
+// gateway_provider_clients counts the live clients the gateway issuer binds
+// for this authorization server; above one, only associated members claim.
+// Both count only live issuers and clients owned by the gateway's project or
+// its organization, as AutoAttachMemberProviderClient binds them.
 func (q *Queries) ListMetaMCPMembersForRemoteSessionIssuer(ctx context.Context, arg ListMetaMCPMembersForRemoteSessionIssuerParams) ([]ListMetaMCPMembersForRemoteSessionIssuerRow, error) {
-	rows, err := q.db.Query(ctx, listMetaMCPMembersForRemoteSessionIssuer, arg.MetaMcpServerID, arg.ProjectID, arg.RemoteSessionIssuerID)
+	rows, err := q.db.Query(ctx, listMetaMCPMembersForRemoteSessionIssuer,
+		arg.RemoteSessionClientID,
+		arg.GatewayUserSessionIssuerID,
+		arg.RemoteSessionIssuerID,
+		arg.MetaMcpServerID,
+		arg.ProjectID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -870,6 +920,8 @@ func (q *Queries) ListMetaMCPMembersForRemoteSessionIssuer(ctx context.Context, 
 			&i.McpServerVisibility,
 			&i.UpstreamUrl,
 			&i.Tunneled,
+			&i.MemberBindsClient,
+			&i.GatewayProviderClients,
 		); err != nil {
 			return nil, err
 		}

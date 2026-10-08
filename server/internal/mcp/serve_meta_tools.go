@@ -475,19 +475,20 @@ func (s *Service) buildMemberDispatch(
 	return toolset, inputs, nil
 }
 
-// hostedMemberTokens narrows a gate's token map to what a hosted member may
-// receive: the entry keyed by the member's own derived remote_session_issuer,
-// and only when its grant is unqualified. The tunneled arm of
-// routeMetaMemberToken applies the same rule. A lone-token fallback would
-// forward a sibling's bearer once partial resolution leaves gaps in the map,
-// and a resource-qualified token is audience-bound to the remote upstream it
-// was consented for; both cases yield no token.
-func hostedMemberTokens(tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember) map[uuid.UUID]remotesessions.UpstreamToken {
+// hostedMemberTokens narrows a gate's credentials to what a hosted member may
+// receive: the single credential of the member's own derived
+// remote_session_issuer, and only when its grant is unqualified. The tunneled
+// arm of routeMetaMemberToken applies the same rule. A lone-token fallback
+// would forward a sibling's bearer once partial resolution leaves gaps, a
+// resource-qualified token is audience-bound to the remote upstream it was
+// consented for, and several clients of the issuer leave no identity to
+// choose by; each case yields no token.
+func hostedMemberTokens(tokens remotesessions.ClientTokens, member metaMember) map[uuid.UUID]remotesessions.UpstreamToken {
 	if !member.remoteSessionIssuerID.Valid {
 		return nil
 	}
-	entry, ok := tokens[member.remoteSessionIssuerID.UUID]
-	if !ok || entry.Resource != "" {
+	entry, count := tokens.ForRemoteIssuer(member.remoteSessionIssuerID.UUID)
+	if count != 1 || entry.Resource != "" {
 		return nil
 	}
 	return map[uuid.UUID]remotesessions.UpstreamToken{member.remoteSessionIssuerID.UUID: entry}

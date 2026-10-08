@@ -73,22 +73,7 @@ func createConsentRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.
 		CodeChallengeMethodsSupported:     []string{"S256"},
 	})
 	require.NoError(t, err)
-
-	rsc, err := q.CreateRemoteSessionClient(ctx, remotesessions_repo.CreateRemoteSessionClientParams{
-		ProjectID:             conv.ToNullUUID(projectID),
-		OrganizationID:        conv.ToPGTextEmpty(organizationID),
-		RemoteSessionIssuerID: rsi.ID,
-		ClientID:              slug + "-external-client",
-		ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
-	})
-	require.NoError(t, err)
-	for _, usi := range userSessionIssuerIDs {
-		require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
-			RemoteSessionClientID: rsc.ID,
-			UserSessionIssuerID:   usi,
-		}))
-	}
-	return rsc.ID
+	return createConsentClientOnIssuer(t, ctx, conn, projectID, organizationID, rsi.ID, slug+"-external-client", userSessionIssuerIDs)
 }
 
 // attachConsentRemoteMcpServer binds a remote-backed mcp_server to issuerID

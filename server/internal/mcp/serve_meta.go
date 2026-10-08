@@ -54,7 +54,10 @@ type metaGateContext struct {
 	// stored membership rows.
 	agentID        uuid.UUID
 	organizationID string
-	tokens         map[uuid.UUID]remotesessions.UpstreamToken
+	// tokens holds the gateway's resolved member credentials, keyed by
+	// remote_session_client_id: several members may use clients of one
+	// authorization server, each with its own grant.
+	tokens remotesessions.ClientTokens
 	// userSessionIssuerID is the gated endpoint's issuer; uuid.Nil when ungated.
 	userSessionIssuerID uuid.UUID
 	// chainUpstream acquires a member's upstream token by identity chaining
@@ -145,14 +148,14 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		}
 	}
 
-	var gateTokens map[uuid.UUID]remotesessions.UpstreamToken
+	var gateTokens remotesessions.ClientTokens
 	var gateToolSelection *toolfilter.SessionSelection
 	if metaServer.UserSessionIssuerID.Valid {
 		resolvedEndpoint, err := s.BuildResolvedMcpEndpointForMetaServer(ctx, logger, mcpEndpoint, metaServer, "mcp")
 		if err != nil {
 			return err
 		}
-		newCtx, tokens, toolSelection, err := s.ApplyIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
+		newCtx, tokens, toolSelection, err := s.applyGatewayIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
 		if err != nil {
 			return fmt.Errorf("apply issuer gate: %w", err)
 		}

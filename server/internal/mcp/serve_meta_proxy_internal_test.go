@@ -24,8 +24,9 @@ func TestMemberResponseRecorderStatusStartsUnset(t *testing.T) {
 }
 
 // The strict meta MCP router: exact resource match only, no lone-token
-// fallback for remote members; tunneled members route by their own derived
-// remote_session_issuer key, unqualified grants only.
+// fallback for remote members; tunneled members route by the single
+// credential of their own derived remote_session_issuer, unqualified grants
+// only.
 func TestRouteMetaMemberToken(t *testing.T) {
 	t.Parallel()
 
@@ -35,8 +36,14 @@ func TestRouteMetaMemberToken(t *testing.T) {
 	entry := func(token, resource string) remotesessions.UpstreamToken {
 		return remotesessions.UpstreamToken{Token: token, Resource: resource}
 	}
-	tokens := func(entries ...remotesessions.UpstreamToken) map[uuid.UUID]remotesessions.UpstreamToken {
-		m := make(map[uuid.UUID]remotesessions.UpstreamToken, len(entries))
+	// own is a credential of the tunneled member's own authorization server.
+	own := func(token, resource string) remotesessions.UpstreamToken {
+		e := entry(token, resource)
+		e.RemoteSessionIssuerID = tunnelIssuerID
+		return e
+	}
+	tokens := func(entries ...remotesessions.UpstreamToken) remotesessions.ClientTokens {
+		m := make(remotesessions.ClientTokens, len(entries))
 		for _, e := range entries {
 			m[uuid.New()] = e
 		}
@@ -87,14 +94,35 @@ func TestRouteMetaMemberToken(t *testing.T) {
 
 	t.Run("tunneled own-issuer unqualified token forwards", func(t *testing.T) {
 		t.Parallel()
-		got, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{tunnelIssuerID: entry("a", "")}, tunnelMember, "")
+		got, err := routeMetaMemberToken(tokens(own("a", "")), tunnelMember, "")
 		require.NoError(t, err)
 		require.Equal(t, "a", got)
 	})
 
+	t.Run("tunneled fails closed when several clients share its issuer", func(t *testing.T) {
+		t.Parallel()
+		// A gateway may bind several clients of one authorization server for
+		// its remote members; the tunnel's issuer then names no single
+		// credential, and guessing could forward a sibling's bearer.
+		got, err := routeMetaMemberToken(tokens(own("a", ""), own("b", "")), tunnelMember, "")
+		require.ErrorIs(t, err, errAmbiguousMemberCredential)
+		require.Empty(t, got)
+	})
+
+	t.Run("tunneled fails closed when only one of several bound clients resolved", func(t *testing.T) {
+		t.Parallel()
+		// Partial resolution drops unconnected clients, so the one token
+		// left may be a sibling's; the bound count still makes it ambiguous.
+		partial := own("sibling", "")
+		partial.IssuerBoundClients = 2
+		got, err := routeMetaMemberToken(tokens(partial), tunnelMember, "")
+		require.ErrorIs(t, err, errAmbiguousMemberCredential)
+		require.Empty(t, got)
+	})
+
 	t.Run("tunneled own-issuer qualified token belongs elsewhere", func(t *testing.T) {
 		t.Parallel()
-		got, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{tunnelIssuerID: entry("a", "https://a.example.com/mcp")}, tunnelMember, "")
+		got, err := routeMetaMemberToken(tokens(own("a", "https://a.example.com/mcp")), tunnelMember, "")
 		require.NoError(t, err)
 		require.Empty(t, got)
 	})
@@ -119,8 +147,7 @@ func TestRouteMetaMemberToken(t *testing.T) {
 
 	t.Run("tunneled routes its own entry among several", func(t *testing.T) {
 		t.Parallel()
-		m := tokens(entry("sibling", ""), entry("other", "https://b.example.com/mcp"))
-		m[tunnelIssuerID] = entry("own", "")
+		m := tokens(entry("sibling", ""), entry("other", "https://b.example.com/mcp"), own("own", ""))
 		got, err := routeMetaMemberToken(m, tunnelMember, "")
 		require.NoError(t, err)
 		require.Equal(t, "own", got)
@@ -128,8 +155,7 @@ func TestRouteMetaMemberToken(t *testing.T) {
 
 	t.Run("tunneled identifier matches its own grant", func(t *testing.T) {
 		t.Parallel()
-		m := tokens(entry("sibling", "https://b.example.com/mcp"))
-		m[tunnelIssuerID] = entry("own", "https://tunneled.internal/mcp/")
+		m := tokens(entry("sibling", "https://b.example.com/mcp"), own("own", "https://tunneled.internal/mcp/"))
 		got, err := routeMetaMemberToken(m, tunnelMember, "https://tunneled.internal/mcp")
 		require.NoError(t, err)
 		require.Equal(t, "own", got)
@@ -148,7 +174,7 @@ func TestRouteMetaMemberToken(t *testing.T) {
 
 	t.Run("tunneled grant qualified elsewhere is anonymous", func(t *testing.T) {
 		t.Parallel()
-		m := map[uuid.UUID]remotesessions.UpstreamToken{tunnelIssuerID: entry("own", "https://elsewhere.example.com/mcp")}
+		m := tokens(own("own", "https://elsewhere.example.com/mcp"))
 		got, err := routeMetaMemberToken(m, tunnelMember, "https://tunneled.internal/mcp")
 		require.NoError(t, err)
 		require.Empty(t, got, "a credential qualified to another upstream degrades to an anonymous call")
@@ -159,8 +185,7 @@ func TestRouteMetaMemberToken(t *testing.T) {
 		// A grant minted against the member's issuer before its resource
 		// identifier was recorded is unqualified; the identity key still
 		// routes it, so recording an identifier does not strand the grant.
-		m := tokens(entry("sibling", "https://b.example.com/mcp"))
-		m[tunnelIssuerID] = entry("own", "")
+		m := tokens(entry("sibling", "https://b.example.com/mcp"), own("own", ""))
 		got, err := routeMetaMemberToken(m, tunnelMember, "https://tunneled.internal/mcp")
 		require.NoError(t, err)
 		require.Equal(t, "own", got)
