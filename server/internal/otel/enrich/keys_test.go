@@ -11,7 +11,7 @@ import (
 // The transform drops what a producer sends under the namespaces the
 // pipeline writes, and nothing else: the pipeline's own keys and the
 // directory enricher's, never a producer's own attributes or the gram keys
-// Gram's own producers stamp before the transform.
+// Speakeasy's own producers stamp before the transform.
 func TestIsPipelineKeyCoversWhatThePipelineWrites(t *testing.T) {
 	t.Parallel()
 

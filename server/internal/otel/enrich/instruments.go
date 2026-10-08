@@ -25,7 +25,7 @@ const meterColumnEnricherMissing = "gram.otel_column_enricher.missing"
 const meterColumnEnricherTruncated = "gram.otel_column_enricher.truncated"
 
 // MeterReservedAttributesDropped counts the attributes a transform dropped
-// because a producer sent them under Gram's reserved speakeasy namespace,
+// because a producer sent them under Speakeasy's reserved speakeasy namespace,
 // by signal. Only the pipeline may write there; a producer that does, by
 // accident or on purpose, is otherwise invisible.
 const MeterReservedAttributesDropped = "gram.otel_reserved_attributes_dropped"

@@ -299,7 +299,7 @@ func spanTestStringAttribute(key, value string) *otelv1.InboundSpan_KeyValue {
 	}).Build()
 }
 
-// A producer that writes Gram's own speakeasy.agent namespace on a span is
+// A producer that writes Speakeasy's own speakeasy.agent namespace on a span is
 // dropped and counted, exactly as for a log record: only what the column
 // enrichers wrote reaches a consumer.
 func TestSpanTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
