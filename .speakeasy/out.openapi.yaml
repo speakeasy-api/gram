@@ -93214,6 +93214,10 @@ components:
           description: Identity provider; always okta.
           enum:
             - okta
+        remote_session_issuer_id:
+          type: string
+          description: Organization remote session issuer that backs this connection. Omitted until the managed client is provisioned.
+          format: uuid
         required_scopes:
           type: array
           items:
@@ -96552,6 +96556,10 @@ components:
         created_at:
           type: string
           format: date-time
+        federated_callback_url:
+          type: string
+          description: The redirect URI to register in the customer identity provider's app when this client is a user session issuer's trusted sign-in client. Present only on organization-owned clients outside any project and not managed by an identity provider connection, the only clients a user session issuer can trust.
+          format: uri
         grant_types:
           type: array
           items:

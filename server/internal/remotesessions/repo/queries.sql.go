@@ -1257,6 +1257,25 @@ func (q *Queries) CountTrustedUserSessionIssuersByRemoteSessionIssuerID(ctx cont
 	return count, err
 }
 
+const countTrustedUserSessionIssuersForRemoteSessionIssuerClients = `-- name: CountTrustedUserSessionIssuersForRemoteSessionIssuerClients :one
+SELECT COUNT(*)
+FROM user_session_issuers AS usi
+JOIN remote_session_clients AS c ON c.id = usi.trusted_remote_session_client_id
+WHERE c.remote_session_issuer_id = $1::uuid
+  AND c.deleted IS FALSE
+  AND usi.deleted IS FALSE
+`
+
+// Every active user-session issuer whose trusted sign-in client is an active
+// client of this remote issuer, whatever issuer the trust row names. Unscoped
+// like the other migrate guards so no reference can be stranded.
+func (q *Queries) CountTrustedUserSessionIssuersForRemoteSessionIssuerClients(ctx context.Context, remoteSessionIssuerID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countTrustedUserSessionIssuersForRemoteSessionIssuerClients, remoteSessionIssuerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createLocalFixtureGlobalRemoteSessionIssuer = `-- name: CreateLocalFixtureGlobalRemoteSessionIssuer :one
 INSERT INTO remote_session_issuers (
     id,

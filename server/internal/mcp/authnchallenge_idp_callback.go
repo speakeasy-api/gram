@@ -25,7 +25,8 @@ import (
 
 // HandleIDPCallback is the GET endpoint the IDP redirects back to after the
 // user authenticates on the private-toolset path. Mounted at
-// `GET /mcp/idp_callback`; the legacy `GET /mcp/{mcpSlug}/idp_callback`
+// `GET /mcp/idp_callback` (WorkOS) and `GET /mcp/idp_callback/{clientID}`
+// (federated logins); the legacy `GET /mcp/{mcpSlug}/idp_callback`
 // route is still accepted, but the toolset is resolved from the stored
 // AuthnChallengeState.
 //
@@ -40,6 +41,7 @@ import (
 func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	routeMcpSlug := chi.URLParam(r, "mcpSlug")
+	routeClientID := chi.URLParam(r, "clientID")
 	logger := s.logger
 
 	q := r.URL.Query()
@@ -85,6 +87,18 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		// State-confusion guard (state minted for a different route). Attacker-
 		// controllable, so deliberately NOT counted as a flow failure.
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this MCP server").LogError(ctx, logger)
+	}
+	if routeClientID != "" && (challengeState.Federation == nil || routeClientID != challengeState.Federation.ClientID.String()) {
+		// Per-client callbacks serve only their own federated client, never WorkOS. Attacker-controllable.
+		logger.InfoContext(ctx, "federated callback rejected", attr.SlogOAuthFederatedCallbackRejectReason("client_mismatch"))
+		return oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this callback")
+	}
+	if federation := challengeState.Federation; federation != nil {
+		// Validate before GETDEL so a misrouted callback cannot burn the single-use state.
+		if reason := federatedCallbackMisrouted(r, federation, routeClientID); reason != "" {
+			logger.InfoContext(ctx, "federated callback rejected", attr.SlogOAuthFederatedCallbackRejectReason(reason))
+			return oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this callback")
+		}
 	}
 	endpoint, err := s.loadResolvedMcpEndpointByRef(ctx, challengeState.Endpoint)
 	if err != nil {
@@ -165,8 +179,8 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 				return finishFederation(oops.CodeUnauthorized, remotesessions.ErrFederatedIdentity, "Invalid login response", false)
 			}
 		}
-		_, callbackErr := recordedIDPCallbackOrigin(endpoint, federation.CallbackURL)
-		if callbackErr != nil || federation.OrganizationID != endpoint.OrganizationID || federation.IssuerID != trustedIssuerID || federation.ClientID != trustedClientID || federation.Configuration != configuration || challengeState.CreatedAt.IsZero() || time.Since(challengeState.CreatedAt) > challengeState.TTL() {
+		if reason := federatedCallbackRejectReason(r, &challengeState, routeClientID, endpoint.OrganizationID, trustedIssuerID, trustedClientID, configuration); reason != "" {
+			logger.InfoContext(ctx, "federated callback rejected", attr.SlogOAuthFederatedCallbackRejectReason(reason))
 			return finishFederation(oops.CodeFailedPrecondition, remotesessions.ErrFederatedConfiguration, "Login configuration changed or expired. Restart login", false)
 		}
 		if q.Get("federated_start") == "1" && q.Get("code") == "" && q.Get("error") == "" {
@@ -187,7 +201,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		if err := validateFederatedBrowser(r, challengeState); err != nil || federation.StartPhase != "login" || q.Get("federated_start") != "" {
 			return finishFederation(oops.CodeUnauthorized, remotesessions.ErrFederatedIdentity, "Login browser binding is invalid. Restart login", false)
 		}
-		if err := provider.ValidateResponseIssuer(q.Get("iss")); err != nil {
+		if err := provider.ValidateAuthorizationResponseIssuer(q); err != nil {
 			return finishFederation(oops.CodeUnauthorized, remotesessions.ErrFederatedIdentity, "Login provider response is invalid. Restart login", false)
 		}
 		// Provider errors are untrusted input, not safe browser/log messages.
@@ -432,4 +446,21 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	}
 	http.Redirect(w, r, consentURL, http.StatusFound)
 	return nil
+}
+
+// federatedCallbackRejectReason names why a federated callback cannot complete, or "" when it can.
+func federatedCallbackRejectReason(r *http.Request, state *AuthnChallengeState, routeClientID, organizationID string, trustedIssuerID, trustedClientID uuid.UUID, configuration string) string {
+	federation := state.Federation
+	if reason := federatedCallbackMisrouted(r, federation, routeClientID); reason != "" {
+		return reason
+	}
+	switch {
+	case federation.ClientID != trustedClientID:
+		return "client_mismatch"
+	case federation.OrganizationID != organizationID || federation.IssuerID != trustedIssuerID || federation.Configuration != configuration:
+		return "config_drift"
+	case state.CreatedAt.IsZero() || time.Since(state.CreatedAt) > state.TTL():
+		return "expired"
+	}
+	return ""
 }

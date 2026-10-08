@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -18,14 +19,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// runIDPCallback seeds an in-flight challenge for a private toolset and
-// drives the IDP callback through it with a successful code exchange.
-func runIDPCallback(t *testing.T, mock *mockIdentityResolver) (context.Context, *testInstance, string, *httptest.ResponseRecorder, error) {
+// seedIDPCallbackChallenge stores an in-flight WorkOS challenge for a new private toolset.
+func seedIDPCallbackChallenge(t *testing.T, ctx context.Context, ti *testInstance) string {
 	t.Helper()
 
-	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
-
 	challengeID := uuid.NewString()
 	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
 		ID:                  challengeID,
@@ -42,6 +40,16 @@ func runIDPCallback(t *testing.T, mock *mockIdentityResolver) (context.Context, 
 		CSRFToken:           "csrf-token",
 		CreatedAt:           time.Now(),
 	}))
+	return challengeID
+}
+
+// runIDPCallback seeds an in-flight challenge for a private toolset and
+// drives the IDP callback through it with a successful code exchange.
+func runIDPCallback(t *testing.T, mock *mockIdentityResolver) (context.Context, *testInstance, string, *httptest.ResponseRecorder, error) {
+	t.Helper()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
+	challengeID := seedIDPCallbackChallenge(t, ctx, ti)
 
 	q := url.Values{"state": {challengeID}, "code": {"idp-auth-code"}}
 	req := httptest.NewRequest(http.MethodGet, "/mcp/idp_callback?"+q.Encode(), nil).WithContext(ctx)
@@ -102,4 +110,27 @@ func TestHandleIDPCallback_BootstrapFailureFailsClosed(t *testing.T) {
 	require.Equal(t, oops.CodeUnexpected, shareable.Code)
 	require.Equal(t, []string{"CompleteIDPLogin"}, mock.calls, "membership must not be checked on unverified data")
 	require.Empty(t, w.Header().Get("Location"))
+}
+
+// A per-client callback path serves only federated challenges, never WorkOS.
+func TestHandleIDPCallback_WorkOSRejectedOnPerClientPath(t *testing.T) {
+	t.Parallel()
+
+	mock := memberMock()
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
+	challengeID := seedIDPCallbackChallenge(t, ctx, ti)
+
+	clientID := uuid.NewString()
+	route := chi.NewRouteContext()
+	route.URLParams.Add("clientID", clientID)
+	q := url.Values{"state": {challengeID}, "code": {"idp-auth-code"}}
+	req := httptest.NewRequest(http.MethodGet, "/mcp/idp_callback/"+clientID+"?"+q.Encode(), nil).WithContext(context.WithValue(ctx, chi.RouteCtxKey, route))
+	err := ti.service.HandleIDPCallback(httptest.NewRecorder(), req)
+	require.Error(t, err)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeUnauthorized, shareable.Code)
+	require.Empty(t, mock.calls, "no code exchange on a per-client path")
+	_, err = ti.authnChallengeCache.Get(ctx, "authnChallenge:"+challengeID)
+	require.NoError(t, err, "a mismatched route does not consume the challenge")
 }

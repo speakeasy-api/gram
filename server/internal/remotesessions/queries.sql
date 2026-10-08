@@ -683,6 +683,17 @@ FROM user_session_issuers
 WHERE trusted_remote_session_client_id = @remote_session_client_id::uuid
   AND deleted IS FALSE;
 
+-- name: CountTrustedUserSessionIssuersForRemoteSessionIssuerClients :one
+-- Every active user-session issuer whose trusted sign-in client is an active
+-- client of this remote issuer, whatever issuer the trust row names. Unscoped
+-- like the other migrate guards so no reference can be stranded.
+SELECT COUNT(*)
+FROM user_session_issuers AS usi
+JOIN remote_session_clients AS c ON c.id = usi.trusted_remote_session_client_id
+WHERE c.remote_session_issuer_id = @remote_session_issuer_id::uuid
+  AND c.deleted IS FALSE
+  AND usi.deleted IS FALSE;
+
 -- name: ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientID :many
 -- Tenant-scoped details for the client delete preflight. Mutation enforcement
 -- uses the unscoped count above.

@@ -118,6 +118,9 @@ type CreateResponseBody struct {
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
 	// Whether the real Okta client ID has replaced the provisioning placeholder.
 	ClientIDSubmitted bool `form:"client_id_submitted" json:"client_id_submitted" xml:"client_id_submitted"`
+	// Organization remote session issuer that backs this connection. Omitted until
+	// the managed client is provisioned.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// Whether Okta issued a DPoP-bound token at the last verification.
 	DpopRequired bool `form:"dpop_required" json:"dpop_required" xml:"dpop_required"`
 	// Okta API scopes the integration needs.
@@ -177,6 +180,9 @@ type SubmitClientIDResponseBody struct {
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
 	// Whether the real Okta client ID has replaced the provisioning placeholder.
 	ClientIDSubmitted bool `form:"client_id_submitted" json:"client_id_submitted" xml:"client_id_submitted"`
+	// Organization remote session issuer that backs this connection. Omitted until
+	// the managed client is provisioned.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// Whether Okta issued a DPoP-bound token at the last verification.
 	DpopRequired bool `form:"dpop_required" json:"dpop_required" xml:"dpop_required"`
 	// Okta API scopes the integration needs.
@@ -237,6 +243,9 @@ type ReplaceClientSecretResponseBody struct {
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
 	// Whether the real Okta client ID has replaced the provisioning placeholder.
 	ClientIDSubmitted bool `form:"client_id_submitted" json:"client_id_submitted" xml:"client_id_submitted"`
+	// Organization remote session issuer that backs this connection. Omitted until
+	// the managed client is provisioned.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// Whether Okta issued a DPoP-bound token at the last verification.
 	DpopRequired bool `form:"dpop_required" json:"dpop_required" xml:"dpop_required"`
 	// Okta API scopes the integration needs.
@@ -296,6 +305,9 @@ type SetSetupMethodResponseBody struct {
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
 	// Whether the real Okta client ID has replaced the provisioning placeholder.
 	ClientIDSubmitted bool `form:"client_id_submitted" json:"client_id_submitted" xml:"client_id_submitted"`
+	// Organization remote session issuer that backs this connection. Omitted until
+	// the managed client is provisioned.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// Whether Okta issued a DPoP-bound token at the last verification.
 	DpopRequired bool `form:"dpop_required" json:"dpop_required" xml:"dpop_required"`
 	// Okta API scopes the integration needs.
@@ -355,6 +367,9 @@ type VerifyResponseBody struct {
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
 	// Whether the real Okta client ID has replaced the provisioning placeholder.
 	ClientIDSubmitted bool `form:"client_id_submitted" json:"client_id_submitted" xml:"client_id_submitted"`
+	// Organization remote session issuer that backs this connection. Omitted until
+	// the managed client is provisioned.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// Whether Okta issued a DPoP-bound token at the last verification.
 	DpopRequired bool `form:"dpop_required" json:"dpop_required" xml:"dpop_required"`
 	// Okta API scopes the integration needs.
@@ -421,6 +436,9 @@ type RecordAgentResponseBody struct {
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
 	// Whether the real Okta client ID has replaced the provisioning placeholder.
 	ClientIDSubmitted bool `form:"client_id_submitted" json:"client_id_submitted" xml:"client_id_submitted"`
+	// Organization remote session issuer that backs this connection. Omitted until
+	// the managed client is provisioned.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// Whether Okta issued a DPoP-bound token at the last verification.
 	DpopRequired bool `form:"dpop_required" json:"dpop_required" xml:"dpop_required"`
 	// Okta API scopes the integration needs.
@@ -480,6 +498,9 @@ type RevokeResponseBody struct {
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
 	// Whether the real Okta client ID has replaced the provisioning placeholder.
 	ClientIDSubmitted bool `form:"client_id_submitted" json:"client_id_submitted" xml:"client_id_submitted"`
+	// Organization remote session issuer that backs this connection. Omitted until
+	// the managed client is provisioned.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// Whether Okta issued a DPoP-bound token at the last verification.
 	DpopRequired bool `form:"dpop_required" json:"dpop_required" xml:"dpop_required"`
 	// Okta API scopes the integration needs.
@@ -540,6 +561,9 @@ type SyncApplicationsResponseBody struct {
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
 	// Whether the real Okta client ID has replaced the provisioning placeholder.
 	ClientIDSubmitted bool `form:"client_id_submitted" json:"client_id_submitted" xml:"client_id_submitted"`
+	// Organization remote session issuer that backs this connection. Omitted until
+	// the managed client is provisioned.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// Whether Okta issued a DPoP-bound token at the last verification.
 	DpopRequired bool `form:"dpop_required" json:"dpop_required" xml:"dpop_required"`
 	// Okta API scopes the integration needs.
@@ -2970,6 +2994,9 @@ type OktaIdentityProviderConnectionResponseBody struct {
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
 	// Whether the real Okta client ID has replaced the provisioning placeholder.
 	ClientIDSubmitted bool `form:"client_id_submitted" json:"client_id_submitted" xml:"client_id_submitted"`
+	// Organization remote session issuer that backs this connection. Omitted until
+	// the managed client is provisioned.
+	RemoteSessionIssuerID *string `form:"remote_session_issuer_id,omitempty" json:"remote_session_issuer_id,omitempty" xml:"remote_session_issuer_id,omitempty"`
 	// Whether Okta issued a DPoP-bound token at the last verification.
 	DpopRequired bool `form:"dpop_required" json:"dpop_required" xml:"dpop_required"`
 	// Okta API scopes the integration needs.
@@ -3055,23 +3082,24 @@ type IdentityProviderConnectionReconcileRunResponseBody struct {
 // "create" endpoint of the "identityProviderConnections" service.
 func NewCreateResponseBody(res *identityproviderconnections.OktaIdentityProviderConnection) *CreateResponseBody {
 	body := &CreateResponseBody{
-		ID:                res.ID,
-		OrganizationID:    res.OrganizationID,
-		Provider:          res.Provider,
-		Status:            res.Status,
-		OrgURL:            res.OrgURL,
-		IssuerURL:         res.IssuerURL,
-		ListingMode:       res.ListingMode,
-		JwksURL:           res.JwksURL,
-		ClientID:          res.ClientID,
-		ClientIDSubmitted: res.ClientIDSubmitted,
-		DpopRequired:      res.DpopRequired,
-		LastVerifiedAt:    res.LastVerifiedAt,
-		LastError:         res.LastError,
-		AgentID:           res.AgentID,
-		AgentAppID:        res.AgentAppID,
-		CreatedAt:         res.CreatedAt,
-		UpdatedAt:         res.UpdatedAt,
+		ID:                    res.ID,
+		OrganizationID:        res.OrganizationID,
+		Provider:              res.Provider,
+		Status:                res.Status,
+		OrgURL:                res.OrgURL,
+		IssuerURL:             res.IssuerURL,
+		ListingMode:           res.ListingMode,
+		JwksURL:               res.JwksURL,
+		ClientID:              res.ClientID,
+		ClientIDSubmitted:     res.ClientIDSubmitted,
+		RemoteSessionIssuerID: res.RemoteSessionIssuerID,
+		DpopRequired:          res.DpopRequired,
+		LastVerifiedAt:        res.LastVerifiedAt,
+		LastError:             res.LastError,
+		AgentID:               res.AgentID,
+		AgentAppID:            res.AgentAppID,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
 	}
 	if res.RequiredScopes != nil {
 		body.RequiredScopes = make([]string, len(res.RequiredScopes))
@@ -3131,23 +3159,24 @@ func NewCreateResponseBody(res *identityproviderconnections.OktaIdentityProvider
 // service.
 func NewSubmitClientIDResponseBody(res *identityproviderconnections.OktaIdentityProviderConnection) *SubmitClientIDResponseBody {
 	body := &SubmitClientIDResponseBody{
-		ID:                res.ID,
-		OrganizationID:    res.OrganizationID,
-		Provider:          res.Provider,
-		Status:            res.Status,
-		OrgURL:            res.OrgURL,
-		IssuerURL:         res.IssuerURL,
-		ListingMode:       res.ListingMode,
-		JwksURL:           res.JwksURL,
-		ClientID:          res.ClientID,
-		ClientIDSubmitted: res.ClientIDSubmitted,
-		DpopRequired:      res.DpopRequired,
-		LastVerifiedAt:    res.LastVerifiedAt,
-		LastError:         res.LastError,
-		AgentID:           res.AgentID,
-		AgentAppID:        res.AgentAppID,
-		CreatedAt:         res.CreatedAt,
-		UpdatedAt:         res.UpdatedAt,
+		ID:                    res.ID,
+		OrganizationID:        res.OrganizationID,
+		Provider:              res.Provider,
+		Status:                res.Status,
+		OrgURL:                res.OrgURL,
+		IssuerURL:             res.IssuerURL,
+		ListingMode:           res.ListingMode,
+		JwksURL:               res.JwksURL,
+		ClientID:              res.ClientID,
+		ClientIDSubmitted:     res.ClientIDSubmitted,
+		RemoteSessionIssuerID: res.RemoteSessionIssuerID,
+		DpopRequired:          res.DpopRequired,
+		LastVerifiedAt:        res.LastVerifiedAt,
+		LastError:             res.LastError,
+		AgentID:               res.AgentID,
+		AgentAppID:            res.AgentAppID,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
 	}
 	if res.RequiredScopes != nil {
 		body.RequiredScopes = make([]string, len(res.RequiredScopes))
@@ -3207,23 +3236,24 @@ func NewSubmitClientIDResponseBody(res *identityproviderconnections.OktaIdentity
 // "identityProviderConnections" service.
 func NewReplaceClientSecretResponseBody(res *identityproviderconnections.OktaIdentityProviderConnection) *ReplaceClientSecretResponseBody {
 	body := &ReplaceClientSecretResponseBody{
-		ID:                res.ID,
-		OrganizationID:    res.OrganizationID,
-		Provider:          res.Provider,
-		Status:            res.Status,
-		OrgURL:            res.OrgURL,
-		IssuerURL:         res.IssuerURL,
-		ListingMode:       res.ListingMode,
-		JwksURL:           res.JwksURL,
-		ClientID:          res.ClientID,
-		ClientIDSubmitted: res.ClientIDSubmitted,
-		DpopRequired:      res.DpopRequired,
-		LastVerifiedAt:    res.LastVerifiedAt,
-		LastError:         res.LastError,
-		AgentID:           res.AgentID,
-		AgentAppID:        res.AgentAppID,
-		CreatedAt:         res.CreatedAt,
-		UpdatedAt:         res.UpdatedAt,
+		ID:                    res.ID,
+		OrganizationID:        res.OrganizationID,
+		Provider:              res.Provider,
+		Status:                res.Status,
+		OrgURL:                res.OrgURL,
+		IssuerURL:             res.IssuerURL,
+		ListingMode:           res.ListingMode,
+		JwksURL:               res.JwksURL,
+		ClientID:              res.ClientID,
+		ClientIDSubmitted:     res.ClientIDSubmitted,
+		RemoteSessionIssuerID: res.RemoteSessionIssuerID,
+		DpopRequired:          res.DpopRequired,
+		LastVerifiedAt:        res.LastVerifiedAt,
+		LastError:             res.LastError,
+		AgentID:               res.AgentID,
+		AgentAppID:            res.AgentAppID,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
 	}
 	if res.RequiredScopes != nil {
 		body.RequiredScopes = make([]string, len(res.RequiredScopes))
@@ -3283,23 +3313,24 @@ func NewReplaceClientSecretResponseBody(res *identityproviderconnections.OktaIde
 // service.
 func NewSetSetupMethodResponseBody(res *identityproviderconnections.OktaIdentityProviderConnection) *SetSetupMethodResponseBody {
 	body := &SetSetupMethodResponseBody{
-		ID:                res.ID,
-		OrganizationID:    res.OrganizationID,
-		Provider:          res.Provider,
-		Status:            res.Status,
-		OrgURL:            res.OrgURL,
-		IssuerURL:         res.IssuerURL,
-		ListingMode:       res.ListingMode,
-		JwksURL:           res.JwksURL,
-		ClientID:          res.ClientID,
-		ClientIDSubmitted: res.ClientIDSubmitted,
-		DpopRequired:      res.DpopRequired,
-		LastVerifiedAt:    res.LastVerifiedAt,
-		LastError:         res.LastError,
-		AgentID:           res.AgentID,
-		AgentAppID:        res.AgentAppID,
-		CreatedAt:         res.CreatedAt,
-		UpdatedAt:         res.UpdatedAt,
+		ID:                    res.ID,
+		OrganizationID:        res.OrganizationID,
+		Provider:              res.Provider,
+		Status:                res.Status,
+		OrgURL:                res.OrgURL,
+		IssuerURL:             res.IssuerURL,
+		ListingMode:           res.ListingMode,
+		JwksURL:               res.JwksURL,
+		ClientID:              res.ClientID,
+		ClientIDSubmitted:     res.ClientIDSubmitted,
+		RemoteSessionIssuerID: res.RemoteSessionIssuerID,
+		DpopRequired:          res.DpopRequired,
+		LastVerifiedAt:        res.LastVerifiedAt,
+		LastError:             res.LastError,
+		AgentID:               res.AgentID,
+		AgentAppID:            res.AgentAppID,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
 	}
 	if res.RequiredScopes != nil {
 		body.RequiredScopes = make([]string, len(res.RequiredScopes))
@@ -3358,23 +3389,24 @@ func NewSetSetupMethodResponseBody(res *identityproviderconnections.OktaIdentity
 // "verify" endpoint of the "identityProviderConnections" service.
 func NewVerifyResponseBody(res *identityproviderconnections.OktaIdentityProviderConnection) *VerifyResponseBody {
 	body := &VerifyResponseBody{
-		ID:                res.ID,
-		OrganizationID:    res.OrganizationID,
-		Provider:          res.Provider,
-		Status:            res.Status,
-		OrgURL:            res.OrgURL,
-		IssuerURL:         res.IssuerURL,
-		ListingMode:       res.ListingMode,
-		JwksURL:           res.JwksURL,
-		ClientID:          res.ClientID,
-		ClientIDSubmitted: res.ClientIDSubmitted,
-		DpopRequired:      res.DpopRequired,
-		LastVerifiedAt:    res.LastVerifiedAt,
-		LastError:         res.LastError,
-		AgentID:           res.AgentID,
-		AgentAppID:        res.AgentAppID,
-		CreatedAt:         res.CreatedAt,
-		UpdatedAt:         res.UpdatedAt,
+		ID:                    res.ID,
+		OrganizationID:        res.OrganizationID,
+		Provider:              res.Provider,
+		Status:                res.Status,
+		OrgURL:                res.OrgURL,
+		IssuerURL:             res.IssuerURL,
+		ListingMode:           res.ListingMode,
+		JwksURL:               res.JwksURL,
+		ClientID:              res.ClientID,
+		ClientIDSubmitted:     res.ClientIDSubmitted,
+		RemoteSessionIssuerID: res.RemoteSessionIssuerID,
+		DpopRequired:          res.DpopRequired,
+		LastVerifiedAt:        res.LastVerifiedAt,
+		LastError:             res.LastError,
+		AgentID:               res.AgentID,
+		AgentAppID:            res.AgentAppID,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
 	}
 	if res.RequiredScopes != nil {
 		body.RequiredScopes = make([]string, len(res.RequiredScopes))
@@ -3443,23 +3475,24 @@ func NewGetResponseBody(res *identityproviderconnections.GetIdentityProviderConn
 // the "recordAgent" endpoint of the "identityProviderConnections" service.
 func NewRecordAgentResponseBody(res *identityproviderconnections.OktaIdentityProviderConnection) *RecordAgentResponseBody {
 	body := &RecordAgentResponseBody{
-		ID:                res.ID,
-		OrganizationID:    res.OrganizationID,
-		Provider:          res.Provider,
-		Status:            res.Status,
-		OrgURL:            res.OrgURL,
-		IssuerURL:         res.IssuerURL,
-		ListingMode:       res.ListingMode,
-		JwksURL:           res.JwksURL,
-		ClientID:          res.ClientID,
-		ClientIDSubmitted: res.ClientIDSubmitted,
-		DpopRequired:      res.DpopRequired,
-		LastVerifiedAt:    res.LastVerifiedAt,
-		LastError:         res.LastError,
-		AgentID:           res.AgentID,
-		AgentAppID:        res.AgentAppID,
-		CreatedAt:         res.CreatedAt,
-		UpdatedAt:         res.UpdatedAt,
+		ID:                    res.ID,
+		OrganizationID:        res.OrganizationID,
+		Provider:              res.Provider,
+		Status:                res.Status,
+		OrgURL:                res.OrgURL,
+		IssuerURL:             res.IssuerURL,
+		ListingMode:           res.ListingMode,
+		JwksURL:               res.JwksURL,
+		ClientID:              res.ClientID,
+		ClientIDSubmitted:     res.ClientIDSubmitted,
+		RemoteSessionIssuerID: res.RemoteSessionIssuerID,
+		DpopRequired:          res.DpopRequired,
+		LastVerifiedAt:        res.LastVerifiedAt,
+		LastError:             res.LastError,
+		AgentID:               res.AgentID,
+		AgentAppID:            res.AgentAppID,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
 	}
 	if res.RequiredScopes != nil {
 		body.RequiredScopes = make([]string, len(res.RequiredScopes))
@@ -3518,23 +3551,24 @@ func NewRecordAgentResponseBody(res *identityproviderconnections.OktaIdentityPro
 // "revoke" endpoint of the "identityProviderConnections" service.
 func NewRevokeResponseBody(res *identityproviderconnections.OktaIdentityProviderConnection) *RevokeResponseBody {
 	body := &RevokeResponseBody{
-		ID:                res.ID,
-		OrganizationID:    res.OrganizationID,
-		Provider:          res.Provider,
-		Status:            res.Status,
-		OrgURL:            res.OrgURL,
-		IssuerURL:         res.IssuerURL,
-		ListingMode:       res.ListingMode,
-		JwksURL:           res.JwksURL,
-		ClientID:          res.ClientID,
-		ClientIDSubmitted: res.ClientIDSubmitted,
-		DpopRequired:      res.DpopRequired,
-		LastVerifiedAt:    res.LastVerifiedAt,
-		LastError:         res.LastError,
-		AgentID:           res.AgentID,
-		AgentAppID:        res.AgentAppID,
-		CreatedAt:         res.CreatedAt,
-		UpdatedAt:         res.UpdatedAt,
+		ID:                    res.ID,
+		OrganizationID:        res.OrganizationID,
+		Provider:              res.Provider,
+		Status:                res.Status,
+		OrgURL:                res.OrgURL,
+		IssuerURL:             res.IssuerURL,
+		ListingMode:           res.ListingMode,
+		JwksURL:               res.JwksURL,
+		ClientID:              res.ClientID,
+		ClientIDSubmitted:     res.ClientIDSubmitted,
+		RemoteSessionIssuerID: res.RemoteSessionIssuerID,
+		DpopRequired:          res.DpopRequired,
+		LastVerifiedAt:        res.LastVerifiedAt,
+		LastError:             res.LastError,
+		AgentID:               res.AgentID,
+		AgentAppID:            res.AgentAppID,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
 	}
 	if res.RequiredScopes != nil {
 		body.RequiredScopes = make([]string, len(res.RequiredScopes))
@@ -3594,23 +3628,24 @@ func NewRevokeResponseBody(res *identityproviderconnections.OktaIdentityProvider
 // "identityProviderConnections" service.
 func NewSyncApplicationsResponseBody(res *identityproviderconnections.OktaIdentityProviderConnection) *SyncApplicationsResponseBody {
 	body := &SyncApplicationsResponseBody{
-		ID:                res.ID,
-		OrganizationID:    res.OrganizationID,
-		Provider:          res.Provider,
-		Status:            res.Status,
-		OrgURL:            res.OrgURL,
-		IssuerURL:         res.IssuerURL,
-		ListingMode:       res.ListingMode,
-		JwksURL:           res.JwksURL,
-		ClientID:          res.ClientID,
-		ClientIDSubmitted: res.ClientIDSubmitted,
-		DpopRequired:      res.DpopRequired,
-		LastVerifiedAt:    res.LastVerifiedAt,
-		LastError:         res.LastError,
-		AgentID:           res.AgentID,
-		AgentAppID:        res.AgentAppID,
-		CreatedAt:         res.CreatedAt,
-		UpdatedAt:         res.UpdatedAt,
+		ID:                    res.ID,
+		OrganizationID:        res.OrganizationID,
+		Provider:              res.Provider,
+		Status:                res.Status,
+		OrgURL:                res.OrgURL,
+		IssuerURL:             res.IssuerURL,
+		ListingMode:           res.ListingMode,
+		JwksURL:               res.JwksURL,
+		ClientID:              res.ClientID,
+		ClientIDSubmitted:     res.ClientIDSubmitted,
+		RemoteSessionIssuerID: res.RemoteSessionIssuerID,
+		DpopRequired:          res.DpopRequired,
+		LastVerifiedAt:        res.LastVerifiedAt,
+		LastError:             res.LastError,
+		AgentID:               res.AgentID,
+		AgentAppID:            res.AgentAppID,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
 	}
 	if res.RequiredScopes != nil {
 		body.RequiredScopes = make([]string, len(res.RequiredScopes))

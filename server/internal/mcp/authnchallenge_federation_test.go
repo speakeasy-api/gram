@@ -235,7 +235,7 @@ func runFederatedLogin(t *testing.T, scenario string, rotate federationRotation)
 	if scenario == "wrong_response_issuer" {
 		callbackQuery.Set("iss", "https://other.example.test")
 	}
-	callback := httptest.NewRequest(http.MethodGet, ti.serverURL.String()+"/mcp/idp_callback?"+callbackQuery.Encode(), nil).WithContext(ctx)
+	callback := httptest.NewRequest(http.MethodGet, ti.serverURL.String()+f.callbackPath()+"?"+callbackQuery.Encode(), nil).WithContext(ctx)
 	if scenario == "wrong_cookie" {
 		cookie.Value = "different-browser"
 	}
@@ -247,7 +247,7 @@ func runFederatedLogin(t *testing.T, scenario string, rotate federationRotation)
 		expectedSecret = "rotated-secret"
 	}
 	result := httptest.NewRecorder()
-	err = ti.service.HandleIDPCallback(result, callback)
+	err = ti.service.HandleIDPCallback(result, routeIDPCallback(callback))
 	success := scenario == "success" || scenario == "first_party" || scenario == "consumer"
 	if success {
 		require.NoError(t, err)
@@ -309,7 +309,7 @@ func runFederatedLogin(t *testing.T, scenario string, rotate federationRotation)
 	require.NoError(t, err)
 	require.Equal(t, beforeUsers, afterUsers)
 	count := provider.exchangeCount()
-	require.Error(t, ti.service.HandleIDPCallback(httptest.NewRecorder(), callback), "callback is single-use even on rejection")
+	require.Error(t, ti.service.HandleIDPCallback(httptest.NewRecorder(), routeIDPCallback(callback)), "callback is single-use even on rejection")
 	require.Equal(t, count, provider.exchangeCount(), "replay must not reach the token endpoint")
 	if scenario == "missing_cookie" || scenario == "wrong_cookie" || scenario == "expired_state" || scenario == "changed_client" || scenario == "deleted_client" || scenario == "changed_issuer" || scenario == "missing_response_issuer" || scenario == "wrong_response_issuer" {
 		require.Zero(t, provider.exchangeCount())
@@ -390,6 +390,10 @@ func newFederationLoginFixture(t *testing.T, memberAllowed bool, offline ...bool
 }
 
 // begin checks the bootstrap-to-browser transition, PKCE, and cookie security.
+func (f *federationLoginFixture) callbackPath() string {
+	return "/mcp/idp_callback/" + f.clientID.String()
+}
+
 func (f *federationLoginFixture) begin(t *testing.T, ctx context.Context, firstParty bool) (*http.Request, string, string, string, mcp.AuthnChallengeState, *http.Cookie) {
 	t.Helper()
 	ti, provider := f.ti, f.provider
@@ -409,7 +413,7 @@ func (f *federationLoginFixture) begin(t *testing.T, ctx context.Context, firstP
 	bootstrap, err := url.Parse(start.Header().Get("Location"))
 	require.NoError(t, err)
 	require.Equal(t, ti.serverURL.Host, bootstrap.Host)
-	require.Equal(t, "/mcp/idp_callback", bootstrap.Path)
+	require.Equal(t, f.callbackPath(), bootstrap.Path)
 	require.Equal(t, "1", bootstrap.Query().Get("federated_start"))
 	initialID := bootstrap.Query().Get("state")
 	require.NotEmpty(t, initialID)
@@ -422,14 +426,14 @@ func (f *federationLoginFixture) begin(t *testing.T, ctx context.Context, firstP
 	cookies := start.Result().Cookies()
 	require.Len(t, cookies, 1)
 	bootstrapRequest.AddCookie(cookies[0])
-	require.NoError(t, ti.service.HandleIDPCallback(begin, bootstrapRequest))
+	require.NoError(t, ti.service.HandleIDPCallback(begin, routeIDPCallback(bootstrapRequest)))
 	upstream, err := url.Parse(begin.Header().Get("Location"))
 	require.NoError(t, err)
 	require.Equal(t, provider.URL+"/authorize", upstream.Scheme+"://"+upstream.Host+upstream.Path)
 	require.Equal(t, "selected-client", upstream.Query().Get("client_id"))
 	require.NotContains(t, upstream.Query().Get("scope"), "offline_access", "unknown human always starts with minimal login")
 	require.Empty(t, upstream.Query().Get("prompt"))
-	require.Equal(t, ti.serverURL.String()+"/mcp/idp_callback", upstream.Query().Get("redirect_uri"))
+	require.Equal(t, ti.serverURL.String()+f.callbackPath(), upstream.Query().Get("redirect_uri"), "federated logins always use the per-client callback")
 	id := upstream.Query().Get("state")
 	require.NotEmpty(t, id)
 	require.NotEqual(t, initialID, id)
@@ -448,7 +452,7 @@ func (f *federationLoginFixture) begin(t *testing.T, ctx context.Context, firstP
 	require.True(t, cookie.HttpOnly)
 	require.Equal(t, http.SameSiteLaxMode, cookie.SameSite)
 	require.Contains(t, cookie.Name, "__Host-")
-	require.Error(t, ti.service.HandleIDPCallback(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, bootstrap.String(), nil).WithContext(ctx)), "bootstrap is single-use")
+	require.Error(t, ti.service.HandleIDPCallback(httptest.NewRecorder(), routeIDPCallback(httptest.NewRequest(http.MethodGet, bootstrap.String(), nil).WithContext(ctx))), "bootstrap is single-use")
 	return req, id, nonce, upstream.Query().Get("code_challenge"), state, cookie
 }
 
@@ -481,7 +485,7 @@ func TestFederatedLoginBootstrapCannotTransferBrowsers(t *testing.T) {
 					victim.AddCookie(&cookie)
 				}
 				response := httptest.NewRecorder()
-				err = f.ti.service.HandleIDPCallback(response, victim)
+				err = f.ti.service.HandleIDPCallback(response, routeIDPCallback(victim))
 				if firstParty {
 					require.Error(t, err)
 				} else {
@@ -494,28 +498,4 @@ func TestFederatedLoginBootstrapCannotTransferBrowsers(t *testing.T) {
 			})
 		}
 	}
-}
-
-// A provider usable for back-channel exchange must still be refused for login
-// when it cannot identify the authorization response issuer at our shared callback.
-func TestFederatedLoginRejectsUnsupportedResponseIssuer(t *testing.T) {
-	t.Parallel()
-	ctx, f := newFederationLoginFixture(t, true)
-	f.provider.mu.Lock()
-	f.provider.unsupportedResponseIssuer = true
-	f.provider.mu.Unlock()
-	query := url.Values{"response_type": {"code"}, "client_id": {f.downstreamClientID}, "redirect_uri": {"http://127.0.0.1/callback"}, "state": {"downstream-state"}, "code_challenge": {"downstream-pkce"}, "code_challenge_method": {"S256"}}
-	route := chi.NewRouteContext()
-	route.URLParams.Add("mcpSlug", f.toolsetSlug)
-	req := httptest.NewRequest(http.MethodGet, "/mcp/"+f.toolsetSlug+"/authorize?"+query.Encode(), nil).WithContext(context.WithValue(ctx, chi.RouteCtxKey, route))
-	response := httptest.NewRecorder()
-	err := f.ti.service.HandleAuthorize(response, req)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusFound, response.Code)
-	redirect, err := url.Parse(response.Header().Get("Location"))
-	require.NoError(t, err)
-	require.Equal(t, "127.0.0.1", redirect.Host, "return the failure to the client, never start provider login")
-	require.Equal(t, "server_error", redirect.Query().Get("error"))
-	require.Empty(t, redirect.Query().Get("code"))
-	require.Zero(t, f.provider.exchangeCount())
 }

@@ -72,10 +72,10 @@ func TestFederatedExplicitDelegationRetry(t *testing.T) {
 				},
 			})
 			callback := func(q url.Values, cookie *http.Cookie) (*httptest.ResponseRecorder, error) {
-				req := httptest.NewRequest(http.MethodGet, f.ti.serverURL.String()+"/mcp/idp_callback?"+q.Encode(), nil).WithContext(ctx)
+				req := httptest.NewRequest(http.MethodGet, f.ti.serverURL.String()+f.callbackPath()+"?"+q.Encode(), nil).WithContext(ctx)
 				req.AddCookie(cookie)
 				response := httptest.NewRecorder()
-				err := f.ti.service.HandleIDPCallback(response, req)
+				err := f.ti.service.HandleIDPCallback(response, routeIDPCallback(req))
 				if err != nil {
 					return response, fmt.Errorf("perform federation request: %w", err)
 				}
@@ -250,7 +250,7 @@ func TestFederatedExplicitDelegationRetry(t *testing.T) {
 					transferred.AddCookie(&cookie)
 				}
 				response := httptest.NewRecorder()
-				require.NoError(t, f.ti.service.HandleIDPCallback(response, transferred))
+				require.NoError(t, f.ti.service.HandleIDPCallback(response, routeIDPCallback(transferred)))
 				assertFederationErrorRedirect(t, response)
 				_, err := f.ti.authnChallengeCache.Get(ctx, "authnChallenge:"+bootstrap.URL.Query().Get("state"))
 				require.NoError(t, err, "missing or wrong browser proof must preserve retry state")
@@ -260,7 +260,7 @@ func TestFederatedExplicitDelegationRetry(t *testing.T) {
 			}
 			bootstrap.AddCookie(retryCookies[0])
 			begin := httptest.NewRecorder()
-			require.NoError(t, f.ti.service.HandleIDPCallback(begin, bootstrap))
+			require.NoError(t, f.ti.service.HandleIDPCallback(begin, routeIDPCallback(bootstrap)))
 			target, err := url.Parse(begin.Header().Get("Location"))
 			require.NoError(t, err)
 			require.NotContains(t, target.Query().Get("scope"), "offline_access")

@@ -2108,6 +2108,7 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		Audience:                        v.Audience,
 		LegacyCallbackURL:               *v.LegacyCallbackURL,
 		CallbackURL:                     v.CallbackURL,
+		FederatedCallbackURL:            v.FederatedCallbackURL,
 		CreatedAt:                       *v.CreatedAt,
 		UpdatedAt:                       *v.UpdatedAt,
 	}

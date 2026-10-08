@@ -54,6 +54,21 @@ func TestCallbackOrigins_ResolveClientAndNewClientOrigins(t *testing.T) {
 	require.Equal(t, pinnedOrigin+"/mcp/remote_login_callback", remotesessions.RemoteLoginCallbackURL(mustURL(t, pinnedOrigin+"/")), "a trailing slash does not change the redirect_uri")
 	require.Equal(t, movedOrigin+"/mcp/remote_login_callback", origins.ClientCallbackURL(pgtype.Text{String: movedOrigin, Valid: true}))
 	require.Equal(t, movedOrigin+"/oauth/callback", remotesessions.LegacyProxyCallbackURL(origins.ForClient(pgtype.Text{String: movedOrigin, Valid: true})))
+	federatedClient := uuid.New()
+	orgClient := repo.RemoteSessionClient{ID: federatedClient, OrganizationID: pgtype.Text{String: "org-test", Valid: true}}
+	require.Equal(t, pinnedOrigin+"/mcp/idp_callback/"+federatedClient.String(), *origins.ClientFederatedCallbackURL(orgClient))
+	orgClient.CallbackBaseUrl = pgtype.Text{String: movedOrigin, Valid: true}
+	require.Equal(t, movedOrigin+"/mcp/idp_callback/"+federatedClient.String(), *origins.ClientFederatedCallbackURL(orgClient))
+	projectClient := orgClient
+	projectClient.ProjectID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	require.Nil(t, origins.ClientFederatedCallbackURL(projectClient), "project clients can never be trusted for federation")
+	managedClient := orgClient
+	managedClient.IdentityProviderConnectionID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	require.Nil(t, origins.ClientFederatedCallbackURL(managedClient), "identity provider connection clients can never be trusted for federation")
+	require.Nil(t, origins.ClientFederatedCallbackURL(repo.RemoteSessionClient{ID: federatedClient}), "global clients can never be trusted for federation")
+	noOrigins := remotesessions.CallbackOrigins{Outbound: nil, Registration: nil}
+	require.Nil(t, noOrigins.ClientFederatedCallbackURL(repo.RemoteSessionClient{ID: federatedClient, OrganizationID: pgtype.Text{String: "org-test", Valid: true}}), "no origin omits the callback")
+	require.Equal(t, pinnedOrigin+"/mcp/idp_callback/"+federatedClient.String(), remotesessions.FederatedIDPCallbackURL(mustURL(t, pinnedOrigin+"/"), federatedClient))
 
 	require.Equal(t, pgtype.Text{String: movedOrigin, Valid: true}, origins.NewClientBaseURL(true), "organization-owned clients record the registration origin")
 	require.False(t, origins.NewClientBaseURL(false).Valid, "global clients never record one")
@@ -195,6 +210,7 @@ func TestCreateClients_RecordRegistrationOriginOnOrganizationOwnedClients(t *tes
 	got, err := ti.service.GetRemoteSessionClient(ctx, &clientsgen.GetRemoteSessionClientPayload{ID: projectClientID})
 	require.NoError(t, err)
 	require.Equal(t, wantCallback, *got.CallbackURL)
+	require.Nil(t, got.FederatedCallbackURL, "project clients can never be trusted for federation")
 
 	// An organization-level client created by an organization administrator.
 	orgIssuerID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, activeOrganizationID(t, ctx), "origin-org-issuer")
@@ -202,6 +218,7 @@ func TestCreateClients_RecordRegistrationOriginOnOrganizationOwnedClients(t *tes
 	require.NoError(t, err)
 	require.Equal(t, moved, storedCallbackBaseURL(t, ti, orgClient.ID))
 	require.Equal(t, wantCallback, *orgClient.CallbackURL)
+	require.Equal(t, movedOrigin+"/mcp/idp_callback/"+orgClient.ID, *orgClient.FederatedCallbackURL)
 
 	// A CIMD client publishes its whole identity on the recorded origin.
 	cimdIssuerID := createCIMDIssuer(t, ctx, ti, "origin-cimd-issuer", "https://idp.example.com/authorize", "https://idp.example.com/token")
@@ -224,6 +241,8 @@ func TestCreateClients_RecordRegistrationOriginOnOrganizationOwnedClients(t *tes
 	})
 	require.NoError(t, err)
 	require.False(t, storedCallbackBaseURL(t, ti, globalClient.ID).Valid)
+	require.Nil(t, globalClient.CallbackURL)
+	require.Nil(t, globalClient.FederatedCallbackURL)
 
 	newClient, err := ti.service.GetNewClientCallbackURL(ctx, &clientsgen.GetNewClientCallbackURLPayload{})
 	require.NoError(t, err)
@@ -247,6 +266,7 @@ func TestCreateClients_RecordNoOriginWithoutRegistrationOrigin(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, storedCallbackBaseURL(t, ti, orgClient.ID).Valid)
 	require.Equal(t, wantCallback, *orgClient.CallbackURL, "a NULL client reports the pinned callback")
+	require.Equal(t, pinnedOrigin+"/mcp/idp_callback/"+orgClient.ID, *orgClient.FederatedCallbackURL, "a NULL client reports the pinned federated callback")
 
 	newClient, err := ti.service.GetNewClientCallbackURL(ctx, &clientsgen.GetNewClientCallbackURLPayload{})
 	require.NoError(t, err)

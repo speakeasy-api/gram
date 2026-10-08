@@ -4,14 +4,19 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
 // remoteLoginCallbackPath is the path of the redirect_uri Speakeasy registers with
 // every upstream provider. It is served on every platform host.
 const remoteLoginCallbackPath = "/" + canonicalCallbackRouteBase + "/remote_login_callback"
+
+// federatedIDPCallbackPathPrefix prefixes the per-client federated IdP redirect_uri.
+const federatedIDPCallbackPathPrefix = "/" + canonicalCallbackRouteBase + "/idp_callback/"
 
 // legacyProxyCallbackPath is the oauth_proxy_servers-era redirect_uri path.
 const legacyProxyCallbackPath = "/oauth/callback"
@@ -66,6 +71,28 @@ func (o CallbackOrigins) ForNewClient(organizationOwned bool) *url.URL {
 // RemoteLoginCallbackURL is the redirect_uri a client on origin registers.
 func RemoteLoginCallbackURL(origin *url.URL) string {
 	return trimOrigin(origin) + remoteLoginCallbackPath
+}
+
+// FederatedIDPCallbackURL is the per-client redirect_uri every federated sign-in uses.
+func FederatedIDPCallbackURL(origin *url.URL, clientID uuid.UUID) string {
+	return trimOrigin(origin) + FederatedIDPCallbackPath(clientID)
+}
+
+// FederatedIDPCallbackPath is the path of FederatedIDPCallbackURL.
+func FederatedIDPCallbackPath(clientID uuid.UUID) string {
+	return federatedIDPCallbackPathPrefix + clientID.String()
+}
+
+// ClientFederatedCallbackURL is FederatedIDPCallbackURL on the client's origin, nil for clients federation can never trust.
+func (o CallbackOrigins) ClientFederatedCallbackURL(client repo.RemoteSessionClient) *string {
+	if client.ProjectID.Valid || !client.OrganizationID.Valid || client.OrganizationID.String == "" || client.IdentityProviderConnectionID.Valid {
+		return nil
+	}
+	origin := o.ForClient(client.CallbackBaseUrl)
+	if origin == nil {
+		return nil
+	}
+	return new(FederatedIDPCallbackURL(origin, client.ID))
 }
 
 // LegacyProxyCallbackURL is the oauth_proxy_servers-era redirect_uri on origin.

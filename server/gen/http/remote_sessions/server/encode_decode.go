@@ -1945,6 +1945,7 @@ func marshalTypesRemoteSessionClientToRemoteSessionClientResponseBody(v *types.R
 		Audience:                        v.Audience,
 		LegacyCallbackURL:               v.LegacyCallbackURL,
 		CallbackURL:                     v.CallbackURL,
+		FederatedCallbackURL:            v.FederatedCallbackURL,
 		CreatedAt:                       v.CreatedAt,
 		UpdatedAt:                       v.UpdatedAt,
 	}

@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -63,21 +65,19 @@ func (s *Service) federatedProvider(ctx context.Context, endpoint *ResolvedMcpEn
 	if row.ProjectID.Valid || !row.OrganizationID.Valid || row.OrganizationID.String != endpoint.OrganizationID || !row.TrustedRemoteSessionIssuerID.Valid || s.remoteChallengeMgr == nil {
 		return nil, uuid.Nil, uuid.Nil, "", errors.New("invalid federated issuer configuration")
 	}
-	// Reject an unusable callback before discovery or any provider traffic. This
-	// check is deliberately after the unlinked branch, preserving WorkOS HTTP dev.
-	// The trusted client's own callback origin is checked once it is loaded.
-	callback, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
+	// Reject an unusable per-client callback before discovery or any provider
+	// traffic. This is deliberately after the unlinked branch, preserving WorkOS HTTP dev.
+	clientID := row.TrustedRemoteSessionClientID.UUID
+	checkCallback := func(base pgtype.Text) error {
+		callback, err := federatedIDPCallbackURL(s.federatedCallbackOrigin(base), clientID)
+		if err != nil {
+			return err
+		}
+		_, err = federatedCallbackURL(callback)
+		return err
+	}
+	provider, err := s.remoteChallengeMgr.LoadFederatedLoginProvider(ctx, endpoint.OrganizationID, row.TrustedRemoteSessionIssuerID.UUID, clientID, checkCallback)
 	if err != nil {
-		return nil, uuid.Nil, uuid.Nil, "", remotesessions.ErrFederatedConfiguration
-	}
-	if _, err := federatedCallbackURL(callback); err != nil {
-		return nil, uuid.Nil, uuid.Nil, "", fmt.Errorf("resolve federated login provider: %w", err)
-	}
-	provider, err := s.remoteChallengeMgr.LoadFederatedProvider(ctx, endpoint.OrganizationID, row.TrustedRemoteSessionIssuerID.UUID, row.TrustedRemoteSessionClientID.UUID)
-	if err != nil {
-		return nil, uuid.Nil, uuid.Nil, "", fmt.Errorf("resolve federated login provider: %w", err)
-	}
-	if err := provider.RequireLoginRedirect(); err != nil {
 		return nil, uuid.Nil, uuid.Nil, "", fmt.Errorf("resolve federated login provider: %w", err)
 	}
 	version := provider.Fingerprint() + ":" + row.UpdatedAt.Time.UTC().Format(time.RFC3339Nano)
@@ -103,10 +103,11 @@ func (s *Service) prepareBoundFederatedLogin(w http.ResponseWriter, r *http.Requ
 	}
 	// The callback shares the trusted client's recorded callback origin, so the
 	// customer IdP app allowlists the same host as its remote_login_callback.
-	callback, err := endpoint.IDPCallbackURL(s.federatedCallbackOrigin(provider).String())
+	callback, err := federatedIDPCallbackURL(s.federatedCallbackOrigin(provider.CallbackBaseURL()), clientID)
 	if err != nil {
 		return nil, err
 	}
+	endpoint.LogWith(s.logger).InfoContext(ctx, "federated login started", attr.SlogOAuthFlowID(state.FlowID), attr.SlogOAuthResponseIssuerAdvertised(provider.AdvertisesResponseIssuer()))
 	target, err := federatedCallbackURL(callback)
 	if err != nil {
 		return nil, err
@@ -153,21 +154,48 @@ func (s *Service) prepareBoundFederatedLogin(w http.ResponseWriter, r *http.Requ
 	return target, nil
 }
 
-// recordedIDPCallbackOrigin validates the IdP callback a federated challenge
-// was minted with and returns its origin. The challenge is the source of truth:
-// a replica configured with another outbound origin still completes the login,
-// as long as the URL is this endpoint's callback.
-func recordedIDPCallbackOrigin(endpoint *ResolvedMcpEndpoint, callback string) (*url.URL, error) {
+// federatedIDPCallbackURL is the per-client redirect URI every federated login mints (RFC 9700 4.4.2).
+func federatedIDPCallbackURL(origin *url.URL, clientID uuid.UUID) (string, error) {
+	if clientID == uuid.Nil {
+		return "", remotesessions.ErrFederatedConfiguration
+	}
+	return remotesessions.FederatedIDPCallbackURL(origin, clientID), nil
+}
+
+// recordedIDPCallbackOrigin validates the per-client IdP callback a federated
+// challenge was minted with and returns its origin. The challenge is the source
+// of truth: a replica configured with another outbound origin still completes
+// the login, as long as the URL is the client's callback.
+func recordedIDPCallbackOrigin(callback string, clientID uuid.UUID) (*url.URL, error) {
 	target, err := federatedCallbackURL(callback)
 	if err != nil {
 		return nil, err
 	}
 	origin := &url.URL{Scheme: target.Scheme, Host: target.Host}
-	expected, err := endpoint.IDPCallbackURL(origin.String())
-	if err != nil || expected != callback {
+	if expected, err := federatedIDPCallbackURL(origin, clientID); err != nil || expected != callback {
 		return nil, remotesessions.ErrFederatedConfiguration
 	}
 	return origin, nil
+}
+
+// validateFederatedCallbackRoute requires the callback to arrive on exactly the recorded per-client path.
+func validateFederatedCallbackRoute(r *http.Request, callback string, clientID uuid.UUID, routeClientID string) error {
+	recorded, err := url.Parse(callback)
+	if err != nil || recorded.Path == "" || r.URL.Path != recorded.Path || routeClientID != clientID.String() || r.URL.Path != remotesessions.FederatedIDPCallbackPath(clientID) {
+		return remotesessions.ErrFederatedConfiguration
+	}
+	return nil
+}
+
+// federatedCallbackMisrouted reports, before state is consumed, a federated challenge arriving off its recorded callback.
+func federatedCallbackMisrouted(r *http.Request, federation *FederatedChallenge, routeClientID string) string {
+	if _, err := recordedIDPCallbackOrigin(federation.CallbackURL, federation.ClientID); err != nil {
+		return "origin_mismatch"
+	}
+	if validateFederatedCallbackRoute(r, federation.CallbackURL, federation.ClientID, routeClientID) != nil {
+		return "route_mismatch"
+	}
+	return ""
 }
 
 func federationCookieName(id string) string { return "__Host-gram-federation-" + id }

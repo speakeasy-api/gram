@@ -1462,3 +1462,16 @@ func TestServeMCP_IssuerGatedToolsetBackend_PrivateHappyPath(t *testing.T) {
 	require.NotEqual(t, http.StatusUnauthorized, rr.Code, "issuer-gated bearer on a private toolset must not be re-rejected; body=%s", rr.Body.String())
 	require.Equal(t, http.StatusOK, rr.Code, "ServeMCP should respond 200; body=%s", rr.Body.String())
 }
+
+// Per-client federated callbacks are minted only under /mcp, so /x/mcp mounts just the shared callback.
+func TestAttach_NoPerClientIDPCallback(t *testing.T) {
+	t.Parallel()
+
+	_, ti := newTestService(t)
+	mux := goahttp.NewMuxer()
+	xmcp.Attach(mux, ti.service, nil)
+
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/x/mcp/idp_callback/"+uuid.NewString()+"?state="+uuid.NewString(), nil))
+	require.Equal(t, http.StatusNotFound, w.Code)
+}

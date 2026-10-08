@@ -62,6 +62,12 @@ type RemoteSessionClient struct {
 	// The redirect URI this client registers with its upstream provider. It never
 	// changes after the client is created. Absent on global clients.
 	CallbackURL *string
-	CreatedAt   string
-	UpdatedAt   string
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string
+	CreatedAt            string
+	UpdatedAt            string
 }
