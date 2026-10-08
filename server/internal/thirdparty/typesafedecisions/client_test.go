@@ -3,6 +3,7 @@ package typesafedecisions
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -369,6 +370,9 @@ func TestEvaluateProviderThrottlingReturnsErrorWithoutRetry(t *testing.T) {
 	})
 	_, err := client.Evaluate(t.Context(), "org-1", json.RawMessage(`{}`), testQuestions())
 	require.ErrorContains(t, err, "typesafe HTTP status 429")
+	statusErr, ok := errors.AsType[*StatusError](err)
+	require.True(t, ok, "callers can branch on the status")
+	require.Equal(t, http.StatusTooManyRequests, statusErr.StatusCode)
 	require.EqualValues(t, 1, attempts.Load())
 }
 

@@ -30,6 +30,17 @@ var ErrUnavailable = errors.New("typesafe is not configured")
 // without exposing the provider response body or echoed input.
 var ErrContextLengthExceeded = errors.New("typesafe context length exceeded")
 
+// StatusError reports a non-OK Decisions API response. It omits the body,
+// which can echo the evaluated state.
+type StatusError struct {
+	// StatusCode is the HTTP status the Decisions API returned.
+	StatusCode int
+}
+
+func (e *StatusError) Error() string {
+	return fmt.Sprintf("typesafe HTTP status %d", e.StatusCode)
+}
+
 // Question defines a single binary semantic condition.
 type Question struct {
 	Instructions string            `json:"instructions"`
@@ -204,7 +215,7 @@ func (c *boundedClient) do(req *http.Request) (*http.Response, error) {
 				return nil, ErrContextLengthExceeded
 			}
 		}
-		return nil, fmt.Errorf("typesafe HTTP status %d", res.StatusCode)
+		return nil, &StatusError{StatusCode: res.StatusCode}
 	}
 	raw, err := io.ReadAll(io.LimitReader(res.Body, (1<<20)+1))
 	if err != nil {
