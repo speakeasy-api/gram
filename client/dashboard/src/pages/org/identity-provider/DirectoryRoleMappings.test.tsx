@@ -21,8 +21,12 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 const mocks = vi.hoisted(() => ({
   save: vi.fn(),
   refetch: vi.fn(),
+  toastError: vi.fn(),
   fetchedAfterMount: true,
   mappings: [] as DirectoryRoleMapping[],
+}));
+vi.mock("sonner", () => ({
+  toast: { error: mocks.toastError, success: vi.fn() },
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({ createRole: { href: () => "/roles/new" } }),
@@ -115,6 +119,7 @@ function renderMappings(params = new URLSearchParams()) {
 beforeEach(() => {
   mocks.save.mockReset();
   mocks.refetch.mockReset();
+  mocks.toastError.mockReset();
   mocks.refetch.mockImplementation(async () => ({
     data: { mappings: mocks.mappings },
   }));
@@ -241,7 +246,9 @@ describe("directory source role sets", () => {
     renderMappings();
     mocks.refetch.mockRejectedValue(new Error("Refresh failed"));
     fireEvent.click(screen.getByRole("button", { name: "Add Support" }));
-    await waitFor(() => expect(mocks.refetch).toHaveBeenCalledOnce());
+    await waitFor(() =>
+      expect(mocks.toastError).toHaveBeenCalledWith("Refresh failed"),
+    );
     expect(mocks.save).not.toHaveBeenCalled();
   });
 });
