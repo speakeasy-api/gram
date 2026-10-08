@@ -38,6 +38,25 @@ func servers(ctx context.Context, tx pgx.Tx, org string, projectID uuid.UUID) ([
 	if err != nil {
 		return nil, fmt.Errorf("list role delivery server candidates: %w", err)
 	}
+	for i := range candidates {
+		s := &candidates[i]
+		if !s.Eligible || (s.BackendKind == "mcp_server" && !s.LegacyToolsetID.Valid) {
+			continue
+		}
+		toolsetID, mcpServerID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+		if s.BackendKind == "mcp_server" {
+			mcpServerID = uuid.NullUUID{UUID: s.ID, Valid: true}
+		} else {
+			toolsetID = uuid.NullUUID{UUID: s.ID, Valid: true}
+		}
+		containsPlatform, err := ContainsPlatformTools(ctx, tx, org, projectID, toolsetID, mcpServerID)
+		if err != nil {
+			return nil, err
+		}
+		// Retain excluded backends as removal candidates, but classify additions
+		// once per inventory load rather than once per receiving plugin.
+		s.Eligible = !containsPlatform
+	}
 	return candidates, nil
 }
 

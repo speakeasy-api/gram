@@ -47,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -624,6 +625,24 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		return nil, err
 	}
 
+	var pluginContentsChanged bool
+	if payload.ToolUrns != nil {
+		removed, err := roledelivery.ContentChanged(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, updatedToolset.ID, nil)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "update automatic plugin distribution").LogError(ctx, logger)
+		}
+		carried, err := toolsetCarriedByPlugin(ctx, dbtx, authCtx, updatedToolset.ID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check toolset plugin membership").LogError(ctx, logger)
+		}
+		pluginContentsChanged = len(removed) > 0 || carried
+		if pluginContentsChanged {
+			if err := s.requestPluginPublication(ctx, dbtx, authCtx); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "request plugin publication").LogError(ctx, logger)
+			}
+		}
+	}
+
 	var pluginCreated bool
 	if !existingToolset.McpEnabled && updatedToolset.McpEnabled {
 		pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updatedToolset.ID, updatedToolset.Name)
@@ -690,7 +709,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	// its entry in the generated package even though no attach ran, and
 	// disabling MCP drops the entry entirely — so the previous state counts as
 	// much as the new one.
-	s.triggerPluginPublish(ctx, authCtx, existingToolset.McpEnabled || updatedToolset.McpEnabled, pluginCreated)
+	s.triggerPluginPublish(ctx, authCtx, existingToolset.McpEnabled || updatedToolset.McpEnabled || pluginContentsChanged, pluginCreated)
 	s.triggerToolsetIndex(ctx, toolsetDetails)
 
 	return toolsetDetails, nil

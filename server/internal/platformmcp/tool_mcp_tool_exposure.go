@@ -14,7 +14,7 @@ const (
 	listProjectToolsToolName    = "list_project_tools"
 	addToolsToMCPToolName       = "add_tools_to_mcp"
 	removeToolsFromMCPToolName  = "remove_tools_from_mcp"
-	toolExposureBlastRadiusNote = "Changing this list republishes every plugin that carries the server, so everyone holding one of those plugins gets the change immediately; the result names those plugins."
+	toolExposureBlastRadiusNote = "Changing this list requests publication for affected plugins. Adding a platform tool removes proven automatic role-plugin memberships, but preserves explicit manual memberships and MCP access. The result names current distributions and plugins removed by this edit; clients receive updates on their normal refresh cycle."
 )
 
 // registerToolExposureTools keeps the live and unavailable manifests identical

@@ -813,8 +813,9 @@ func TestToolExposureUnavailableRegistrationMatchesLiveManifest(t *testing.T) {
 		require.Equal(t, externalOnly, unavailable[name].Meta.Audiences, "%s", name)
 		require.Equal(t, ExternalAuthorizationOrgAdmin, unavailable[name].Meta.Authorization, "%s", name)
 		require.Equal(t, ProjectScopeExplicit, unavailable[name].Meta.ProjectScope, "%s", name)
-		require.Contains(t, unavailable[name].Description, "republishes every plugin that carries the server",
+		require.Contains(t, unavailable[name].Description, "requests publication for affected plugins",
 			"%s must state the blast radius before it is called", name)
+		require.Contains(t, unavailable[name].Description, "removes proven automatic role-plugin memberships", "%s", name)
 		require.Contains(t, unavailable[name].Description, "confirmed: true", "%s", name)
 	}
 
