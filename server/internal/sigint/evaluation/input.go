@@ -22,7 +22,7 @@ type Event struct {
 	// OrganizationID owns the event and the sensor definitions.
 	OrganizationID string
 
-	// ProjectID is the Gram project UUID owning the event.
+	// ProjectID is the Speakeasy project UUID owning the event.
 	ProjectID string
 
 	// Subject identifies the source event and optional source-specific context.
@@ -40,7 +40,7 @@ type Event struct {
 	// Account describes the external AI account used for the source workload.
 	Account *sigintv1.Reading_Account
 
-	// AssistantID identifies a Gram assistant when supplied by the producer.
+	// AssistantID identifies a Speakeasy assistant when supplied by the producer.
 	AssistantID *string
 
 	// Replayed marks historical ingestion, not transport redelivery.

@@ -706,12 +706,12 @@ type Reading_builder struct {
 	// Fresh UUID for a logical event evaluation, shared by its sensor readings.
 	// A retry gets a new attempt ID even when the logical reading ID is unchanged.
 	EvaluationAttemptId *string
-	// Gram organization owning the source event and evaluation.
+	// Speakeasy organization owning the source event and evaluation.
 	OrganizationId *string
-	// Gram project UUID owning the source event and sensor configuration.
+	// Speakeasy project UUID owning the source event and sensor configuration.
 	ProjectId *string
 	Event     *Reading_Event
-	// Gram sensor UUID; stable across display-name, slug and definition edits.
+	// Speakeasy sensor UUID; stable across display-name, slug and definition edits.
 	SensorId *string
 	// Always populated with the sensor slug observed during evaluation.
 	SensorSlug  *string
@@ -730,7 +730,7 @@ type Reading_builder struct {
 	CompilerVersion *string
 	// Identity associated with the source event, preserved as observed at ingestion.
 	Actor *Reading_Actor
-	// Gram user ID to which the source producer explicitly allocates usage. For
+	// Speakeasy user ID to which the source producer explicitly allocates usage. For
 	// conversations this matches agent-session storage metering. May differ
 	// from actor.user_id or exist without an actor (e.g. generated compaction
 	// messages allocated to the chat owner). Interpret with organization_id.
@@ -741,7 +741,7 @@ type Reading_builder struct {
 	Source *string
 	// Source-session AI account context, preserved from the ingestion snapshot.
 	Account *Reading_Account
-	// Gram assistant UUID associated with the workload, supplied by the producer.
+	// Speakeasy assistant UUID associated with the workload, supplied by the producer.
 	// Identifies an assistant resource, not a human user or provider account.
 	AssistantId *string
 	// Historical ingestion marker, not Pub/Sub redelivery.
@@ -983,15 +983,15 @@ func (x *Reading_Actor) ClearUserEmail() {
 type Reading_Actor_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	// Gram user ID attributed to the source event, not necessarily its author:
+	// Speakeasy user ID attributed to the source event, not necessarily its author:
 	// assistant responses can carry the requesting user's ID. Does not allocate
 	// billing usage.
 	UserId *string
-	// Opaque user ID reported by the source system, not a Gram user/account ID.
+	// Opaque user ID reported by the source system, not a Speakeasy user/account ID.
 	// Interpret within organization_id and source. Can exist without user_id
-	// when ingestion has not resolved the external identity to a Gram user.
+	// when ingestion has not resolved the external identity to a Speakeasy user.
 	ExternalUserId *string
-	// Actor email explicitly observed by ingestion. Not a current Gram
+	// Actor email explicitly observed by ingestion. Not a current Speakeasy
 	// directory lookup, a billing-user email, or an inferred provider-account email.
 	UserEmail *string
 }
@@ -1016,7 +1016,7 @@ func (b0 Reading_Actor_builder) Build() *Reading_Actor {
 }
 
 // The external AI account/credentials used for the source workload, as resolved
-// by ingestion. Not the Gram user allocated usage or the organization's Gram
+// by ingestion. Not the Speakeasy user allocated usage or the organization's Speakeasy
 // billing plan. Classification may be known without a persisted account ID.
 type Reading_Account struct {
 	state                    protoimpl.MessageState `protogen:"opaque.v1"`
@@ -1138,10 +1138,10 @@ func (x *Reading_Account) ClearBillingMode() {
 type Reading_Account_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	// UUID of Gram's user_accounts record representing the external AI account.
-	// Not a Gram user ID, provider-issued account ID, or billing-user selection.
+	// UUID of Speakeasy's user_accounts record representing the external AI account.
+	// Not a Speakeasy user ID, provider-issued account ID, or billing-user selection.
 	UserAccountId *string
-	// Gram's ingestion-time classification: "team" for company-associated
+	// Speakeasy's ingestion-time classification: "team" for company-associated
 	// accounts/credentials, "personal" for personal accounts. May be inferred
 	// from provider organization and identity evidence or assigned by an import
 	// adapter; not necessarily a provider-reported plan or verified ownership.
@@ -1150,7 +1150,7 @@ type Reading_Account_builder struct {
 	// How the external AI account is billed: "metered" for usage-based billing,
 	// "flat_rate" for subscription/seat billing; "unknown" may be supplied when
 	// undetermined. Resolved from account/provider-organization configuration;
-	// absence means no mode was resolved or supplied. Does not determine Gram
+	// absence means no mode was resolved or supplied. Does not determine Speakeasy
 	// pricing or select a billing user.
 	BillingMode *string
 }
@@ -1545,7 +1545,7 @@ func (x *Reading_ConversationMessage) ClearRole() {
 type Reading_ConversationMessage_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	// Gram conversation UUID, not the source system's session identifier.
+	// Speakeasy conversation UUID, not the source system's session identifier.
 	ConversationId *string
 	// Independent of human attribution; only user/assistant messages are evaluated.
 	Role *Reading_ConversationMessage_Role
@@ -1691,7 +1691,7 @@ type Reading_ToolCall_builder struct {
 	ToolName *string
 	// Protocol call ID, scoped to its originating session/connection.
 	ToolCallId *string
-	// Gram MCP server UUID when the execution belongs to an MCP server.
+	// Speakeasy MCP server UUID when the execution belongs to an MCP server.
 	McpServerId *string
 }
 
@@ -1833,7 +1833,7 @@ func (x *Reading_Probability) ClearSignalSlug() {
 type Reading_Probability_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	// Gram custom-signal UUID from the configuration used for this evaluation.
+	// Speakeasy custom-signal UUID from the configuration used for this evaluation.
 	SignalId *string
 	// Classifier probability in [0, 1], not a usage quantity or billing weight.
 	Probability *float64
@@ -2054,7 +2054,7 @@ func (x *Reading_Choice) ClearSelectedSignalSlug() {
 type Reading_Choice_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	// Gram custom-signal UUID selected by the classifier.
+	// Speakeasy custom-signal UUID selected by the classifier.
 	SelectedSignalId *string
 	// Probabilities across the configured signal options, including unselected ones.
 	Distribution []*Reading_Probability

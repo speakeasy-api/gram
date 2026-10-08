@@ -129,7 +129,7 @@ no content bodies or publication-specific spilled assets.
 ## Delivery and observability
 
 Readings preserve ingestion identity separately from billing attribution:
-`actor` contains the persisted message's Gram user ID and external user ID plus
+`actor` contains the persisted message's Speakeasy user ID and external user ID plus
 the ingestion event's observed email;
 `billing_user_id` is the producer's explicit usage allocation, including for
 assistant-generated messages with no actor. Neither identity is inferred from the
