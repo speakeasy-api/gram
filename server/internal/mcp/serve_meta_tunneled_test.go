@@ -42,6 +42,26 @@ func seedTunneledMetaMember(
 ) (uuid.UUID, uuid.UUID) {
 	t.Helper()
 
+	tunnelID, issuerID, _ := seedTunneledMetaMemberWithVisibility(t, ctx, ti, projectID, metaID, name, slug, sortOrder, resourceIdentifier, mcpservers.VisibilityPublic)
+	return tunnelID, issuerID
+}
+
+// seedTunneledMetaMemberWithVisibility is seedTunneledMetaMember with the
+// member's visibility chosen, and also returns the member's mcp_servers id —
+// the resource its per-tool grants name.
+func seedTunneledMetaMemberWithVisibility(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	projectID uuid.UUID,
+	metaID uuid.UUID,
+	name, slug string,
+	sortOrder int32,
+	resourceIdentifier string,
+	visibility string,
+) (uuid.UUID, uuid.UUID, uuid.UUID) {
+	t.Helper()
+
 	tunnelName := "meta-tunnel-" + uuid.NewString()[:8]
 	tunneledID, err := uuid.NewV7()
 	require.NoError(t, err)
@@ -68,7 +88,7 @@ func seedTunneledMetaMember(
 		RemoteMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		TunneledMcpServerID: uuid.NullUUID{UUID: tunneledServer.ID, Valid: true},
 		ToolsetID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:          mcpservers.VisibilityPublic,
+		Visibility:          visibility,
 	})
 	require.NoError(t, err)
 
@@ -79,7 +99,7 @@ func seedTunneledMetaMember(
 		SortOrder:       sortOrder,
 	})
 	require.NoError(t, err)
-	return tunneledServer.ID, memberIssuerID
+	return tunneledServer.ID, memberIssuerID, server.ID
 }
 
 // A tunneled member records no RFC 8707 resource, so its credential is the

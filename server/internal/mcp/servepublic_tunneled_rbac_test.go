@@ -40,7 +40,8 @@ import (
 const tunnelRBACTools = `[
 	{"name":"list_devices","inputSchema":{"type":"object"}},
 	{"name":"wipe_device","inputSchema":{"type":"object"}},
-	{"name":"ping","inputSchema":{"type":"object"}}
+	{"name":"ping","inputSchema":{"type":"object"}},
+	{"name":"device_status","inputSchema":{"type":"object"}}
 ]`
 
 // privateTunnelRBACFixture is one private MCP server fronting a tunnel, with
@@ -243,9 +244,12 @@ func requireToolCallDenied(t *testing.T, ti *testInstance, fixture privateTunnel
 	require.Equal(t, before, forwardedToolCalls(gateway, name), "a refused %s call must never reach the tunnel", name)
 }
 
+// ping has no stored metadata; device_status is stored with every hint false,
+// so both are unclassified.
 const tunnelRBACMetadata = `[
 	{"tool_name":"list_devices","read_only_hint":true},
-	{"tool_name":"wipe_device","read_only_hint":false,"destructive_hint":true}
+	{"tool_name":"wipe_device","read_only_hint":false,"destructive_hint":true},
+	{"tool_name":"device_status","read_only_hint":false,"destructive_hint":false,"idempotent_hint":false,"open_world_hint":false}
 ]`
 
 func TestServePublic_PrivateTunneled_ToolGrantNarrowsListAndCall(t *testing.T) {
@@ -268,8 +272,8 @@ func TestServePublic_PrivateTunneled_ToolGrantNarrowsListAndCall(t *testing.T) {
 }
 
 // A disposition grant admits only tools whose stored metadata carries that
-// disposition. A tool with no stored metadata has no disposition, so no
-// disposition grant reaches it.
+// disposition. A tool with no stored metadata, or stored with no hint set, has
+// no disposition, so no disposition grant reaches it.
 func TestServePublic_PrivateTunneled_DispositionGrantFollowsStoredMetadata(t *testing.T) {
 	t.Parallel()
 
@@ -287,6 +291,7 @@ func TestServePublic_PrivateTunneled_DispositionGrantFollowsStoredMetadata(t *te
 	requireToolCallAllowed(t, ti, fixture, sessionID, gateway, "list_devices")
 	requireToolCallDenied(t, ti, fixture, sessionID, gateway, "wipe_device")
 	requireToolCallDenied(t, ti, fixture, sessionID, gateway, "ping")
+	requireToolCallDenied(t, ti, fixture, sessionID, gateway, "device_status")
 }
 
 // Two MCP servers fronting the same tunnel hold different metadata and
@@ -322,4 +327,51 @@ func TestServePublic_PrivateTunneled_ServersSharingATunnelAuthorizeIndependently
 	// grant decide here.
 	requireToolCallDenied(t, ti, inverted, invertedSession, gateway, "wipe_device")
 	requireToolCallDenied(t, ti, inverted, invertedSession, gateway, "list_devices")
+}
+
+// A private tunneled member of a meta gateway is authorized by its own
+// mcp_servers id and stored metadata: execute_tool runs a tool its grant
+// reaches and refuses one it does not, without forwarding the refused call.
+func TestServePublic_MetaEndpoint_ExecuteTool_PrivateTunneledMemberEnforcesToolGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	sharedIssuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-tunnel-rbac-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, sharedIssuerID)
+
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-secret-session", toolsJSON: tunnelRBACTools}
+	tunnelID, _, memberID := seedTunneledMetaMemberWithVisibility(t, ctx, ti, projectID, meta.ID, "Tunneled member", "member-tunnel", 0, "", "private")
+	gatewayServer := httptest.NewServer(gateway)
+	t.Cleanup(gatewayServer.Close)
+	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnelID.String(), gatewayServer.URL, time.Hour))
+
+	_, err := mcpserversrepo.New(ti.conn).AddMCPServerToolMetadata(ctx, mcpserversrepo.AddMCPServerToolMetadataParams{
+		ProjectID:   projectID,
+		McpServerID: memberID,
+		Tools:       []byte(tunnelRBACMetadata),
+	})
+	require.NoError(t, err)
+
+	// Only the member's read-only tools, for an organization member with no
+	// other grant.
+	seedMockUserMCPGrant(t, ctx, ti.conn, orgID, memberID, map[string]string{authz.SelectorKeyDisposition: authz.DispositionReadOnly})
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, urn.NewUserSubject(mockidp.MockUserID))
+
+	text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member-tunnel--list_devices"))
+	require.False(t, isError, "a granted member tool must run: %s", text)
+	require.Contains(t, text, "pong through the tunnel")
+	require.Equal(t, 1, forwardedToolCalls(gateway, "list_devices"))
+
+	for _, tool := range []string{"wipe_device", "ping", "device_status"} {
+		text, isError = metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member-tunnel--"+tool))
+		require.True(t, isError, "%s must be refused: %s", tool, text)
+		require.Zero(t, forwardedToolCalls(gateway, tool), "a refused %s call must never reach the tunnel", tool)
+	}
 }

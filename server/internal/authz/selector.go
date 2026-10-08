@@ -99,8 +99,8 @@ const (
 	DispositionOpenWorld   = "open_world"
 )
 
-// DispositionUnclassified is the disposition a tool check carries when the
-// tool has no annotations. It is not in validDispositions, so ValidateSelector
+// DispositionUnclassified is the disposition a tool check carries when no
+// annotation hint of the tool is set to true. It is not in validDispositions, so ValidateSelector
 // rejects it in any grant and no stored grant can match it by disposition.
 const DispositionUnclassified = "unclassified"
 

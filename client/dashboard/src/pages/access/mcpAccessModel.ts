@@ -442,3 +442,13 @@ export function indexServers(
 export function serverHandle(server: Server): string {
   return server.mcpSlug ?? server.slug;
 }
+
+/**
+ * What an annotation rule covers. A tool with no annotations is outside every
+ * annotation rule, so it is named explicitly whether the rule grants or
+ * excludes.
+ */
+export function annotationRuleDescription(isDeny: boolean): string {
+  const byName = isDeny ? "exclude them by name" : "grant them by name";
+  return `Tools can be annotated with labels that provide more context about the properties of the tool, such as if it's a destructive operation. OpenAPI sources are tagged automatically based on HTTP method. You can edit annotations on the MCP tools tab. Tools with no annotations aren't covered by an annotation rule; ${byName}.`;
+}
