@@ -114,8 +114,10 @@ type ComplianceSyncProgress struct {
 	// of which became a chat import.
 	ChatsListed int `json:"chats_listed"`
 
-	// ChatsUnavailable counts chats skipped because Anthropic no longer
-	// serves their messages (the chats endpoint answered 404).
+	// ChatsUnavailable counts chat visits skipped because Anthropic no
+	// longer serves the chat's messages (the chats endpoint answered 404).
+	// Like ChatsImported it counts visits, so a chat both feeds yield in one
+	// run is counted twice.
 	ChatsUnavailable int `json:"chats_unavailable"`
 
 	// ChatsImported counts chat rows upserted across both feeds; a chat seen
