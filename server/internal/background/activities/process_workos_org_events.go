@@ -269,6 +269,9 @@ func (p *ProcessWorkOSOrganizationEvents) handleEvent(ctx context.Context, logge
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := workosrepo.New(dbtx).LockOrganizationSync(ctx, workosOrgID); err != nil {
+		return "", fmt.Errorf("lock organization event sync: %w", err)
+	}
 	effects, err := handleOrganizationEvent(ctx, logger, dbtx, workosOrgID, event, p.newOrganizationDefaultHost)
 	if err != nil {
 		return "", err

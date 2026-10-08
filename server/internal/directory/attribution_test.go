@@ -13,6 +13,7 @@ import (
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 )
 
 type fakeDirectoryInventory struct {
@@ -22,6 +23,7 @@ type fakeDirectoryInventory struct {
 	directoriesErr error
 	usersErr       error
 	groupsErr      error
+	onGroups       func()
 }
 
 func (f fakeDirectoryInventory) ListDirectories(context.Context, string) ([]workos.Directory, error) {
@@ -33,6 +35,9 @@ func (f fakeDirectoryInventory) ListDirectoryUsers(_ context.Context, id string)
 }
 
 func (f fakeDirectoryInventory) ListDirectoryGroups(_ context.Context, id string) ([]workos.DirectoryGroup, error) {
+	if f.onGroups != nil {
+		f.onGroups()
+	}
 	return f.groups[id], f.groupsErr
 }
 
@@ -45,6 +50,49 @@ func validInventory() fakeDirectoryInventory {
 		groups: map[string][]workos.DirectoryGroup{
 			"directory_1": {{ID: "directory_group_match", DirectoryID: "directory_1", OrganizationID: "workos_org"}},
 		},
+	}
+}
+
+func TestAttributeDirectorySourcesRejectsChangedEventCursor(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		before []string
+		during []string
+	}{
+		{name: "cursor created", during: []string{"event_010"}},
+		{name: "cursor advanced", before: []string{"event_001"}, during: []string{"event_010"}},
+		{name: "duplicate replay", before: []string{"event_010"}, during: []string{"event_010"}},
+		{name: "cursor returned to baseline", before: []string{"event_001"}, during: []string{"event_010", "event_001"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, conn := newTestService(t)
+			ctx := t.Context()
+			const organizationID = "org_attribution_cursor"
+			seedOrganization(t, conn, organizationID)
+			at := time.Now().UTC()
+			seedDirectoryUser(t, conn, organizationID, "", "directory_user_match", "person@example.test", []byte(`{}`), at)
+			seedDirectoryGroup(t, conn, organizationID, "directory_group_match", "Group", at)
+			advance := func(ids []string) {
+				for _, id := range ids {
+					_, err := workosrepo.New(conn).SetOrganizationSyncLastEventID(ctx, workosrepo.SetOrganizationSyncLastEventIDParams{WorkosOrganizationID: "workos_org", LastEventID: id})
+					require.NoError(t, err)
+				}
+			}
+			advance(tc.before)
+			inventory := validInventory()
+			inventory.onGroups = func() { advance(tc.during) }
+			_, err := directory.AttributeDirectorySources(ctx, conn, inventory, organizationID, "workos_org", false)
+			require.ErrorContains(t, err, "organization events changed during inventory retrieval")
+			fixtures := testrepo.New(conn)
+			user, err := fixtures.GetDirectoryUserLifecycleFixture(ctx, testrepo.GetDirectoryUserLifecycleFixtureParams{OrganizationID: organizationID, WorkosDirectoryUserID: "directory_user_match"})
+			require.NoError(t, err)
+			require.False(t, user.DirectoryID.Valid)
+			group, err := fixtures.GetDirectoryGroupLifecycleFixture(ctx, testrepo.GetDirectoryGroupLifecycleFixtureParams{OrganizationID: organizationID, WorkosDirectoryGroupID: "directory_group_match"})
+			require.NoError(t, err)
+			require.False(t, group.DirectoryID.Valid)
+		})
 	}
 }
 
@@ -95,7 +143,7 @@ func TestAttributeDirectorySourcesPreservesKnownAttributionAndTombstones(t *test
 		WorkosDeletedAt: conv.ToPGTimestamptz(now.Add(time.Second)), WorkosLastEventID: conv.ToPGText("delete_event"), WorkosDirectoryUserID: "directory_user_match",
 	})
 	require.NoError(t, err)
-	_, err = directoryrepo.New(conn).AttributeDirectoryGroup(ctx, directoryrepo.AttributeDirectoryGroupParams{OrganizationID: organizationID, WorkosDirectoryGroupID: "directory_group_match", DirectoryID: "known_directory"})
+	_, err = directoryrepo.New(conn).AttributeDirectoryGroups(ctx, directoryrepo.AttributeDirectoryGroupsParams{OrganizationID: organizationID, WorkosDirectoryGroupIds: []string{"directory_group_match"}, DirectoryID: "known_directory"})
 	require.NoError(t, err)
 	report, err := directory.AttributeDirectorySources(ctx, conn, validInventory(), organizationID, "workos_org", false)
 	require.NoError(t, err)

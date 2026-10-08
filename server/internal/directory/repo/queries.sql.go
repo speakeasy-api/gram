@@ -12,44 +12,44 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const attributeDirectoryGroup = `-- name: AttributeDirectoryGroup :execrows
+const attributeDirectoryGroups = `-- name: AttributeDirectoryGroups :execrows
 UPDATE directory_groups
 SET directory_id = $1::text, updated_at = clock_timestamp()
 WHERE organization_id = $2
-  AND workos_directory_group_id = $3
+  AND workos_directory_group_id = ANY($3::text[])
   AND directory_id IS NULL
 `
 
-type AttributeDirectoryGroupParams struct {
-	DirectoryID            string
-	OrganizationID         string
-	WorkosDirectoryGroupID string
+type AttributeDirectoryGroupsParams struct {
+	DirectoryID             string
+	OrganizationID          string
+	WorkosDirectoryGroupIds []string
 }
 
-func (q *Queries) AttributeDirectoryGroup(ctx context.Context, arg AttributeDirectoryGroupParams) (int64, error) {
-	result, err := q.db.Exec(ctx, attributeDirectoryGroup, arg.DirectoryID, arg.OrganizationID, arg.WorkosDirectoryGroupID)
+func (q *Queries) AttributeDirectoryGroups(ctx context.Context, arg AttributeDirectoryGroupsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, attributeDirectoryGroups, arg.DirectoryID, arg.OrganizationID, arg.WorkosDirectoryGroupIds)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
 }
 
-const attributeDirectoryUser = `-- name: AttributeDirectoryUser :execrows
+const attributeDirectoryUsers = `-- name: AttributeDirectoryUsers :execrows
 UPDATE directory_users
 SET directory_id = $1::text, updated_at = clock_timestamp()
 WHERE organization_id = $2
-  AND workos_directory_user_id = $3
+  AND workos_directory_user_id = ANY($3::text[])
   AND directory_id IS NULL
 `
 
-type AttributeDirectoryUserParams struct {
-	DirectoryID           string
-	OrganizationID        string
-	WorkosDirectoryUserID string
+type AttributeDirectoryUsersParams struct {
+	DirectoryID            string
+	OrganizationID         string
+	WorkosDirectoryUserIds []string
 }
 
-func (q *Queries) AttributeDirectoryUser(ctx context.Context, arg AttributeDirectoryUserParams) (int64, error) {
-	result, err := q.db.Exec(ctx, attributeDirectoryUser, arg.DirectoryID, arg.OrganizationID, arg.WorkosDirectoryUserID)
+func (q *Queries) AttributeDirectoryUsers(ctx context.Context, arg AttributeDirectoryUsersParams) (int64, error) {
+	result, err := q.db.Exec(ctx, attributeDirectoryUsers, arg.DirectoryID, arg.OrganizationID, arg.WorkosDirectoryUserIds)
 	if err != nil {
 		return 0, err
 	}
@@ -1231,16 +1231,20 @@ VALUES (
   $7
 )
 ON CONFLICT (workos_directory_group_id) DO UPDATE SET
-  directory_id = COALESCE(EXCLUDED.directory_id, directory_groups.directory_id),
-  name = EXCLUDED.name,
-  attributes = EXCLUDED.attributes,
-  workos_updated_at = EXCLUDED.workos_updated_at,
+  directory_id = CASE WHEN directory_groups.workos_updated_at < EXCLUDED.workos_updated_at
+    THEN COALESCE(EXCLUDED.directory_id, directory_groups.directory_id)
+    ELSE COALESCE(directory_groups.directory_id, EXCLUDED.directory_id) END,
+  name = CASE WHEN directory_groups.workos_updated_at < EXCLUDED.workos_updated_at
+    THEN EXCLUDED.name ELSE directory_groups.name END,
+  attributes = CASE WHEN directory_groups.workos_updated_at < EXCLUDED.workos_updated_at
+    THEN EXCLUDED.attributes ELSE directory_groups.attributes END,
+  workos_updated_at = GREATEST(directory_groups.workos_updated_at, EXCLUDED.workos_updated_at),
   updated_at = clock_timestamp()
 WHERE directory_groups.organization_id = EXCLUDED.organization_id
   AND directory_groups.deleted IS FALSE
   AND directory_groups.workos_deleted IS FALSE
   AND (directory_groups.workos_updated_at < EXCLUDED.workos_updated_at
-    OR (directory_groups.workos_updated_at = EXCLUDED.workos_updated_at AND directory_groups.directory_id IS NULL))
+    OR (directory_groups.directory_id IS NULL AND EXCLUDED.directory_id IS NOT NULL))
 `
 
 type UpsertListedDirectoryGroupParams struct {

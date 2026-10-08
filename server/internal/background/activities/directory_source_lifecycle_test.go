@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 )
 
 func sourceLifecycleEvent(t *testing.T, kind, eventID, orgID, directoryID, sourceID, name string, at time.Time) events.Event {
@@ -252,6 +253,88 @@ func TestDirectorySourceLifecycleConflictingTenantDoesNotBlockEvents(t *testing.
 	require.Equal(t, "event_002", user.WorkosLastEventID.String)
 	_, _, _, deleted := getDirectoryGroupRow(t, ctx, conn, "valid_group_id")
 	require.False(t, deleted)
+}
+
+func TestDirectoryDeletionWaitsForAttributionTransaction(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn := newOrgEventsTestConn(t, "directory_attribution_lock")
+	const orgID, workosOrgID = "gram_attribution_lock", "org_attribution_lock"
+	seedWorkOSOrganization(t, ctx, conn, orgID, workosOrgID)
+	at := directorySyncTime()
+	stub := newWorkOSClientWithEvents([][]events.Event{{
+		sourceLifecycleEvent(t, "dsync.group.created", "event_001", workosOrgID, "", "attribution_group", "Group", at),
+		sourceLifecycleEvent(t, "dsync.user.created", "event_002", workosOrgID, "", "attribution_user", "", at),
+	}})
+	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache, nil)
+	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	tx := testenv.BeginTx(t, ctx, conn)
+	require.NoError(t, workosrepo.New(tx).LockOrganizationSync(ctx, workosOrgID))
+	queries := directoryrepo.New(tx)
+	_, err = queries.AttributeDirectoryUsers(ctx, directoryrepo.AttributeDirectoryUsersParams{OrganizationID: orgID, DirectoryID: "directory_1", WorkosDirectoryUserIds: []string{"attribution_user"}})
+	require.NoError(t, err)
+	_, err = queries.AttributeDirectoryGroups(ctx, directoryrepo.AttributeDirectoryGroupsParams{OrganizationID: orgID, DirectoryID: "directory_1", WorkosDirectoryGroupIds: []string{"attribution_group"}})
+	require.NoError(t, err)
+	deletion := sourceLifecycleEvent(t, "dsync.deleted", "event_010", workosOrgID, "", "directory_1", "", at.Add(time.Hour))
+	stub.SetEventPages([][]events.Event{{deletion}})
+	blockedCtx, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
+	defer cancel()
+	_, err = activity.Do(blockedCtx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.Error(t, err)
+	require.ErrorIs(t, blockedCtx.Err(), context.DeadlineExceeded)
+	_, _, _, deleted := getDirectoryGroupRow(t, ctx, conn, "attribution_group")
+	require.False(t, deleted, "worker must not mutate sources before acquiring the attribution lock")
+	require.NoError(t, tx.Commit(ctx))
+	stub.SetEventPages([][]events.Event{{deletion}})
+	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	_, _, _, deleted = getDirectoryGroupRow(t, ctx, conn, "attribution_group")
+	require.True(t, deleted)
+	user, err := testrepo.New(conn).GetDirectoryUserLifecycleFixture(ctx, testrepo.GetDirectoryUserLifecycleFixtureParams{OrganizationID: orgID, WorkosDirectoryUserID: "attribution_user"})
+	require.NoError(t, err)
+	require.True(t, user.WorkosDeleted)
+}
+
+func TestOlderListedGroupFillsAttributionWithoutReplacingEventState(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn := newOrgEventsTestConn(t, "directory_listing_attribution")
+	const orgID, workosOrgID = "gram_listing_attribution", "org_listing_attribution"
+	seedWorkOSOrganization(t, ctx, conn, orgID, workosOrgID)
+	at := directorySyncTime()
+	stub := newWorkOSClientWithEvents([][]events.Event{{
+		sourceLifecycleEvent(t, "dsync.group.created", "event_001", workosOrgID, "", "listed_group", "Current", at.Add(time.Hour)),
+	}})
+	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache, nil)
+	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	queries := directoryrepo.New(conn)
+	listed := directoryrepo.UpsertListedDirectoryGroupParams{
+		OrganizationID: orgID, WorkosDirectoryGroupID: "listed_group", DirectoryID: conv.ToPGText("directory_1"),
+		Name: "Old", Attributes: []byte(`{"old":true}`), WorkosCreatedAt: conv.ToPGTimestamptz(at), WorkosUpdatedAt: conv.ToPGTimestamptz(at),
+	}
+	count, err := queries.UpsertListedDirectoryGroup(ctx, listed)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), count)
+	fixtures := testrepo.New(conn)
+	group, err := fixtures.GetDirectoryGroupLifecycleFixture(ctx, testrepo.GetDirectoryGroupLifecycleFixtureParams{OrganizationID: orgID, WorkosDirectoryGroupID: "listed_group"})
+	require.NoError(t, err)
+	require.Equal(t, "directory_1", group.DirectoryID.String)
+	_, name, attributes, deleted := getDirectoryGroupRow(t, ctx, conn, "listed_group")
+	require.Equal(t, "Current", name)
+	require.JSONEq(t, `{}`, string(attributes))
+	require.Equal(t, "event_001", group.WorkosLastEventID.String)
+	require.False(t, deleted)
+	listed.DirectoryID = conv.ToPGText("stale_directory")
+	count, err = queries.UpsertListedDirectoryGroup(ctx, listed)
+	require.NoError(t, err)
+	require.Zero(t, count, "older snapshots cannot replace known attribution")
+	stub.SetEventPages([][]events.Event{{sourceLifecycleEvent(t, "dsync.deleted", "event_010", workosOrgID, "", "directory_1", "", at.Add(2*time.Hour))}})
+	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	_, _, _, deleted = getDirectoryGroupRow(t, ctx, conn, "listed_group")
+	require.True(t, deleted, "the filled attribution must participate in directory deletion")
 }
 
 func TestDirectoryDeletionLargeFixture(t *testing.T) {

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -42,6 +44,12 @@ func run(ctx context.Context, args []string) error {
 		return fmt.Errorf("WORKOS_API_KEY is required")
 	}
 
+	endpoint := os.Getenv("WORKOS_API_URL")
+	policy, err := workOSPolicy(endpoint, os.Getenv("GRAM_ENVIRONMENT"))
+	if err != nil {
+		return err
+	}
+
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		return fmt.Errorf("connect to Postgres: %w", err)
@@ -56,7 +64,7 @@ func run(ctx context.Context, args []string) error {
 		return fmt.Errorf("organization %q has no WorkOS organization ID", *organizationID)
 	}
 
-	client := workos.NewClient(guardian.NewDefaultPolicy(noop.NewTracerProvider()), apiKey, workos.ClientOpts{Endpoint: os.Getenv("WORKOS_API_URL"), ClientID: ""})
+	client := workos.NewClient(policy, apiKey, workos.ClientOpts{Endpoint: endpoint, ClientID: ""})
 	report, err := directory.AttributeDirectorySources(ctx, pool, client, *organizationID, org.WorkosID.String, !*apply)
 	if err != nil {
 		return fmt.Errorf("attribute directory sources: %w", err)
@@ -64,7 +72,34 @@ func run(ctx context.Context, args []string) error {
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(report); err != nil {
-		return fmt.Errorf("encode attribution report: %w", err)
+		if !report.DryRun {
+			return fmt.Errorf("encode attribution report (attribution writes already committed): %w", err)
+		}
+		return fmt.Errorf("encode attribution report (dry-run rolled back): %w", err)
 	}
 	return nil
+}
+
+func workOSPolicy(endpoint, environment string) (*guardian.Policy, error) {
+	tracer := noop.NewTracerProvider()
+	if endpoint == "" {
+		return guardian.NewDefaultPolicy(tracer), nil
+	}
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return nil, fmt.Errorf("WORKOS_API_URL must be an absolute URL without credentials, query or fragment")
+	}
+	ip := net.ParseIP(u.Hostname())
+	loopback := u.Hostname() == "localhost" || (ip != nil && ip.IsLoopback())
+	if loopback && environment == "local" && (u.Scheme == "http" || u.Scheme == "https") {
+		policy, err := guardian.NewUnsafePolicy(tracer, []string{})
+		if err != nil {
+			return nil, fmt.Errorf("create local WorkOS policy: %w", err)
+		}
+		return policy, nil
+	}
+	if u.Scheme != "https" {
+		return nil, fmt.Errorf("WORKOS_API_URL requires HTTPS; HTTP is only allowed for a loopback stub with GRAM_ENVIRONMENT=local")
+	}
+	return guardian.NewDefaultPolicy(tracer), nil
 }

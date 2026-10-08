@@ -465,16 +465,20 @@ VALUES (
   @workos_updated_at
 )
 ON CONFLICT (workos_directory_group_id) DO UPDATE SET
-  directory_id = COALESCE(EXCLUDED.directory_id, directory_groups.directory_id),
-  name = EXCLUDED.name,
-  attributes = EXCLUDED.attributes,
-  workos_updated_at = EXCLUDED.workos_updated_at,
+  directory_id = CASE WHEN directory_groups.workos_updated_at < EXCLUDED.workos_updated_at
+    THEN COALESCE(EXCLUDED.directory_id, directory_groups.directory_id)
+    ELSE COALESCE(directory_groups.directory_id, EXCLUDED.directory_id) END,
+  name = CASE WHEN directory_groups.workos_updated_at < EXCLUDED.workos_updated_at
+    THEN EXCLUDED.name ELSE directory_groups.name END,
+  attributes = CASE WHEN directory_groups.workos_updated_at < EXCLUDED.workos_updated_at
+    THEN EXCLUDED.attributes ELSE directory_groups.attributes END,
+  workos_updated_at = GREATEST(directory_groups.workos_updated_at, EXCLUDED.workos_updated_at),
   updated_at = clock_timestamp()
 WHERE directory_groups.organization_id = EXCLUDED.organization_id
   AND directory_groups.deleted IS FALSE
   AND directory_groups.workos_deleted IS FALSE
   AND (directory_groups.workos_updated_at < EXCLUDED.workos_updated_at
-    OR (directory_groups.workos_updated_at = EXCLUDED.workos_updated_at AND directory_groups.directory_id IS NULL));
+    OR (directory_groups.directory_id IS NULL AND EXCLUDED.directory_id IS NOT NULL));
 
 -- name: DeleteDirectoryUsersByDirectoryID :execrows
 UPDATE directory_users
@@ -502,18 +506,18 @@ WHERE organization_id = @organization_id
     THEN workos_last_event_id < @workos_last_event_id
     ELSE workos_updated_at IS NULL OR workos_updated_at <= @workos_deleted_at END;
 
--- name: AttributeDirectoryUser :execrows
+-- name: AttributeDirectoryUsers :execrows
 UPDATE directory_users
 SET directory_id = @directory_id::text, updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
-  AND workos_directory_user_id = @workos_directory_user_id
+  AND workos_directory_user_id = ANY(@workos_directory_user_ids::text[])
   AND directory_id IS NULL;
 
--- name: AttributeDirectoryGroup :execrows
+-- name: AttributeDirectoryGroups :execrows
 UPDATE directory_groups
 SET directory_id = @directory_id::text, updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
-  AND workos_directory_group_id = @workos_directory_group_id
+  AND workos_directory_group_id = ANY(@workos_directory_group_ids::text[])
   AND directory_id IS NULL;
 
 -- name: ListUnattributedDirectorySources :many
