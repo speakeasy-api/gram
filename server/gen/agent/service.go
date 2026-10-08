@@ -377,10 +377,11 @@ type GetPluginsResult struct {
 	// Plugin marketplaces the agent should register with the tools it manages.
 	// Sorted by name.
 	Marketplaces []*AgentMarketplace
-	// Plugins assigned to the caller. Each entry's install_mode says whether the
-	// agent installs it (`required`, `default`) or only offers it for the user to
-	// turn on (`available`). Each entry references one of the marketplaces above
-	// by name.
+	// Plugins for the caller: the observability plugin of each listed marketplace,
+	// when enabled, and the plugins assigned to the caller. Each entry's
+	// install_mode says whether the agent installs it (`required`, `default`) or
+	// only offers it for the user to turn on (`available`). Each entry references
+	// one of the marketplaces above by name.
 	Plugins []*AgentPlugin
 	// Organization-wide remote configuration. Absent until an administrator saves
 	// a configuration, allowing an agent with no cached remote layer to keep using

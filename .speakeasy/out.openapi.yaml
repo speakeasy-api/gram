@@ -86748,7 +86748,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AgentPlugin'
-          description: Plugins assigned to the caller. Each entry's install_mode says whether the agent installs it (`required`, `default`) or only offers it for the user to turn on (`available`). Each entry references one of the marketplaces above by name.
+          description: 'Plugins for the caller: the observability plugin of each listed marketplace, when enabled, and the plugins assigned to the caller. Each entry''s install_mode says whether the agent installs it (`required`, `default`) or only offers it for the user to turn on (`available`). Each entry references one of the marketplaces above by name.'
         principal:
           $ref: '#/components/schemas/AgentPollingPrincipal'
       required:
