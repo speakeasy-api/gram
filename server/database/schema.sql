@@ -7105,6 +7105,10 @@ CREATE TABLE IF NOT EXISTS plugin_assignments (
   plugin_id uuid NOT NULL,
   organization_id TEXT NOT NULL,
   principal_urn TEXT NOT NULL,
+  -- How the device agent installs the plugin for this audience: 'required'
+  -- (on, can't be turned off), 'default' (on, user can turn it off) or
+  -- 'available' (off, user can turn it on). Validated in application code.
+  install_mode TEXT NOT NULL DEFAULT 'default',
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
