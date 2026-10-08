@@ -2,4 +2,4 @@
 "dashboard": patch
 ---
 
-Temporarily hide the always-on docked "Ask anything" Project Assistant composer. The sidebar "Project Assistant" button is now always shown and summons the expanded dock, with its suggestions, over the current page. Cmd+/ (Ctrl+/) does the same.
+Replace the always-on docked "Ask anything" Project Assistant composer with a compact floating "Project Assistant" launcher at the bottom of each page. Clicking it, or pressing Cmd+/ (Ctrl+/), opens the expanded dock with its suggestions. The full-page chat composer now stays at the bottom of the viewport.

@@ -48,6 +48,7 @@ import {
   HistoryIcon,
   Loader2,
   Maximize2,
+  Sparkles,
   SquarePen,
   Terminal,
   X,
@@ -64,6 +65,11 @@ import {
 import type { InsightsConfigOptions } from "./insights-context";
 import { InsightsContext, useInsightsState } from "./insights-context";
 import { InsightsShortcutKeys } from "./insights-dock-shortcut-hint";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/Tooltip";
 import { useAskAiListener } from "./command-palette/askAiBridge";
 
 // Types-only re-export (erased at compile time, won't break Fast Refresh)
@@ -391,6 +397,38 @@ interface InsightsDockProps {
   /** Called when the dock settles back to the resting pill (composer
    *  collapsed, no draft, panel closed). */
   onIdle?: () => void;
+}
+
+/**
+ * Compact floating launcher shown at the dock's resting spot while the dock is
+ * turned off (INSIGHTS_DOCK_ENABLED). Clicking it summons the expanded dock.
+ */
+function InsightsDockLauncher({
+  onOpen,
+}: {
+  onOpen: () => void;
+}): ReactElement {
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center pb-12">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={onOpen}
+            aria-keyshortcuts={isMacPlatform() ? "Meta+/" : "Control+/"}
+            className="border-border bg-card text-card-foreground hover:bg-muted pointer-events-auto flex items-center gap-2 border px-4 py-2 text-sm font-medium shadow-md transition-colors"
+          >
+            <Sparkles className="size-4" />
+            Project Assistant
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="flex items-center gap-2">
+          New chat
+          <InsightsShortcutKeys />
+        </TooltipContent>
+      </Tooltip>
+    </div>
+  );
 }
 
 /** Width of the dock card across its states: chat panel open, composer
@@ -856,7 +894,7 @@ export function InsightsProvider({
   // ignores the initial value.
   const [focusComposerKey, setFocusComposerKey] = useState(0);
   // While the dock is turned off (INSIGHTS_DOCK_ENABLED) it is mounted only
-  // on demand: the sidebar button or Cmd+/ summons it expanded, and it goes
+  // on demand: the floating launcher or Cmd+/ summons it expanded, and it goes
   // away again once it settles back to the resting pill.
   const [dockSummoned, setDockSummoned] = useState(false);
   const summonDock = useCallback(() => {
@@ -982,13 +1020,6 @@ export function InsightsProvider({
     onSkillIdsSent: handleSkillIdsSent,
   });
   const hideTrigger = pageHidesTrigger || !assistantAllowed;
-  // Page opt-outs exist to keep the resting composer off busy pages. While the
-  // dock is turned off there is no resting composer, so a panel the user opens
-  // on purpose (sidebar button, Cmd+/) works everywhere but the chat route,
-  // where the page already shows the chat.
-  const panelBlocked = INSIGHTS_DOCK_ENABLED
-    ? hideTrigger
-    : !assistantAllowed || onChatRoute;
 
   const skillsQuery = useSkillsInfinite(
     { limit: 200, gramProject: mcpConfig.projectSlug },
@@ -1323,7 +1354,7 @@ export function InsightsProvider({
   useAskAiListener(
     useCallback(
       (prompt: string) => {
-        // With the dock turned off, an empty request (the sidebar button)
+        // With the dock turned off, an empty request (e.g. the command palette)
         // summons the expanded dock with its suggestions.
         if (!INSIGHTS_DOCK_ENABLED && !prompt.trim()) {
           summonDock();
@@ -1398,7 +1429,7 @@ export function InsightsProvider({
   // contentEditable region — letting Cmd+/ still work in plain inputs since
   // the Cmd/Ctrl modifier means it never inserts text.
   useEffect(() => {
-    if (panelBlocked) return;
+    if (hideTrigger) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!e.metaKey && !e.ctrlKey) return;
       if (e.altKey) return;
@@ -1418,7 +1449,7 @@ export function InsightsProvider({
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [panelBlocked, isExpanded, summonDock]);
+  }, [hideTrigger, isExpanded, summonDock]);
 
   const contextValue = useMemo(
     () => ({
@@ -1631,10 +1662,10 @@ export function InsightsProvider({
             the Project Assistant. Expands in place into the chat panel.
             Hidden on pages that opt out via hideTrigger, and while dismissed
             to the sidebar resume button. While the dock is turned off it
-            mounts only when summoned (sidebar button or Cmd+/) or with the
+            mounts only when summoned (launcher or Cmd+/) or with the
             panel open, and unmounts once it settles back to the resting pill,
             so the resting composer never shows. */}
-      {!panelBlocked &&
+      {!hideTrigger &&
         (INSIGHTS_DOCK_ENABLED
           ? !dockDismissed
           : dockSummoned || isExpanded) && (
@@ -1653,6 +1684,17 @@ export function InsightsProvider({
               startExpanded={!INSIGHTS_DOCK_ENABLED}
               onIdle={INSIGHTS_DOCK_ENABLED ? undefined : unsummonDock}
             />
+          </div>
+        )}
+
+      {/* While the dock is turned off, a compact launcher holds its resting
+          spot and summons it on click. */}
+      {!INSIGHTS_DOCK_ENABLED &&
+        !hideTrigger &&
+        !dockSummoned &&
+        !isExpanded && (
+          <div className="pointer-events-none sticky bottom-0 z-30 h-0 shrink-0">
+            <InsightsDockLauncher onOpen={summonDock} />
           </div>
         )}
     </div>

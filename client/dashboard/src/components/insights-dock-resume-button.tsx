@@ -6,7 +6,6 @@ import {
 } from "@/hooks/useInsightsDockCta";
 import { Sparkles } from "lucide-react";
 import { ReleaseStageBadge } from "./release-stage-badge";
-import { requestAskAi } from "./command-palette/askAiBridge";
 import { SidebarFooterAction } from "./sidebar-footer-action";
 
 /**
@@ -19,14 +18,12 @@ import { SidebarFooterAction } from "./sidebar-footer-action";
 export function InsightsDockResumeButton(): JSX.Element | null {
   const { dismissed, resume } = useInsightsDockCta();
 
-  // While the dock is off this button is the always-on entry point: it opens
-  // the expanded dock (with suggestions) over the current page instead of
-  // restoring the always-on dock.
-  if (INSIGHTS_DOCK_ENABLED && !dismissed) return null;
+  // While the dock is off, the floating launcher pill is the entry point.
+  if (!INSIGHTS_DOCK_ENABLED || !dismissed) return null;
 
   return (
     <SidebarFooterAction
-      onClick={INSIGHTS_DOCK_ENABLED ? resume : () => requestAskAi("")}
+      onClick={resume}
       icon={Sparkles}
       label="Project Assistant"
       className={INSIGHTS_DOCK_VT_CLASS}
