@@ -105,12 +105,12 @@ const (
 	// are shown, or says why there are none.
 	BlockComputedStatus BlockType = "computed_status"
 
-	// BlockComputed shows one value Gram derives, with a copy button.
+	// BlockComputed shows one value Speakeasy derives, with a copy button.
 	BlockComputed BlockType = "computed"
 
 	// BlockChecklistItem is one thing to do in the platform's console, with a
 	// checkbox the operator ticks as they go: a console field and the value
-	// Gram derives for it, or a field or control and what to do with it.
+	// Speakeasy derives for it, or a field or control and what to do with it.
 	BlockChecklistItem BlockType = "checklist_item"
 )
 
@@ -569,7 +569,7 @@ func validateBlock(b Block, variables map[string]Variable) error {
 		}
 	case BlockComputed:
 		if !slices.Contains(computedValues, b.Value) {
-			return fmt.Errorf("computed value %q is not one Gram derives", b.Value)
+			return fmt.Errorf("computed value %q is not one Speakeasy derives", b.Value)
 		}
 		if strings.TrimSpace(b.Label) == "" {
 			return errors.New("computed value needs a label")
@@ -583,7 +583,7 @@ func validateBlock(b Block, variables map[string]Variable) error {
 			return errors.New("checklist item shows a computed value or markdown, not both")
 		case b.Value != "":
 			if !slices.Contains(computedValues, b.Value) {
-				return fmt.Errorf("computed value %q is not one Gram derives", b.Value)
+				return fmt.Errorf("computed value %q is not one Speakeasy derives", b.Value)
 			}
 		case strings.TrimSpace(b.Markdown) == "":
 			return errors.New("checklist item needs a computed value or markdown")

@@ -20,6 +20,10 @@ Never include customer-identifying information in anything that gets committed o
 
 </important>
 
+## Product Naming
+
+The product is called **Speakeasy**, not Gram. Write "Speakeasy" in all new user-facing text, error messages, comments, docs, and changesets. `mise run lint:brand` (pre-commit hook and CI) fails on added lines that say "Gram". HTTP headers (`Gram-Key`, `X-Gram-*`), `GRAM_*` environment variables, import lines, and code uses of the SDK `Gram` class in code files are still allowed. Lowercase `gram` (package names, URLs) is not checked. For any other intentional use, put `brand-ok: <reason>` on the line.
+
 ## Key Directories
 
 <structure>

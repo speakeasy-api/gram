@@ -2559,7 +2559,7 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   identity_provider_connection_id uuid,
 
   -- Who the upstream access credential belongs to. This describes the token
-  -- Gram presents to the upstream resource, not the client's own secret or
+  -- Speakeasy presents to the upstream resource, not the client's own secret or
   -- key material, which always belongs to the client.
   --
   --   subject  the credential belongs to a session subject (a user), obtained

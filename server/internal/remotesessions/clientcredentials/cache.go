@@ -44,7 +44,7 @@ type failureEntry struct {
 	// Key is the entry's cache key.
 	Key string
 
-	// Configuration reports a registration Gram cannot authenticate with.
+	// Configuration reports a registration Speakeasy cannot authenticate with.
 	Configuration bool
 
 	// StatusCode is the token endpoint's HTTP status for a provider rejection.

@@ -89,7 +89,7 @@ export function useServerTools(
     undefined,
     { enabled: needsLive && !!project, throwOnError: false },
   );
-  // Connect on the Gram origin: a custom domain would need its own session.
+  // Connect on the Speakeasy origin: a custom domain would need its own session.
   const platformSlug = platformEndpointSlug(endpoints.data?.mcpEndpoints ?? []);
   const live = useRemoteMcpToolConnection({
     mcpUrl: platformSlug ? `${getServerURL()}/mcp/${platformSlug}` : undefined,
@@ -130,7 +130,7 @@ export function useServerTools(
     };
   }
   if (mcpServer.isLoading || endpoints.isLoading) return { status: "loading" };
-  // No Gram-origin endpoint: nothing to list through or connect to.
+  // No Speakeasy-origin endpoint: nothing to list through or connect to.
   if (!platformSlug) return { status: "needs-connect", connect: undefined };
   if (live.loading) return { status: "loading" };
   if (live.needsAuth) return { status: "needs-connect", connect: live.connect };
