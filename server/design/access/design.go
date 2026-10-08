@@ -201,30 +201,50 @@ var _ = Service("access", func() {
 	})
 
 	Method("setDirectoryRoleMapping", func() {
-		Description("Map a directory group or attribute value to a role, replacing any role it was mapped to before.")
+		Description("Deprecated compatibility endpoint for older dashboard clients. Use setDirectoryRoleMappings. Rejects replacement when the source already grants multiple roles.")
+		Security(security.ByKey, func() { Scope("producer") })
+		Security(security.Session)
+		Payload(func() {
+			Extend(SetDirectoryRoleMappingForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+		Result(DirectoryRoleMappingModel)
+		HTTP(func() {
+			POST("/rpc/access.setDirectoryRoleMapping")
+			Deprecated()
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "setDirectoryRoleMapping")
+	})
+
+	Method("setDirectoryRoleMappings", func() {
+		Description("Replace the full set of roles granted by a directory group or attribute value. An empty role list removes all mappings for the source.")
 		Security(security.ByKey, func() {
 			Scope("producer")
 		})
 		Security(security.Session)
 
 		Payload(func() {
-			Extend(SetDirectoryRoleMappingForm)
+			Extend(SetDirectoryRoleMappingsForm)
 			security.ByKeyPayload()
 			security.SessionPayload()
 		})
 
-		Result(DirectoryRoleMappingModel)
+		Result(ArrayOf(DirectoryRoleMappingModel))
 
 		HTTP(func() {
-			POST("/rpc/access.setDirectoryRoleMapping")
+			POST("/rpc/access.setDirectoryRoleMappings")
 			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "setDirectoryRoleMapping")
-		Meta("openapi:extension:x-speakeasy-name-override", "setDirectoryRoleMapping")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetDirectoryRoleMapping", "type": "mutation"}`)
+		Meta("openapi:operationId", "setDirectoryRoleMappings")
+		Meta("openapi:extension:x-speakeasy-name-override", "setDirectoryRoleMappings")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetDirectoryRoleMappings", "type": "mutation"}`)
 	})
 
 	Method("deleteDirectoryRoleMapping", func() {
@@ -1871,6 +1891,15 @@ var SyncDirectoryGroupsResult = Type("SyncDirectoryGroupsResult", func() {
 
 var SetDirectoryRoleMappingForm = Type("SetDirectoryRoleMappingForm", func() {
 	Required("source_kind", "role_urn")
+	Attribute("source_kind", String, "What the mapping matches.", func() { Enum("group", "attribute") })
+	Attribute("directory_group_id", String, "Directory group to map. Required when source_kind is group.", func() { Format(FormatUUID) })
+	Attribute("attribute_key", String, "Attribute key to match. Required when source_kind is attribute.", func() { MinLength(1) })
+	Attribute("attribute_value", String, "Attribute value to match. Required when source_kind is attribute.", func() { MinLength(1) })
+	Attribute("role_urn", String, "Role principal URN to grant.")
+})
+
+var SetDirectoryRoleMappingsForm = Type("SetDirectoryRoleMappingsForm", func() {
+	Required("source_kind", "role_urns")
 
 	Attribute("source_kind", String, "What the mapping matches.", func() {
 		Enum("group", "attribute")
@@ -1884,5 +1913,5 @@ var SetDirectoryRoleMappingForm = Type("SetDirectoryRoleMappingForm", func() {
 	Attribute("attribute_value", String, "Attribute value to match. Required when source_kind is attribute.", func() {
 		MinLength(1)
 	})
-	Attribute("role_urn", String, "Principal URN of the role to grant, from Role.principal_urn.")
+	Attribute("role_urns", ArrayOf(String), "The complete set of role principal URNs to grant, from Role.principal_urn. Empty removes every mapping for the source.")
 })

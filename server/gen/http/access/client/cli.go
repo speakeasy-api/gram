@@ -351,6 +351,71 @@ func BuildSetDirectoryRoleMappingPayload(accessSetDirectoryRoleMappingBody strin
 	return v, nil
 }
 
+// BuildSetDirectoryRoleMappingsPayload builds the payload for the access
+// setDirectoryRoleMappings endpoint from CLI flags.
+func BuildSetDirectoryRoleMappingsPayload(accessSetDirectoryRoleMappingsBody string, accessSetDirectoryRoleMappingsApikeyToken string, accessSetDirectoryRoleMappingsSessionToken string) (*access.SetDirectoryRoleMappingsPayload, error) {
+	var err error
+	var body SetDirectoryRoleMappingsRequestBody
+	{
+		err = json.Unmarshal([]byte(accessSetDirectoryRoleMappingsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"attribute_key\": \"aa\",\n      \"attribute_value\": \"aa\",\n      \"directory_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"role_urns\": [\n         \"abc123\"\n      ],\n      \"source_kind\": \"attribute\"\n   }'")
+		}
+		if body.RoleUrns == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("role_urns", "body"))
+		}
+		if !(body.SourceKind == "group" || body.SourceKind == "attribute") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.source_kind", body.SourceKind, []any{"group", "attribute"}))
+		}
+		if body.DirectoryGroupID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.directory_group_id", *body.DirectoryGroupID, goa.FormatUUID))
+		}
+		if body.AttributeKey != nil {
+			if utf8.RuneCountInString(*body.AttributeKey) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.attribute_key", *body.AttributeKey, utf8.RuneCountInString(*body.AttributeKey), 1, true))
+			}
+		}
+		if body.AttributeValue != nil {
+			if utf8.RuneCountInString(*body.AttributeValue) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.attribute_value", *body.AttributeValue, utf8.RuneCountInString(*body.AttributeValue), 1, true))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if accessSetDirectoryRoleMappingsApikeyToken != "" {
+			apikeyToken = &accessSetDirectoryRoleMappingsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if accessSetDirectoryRoleMappingsSessionToken != "" {
+			sessionToken = &accessSetDirectoryRoleMappingsSessionToken
+		}
+	}
+	v := &access.SetDirectoryRoleMappingsPayload{
+		SourceKind:       body.SourceKind,
+		DirectoryGroupID: body.DirectoryGroupID,
+		AttributeKey:     body.AttributeKey,
+		AttributeValue:   body.AttributeValue,
+	}
+	if body.RoleUrns != nil {
+		v.RoleUrns = make([]string, len(body.RoleUrns))
+		for i, val := range body.RoleUrns {
+			v.RoleUrns[i] = val
+		}
+	} else {
+		v.RoleUrns = []string{}
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildDeleteDirectoryRoleMappingPayload builds the payload for the access
 // deleteDirectoryRoleMapping endpoint from CLI flags.
 func BuildDeleteDirectoryRoleMappingPayload(accessDeleteDirectoryRoleMappingID string, accessDeleteDirectoryRoleMappingApikeyToken string, accessDeleteDirectoryRoleMappingSessionToken string) (*access.DeleteDirectoryRoleMappingPayload, error) {
