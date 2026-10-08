@@ -38,20 +38,29 @@ git diff "${range[@]}" -U0 --no-color --no-ext-diff -- . \
     next unless /^\+/;
     my $text = substr($_, 1);
     my $n = $line++;
-    next if $text =~ /brand-ok/;
-    next if $text =~ /^[\s\-+]*(import\b|\}\s*from\b)/;
+    next if $text =~ /brand-ok:\s*\S/;
     (my $s = $text) =~ s{
         \bX-Gram-[\w-]+         # HTTP headers
       | \bGram-[A-Z][\w-]*      # HTTP headers (Gram-Key, Gram-Project, ...)
       | Speakeasy-Gram/         # device-management user agent
-      | \b(?:new|class|extends|typeof|const|let|type)\s+Gram\b
-      | \.Gram\b                # window.Gram, sdk.Gram
-      | (?<=[(<\[])Gram(?=[)>\],])   # Gram as an argument or type parameter
-      | ^\s*Gram(?=\s+(?:struct|\*?[\w.]+\s*`))   # Go struct field
-      | \bGram(?=[(<]|\.\w)    # Gram(...), Gram.tool, Gram<T>
-      | :\s*Gram\b(?=\s*(?:[;,)=|>]|$))   # type annotations
-      | ["\x27`]Gram["\x27`]    # the literal needle in "never says Gram" tests
     }{}gx;
+    # Code uses of the `Gram` class are allowed, but only on code lines of code
+    # files, so prose such as "the old product (Gram)" in docs and comments
+    # cannot slip through these patterns.
+    my $code = $file =~ /\.(?:[cm]?[jt]sx?|go|py)$/ && $text !~ m{^\s*(?://|/\*|\*|\#|--)};
+    next if $text =~ /^[\s\-+]*(import\b|\}\s*from\b)/;
+    if ($code) {
+      $s =~ s{
+          ^\s*(?:type\s+)?Gram(?:\s+as\s+\w+)?,?\s*$   # wrapped import specifier
+        | \b(?:new|class|extends|typeof|const|let|type)\s+Gram\b
+        | \.Gram\b                # window.Gram, sdk.Gram
+        | (?:[(<\[*]|,\s*)Gram(?=[)>\],;\[]|\s*$)   # argument or type parameter
+        | ^\s*Gram\s+(?:struct\s*\{|\*?[\w.\[\]]+\s*(?:`.*)?)$   # Go struct field
+        | \bGram(?=[(<]|\.\w|\[\])   # Gram(...), Gram.tool, Gram<T>, Gram[]
+        | :\s*Gram\b(?=\s*(?:[;,)=|>\[]|$))   # type annotations
+        | ["\x27`]Gram["\x27`]    # the literal needle in "never says Gram" tests
+      }{}gx;
+    }
     if ($s =~ /\bGram\b/) {
       chomp $text;
       print "$file:$n: $text\n";

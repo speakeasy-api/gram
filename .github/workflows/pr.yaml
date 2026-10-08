@@ -339,7 +339,7 @@ jobs:
       - name: Check formatting
         run: hk check --all
 
-      # Blocks added lines that say "Gram"; the product is called Speakeasy.
+      # Blocks added lines that use the old product name; see lint:brand.
       - name: Check product naming
         run: mise run lint:brand --base "origin/${{ github.base_ref || 'main' }}"
 
