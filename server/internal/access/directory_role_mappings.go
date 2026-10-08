@@ -225,7 +225,7 @@ func (s *Service) setDirectoryRoleMappings(ctx context.Context, payload *gen.Set
 	if err := queries.LockDirectoryRoleMappingSource(ctx, lockKey); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock directory role mapping source").LogError(ctx, s.logger)
 	}
-	if err := s.requireLiveOrgAdmin(ctx, ac); err != nil {
+	if err := s.requireLiveOrgAdminWithDBTX(ctx, ac, dbtx); err != nil {
 		return nil, err
 	}
 
@@ -417,7 +417,7 @@ func (s *Service) DeleteDirectoryRoleMapping(ctx context.Context, payload *gen.D
 	if err := queries.LockDirectoryRoleMappingSource(ctx, lockKey); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock directory role mapping source").LogError(ctx, s.logger)
 	}
-	if err := s.requireLiveOrgAdmin(ctx, ac); err != nil {
+	if err := s.requireLiveOrgAdminWithDBTX(ctx, ac, dbtx); err != nil {
 		return err
 	}
 	mapping, err = queries.GetDirectoryRoleMapping(ctx, repo.GetDirectoryRoleMappingParams{

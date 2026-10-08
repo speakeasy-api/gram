@@ -10076,6 +10076,7 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
+            deprecated: true
             security:
                 - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
