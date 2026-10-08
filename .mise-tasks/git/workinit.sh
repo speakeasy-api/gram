@@ -49,7 +49,7 @@ done
 echo ✅ Updated all port mappings for new worktree
 
 # A fresh mise invocation resolves GRAM_SERVER_URL with the newly saved ports.
-mise run git:workmcp
+mise run git:workmcp || echo "Warning: MCP setup failed; run 'mise run git:workmcp' to retry" >&2
 
 # The server refuses to start without a caller identity signing key. This is a
 # no-op when the key pair was copied from the main worktree above.

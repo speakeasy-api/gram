@@ -7,12 +7,13 @@
 //USAGE flag "--server-url <url>" env="GRAM_SERVER_URL" required_unless="--remove" help="Worktree server URL"
 //USAGE flag "--out-file <file>" default=".opencode/opencode.jsonc" help="Local OpenCode config to update"
 //USAGE flag "--remove" help="Remove external MCP registrations before deleting this worktree"
+//USAGE flag "--worktree <dir>" help="Target worktree for --remove (defaults to this worktree)"
 
 import assert from "node:assert/strict";
 import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
-import { parseJSONC, type JSONCParseError } from "confbox";
+import { dirname, join, resolve } from "node:path";
+import { applyEdits, modify, parse, type ParseError } from "jsonc-parser";
 import { $ } from "zx";
 
 interface MCPServer {
@@ -20,39 +21,55 @@ interface MCPServer {
   url: string;
 }
 
-async function claudeAvailable() {
-  return (await $`command -v claude`.quiet().nothrow()).exitCode === 0;
+async function claudeExecutable() {
+  const result = await $`command -v claude`.quiet().nothrow();
+  return result.exitCode === 0 ? resolve(result.stdout.trim()) : undefined;
 }
 
-async function localClaudeServers() {
+async function readJSON<T>(file: string, fallback: T): Promise<T> {
+  try {
+    return JSON.parse(await readFile(file, "utf8")) as T;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return fallback;
+    throw error;
+  }
+}
+
+async function ownershipFile(worktree: string) {
+  const gitDir = (
+    await $`git -C ${worktree} rev-parse --absolute-git-dir`.quiet()
+  ).stdout.trim();
+  return join(gitDir, "gram-workmcp.json");
+}
+
+async function localClaudeServers(worktree: string) {
   const file = join(
     process.env["CLAUDE_CONFIG_DIR"] ?? homedir(),
     ".claude.json",
   );
-  let source: string;
-  try {
-    source = await readFile(file, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
-    throw error;
-  }
-  const config = JSON.parse(source) as {
+  const config = await readJSON<{
     projects?: Record<
       string,
       { mcpServers?: Record<string, Record<string, unknown>> }
     >;
-  };
-  return config.projects?.[await realpath(process.cwd())]?.mcpServers ?? {};
+  }>(file, {});
+  return config.projects?.[worktree]?.mcpServers ?? {};
 }
 
 async function setupClaudeCode(servers: MCPServer[]) {
-  if (!(await claudeAvailable())) return;
-  const existing = await localClaudeServers();
+  const claude = await claudeExecutable();
+  if (!claude) return;
+  const worktree = await realpath(process.cwd());
+  const existing = await localClaudeServers(worktree);
+  const file = await ownershipFile(worktree);
+  const owned = await readJSON<Record<string, string>>(file, {});
   for (const server of servers) {
     const current = existing[server.name];
     if (current?.type === "http" && current.url === server.url) continue;
     if (!current) {
-      await $`claude mcp add --scope local --transport http ${server.name} ${server.url}`;
+      await $`${claude} mcp add --scope local --transport http ${server.name} ${server.url}`;
+      owned[server.name] = server.url;
+      await writeFile(file, JSON.stringify(owned, null, 2) + "\n");
       continue;
     }
 
@@ -63,26 +80,52 @@ async function setupClaudeCode(servers: MCPServer[]) {
       type: "http",
       url: server.url,
     });
-    await $`claude mcp remove --scope local ${server.name}`;
+    await $`${claude} mcp remove --scope local ${server.name}`;
     try {
-      await $`claude mcp add-json --scope local ${server.name} ${updated}`;
+      await $`${claude} mcp add-json --scope local ${server.name} ${updated}`;
     } catch (error) {
-      await $`claude mcp add-json --scope local ${server.name} ${JSON.stringify(current)}`.nothrow();
+      await $`${claude} mcp add-json --scope local ${server.name} ${JSON.stringify(current)}`.nothrow();
       throw error;
+    }
+    // Only newly created registrations are ours to remove. A pre-existing
+    // registration can be updated without transferring its ownership.
+    if (Object.hasOwn(owned, server.name)) {
+      owned[server.name] = server.url;
+      await writeFile(file, JSON.stringify(owned, null, 2) + "\n");
     }
   }
 }
 
-async function cleanupClaudeCode(names: string[]) {
-  if (!(await claudeAvailable())) return;
-  const existing = await localClaudeServers();
+async function cleanupClaudeCode(names: string[], worktree: string) {
+  const claude = await claudeExecutable();
+  if (!claude) return;
+  const existing = await localClaudeServers(worktree);
+  const file = await ownershipFile(worktree);
+  const owned = await readJSON<Record<string, string>>(file, {});
+  const run = $({ cwd: worktree });
+  let failed = false;
   for (const name of names) {
-    if (!existing[name]) continue;
-    const result = await $`claude mcp remove --scope local ${name}`.nothrow();
+    if (!Object.hasOwn(owned, name)) continue;
+    if (
+      existing[name]?.type !== "http" ||
+      existing[name]?.url !== owned[name]
+    ) {
+      delete owned[name];
+      continue;
+    }
+    const result =
+      await run`${claude} mcp remove --scope local ${name}`.nothrow();
     if (result.exitCode !== 0) {
-      console.warn(`Could not remove local Claude MCP registration: ${name}`);
+      console.warn(
+        `Could not remove local Claude MCP registration ${name} for ${worktree}`,
+      );
+      failed = true;
+    } else {
+      delete owned[name];
     }
   }
+  await writeFile(file, JSON.stringify(owned, null, 2) + "\n");
+  assert(!failed, `MCP cleanup failed for ${worktree}`);
 }
 
 async function setupOpenCode(servers: MCPServer[], file: string) {
@@ -93,29 +136,31 @@ async function setupOpenCode(servers: MCPServer[], file: string) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
 
-  const errors: JSONCParseError[] = [];
-  const config = parseJSONC<{
-    $schema?: string;
-    mcp?: { servers?: Record<string, Record<string, unknown>> };
-  }>(source, { errors, allowTrailingComma: true });
+  const errors: ParseError[] = [];
+  const config = parse(source, errors, { allowTrailingComma: true });
   assert.equal(errors.length, 0, `Invalid JSONC in ${file}`);
   assert(
     config && typeof config === "object" && !Array.isArray(config),
     "config must be an object",
   );
-  config.$schema ??= "https://opencode.ai/config.json";
-  config.mcp ??= {};
-  config.mcp.servers ??= {};
+  const set = (path: string[], value: unknown) => {
+    source = applyEdits(
+      source,
+      modify(source, path, value, {
+        formattingOptions: { insertSpaces: true, tabSize: 2 },
+      }),
+    );
+  };
+  if (!config.$schema) set(["$schema"], "https://opencode.ai/config.json");
+  // OpenCode V2 uses mcp.servers, unlike the legacy V1 server map.
+  // https://opencode.ai/v2/docs/mcp-servers#config
   for (const server of servers) {
-    config.mcp.servers[server.name] = {
-      ...config.mcp.servers[server.name],
-      type: "remote",
-      url: server.url,
-    };
+    set(["mcp", "servers", server.name, "type"], "remote");
+    set(["mcp", "servers", server.name, "url"], server.url);
   }
 
   await mkdir(dirname(file), { recursive: true });
-  await writeFile(file, JSON.stringify(config, null, 2) + "\n");
+  await writeFile(file, source.endsWith("\n") ? source : source + "\n");
   for (const server of servers) {
     console.log(`✅ Registered ${server.name} MCP at ${server.url} in ${file}`);
   }
@@ -126,16 +171,20 @@ async function main() {
   if (process.env["usage_remove"] === "true") {
     // OpenCode's ignored config disappears with the worktree; Claude's lives
     // outside it, so remove only the local servers managed by this task.
-    await cleanupClaudeCode(definitions.map((server) => server.name));
+    await cleanupClaudeCode(
+      definitions.map((server) => server.name),
+      await realpath(process.env["usage_worktree"] || process.cwd()),
+    );
     return;
   }
+  assert(
+    !process.env["usage_worktree"],
+    "--worktree is only supported with --remove",
+  );
   const serverURL = process.env["usage_server_url"];
   assert(serverURL, "server URL is required");
   const url = new URL(serverURL);
-  assert(
-    ["http:", "https:"].includes(url.protocol),
-    "server URL must use HTTP(S)",
-  );
+  assert(url.protocol === "https:", "server URL must use HTTPS");
   const servers: MCPServer[] = definitions.map((server) => ({
     name: server.name,
     url: new URL(server.path, url).href,
