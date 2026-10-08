@@ -212,6 +212,7 @@ var _ = Service("access", func() {
 		Result(DirectoryRoleMappingModel)
 		HTTP(func() {
 			POST("/rpc/access.setDirectoryRoleMapping")
+			Deprecated()
 			security.ByKeyHeader()
 			security.SessionHeader()
 			Response(StatusOK)
