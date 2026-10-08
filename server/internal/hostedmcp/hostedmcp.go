@@ -26,7 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// Actor is who wrapper writes are audited under: a user, or a Gram component when UserID is empty.
+// Actor is who wrapper writes are audited under: a user, or a server component when UserID is empty.
 type Actor struct {
 	// UserID is the acting user; it takes precedence over System.
 	UserID string
@@ -34,11 +34,11 @@ type Actor struct {
 	// Email is the acting user's display name in audit entries.
 	Email *string
 
-	// System names a Gram component acting with no user behind it, audited as system:<System>.
+	// System names a server component acting with no user behind it, audited as system:<System>.
 	System string
 }
 
-// SystemActor audits wrapper writes as the named Gram component.
+// SystemActor audits wrapper writes as the named server component.
 func SystemActor(component string) Actor {
 	return Actor{UserID: "", Email: nil, System: component}
 }
