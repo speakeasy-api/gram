@@ -2,6 +2,7 @@ package mcpservers_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -232,27 +233,31 @@ type toolMetadataMutator struct {
 
 var toolMetadataMutators = []toolMetadataMutator{
 	{name: "set batch", run: func(ctx context.Context, ti *testInstance, serverID string) error {
-		_, err := ti.service.SetToolMetadataBatch(ctx, &gen.SetToolMetadataBatchPayload{
+		if _, err := ti.service.SetToolMetadataBatch(ctx, &gen.SetToolMetadataBatchPayload{
 			McpServerID:      serverID,
 			Tools:            []*gen.ToolMetadataForm{},
 			SessionToken:     nil,
 			ApikeyToken:      nil,
 			ProjectSlugInput: nil,
-		})
-		return err
+		}); err != nil {
+			return fmt.Errorf("set tool metadata batch: %w", err)
+		}
+		return nil
 	}},
 	{name: "add batch", run: func(ctx context.Context, ti *testInstance, serverID string) error {
-		_, err := ti.service.AddToolMetadataBatch(ctx, &gen.AddToolMetadataBatchPayload{
+		if _, err := ti.service.AddToolMetadataBatch(ctx, &gen.AddToolMetadataBatchPayload{
 			McpServerID:      serverID,
 			Tools:            []*gen.ToolMetadataForm{metadataForm("injected", new(true), nil)},
 			SessionToken:     nil,
 			ApikeyToken:      nil,
 			ProjectSlugInput: nil,
-		})
-		return err
+		}); err != nil {
+			return fmt.Errorf("add tool metadata batch: %w", err)
+		}
+		return nil
 	}},
 	{name: "set", run: func(ctx context.Context, ti *testInstance, serverID string) error {
-		_, err := ti.service.SetToolMetadata(ctx, &gen.SetToolMetadataPayload{
+		if _, err := ti.service.SetToolMetadata(ctx, &gen.SetToolMetadataPayload{
 			McpServerID:      serverID,
 			ToolName:         "list_devices",
 			Title:            nil,
@@ -263,17 +268,22 @@ var toolMetadataMutators = []toolMetadataMutator{
 			SessionToken:     nil,
 			ApikeyToken:      nil,
 			ProjectSlugInput: nil,
-		})
-		return err
+		}); err != nil {
+			return fmt.Errorf("set tool metadata: %w", err)
+		}
+		return nil
 	}},
 	{name: "delete", run: func(ctx context.Context, ti *testInstance, serverID string) error {
-		return ti.service.DeleteToolMetadata(ctx, &gen.DeleteToolMetadataPayload{
+		if err := ti.service.DeleteToolMetadata(ctx, &gen.DeleteToolMetadataPayload{
 			McpServerID:      serverID,
 			ToolName:         "list_devices",
 			SessionToken:     nil,
 			ApikeyToken:      nil,
 			ProjectSlugInput: nil,
-		})
+		}); err != nil {
+			return fmt.Errorf("delete tool metadata: %w", err)
+		}
+		return nil
 	}},
 }
 

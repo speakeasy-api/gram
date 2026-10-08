@@ -70,6 +70,7 @@ export interface ToolMetadataActions {
 export function useSyncToolMetadata({
   mcpServerId,
   live,
+  listedAt = 0,
   stored,
   enabled,
   mode,
@@ -77,6 +78,11 @@ export function useSyncToolMetadata({
 }: {
   mcpServerId: string | undefined;
   live: Record<string, ProxiedMcpTool> | undefined;
+  /**
+   * When the listing in `live` succeeded. It advances on every successful
+   * refetch, even one returning the same (referentially shared) tools.
+   */
+  listedAt?: number;
   stored: ToolMetadataByName;
   /** False until both sides have loaded, and for servers without metadata. */
   enabled: boolean;
@@ -96,29 +102,20 @@ export function useSyncToolMetadata({
       refetchType: "all",
     });
 
-  // Guards the automatic pass so a re-render (or the refetch the write itself
-  // triggers) can't fire it twice for the same tools. It names the server, its
-  // project and, in additive mode, the tools being recorded, so a later listing
-  // that shows more tools records those too. Released whenever the write
-  // fails, so a transient error doesn't leave the tools unrecorded until the
-  // page is remounted — the next refetch gets to try again.
-  const autoWritten = useRef<string | null>(null);
+  // What the automatic pass last wrote (or is writing) per server and project:
+  // in additive mode the names of the batch, in mirror mode just that it ran.
+  // A re-render, or the refetch the write itself triggers, never sends the
+  // same batch twice, while a later listing showing other unrecorded tools
+  // writes those. A failed write forgets only its own entry, so the next
+  // successful listing — even one returning the same tools — tries again, and
+  // a persistent failure is retried once per listing rather than in a loop.
+  const autoWritten = useRef(new Map<string, string>());
 
   // Records tools with no stored entry. Strictly additive: it rejects the whole
   // batch if any tool already has one, so a 409 means our stored snapshot was
   // stale rather than that anything went wrong. This pass is invisible, so that
   // case just reloads the list instead of surfacing an error.
-  const add = useAddMcpServerToolMetadataBatchMutation({
-    onSuccess: refresh,
-    onError: async (error) => {
-      autoWritten.current = null;
-      if (error instanceof GramError && error.statusCode === 409) {
-        await refresh();
-        return;
-      }
-      handleAPIError(error, "Failed to record new tool metadata");
-    },
-  });
+  const add = useAddMcpServerToolMetadataBatchMutation({ onSuccess: refresh });
 
   // Makes the stored set mirror the session, deleting tools it dropped.
   const set = useSetMcpServerToolMetadataBatchMutation({
@@ -150,22 +147,44 @@ export function useSyncToolMetadata({
 
     const tools = newToolsBatch(live, stored);
     const serverKey = `${project?.slug ?? ""}:${mcpServerId}`;
-    const key =
+    const batchKey =
       mode === "additive"
-        ? `${serverKey}:${(tools ?? []).map((tool) => tool.toolName).join("\n")}`
-        : serverKey;
-    if (autoWritten.current === key) return;
-    autoWritten.current = key;
+        ? (tools ?? []).map((tool) => tool.toolName).join("\n")
+        : "";
+    if (autoWritten.current.get(serverKey) === batchKey) return;
+    autoWritten.current.set(serverKey, batchKey);
     if (!tools) return;
 
-    add.mutate({
-      request: {
-        gramProject: project?.slug,
-        setToolMetadataBatchRequestBody: { mcpServerId, tools },
-      },
-    });
+    add
+      .mutateAsync({
+        request: {
+          gramProject: project?.slug,
+          setToolMetadataBatchRequestBody: { mcpServerId, tools },
+        },
+      })
+      .catch(async (error: unknown) => {
+        // Only this request's entry: a newer batch, or another server's, keeps
+        // its own guard.
+        if (autoWritten.current.get(serverKey) === batchKey) {
+          autoWritten.current.delete(serverKey);
+        }
+        if (error instanceof GramError && error.statusCode === 409) {
+          await refresh();
+          return;
+        }
+        handleAPIError(error, "Failed to record new tool metadata");
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, canWrite, mcpServerId, live, stored, mode, project?.slug]);
+  }, [
+    enabled,
+    canWrite,
+    mcpServerId,
+    live,
+    listedAt,
+    stored,
+    mode,
+    project?.slug,
+  ]);
 
   const pendingTool =
     (recordOne.isPending &&

@@ -90,7 +90,12 @@ export function ToolMetadataDriftPanel({
   isSyncing: boolean;
   toolActions?: ToolMetadataActions;
 }): JSX.Element | null {
-  const [removing, setRemoving] = useState<string | null>(null);
+  // The confirmation names the server it was opened for, so it never applies
+  // to another server this panel is later reused for.
+  const [removing, setRemoving] = useState<{
+    mcpServerId: string | undefined;
+    toolName: string;
+  } | null>(null);
   if (drift.length === 0) return null;
 
   if (toolActions) {
@@ -116,17 +121,24 @@ export function ToolMetadataDriftPanel({
                   entry={entry}
                   mcpServerId={mcpServerId}
                   actions={toolActions}
-                  onRemove={() => setRemoving(entry.toolName)}
+                  onRemove={() =>
+                    setRemoving({ mcpServerId, toolName: entry.toolName })
+                  }
                 />
               }
             />
           ))}
         </ul>
-        {removing !== null ? (
+        {removing !== null &&
+        removing.mcpServerId === mcpServerId &&
+        drift.some(
+          (entry) =>
+            entry.kind === "removed" && entry.toolName === removing.toolName,
+        ) ? (
           <RemoveStoredToolDialog
-            toolName={removing}
+            toolName={removing.toolName}
             onConfirm={() => {
-              toolActions.remove(removing);
+              toolActions.remove(removing.toolName);
               setRemoving(null);
             }}
             onClose={() => setRemoving(null)}
@@ -312,7 +324,9 @@ function RemoveStoredToolDialog({
             It wasn&rsquo;t in your listing, but other people may still see it.
           </li>
           <li>
-            Annotation rules stop reaching it for everyone. Rules naming the
+            Annotation rules stop reaching it for everyone: allow rules no
+            longer grant it, and annotation-based exclusions no longer block it,
+            which can widen access another rule grants. Rules naming only the
             tool keep working.
           </li>
         </ul>
@@ -352,7 +366,7 @@ function DriftRow({
           : "grid-cols-[0.75rem_minmax(0,14rem)_minmax(0,1fr)]",
       )}
     >
-      <DriftMarker kind={entry.kind} />
+      <DriftMarker kind={entry.kind} neutral={!!action} />
       <Text
         mono
         small
@@ -417,8 +431,26 @@ function ChangeChip({ change }: { change: FieldChange }): JSX.Element {
   );
 }
 
-function DriftMarker({ kind }: { kind: ToolDrift["kind"] }): JSX.Element {
-  const { symbol, label, className } = DRIFT_MARKERS[kind];
+/**
+ * A tool the viewer's listing lacks is not known to be gone when listings
+ * differ per caller, so it is marked neutrally there rather than as removed.
+ */
+const NOT_IN_LISTING_MARKER = {
+  symbol: "?",
+  label: "Not in your listing",
+  className: "text-muted-foreground",
+};
+
+function DriftMarker({
+  kind,
+  neutral,
+}: {
+  kind: ToolDrift["kind"];
+  /** Per-caller listings: a missing tool is not shown as removed. */
+  neutral: boolean;
+}): JSX.Element {
+  const { symbol, label, className } =
+    neutral && kind === "removed" ? NOT_IN_LISTING_MARKER : DRIFT_MARKERS[kind];
 
   return (
     <span
