@@ -25,6 +25,7 @@ function scopes(
     challengeScopes: [],
     discoveryEnabled: true,
     sharedServerCount: 0,
+    canPin: true,
     clients: [
       {
         clientId: "client-1",
@@ -66,7 +67,6 @@ function pin(
   return {
     data: undefined,
     isError: false,
-    forbidden: false,
     value,
     setValue,
     dirty,
@@ -555,6 +555,33 @@ describe("ResourceScopePinField", () => {
       screen.getByRole("button", { name: "Clear pinned scopes" }),
     );
     expect(setValue).toHaveBeenCalledWith([]);
+  });
+
+  it("is read-only for a caller who cannot write every sharing server", () => {
+    for (const discoveryEnabled of [true, false]) {
+      render(
+        <ResourceScopePinField
+          pin={pin(["read"])}
+          scopes={scopes({ canPin: false, discoveryEnabled })}
+          connectedClientId="client-1"
+          issuerScopes={[]}
+          serverName="Linear"
+          disabled={false}
+        />,
+      );
+
+      const field = screen.getByRole("combobox", { name: "Pinned scopes" });
+      expect((field as HTMLButtonElement).disabled).toBe(true);
+      expect(
+        screen.getByText(
+          "Pinned scopes are shared by every MCP server that uses this URL. You need edit access to all of them to change the pin.",
+        ),
+      ).toBeDefined();
+      expect(
+        screen.queryByRole("button", { name: "Clear pinned scopes" }),
+      ).toBeNull();
+      cleanup();
+    }
   });
 
   it("offers no Clear button with the flag on", () => {

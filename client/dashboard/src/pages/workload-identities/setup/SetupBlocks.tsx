@@ -18,7 +18,7 @@ import {
 import { Stack } from "@/components/ui/Stack";
 import { TagInput } from "@/components/ui/TagInput";
 import { Text } from "@/components/ui/Text";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import type { CatalogVariable, ChecklistItemBlock } from "./definition";
 import { tagsProblem } from "../tagLimits";
 import type { SetupValues } from "./setupValues";
@@ -104,7 +104,8 @@ export function SubjectRulePreview({
   );
 }
 
-function OptionPicker({
+/** A labeled select over options, with an optional hint beneath it. */
+export function OptionPicker({
   id,
   label,
   placeholder,
@@ -119,7 +120,8 @@ function OptionPicker({
   options: Option[];
   value: string;
   onChange: (value: string) => void;
-  hint: string | null;
+  /** Shown under the select. */
+  hint: ReactNode;
 }): JSX.Element {
   return (
     <Stack gap={2}>
@@ -136,11 +138,7 @@ function OptionPicker({
           ))}
         </SelectContent>
       </Select>
-      {hint !== null && (
-        <Text muted small>
-          {hint}
-        </Text>
-      )}
+      {hint}
     </Stack>
   );
 }
@@ -183,7 +181,13 @@ export function AgentPicker({
         options={agents}
         value={agentId}
         onChange={onAgentChange}
-        hint={unavailableReason}
+        hint={
+          unavailableReason !== null && (
+            <Text muted small>
+              {unavailableReason}
+            </Text>
+          )
+        }
       />
       <div>
         <Button variant="tertiary" size="sm" onClick={() => setCreating(true)}>
@@ -246,34 +250,49 @@ function NewAgentForm({
   );
 }
 
-/** Optional labels for the access rule. */
+/**
+ * Optional labels for the access rule. The id must be unique on the page; it
+ * also names the error message.
+ */
 export function TagsField({
   tags,
   onChange,
+  id = "setup-tags",
+  label = "Tags (optional)",
+  placeholder = "support, production",
+  help = (
+    <Text muted small>
+      Labels for finding this access later. Not used for matching.
+    </Text>
+  ),
 }: {
   tags: string[];
   onChange: (tags: string[]) => void;
+  id?: string;
+  label?: string;
+  placeholder?: string;
+  /** Shown while the tags have no problem. */
+  help?: ReactNode;
 }): JSX.Element {
   const problem = tagsProblem(tags);
+  const errorId = `${id}-error`;
   return (
     <Stack gap={2}>
-      <Label htmlFor="setup-tags">Tags (optional)</Label>
+      <Label htmlFor={id}>{label}</Label>
       <TagInput
-        id="setup-tags"
+        id={id}
         value={tags}
-        placeholder="support, production"
+        placeholder={placeholder}
         error={problem !== null}
-        ariaDescribedBy={problem !== null ? "setup-tags-error" : undefined}
+        ariaDescribedBy={problem !== null ? errorId : undefined}
         onChange={onChange}
       />
       {problem !== null ? (
-        <Text id="setup-tags-error" role="alert" small destructive>
+        <Text id={errorId} role="alert" small destructive>
           {problem}
         </Text>
       ) : (
-        <Text muted small>
-          Labels for finding this access later. Not used for matching.
-        </Text>
+        help
       )}
     </Stack>
   );

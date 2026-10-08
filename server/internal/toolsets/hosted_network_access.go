@@ -65,7 +65,7 @@ func (s *Service) reconcileCustomDomains(ctx context.Context, customDomainIDs []
 
 func hostedActor(actor *contextvalues.AuthContext) hostedmcp.Actor {
 	if actor == nil {
-		return hostedmcp.Actor{UserID: "", Email: nil}
+		return hostedmcp.Actor{UserID: "", Email: nil, System: ""}
 	}
-	return hostedmcp.Actor{UserID: actor.UserID, Email: actor.Email}
+	return hostedmcp.Actor{UserID: actor.UserID, Email: actor.Email, System: ""}
 }

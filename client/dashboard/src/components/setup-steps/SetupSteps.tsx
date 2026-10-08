@@ -25,8 +25,9 @@ interface SetupStepsProps<S extends SetupStepsStep> {
 /**
  * Steps shown one at a time, sliding sideways between them, under a row of
  * dashes that tracks progress and links back to any step that can be shown.
- * With a single step there is nothing to track, so the dashes and the step
- * number are left out.
+ * With a single step there is nothing to track, so the dashes, the step
+ * number and the step title are left out: the step is the whole form, and
+ * whatever holds it names it.
  *
  * Presentation only: which step is active, which can be reached and what the
  * footer does belong to the caller. Renders as children of a flex column
@@ -70,14 +71,18 @@ export function SetupSteps<S extends SetupStepsStep>({
               // tab order and the accessibility tree.
               inert={index !== activeIndex}
               className={cn(
-                "w-full shrink-0 space-y-4 overflow-y-auto px-6 pb-6",
-                !multiStep && "pt-4",
+                "w-full shrink-0 overflow-y-auto px-6 pb-6",
+                multiStep ? "space-y-4" : "space-y-6 pt-6",
               )}
             >
-              {multiStep && <p className="text-eyebrow">Step {index + 1}</p>}
-              <h3 className="text-foreground text-base font-medium">
-                {step.title}
-              </h3>
+              {multiStep && (
+                <>
+                  <p className="text-eyebrow">Step {index + 1}</p>
+                  <h3 className="text-foreground text-base font-medium">
+                    {step.title}
+                  </h3>
+                </>
+              )}
               {renderStep(step, index)}
             </div>
           ))}

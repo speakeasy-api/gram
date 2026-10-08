@@ -43,7 +43,7 @@ const (
 	OperatorIn     Operator = "in"
 )
 
-// Aggregation is an op a measure admits. Count is not listed here: it is an
+// Aggregation is an op a field admits. Count is not listed here: it is an
 // op without a field and every dataset admits it at its grain.
 type Aggregation string
 
@@ -55,6 +55,12 @@ const (
 	AggregationP50 Aggregation = "p50"
 	AggregationP95 Aggregation = "p95"
 	AggregationP99 Aggregation = "p99"
+
+	// AggregationCountDistinct is the one aggregation a dimension declares:
+	// how many distinct values of it the matching rows carry, exact, over
+	// the dimension's own values. A measure may not declare it, since
+	// counting distinct durations is not a question anyone asks.
+	AggregationCountDistinct Aggregation = "count_distinct"
 )
 
 // AggregationCount is the one op that takes no field.
@@ -112,6 +118,14 @@ type Field struct {
 	Operators    []Operator
 	Aggregations []Aggregation
 	Expr         string
+	// Description says what the field is and, when it matters, which
+	// producers fill it: a field one producer family reports and the rest
+	// do not needs to say so, or a sparse breakdown reads as "none". It is
+	// shown by describe and the builder's pickers; most fields need none.
+	Description string
+	// Lookup names the lookup every read of this dimension folds Expr through;
+	// empty reads it as reported.
+	Lookup string
 }
 
 // Dataset is a logical entity at a declared grain. It owns a source query,
@@ -159,15 +173,19 @@ func (d *Dataset) Field(name string) (*Field, bool) {
 	return nil, false
 }
 
-// Admits says whether a field admits an operator or aggregation.
-func (f *Field) Admits(op string) bool {
-	switch f.Role {
-	case RoleDimension:
-		return slices.Contains(f.Operators, Operator(op))
-	case RoleMeasure:
-		return slices.Contains(f.Aggregations, Aggregation(op))
-	}
-	return false
+// AdmitsOperator says whether a filter may compare the field with op: a
+// dimension admits the operators it declares, a measure none.
+func (f *Field) AdmitsOperator(op string) bool {
+	return f.Role == RoleDimension && slices.Contains(f.Operators, Operator(op))
+}
+
+// AdmitsAggregation says whether a measure may aggregate the field with
+// agg: a measure admits the aggregations it declares, a dimension the one
+// over its own values when it declares it. A filter and a measure are
+// different questions, so they are asked separately: an aggregation
+// offered as a filter operator is refused, not silently dropped.
+func (f *Field) AdmitsAggregation(agg string) bool {
+	return slices.Contains(f.Aggregations, Aggregation(agg))
 }
 
 // Catalog is the declaration of every dataset and field: the contract the
@@ -175,18 +193,29 @@ func (f *Field) Admits(op string) bool {
 // change.
 type Catalog struct {
 	datasets []*Dataset
+	lookups  []*Lookup
 }
 
-// NewCatalog validates the datasets and returns a catalog over them. A
-// declaration that could not be queried is a programming error, so this
-// fails loudly rather than serving a half-declared contract.
-func NewCatalog(datasets ...*Dataset) (*Catalog, error) {
+// NewCatalog validates the lookups and datasets and returns a catalog over
+// them. A declaration that could not be queried is a programming error, so
+// this fails loudly rather than serving a half-declared contract.
+func NewCatalog(lookups []*Lookup, datasets ...*Dataset) (*Catalog, error) {
+	lookupNames := make(map[string]struct{}, len(lookups))
+	for _, l := range lookups {
+		if l == nil || l.Name == "" {
+			return nil, fmt.Errorf("catalog: lookup with no name")
+		}
+		if _, dup := lookupNames[l.Name]; dup {
+			return nil, fmt.Errorf("catalog: lookup %q declared twice", l.Name)
+		}
+		lookupNames[l.Name] = struct{}{}
+	}
 	seen := make(map[string]struct{}, len(datasets))
 	for _, ds := range datasets {
 		if ds == nil {
 			return nil, fmt.Errorf("catalog: nil dataset")
 		}
-		if err := ds.validate(); err != nil {
+		if err := ds.validate(lookupNames); err != nil {
 			return nil, err
 		}
 		if _, dup := seen[ds.Name]; dup {
@@ -194,12 +223,12 @@ func NewCatalog(datasets ...*Dataset) (*Catalog, error) {
 		}
 		seen[ds.Name] = struct{}{}
 	}
-	return &Catalog{datasets: datasets}, nil
+	return &Catalog{datasets: datasets, lookups: lookups}, nil
 }
 
 // MustCatalog is NewCatalog for the package's own declarations.
-func MustCatalog(datasets ...*Dataset) *Catalog {
-	catalog, err := NewCatalog(datasets...)
+func MustCatalog(lookups []*Lookup, datasets ...*Dataset) *Catalog {
+	catalog, err := NewCatalog(lookups, datasets...)
 	if err != nil {
 		panic(err)
 	}
@@ -221,7 +250,7 @@ func (c *Catalog) Datasets() []*Dataset {
 	return slices.Clone(c.datasets)
 }
 
-func (d *Dataset) validate() error {
+func (d *Dataset) validate(lookups map[string]struct{}) error {
 	if d.Name == "" {
 		return fmt.Errorf("catalog: dataset with empty name")
 	}
@@ -263,8 +292,19 @@ func (d *Dataset) validate() error {
 		}
 		switch f.Role {
 		case RoleDimension:
-			if len(f.Operators) == 0 || len(f.Aggregations) != 0 {
-				return fmt.Errorf("catalog: dataset %q dimension %q must declare operators and no aggregations", d.Name, f.Name)
+			if len(f.Operators) == 0 {
+				return fmt.Errorf("catalog: dataset %q dimension %q must declare operators", d.Name, f.Name)
+			}
+			// The one aggregation a dimension can carry is over its own
+			// values; a sum or a percentile of a string means nothing.
+			for _, agg := range f.Aggregations {
+				switch agg {
+				case AggregationCountDistinct:
+				case AggregationSum, AggregationAvg, AggregationMin, AggregationMax, AggregationP50, AggregationP95, AggregationP99:
+					return fmt.Errorf("catalog: dataset %q dimension %q may declare count_distinct and no other aggregation", d.Name, f.Name)
+				default:
+					return fmt.Errorf("catalog: dataset %q dimension %q has unknown aggregation %q", d.Name, f.Name, agg)
+				}
 			}
 			// Filters and value pickers compare a dimension as a string; a
 			// numeric one would need casting in both the compiler and the
@@ -272,6 +312,11 @@ func (d *Dataset) validate() error {
 			// needed.
 			if f.Type != TypeString {
 				return fmt.Errorf("catalog: dataset %q dimension %q must be a string", d.Name, f.Name)
+			}
+			if f.Lookup != "" {
+				if _, declared := lookups[f.Lookup]; !declared {
+					return fmt.Errorf("catalog: dataset %q dimension %q reads through undeclared lookup %q", d.Name, f.Name, f.Lookup)
+				}
 			}
 			for _, op := range f.Operators {
 				switch op {
@@ -284,12 +329,17 @@ func (d *Dataset) validate() error {
 			if len(f.Aggregations) == 0 || len(f.Operators) != 0 {
 				return fmt.Errorf("catalog: dataset %q measure %q must declare aggregations and no operators", d.Name, f.Name)
 			}
+			if f.Lookup != "" {
+				return fmt.Errorf("catalog: dataset %q measure %q cannot read through a lookup, which maps dimension values", d.Name, f.Name)
+			}
 			if f.Type == TypeString {
 				return fmt.Errorf("catalog: dataset %q measure %q cannot be a string", d.Name, f.Name)
 			}
 			for _, agg := range f.Aggregations {
 				switch agg {
 				case AggregationSum, AggregationAvg, AggregationMin, AggregationMax, AggregationP50, AggregationP95, AggregationP99:
+				case AggregationCountDistinct:
+					return fmt.Errorf("catalog: dataset %q measure %q cannot declare count_distinct, which counts a dimension", d.Name, f.Name)
 				default:
 					return fmt.Errorf("catalog: dataset %q measure %q has unknown aggregation %q", d.Name, f.Name, agg)
 				}
@@ -304,4 +354,7 @@ func (d *Dataset) validate() error {
 // timeBucketColumn is the reserved result column for a bucketed query.
 const timeBucketColumn = "time_bucket"
 
-var equalsIn = []Operator{OperatorEquals, OperatorIn}
+var (
+	equalsIn      = []Operator{OperatorEquals, OperatorIn}
+	countDistinct = []Aggregation{AggregationCountDistinct}
+)

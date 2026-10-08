@@ -67,11 +67,11 @@ it("disables the dash of a step that cannot be shown", () => {
   expect(onStepChange).toHaveBeenCalledWith("values");
 });
 
-it("leaves out the progress for a single step", () => {
+it("leaves out the progress and the step title for a single step", () => {
   renderSteps({ steps: [steps[0]!] });
   expect(screen.queryByRole("button", { name: /^Step / })).toBeNull();
   expect(screen.queryByText("1/1")).toBeNull();
   expect(screen.queryByText("Step 1")).toBeNull();
-  expect(screen.getByText("Before you start")).toBeTruthy();
+  expect(screen.queryByText("Before you start")).toBeNull();
   expect(screen.getByText("Body of intro")).toBeTruthy();
 });

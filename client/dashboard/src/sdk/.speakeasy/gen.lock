@@ -874,6 +874,7 @@ trackedFiles:
   src/models/components/analyticsfield.ts: {}
   src/models/components/analyticsfilter.ts: {}
   src/models/components/analyticsfilteroperator.ts: {}
+  src/models/components/analyticslookup.ts: {}
   src/models/components/analyticsmeasure.ts: {}
   src/models/components/analyticsorderby.ts: {}
   src/models/components/analyticsquerypayload.ts: {}
@@ -7499,7 +7500,7 @@ examples:
           mcp_server_id: "5a149d89-78f9-4c10-afc1-8539d6721f85"
       responses:
         "200":
-          application/json: {"advertised_scopes_known": false, "challenge_scopes": ["<value 1>", "<value 2>", "<value 3>"], "clients": [{"client_id": "b44a5d27-6afc-4330-9d4c-2c00e586c851", "pin_would_decide": true, "requested_scopes": [], "scope_source": "resource_pin", "unadvertised_pinned_scopes": []}], "discovery_enabled": true, "pinned_scopes": ["<value 1>"], "resource_url": "https://smug-plain.org/", "shared_server_count": 335278}
+          application/json: {"advertised_scopes_known": false, "can_pin": true, "challenge_scopes": ["<value 1>", "<value 2>", "<value 3>"], "clients": [{"client_id": "b44a5d27-6afc-4330-9d4c-2c00e586c851", "issuer_name": "<value>", "pin_would_decide": true, "requested_scopes": [], "scope_source": "resource_pin", "unadvertised_pinned_scopes": []}], "discovery_enabled": true, "pinned_scopes": ["<value 1>"], "resource_url": "https://smug-plain.org/", "shared_server_count": 335278}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -11785,7 +11786,7 @@ examples:
         application/json: {"mcp_server_id": "5353c293-642c-4480-be2f-b05fe48d5f98", "scopes": ["<value 1>"]}
       responses:
         "200":
-          application/json: {"advertised_scopes_known": false, "challenge_scopes": [], "clients": [{"client_id": "b5aff61a-32be-45f7-aa3c-f81e4904b2cf", "pin_would_decide": true, "requested_scopes": [], "scope_source": "cached_resource", "unadvertised_pinned_scopes": ["<value 1>"]}], "discovery_enabled": true, "pinned_scopes": ["<value 1>", "<value 2>"], "resource_url": "https://secondary-outrun.com", "shared_server_count": 342158}
+          application/json: {"advertised_scopes_known": false, "can_pin": true, "challenge_scopes": [], "clients": [{"client_id": "b5aff61a-32be-45f7-aa3c-f81e4904b2cf", "issuer_name": "<value>", "pin_would_decide": true, "requested_scopes": [], "scope_source": "cached_resource", "unadvertised_pinned_scopes": ["<value 1>"]}], "discovery_enabled": true, "pinned_scopes": ["<value 1>", "<value 2>"], "resource_url": "https://secondary-outrun.com", "shared_server_count": 342158}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

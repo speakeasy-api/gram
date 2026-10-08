@@ -1,6 +1,6 @@
-// The authentication host: a second host that serves the per-server OAuth
-// authorization server and nothing else, so authentication stays apart from
-// the hosts that carry MCP traffic.
+// The authentication host: a second host that serves OAuth authorization
+// servers and nothing else, so authentication stays apart from the hosts that
+// carry MCP traffic.
 
 package mcp
 
@@ -21,15 +21,20 @@ import (
 )
 
 // AuthenticationHost routes requests addressed to a dedicated authentication
-// host to the per-server OAuth authorization server endpoints.
+// host to the per-server OAuth authorization server endpoints and to the
+// shared authorization servers whose issuer is on it.
 //
-// The host is an alias for issuers that opt in with
-// user_session_issuers.use_authentication_host: every route it serves also
-// serves on the MCP host, and the same handlers run with the resource still
-// derived from the MCP host. Such an issuer announces the authentication host
-// as its issuer whichever host a request arrives on, so the issuer a client
-// recorded stays the issuer it sees. For any other issuer the host serves
-// nothing.
+// For per-server authorization servers, the host is an alias for issuers that
+// opt in with user_session_issuers.use_authentication_host: every route it
+// serves also serves on the MCP host, and the same handlers run with the
+// resource still derived from the MCP host. Such an issuer announces the
+// authentication host as its issuer whichever host a request arrives on, so
+// the issuer a client recorded stays the issuer it sees. For any other issuer
+// those routes serve nothing.
+//
+// A shared authorization server whose issuer is on the authentication host is
+// served there alone, and only its metadata, token, and revocation endpoints.
+// A shared authorization server on another host is not served here.
 //
 // MCP traffic and protected-resource metadata are not served, so the host
 // can never become an API host by accident; every such path answers 404.
@@ -149,9 +154,10 @@ func (h *AuthenticationHost) Handle(method, pattern string, handler http.Handler
 	h.router.Method(method, pattern, handler)
 }
 
-// AttachAuthenticationHost mounts the /mcp authorization server routes on the
-// authentication host and lets service announce it for issuers that opt in.
-// It is a no-op when the host is disabled.
+// AttachAuthenticationHost mounts the /mcp authorization server routes and the
+// shared authorization server routes the host serves on the authentication
+// host, and lets service announce it for issuers that opt in. It is a no-op
+// when the host is disabled.
 //
 // The IdP and upstream login callbacks are not mounted: they are registered
 // against the platform host and always return there.
@@ -159,7 +165,7 @@ func AttachAuthenticationHost(host *AuthenticationHost, service *Service) {
 	if host.host == "" {
 		return
 	}
-	service.authenticationHostBaseURL = host.baseURL
+	RecordAuthenticationHost(host, service)
 
 	handle := func(method, pattern string, handler func(http.ResponseWriter, *http.Request) error) {
 		host.Handle(method, pattern, oops.ErrHandle(service.logger, handler).ServeHTTP)
@@ -178,6 +184,20 @@ func AttachAuthenticationHost(host *AuthenticationHost, service *Service) {
 	handle(http.MethodGet, "/mcp/consent-fonts/{file}", service.ServeConsentFont)
 	handle(http.MethodPost, PublicServerRoute+"/token", service.HandleToken)
 	handle(http.MethodPost, PublicServerRoute+"/revoke", service.HandleRevoke)
+	for _, route := range service.sharedAuthorizationServerRoutes() {
+		if route.onAuthenticationHost {
+			handle(route.method, route.path, route.handler)
+		}
+	}
+}
+
+// RecordAuthenticationHost records the authentication host on service without
+// mounting any route on it, so a service that serves no authentication host
+// routes still derives the same authorization servers as one that does, such
+// as the shared authorization server of an issuer pinned to the host. It is a
+// no-op when the host is disabled.
+func RecordAuthenticationHost(host *AuthenticationHost, service *Service) {
+	service.authenticationHostBaseURL = host.baseURL
 }
 
 // authenticationHostBaseURL reports the authentication host's base URL when
@@ -185,6 +205,12 @@ func AttachAuthenticationHost(host *AuthenticationHost, service *Service) {
 func authenticationHostBaseURL(ctx context.Context) (string, bool) {
 	baseURL, ok := ctx.Value(authenticationHostContextKey{}).(string)
 	return baseURL, ok && baseURL != ""
+}
+
+// withoutAuthenticationHost derives a context that reads as not having
+// arrived on the authentication host.
+func withoutAuthenticationHost(ctx context.Context) context.Context {
+	return context.WithValue(ctx, authenticationHostContextKey{}, "")
 }
 
 // OnAuthenticationHost reports whether the request arrived on the
@@ -285,11 +311,16 @@ func (s *Service) consentURL(endpoint *ResolvedMcpEndpoint, perEndpointBaseURL, 
 // it has one, otherwise the endpoint's own. Requests over a private network
 // ingress keep the endpoint's own authorization server on the private origin,
 // which the shared authorization server does not serve.
+//
+// A shared authorization server on the authentication host accepts only the
+// workload grant, which platforms are pointed at directly, so the endpoint's
+// own authorization server stays the one MCP clients discover for browser
+// sign-in.
 func (s *Service) protectedResourceAuthorizationServer(ctx context.Context, endpoint *ResolvedMcpEndpoint, resourceBaseURL string) (string, error) {
 	origin, ok := requestorigin.FromContext(ctx)
 	private := ok && origin.Surface == requestorigin.SurfacePrivateNetwork
-	if endpoint.sharedAuthorizationServer != nil && !private {
-		return endpoint.sharedAuthorizationServer.issuer, nil
+	if shared := endpoint.sharedAuthorizationServer; shared != nil && !private && !shared.onAuthenticationHost {
+		return shared.issuer, nil
 	}
 	return s.issuerURL(endpoint, resourceBaseURL)
 }

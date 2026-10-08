@@ -140,6 +140,14 @@ const (
 	// ParamRefreshToken carries the refresh token of a refresh_token grant
 	// (RFC 6749 §6).
 	ParamRefreshToken = "refresh_token"
+
+	// ParamToken carries the token a revocation request revokes (RFC 7009
+	// §2.1).
+	ParamToken = "token"
+
+	// ParamTokenTypeHint carries a revocation request's hint about the type
+	// of the token it revokes (RFC 7009 §2.1).
+	ParamTokenTypeHint = "token_type_hint"
 )
 
 // Error carries an OAuth wire error: the shared shape used across the

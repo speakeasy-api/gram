@@ -1238,20 +1238,32 @@ SELECT COALESCE((SELECT pid FROM pg_catalog.pg_stat_activity WHERE datname = cur
 
 -- name: ListRoleDeliveryServers :many
 -- Keep ineligible live backends as removal candidates. Only additions require eligibility.
+-- Load latest live contents with the inventory for typed platform classification.
 SELECT m.id, m.project_id, COALESCE(NULLIF(m.name, ''), NULLIF(m.slug, ''), m.id::text)::text AS name,
   'mcp_server'::text AS backend_kind, COALESCE(m.toolset_id, m.id)::uuid AS resource_id, m.toolset_id AS legacy_toolset_id,
   (m.visibility <> 'disabled' AND (m.unproxied_mcp_server_id IS NOT NULL OR EXISTS (
     SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = m.id AND e.project_id = p.id AND e.deleted IS FALSE
-  )))::boolean AS eligible
+  )))::boolean AS eligible, latest.tool_urns
 FROM mcp_servers m JOIN projects p ON p.id = m.project_id
+LEFT JOIN toolsets backing ON backing.id = m.toolset_id AND backing.project_id = p.id AND backing.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT v.tool_urns FROM toolset_versions v
+  WHERE v.toolset_id = backing.id AND v.deleted IS FALSE
+  ORDER BY v.version DESC LIMIT 1
+) latest ON true
 WHERE p.organization_id = @organization_id AND p.id = @project_id
   AND p.deleted IS FALSE AND m.deleted IS FALSE
 UNION ALL
 SELECT t.id, t.project_id, t.name, 'toolset'::text, t.id, t.id,
   (t.mcp_enabled AND COALESCE(t.mcp_slug, '') <> '' AND NOT EXISTS (
     SELECT 1 FROM mcp_servers m WHERE m.toolset_id = t.id AND m.project_id = p.id AND m.deleted IS FALSE
-  ))::boolean
+  ))::boolean, latest.tool_urns
 FROM toolsets t JOIN projects p ON p.id = t.project_id
+LEFT JOIN LATERAL (
+  SELECT v.tool_urns FROM toolset_versions v
+  WHERE v.toolset_id = t.id AND v.deleted IS FALSE
+  ORDER BY v.version DESC LIMIT 1
+) latest ON true
 WHERE p.organization_id = @organization_id AND p.id = @project_id
   AND p.deleted IS FALSE AND t.deleted IS FALSE
 ORDER BY id;
@@ -1331,3 +1343,78 @@ WHERE p.organization_id = @organization_id AND p.project_id = @project_id
     OR EXISTS (SELECT 1 FROM meta_mcp_servers m WHERE m.id = @resource_id AND m.id = ps.meta_mcp_server_id AND m.project_id = p.project_id AND m.deleted IS FALSE)
   )
 ORDER BY a.principal_urn, p.name, p.id;
+-- name: ListDeliveryToolsetToolURNs :many
+-- Resolve direct and wrapped toolsets without changing removal eligibility.
+SELECT latest.tool_urns
+FROM toolsets t
+JOIN projects p ON p.id = t.project_id
+CROSS JOIN LATERAL (
+  SELECT v.tool_urns FROM toolset_versions v
+  WHERE v.toolset_id = t.id AND v.deleted IS FALSE
+  ORDER BY v.version DESC LIMIT 1
+) latest
+WHERE p.organization_id = @organization_id AND p.id = @project_id
+  AND p.deleted IS FALSE AND t.deleted IS FALSE
+  AND (t.id = sqlc.narg('toolset_id')::uuid OR EXISTS (
+    SELECT 1 FROM mcp_servers m
+    WHERE m.id = sqlc.narg('mcp_server_id')::uuid
+      AND m.project_id = p.id AND m.toolset_id = t.id AND m.deleted IS FALSE
+  ));
+
+-- name: ListPlatformCleanupMemberships :many
+-- Exact membership audit provenance only. Initiating-user Default attachments
+-- and manually updated entries remain ambiguous and must never be auto-cleaned.
+SELECT sqlc.embed(ps),
+  (EXISTS (
+    SELECT 1 FROM audit_logs a
+    WHERE a.organization_id = @organization_id AND a.project_id = @project_id
+      AND a.subject_type = 'plugin' AND a.subject_id = ps.plugin_id::text
+      AND a.action = 'plugin:server_add' AND a.metadata->>'server_id' = ps.id::text
+    GROUP BY a.subject_id
+    HAVING count(*) = 1 AND bool_and(a.actor_type = 'system' AND a.actor_id = 'automatic-role-distribution')
+  ) AND NOT EXISTS (
+    SELECT 1 FROM audit_logs a
+    WHERE a.organization_id = @organization_id AND a.project_id = @project_id
+      AND a.subject_type = 'plugin' AND a.subject_id = ps.plugin_id::text
+      AND a.metadata->>'server_id' = ps.id::text
+      AND a.action IN ('plugin:server_update', 'plugin:server_remove')
+  ))::boolean AS automatic_provenance
+FROM plugin_servers ps
+JOIN plugins p ON p.id = ps.plugin_id
+JOIN projects project ON project.id = p.project_id
+LEFT JOIN mcp_servers m ON m.id = ps.mcp_server_id AND m.project_id = @project_id AND m.deleted IS FALSE
+WHERE p.organization_id = @organization_id AND p.project_id = @project_id
+  AND project.organization_id = @organization_id AND project.deleted IS FALSE
+  AND p.deleted IS FALSE AND ps.deleted IS FALSE
+  AND (ps.toolset_id IS NOT NULL OR m.toolset_id IS NOT NULL)
+  AND (sqlc.narg('toolset_id')::uuid IS NULL OR ps.toolset_id = sqlc.narg('toolset_id')::uuid OR m.toolset_id = sqlc.narg('toolset_id')::uuid)
+  AND (cardinality(@membership_ids::uuid[]) = 0 OR ps.id = ANY(@membership_ids::uuid[]))
+  AND ps.id > @after_id::uuid
+ORDER BY ps.id
+LIMIT @page_size::integer;
+
+-- name: LockPlatformCleanupMemberships :many
+-- Lock exact live rows before the final audit-provenance read. Manual updates
+-- lock these rows even when they do not acquire project admission/plugin locks.
+SELECT ps.id
+FROM plugin_servers ps
+JOIN plugins p ON p.id = ps.plugin_id
+JOIN projects project ON project.id = p.project_id
+WHERE p.organization_id = @organization_id AND p.project_id = @project_id
+  AND project.organization_id = @organization_id AND project.deleted IS FALSE
+  AND p.deleted IS FALSE AND ps.deleted IS FALSE
+  AND ps.id = ANY(@membership_ids::uuid[])
+ORDER BY ps.id
+FOR UPDATE OF ps;
+
+-- name: RemovePlatformCleanupMembership :one
+-- Reassert tenant scope on the write after cleanup's scoped reads and row locks.
+UPDATE plugin_servers ps
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+FROM plugins p, projects project
+WHERE ps.id = @id AND ps.plugin_id = @plugin_id AND ps.deleted IS FALSE
+  AND p.id = ps.plugin_id AND p.deleted IS FALSE
+  AND p.organization_id = @organization_id AND p.project_id = @project_id
+  AND project.id = p.project_id AND project.organization_id = @organization_id
+  AND project.deleted IS FALSE
+RETURNING ps.*;

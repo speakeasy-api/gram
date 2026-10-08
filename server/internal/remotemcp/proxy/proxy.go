@@ -138,12 +138,44 @@ func (i ServerIdentity) AppendAttributes(attrs []attribute.KeyValue) []attribute
 	return attrs
 }
 
+// UpstreamResponseRetry is how a retried upstream request differs from the
+// first. A zero field leaves that part of the request unchanged.
 type UpstreamResponseRetry struct {
+	// RemoteURL replaces the upstream URL; empty keeps it.
 	RemoteURL string
-	Headers   []ConfiguredHeader
+
+	// Headers replaces the configured headers; nil keeps them.
+	Headers []ConfiguredHeader
+
+	// AuthorizationOverride replaces the bearer token presented upstream;
+	// empty keeps it.
+	AuthorizationOverride string
 }
 
+// UpstreamResponseRetryer inspects the first upstream response, before any of
+// it is relayed, and returns how to send the request once more, or nil to
+// keep the response.
 type UpstreamResponseRetryer func(ctx context.Context, resp *http.Response) (*UpstreamResponseRetry, error)
+
+// ChainUpstreamResponseRetryers tries each retryer in order and returns the
+// first retry one asks for, or its error. The proxy retries once, so later
+// retryers only see responses earlier ones keep. Nil retryers are skipped.
+func ChainUpstreamResponseRetryers(retryers ...UpstreamResponseRetryer) UpstreamResponseRetryer {
+	return func(ctx context.Context, resp *http.Response) (*UpstreamResponseRetry, error) {
+		for _, retryer := range retryers {
+			if retryer == nil {
+				continue
+			}
+
+			retry, err := retryer(ctx, resp)
+			if err != nil || retry != nil {
+				return retry, err
+			}
+		}
+
+		return nil, nil
+	}
+}
 
 // Proxy is a one-request handler that forwards inbound MCP client requests
 // to a configured Remote MCP Server. A fresh value is expected per inbound
@@ -1049,8 +1081,15 @@ func (p *Proxy) forwardRequestWithRetry(
 	}
 	o11y.NoLogDefer(upstreamResp.Body.Close)
 
-	p.RemoteURL = retry.RemoteURL
-	p.Headers = retry.Headers
+	if retry.RemoteURL != "" {
+		p.RemoteURL = retry.RemoteURL
+	}
+	if retry.Headers != nil {
+		p.Headers = retry.Headers
+	}
+	if retry.AuthorizationOverride != "" {
+		p.AuthorizationOverride = retry.AuthorizationOverride
+	}
 	return p.forwardRequest(ctx, r, body(), validate)
 }
 

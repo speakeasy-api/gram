@@ -3,10 +3,12 @@ package analytics
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -19,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -38,14 +41,52 @@ var _ gen.Auther = (*Service)(nil)
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, ch Querier, sessions *sessions.Manager, authzEngine *authz.Engine) *Service {
 	logger = logger.With(attr.SlogComponent("analytics"))
+	// A lookup without a loader is a programming error, so it panics like
+	// MustCatalog.
+	catalog, err := Default.WithLoaders(map[string]LookupLoader{
+		MCPServerDisplayNamesLookup: mcpServerDisplayNames(hooksRepo.New(db)),
+	})
+	if err != nil {
+		panic(err)
+	}
 	return &Service{
 		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry/analytics"),
 		logger:  logger,
 		auth:    auth.New(logger, db, sessions, authzEngine),
 		authz:   authzEngine,
 		ch:      ch,
-		catalog: Default,
+		catalog: catalog,
 	}
+}
+
+// mcpServerDisplayNames loads a project's hook server-name overrides, raw
+// name to display name, on every request so a query speaks the names the
+// page shows now.
+func mcpServerDisplayNames(hooks *hooksRepo.Queries) LookupLoader {
+	return func(ctx context.Context, tenant Tenant) (map[string]string, error) {
+		projectID, err := uuid.Parse(tenant.ProjectID)
+		if err != nil {
+			return nil, fmt.Errorf("parse project id: %w", err)
+		}
+		overrides, err := hooks.ListHooksServerNameOverrides(ctx, projectID)
+		if err != nil {
+			return nil, fmt.Errorf("list hook server name overrides: %w", err)
+		}
+		names := make(map[string]string, len(overrides))
+		for _, override := range overrides {
+			names[override.RawServerName] = override.DisplayName
+		}
+		return names, nil
+	}
+}
+
+// loadLookups is LoadLookups with a failure mapped to an unexpected error.
+func (s *Service) loadLookups(ctx context.Context, tenant Tenant, dataset string, reads []string) (LookupMaps, error) {
+	lookups, err := s.catalog.LoadLookups(ctx, tenant, dataset, reads)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load the dataset's lookups").LogError(ctx, s.logger)
+	}
+	return lookups, nil
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -84,8 +125,13 @@ func (s *Service) Query(ctx context.Context, payload *gen.QueryPayload) (*gen.An
 	if err != nil {
 		return nil, err
 	}
+	tenant := Tenant{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: authCtx.ProjectID.String()}
+	lookups, err := s.loadLookups(ctx, tenant, req.Dataset, req.Reads())
+	if err != nil {
+		return nil, err
+	}
 
-	plan, err := Compile(s.catalog, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), req)
+	plan, err := Compile(s.catalog, tenant, lookups, req)
 	if err != nil {
 		if invalid, ok := errors.AsType[*Error](err); ok {
 			return nil, oops.E(oops.CodeBadRequest, err, "%s", invalid.Error())
@@ -193,10 +239,19 @@ func describeDatasets(catalog *Catalog) []*gen.AnalyticsDataset {
 				Unit:         nil,
 				Operators:    nil,
 				Aggregations: nil,
+				Description:  nil,
+				Lookup:       nil,
 			}
 			if f.Unit != "" {
 				unit := f.Unit
 				field.Unit = &unit
+			}
+			if f.Description != "" {
+				description := f.Description
+				field.Description = &description
+			}
+			if lookup, ok := catalog.Lookup(f.Lookup); ok {
+				field.Lookup = &gen.AnalyticsLookup{Name: lookup.Name, Description: lookup.Description}
 			}
 			for _, op := range f.Operators {
 				field.Operators = append(field.Operators, string(op))

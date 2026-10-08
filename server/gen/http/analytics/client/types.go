@@ -626,10 +626,12 @@ type DimensionValuesGatewayErrorResponseBody struct {
 
 // AnalyticsMeasureRequestBody is used to define fields on request body types.
 type AnalyticsMeasureRequestBody struct {
-	// Aggregation to apply. count takes no field; every other op needs a measure
-	// field that admits it, per describe.
+	// Aggregation to apply. count takes no field; count_distinct takes a dimension
+	// that admits it; every other op needs a measure field that admits it, per
+	// describe.
 	Op string `form:"op" json:"op" xml:"op"`
-	// Measure field the op applies to. Absent for count.
+	// Field the op applies to: a dimension for count_distinct, a measure
+	// otherwise. Absent for count.
 	Field *string `form:"field,omitempty" json:"field,omitempty" xml:"field,omitempty"`
 	// Result column name. Defaults to the op, or op_field.
 	Alias *string `form:"alias,omitempty" json:"alias,omitempty" xml:"alias,omitempty"`
@@ -674,8 +676,20 @@ type AnalyticsFieldResponseBody struct {
 	Unit *string `form:"unit,omitempty" json:"unit,omitempty" xml:"unit,omitempty"`
 	// Filter operators a dimension admits
 	Operators []string `form:"operators,omitempty" json:"operators,omitempty" xml:"operators,omitempty"`
-	// Ops a measure admits
+	// Ops a field admits: aggregations on a measure, count_distinct on a dimension
 	Aggregations []string `form:"aggregations,omitempty" json:"aggregations,omitempty" xml:"aggregations,omitempty"`
+	// What the field is and which producers fill it, when the catalog has
+	// something to say beyond the name
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The map this dimension reads through, when it reads through one
+	Lookup *AnalyticsLookupResponseBody `form:"lookup,omitempty" json:"lookup,omitempty" xml:"lookup,omitempty"`
+}
+
+// AnalyticsLookupResponseBody is used to define fields on response body types.
+type AnalyticsLookupResponseBody struct {
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// What the map is and where it is set
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 }
 
 // AnalyticsDimensionValueResponseBody is used to define fields on response
@@ -2044,8 +2058,8 @@ func ValidateDimensionValuesGatewayErrorResponseBody(body *DimensionValuesGatewa
 // ValidateAnalyticsMeasureRequestBody runs the validations defined on
 // AnalyticsMeasureRequestBody
 func ValidateAnalyticsMeasureRequestBody(body *AnalyticsMeasureRequestBody) (err error) {
-	if !(body.Op == "count" || body.Op == "sum" || body.Op == "avg" || body.Op == "min" || body.Op == "max" || body.Op == "p50" || body.Op == "p95" || body.Op == "p99") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", body.Op, []any{"count", "sum", "avg", "min", "max", "p50", "p95", "p99"}))
+	if !(body.Op == "count" || body.Op == "count_distinct" || body.Op == "sum" || body.Op == "avg" || body.Op == "min" || body.Op == "max" || body.Op == "p50" || body.Op == "p95" || body.Op == "p99") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.op", body.Op, []any{"count", "count_distinct", "sum", "avg", "min", "max", "p50", "p95", "p99"}))
 	}
 	return
 }
@@ -2131,6 +2145,23 @@ func ValidateAnalyticsFieldResponseBody(body *AnalyticsFieldResponseBody) (err e
 		if !(*body.Role == "dimension" || *body.Role == "measure") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.role", *body.Role, []any{"dimension", "measure"}))
 		}
+	}
+	if body.Lookup != nil {
+		if err2 := ValidateAnalyticsLookupResponseBody(body.Lookup); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateAnalyticsLookupResponseBody runs the validations defined on
+// AnalyticsLookupResponseBody
+func ValidateAnalyticsLookupResponseBody(body *AnalyticsLookupResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
 	}
 	return
 }

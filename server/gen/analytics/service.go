@@ -95,8 +95,13 @@ type AnalyticsField struct {
 	Unit *string
 	// Filter operators a dimension admits
 	Operators []string
-	// Ops a measure admits
+	// Ops a field admits: aggregations on a measure, count_distinct on a dimension
 	Aggregations []string
+	// What the field is and which producers fill it, when the catalog has
+	// something to say beyond the name
+	Description *string
+	// The map this dimension reads through, when it reads through one
+	Lookup *AnalyticsLookup
 }
 
 // A filter on a dimension. All filters are ANDed.
@@ -109,12 +114,22 @@ type AnalyticsFilter struct {
 	Values []string
 }
 
+// A per-project map a dimension reads through at query time: a reported value
+// with an entry shows as its target, the rest show as reported.
+type AnalyticsLookup struct {
+	Name string
+	// What the map is and where it is set
+	Description string
+}
+
 // A composed measure: an op over a field, or count alone.
 type AnalyticsMeasure struct {
-	// Aggregation to apply. count takes no field; every other op needs a measure
-	// field that admits it, per describe.
+	// Aggregation to apply. count takes no field; count_distinct takes a dimension
+	// that admits it; every other op needs a measure field that admits it, per
+	// describe.
 	Op string
-	// Measure field the op applies to. Absent for count.
+	// Field the op applies to: a dimension for count_distinct, a measure
+	// otherwise. Absent for count.
 	Field *string
 	// Result column name. Defaults to the op, or op_field.
 	Alias *string

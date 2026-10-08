@@ -263,15 +263,20 @@ function hostOf(url: string | undefined | null): string {
 }
 
 /** Host plus path, minus the scheme — how the mock renders an issuer URL. */
-function displayUrl(url: string): string {
+export function displayUrl(url: string): string {
   return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
 }
 
-function issuerDisplayName(issuer: RemoteSessionIssuer): string {
+/** An issuer's name, else its URL's host, else its slug; "" when none. */
+export function issuerDisplayName(
+  issuer: Pick<RemoteSessionIssuer, "issuer"> &
+    Partial<Pick<RemoteSessionIssuer, "name" | "slug">>,
+): string {
   return (
     issuer.name?.trim() ||
     deriveRemoteSessionIssuerNameFromUrl(issuer.issuer) ||
-    issuer.slug
+    issuer.slug ||
+    ""
   );
 }
 

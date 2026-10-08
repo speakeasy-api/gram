@@ -213,18 +213,6 @@
               "help": ""
             },
             {
-              "type": "text",
-              "markdown": "**Not ready yet:** Speakeasy's token endpoint can't accept Claude's token until workload sign-in reaches shared authorization servers. You can save these values in Claude now, but sign-in fails until then.\n",
-              "src": "",
-              "alt": "",
-              "caption": "",
-              "href": "",
-              "label": "",
-              "variable": "",
-              "value": "",
-              "help": ""
-            },
-            {
               "type": "checklist_item",
               "markdown": "",
               "src": "",
@@ -305,7 +293,7 @@
             },
             {
               "type": "checklist_item",
-              "markdown": "Leave empty.",
+              "markdown": "Leave empty. Claude Tag's token then works at every MCP server of this authorization server that the agent assigned to Claude Tag may connect to.",
               "src": "",
               "alt": "",
               "caption": "",
@@ -337,7 +325,7 @@
               "label": "Allowed API hosts",
               "variable": "",
               "value": "mcp_host",
-              "help": "This is also the token endpoint's host, so Claude asks for the API paths it may call too. List your MCP servers' paths, such as /mcp/your-server."
+              "help": "When the token endpoint above is on this same host, Claude asks for the API paths it may call too. List the paths of the MCP servers Claude Tag should use, such as /mcp/your-server."
             },
             {
               "type": "checklist_item",

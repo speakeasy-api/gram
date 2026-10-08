@@ -3978,7 +3978,7 @@ func (s *ServiceCore) stopRuntimeRecord(ctx context.Context, projectID, runtimeI
 
 // assistantActor attributes hosted MCP changes made by an assistant write.
 func assistantActor(ctx context.Context, fallbackUserID string) hostedmcp.Actor {
-	actor := hostedmcp.Actor{UserID: fallbackUserID, Email: nil}
+	actor := hostedmcp.Actor{UserID: fallbackUserID, Email: nil, System: ""}
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.UserID != "" {
 		actor.UserID, actor.Email = authCtx.UserID, authCtx.Email
 	}
