@@ -127,6 +127,8 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 			RemoteSessionID:                    uuid.Nil,
 			RemoteSessionUpdatedAt:             time.Time{},
 			RemoteSessionResolvedFromUpdatedAt: time.Time{},
+			GrantGeneration:                    0,
+			AccessExpiresAt:                    nil,
 			ClientCredentialErr:                nil,
 		}, nil
 	case !outcome.Applicable() && unusable:

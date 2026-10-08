@@ -27,7 +27,6 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -37,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/tunnel/identity"
 )
 
 // agentGatewayFixture is one agent, one key, and two private member servers in
@@ -258,7 +258,7 @@ func TestServeAgentGateway_PrivateTunnelReceivesAgentAssertion(t *testing.T) {
 	headers, _ := tunnelForwards(gateway)
 	require.GreaterOrEqual(t, len(headers), 3)
 	for _, header := range headers {
-		token, err := jwt.Parse(header.Get(mcpauthz.Header), func(*jwt.Token) (any, error) { return publicKey, nil }, jwt.WithValidMethods([]string{"RS256"}), jwt.WithIssuer("https://gram.example"), jwt.WithAudience(resource), jwt.WithExpirationRequired())
+		token, err := jwt.Parse(header.Get(identity.Header), func(*jwt.Token) (any, error) { return publicKey, nil }, jwt.WithValidMethods([]string{"RS256"}), jwt.WithIssuer("https://gram.example"), jwt.WithAudience(resource), jwt.WithExpirationRequired())
 		require.NoError(t, err)
 		claims, ok := token.Claims.(jwt.MapClaims)
 		require.True(t, ok)

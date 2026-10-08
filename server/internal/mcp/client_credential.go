@@ -84,7 +84,7 @@ func (s *Service) renewClientCredentialOnRejection(p *proxy.Proxy, logger *slog.
 			attr.SlogRemoteSessionClientID(upstream.RemoteSessionClientID.String()),
 		)
 
-		return &proxy.UpstreamResponseRetry{RemoteURL: "", Headers: nil, AuthorizationOverride: renewed.Token}, nil
+		return &proxy.UpstreamResponseRetry{RemoteURL: "", Headers: nil, AuthorizationOverride: renewed.Token, UpstreamCredential: upstreamProvenance(renewed)}, nil
 	}
 
 	p.UpstreamResponseRetryer = proxy.ChainUpstreamResponseRetryers(p.UpstreamResponseRetryer, renew)

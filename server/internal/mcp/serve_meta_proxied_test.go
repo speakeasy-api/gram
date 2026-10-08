@@ -306,20 +306,41 @@ func insertQualifiedRemoteSessionToken(
 ) {
 	t.Helper()
 
+	upsertRemoteSessionToken(t, ctx, ti, userSessionIssuerID, remoteSessionClientID, subject, accessToken, resource, new(time.Now().Add(time.Hour)))
+}
+
+// upsertRemoteSessionToken authorizes subject's grant for the client with
+// accessToken, expiring at accessExpiresAt or never stating an expiry when
+// nil, and returns the grant row. Authorizing an existing grant again
+// advances its generation.
+func upsertRemoteSessionToken(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	userSessionIssuerID uuid.UUID,
+	remoteSessionClientID uuid.UUID,
+	subject urn.SessionSubject,
+	accessToken string,
+	resource string,
+	accessExpiresAt *time.Time,
+) remotesessions_repo.RemoteSession {
+	t.Helper()
+
 	accessTokenEncrypted, err := ti.enc.Encrypt([]byte(accessToken))
 	require.NoError(t, err)
-	_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+	grant, err := remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userSessionIssuerID,
 		RemoteSessionClientID: remoteSessionClientID,
 		AccessTokenEncrypted:  accessTokenEncrypted,
-		AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+		AccessExpiresAt:       conv.PtrToPGTimestamptz(accessExpiresAt),
 		RefreshTokenEncrypted: pgtype.Text{String: "", Valid: false},
 		RefreshExpiresAt:      pgtype.Timestamptz{Valid: false},
 		Scopes:                []string{},
 		Resource:              pgtype.Text{String: resource, Valid: resource != ""},
 	})
 	require.NoError(t, err)
+	return grant
 }
 
 // mintMetaIssuerBearer mints and persists a user-session bearer for an

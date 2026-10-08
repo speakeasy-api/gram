@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/tunnel/identity"
 )
 
 const (
@@ -150,6 +151,12 @@ type UpstreamResponseRetry struct {
 	// AuthorizationOverride replaces the bearer token presented upstream;
 	// empty keeps it.
 	AuthorizationOverride string
+
+	// UpstreamCredential describes AuthorizationOverride. It replaces the
+	// proxy's credential whenever AuthorizationOverride is set, so nil then
+	// clears it; with an empty AuthorizationOverride it is ignored and the
+	// proxy keeps both.
+	UpstreamCredential *identity.UpstreamCredential
 }
 
 // UpstreamResponseRetryer inspects the first upstream response, before any of
@@ -261,9 +268,17 @@ type Proxy struct {
 	// Leave empty (default) to send no Authorization upstream.
 	AuthorizationOverride string
 
+	// UpstreamCredential describes exactly the bearer in AuthorizationOverride,
+	// for the caller assertion to attest. Nil means the bearer, if any, is
+	// unattested: identity chained, configured, or absent. Set the pair with
+	// SetUpstreamAuthorization; a request whose credential does not match
+	// AuthorizationOverride fails before it is forwarded.
+	UpstreamCredential *identity.UpstreamCredential
+
 	// CallerAssertion signs the caller's identity for each forwarded request,
-	// after headers are set. Proxies with an issuer never follow redirects.
-	CallerAssertion func(context.Context) (string, error)
+	// after headers are set, with UpstreamCredential describing the forwarded
+	// bearer. Proxies with an issuer never follow redirects.
+	CallerAssertion func(ctx context.Context, cred *identity.UpstreamCredential) (string, error)
 
 	// UpstreamResponseRetryer may replace the upstream target once after
 	// response headers arrive but before any response is relayed to the user.
@@ -385,6 +400,14 @@ type Proxy struct {
 	// originating request ID is seen. Responses to non-resources/list
 	// requests skip this loop entirely.
 	ResourcesListResponseInterceptors []ResourcesListResponseInterceptor
+}
+
+// SetUpstreamAuthorization sets the bearer presented upstream together with
+// the credential that describes it. cred is nil for a bearer the caller
+// assertion must not attest, such as an identity-chained token.
+func (p *Proxy) SetUpstreamAuthorization(token string, cred *identity.UpstreamCredential) {
+	p.AuthorizationOverride = token
+	p.UpstreamCredential = cred
 }
 
 // Delete forwards an inbound DELETE to the remote MCP server. In MCP's
@@ -1088,7 +1111,7 @@ func (p *Proxy) forwardRequestWithRetry(
 		p.Headers = retry.Headers
 	}
 	if retry.AuthorizationOverride != "" {
-		p.AuthorizationOverride = retry.AuthorizationOverride
+		p.SetUpstreamAuthorization(retry.AuthorizationOverride, retry.UpstreamCredential)
 	}
 	return p.forwardRequest(ctx, r, body(), validate)
 }

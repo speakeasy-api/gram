@@ -17,6 +17,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/tunnel/identity"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
@@ -64,9 +66,10 @@ type buildProxyParams struct {
 	// uses the tunneled server ID.
 	ResourceIdentifier string
 
-	// UpstreamAuth is the Authorization value forwarded upstream. Empty
-	// forwards none; the incoming Authorization header is always dropped.
-	UpstreamAuth string
+	// Upstream is the bearer forwarded upstream and the credential describing
+	// it. An empty token forwards none; the incoming Authorization header is
+	// always dropped.
+	Upstream upstreamBearer
 
 	// WWWAuthenticate replaces the upstream's challenge on 401/403. Empty
 	// relays the upstream challenge verbatim.
@@ -74,6 +77,60 @@ type buildProxyParams struct {
 
 	// Selection restricts the tools exposed through this proxy.
 	Selection *toolfilter.SessionSelection
+}
+
+// upstreamBearer is a bearer to forward upstream with the credential that
+// describes it.
+type upstreamBearer struct {
+	// Token is the bearer. Empty forwards none.
+	Token string
+
+	// Credential describes Token for the caller assertion, built by
+	// upstreamProvenance. Nil leaves Token unattested, as for an
+	// identity-chained token.
+	Credential *identity.UpstreamCredential
+}
+
+// routedUpstreamBearer forwards tok with the credential describing it.
+func routedUpstreamBearer(tok remotesessions.UpstreamToken) upstreamBearer {
+	return upstreamBearer{Token: tok.Token, Credential: upstreamProvenance(tok)}
+}
+
+// upstreamProvenance describes tok for the caller assertion, or returns nil
+// when tok came from neither a remote session grant nor a self client
+// credential. A subject token needs its grant row: an identity-chained token
+// is wrapped as a subject token with no grant, and stays unattested.
+func upstreamProvenance(tok remotesessions.UpstreamToken) *identity.UpstreamCredential {
+	if tok.Token == "" || tok.RemoteSessionClientID == uuid.Nil {
+		return nil
+	}
+
+	cred := &identity.UpstreamCredential{
+		Owner:           "",
+		ClientID:        tok.RemoteSessionClientID.String(),
+		GrantID:         "",
+		GrantGeneration: 0,
+		TokenSHA256:     identity.TokenSHA256(tok.Token),
+		TokenExpiresAt:  nil,
+	}
+	switch tok.CredentialOwner {
+	case remotesessions.CredentialOwnerSubject:
+		if tok.RemoteSessionID == uuid.Nil || tok.GrantGeneration < 1 {
+			return nil
+		}
+		cred.Owner = identity.OwnerSubject
+		cred.GrantID = tok.RemoteSessionID.String()
+		cred.GrantGeneration = tok.GrantGeneration
+	case remotesessions.CredentialOwnerSelf:
+		cred.Owner = identity.OwnerSelf
+	default:
+		return nil
+	}
+	if tok.AccessExpiresAt != nil {
+		cred.TokenExpiresAt = new(tok.AccessExpiresAt.Unix())
+	}
+
+	return cred
 }
 
 // buildProxy constructs the tunnel-backed proxy for one request.
@@ -127,20 +184,22 @@ func (m *tunnelManager) buildProxy(
 		mcpServer.Visibility,
 		params.OrganizationID,
 		params.ProjectID.String(),
-		params.UpstreamAuth,
+		params.Upstream.Token,
 		params.WWWAuthenticate,
 		params.Selection,
 		options...,
 	)
+	p.SetUpstreamAuthorization(params.Upstream.Token, params.Upstream.Credential)
 	if mcpServer.Visibility == mcpservers.VisibilityPrivate {
 		target := mcpauthz.Target{
 			OrganizationID:     params.OrganizationID,
 			ProjectID:          params.ProjectID,
 			TunnelID:           mcpServer.TunneledMcpServerID.UUID,
+			MCPServerID:        mcpServer.ID,
 			ResourceIdentifier: params.ResourceIdentifier,
 		}
-		p.CallerAssertion = func(ctx context.Context) (string, error) {
-			return m.callerAssertions.Mint(ctx, target)
+		p.CallerAssertion = func(ctx context.Context, cred *identity.UpstreamCredential) (string, error) {
+			return m.callerAssertions.Mint(ctx, target, cred)
 		}
 	}
 	p.UpstreamResponseRetryer = tunnelrouting.Retryer(m.routes, tunnelID, addr, params.ClientAffinityKey, m.forwardToken)

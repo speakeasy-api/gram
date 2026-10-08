@@ -31,7 +31,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -43,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/tunnel/identity"
 )
 
 type Service struct {
@@ -739,7 +739,7 @@ func (s *Service) UpdateServerHeader(ctx context.Context, payload *gen.UpdateSer
 	hasValueFromRequestHeader := payload.ValueFromRequestHeader != nil && *payload.ValueFromRequestHeader != ""
 	preserveStoredValue := isSecret && !hasValue && !hasValueFromRequestHeader && existing.IsSecret && existing.Value.Valid
 
-	if mcpauthz.ReservedHeader(payload.Name) || (payload.ValueFromRequestHeader != nil && mcpauthz.ReservedHeader(*payload.ValueFromRequestHeader)) {
+	if identity.ReservedHeader(payload.Name) || (payload.ValueFromRequestHeader != nil && identity.ReservedHeader(*payload.ValueFromRequestHeader)) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "caller assertion headers are reserved")
 	}
 	if !preserveStoredValue {
@@ -879,7 +879,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // pass-through header is not marked secret. Callers that want to preserve an
 // existing secret's stored value skip this check entirely; see UpdateServerHeader.
 func validateHeaderValueSource(name string, value *string, valueFromRequestHeader *string, isSecret bool) error {
-	if mcpauthz.ReservedHeader(name) || (valueFromRequestHeader != nil && mcpauthz.ReservedHeader(*valueFromRequestHeader)) {
+	if identity.ReservedHeader(name) || (valueFromRequestHeader != nil && identity.ReservedHeader(*valueFromRequestHeader)) {
 		return errors.New("caller assertion headers are reserved")
 	}
 	hasValue := value != nil && *value != ""
