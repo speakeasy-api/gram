@@ -218,6 +218,12 @@ vi.mock("@gram/client/react-query/getRemoteMcpServerScopes.js", () => ({
     mocks.setScopesData(...args),
   invalidateAllGetRemoteMcpServerScopes: (...args: unknown[]) =>
     mocks.invalidateScopes(...args),
+  queryKeyGetRemoteMcpServerScopes: (params: unknown) => [
+    "@gram/client",
+    "remoteMcp",
+    "getServerScopes",
+    params,
+  ],
 }));
 
 vi.mock("@gram/client/react-query/setRemoteMcpServerScopePin.js", () => ({
@@ -305,6 +311,7 @@ function serverScopes(overrides: Record<string, unknown> = {}) {
     challengeScopes: [],
     discoveryEnabled: true,
     sharedServerCount: 0,
+    canPin: true,
     clients: [
       {
         clientId: "client-1",
@@ -2200,6 +2207,73 @@ describe("RemoteMcpIdentitySectionBody", () => {
       expect(mocks.invalidateScopes).not.toHaveBeenCalled();
     });
 
+    it("cancels in-flight reads before writing the saved pin", async () => {
+      const cancel = vi.spyOn(QueryClient.prototype, "cancelQueries");
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+
+      renderIdentity();
+      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
+      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => expect(mocks.setScopesData).toHaveBeenCalledOnce());
+      expect(cancel).toHaveBeenCalledWith({
+        queryKey: [
+          "@gram/client",
+          "remoteMcp",
+          "getServerScopes",
+          { mcpServerId: "mcp-server-1" },
+        ],
+      });
+      expect(cancel.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.setScopesData.mock.invocationCallOrder[0] ?? 0,
+      );
+      cancel.mockRestore();
+    });
+
+    it("refreshes the other servers' views of a shared pin", async () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({
+        data: serverScopes({ sharedServerCount: 1 }),
+        isError: false,
+      });
+      mocks.setPin.mockResolvedValue(
+        serverScopes({ pinnedScopes: ["read", "write"], sharedServerCount: 1 }),
+      );
+
+      renderIdentity();
+      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
+      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() =>
+        expect(mocks.toastSuccess).toHaveBeenCalledWith(
+          "Pinned scopes updated",
+        ),
+      );
+      expect(mocks.setScopesData).toHaveBeenCalledOnce();
+      expect(mocks.invalidateScopes).toHaveBeenCalledOnce();
+    });
+
+    it("shows a partial writer the pin without letting them change it", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({
+        data: serverScopes({ canPin: false, sharedServerCount: 1 }),
+        isError: false,
+      });
+
+      renderIdentity();
+
+      const field = screen.getByRole("combobox", { name: "Pinned scopes" });
+      expect((field as HTMLButtonElement).disabled).toBe(true);
+      expect(
+        screen.getByText(
+          "Pinned scopes are shared by every MCP server that uses this URL. You need edit access to all of them to change the pin.",
+        ),
+      ).toBeDefined();
+    });
+
     it("leaves the pin view alone when headers are saved", async () => {
       connectClient();
       mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
@@ -2399,7 +2473,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       ).toBeNull();
     });
 
-    it("explains a refusal: the pin needs edit access to every server on the URL", () => {
+    it("shows the generic load error on a refusal", () => {
       connectClient();
       mocks.scopes.mockReturnValue({
         data: undefined,
@@ -2413,12 +2487,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
       renderIdentity();
 
-      expect(
-        screen.getByText(
-          "Pinned scopes are shared by every MCP server that uses this URL. You need edit access to all of them to view or change the pin.",
-        ),
-      ).toBeDefined();
-      expect(screen.queryByText("Couldn't load pinned scopes.")).toBeNull();
+      expect(screen.getByText("Couldn't load pinned scopes.")).toBeDefined();
     });
 
     it("says the pin is loading until it arrives", () => {

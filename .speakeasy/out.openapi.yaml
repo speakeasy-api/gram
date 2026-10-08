@@ -47838,7 +47838,7 @@ paths:
         name: GetRemoteMcpServerHeader
   /rpc/remoteMcp.getServerScopes:
     get:
-      description: 'Report the scope state of the protected resource a remote-backed MCP server''s logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization''s resource scope discovery flag, and what a login through each bound client would request now. Reads cached state only; never contacts the resource.'
+      description: 'Report the scope state of the protected resource a remote-backed MCP server''s logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization''s resource scope discovery flag, and what a login through each bound client would request now. Requires read access to the server only. Reads cached state only; never contacts the resource.'
       operationId: getRemoteMcpServerScopes
       parameters:
         - allowEmptyValue: true
@@ -96439,6 +96439,12 @@ components:
           type: string
           description: The remote session client's ID.
           format: uuid
+        issuer_name:
+          type: string
+          description: The configured name of the client's authorization server; absent when it has none.
+        issuer_url:
+          type: string
+          description: The issuer URL of the client's authorization server.
         pin_would_decide:
           type: boolean
           description: 'Whether a pin, if set, decides this client''s request: discovery is on, the client owns the resource, and neither its own scope nor a challenge outranks the pin.'
@@ -96524,6 +96530,9 @@ components:
         advertised_scopes_known:
           type: boolean
           description: Whether a read of the resource's metadata within the last good window captured an advertised list.
+        can_pin:
+          type: boolean
+          description: 'Whether the caller may change the pin: write access to this server and every server in the project with the same upstream URL.'
         challenge_scopes:
           type: array
           items:
@@ -96559,6 +96568,7 @@ components:
         - discovery_enabled
         - clients
         - shared_server_count
+        - can_pin
     RemoteSession:
       type: object
       properties:
