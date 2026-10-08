@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 
 	"github.com/speakeasy-api/agenthooks"
 	"github.com/stretchr/testify/require"
@@ -147,22 +148,24 @@ func TestRelayCacheRejectionUsesFinalOrgCredentialsForUploadTask(t *testing.T) {
 }
 
 func TestRelaySpoolsEnrichedUnsentSkillPayload(t *testing.T) {
-	setSpoolStateHome(t)
-	event, rawSHA256 := relaySkillEvent(t, []byte("offline content"))
-	cfg := authedConfig(t, closedPortURL(t))
+	synctest.Test(t, func(t *testing.T) {
+		setSpoolStateHome(t)
+		event, rawSHA256 := relaySkillEvent(t, []byte("offline content"))
+		cfg := authedConfig(t, refusedPipeURL(t))
 
-	result, _ := NewRelay(cfg).deliver(t.Context(), event)
+		result, _ := NewRelay(cfg).deliver(t.Context(), event)
 
-	require.True(t, result.unsent())
-	names := spoolFiles(t)
-	require.Len(t, names, 1)
-	entry := readSpoolEntry(t, names[0])
-	skill := entry.Envelope.Data.Skill
-	require.NotNil(t, skill)
-	require.Nil(t, skill.SourceLevel)
-	require.Nil(t, skill.SourcePath)
-	require.Equal(t, rawSHA256, *skill.RawSha256)
-	require.Equal(t, "offline content", entry.Envelope.Data.ToolCall.Output)
+		require.True(t, result.unsent())
+		names := spoolFiles(t)
+		require.Len(t, names, 1)
+		entry := readSpoolEntry(t, names[0])
+		skill := entry.Envelope.Data.Skill
+		require.NotNil(t, skill)
+		require.Nil(t, skill.SourceLevel)
+		require.Nil(t, skill.SourcePath)
+		require.Equal(t, rawSHA256, *skill.RawSha256)
+		require.Equal(t, "offline content", entry.Envelope.Data.ToolCall.Output)
+	})
 }
 
 func TestIngestRedirectDoesNotForwardKeyAndFailsClosedWithoutSpool(t *testing.T) {

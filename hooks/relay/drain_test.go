@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/speakeasy-api/agenthooks"
@@ -166,16 +167,18 @@ func TestDrainReplaysSkillContent(t *testing.T) {
 // TestDrainAbortsWhenServerStillDown pins backpressure: the first unsent
 // exchange stops the run and the backlog survives untouched.
 func TestDrainAbortsWhenServerStillDown(t *testing.T) {
-	drainEnv(t)
-	url := closedPortURL(t)
-	seedSpoolEntry(t, url, 2*time.Hour, "sess-1")
-	seedSpoolEntry(t, url, time.Hour, "sess-2")
+	synctest.Test(t, func(t *testing.T) {
+		drainEnv(t)
+		url := refusedPipeURL(t)
+		seedSpoolEntry(t, url, 2*time.Hour, "sess-1")
+		seedSpoolEntry(t, url, time.Hour, "sess-2")
 
-	s := Drain(t.Context())
-	require.True(t, s.Aborted)
-	require.Zero(t, s.Replayed)
-	require.Equal(t, 2, s.Remaining, "an aborted drain must keep the backlog")
-	require.Len(t, spoolFiles(t), 2)
+		s := Drain(t.Context())
+		require.True(t, s.Aborted)
+		require.Zero(t, s.Replayed)
+		require.Equal(t, 2, s.Remaining, "an aborted drain must keep the backlog")
+		require.Len(t, spoolFiles(t), 2)
+	})
 }
 
 // TestDrainDropsDefinitiveRejections: a 4xx answer means a replay would fail
@@ -417,11 +420,13 @@ func TestDrainEnvKeyPinnedToItsDeployment(t *testing.T) {
 // TestRunDrainAbortExitsNonZero: unreachable mid-run is the one retryable
 // outcome, and the exit code says so.
 func TestRunDrainAbortExitsNonZero(t *testing.T) {
-	drainEnv(t)
-	seedSpoolEntry(t, closedPortURL(t), time.Hour, "sess-1")
-	var out bytes.Buffer
-	require.Equal(t, 1, RunDrain(t.Context(), &out))
-	require.Contains(t, out.String(), "aborted=true")
+	synctest.Test(t, func(t *testing.T) {
+		drainEnv(t)
+		seedSpoolEntry(t, refusedPipeURL(t), time.Hour, "sess-1")
+		var out bytes.Buffer
+		require.Equal(t, 1, RunDrain(t.Context(), &out))
+		require.Contains(t, out.String(), "aborted=true")
+	})
 }
 
 // TestDrainPinsEntryProject: a SPEAKEASY_AI_HOOKS_PROJECT_SLUG inherited from the
