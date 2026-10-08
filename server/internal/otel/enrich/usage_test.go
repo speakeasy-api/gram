@@ -122,6 +122,8 @@ func TestUsageForCodex(t *testing.T) {
 		)
 
 		attrs := usage(t, in, record)
+		require.Contains(t, attrs, AgentInputTokensKey, "a clamped input is written as a stated zero, not left out")
+		require.Equal(t, attribute.INT64, attrs[AgentInputTokensKey].Type())
 		require.Zero(t, attrs[AgentInputTokensKey].AsInt64())
 		require.Equal(t, int64(10), attrs[AgentCacheReadTokensKey].AsInt64())
 	})
