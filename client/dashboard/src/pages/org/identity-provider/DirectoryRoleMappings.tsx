@@ -52,20 +52,17 @@ import type { DirectoryRoleMapping } from "@gram/client/models/components/direct
 import type { ListDirectoryRoleMappingsResult } from "@gram/client/models/components/listdirectoryrolemappingsresult.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { SetDirectoryRoleMappingsForm } from "@gram/client/models/components/setdirectoryrolemappingsform.js";
-import {
-  mutationKeyDeleteDirectoryRoleMapping,
-  useDeleteDirectoryRoleMappingMutation,
-} from "@gram/client/react-query/deleteDirectoryRoleMapping.js";
+
 import {
   invalidateAllDirectoryRoleMappings,
   useDirectoryRoleMappings,
 } from "@gram/client/react-query/directoryRoleMappings.js";
 import { useMembers } from "@gram/client/react-query/members.js";
+import { useRoles } from "@gram/client/react-query/roles.js";
 import {
-  invalidateAllRoles,
-  useRoles,
-} from "@gram/client/react-query/roles.js";
-import { useSetDirectoryRoleMappingsMutation } from "@gram/client/react-query/setDirectoryRoleMappings.js";
+  mutationKeySetDirectoryRoleMappings,
+  useSetDirectoryRoleMappingsMutation,
+} from "@gram/client/react-query/setDirectoryRoleMappings.js";
 import { useSyncDirectoryGroupsMutation } from "@gram/client/react-query/syncDirectoryGroups.js";
 
 import {
@@ -75,9 +72,11 @@ import {
   startCreateRoleFlow,
 } from "./directoryMappingFlow";
 
+import { invalidateDirectoryMappingAccess } from "./invalidateDirectoryMappingAccess";
+
 const CREATE_ROLE = "__create_role";
 
-/** One directory group or attribute value that can be mapped to a role. */
+/** One directory group or attribute value and the roles it grants. */
 type SourceRow = {
   key: string;
   label: string;
@@ -85,7 +84,7 @@ type SourceRow = {
   /** Gram members in the source, shown as faces in place of the detail. */
   members?: FacepileMember[];
   form: Omit<SetDirectoryRoleMappingsForm, "roleUrns">;
-  mapping: DirectoryRoleMapping | undefined;
+  mappings: DirectoryRoleMapping[];
 };
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -100,11 +99,13 @@ function groupRows(
   data: ListDirectoryRoleMappingsResult,
   members: AccessMember[],
 ): SourceRow[] {
-  const byGroup = new Map(
-    data.mappings
-      .filter((m) => m.sourceKind === "group")
-      .map((m) => [m.directoryGroupId, m]),
-  );
+  const byGroup = new Map<string, DirectoryRoleMapping[]>();
+  for (const mapping of data.mappings) {
+    if (mapping.sourceKind !== "group" || !mapping.directoryGroupId) continue;
+    const mappings = byGroup.get(mapping.directoryGroupId) ?? [];
+    mappings.push(mapping);
+    byGroup.set(mapping.directoryGroupId, mappings);
+  }
   // Members name their directory groups, not group ids, so match on the name.
   const membersByGroup = new Map<string, FacepileMember[]>();
   for (const member of members) {
@@ -125,7 +126,7 @@ function groupRows(
     detail: memberLabel(group.memberCount),
     members: membersByGroup.get(group.name),
     form: { sourceKind: "group", directoryGroupId: group.id },
-    mapping: byGroup.get(group.id),
+    mappings: byGroup.get(group.id) ?? [],
   }));
 }
 
@@ -133,27 +134,33 @@ function groupRows(
 function attributeMappingRows(
   data: ListDirectoryRoleMappingsResult,
 ): SourceRow[] {
-  return data.mappings
-    .filter((m) => m.sourceKind === "attribute")
-    .map((mapping): SourceRow => {
-      const key = mapping.attributeKey ?? "";
-      const value = mapping.attributeValue ?? "";
-      const option = data.attributes.find(
-        (a) => a.key === key && a.value === value,
-      );
-      return {
-        key: mapping.id,
-        label: `${key} = ${value}`,
-        detail: memberLabel(option?.memberCount ?? 0),
-        form: {
-          sourceKind: "attribute",
-          attributeKey: key,
-          attributeValue: value,
-        },
-        mapping,
-      };
-    })
-    .sort((a, b) => a.label.localeCompare(b.label));
+  const rows = new Map<string, SourceRow>();
+  for (const mapping of data.mappings) {
+    if (mapping.sourceKind !== "attribute") continue;
+    const key = mapping.attributeKey ?? "";
+    const value = mapping.attributeValue ?? "";
+    const sourceKey = JSON.stringify([key, value]);
+    const existing = rows.get(sourceKey);
+    if (existing) {
+      existing.mappings.push(mapping);
+      continue;
+    }
+    const option = data.attributes.find(
+      (a) => a.key === key && a.value === value,
+    );
+    rows.set(sourceKey, {
+      key: sourceKey,
+      label: `${key} = ${value}`,
+      detail: memberLabel(option?.memberCount ?? 0),
+      form: {
+        sourceKind: "attribute",
+        attributeKey: key,
+        attributeValue: value,
+      },
+      mappings: [mapping],
+    });
+  }
+  return [...rows.values()].sort((a, b) => a.label.localeCompare(b.label));
 }
 
 /**
@@ -170,7 +177,11 @@ export function DirectoryRoleMappings({
   /** Shown at the right of the footer bar, such as the connection button. */
   footerAction?: ReactNode;
 }): JSX.Element {
-  const { data, isPending } = useDirectoryRoleMappings();
+  const { data, isPending, isFetching, isError } = useDirectoryRoleMappings(
+    undefined,
+    undefined,
+    { refetchOnMount: "always" },
+  );
   const { data: rolesData } = useRoles();
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
@@ -193,7 +204,10 @@ export function DirectoryRoleMappings({
   // trip ends only once the save succeeds; a failed save keeps it so a reload
   // retries. Only a round trip this tab started can get here.
   const [params, setParams] = useSearchParams();
-  const pending = pendingMappingFromParams(params);
+  const pending =
+    data && !isFetching && !isError
+      ? pendingMappingFromParams(params, data.mappings)
+      : undefined;
   const queryClient = useQueryClient();
   const savePending = useSetDirectoryRoleMappingsMutation({
     onError: (error) => {
@@ -211,10 +225,9 @@ export function DirectoryRoleMappings({
           setParams((previous) => finishCreateRoleFlow(previous, pending.key), {
             replace: true,
           });
-          void Promise.all([
-            invalidateAllDirectoryRoleMappings(queryClient),
-            invalidateAllRoles(queryClient),
-          ]).then(() => toast.success("Role created and mapped"));
+          void invalidateDirectoryMappingAccess(queryClient).then(() =>
+            toast.success("Role created and mapped"),
+          );
         },
       },
     );
@@ -229,7 +242,7 @@ export function DirectoryRoleMappings({
       const missing = rows.filter((row) => !(row.key in previous));
       if (missing.length === 0) return previous;
       const next = { ...previous };
-      for (const row of missing) next[row.key] = row.mapping !== undefined;
+      for (const row of missing) next[row.key] = row.mappings.length > 0;
       return next;
     });
   }, [rows]);
@@ -237,7 +250,7 @@ export function DirectoryRoleMappings({
   const visibleRows = useMemo(() => {
     const needle = deferredSearch.trim().toLowerCase();
     const wasMapped = (row: SourceRow) =>
-      mappedAtLoad[row.key] ?? row.mapping !== undefined;
+      mappedAtLoad[row.key] ?? row.mappings.length > 0;
     return rows
       .filter(
         (row) => needle === "" || row.label.toLowerCase().includes(needle),
@@ -249,9 +262,8 @@ export function DirectoryRoleMappings({
       );
   }, [rows, deferredSearch, mappedAtLoad]);
 
-  const mappedCount = rows.filter((row) => row.mapping).length;
-  const attributeCount =
-    data?.mappings.filter((m) => m.sourceKind === "attribute").length ?? 0;
+  const mappedCount = rows.filter((row) => row.mappings.length > 0).length;
+  const attributeCount = data ? attributeMappingRows(data).length : 0;
 
   return (
     <div className="mt-4 space-y-3">
@@ -259,7 +271,7 @@ export function DirectoryRoleMappings({
         <div>
           <div className="text-eyebrow">Configure role mappings</div>
           <Text muted small>
-            {mappedCount} of {rows.length} groups give their members a role.
+            {mappedCount} of {rows.length} groups give their members roles.
           </Text>
         </div>
         <div className="flex items-center gap-2">
@@ -335,18 +347,12 @@ function MappingTable({
   sourceHeader,
   noResults,
   scrollable = false,
-  removable = false,
 }: {
   rows: SourceRow[];
   roles: Role[];
   sourceHeader: string;
   noResults: string;
   scrollable?: boolean;
-  /**
-   * Shows a remove button in place of the mark, for tables where every row is
-   * a mapping (attribute values), so the mark would say nothing.
-   */
-  removable?: boolean;
 }): JSX.Element {
   const columns: Column<SourceRow>[] = [
     {
@@ -369,7 +375,7 @@ function MappingTable({
     },
     {
       key: "role",
-      header: "Role",
+      header: "Roles",
       width: "280px",
       render: (row) => <RolePicker row={row} roles={roles} />,
     },
@@ -377,12 +383,7 @@ function MappingTable({
       key: "status",
       header: "",
       width: "64px",
-      render: (row) =>
-        removable && row.mapping ? (
-          <RemoveMappingButton mapping={row.mapping} label={row.label} />
-        ) : (
-          <MappedMark mapped={row.mapping !== undefined} />
-        ),
+      render: (row) => <MappedMark mapped={row.mappings.length > 0} />,
     },
   ];
 
@@ -398,7 +399,9 @@ function MappingTable({
         cloneElement(rowElement as ReactElement<{ className?: string }>, {
           className: cn(
             (rowElement.props as { className?: string }).className,
-            row.mapping ? "bg-muted/25 hover:bg-muted/40" : "hover:bg-muted/10",
+            row.mappings.length > 0
+              ? "bg-muted/25 hover:bg-muted/40"
+              : "hover:bg-muted/10",
           ),
         })
       }
@@ -442,7 +445,12 @@ function AttributeMappings({
     label: "",
     detail: "",
     form: { sourceKind: "attribute", attributeKey, attributeValue },
-    mapping: undefined,
+    mappings: data.mappings.filter(
+      (mapping) =>
+        mapping.sourceKind === "attribute" &&
+        mapping.attributeKey === attributeKey &&
+        mapping.attributeValue === attributeValue,
+    ),
   };
 
   return (
@@ -458,7 +466,7 @@ function AttributeMappings({
             rows={rows}
             roles={roles}
             sourceHeader="Attribute value"
-            removable
+
             noResults="No attribute mappings"
           />
         )}
@@ -528,10 +536,6 @@ function AttributeMappings({
   );
 }
 
-/**
- * Picks the role for one group or attribute value. Picking a role saves it
- * straight away; picking the mapped role again removes the mapping.
- */
 function RolePicker({
   row,
   roles,
@@ -546,54 +550,26 @@ function RolePicker({
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const orgRoutes = useOrgRoutes();
-
-  const refresh = () =>
-    Promise.all([
-      invalidateAllDirectoryRoleMappings(queryClient),
-      invalidateAllRoles(queryClient),
-    ]);
-  // Returning the refresh keeps the mutation pending until the row reloads.
   const save = useSetDirectoryRoleMappingsMutation({
     onSuccess: async () => {
-      await refresh();
+      await invalidateDirectoryMappingAccess(queryClient);
       onSaved?.();
     },
     onError: (error) => {
       toast.error(errorMessage(error, "Failed to save role mapping"));
     },
   });
-  const remove = useDeleteDirectoryRoleMappingMutation({
-    onSuccess: () => refresh(),
-    onError: (error) => {
-      toast.error(errorMessage(error, "Failed to remove role mapping"));
-    },
-  });
-  // Any mapping delete in flight locks the pickers, so a row cannot be
-  // re-mapped while its trash action is still removing it.
-  const deleting =
-    useIsMutating({ mutationKey: mutationKeyDeleteDirectoryRoleMapping() }) > 0;
-  const saving = save.isPending || remove.isPending || deleting;
-
-  const current = roles.find(
-    (role) => role.principalUrn === row.mapping?.roleUrn,
-  );
-  const items: DropdownItem[] = roles.map((role) => ({
-    value: role.principalUrn,
-    label: role.name,
-    description: role.description || undefined,
-  }));
-  // A mapping can outlive its role. List that role so picking it again clears
-  // the stale mapping, like any other.
-  if (
-    row.mapping &&
-    !roles.some((role) => role.principalUrn === row.mapping?.roleUrn)
-  ) {
-    items.push({
-      value: row.mapping.roleUrn,
-      label: "Deleted role",
-      description: "Pick to remove this mapping",
-    });
-  }
+  const setting =
+    useIsMutating({ mutationKey: mutationKeySetDirectoryRoleMappings() }) > 0;
+  const saving = save.isPending || setting;
+  const mappedRoles = row.mappings.map((mapping) => mapping.roleUrn);
+  const items: DropdownItem[] = roles
+    .filter((role) => !mappedRoles.includes(role.principalUrn))
+    .map((role) => ({
+      value: role.principalUrn,
+      label: role.name,
+      description: role.description || undefined,
+    }));
   items.unshift({
     value: CREATE_ROLE,
     label: "Create role…",
@@ -601,11 +577,8 @@ function RolePicker({
     icon: <Plus className="h-4 w-4" />,
     separatorAfter: true,
   });
-
   const pick = (value: string) => {
     if (value === CREATE_ROLE) {
-      // Start the new role with the group's name, or the attribute value,
-      // made unique so saving does not fail on a taken name.
       const baseName =
         row.form.sourceKind === "attribute"
           ? (row.form.attributeValue ?? "")
@@ -617,44 +590,65 @@ function RolePicker({
       void navigate(`${orgRoutes.createRole.href()}?${params.toString()}`);
       return;
     }
-    // Picking the role that is already mapped clears it, like unticking it.
-    if (row.mapping && value === row.mapping.roleUrn) {
-      remove.mutate({ request: { id: row.mapping.id } });
-      return;
-    }
     save.mutate({
       request: {
-        setDirectoryRoleMappingsForm: { ...row.form, roleUrns: [value] },
+        setDirectoryRoleMappingsForm: {
+          ...row.form,
+          roleUrns: [...mappedRoles, value],
+        },
       },
     });
   };
-
-  let label = "Assign role";
-  if (saving) label = "Saving…";
-  else if (row.mapping) label = current?.name ?? "Deleted role";
-
   return (
-    <Combobox
-      items={items}
-      selected={row.mapping?.roleUrn}
-      onSelectionChange={(item) => pick(item.value)}
-      searchable
-      searchPlaceholder="Search roles…"
-      // An unmapped row is a call to action, so its picker is a bordered
-      // button; a mapped row reads as settled state.
-      variant={row.mapping ? "tertiary" : "secondary"}
-      className={cn(
-        "h-auto w-full justify-start py-1 text-left",
-        !row.mapping && "border-dashed",
-      )}
-      contentClassName="w-[min(24rem,90vw)]"
-      disabledMessage={saving ? "Saving mapping" : disabledMessage}
-    >
-      <span className="flex items-center gap-2">
-        {!row.mapping && !saving && <Plus className="size-4 shrink-0" />}
-        {label}
-      </span>
-    </Combobox>
+    <div className="flex flex-wrap items-center gap-2">
+      {row.mappings.map((mapping) => {
+        const name =
+          roles.find((role) => role.principalUrn === mapping.roleUrn)?.name ??
+          "Deleted role";
+        return (
+          <span
+            key={mapping.id}
+            className="bg-muted/40 border-border inline-flex max-w-full items-center gap-1 rounded-md border pl-2 text-sm"
+          >
+            <span className="truncate" title={name}>
+              {name}
+            </span>
+            <RemoveMappingButton
+              label={`${name} from ${row.label}`}
+              disabled={saving || !!disabledMessage}
+              onRemove={() =>
+                save.mutate({
+                  request: {
+                    setDirectoryRoleMappingsForm: {
+                      ...row.form,
+                      roleUrns: mappedRoles.filter(
+                        (roleUrn) => roleUrn !== mapping.roleUrn,
+                      ),
+                    },
+                  },
+                })
+              }
+            />
+          </span>
+        );
+      })}
+      <Combobox
+        items={items}
+        selected={undefined}
+        onSelectionChange={(item) => pick(item.value)}
+        searchable
+        searchPlaceholder="Search roles…"
+        variant="secondary"
+        className="h-auto justify-start border-dashed py-1 text-left"
+        contentClassName="w-[min(24rem,90vw)]"
+        disabledMessage={saving ? "Saving mapping" : disabledMessage}
+      >
+        <span className="flex items-center gap-2">
+          <Plus className="size-4 shrink-0" />
+          {saving ? "Saving…" : "Add role"}
+        </span>
+      </Combobox>
+    </div>
   );
 }
 
@@ -689,40 +683,26 @@ function MappedMark({ mapped }: { mapped: boolean }): JSX.Element {
 
 /** Removes one mapping. */
 function RemoveMappingButton({
-  mapping,
   label,
+  disabled,
+  onRemove,
 }: {
-  mapping: DirectoryRoleMapping;
   label: string;
+  disabled: boolean;
+  onRemove: () => void;
 }): JSX.Element {
-  const queryClient = useQueryClient();
-  const remove = useDeleteDirectoryRoleMappingMutation({
-    onSuccess: () =>
-      Promise.all([
-        invalidateAllDirectoryRoleMappings(queryClient),
-        invalidateAllRoles(queryClient),
-      ]),
-    onError: (error) => {
-      toast.error(errorMessage(error, "Failed to remove role mapping"));
-    },
-  });
-
   return (
     <div className="flex justify-center">
-      <SimpleTooltip tooltip="Remove this mapping">
+      <SimpleTooltip tooltip="Remove this role from the source">
         <Button
           variant="tertiary"
           size="sm"
-          aria-label={`Remove mapping for ${label}`}
+          aria-label={`Remove ${label}`}
           className="size-8 justify-center p-0"
-          disabled={remove.isPending}
-          onClick={() => remove.mutate({ request: { id: mapping.id } })}
+          disabled={disabled}
+          onClick={onRemove}
         >
-          {remove.isPending ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Trash2 className="size-4" />
-          )}
+          <Trash2 className="size-4" />
         </Button>
       </SimpleTooltip>
     </div>
