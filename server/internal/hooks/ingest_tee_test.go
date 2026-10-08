@@ -337,7 +337,7 @@ func TestIngest_TeesEveryEventKindTheDialectClassifies(t *testing.T) {
 	// A Claude Code prompt: a prompt whose words go to chat, not here.
 	prompt := withRaw("claude", "prompt.submitted", "UserPromptSubmit", "claude-kinds-session", "idem-kinds-prompt")
 	prompt.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: new("list the files")}}
-	// A Codex permission request: Gram's verdict rides as a tool_decision.
+	// A Codex permission request: Speakeasy's verdict rides as a tool_decision.
 	permission := withRaw("codex", "tool.requested", "PermissionRequest", "codex-kinds-session", "idem-kinds-permission")
 	permission.Data = &gen.HookIngestData{ToolCall: toolCall()}
 	permission.Data.ToolCall.PermissionType = new("default")

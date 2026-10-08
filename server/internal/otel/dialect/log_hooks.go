@@ -59,7 +59,7 @@ const (
 // and carrying the tool, the session and how the call went as gram.hook.*
 // attributes. The agent surface is the hook_source the endpoint resolved.
 // Only the tool, prompt and permission hooks have a type; session
-// lifecycle, notifications and Gram's own derived rows stay unclassified
+// lifecycle, notifications and Speakeasy's own derived rows stay unclassified
 // with their raw name kept.
 type HooksLog struct{}
 
@@ -105,7 +105,7 @@ func (HooksLog) SessionID(record *otelv1.InboundLogRecord) (string, string, erro
 }
 
 // ExternalUserID is the AI account the hooks endpoint attributed the
-// session to, when it had one. The row's user.id is the Gram user the
+// session to, when it had one. The row's user.id is the Speakeasy user the
 // endpoint resolved, not an account at a provider.
 func (HooksLog) ExternalUserID(record *otelv1.InboundLogRecord) (string, string, error) {
 	key, value := getOneLogAttr(record, hookExternalUserIDKey)
@@ -190,7 +190,7 @@ func (HooksLog) ToolName(record *otelv1.InboundLogRecord) (string, string, error
 
 // Outcome is what the hook event says about the call: a completed tool ran,
 // a failure did not, an MCP call that reported an error failed, and a
-// permission request Gram denied was rejected. A pre-call hook and a prompt
+// permission request Speakeasy denied was rejected. A pre-call hook and a prompt
 // have no outcome.
 func (HooksLog) Outcome(record *otelv1.InboundLogRecord) (string, string, error) {
 	nameKey, name := logRawEventName(record)
@@ -225,7 +225,7 @@ func (HooksLog) OutcomeMessage(record *otelv1.InboundLogRecord) (string, string,
 	return key, value, nil
 }
 
-// Text on a permission request is Gram's verdict; the prompt's words go to
+// Text on a permission request is Speakeasy's verdict; the prompt's words go to
 // chat, not telemetry, so a prompt has no text here.
 func (HooksLog) Text(record *otelv1.InboundLogRecord) (string, string, error) {
 	_, name := logRawEventName(record)
