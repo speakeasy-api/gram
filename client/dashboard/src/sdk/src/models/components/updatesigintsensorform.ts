@@ -35,7 +35,7 @@ export type UpdateSigintSensorForm = {
    */
   instructions?: string | undefined;
   /**
-   * Replacement boolean CEL predicate; omission preserves it
+   * Replacement boolean CEL predicate, at most 4096 UTF-8 bytes; omission preserves it
    */
   matchExpression?: string | undefined;
   /**

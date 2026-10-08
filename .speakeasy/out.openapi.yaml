@@ -84172,8 +84172,7 @@ components:
           description: Optional classification instructions; empty stores no value
         match_expression:
           type: string
-          description: Boolean CEL predicate; omission defaults to message.role == "user"
-          maxLength: 4096
+          description: Boolean CEL predicate, at most 4096 UTF-8 bytes; omission defaults to message.role == "user"
         mode:
           type: string
           description: 'How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.'
@@ -108615,8 +108614,7 @@ components:
           description: Replacement instructions; empty clears it
         match_expression:
           type: string
-          description: Replacement boolean CEL predicate; omission preserves it
-          maxLength: 4096
+          description: Replacement boolean CEL predicate, at most 4096 UTF-8 bytes; omission preserves it
         mode:
           type: string
           description: 'How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.'

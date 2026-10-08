@@ -49,7 +49,8 @@ type UpdateSignalRequestBody struct {
 // CreateSensorRequestBody is the type of the "sigint" service "createSensor"
 // endpoint HTTP request body.
 type CreateSensorRequestBody struct {
-	// Boolean CEL predicate; omission defaults to message.role == "user"
+	// Boolean CEL predicate, at most 4096 UTF-8 bytes; omission defaults to
+	// message.role == "user"
 	MatchExpression *string `form:"match_expression,omitempty" json:"match_expression,omitempty" xml:"match_expression,omitempty"`
 	// Optional project-scoped slug; defaults to a slugified display name. Must be
 	// unique including deleted sensors.
@@ -68,7 +69,8 @@ type CreateSensorRequestBody struct {
 // UpdateSensorRequestBody is the type of the "sigint" service "updateSensor"
 // endpoint HTTP request body.
 type UpdateSensorRequestBody struct {
-	// Replacement boolean CEL predicate; omission preserves it
+	// Replacement boolean CEL predicate, at most 4096 UTF-8 bytes; omission
+	// preserves it
 	MatchExpression *string `form:"match_expression,omitempty" json:"match_expression,omitempty" xml:"match_expression,omitempty"`
 	// Replacement slug; omission preserves it. Changing it changes the identifier
 	// used by future exports.
@@ -3974,11 +3976,6 @@ func ValidateCreateSensorRequestBody(body *CreateSensorRequestBody) (err error) 
 	if body.Mode == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
 	}
-	if body.MatchExpression != nil {
-		if utf8.RuneCountInString(*body.MatchExpression) > 4096 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.match_expression", *body.MatchExpression, utf8.RuneCountInString(*body.MatchExpression), 4096, false))
-		}
-	}
 	if body.Slug != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
 	}
@@ -4003,11 +4000,6 @@ func ValidateCreateSensorRequestBody(body *CreateSensorRequestBody) (err error) 
 func ValidateUpdateSensorRequestBody(body *UpdateSensorRequestBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.MatchExpression != nil {
-		if utf8.RuneCountInString(*body.MatchExpression) > 4096 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.match_expression", *body.MatchExpression, utf8.RuneCountInString(*body.MatchExpression), 4096, false))
-		}
 	}
 	if body.Slug != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))

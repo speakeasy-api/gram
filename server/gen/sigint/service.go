@@ -90,7 +90,8 @@ type CreateSensorPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
-	// Boolean CEL predicate; omission defaults to message.role == "user"
+	// Boolean CEL predicate, at most 4096 UTF-8 bytes; omission defaults to
+	// message.role == "user"
 	MatchExpression *string
 	// Optional project-scoped slug; defaults to a slugified display name. Must be
 	// unique including deleted sensors.
@@ -209,7 +210,8 @@ type UpdateSensorPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
-	// Replacement boolean CEL predicate; omission preserves it
+	// Replacement boolean CEL predicate, at most 4096 UTF-8 bytes; omission
+	// preserves it
 	MatchExpression *string
 	// Replacement slug; omission preserves it. Changing it changes the identifier
 	// used by future exports.

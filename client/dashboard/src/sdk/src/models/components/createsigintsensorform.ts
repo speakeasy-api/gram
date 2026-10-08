@@ -29,7 +29,7 @@ export type CreateSigintSensorForm = {
    */
   instructions?: string | undefined;
   /**
-   * Boolean CEL predicate; omission defaults to message.role == "user"
+   * Boolean CEL predicate, at most 4096 UTF-8 bytes; omission defaults to message.role == "user"
    */
   matchExpression?: string | undefined;
   /**
