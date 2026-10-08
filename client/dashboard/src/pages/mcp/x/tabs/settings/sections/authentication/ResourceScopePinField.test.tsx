@@ -185,6 +185,20 @@ describe("scopePinStatus", () => {
     ]);
     expect(
       scopePinStatus(
+        withSource(
+          "issuer_override",
+          { pinnedScopes: [], advertisedScopesKnown: false },
+          [],
+          true,
+        ),
+        "client-1",
+      ),
+    ).toEqual([
+      "Sign-ins request read, set by the identity provider's override. This may change once the MCP server is next contacted.",
+    ]);
+    // A client that does not own the resource never reads it, so nothing can change.
+    expect(
+      scopePinStatus(
         withSource("issuer_override", {
           pinnedScopes: [],
           advertisedScopesKnown: false,
@@ -192,13 +206,7 @@ describe("scopePinStatus", () => {
         "client-1",
       ),
     ).toEqual([
-      "Sign-ins request read, set by the identity provider's override. This may change once the MCP server is next contacted.",
-    ]);
-  });
-
-  it("adds nothing when the pin decides", () => {
-    expect(scopePinStatus(withSource("resource_pin"), "client-1")).toEqual([
-      "Sign-ins request these scopes.",
+      "Sign-ins request read, set by the identity provider's override.",
     ]);
   });
 

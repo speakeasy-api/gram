@@ -223,6 +223,18 @@ describe("RequestedScopesSummary", () => {
     },
   );
 
+  it("does not warn for a client that does not own the resource", () => {
+    renderSummary(
+      scopes(
+        [client({ scopeSource: "issuer_catalogue", pinWouldDecide: false })],
+        { advertisedScopesKnown: false, advertisedScopes: undefined },
+      ),
+    );
+    expect(
+      screen.queryByText(/may change once the MCP server is next contacted/),
+    ).toBeNull();
+  });
+
   it("does not warn once advertised scopes are known", () => {
     renderSummary(scopes([client({ scopeSource: "cached_resource" })]));
     expect(screen.getByText("Advertised by the MCP server.")).toBeTruthy();

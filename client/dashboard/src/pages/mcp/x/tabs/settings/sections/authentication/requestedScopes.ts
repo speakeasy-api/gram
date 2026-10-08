@@ -82,6 +82,7 @@ function mayChange(
 ): boolean {
   return (
     PROBE_CAN_CHANGE.has(client.scopeSource) &&
+    client.pinWouldDecide &&
     scopes.discoveryEnabled &&
     !scopes.advertisedScopesKnown
   );
