@@ -14,7 +14,9 @@ import { Stack } from "@/components/ui/Stack";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
 import { AlertCircle, Loader2 } from "lucide-react";
+import { RequireScope } from "@/components/require-scope";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { useProject } from "@/contexts/Auth";
 import { NewServerGuardrailOutcomeAlert } from "@/pages/security/server-guardrails/NewServerGuardrailOutcomeAlert";
 import { useTunneledMcpServers } from "@gram/client/react-query/tunneledMcpServers.js";
 import { useState, type ReactNode } from "react";
@@ -51,6 +53,7 @@ type CreatedState = {
 
 export default function CreateTunneledMcp(): JSX.Element | null {
   const routes = useRoutes();
+  const project = useProject();
   const telemetry = useTelemetry();
   const isTunneledMcpEnabled = telemetry.isFeatureEnabled(
     TUNNELED_MCP_FEATURE_FLAG,
@@ -64,13 +67,26 @@ export default function CreateTunneledMcp(): JSX.Element | null {
     return <Navigate to={routes.mcp.add.href()} replace />;
   }
 
-  return <CreateTunneledMcpPage />;
+  // Creating either a tunnel or an MCP server on one is a project-level
+  // write, so the page is gated on the active project before anything loads.
+  return (
+    <RequireScope
+      scope="mcp:write"
+      resourceId={project.id}
+      projectId={project.id}
+      level="page"
+    >
+      <CreateTunneledMcpPage />
+    </RequireScope>
+  );
 }
 
 type CreateMode = "new" | "existing";
 
 // New tunnel (issues a key) or another MCP server on a tunnel the project
-// already has. The choice is offered only when there is a tunnel to reuse.
+// already has. The choice is offered when there is a tunnel to reuse, and
+// stays while Existing tunnel is selected so deleting the last unused tunnel
+// never strands the page.
 function CreateTunneledMcpPage() {
   const [searchParams] = useSearchParams();
   const requestedTunnelId = searchParams.get(EXISTING_TUNNEL_SEARCH_PARAM);
@@ -83,7 +99,7 @@ function CreateTunneledMcpPage() {
   const hasTunnels = (tunnelsQuery.data?.tunneledMcpServers.length ?? 0) > 0;
 
   const modeSwitch = (disabled: boolean): ReactNode =>
-    hasTunnels || requestedTunnelId ? (
+    hasTunnels || requestedTunnelId || mode === "existing" ? (
       <SegmentedControl<CreateMode>
         value={mode}
         onChange={setMode}
@@ -99,6 +115,7 @@ function CreateTunneledMcpPage() {
     return (
       <ExistingTunnelFlow
         modeSwitch={modeSwitch}
+        onNewTunnel={() => setMode("new")}
         requestedTunnelId={requestedTunnelId}
       />
     );

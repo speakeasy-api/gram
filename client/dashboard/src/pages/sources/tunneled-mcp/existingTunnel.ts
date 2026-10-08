@@ -56,7 +56,8 @@ export class TunnelServersChangedError extends Error {
 
 // Part of the delete may have been applied. `progressed` says whether any MCP
 // server delete committed or may have committed, in which case the page the
-// user started from may already be gone.
+// user started from may already be gone and the caller has to work out what
+// is left before offering a way to finish.
 export class TunnelDeleteIncompleteError extends Error {
   readonly progressed: boolean;
 
@@ -67,8 +68,9 @@ export class TunnelDeleteIncompleteError extends Error {
   }
 }
 
-const RECOVERY_HINT =
-  "To finish, open Add MCP server, choose Existing tunnel, and delete the unused tunnel there.";
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
 
 type TunnelDeleteDeps = {
   /** The MCP server ids the user reviewed and confirmed. */
@@ -99,24 +101,36 @@ export async function deleteTunnelAndConfirmedServers({
     confirmedIds.map((id) => deleteMcpServer(id)),
   );
   let deleted = 0;
+  let refused = 0;
   let uncertain = 0;
-  let firstFailure: unknown;
+  let firstRefusal: unknown;
   for (const result of results) {
     if (result.status === "fulfilled" || isNotFoundError(result.reason)) {
       deleted++;
-      continue;
+    } else if (isDefiniteRejection(result.reason)) {
+      refused++;
+      firstRefusal ??= result.reason;
+    } else {
+      uncertain++;
     }
-    firstFailure ??= result.reason;
-    if (!isDefiniteRejection(result.reason)) uncertain++;
   }
   const total = confirmedIds.length;
   const progressed = deleted > 0 || uncertain > 0;
 
   if (deleted < total) {
-    throw new TunnelDeleteIncompleteError(
-      `Deleted ${deleted} of ${total} MCP servers; ${total - deleted} could not be deleted (${reasonOf(firstFailure)}). The tunnel was kept.${progressed ? ` ${RECOVERY_HINT}` : ""}`,
-      progressed,
-    );
+    const parts = [`Deleted ${deleted} of ${plural(total, "MCP server")}.`];
+    if (refused > 0) {
+      parts.push(
+        `${plural(refused, "MCP server")} could not be deleted (${reasonOf(firstRefusal)}).`,
+      );
+    }
+    if (uncertain > 0) {
+      parts.push(
+        `The outcome for ${plural(uncertain, "MCP server")} is unknown because the connection failed.`,
+      );
+    }
+    parts.push("The tunnel was kept.");
+    throw new TunnelDeleteIncompleteError(parts.join(" "), progressed);
   }
 
   try {
@@ -129,8 +143,37 @@ export async function deleteTunnelAndConfirmedServers({
       );
     }
     throw new TunnelDeleteIncompleteError(
-      `Deleted ${deleted} MCP servers, but the tunnel could not be confirmed deleted (${reasonOf(error)}).${progressed ? ` ${RECOVERY_HINT}` : " Retry to finish."}`,
+      `Deleted ${plural(deleted, "MCP server")}, but the tunnel could not be confirmed deleted (${reasonOf(error)}).`,
       progressed,
     );
   }
+}
+
+// Where to go after a tunnel delete stopped partway, judged from the MCP
+// servers still on the tunnel. The page the user started from survives only
+// if its own server does.
+export type TunnelDeleteRecovery =
+  | { kind: "stay" }
+  | { kind: "server"; mcpServer: McpServer }
+  | { kind: "tunnel" };
+
+export function tunnelDeleteRecovery(
+  remaining: readonly McpServer[],
+  currentMcpServerId: string,
+): TunnelDeleteRecovery {
+  if (remaining.some((server) => server.id === currentMcpServerId)) {
+    return { kind: "stay" };
+  }
+  const survivor = remaining[0];
+  if (survivor) return { kind: "server", mcpServer: survivor };
+  return { kind: "tunnel" };
+}
+
+// Order-insensitive identity of a set of MCP servers, to tell whether the set
+// a confirmation was given for is still the one on screen.
+export function serverSetKey(servers: readonly { id: string }[]): string {
+  return servers
+    .map((server) => server.id)
+    .sort()
+    .join(",");
 }

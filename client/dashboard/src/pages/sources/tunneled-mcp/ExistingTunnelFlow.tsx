@@ -1,3 +1,4 @@
+import { InlineEmptyState } from "@/components/inline-empty-state";
 import { FormPage } from "@/components/page-templates";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -75,9 +76,12 @@ function tunnelOptions(
  */
 export function ExistingTunnelFlow({
   modeSwitch,
+  onNewTunnel,
   requestedTunnelId,
 }: {
   modeSwitch: (disabled: boolean) => ReactNode;
+  /** Switches the page to creating a new tunnel. */
+  onNewTunnel: () => void;
   /** A tunnel named in the URL, e.g. from "Add MCP server on this tunnel". */
   requestedTunnelId: string | null;
 }): JSX.Element {
@@ -229,6 +233,22 @@ export function ExistingTunnelFlow({
                 void serversQuery.refetch();
               }}
             >
+              {options.length === 0 ? (
+                <InlineEmptyState
+                  icon="cable"
+                  heading="No tunnels in this project"
+                  description="Create a tunnel first; this page then adds more MCP servers to it."
+                  action={
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={onNewTunnel}
+                    >
+                      <Button.Text>New tunnel</Button.Text>
+                    </Button>
+                  }
+                />
+              ) : null}
               <ExistingTunnelPicker
                 options={options}
                 selectedId={selected?.tunnel.id ?? null}
