@@ -168,23 +168,8 @@ export function createWizardServices(
       const issuerUrl =
         authServerOrigin(input.authorizationEndpoint, input.tokenEndpoint) ||
         input.authorizationEndpoint;
-      let draft: {
-        authorizationEndpoint?: string;
-        tokenEndpoint?: string;
-        registrationEndpoint?: string;
-        jwksUri?: string;
-        scopesSupported?: string[];
-        grantTypesSupported?: string[];
-        responseTypesSupported?: string[];
-        tokenEndpointAuthMethodsSupported?: string[];
-        userinfoEndpoint?: string;
-        introspectionEndpoint?: string;
-        introspectionEndpointAuthMethodsSupported?: string[] | null;
-        idTokenSigningAlgValuesSupported?: string[] | null;
-        claimsSupported?: string[] | null;
-        backchannelLogoutSupported?: boolean;
-        authorizationResponseIssParameterSupported?: boolean;
-      } = {};
+      let draft: Partial<RemoteSessionIssuerDraft> = {};
+      let discovered = false;
       if (issuerUrl) {
         try {
           draft = await buildFetchRemoteSessionIssuerMetadataMutation(
@@ -195,6 +180,7 @@ export function createWizardServices(
             },
             ...opts,
           });
+          discovered = true;
         } catch {
           // Keep the operator-supplied endpoints on discovery failure.
         }
@@ -212,17 +198,25 @@ export function createWizardServices(
             tokenEndpoint: draft.tokenEndpoint ?? input.tokenEndpoint,
             registrationEndpoint: draft.registrationEndpoint,
             jwksUri: draft.jwksUri,
+            // Operator-entered scopes stay explicit; the other lists restate the document.
             scopesSupported: draft.scopesSupported ?? parseScopes(input.scopes),
-            grantTypesSupported: draft.grantTypesSupported ?? [
-              "authorization_code",
-              "refresh_token",
-            ],
-            responseTypesSupported: draft.responseTypesSupported ?? ["code"],
+            grantTypesSupported:
+              draft.grantTypesSupported ??
+              (discovered ? [] : ["authorization_code", "refresh_token"]),
+            responseTypesSupported:
+              draft.responseTypesSupported ?? (discovered ? [] : ["code"]),
             tokenEndpointAuthMethodsSupported:
-              draft.tokenEndpointAuthMethodsSupported ?? [
-                input.tokenAuthMethod,
-              ],
+              draft.tokenEndpointAuthMethodsSupported ??
+              (discovered ? [] : [input.tokenAuthMethod]),
             // Discovery-only capabilities; all undefined when discovery failed.
+            authorizationGrantProfilesSupported: discovered
+              ? (draft.authorizationGrantProfilesSupported ?? [])
+              : undefined,
+            codeChallengeMethodsSupported:
+              draft.codeChallengeMethodsSupported ?? undefined,
+            clientIdMetadataDocumentSupported:
+              draft.clientIdMetadataDocumentSupported,
+            serviceDocumentation: draft.serviceDocumentation,
             userinfoEndpoint: draft.userinfoEndpoint,
             introspectionEndpoint: draft.introspectionEndpoint,
             introspectionEndpointAuthMethodsSupported:

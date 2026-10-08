@@ -24,6 +24,14 @@ func PreparationEligibility(profiles, grants []string) string {
 	return preparationEligible
 }
 
+// IssuerPreparationEligibility also requires the advertisement to come from a discovered document.
+func IssuerPreparationEligibility(issuer repo.RemoteSessionIssuer) string {
+	if !issuer.MetadataFetchedAt.Valid {
+		return PreparationStateIncompleteMetadata
+	}
+	return PreparationEligibility(issuer.AuthorizationGrantProfilesSupported, issuer.GrantTypesSupported)
+}
+
 // Grant arrays without provenance cannot establish registration readiness.
 func preparationGrantSourceRecorded(source string) bool {
 	switch source {
@@ -95,7 +103,7 @@ func normalizePreparationInput(in PreparationInput) (PreparationInput, error) {
 // A completed provider registration can recover as discovery or credentials
 // change, but only current grant evidence can make it ready.
 func preparationRegistrationReadiness(ctx context.Context, q *repo.Queries, client repo.RemoteSessionClient, issuer repo.RemoteSessionIssuer, org string, readOnly ...bool) string {
-	if eligibility := PreparationEligibility(issuer.AuthorizationGrantProfilesSupported, issuer.GrantTypesSupported); eligibility != preparationEligible {
+	if eligibility := IssuerPreparationEligibility(issuer); eligibility != preparationEligible {
 		return eligibility
 	}
 	if preparationMetadataTransient(issuer) {

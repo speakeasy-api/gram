@@ -211,6 +211,9 @@ func TestFederatedRuntimePolicy(t *testing.T) {
 		"implicit response":    func(p *FederatedProvider) { p.metadata.ResponseTypesSupported = []string{"id_token"} },
 		"empty response types": func(p *FederatedProvider) { p.metadata.ResponseTypesSupported = []string{} },
 		"HTTP loopback JWKS":   func(p *FederatedProvider) { p.metadata.JwksURI = "http://127.0.0.1/jwks" },
+		// RFC 8414 section 2: an omitted list means client_secret_basic only.
+		"omitted auth methods": func(p *FederatedProvider) { p.client.TokenEndpointAuthMethod.String = "client_secret_post" },
+		"empty auth methods":   func(p *FederatedProvider) { p.metadata.TokenEndpointAuthMethodsSupported = []string{} },
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

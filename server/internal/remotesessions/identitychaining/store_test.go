@@ -94,6 +94,7 @@ func prepareResourceClient(t *testing.T, db *pgxpool.Pool, enc *encryption.Clien
 		GrantTypesSupported:                 []string{oauthwire.GrantTypeJWTBearer},
 		AuthorizationGrantProfilesSupported: []string{oauthwire.GrantProfileIDJAG},
 		TokenEndpointAuthMethodsSupported:   []string{oauthwire.AuthMethodClientSecretPost},
+		MetadataFetchedAt:                   pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
 		ScopesSupported:                     []string{}, ResponseTypesSupported: []string{}, CodeChallengeMethodsSupported: []string{},
 		IntrospectionEndpointAuthMethodsSupported: []string{}, IDTokenSigningAlgValuesSupported: []string{}, ClaimsSupported: []string{},
 	})

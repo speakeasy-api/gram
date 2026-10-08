@@ -761,6 +761,8 @@ export function useUserIdentityDraft({
           jwksUri: draft.jwksUri ?? undefined,
           scopesSupported: draft.scopesSupported ?? undefined,
           grantTypesSupported: draft.grantTypesSupported ?? undefined,
+          authorizationGrantProfilesSupported:
+            draft.authorizationGrantProfilesSupported ?? [],
           responseTypesSupported: draft.responseTypesSupported ?? undefined,
           tokenEndpointAuthMethodsSupported:
             draft.tokenEndpointAuthMethodsSupported ?? undefined,

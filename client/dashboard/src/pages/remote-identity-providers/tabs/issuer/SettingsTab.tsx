@@ -111,6 +111,8 @@ export function SettingsTab({
       jwksUri: issuer.jwksUri ?? "",
       scopesSupported: issuer.scopesSupported ?? [],
       grantTypesSupported: issuer.grantTypesSupported ?? [],
+      authorizationGrantProfilesSupported:
+        issuer.authorizationGrantProfilesSupported ?? [],
       responseTypesSupported: issuer.responseTypesSupported ?? [],
       tokenEndpointAuthMethodsSupported:
         issuer.tokenEndpointAuthMethodsSupported ?? [],
@@ -245,6 +247,7 @@ export function SettingsTab({
           registrationEndpoint,
           jwksUri,
           discoveredSnapshot,
+          savedIssuerUrl: issuer.issuer,
           scopeOverride,
           omitScopeFallback:
             omitScopeFallback !== undefined &&

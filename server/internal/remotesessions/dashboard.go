@@ -82,9 +82,13 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 		return nil, err
 	}
 
-	commit := s.identity.Prepare(req.plan(authCtx, target))
+	plan := req.plan(authCtx, target)
+	commit := s.identity.Prepare(plan)
 	if err := commit.Preflight(ctx); err != nil {
 		return nil, identityOopsError(err, "check identity configuration").LogError(ctx, logger)
+	}
+	if plan.Provider.create != nil {
+		s.recordCreateDiscovery(ctx, logger, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, plan.Provider.create, time.Now())
 	}
 	reg, err := commit.Register(ctx)
 	if err != nil {

@@ -19,6 +19,8 @@ export type IssuerSettingsFormState = {
   registrationEndpoint: string;
   jwksUri: string;
   discoveredSnapshot: DiscoveredEndpoints | null;
+  // The stored issuer URL; a different submitted URL clears its grant profiles.
+  savedIssuerUrl?: string;
   // Undefined omits the admin-only field; an empty string explicitly clears
   // an existing issuer binding.
   tunneledMcpServerId?: string;
@@ -67,6 +69,11 @@ export function buildUpdateIssuerForm(
     jwksUri: state.jwksUri.trim(),
     scopesSupported: fromDiscovery?.scopesSupported,
     grantTypesSupported: fromDiscovery?.grantTypesSupported,
+    authorizationGrantProfilesSupported:
+      fromDiscovery?.authorizationGrantProfilesSupported ??
+      (state.savedIssuerUrl !== undefined && issuer !== state.savedIssuerUrl
+        ? []
+        : undefined),
     responseTypesSupported: fromDiscovery?.responseTypesSupported,
     tokenEndpointAuthMethodsSupported:
       fromDiscovery?.tokenEndpointAuthMethodsSupported,
@@ -153,6 +160,9 @@ export function buildCreateIssuerForm(
     jwksUri: state.jwksUri.trim() || undefined,
     scopesSupported: fromDiscovery?.scopesSupported ?? [],
     grantTypesSupported: fromDiscovery?.grantTypesSupported ?? [],
+    // Omitted without discovery: the server treats any value as discovered.
+    authorizationGrantProfilesSupported:
+      fromDiscovery?.authorizationGrantProfilesSupported,
     responseTypesSupported: fromDiscovery?.responseTypesSupported ?? [],
     tokenEndpointAuthMethodsSupported:
       fromDiscovery?.tokenEndpointAuthMethodsSupported ?? [],

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	issuersgen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
@@ -81,6 +82,31 @@ func TestPreparationIntegration_ManualGrantEvidence(t *testing.T) {
 			require.Equal(t, confirmed, repeated, "identical confirmation must replay its durable result without a new generation")
 		})
 	}
+}
+
+func TestPreparationIntegration_DeclaredAdvertisementIsNotEligible(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	issuer := uuid.MustParse(createRemoteIssuer(t, ctx, ti, "declared", ""))
+	user := createUserSessionIssuer(t, ctx, ti.conn, "declared-human")
+	_, err := ti.service.UpdateRemoteSessionIssuer(ctx, &issuersgen.UpdateRemoteSessionIssuerPayload{
+		ID:                                  issuer.String(),
+		GrantTypesSupported:                 []string{oauthwire.GrantTypeJWTBearer},
+		AuthorizationGrantProfilesSupported: []string{oauthwire.GrantProfileIDJAG},
+	})
+	require.NoError(t, err)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	client := preparationManualClient(t, ctx, ti, *auth.ProjectID, issuer, "declared-client")
+	in := remotesessions.PreparationInput{UserSessionIssuerID: user, RemoteSessionIssuerID: issuer, ClientID: client, Resource: "https://resource.example.com/", Mechanism: "manual", Scopes: []string{"openid"}}
+
+	declared, err := ti.service.ReadIdentityChaining(ctx, in)
+	require.NoError(t, err)
+	require.Equal(t, "incomplete_metadata", declared.State, "an advertisement no discovery recorded must not make the issuer eligible")
+
+	preparationAdvertise(t, ctx, ti, issuer)
+	discovered, err := ti.service.ReadIdentityChaining(ctx, in)
+	require.NoError(t, err)
+	require.Equal(t, "configuration_required", discovered.State)
 }
 
 func TestPreparationIntegration_TenantAndIssuerSubstitution(t *testing.T) {

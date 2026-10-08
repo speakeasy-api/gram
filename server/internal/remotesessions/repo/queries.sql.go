@@ -12210,20 +12210,25 @@ SET
         WHEN $5::text = '' THEN NULL
         ELSE COALESCE($5, client_setup_documentation_url)
     END,
+    -- A new issuer URL resets every discovered column the edit does not restate.
     authorization_endpoint = CASE
         WHEN $6::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $6
         ELSE COALESCE($6, authorization_endpoint)
     END,
     token_endpoint = CASE
         WHEN $7::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $7
         ELSE COALESCE($7, token_endpoint)
     END,
     revocation_endpoint = CASE
         WHEN $8::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $8
         ELSE COALESCE($8, revocation_endpoint)
     END,
     registration_endpoint = CASE
         WHEN $9::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $9
         ELSE COALESCE($9, registration_endpoint)
     END,
     -- A manually changed key URL invalidates every value derived from the old
@@ -12237,46 +12242,60 @@ SET
     jwks_etag = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN $10::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $10
         ELSE COALESCE($10, jwks_uri)
     END,
     service_documentation = CASE
         WHEN $11::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $11
         ELSE COALESCE($11, service_documentation)
     END,
     op_policy_uri = CASE
         WHEN $12::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $12
         ELSE COALESCE($12, op_policy_uri)
     END,
     op_tos_uri = CASE
         WHEN $13::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $13
         ELSE COALESCE($13, op_tos_uri)
     END,
-    scopes_supported = COALESCE($14::text[], scopes_supported),
-    grant_types_supported = COALESCE($15::text[], grant_types_supported),
-    authorization_grant_profiles_supported = COALESCE($16::text[], authorization_grant_profiles_supported),
+    scopes_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($14::text[], ARRAY[]::text[]) ELSE COALESCE($14::text[], scopes_supported) END,
+    grant_types_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($15::text[], ARRAY[]::text[]) ELSE COALESCE($15::text[], grant_types_supported) END,
+    authorization_grant_profiles_supported = CASE
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN ARRAY[]::text[]
+        ELSE COALESCE($16::text[], authorization_grant_profiles_supported)
+    END,
+    metadata_fetched_at = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_fetched_at END,
+    metadata_last_error = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_last_error END,
+    metadata_last_error_at = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_last_error_at END,
+    metadata_last_error_url = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_last_error_url END,
     -- Keep the local projection source aligned with an explicit operator edit.
-    -- Discovery timestamps are unchanged; only a fresh fetch replaces this evidence.
+    -- A profile edit keeps discovery timestamps; only a fresh fetch replaces this evidence.
     metadata = CASE
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL
         WHEN $16::text[] IS NULL OR metadata IS NULL THEN metadata
         ELSE jsonb_set(metadata, '{authorization_grant_profiles_supported}', to_jsonb($16::text[]))
     END,
-    response_types_supported = COALESCE($17::text[], response_types_supported),
-    token_endpoint_auth_methods_supported = COALESCE($18::text[], token_endpoint_auth_methods_supported),
-    code_challenge_methods_supported = COALESCE($19::text[], code_challenge_methods_supported),
-    client_id_metadata_document_supported = COALESCE($20, client_id_metadata_document_supported),
+    response_types_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($17::text[], ARRAY[]::text[]) ELSE COALESCE($17::text[], response_types_supported) END,
+    token_endpoint_auth_methods_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($18::text[], ARRAY[]::text[]) ELSE COALESCE($18::text[], token_endpoint_auth_methods_supported) END,
+    code_challenge_methods_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $19::text[] ELSE COALESCE($19::text[], code_challenge_methods_supported) END,
+    client_id_metadata_document_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($20::boolean, FALSE) ELSE COALESCE($20::boolean, client_id_metadata_document_supported) END,
     userinfo_endpoint = CASE
         WHEN $21::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $21
         ELSE COALESCE($21, userinfo_endpoint)
     END,
     introspection_endpoint = CASE
         WHEN $22::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $22
         ELSE COALESCE($22, introspection_endpoint)
     END,
-    introspection_endpoint_auth_methods_supported = COALESCE($23::text[], introspection_endpoint_auth_methods_supported),
-    id_token_signing_alg_values_supported = COALESCE($24::text[], id_token_signing_alg_values_supported),
-    claims_supported = COALESCE($25::text[], claims_supported),
-    backchannel_logout_supported = COALESCE($26, backchannel_logout_supported),
-    authorization_response_iss_parameter_supported = COALESCE($27, authorization_response_iss_parameter_supported),
+    introspection_endpoint_auth_methods_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $23::text[] ELSE COALESCE($23::text[], introspection_endpoint_auth_methods_supported) END,
+    id_token_signing_alg_values_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $24::text[] ELSE COALESCE($24::text[], id_token_signing_alg_values_supported) END,
+    claims_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $25::text[] ELSE COALESCE($25::text[], claims_supported) END,
+    backchannel_logout_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $26::boolean ELSE COALESCE($26::boolean, backchannel_logout_supported) END,
+    authorization_response_iss_parameter_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $27::boolean ELSE COALESCE($27::boolean, authorization_response_iss_parameter_supported) END,
     -- An empty array clears scope_override to NULL; omitted keeps it. resource_indicator_supported is set-only.
     scope_override = CASE
         WHEN $28::text[] IS NULL THEN scope_override
@@ -12537,20 +12556,25 @@ SET
         WHEN $5::text = '' THEN NULL
         ELSE COALESCE($5, client_setup_documentation_url)
     END,
+    -- A new issuer URL resets every discovered column the edit does not restate.
     authorization_endpoint = CASE
         WHEN $6::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $6
         ELSE COALESCE($6, authorization_endpoint)
     END,
     token_endpoint = CASE
         WHEN $7::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $7
         ELSE COALESCE($7, token_endpoint)
     END,
     revocation_endpoint = CASE
         WHEN $8::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $8
         ELSE COALESCE($8, revocation_endpoint)
     END,
     registration_endpoint = CASE
         WHEN $9::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $9
         ELSE COALESCE($9, registration_endpoint)
     END,
     -- A manually changed key URL invalidates every value derived from the old
@@ -12564,46 +12588,60 @@ SET
     jwks_etag = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN $10::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $10
         ELSE COALESCE($10, jwks_uri)
     END,
     service_documentation = CASE
         WHEN $11::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $11
         ELSE COALESCE($11, service_documentation)
     END,
     op_policy_uri = CASE
         WHEN $12::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $12
         ELSE COALESCE($12, op_policy_uri)
     END,
     op_tos_uri = CASE
         WHEN $13::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $13
         ELSE COALESCE($13, op_tos_uri)
     END,
-    scopes_supported = COALESCE($14::text[], scopes_supported),
-    grant_types_supported = COALESCE($15::text[], grant_types_supported),
-    authorization_grant_profiles_supported = COALESCE($16::text[], authorization_grant_profiles_supported),
+    scopes_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($14::text[], ARRAY[]::text[]) ELSE COALESCE($14::text[], scopes_supported) END,
+    grant_types_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($15::text[], ARRAY[]::text[]) ELSE COALESCE($15::text[], grant_types_supported) END,
+    authorization_grant_profiles_supported = CASE
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN ARRAY[]::text[]
+        ELSE COALESCE($16::text[], authorization_grant_profiles_supported)
+    END,
+    metadata_fetched_at = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_fetched_at END,
+    metadata_last_error = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_last_error END,
+    metadata_last_error_at = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_last_error_at END,
+    metadata_last_error_url = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_last_error_url END,
     -- Keep the local projection source aligned with an explicit operator edit.
-    -- Discovery timestamps are unchanged; only a fresh fetch replaces this evidence.
+    -- A profile edit keeps discovery timestamps; only a fresh fetch replaces this evidence.
     metadata = CASE
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL
         WHEN $16::text[] IS NULL OR metadata IS NULL THEN metadata
         ELSE jsonb_set(metadata, '{authorization_grant_profiles_supported}', to_jsonb($16::text[]))
     END,
-    response_types_supported = COALESCE($17::text[], response_types_supported),
-    token_endpoint_auth_methods_supported = COALESCE($18::text[], token_endpoint_auth_methods_supported),
-    code_challenge_methods_supported = COALESCE($19::text[], code_challenge_methods_supported),
-    client_id_metadata_document_supported = COALESCE($20, client_id_metadata_document_supported),
+    response_types_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($17::text[], ARRAY[]::text[]) ELSE COALESCE($17::text[], response_types_supported) END,
+    token_endpoint_auth_methods_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($18::text[], ARRAY[]::text[]) ELSE COALESCE($18::text[], token_endpoint_auth_methods_supported) END,
+    code_challenge_methods_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $19::text[] ELSE COALESCE($19::text[], code_challenge_methods_supported) END,
+    client_id_metadata_document_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($20::boolean, FALSE) ELSE COALESCE($20::boolean, client_id_metadata_document_supported) END,
     userinfo_endpoint = CASE
         WHEN $21::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $21
         ELSE COALESCE($21, userinfo_endpoint)
     END,
     introspection_endpoint = CASE
         WHEN $22::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $22
         ELSE COALESCE($22, introspection_endpoint)
     END,
-    introspection_endpoint_auth_methods_supported = COALESCE($23::text[], introspection_endpoint_auth_methods_supported),
-    id_token_signing_alg_values_supported = COALESCE($24::text[], id_token_signing_alg_values_supported),
-    claims_supported = COALESCE($25::text[], claims_supported),
-    backchannel_logout_supported = COALESCE($26, backchannel_logout_supported),
-    authorization_response_iss_parameter_supported = COALESCE($27, authorization_response_iss_parameter_supported),
+    introspection_endpoint_auth_methods_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $23::text[] ELSE COALESCE($23::text[], introspection_endpoint_auth_methods_supported) END,
+    id_token_signing_alg_values_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $24::text[] ELSE COALESCE($24::text[], id_token_signing_alg_values_supported) END,
+    claims_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $25::text[] ELSE COALESCE($25::text[], claims_supported) END,
+    backchannel_logout_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $26::boolean ELSE COALESCE($26::boolean, backchannel_logout_supported) END,
+    authorization_response_iss_parameter_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $27::boolean ELSE COALESCE($27::boolean, authorization_response_iss_parameter_supported) END,
     -- An empty array clears scope_override to NULL; omitted keeps it. resource_indicator_supported is set-only.
     scope_override = CASE
         WHEN $28::text[] IS NULL THEN scope_override
@@ -13114,20 +13152,25 @@ SET
         WHEN $5::text = '' THEN NULL
         ELSE COALESCE($5, client_setup_documentation_url)
     END,
+    -- A new issuer URL resets every discovered column the edit does not restate.
     authorization_endpoint = CASE
         WHEN $6::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $6
         ELSE COALESCE($6, authorization_endpoint)
     END,
     token_endpoint = CASE
         WHEN $7::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $7
         ELSE COALESCE($7, token_endpoint)
     END,
     revocation_endpoint = CASE
         WHEN $8::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $8
         ELSE COALESCE($8, revocation_endpoint)
     END,
     registration_endpoint = CASE
         WHEN $9::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $9
         ELSE COALESCE($9, registration_endpoint)
     END,
     -- Changing the issuer identity or key URL invalidates every value derived
@@ -13140,46 +13183,60 @@ SET
     jwks_etag = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN $10::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $10
         ELSE COALESCE($10, jwks_uri)
     END,
     service_documentation = CASE
         WHEN $11::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $11
         ELSE COALESCE($11, service_documentation)
     END,
     op_policy_uri = CASE
         WHEN $12::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $12
         ELSE COALESCE($12, op_policy_uri)
     END,
     op_tos_uri = CASE
         WHEN $13::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $13
         ELSE COALESCE($13, op_tos_uri)
     END,
-    scopes_supported = COALESCE($14::text[], scopes_supported),
-    grant_types_supported = COALESCE($15::text[], grant_types_supported),
-    authorization_grant_profiles_supported = COALESCE($16::text[], authorization_grant_profiles_supported),
+    scopes_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($14::text[], ARRAY[]::text[]) ELSE COALESCE($14::text[], scopes_supported) END,
+    grant_types_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($15::text[], ARRAY[]::text[]) ELSE COALESCE($15::text[], grant_types_supported) END,
+    authorization_grant_profiles_supported = CASE
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN ARRAY[]::text[]
+        ELSE COALESCE($16::text[], authorization_grant_profiles_supported)
+    END,
+    metadata_fetched_at = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_fetched_at END,
+    metadata_last_error = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_last_error END,
+    metadata_last_error_at = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_last_error_at END,
+    metadata_last_error_url = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_last_error_url END,
     -- Keep the local projection source aligned with an explicit operator edit.
-    -- Discovery timestamps are unchanged; only a fresh fetch replaces this evidence.
+    -- A profile edit keeps discovery timestamps; only a fresh fetch replaces this evidence.
     metadata = CASE
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL
         WHEN $16::text[] IS NULL OR metadata IS NULL THEN metadata
         ELSE jsonb_set(metadata, '{authorization_grant_profiles_supported}', to_jsonb($16::text[]))
     END,
-    response_types_supported = COALESCE($17::text[], response_types_supported),
-    token_endpoint_auth_methods_supported = COALESCE($18::text[], token_endpoint_auth_methods_supported),
-    code_challenge_methods_supported = COALESCE($19::text[], code_challenge_methods_supported),
-    client_id_metadata_document_supported = COALESCE($20, client_id_metadata_document_supported),
+    response_types_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($17::text[], ARRAY[]::text[]) ELSE COALESCE($17::text[], response_types_supported) END,
+    token_endpoint_auth_methods_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($18::text[], ARRAY[]::text[]) ELSE COALESCE($18::text[], token_endpoint_auth_methods_supported) END,
+    code_challenge_methods_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $19::text[] ELSE COALESCE($19::text[], code_challenge_methods_supported) END,
+    client_id_metadata_document_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($20::boolean, FALSE) ELSE COALESCE($20::boolean, client_id_metadata_document_supported) END,
     userinfo_endpoint = CASE
         WHEN $21::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $21
         ELSE COALESCE($21, userinfo_endpoint)
     END,
     introspection_endpoint = CASE
         WHEN $22::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $22
         ELSE COALESCE($22, introspection_endpoint)
     END,
-    introspection_endpoint_auth_methods_supported = COALESCE($23::text[], introspection_endpoint_auth_methods_supported),
-    id_token_signing_alg_values_supported = COALESCE($24::text[], id_token_signing_alg_values_supported),
-    claims_supported = COALESCE($25::text[], claims_supported),
-    backchannel_logout_supported = COALESCE($26, backchannel_logout_supported),
-    authorization_response_iss_parameter_supported = COALESCE($27, authorization_response_iss_parameter_supported),
+    introspection_endpoint_auth_methods_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $23::text[] ELSE COALESCE($23::text[], introspection_endpoint_auth_methods_supported) END,
+    id_token_signing_alg_values_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $24::text[] ELSE COALESCE($24::text[], id_token_signing_alg_values_supported) END,
+    claims_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $25::text[] ELSE COALESCE($25::text[], claims_supported) END,
+    backchannel_logout_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $26::boolean ELSE COALESCE($26::boolean, backchannel_logout_supported) END,
+    authorization_response_iss_parameter_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $27::boolean ELSE COALESCE($27::boolean, authorization_response_iss_parameter_supported) END,
     -- An empty array clears scope_override to NULL; omitted keeps it. resource_indicator_supported is set-only.
     scope_override = CASE
         WHEN $28::text[] IS NULL THEN scope_override
