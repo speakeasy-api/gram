@@ -7,10 +7,15 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { cn, tunnelGatewayURL } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
+import { useOrganization } from "@/contexts/Auth";
 import { useEffect, useRef, useState } from "react";
 
 const DEFAULT_MCP_URL = "https://placeholder.net/mcp";
 const DEFAULT_MCP_COMMAND = "npx -y @modelcontextprotocol/server-everything";
+// Per-user credentials need a pinned server that reads its token from
+// SPEAKEASY_ACCESS_TOKEN_FILE; exec keeps it in the agent's process group.
+const DEFAULT_CREDENTIALS_MCP_COMMAND = "exec /opt/mcp/bin/your-mcp-server";
+const PRODUCTION_ASSERTION_ISSUER = "https://tunnel.speakeasy.com";
 const DEFAULT_SERVICE_VERSION = "1.0.0";
 const TUNNEL_AGENT_IMAGE = `ghcr.io/speakeasy-api/gram-tunnel-agent:${__GRAM_TUNNEL_AGENT_VERSION__}`;
 
@@ -20,10 +25,19 @@ const TUNNEL_AGENT_IMAGE = `ghcr.io/speakeasy-api/gram-tunnel-agent:${__GRAM_TUN
 const MCP_URL_SENTINEL = "__SLOT_mcpUrl__";
 const MCP_COMMAND_SENTINEL = "__SLOT_mcpCommand__";
 const SERVICE_VERSION_SENTINEL = "__SLOT_serviceVersion__";
+const ISSUER_SENTINEL = "__SLOT_assertionIssuer__";
 
 type SetupMode = "existing" | "new";
 
 type Transport = "http" | "stdio";
+
+type CredentialMode = "shared" | "user";
+
+type CredentialSettings = {
+  issuer: string;
+  audience: string;
+  organizationId: string;
+};
 
 type Platform = "kubernetes" | "docker";
 
@@ -43,31 +57,60 @@ type SnippetContext = {
   mcpUrl: string;
   mcpCommand: string;
   serviceVersion: string;
+  // Set when the stdio server acts upstream as each Speakeasy user.
+  credentials?: CredentialSettings;
 };
 
 export function TunneledMcpSetupTabs({
   tunnelKey,
   keyPrefix,
   serverName,
+  tunneledMcpServerId,
+  resourceIdentifier,
 }: {
   tunnelKey?: string;
   keyPrefix?: string;
   serverName?: string;
+  // The tunneled source, when known, fills in the assertion audience.
+  tunneledMcpServerId?: string;
+  resourceIdentifier?: string;
 }): JSX.Element {
+  const organization = useOrganization();
   const [mode, setMode] = useState<SetupMode>("existing");
   const [platform, setPlatform] = useState<Platform>("kubernetes");
   const [transport, setTransport] = useState<Transport>("http");
   const [mcpUrlDraft, setMcpUrlDraft] = useState("");
   const [mcpCommandDraft, setMcpCommandDraft] = useState("");
   const [serviceVersionDraft, setServiceVersionDraft] = useState("");
+  const [credentialMode, setCredentialMode] =
+    useState<CredentialMode>("shared");
+  const [issuerDraft, setIssuerDraft] = useState("");
+
+  const gateway = tunnelGatewayURL();
+  const perUserCredentials =
+    mode === "existing" && transport === "stdio" && credentialMode === "user";
+  const defaultIssuer = assertionIssuerFor(gateway);
+  const defaultCommand = perUserCredentials
+    ? DEFAULT_CREDENTIALS_MCP_COMMAND
+    : DEFAULT_MCP_COMMAND;
 
   const ctx: SnippetContext = {
     renderedKey: tunnelKey ?? "<YOUR_TUNNEL_KEY>",
     slug: slugForSnippet(serverName),
-    gateway: tunnelGatewayURL(),
+    gateway,
     mcpUrl: mcpUrlDraft.trim() || DEFAULT_MCP_URL,
-    mcpCommand: mcpCommandDraft.trim() || DEFAULT_MCP_COMMAND,
+    mcpCommand: mcpCommandDraft.trim() || defaultCommand,
     serviceVersion: serviceVersionDraft.trim() || DEFAULT_SERVICE_VERSION,
+    credentials: perUserCredentials
+      ? {
+          issuer: issuerDraft.trim() || defaultIssuer,
+          audience: assertionAudienceFor(
+            tunneledMcpServerId,
+            resourceIdentifier,
+          ),
+          organizationId: organization.id,
+        }
+      : undefined,
   };
 
   const snippetTabs = snippetTabsFor(mode, transport, ctx);
@@ -80,6 +123,10 @@ export function TunneledMcpSetupTabs({
 
   const handleTransportChange = (value: string) => {
     if (value === "http" || value === "stdio") setTransport(value);
+  };
+
+  const handleCredentialModeChange = (value: string) => {
+    if (value === "shared" || value === "user") setCredentialMode(value);
   };
 
   const handlePlatformChange = (value: string) => {
@@ -161,7 +208,33 @@ export function TunneledMcpSetupTabs({
               description="Shell command that starts the stdio MCP server. The agent runs it once per MCP session."
               value={mcpCommandDraft}
               onChange={setMcpCommandDraft}
-              placeholder={DEFAULT_MCP_COMMAND}
+              placeholder={defaultCommand}
+            />
+          )}
+          {mode === "existing" && transport === "stdio" && (
+            <ConfigGroup label="Upstream credentials">
+              <Tabs
+                value={credentialMode}
+                onValueChange={handleCredentialModeChange}
+              >
+                <TabsList className="w-full">
+                  <TabsTrigger value="shared">Shared</TabsTrigger>
+                  <TabsTrigger value="user">Per user</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <Text muted small>
+                {CREDENTIAL_MODE_DESCRIPTIONS[credentialMode]}
+              </Text>
+            </ConfigGroup>
+          )}
+          {perUserCredentials && (
+            <SnippetField
+              id="tunnel-config-assertion-issuer"
+              label="Assertion issuer"
+              description="Issuer of Speakeasy's signed caller assertions for this deployment. Production uses https://tunnel.speakeasy.com; verify it for other deployments."
+              value={issuerDraft}
+              onChange={setIssuerDraft}
+              placeholder={defaultIssuer}
             />
           )}
           <SnippetField
@@ -188,6 +261,30 @@ export function TunneledMcpSetupTabs({
       </div>
     </div>
   );
+}
+
+const CREDENTIAL_MODE_DESCRIPTIONS: Record<CredentialMode, string> = {
+  shared:
+    "Every server process uses the credentials in the agent's environment.",
+  user: "Each Speakeasy user's own upstream token is written to their server process's SPEAKEASY_ACCESS_TOKEN_FILE. Every MCP server on this tunnel must be private, and callers without a linked account are refused. The server must be a pinned, trusted build that reads that file.",
+};
+
+// The production issuer on production hosts; elsewhere the gateway's origin,
+// which the editable field lets people correct.
+function assertionIssuerFor(gateway: string): string {
+  const url = new URL(gateway);
+  if (url.hostname === "tunnel.speakeasy.com") {
+    return PRODUCTION_ASSERTION_ISSUER;
+  }
+  return `${url.protocol === "ws:" ? "http" : "https"}://${url.host}`;
+}
+
+function assertionAudienceFor(
+  tunneledMcpServerId: string | undefined,
+  resourceIdentifier: string | undefined,
+): string {
+  if (resourceIdentifier) return resourceIdentifier;
+  return `tunneled-mcp-server:${tunneledMcpServerId ?? "<TUNNELED_MCP_SERVER_ID>"}`;
 }
 
 const TRANSPORT_DESCRIPTIONS: Record<Transport, string> = {
@@ -291,10 +388,30 @@ spec:
 
 // The published agent image has no language runtime for the command to use.
 function stdioServerTabs(ctx: SnippetContext): SnippetTab[] {
-  const { renderedKey, slug, gateway, mcpCommand, serviceVersion } = ctx;
+  const {
+    renderedKey,
+    slug,
+    gateway,
+    mcpCommand,
+    serviceVersion,
+    credentials,
+  } = ctx;
   const localImage = `gram-tunnel-${slug}:local`;
 
-  const dockerfile = `cat > Dockerfile <<'DOCKERFILE'
+  const dockerfile = credentials
+    ? `cat > Dockerfile <<'DOCKERFILE'
+# Any Linux base image with your server's runtime works. Install a pinned
+# build of a server that reads its token from SPEAKEASY_ACCESS_TOKEN_FILE.
+FROM node:22-alpine
+# tini as PID 1 stops every server process when the container stops.
+RUN apk add --no-cache tini
+COPY --from=${TUNNEL_AGENT_IMAGE} /usr/local/bin/tunnel-agent /usr/local/bin/tunnel-agent
+USER node
+ENV TUNNEL_LOCAL_MCP_COMMAND="${MCP_COMMAND_SENTINEL}"
+ENV TUNNEL_STDIO_CREDENTIALS=user
+ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/tunnel-agent"]
+DOCKERFILE`
+    : `cat > Dockerfile <<'DOCKERFILE'
 # Any Linux base image with your command's runtime works. Keep USER pointed
 # at a non-root user in that image with a writable home directory.
 FROM node:22-alpine
@@ -303,6 +420,34 @@ USER node
 ENV TUNNEL_LOCAL_MCP_COMMAND="${MCP_COMMAND_SENTINEL}"
 ENTRYPOINT ["/usr/local/bin/tunnel-agent"]
 DOCKERFILE`;
+  const dockerCredentialFlags = credentials
+    ? `  -e TUNNEL_IDENTITY_ISSUER='${ISSUER_SENTINEL}' \\
+  -e TUNNEL_IDENTITY_AUDIENCE=${shellQuote(credentials.audience)} \\
+  -e TUNNEL_IDENTITY_ORGANIZATION_ID=${shellQuote(credentials.organizationId)} \\
+`
+    : "";
+  const kubernetesCredentialEnv = credentials
+    ? `
+            - name: TUNNEL_STDIO_CREDENTIALS
+              value: "user"
+            - name: TUNNEL_IDENTITY_ISSUER
+              value: ${yamlQuote(ISSUER_SENTINEL)}
+            - name: TUNNEL_IDENTITY_AUDIENCE
+              value: ${yamlQuote(credentials.audience)}
+            - name: TUNNEL_IDENTITY_ORGANIZATION_ID
+              value: ${yamlQuote(credentials.organizationId)}
+          # Token files live only in memory.
+          volumeMounts:
+            - name: credentials
+              mountPath: /dev/shm
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+      volumes:
+        - name: credentials
+          emptyDir:
+            medium: Memory`
+    : "";
 
   const docker = `mkdir -p gram-tunnel-${slug}
 cd gram-tunnel-${slug}
@@ -314,7 +459,7 @@ docker run --rm --name gram-tunnel-${slug} \\
   -e TUNNEL_KEY=${shellQuote(renderedKey)} \\
   -e TUNNEL_GATEWAY_URL=${shellQuote(gateway)} \\
   -e TUNNEL_SERVICE_VERSION='${SERVICE_VERSION_SENTINEL}' \\
-  ${localImage}`;
+${dockerCredentialFlags}  ${localImage}`;
 
   const kubernetes = `apiVersion: v1
 kind: Secret
@@ -352,7 +497,12 @@ spec:
             - name: TUNNEL_GATEWAY_URL
               value: ${yamlQuote(gateway)}
             - name: TUNNEL_SERVICE_VERSION
-              value: ${yamlQuote(SERVICE_VERSION_SENTINEL)}`;
+              value: ${yamlQuote(SERVICE_VERSION_SENTINEL)}${kubernetesCredentialEnv}`;
+
+  const issuerSlots = (
+    slot: (value: string) => CodeBlockSlot,
+  ): Record<string, CodeBlockSlot> =>
+    credentials ? { [ISSUER_SENTINEL]: slot(credentials.issuer) } : {};
 
   return [
     {
@@ -363,6 +513,7 @@ spec:
       code: kubernetes,
       slots: {
         [SERVICE_VERSION_SENTINEL]: yamlSlot(serviceVersion),
+        ...issuerSlots(yamlSlot),
       },
     },
     {
@@ -380,6 +531,7 @@ spec:
           serviceVersion,
           "TUNNEL_SERVICE_VERSION=",
         ),
+        ...issuerSlots((value) => shellSlot(value, "TUNNEL_IDENTITY_ISSUER=")),
       },
     },
   ];
