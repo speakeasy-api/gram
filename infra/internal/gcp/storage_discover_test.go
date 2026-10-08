@@ -21,10 +21,12 @@ import (
 
 func storageFixture(t *testing.T) (*descriptorpb.FileDescriptorSet, *descriptorpb.DescriptorProto, *descriptorpb.DescriptorProto, *pubsubv1.StorageSubscriptionOptions) {
 	t.Helper()
+
 	payload := &descriptorpb.DescriptorProto{Name: new("Event"), Options: topicOptions(t), Field: []*descriptorpb.FieldDescriptorProto{stringField("id", 1)}}
 	opts := pubsubv1.StorageSubscriptionOptions_builder{Topic: new("test.storage.v1.Event"), Bucket: new("event-archive")}.Build()
 	marker := &descriptorpb.DescriptorProto{Name: new("EventArchive"), Options: &descriptorpb.MessageOptions{}}
 	proto.SetExtension(marker.Options, pubsubv1.E_StorageSubscription, opts)
+
 	set := &descriptorpb.FileDescriptorSet{File: append(wellKnownSchemaDeps(),
 		&descriptorpb.FileDescriptorProto{
 			Name: new("test/storage/v1/event.proto"), Package: new("test.storage.v1"), Syntax: new("proto3"),
@@ -35,28 +37,34 @@ func storageFixture(t *testing.T) (*descriptorpb.FileDescriptorSet, *descriptorp
 			Dependency: []string{"gcp/pubsub/v1/options.proto"}, MessageType: []*descriptorpb.DescriptorProto{marker},
 		},
 	)}
+
 	return set, payload, marker, opts
 }
 
 func discoverStorageFixture(t *testing.T, set *descriptorpb.FileDescriptorSet) ([]DesiredTopic, []DesiredSubscription, error) {
 	t.Helper()
+
 	raw, err := proto.Marshal(set)
 	require.NoError(t, err)
+
 	return DiscoverPubSub(raw)
 }
 
 func TestStorageSubscription_DefaultsAndTransport(t *testing.T) {
 	t.Parallel()
+
 	set, _, _, opts := storageFixture(t)
 	opts.ClearBucket()
 	opts.SetRetention(durationpb.New(24 * time.Hour))
 	opts.SetAckDeadline(durationpb.New(60 * time.Second))
 	opts.SetRetryPolicy(pubsubv1.RetryPolicy_builder{}.Build())
 	opts.SetDeadLetter(pubsubv1.DeadLetterPolicy_builder{MaxDeliveryAttempts: new(int32(10))}.Build())
+
 	topics, subs, err := discoverStorageFixture(t, set)
 	require.NoError(t, err)
 	require.Len(t, subs, 1)
 	require.Len(t, topics, 2)
+
 	sub := subs[0]
 	require.Equal(t, "test-storage-v1-event-archive", sub.Name)
 	require.Equal(t, "test-storage-v1-event", sub.Topic)
@@ -74,6 +82,7 @@ func TestStorageSubscription_DefaultsAndTransport(t *testing.T) {
 
 func TestStorageSubscription_ExplicitModes(t *testing.T) {
 	t.Parallel()
+
 	for _, mode := range []pubsubv1.StoragePartitioning{
 		pubsubv1.StoragePartitioning_STORAGE_PARTITIONING_HIVE_DAILY,
 		pubsubv1.StoragePartitioning_STORAGE_PARTITIONING_HIVE_HOURLY,
@@ -81,6 +90,7 @@ func TestStorageSubscription_ExplicitModes(t *testing.T) {
 	} {
 		t.Run(mode.String(), func(t *testing.T) {
 			t.Parallel()
+
 			set, _, _, opts := storageFixture(t)
 			opts.SetCodec(pubsubv1.StorageCodec_STORAGE_CODEC_PARQUET)
 			opts.SetPartitioning(mode)
@@ -88,6 +98,7 @@ func TestStorageSubscription_ExplicitModes(t *testing.T) {
 				opts.SetPartitionAttribute("storage_partition")
 				opts.SetPartitionKeys([]string{"region", "date"})
 			}
+
 			_, subs, err := discoverStorageFixture(t, set)
 			require.NoError(t, err)
 			require.Equal(t, mode, subs[0].Storage.Partitioning)
@@ -98,6 +109,7 @@ func TestStorageSubscription_ExplicitModes(t *testing.T) {
 
 func TestStorageSubscription_InvalidOptions(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name string
 		edit func(*pubsubv1.StorageSubscriptionOptions)
@@ -125,11 +137,14 @@ func TestStorageSubscription_InvalidOptions(t *testing.T) {
 			o.SetDeadLetter(pubsubv1.DeadLetterPolicy_builder{MaxDeliveryAttempts: new(int32(1))}.Build())
 		}, "max delivery attempts"},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			set, _, _, opts := storageFixture(t)
 			tt.edit(opts)
+
 			_, _, err := discoverStorageFixture(t, set)
 			require.ErrorContains(t, err, tt.want)
 		})
@@ -138,6 +153,7 @@ func TestStorageSubscription_InvalidOptions(t *testing.T) {
 
 func TestStorageSubscription_InvalidExternalConfiguration(t *testing.T) {
 	t.Parallel()
+
 	for _, tt := range []struct {
 		name      string
 		attribute string
@@ -159,10 +175,12 @@ func TestStorageSubscription_InvalidExternalConfiguration(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			set, _, _, opts := storageFixture(t)
 			opts.SetPartitioning(pubsubv1.StoragePartitioning_STORAGE_PARTITIONING_HIVE_EXTERNAL)
 			opts.SetPartitionAttribute(tt.attribute)
 			opts.SetPartitionKeys(tt.keys)
+
 			_, _, err := discoverStorageFixture(t, set)
 			require.ErrorContains(t, err, tt.want)
 		})
@@ -171,15 +189,18 @@ func TestStorageSubscription_InvalidExternalConfiguration(t *testing.T) {
 
 func TestStorageSubscription_ExclusiveOptions(t *testing.T) {
 	t.Parallel()
+
 	for _, kind := range []string{"topic", "subscription"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
+
 			set, _, marker, _ := storageFixture(t)
 			if kind == "topic" {
 				proto.SetExtension(marker.Options, pubsubv1.E_Topic, pubsubv1.TopicOptions_builder{}.Build())
 			} else {
 				proto.SetExtension(marker.Options, pubsubv1.E_Subscription, pubsubv1.SubscriptionOptions_builder{Topic: new("test.storage.v1.Event")}.Build())
 			}
+
 			_, _, err := discoverStorageFixture(t, set)
 			require.ErrorContains(t, err, "declare them on separate marker messages")
 		})
@@ -188,17 +209,20 @@ func TestStorageSubscription_ExclusiveOptions(t *testing.T) {
 
 func TestStorageSubscription_CollidesWithOrdinarySubscription(t *testing.T) {
 	t.Parallel()
+
 	set, _, _, opts := storageFixture(t)
 	opts.SetName("same-name")
 	ordinary := &descriptorpb.DescriptorProto{Name: new("Processor"), Options: &descriptorpb.MessageOptions{}}
 	proto.SetExtension(ordinary.Options, pubsubv1.E_Subscription, pubsubv1.SubscriptionOptions_builder{Name: new("same-name"), Topic: new("test.storage.v1.Event")}.Build())
 	set.File[len(set.File)-1].MessageType = append(set.File[len(set.File)-1].MessageType, ordinary)
+
 	_, _, err := discoverStorageFixture(t, set)
 	require.ErrorContains(t, err, `subscription "same-name" is declared multiple times`)
 }
 
 func TestStorageSubscription_RequiresAttachedSchema(t *testing.T) {
 	t.Parallel()
+
 	set, payload, _, _ := storageFixture(t)
 	proto.SetExtension(payload.Options, pubsubv1.E_Topic, pubsubv1.TopicOptions_builder{Name: new("shared-topic")}.Build())
 	_, _, err := discoverStorageFixture(t, set)
@@ -217,6 +241,7 @@ func storageMessageField(name string, number int32, target string) *descriptorpb
 
 func TestStorageSubscription_RejectsExternalPayloadTypes(t *testing.T) {
 	t.Parallel()
+
 	for _, tt := range []struct {
 		name   string
 		file   *descriptorpb.FileDescriptorProto
@@ -230,11 +255,13 @@ func TestStorageSubscription_RejectsExternalPayloadTypes(t *testing.T) {
 		for _, edge := range []string{"singular", "repeated", "oneof", "map"} {
 			t.Run(tt.name+"/"+edge, func(t *testing.T) {
 				t.Parallel()
+
 				set, payload, _, _ := storageFixture(t)
 				field := storageMessageField("external", 2, tt.target)
 				if tt.enum {
 					field.Type = descriptorpb.FieldDescriptorProto_TYPE_ENUM.Enum()
 				}
+
 				switch edge {
 				case "repeated":
 					field.Label = descriptorpb.FieldDescriptorProto_LABEL_REPEATED.Enum()
@@ -248,12 +275,14 @@ func TestStorageSubscription_RejectsExternalPayloadTypes(t *testing.T) {
 					field = storageMessageField("external", 2, ".test.storage.v1.Event.ExternalEntry")
 					field.Label = descriptorpb.FieldDescriptorProto_LABEL_REPEATED.Enum()
 				}
+
 				payload.Field = append(payload.Field, field)
 				payloadFile := set.File[len(set.File)-2]
 				payloadFile.Dependency = append(payloadFile.Dependency, tt.file.GetName())
 				if !slices.ContainsFunc(set.File, func(f *descriptorpb.FileDescriptorProto) bool { return f.GetName() == tt.file.GetName() }) {
 					set.File = append(set.File, tt.file)
 				}
+
 				_, _, err := discoverStorageFixture(t, set)
 				require.ErrorContains(t, err, "storage subscription test.storage.v1.EventArchive")
 				require.ErrorContains(t, err, "external payload type")
@@ -266,9 +295,11 @@ func TestStorageSubscription_RejectsExternalPayloadTypes(t *testing.T) {
 
 func TestStorageSubscription_RejectsRecursionWithPath(t *testing.T) {
 	t.Parallel()
+
 	for _, edge := range []string{"direct", "repeated", "oneof", "map"} {
 		t.Run(edge, func(t *testing.T) {
 			t.Parallel()
+
 			set, payload, _, _ := storageFixture(t)
 			child := &descriptorpb.DescriptorProto{Name: new("Child"), Field: []*descriptorpb.FieldDescriptorProto{storageMessageField("parent", 1, ".test.storage.v1.Event")}}
 			field := storageMessageField("child", 2, ".test.storage.v1.Event.Child")
@@ -289,6 +320,7 @@ func TestStorageSubscription_RejectsRecursionWithPath(t *testing.T) {
 			}
 			payload.NestedType = []*descriptorpb.DescriptorProto{child}
 			payload.Field = append(payload.Field, field)
+
 			_, _, err := discoverStorageFixture(t, set)
 			require.ErrorContains(t, err, "recursive payload schema")
 			require.ErrorContains(t, err, "Event.child")
@@ -299,21 +331,25 @@ func TestStorageSubscription_RejectsRecursionWithPath(t *testing.T) {
 
 func TestStorageSubscription_AllowsSharedAcyclicTypes(t *testing.T) {
 	t.Parallel()
+
 	set, payload, _, _ := storageFixture(t)
 	payload.NestedType = []*descriptorpb.DescriptorProto{{Name: new("Child"), Field: []*descriptorpb.FieldDescriptorProto{stringField("value", 1)}}}
 	payload.Field = append(payload.Field, storageMessageField("left", 2, ".test.storage.v1.Event.Child"), storageMessageField("right", 3, ".test.storage.v1.Event.Child"))
+
 	_, _, err := discoverStorageFixture(t, set)
 	require.NoError(t, err)
 }
 
 func TestStorageBuckets_DeduplicatedPrivateAndPreserved(t *testing.T) {
 	t.Parallel()
+
 	subs := []DesiredSubscription{
 		{Name: "archive-one", Storage: &DesiredStorage{Bucket: "zebra-archive"}},
 		{Name: "archive-two", Storage: &DesiredStorage{Bucket: "alpha-archive"}},
 		{Name: "archive-three", Storage: &DesiredStorage{Bucket: "zebra-archive"}},
 		{Name: "ordinary"},
 	}
+
 	doc := buildPubSubValues(t.Context(), slog.New(slog.DiscardHandler), nil, subs, nil)
 	require.Equal(t, []string{storageAPI}, doc.Storage.APIs)
 	require.Len(t, doc.Storage.Buckets, 2)
@@ -327,12 +363,14 @@ func TestStorageBuckets_DeduplicatedPrivateAndPreserved(t *testing.T) {
 		require.Nil(t, bucket.Spec.ResourceID)
 		require.Empty(t, bucket.Spec.LifecycleRule)
 	}
+
 	first, err := yaml.Marshal(doc)
 	require.NoError(t, err)
 	slices.Reverse(subs)
 	second, err := yaml.Marshal(buildPubSubValues(t.Context(), slog.New(slog.DiscardHandler), nil, subs, nil))
 	require.NoError(t, err)
 	require.Equal(t, string(first), string(second))
+
 	withoutStorage, err := yaml.Marshal(buildPubSubValues(t.Context(), slog.New(slog.DiscardHandler), nil, nil, nil))
 	require.NoError(t, err)
 	require.NotContains(t, string(withoutStorage), "storage:")
@@ -340,6 +378,7 @@ func TestStorageBuckets_DeduplicatedPrivateAndPreserved(t *testing.T) {
 
 func TestStorageBuckets_DefaultAndExplicitNames(t *testing.T) {
 	t.Parallel()
+
 	set, _, marker, opts := storageFixture(t)
 	opts.ClearBucket()
 	for _, tt := range []struct {
@@ -359,6 +398,7 @@ func TestStorageBuckets_DefaultAndExplicitNames(t *testing.T) {
 		proto.SetExtension(other.Options, pubsubv1.E_StorageSubscription, options)
 		set.File[len(set.File)-1].MessageType = append(set.File[len(set.File)-1].MessageType, other)
 	}
+
 	_, subs, err := discoverStorageFixture(t, set)
 	require.NoError(t, err)
 	require.Len(t, subs, 4)
@@ -369,6 +409,7 @@ func TestStorageBuckets_DefaultAndExplicitNames(t *testing.T) {
 		}
 		require.Equal(t, want, sub.Storage.Bucket)
 	}
+
 	values := buildStorageValues(subs)
 	require.Len(t, values.Buckets, 2)
 	require.Equal(t, "event-archive", values.Buckets[0].Name)
@@ -378,6 +419,7 @@ func TestStorageBuckets_DefaultAndExplicitNames(t *testing.T) {
 func TestStorageTopology_GenerateAndPreserveOutputOnError(t *testing.T) {
 	t.Parallel()
 	requireBuf(t)
+
 	set, _, _, opts := storageFixture(t)
 	root := t.TempDir()
 	source := filepath.Join(root, "test/storage/v1/event.proto")
@@ -390,11 +432,13 @@ message Event {
   option (gcp.pubsub.v1.topic) = {};
 }
 `), 0o600))
+
 	raw, err := proto.Marshal(set)
 	require.NoError(t, err)
 	out := filepath.Join(root, "kcc.yaml")
 	cc := NewCCPubSub(slog.New(slog.DiscardHandler), out, raw, root)
 	require.NoError(t, cc.Generate(t.Context()))
+
 	data, err := os.ReadFile(out)
 	require.NoError(t, err)
 	require.Contains(t, string(data), "storage:")
@@ -408,6 +452,7 @@ message Event {
 	cc.descriptors, err = proto.Marshal(set)
 	require.NoError(t, err)
 	require.ErrorContains(t, cc.Generate(t.Context()), "unsupported storage codec")
+
 	after, err := os.ReadFile(out)
 	require.NoError(t, err)
 	require.Equal(t, data, after)

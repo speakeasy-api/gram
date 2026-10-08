@@ -125,6 +125,7 @@ func DiscoverPubSub(descriptorBytes []byte) ([]DesiredTopic, []DesiredSubscripti
 	if err := validateStorageSubscriptions(files, topics, subs); err != nil {
 		return nil, nil, err
 	}
+
 	return topics, subs, nil
 }
 
@@ -155,6 +156,7 @@ func collectFromMessages(messages protoreflect.MessageDescriptors, topics *[]Des
 			if err != nil {
 				return fmt.Errorf("storage subscription %s: %w", message.FullName(), err)
 			}
+
 			*subs = append(*subs, sub)
 		}
 

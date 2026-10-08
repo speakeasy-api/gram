@@ -15,18 +15,22 @@ import (
 
 func TestApplicationBrokers_RejectStorageMarkerBeforeIO(t *testing.T) {
 	t.Parallel()
+
 	options := &descriptorpb.MessageOptions{}
 	proto.SetExtension(options, pubsubv1.E_StorageSubscription, pubsubv1.StorageSubscriptionOptions_builder{
 		Topic: new("example.v1.Event"), Bucket: new("event-archive"),
 	}.Build())
+
 	file, err := protodesc.NewFile(&descriptorpb.FileDescriptorProto{
 		Name: new("example/v1/archive.proto"), Package: new("example.v1"), Syntax: new("proto3"),
 		Dependency:  []string{"gcp/pubsub/v1/options.proto"},
 		MessageType: []*descriptorpb.DescriptorProto{{Name: new("Archive"), Options: options}},
 	}, protoregistry.GlobalFiles)
 	require.NoError(t, err)
+
 	marker := dynamicpb.NewMessage(file.Messages().Get(0))
 	logger := slog.New(slog.DiscardHandler)
+
 	// Nil clients prove the ownership check happens before any network use.
 	for _, broker := range []SubscriberBroker{
 		NewPubSubBroker(logger, nil, nil),

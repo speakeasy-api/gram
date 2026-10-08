@@ -19,11 +19,13 @@ func buildStorageValues(subs []DesiredSubscription) *storageValues {
 	if len(names) == 0 {
 		return nil
 	}
+
 	ordered := make([]string, 0, len(names))
 	for name := range names {
 		ordered = append(ordered, name)
 	}
 	slices.Sort(ordered)
+
 	buckets := make([]storageBucketValue, 0, len(ordered))
 	for _, name := range ordered {
 		buckets = append(buckets, storageBucketValue{
@@ -39,5 +41,6 @@ func buildStorageValues(subs []DesiredSubscription) *storageValues {
 			},
 		})
 	}
+
 	return &storageValues{APIs: []string{storageAPI}, Buckets: buckets}
 }

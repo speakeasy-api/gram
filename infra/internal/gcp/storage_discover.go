@@ -52,6 +52,7 @@ func StorageOptionsFromMessage(message protoreflect.MessageDescriptor) (*pubsubv
 	if !ok || options == nil || !proto.HasExtension(options, pubsubv1.E_StorageSubscription) {
 		return nil, false
 	}
+
 	value, ok := proto.GetExtension(options, pubsubv1.E_StorageSubscription).(*pubsubv1.StorageSubscriptionOptions)
 	return value, ok && value != nil
 }
@@ -63,6 +64,7 @@ func desiredStorageSubscription(message protoreflect.MessageDescriptor, opts *pu
 	if err := validateStorageDurations(opts); err != nil {
 		return DesiredSubscription{}, err
 	}
+
 	codec := opts.GetCodec()
 	switch codec {
 	case pubsubv1.StorageCodec_STORAGE_CODEC_UNSPECIFIED:
@@ -71,6 +73,7 @@ func desiredStorageSubscription(message protoreflect.MessageDescriptor, opts *pu
 	default:
 		return DesiredSubscription{}, fmt.Errorf("unsupported storage codec %d", codec)
 	}
+
 	partitioning := opts.GetPartitioning()
 	switch partitioning {
 	case pubsubv1.StoragePartitioning_STORAGE_PARTITIONING_UNSPECIFIED:
@@ -81,15 +84,18 @@ func desiredStorageSubscription(message protoreflect.MessageDescriptor, opts *pu
 	default:
 		return DesiredSubscription{}, fmt.Errorf("unsupported storage partitioning %d", partitioning)
 	}
+
 	if partitioning == pubsubv1.StoragePartitioning_STORAGE_PARTITIONING_HIVE_EXTERNAL {
 		attribute := opts.GetPartitionAttribute()
 		if attribute == "" || strings.TrimSpace(attribute) != attribute || strings.HasPrefix(strings.ToLower(attribute), "goog") || len(attribute) > 256 {
 			return DesiredSubscription{}, fmt.Errorf("partition_attribute must be a nonempty Pub/Sub attribute key of at most 256 bytes without surrounding whitespace or the case-insensitive reserved goog prefix")
 		}
+
 		keys := opts.GetPartitionKeys()
 		if len(keys) == 0 || len(keys) > maxPartitionKeys {
 			return DesiredSubscription{}, fmt.Errorf("HIVE_EXTERNAL requires 1-%d partition_keys", maxPartitionKeys)
 		}
+
 		seen := make(map[string]bool, len(keys))
 		for _, key := range keys {
 			if !partitionKeyPattern.MatchString(key) {
@@ -103,6 +109,7 @@ func desiredStorageSubscription(message protoreflect.MessageDescriptor, opts *pu
 	} else if opts.HasPartitionAttribute() || len(opts.GetPartitionKeys()) != 0 {
 		return DesiredSubscription{}, fmt.Errorf("partition_attribute and partition_keys are only valid with HIVE_EXTERNAL")
 	}
+
 	sub := desiredSubscriptionFromOptions(message, opts)
 	sub.Storage = &DesiredStorage{
 		Bucket:             opts.GetBucket(),
@@ -111,6 +118,7 @@ func desiredStorageSubscription(message protoreflect.MessageDescriptor, opts *pu
 		PartitionAttribute: opts.GetPartitionAttribute(),
 		PartitionKeys:      slices.Clone(opts.GetPartitionKeys()),
 	}
+
 	return sub, nil
 }
 
@@ -137,11 +145,13 @@ func validateStorageDurations(opts *pubsubv1.StorageSubscriptionOptions) error {
 			return fmt.Errorf("%s must be a nonnegative whole-second duration", field.name)
 		}
 	}
+
 	if deadline := opts.GetAckDeadline(); deadline != nil {
 		if d := deadline.AsDuration(); d < 10*time.Second || d > 600*time.Second {
 			return fmt.Errorf("ack_deadline must be between 10s and 600s")
 		}
 	}
+
 	return nil
 }
 
@@ -150,6 +160,7 @@ func validateStorageSubscriptions(files *protoregistry.Files, topics []DesiredTo
 	for _, topic := range topics {
 		topicByMessage[topic.ProtoMessage] = topic
 	}
+
 	for _, sub := range subs {
 		if sub.Storage == nil {
 			continue
@@ -157,10 +168,12 @@ func validateStorageSubscriptions(files *protoregistry.Files, topics []DesiredTo
 		if topicByMessage[sub.TopicMessage].NameOverridden {
 			return fmt.Errorf("storage subscription %s: topic %s overrides its name and has no attached schema", sub.ProtoMessage, sub.TopicMessage)
 		}
+
 		descriptor, err := files.FindDescriptorByName(protoreflect.FullName(sub.TopicMessage))
 		if err != nil {
 			return fmt.Errorf("storage subscription %s: resolve payload: %w", sub.ProtoMessage, err)
 		}
+
 		payload, ok := descriptor.(protoreflect.MessageDescriptor)
 		if !ok {
 			return fmt.Errorf("storage subscription %s: %s is not a message", sub.ProtoMessage, sub.TopicMessage)
@@ -168,6 +181,7 @@ func validateStorageSubscriptions(files *protoregistry.Files, topics []DesiredTo
 		if err := validateStoragePayload(payload); err != nil {
 			return fmt.Errorf("storage subscription %s: %w", sub.ProtoMessage, err)
 		}
+
 		for _, key := range sub.Storage.PartitionKeys {
 			for i := 0; i < payload.Fields().Len(); i++ {
 				if field := payload.Fields().Get(i); strings.EqualFold(key, string(field.Name())) {
@@ -176,12 +190,14 @@ func validateStorageSubscriptions(files *protoregistry.Files, topics []DesiredTo
 			}
 		}
 	}
+
 	return nil
 }
 
 func validateStoragePayload(root protoreflect.MessageDescriptor) error {
 	active := make(map[protoreflect.FullName]bool)
 	complete := make(map[protoreflect.FullName]bool)
+
 	var visit func(protoreflect.MessageDescriptor, []string) error
 	visit = func(message protoreflect.MessageDescriptor, path []string) error {
 		if active[message.FullName()] {
@@ -190,6 +206,7 @@ func validateStoragePayload(root protoreflect.MessageDescriptor) error {
 		if complete[message.FullName()] {
 			return nil
 		}
+
 		active[message.FullName()] = true
 		for i := 0; i < message.Fields().Len(); i++ {
 			field := message.Fields().Get(i)
@@ -203,6 +220,7 @@ func validateStoragePayload(root protoreflect.MessageDescriptor) error {
 			if oneof := field.ContainingOneof(); oneof != nil && !oneof.IsSynthetic() {
 				edge += " (oneof " + string(oneof.Name()) + ")"
 			}
+
 			var target protoreflect.Descriptor
 			if field.Message() != nil {
 				target = field.Message()
@@ -211,6 +229,7 @@ func validateStoragePayload(root protoreflect.MessageDescriptor) error {
 			} else {
 				continue
 			}
+
 			next := append(slices.Clone(path), edge)
 			// Attached Pub/Sub schemas are single-file, self-contained payloads.
 			// Enforce this directly on descriptors, including repo-local imports,
@@ -218,16 +237,20 @@ func validateStoragePayload(root protoreflect.MessageDescriptor) error {
 			if target.ParentFile().Path() != root.ParentFile().Path() {
 				return fmt.Errorf("external payload type: %s -> %s (%s); storage payloads must be self-contained in %s", strings.Join(next, " -> "), target.FullName(), target.ParentFile().Path(), root.ParentFile().Path())
 			}
+
 			if child := field.Message(); child != nil {
 				if err := visit(child, next); err != nil {
 					return err
 				}
 			}
 		}
+
 		delete(active, message.FullName())
 		complete[message.FullName()] = true
+
 		return nil
 	}
+
 	return visit(root, nil)
 }
 
@@ -252,5 +275,6 @@ func ValidateStorageSchemas(topics []DesiredTopic, subs []DesiredSubscription, s
 			return fmt.Errorf("storage subscription %s: topic %s has no attached schema", sub.ProtoMessage, sub.TopicMessage)
 		}
 	}
+
 	return nil
 }

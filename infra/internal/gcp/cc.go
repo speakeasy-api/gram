@@ -55,6 +55,7 @@ func (c *ConfigConnectorPubSub) Generate(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("discover pubsub schemas: %w", err)
 	}
+
 	if err := ValidateStorageSchemas(desiredTopics, desiredSubs, desiredSchemas); err != nil {
 		return fmt.Errorf("validate storage schemas: %w", err)
 	}
