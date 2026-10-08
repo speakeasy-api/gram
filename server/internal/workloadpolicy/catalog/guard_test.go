@@ -1,6 +1,7 @@
 package catalog_test
 
 import (
+	"bytes"
 	"fmt"
 	"io/fs"
 	"os"
@@ -19,6 +20,13 @@ const repositoryRoot = "../../../.."
 // relative to repositoryRoot.
 const definitionsDir = "server/internal/workloadpolicy/catalog/platforms"
 
+// customFlowsPath is the only custom flows file in the repository, relative
+// to repositoryRoot.
+const customFlowsPath = "server/internal/workloadpolicy/catalog/custom.yaml"
+
+// customFlowKeys are the custom flows file's top-level keys.
+var customFlowKeys = []string{"register_platform", "edit_platform", "allow_access", "edit_access"}
+
 // skippedDirs are directory names that never hold the repository's own files.
 var skippedDirs = map[string]bool{
 	".git":         true,
@@ -27,9 +35,10 @@ var skippedDirs = map[string]bool{
 }
 
 // TestNoPlatformDefinitionsOutsideTheCatalog keeps one copy of every platform
-// definition. A YAML file with a definition's top-level keys anywhere else is a
-// second copy that will drift from the one the server loads; tests read the
-// embedded catalog, or the fixture generated from it, instead.
+// definition and of the custom flows. A YAML file with their top-level keys
+// anywhere else is a second copy that will drift from the one the server
+// loads; tests read the embedded catalog, or the fixtures generated from it,
+// instead.
 func TestNoPlatformDefinitionsOutsideTheCatalog(t *testing.T) {
 	t.Parallel()
 
@@ -53,7 +62,7 @@ func TestNoPlatformDefinitionsOutsideTheCatalog(t *testing.T) {
 		if err != nil {
 			return fmt.Errorf("relative path of %s: %w", path, err)
 		}
-		if filepath.ToSlash(filepath.Dir(relative)) == definitionsDir {
+		if filepath.ToSlash(filepath.Dir(relative)) == definitionsDir || filepath.ToSlash(relative) == customFlowsPath {
 			return nil
 		}
 
@@ -61,13 +70,24 @@ func TestNoPlatformDefinitionsOutsideTheCatalog(t *testing.T) {
 		if err != nil {
 			return fmt.Errorf("read %s: %w", path, err)
 		}
-		if looksLikePlatformDefinition(raw) {
+		if looksLikePlatformDefinition(raw) || looksLikeCustomFlows(raw) {
 			copies = append(copies, filepath.ToSlash(relative))
 		}
 		return nil
 	})
 	require.NoError(t, err)
-	require.Empty(t, copies, "platform definitions belong only in %s", definitionsDir)
+	require.Empty(t, copies, "platform definitions belong only in %s, and custom flows only in %s", definitionsDir, customFlowsPath)
+}
+
+func TestLooksLikeCustomFlows(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, looksLikeCustomFlows([]byte("allow_access:\n  title: Allow access\n")))
+	require.False(t, looksLikeCustomFlows([]byte("access:\n  title: Allow access\n")))
+	require.False(t, looksLikeCustomFlows([]byte("- allow_access\n")))
+	require.False(t, looksLikeCustomFlows([]byte("allow_access: {{ .Value }}\n  broken: [\n")))
+	require.True(t, looksLikeCustomFlows([]byte("name: unrelated\n---\nallow_access:\n  title: Allow access\n")))
+	require.True(t, looksLikePlatformDefinition([]byte("name: unrelated\n---\nissuer: {}\njwks_uri: {}\nsubject: {}\n")))
 }
 
 // isNestedCheckout reports whether dir, below the repository root, is another
@@ -81,18 +101,46 @@ func isNestedCheckout(dir string) bool {
 	return err == nil
 }
 
-// looksLikePlatformDefinition reports whether raw is a YAML mapping carrying
-// the keys every platform definition has. A file that does not parse as a YAML
-// mapping, such as a templated one, is not a definition.
+// looksLikePlatformDefinition reports whether any YAML document in raw is a
+// mapping carrying the keys every platform definition has. A file that does
+// not parse as YAML, such as a templated one, holds no definition.
 func looksLikePlatformDefinition(raw []byte) bool {
-	var document map[string]yaml.Node
-	if err := yaml.Unmarshal(raw, &document); err != nil {
+	return anyDocument(raw, func(document map[string]yaml.Node) bool {
+		for _, key := range []string{"issuer", "jwks_uri", "subject"} {
+			if _, ok := document[key]; !ok {
+				return false
+			}
+		}
+		return true
+	})
+}
+
+// looksLikeCustomFlows reports whether any YAML document in raw is a mapping
+// holding one of the custom flows' keys.
+func looksLikeCustomFlows(raw []byte) bool {
+	return anyDocument(raw, func(document map[string]yaml.Node) bool {
+		for _, key := range customFlowKeys {
+			if _, ok := document[key]; ok {
+				return true
+			}
+		}
 		return false
-	}
-	for _, key := range []string{"issuer", "jwks_uri", "subject"} {
-		if _, ok := document[key]; !ok {
+	})
+}
+
+// anyDocument reports whether match holds for any mapping document in raw.
+// Documents that are not mappings are skipped; decoding stops at the end of
+// raw or at the first document that does not parse.
+func anyDocument(raw []byte, match func(map[string]yaml.Node) bool) bool {
+	decoder := yaml.NewDecoder(bytes.NewReader(raw))
+	for {
+		var node yaml.Node
+		if err := decoder.Decode(&node); err != nil {
 			return false
 		}
+		var document map[string]yaml.Node
+		if node.Decode(&document) == nil && match(document) {
+			return true
+		}
 	}
-	return true
 }

@@ -82721,6 +82721,103 @@ paths:
             x-speakeasy-name-override: admitSubject
             x-speakeasy-react-hook:
                 name: AdmitWorkloadSubject
+    /rpc/workloadIdentities.getCustomFlows:
+        get:
+            description: 'Get the forms for trusting a platform the catalog does not list and allowing its workloads: registering and editing a trusted platform, and allowing and editing access. The same for every organization. Requires workload:read.'
+            operationId: getWorkloadCustomFlows
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkloadCustomFlows'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getCustomFlows workloadIdentities
+            tags:
+                - workloadIdentities
+            x-speakeasy-name-override: getCustomFlows
+            x-speakeasy-react-hook:
+                name: WorkloadCustomFlows
     /rpc/workloadIdentities.list:
         get:
             description: 'Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project''s tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.'
@@ -118805,6 +118902,137 @@ components:
                 - wildcard_active
                 - created_at
                 - updated_at
+        WorkloadCustomFlows:
+            type: object
+            properties:
+                allow_access:
+                    $ref: '#/components/schemas/WorkloadForm'
+                edit_access:
+                    $ref: '#/components/schemas/WorkloadForm'
+                edit_platform:
+                    $ref: '#/components/schemas/WorkloadForm'
+                register_platform:
+                    $ref: '#/components/schemas/WorkloadForm'
+            description: The forms for trusting a platform the catalog does not list and allowing its workloads.
+            required:
+                - register_platform
+                - edit_platform
+                - allow_access
+                - edit_access
+        WorkloadForm:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Shown under the title.
+                pending_label:
+                    type: string
+                    description: The submit button's label while the form submits.
+                steps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkloadFormStep'
+                    description: The form's steps, in order.
+                submit_label:
+                    type: string
+                    description: The submit button's label.
+                title:
+                    type: string
+                    description: Heads the form.
+            description: A custom flow's form, held to the management API form it submits.
+            required:
+                - title
+                - description
+                - submit_label
+                - pending_label
+                - steps
+        WorkloadFormBlock:
+            type: object
+            properties:
+                field:
+                    type: string
+                    description: The form value an input collects. label is submitted as an admission's name.
+                    enum:
+                        - ""
+                        - name
+                        - description
+                        - issuer
+                        - jwks_uri
+                        - subject
+                        - label
+                format:
+                    type: string
+                    description: The dashboard validator an input's value must pass. The server applies the same rules when the form is submitted.
+                    enum:
+                        - ""
+                        - issuer_url
+                        - jwks_uri
+                        - platform_name
+                        - platform_description
+                        - subject_rule
+                        - none
+                help:
+                    type: string
+                    description: Markdown shown under a form control while it has no validation message. Raw HTML in it must not be rendered.
+                href:
+                    type: string
+                    description: A link's https target.
+                label:
+                    type: string
+                    description: A link's label, or a form control's.
+                markdown:
+                    type: string
+                    description: A text block's Markdown. Raw HTML in it must not be rendered.
+                multiline:
+                    type: boolean
+                    description: Whether an input is a text area.
+                placeholder:
+                    type: string
+                    description: Shown in an empty form control.
+                read_only:
+                    type: boolean
+                    description: Whether an input shows its value without letting it change. A read-only value is not submitted.
+                type:
+                    type: string
+                    description: The kind of content. wildcard_caution marks where the form warns that a wildcard rule admits more than one identity; the dashboard writes that warning, since it names the rule and the agent.
+                    enum:
+                        - text
+                        - link
+                        - input
+                        - agent_picker
+                        - tags
+                        - wildcard_caution
+            description: One piece of a custom flow's form. Which fields are set depends on type; the rest are empty.
+            required:
+                - type
+                - markdown
+                - href
+                - label
+                - field
+                - placeholder
+                - help
+                - multiline
+                - read_only
+                - format
+        WorkloadFormStep:
+            type: object
+            properties:
+                blocks:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkloadFormBlock'
+                    description: Rendered in order.
+                id:
+                    type: string
+                    description: Stable within the form.
+                title:
+                    type: string
+                    description: Heads the step.
+            description: One screen of a custom flow's form.
+            required:
+                - id
+                - title
+                - blocks
         WorkloadIdentityPolicy:
             type: object
             properties:
