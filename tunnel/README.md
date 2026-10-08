@@ -68,6 +68,13 @@ MCP server that speaks the stdio transport. The agent runs the command with
   the process: stdin closes, then SIGTERM, then SIGKILL to its process group.
 - `TUNNEL_STDIO_MAX_SESSIONS` (default `16`) caps concurrent processes; an
   `initialize` past the cap gets HTTP 503.
+- A single message over 32 MiB in either direction is refused; from the server
+  it ends the session. A stream whose client falls 64 MiB behind is cut off
+  rather than stalling the session.
+- A server that stops reading stdin while a request is being written to it is
+  stopped, so a stuck server cannot hold a session slot.
+- The agent answers a server's `ping` sent before `initialize` completes, since
+  the client has no way to answer it yet.
 - The process inherits the agent's environment minus every `TUNNEL_*`
   variable, so credentials for the server go in the agent's environment.
 - Processes outlive gateway reconnects, but sessions are local to one agent.

@@ -3,6 +3,7 @@ package agent
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -42,8 +44,11 @@ func runStdioFixture() {
 			ID     json.RawMessage `json:"id"`
 			Method string          `json:"method"`
 			Params struct {
-				Name      string         `json:"name"`
-				Arguments map[string]any `json:"arguments"`
+				Name       string         `json:"name"`
+				Arguments  map[string]any `json:"arguments"`
+				ClientInfo struct {
+					Name string `json:"name"`
+				} `json:"clientInfo"`
 			} `json:"params"`
 			Result json.RawMessage `json:"result"`
 		}
@@ -55,6 +60,14 @@ func runStdioFixture() {
 		}
 		switch msg.Method {
 		case "initialize":
+			if msg.Params.ClientInfo.Name == "ping-first" {
+				// Ping and wait for the answer before completing initialize.
+				_ = out.Encode(map[string]any{"jsonrpc": "2.0", "id": "p0", "method": "ping"})
+				pong, err := reader.ReadBytes('\n')
+				if err != nil || !bytes.Contains(pong, []byte(`"p0"`)) {
+					return
+				}
+			}
 			reply(map[string]any{
 				"protocolVersion": "2025-06-18",
 				"capabilities":    map[string]any{"tools": map[string]any{}},
@@ -87,12 +100,16 @@ func newStdioTestServer(t *testing.T, maxSessions int) (*httptest.Server, *Agent
 	t.Helper()
 	exe, err := os.Executable()
 	require.NoError(t, err)
+	return newStdioTestServerWithCommand(t, stdioFixtureEnv+"=1 '"+exe+"'", maxSessions)
+}
 
+func newStdioTestServerWithCommand(t *testing.T, command string, maxSessions int) (*httptest.Server, *Agent) {
+	t.Helper()
 	a, err := New(Config{
 		GatewayURL:       "wss://example.test/connect",
 		APIKey:           "gram_tunnel_test",
 		LocalMCPURL:      "",
-		LocalMCPCommand:  stdioFixtureEnv + "=1 '" + exe + "'",
+		LocalMCPCommand:  command,
 		StdioMaxSessions: maxSessions,
 		StdioIdleTimeout: 0,
 		ServiceVersion:   "1.0.0",
@@ -326,4 +343,135 @@ func TestNewRequiresExactlyOneUpstream(t *testing.T) {
 	both.LocalMCPCommand = "npx server"
 	_, err = New(both, logger)
 	require.Error(t, err)
+}
+
+func TestStdioBridgeAnswersPingDuringInitialize(t *testing.T) {
+	t.Parallel()
+	srv, _ := newStdioTestServer(t, 0)
+
+	resp := mcpRequest(t, srv, http.MethodPost, "", `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ping-first","version":"1"}}}`)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.NotEmpty(t, resp.Header.Get(headerMCPSessionID))
+}
+
+func TestCanonicalRPCIDComparesByValue(t *testing.T) {
+	t.Parallel()
+	key := func(raw string) string {
+		id, err := canonicalRPCID(json.RawMessage(raw))
+		require.NoError(t, err)
+		return id
+	}
+	require.Equal(t, key(`"ab"`), key(`"ab"`))
+	require.Equal(t, key(`1`), key(`1.0`))
+	require.Equal(t, key(`10`), key(`1e1`))
+	require.NotEqual(t, key(`1`), key(`"1"`))
+
+	_, err := canonicalRPCID(json.RawMessage(`{"a":1}`))
+	require.Error(t, err)
+}
+
+func TestReadFrameEnforcesLimit(t *testing.T) {
+	t.Parallel()
+	reader := bufio.NewReaderSize(strings.NewReader(strings.Repeat("x", 100)+"\nok\n"), 16)
+	_, err := readFrame(reader, 64)
+	require.ErrorIs(t, err, errStdioFrameTooLarge)
+
+	reader = bufio.NewReaderSize(strings.NewReader(strings.Repeat("x", 40)+"\n"), 16)
+	frame, err := readFrame(reader, 64)
+	require.NoError(t, err)
+	require.Len(t, frame, 41)
+}
+
+// newRoutingSession builds a session with no process, for exercising route.
+func newRoutingSession() *stdioSession {
+	return &stdioSession{
+		id:           "test",
+		cmd:          nil,
+		stdin:        nil,
+		logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+		writeSem:     make(chan struct{}, 1),
+		exited:       make(chan struct{}),
+		done:         make(chan struct{}),
+		closeOnce:    sync.Once{},
+		mu:           sync.Mutex{},
+		initializing: false,
+		pending:      make(map[string]*rpcStream),
+		streams:      make(map[*rpcStream]struct{}),
+		listener:     nil,
+		backlog:      nil,
+		backlogBytes: 0,
+		inflight:     0,
+		lastActive:   time.Now(),
+	}
+}
+
+func mustParseRPC(t *testing.T, raw string) rpcMessage {
+	t.Helper()
+	msg, err := parseRPCMessage([]byte(raw))
+	require.NoError(t, err)
+	return msg
+}
+
+func TestStdioRouteCutsOffSlowListenerWithoutBlocking(t *testing.T) {
+	t.Parallel()
+	sess := newRoutingSession()
+	listener, err := sess.attachListener()
+	require.NoError(t, err)
+	listener.limit = 256
+
+	post, err := sess.openStream([]string{mustParseRPC(t, `{"id":7,"method":"x"}`).id}, true)
+	require.NoError(t, err)
+
+	notification := `{"jsonrpc":"2.0","method":"notifications/message","params":{"data":"` + strings.Repeat("x", 100) + `"}}`
+	for range 10 {
+		sess.route(mustParseRPC(t, notification))
+	}
+	select {
+	case <-listener.gone:
+	default:
+		t.Fatal("a listener over its byte limit must be cut off")
+	}
+	require.NotEmpty(t, sess.backlog, "messages the listener could not take are kept for the next GET stream")
+
+	sess.route(mustParseRPC(t, `{"jsonrpc":"2.0","id":7,"result":{}}`))
+	event, ok := post.pop()
+	require.True(t, ok)
+	require.True(t, event.response)
+}
+
+func TestStdioRouteRetiresAnsweredStream(t *testing.T) {
+	t.Parallel()
+	sess := newRoutingSession()
+	post, err := sess.openStream([]string{mustParseRPC(t, `{"id":1,"method":"x"}`).id}, true)
+	require.NoError(t, err)
+
+	sess.route(mustParseRPC(t, `{"jsonrpc":"2.0","id":1,"result":{}}`))
+	sess.route(mustParseRPC(t, `{"jsonrpc":"2.0","id":"srv","method":"ping"}`))
+
+	_, ok := post.pop()
+	require.True(t, ok)
+	_, ok = post.pop()
+	require.False(t, ok, "a server request after the final response must not go to the finished stream")
+	require.Len(t, sess.backlog, 1)
+}
+
+func TestStdioBridgeReleasesSessionWhenServerIgnoresStdin(t *testing.T) {
+	t.Parallel()
+	srv, a := newStdioTestServerWithCommand(t, "sleep 300", 1)
+
+	// Larger than a pipe buffer, so the write blocks on a server that never reads.
+	padding := strings.Repeat("x", 1<<20)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, srv.URL+"/", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"pad":"`+padding+`"}}`))
+	require.NoError(t, err)
+	if resp, err := srv.Client().Do(req); err == nil {
+		_ = resp.Body.Close()
+	}
+
+	require.Eventually(t, func() bool {
+		a.stdio.mu.Lock()
+		defer a.stdio.mu.Unlock()
+		return len(a.stdio.sessions) == 0
+	}, 20*time.Second, 100*time.Millisecond, "a cancelled initialize must release its session slot")
 }
