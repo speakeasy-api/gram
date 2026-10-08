@@ -1,4 +1,4 @@
-// Package gramotel is the one way Gram's own code writes log records into
+// Package gramotel is the one way the server's own code writes log records into
 // the OTel pipeline, so they go through the same transform, column enrichers
 // and writers as every customer producer.
 //
@@ -21,9 +21,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 )
 
-// ProvenanceSource is the provenance source stamped on every record Gram
+// ProvenanceSource is the provenance source stamped on every record Speakeasy
 // accepts into the pipeline, from customers through the ingest edge and from
-// Gram's own code alike.
+// the server's own code alike.
 const ProvenanceSource = "speakeasy"
 
 const (

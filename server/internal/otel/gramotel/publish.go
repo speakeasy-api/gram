@@ -36,7 +36,7 @@ func NewMetrics(logger *slog.Logger, meterProvider metric.MeterProvider) *Metric
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/otel/gramotel")
 	records, err := meter.Int64Counter(
 		meterRecords,
-		metric.WithDescription("Records Gram accepted into the OTel pipeline, or refused or failed to publish"),
+		metric.WithDescription("Records Speakeasy accepted into the OTel pipeline, or refused or failed to publish"),
 	)
 	if err != nil {
 		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(meterRecords), attr.SlogError(err))

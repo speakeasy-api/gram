@@ -74,7 +74,7 @@ type tenant struct {
 
 // WithTenant sets the organization and project for code that runs without an
 // authenticated request, such as a background job. Tenancy always comes from
-// Gram's own code, never from a record's attributes.
+// the server's own code, never from a record's attributes.
 func WithTenant(ctx context.Context, organizationID, projectID string) context.Context {
 	return context.WithValue(ctx, tenantKey{}, tenant{organizationID: organizationID, projectID: projectID})
 }
