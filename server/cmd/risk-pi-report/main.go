@@ -224,6 +224,9 @@ type accuracySummary struct {
 	KnownGaps      []knownGapSummary   `json:"known_gaps,omitempty"`
 	RecallGate     recallGateSummary   `json:"recall_gate"`
 	RecallGateRuns []recallGateSummary `json:"recall_gate_runs"`
+
+	// GateRuns holds this partition's merge-gate tallies, one per trial.
+	GateRuns []gateTally `json:"gate_runs"`
 }
 
 type recallGateSummary struct {
@@ -289,6 +292,18 @@ type envelope struct {
 	SchemaSHA256       string          `json:"schema_sha256"`
 	CorpusSHA256       string          `json:"corpus_sha256"`
 	Summary            accuracySummary `json:"summary"`
+
+	// ConfirmationPromptSHA256 hashes the confirmer's system prompt as sent.
+	// Its first 10 hex characters are the evaluation harness's prompt
+	// version key.
+	ConfirmationPromptSHA256 string `json:"confirmation_prompt_sha256,omitempty"`
+
+	// PrefilterQuestionsSHA256 hashes Jev's questions as Python's
+	// json.dumps(sort_keys=True) renders them, the harness's version key.
+	PrefilterQuestionsSHA256 string `json:"prefilter_questions_sha256,omitempty"`
+
+	// Gate is the merge gate over the whole corpus, deepset included.
+	Gate gateResult `json:"gate"`
 }
 
 type options struct {
@@ -299,10 +314,16 @@ type options struct {
 	judgeModel       string
 	judgeConcurrency int
 	sources          string
+	excludeSources   string
 	reasoning        string
 	extraCorpus      string
 	repeats          int
 	samples          int
+
+	// maxFalsePositives and minWellKnownRecall are the merge gate's
+	// thresholds; gateDisabledFalsePositives and 0 leave them unenforced.
+	maxFalsePositives  int
+	minWellKnownRecall float64
 }
 
 const (
@@ -339,6 +360,10 @@ func parseFlags() options {
 		extraCorpus:      "",
 		repeats:          0,
 		samples:          0,
+
+		excludeSources:     "",
+		maxFalsePositives:  0,
+		minWellKnownRecall: 0,
 	}
 	flag.StringVar(&opts.corpusDir, "corpus-dir", defaultCorpusDir, "directory containing prompt-injection JSONL corpus files")
 	flag.StringVar(&opts.outFile, "out", defaultOutFile, "path to write metrics JSON")
@@ -351,6 +376,9 @@ func parseFlags() options {
 	flag.IntVar(&opts.repeats, "repeats", 1, "number of complete repeated trials")
 	flag.IntVar(&opts.samples, "samples", piopenrouter.SamplesPerEvent, "physical judge calls per event; production defaults to one")
 	flag.BoolVar(&opts.cascade, "cascade", false, fmt.Sprintf("evaluate the production Jev >= %.2f to confirmer cascade", piopenrouter.PrefilterThreshold))
+	flag.StringVar(&opts.excludeSources, "exclude-sources", "", "comma-separated source substrings to drop after -sources (empty = none)")
+	flag.IntVar(&opts.maxFalsePositives, "max-false-positives", gateDisabledFalsePositives, "fail when any trial flags more benign cases than this, deepset included (-1 = unenforced)")
+	flag.Float64Var(&opts.minWellKnownRecall, "min-well-known-recall", 0, "fail when any trial catches a smaller share of the well-known attacks, deepset included (0 = unenforced)")
 	flag.Parse()
 	return opts
 }
@@ -359,6 +387,16 @@ func parseFlags() options {
 // substrings. Empty spec keeps everything. Used to run a cheap iteration slice
 // (benigns + adversarial + recall guards) without judging the full corpus.
 func filterSources(corpus []labeledCase, spec string) []labeledCase {
+	return selectSources(corpus, spec, true)
+}
+
+// excludeSources drops cases whose Source contains one of the comma-separated
+// substrings. Empty spec keeps everything.
+func excludeSources(corpus []labeledCase, spec string) []labeledCase {
+	return selectSources(corpus, spec, false)
+}
+
+func selectSources(corpus []labeledCase, spec string, keepMatches bool) []labeledCase {
 	spec = strings.TrimSpace(spec)
 	if spec == "" {
 		return corpus
@@ -371,11 +409,9 @@ func filterSources(corpus []labeledCase, spec string) []labeledCase {
 	}
 	out := corpus[:0:0]
 	for _, c := range corpus {
-		for _, n := range needles {
-			if strings.Contains(c.Source, n) {
-				out = append(out, c)
-				break
-			}
+		matches := slices.ContainsFunc(needles, func(n string) bool { return strings.Contains(c.Source, n) })
+		if matches == keepMatches {
+			out = append(out, c)
 		}
 	}
 	return out
@@ -393,9 +429,15 @@ func run(ctx context.Context, opts options) error {
 	if err != nil {
 		return err
 	}
-	corpus = filterSources(corpus, opts.sources)
+	corpus = excludeSources(filterSources(corpus, opts.sources), opts.excludeSources)
 	if len(corpus) == 0 {
-		return fmt.Errorf("no cases after --sources filter %q", opts.sources)
+		return fmt.Errorf("no cases after --sources filter %q and --exclude-sources filter %q", opts.sources, opts.excludeSources)
+	}
+	if opts.minWellKnownRecall < 0 || opts.minWellKnownRecall > 1 {
+		return fmt.Errorf("--min-well-known-recall must be between 0 and 1")
+	}
+	if opts.maxFalsePositives < gateDisabledFalsePositives {
+		return fmt.Errorf("--max-false-positives must be -1 or more")
 	}
 	fl, err := loadFloors(opts.corpusDir)
 	if err != nil {
@@ -457,18 +499,24 @@ func run(ctx context.Context, opts options) error {
 		}
 	}
 
+	gateRuns := summary.GateRuns
 	if summary.Diagnostics != nil {
 		fmt.Fprintln(os.Stderr, summary.Diagnostics.Scope)
 		printSummary(os.Stderr, summary.Diagnostics.Modes)
+		gateRuns = combineGateRuns(gateRuns, summary.Diagnostics.GateRuns)
 	}
+	gate, gateErr := evaluateGate(opts.maxFalsePositives, opts.minWellKnownRecall, gateRuns)
+	printGate(os.Stderr, gate)
 
+	// Write the artifact before failing so a failed gate keeps its evidence.
+	if err := writeMetrics(opts.outFile, opts, corpus, summary, gate); err != nil {
+		return err
+	}
+	var floorsErr error
 	if opts.checkFloors {
-		if err := checkRecallFloors(fl, summary.RecallGateRuns); err != nil {
-			return err
-		}
+		floorsErr = checkRecallFloors(fl, summary.RecallGateRuns)
 	}
-
-	return writeMetrics(opts.outFile, opts, corpus, summary)
+	return errors.Join(floorsErr, gateErr)
 }
 
 // partitionCorpus excludes the entire model-conditioned source, including rows
@@ -516,6 +564,11 @@ func summarizeCorpus(corpus []labeledCase, modes []modeSummary, allFindings [][]
 	}
 	worstRecallGate := worstRecallGate(recallGateRuns)
 
+	gateRuns := make([]gateTally, len(allFindings))
+	for i, findings := range allFindings {
+		gateRuns[i] = tallyGate(corpus, findings)
+	}
+
 	return accuracySummary{
 		Scope:          "validation excluding model-conditioned deepset",
 		Diagnostics:    nil,
@@ -530,6 +583,7 @@ func summarizeCorpus(corpus []labeledCase, modes []modeSummary, allFindings [][]
 		KnownGaps:      summarizeKnownGaps(corpus),
 		RecallGate:     worstRecallGate,
 		RecallGateRuns: recallGateRuns,
+		GateRuns:       gateRuns,
 	}
 }
 
@@ -1498,7 +1552,7 @@ func firstEnv(keys ...string) string {
 	return ""
 }
 
-func writeMetrics(path string, opts options, corpus []labeledCase, summary accuracySummary) error {
+func writeMetrics(path string, opts options, corpus []labeledCase, summary accuracySummary, gate gateResult) error {
 	schemaJSON, err := json.Marshal(piopenrouter.VerdictSchema())
 	if err != nil {
 		return fmt.Errorf("marshal verdict schema for hash: %w", err)
@@ -1512,6 +1566,7 @@ func writeMetrics(path string, opts options, corpus []labeledCase, summary accur
 	corpusHash := sha256.Sum256(corpusJSON)
 	payload := envelope{
 		Cascade: opts.cascade, PrefilterModel: "", PrefilterThreshold: 0,
+		ConfirmationPromptSHA256: "", PrefilterQuestionsSHA256: "", Gate: gate,
 		GitSHA:          envOr("GITHUB_SHA", "local"),
 		Ref:             envOr("GITHUB_REF_NAME", "local"),
 		Timestamp:       time.Now().UTC().Format(time.RFC3339),
@@ -1532,6 +1587,10 @@ func writeMetrics(path string, opts options, corpus []labeledCase, summary accur
 		questions, _ := json.Marshal(piopenrouter.PrefilterQuestions())
 		combined := sha256.Sum256(append([]byte(piopenrouter.SystemPrompt+"\n"+piopenrouter.WindowInstructions), questions...))
 		payload.PromptSHA256 = fmt.Sprintf("%x", combined)
+		payload.ConfirmationPromptSHA256, payload.PrefilterQuestionsSHA256, err = registryPromptHashes()
+		if err != nil {
+			return err
+		}
 	}
 	body, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
