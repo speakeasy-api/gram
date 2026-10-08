@@ -20,6 +20,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
@@ -386,7 +387,8 @@ type directRemoteHTTPClient interface {
 func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, client directRemoteHTTPClient, resourceURL string) (string, error) {
 	available := false
 	for _, metadataURL := range directRemoteProtectedResourceMetadataURLs(resourceURL) {
-		metadata, status, err := directRemoteGetJSON(ctx, policy, client, metadataURL)
+		var metadata wellknown.OAuthProtectedResourceMetadata
+		status, err := directRemoteGetJSON(ctx, policy, client, metadataURL, &metadata)
 		if transientDirectRemoteMetadataStatus(status) {
 			err = setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
 		}
@@ -399,20 +401,19 @@ func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, cl
 		if err != nil || status != http.StatusOK {
 			continue
 		}
-		servers, ok := metadata["authorization_servers"].([]any)
-		if !ok || len(servers) == 0 {
+		if len(metadata.AuthorizationServers) == 0 {
 			continue
 		}
-		for index, server := range servers {
+		for index, issuer := range metadata.AuthorizationServers {
 			if index == directRemoteOAuthServerLimit {
 				break
 			}
-			issuer, ok := server.(string)
-			if !ok || issuer == "" {
+			if issuer == "" {
 				continue
 			}
 			for _, authorizationMetadataURL := range directRemoteAuthorizationServerMetadataURLs(issuer) {
-				authorizationMetadata, status, err := directRemoteGetJSON(ctx, policy, client, authorizationMetadataURL)
+				var capabilities remotesessions.RegistrationCapabilities
+				status, err := directRemoteGetJSON(ctx, policy, client, authorizationMetadataURL, &capabilities)
 				if transientDirectRemoteMetadataStatus(status) {
 					err = setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
 				}
@@ -425,7 +426,7 @@ func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, cl
 				if err != nil || status != http.StatusOK {
 					continue
 				}
-				if discovery := directRemoteAutomaticRegistration(authorizationMetadata); discovery != "" {
+				if discovery := directRemoteAutomaticRegistration(capabilities); discovery != "" {
 					return discovery, nil
 				}
 				available = true
@@ -438,32 +439,33 @@ func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, cl
 	return oauthDiscoveryIncomplete, nil
 }
 
+// directRemoteDashboardRegistrationPolicy is the classification policy of the
+// dashboard's automatic setup, which registers public clients too, limited to
+// https registration endpoints. The inspector reports it for a provider
+// attachment cannot use.
+var directRemoteDashboardRegistrationPolicy = remotesessions.RegistrationPolicy{
+	Scope:                             nil,
+	Audience:                          nil,
+	TokenEndpointAuthMethod:           nil,
+	RequireClientSecret:               false,
+	Order:                             remotesessions.RegistrationOrderCIMDFirst,
+	AllowLoopbackRegistrationEndpoint: false,
+}
+
 // directRemoteAutomaticRegistration names the automatic client registration
-// path one authorization server's metadata offers, or "" when it offers none.
-// It prefers the path attachment takes: dynamic client registration when
-// attachment can use it, then a Client ID Metadata Document under the
-// predicate the dashboard's automatic setup and attachment share. A valid
-// dynamic registration endpoint attachment cannot use still counts, since the
-// dashboard's automatic setup registers public clients through it.
-func directRemoteAutomaticRegistration(metadata map[string]any) string {
-	endpoint, _ := metadata["registration_endpoint"].(string)
-	supported, _ := metadata["client_id_metadata_document_supported"].(bool)
-	var methods []string
-	if advertised, ok := metadata["token_endpoint_auth_methods_supported"].([]any); ok {
-		methods = make([]string, 0, len(advertised))
-		for _, method := range advertised {
-			if name, ok := method.(string); ok {
-				methods = append(methods, name)
-			}
-		}
+// path one authorization server offers, or "" when it offers none. It reports
+// the path attachment takes, and otherwise the path the dashboard's automatic
+// setup can take, which adds dynamic registration of a public client.
+func directRemoteAutomaticRegistration(capabilities remotesessions.RegistrationCapabilities) string {
+	path := remotesessions.ChooseRegistration(capabilities, attachmentRegistrationPolicy(nil))
+	if path == remotesessions.RegistrationPathManual {
+		path = remotesessions.ChooseRegistration(capabilities, directRemoteDashboardRegistrationPolicy)
 	}
-	switch {
-	case attachmentCanUseDynamicRegistration(endpoint, methods):
+	switch path {
+	case remotesessions.RegistrationPathDCR:
 		return oauthDiscoveryAvailableDCR
-	case remotesessions.SupportsClientIDMetadataDocument(supported, methods):
+	case remotesessions.RegistrationPathCIMD:
 		return oauthDiscoveryAvailableCIMD
-	case validDynamicClientRegistrationEndpoint(endpoint):
-		return oauthDiscoveryAvailableDCR
 	default:
 		return ""
 	}
@@ -503,42 +505,59 @@ func directRemoteAuthorizationServerMetadataURLs(issuer string) []string {
 	return candidates
 }
 
-func directRemoteGetJSON(ctx context.Context, policy *guardian.Policy, client directRemoteHTTPClient, rawURL string) (map[string]any, int, error) {
+// directRemoteGetJSON fetches a JSON metadata object into target and returns
+// the response status. A non-200 status leaves target untouched and is not an
+// error.
+func directRemoteGetJSON(ctx context.Context, policy *guardian.Policy, client directRemoteHTTPClient, rawURL string, target any) (int, error) {
 	if policy == nil || client == nil {
-		return nil, 0, ErrDirectRemoteUnavailable
+		return 0, ErrDirectRemoteUnavailable
 	}
 	canonicalURL, err := canonicalDirectRemoteURL(rawURL)
 	if err != nil {
-		return nil, 0, err
+		return 0, err
 	}
 	if _, err := policy.ValidateHTTPSURL(ctx, canonicalURL); err != nil {
-		return nil, 0, ErrDirectRemoteRejected
+		return 0, ErrDirectRemoteRejected
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, canonicalURL, nil)
 	if err != nil {
-		return nil, 0, err
+		return 0, err
 	}
 	req.Header.Set("Accept", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, 0, err
+		return 0, err
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 	if resp.StatusCode != http.StatusOK {
-		return nil, resp.StatusCode, nil
+		return resp.StatusCode, nil
 	}
 	if mediaType := strings.ToLower(strings.TrimSpace(strings.Split(resp.Header.Get("Content-Type"), ";")[0])); mediaType != "application/json" {
-		return nil, resp.StatusCode, ErrDirectRemoteRejected
+		return resp.StatusCode, ErrDirectRemoteRejected
 	}
 	payload, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, resp.StatusCode, ErrDirectRemoteRejected
+		return resp.StatusCode, ErrDirectRemoteRejected
 	}
-	var value map[string]any
-	if err := json.Unmarshal(payload, &value); err != nil {
-		return nil, resp.StatusCode, ErrDirectRemoteRejected
+	if err := decodeDirectRemoteMetadata(payload, target); err != nil {
+		return resp.StatusCode, ErrDirectRemoteRejected
 	}
-	return value, resp.StatusCode, nil
+	return resp.StatusCode, nil
+}
+
+// decodeDirectRemoteMetadata decodes a JSON object into target. A member of
+// the wrong JSON type is left at its zero value, as if the document omitted
+// it, so one malformed member does not hide the others.
+func decodeDirectRemoteMetadata(payload []byte, target any) error {
+	var members map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &members); err != nil {
+		return err
+	}
+	var typeErr *json.UnmarshalTypeError
+	if err := json.Unmarshal(payload, target); err != nil && !errors.As(err, &typeErr) {
+		return err
+	}
+	return nil
 }
 
 func directRemoteInspection(canonicalURL string, toolNames []string, authentication, oauthDiscovery string, requiresDashboardSetup bool) DirectRemoteInspection {

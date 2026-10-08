@@ -106,7 +106,7 @@ func TestIdentityCommitReuseBoundSkipsRegistrationForBoundClient(t *testing.T) {
 	clientID := bindServerIdentityClient(t, ctx, ti, "identity-commit-reuse-client", providerID, userIssuerID, false)
 
 	plan := linkPlan(t, ctx, userIssuerID, providerID, uuid.Nil)
-	plan.Client = remotesessions.RegisterClient(remotesessions.RegistrationPolicy{Scope: nil, Audience: nil, TokenEndpointAuthMethod: nil, RequireClientSecret: true, AllowCIMD: false})
+	plan.Client = remotesessions.RegisterClient(remotesessions.RegistrationPolicy{Scope: nil, Audience: nil, TokenEndpointAuthMethod: nil, RequireClientSecret: true, Order: remotesessions.RegistrationOrderDCROnly, AllowLoopbackRegistrationEndpoint: true})
 	plan.Bound = remotesessions.ReuseBound
 	commit := identityCommitter(t, ti).Prepare(plan)
 	require.NoError(t, commit.Preflight(ctx))

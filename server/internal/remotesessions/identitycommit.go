@@ -42,7 +42,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -233,9 +232,9 @@ func ManualClient(credentials ClientCredentials) ClientChoice {
 	return ClientChoice{kind: clientManual, linkID: uuid.Nil, credentials: credentials, policy: RegistrationPolicy{}} //nolint:exhaustruct // Unused for a manual client.
 }
 
-// RegisterClient obtains a client from the provider: a Gram-hosted Client ID
-// Metadata Document when the policy allows one and the provider supports it,
-// otherwise dynamic client registration.
+// RegisterClient obtains a client from the provider through the path
+// ChooseRegistration selects for the policy: a Gram-hosted Client ID Metadata
+// Document or dynamic client registration.
 func RegisterClient(policy RegistrationPolicy) ClientChoice {
 	return ClientChoice{kind: clientRegister, linkID: uuid.Nil, credentials: ClientCredentials{}, policy: policy} //nolint:exhaustruct // Registration fills the credentials.
 }
@@ -258,12 +257,18 @@ type RegistrationPolicy struct {
 	TokenEndpointAuthMethod *string
 
 	// RequireClientSecret refuses a registration that is not a confidential
-	// client using TokenEndpointAuthMethod.
+	// client using TokenEndpointAuthMethod. With TokenEndpointAuthMethod set,
+	// it also rules out dynamic registration at a provider whose token
+	// endpoint does not accept that method.
 	RequireClientSecret bool
 
-	// AllowCIMD prefers a Client ID Metadata Document when the provider
-	// supports one.
-	AllowCIMD bool
+	// Order is which automatic registration paths are allowed, and which is
+	// tried first.
+	Order RegistrationOrder
+
+	// AllowLoopbackRegistrationEndpoint accepts a plain http dynamic
+	// registration endpoint on loopback as well as an https one.
+	AllowLoopbackRegistrationEndpoint bool
 }
 
 // BoundPolicy is what a commit does with clients already bound to the user
@@ -569,18 +574,19 @@ func (c *IdentityCommit) Register(ctx context.Context) (Registration, error) {
 func (c *IdentityCommit) register(ctx context.Context, reg Registration) (Registration, error) {
 	policy := c.plan.Client.policy
 	capabilities := c.capabilities()
-	if policy.AllowCIMD && capabilities.supportsCIMD() {
+	path, err := commitRegistrationPath(policy, capabilities)
+	if err != nil {
+		return reg, err
+	}
+	if path == RegistrationPathCIMD {
 		reg.Method = RegistrationCIMD
 		return reg, nil
 	}
-	endpoint := strings.TrimSpace(capabilities.registrationEndpoint.String)
-	if !capabilities.registrationEndpoint.Valid || endpoint == "" {
+	if path == RegistrationPathManual {
 		reg.ManualSetupRequired = true
 		return reg, nil
 	}
-	if !urls.IsAbsoluteHTTPSOrLoopback(endpoint) {
-		return reg, identityRefusal(ErrIdentityInvalid, nil, "registration endpoint must be an absolute https URL, or http on loopback")
-	}
+	endpoint := capabilities.RegistrationEndpoint
 
 	reg.Method = RegistrationDCR
 	// Registering through a tunnel reaches a private network the project
@@ -652,31 +658,33 @@ func registeredAuthMethod(response ProxyRegisterResponse, policy RegistrationPol
 	return method, true
 }
 
-type providerCapabilities struct {
-	registrationEndpoint              pgtype.Text
-	tokenEndpointAuthMethodsSupported []string
-	clientIDMetadataDocumentSupported bool
-}
-
-func (p providerCapabilities) supportsCIMD() bool {
-	return SupportsClientIDMetadataDocument(p.clientIDMetadataDocumentSupported, p.tokenEndpointAuthMethodsSupported)
+// commitRegistrationPath is the registration path register takes for the
+// provider's capabilities. A registration endpoint the policy cannot send to
+// is refused outright, unless the policy's order lets a Client ID Metadata
+// Document be used instead; a provider advertising no endpoint needs manual
+// setup.
+func commitRegistrationPath(policy RegistrationPolicy, capabilities RegistrationCapabilities) (RegistrationPath, error) {
+	path := ChooseRegistration(capabilities, policy)
+	if path == RegistrationPathManual && capabilities.RegistrationEndpoint != "" && !policy.registrationEndpointAllowed(capabilities.RegistrationEndpoint) {
+		return path, identityRefusal(ErrIdentityInvalid, nil, conv.Ternary(policy.AllowLoopbackRegistrationEndpoint, "registration endpoint must be an absolute https URL, or http on loopback", "registration endpoint must be an absolute https URL"))
+	}
+	return path, nil
 }
 
 // capabilities is what registration is chosen from: the new provider's
-// parameters or the stored provider's row.
-func (c *IdentityCommit) capabilities() providerCapabilities {
+// parameters or the stored provider's row, with the registration endpoint
+// trimmed.
+func (c *IdentityCommit) capabilities() RegistrationCapabilities {
+	capabilities := IssuerRegistrationCapabilities(c.provider)
 	if create := c.plan.Provider.create; create != nil {
-		return providerCapabilities{
-			registrationEndpoint:              create.RegistrationEndpoint,
-			tokenEndpointAuthMethodsSupported: create.TokenEndpointAuthMethodsSupported,
-			clientIDMetadataDocumentSupported: create.ClientIDMetadataDocumentSupported,
+		capabilities = RegistrationCapabilities{
+			RegistrationEndpoint:              create.RegistrationEndpoint.String,
+			TokenEndpointAuthMethodsSupported: create.TokenEndpointAuthMethodsSupported,
+			ClientIDMetadataDocumentSupported: create.ClientIDMetadataDocumentSupported,
 		}
 	}
-	return providerCapabilities{
-		registrationEndpoint:              c.provider.RegistrationEndpoint,
-		tokenEndpointAuthMethodsSupported: c.provider.TokenEndpointAuthMethodsSupported,
-		clientIDMetadataDocumentSupported: c.provider.ClientIDMetadataDocumentSupported,
-	}
+	capabilities.RegistrationEndpoint = strings.TrimSpace(capabilities.RegistrationEndpoint)
+	return capabilities
 }
 
 // Begin opens the commit's transaction. The caller may take its own locks on
