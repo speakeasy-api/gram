@@ -205,3 +205,35 @@ it("appends after the highest fetched sort order on each attempt", async () => {
     },
   });
 });
+function conflict(message: string): Error {
+  return Object.assign(new Error(message), { statusCode: 409 });
+}
+it("stops retrying when the gateway already fronts the same backend", async () => {
+  api.add.mockRejectedValueOnce(
+    conflict(
+      "another member of this meta mcp server already fronts the same backend",
+    ),
+  );
+  const { result } = setup();
+  await act(async () => {
+    await expect(result.current.complete("server")).rejects.toThrow();
+  });
+  expect(result.current.attachmentRefused).toBe(true);
+  expect(result.current.attachmentError).toContain("same backend");
+  await act(() => result.current.retry());
+  expect(api.add).toHaveBeenCalledTimes(1);
+  expect(api.navigate).not.toHaveBeenCalled();
+});
+it("keeps other conflicts retryable", async () => {
+  api.add.mockRejectedValueOnce(
+    conflict("direct-remote membership is not admitted"),
+  );
+  const { result } = setup();
+  await act(async () => {
+    await expect(result.current.complete("server")).rejects.toThrow();
+  });
+  expect(result.current.attachmentRefused).toBe(false);
+  await act(() => result.current.retry());
+  expect(api.add).toHaveBeenCalledTimes(2);
+  expect(api.navigate).toHaveBeenCalledTimes(1);
+});

@@ -11,18 +11,22 @@ export function GatewayAttachmentStatus({
   return (
     <Alert variant={flow.isAttaching ? "info" : "error"} dismissible={false}>
       {!flow.isAttaching && <p>{flow.attachmentError}</p>}
-      <Button
-        type="button"
-        variant="secondary"
-        disabled={flow.isAttaching}
-        onClick={() => {
-          void flow.retry().catch(() => {});
-        }}
-      >
-        <Button.Text>
-          {flow.isAttaching ? "Adding to gateway…" : "Retry adding to gateway"}
-        </Button.Text>
-      </Button>
+      {flow.attachmentRefused ? null : (
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={flow.isAttaching}
+          onClick={() => {
+            void flow.retry().catch(() => {});
+          }}
+        >
+          <Button.Text>
+            {flow.isAttaching
+              ? "Adding to gateway…"
+              : "Retry adding to gateway"}
+          </Button.Text>
+        </Button>
+      )}
     </Alert>
   );
 }

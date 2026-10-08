@@ -10,6 +10,7 @@ function flow(
     gatewayId: "gateway",
     createdServerId: "server",
     attachmentError: null,
+    attachmentRefused: false,
     isAttaching: false,
     complete: vi.fn(),
     retry: vi.fn().mockResolvedValue(undefined),
@@ -46,4 +47,16 @@ it("announces attachment retry progress after the previous error is cleared", ()
 it("hides status when neither attaching nor failed", () => {
   const { container } = render(<GatewayAttachmentStatus flow={flow()} />);
   expect(container.textContent).toBe("");
+});
+it("offers no retry once the gateway refused the server for good", () => {
+  render(
+    <GatewayAttachmentStatus
+      flow={flow({
+        attachmentError: "Same backend",
+        attachmentRefused: true,
+      })}
+    />,
+  );
+  expect(screen.getByRole("alert").textContent).toContain("Same backend");
+  expect(screen.queryByRole("button")).toBeNull();
 });
