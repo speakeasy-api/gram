@@ -685,6 +685,11 @@ BEGIN
        ARRAY[]::text[],
        ARRAY['user_demo_priya'],
        ARRAY[]::text[]),
+      ('support-desk', 'Support Desk',
+       'Connects to Acme Support Tools with every tool, and to Slack for read-only tools only.',
+       ARRAY[]::text[],
+       ARRAY['user_demo_hana'],
+       ARRAY[]::text[]),
       ('temporary-escalation', 'Temporary Escalation',
        'Elevated access granted for a fixed period and reviewed each quarter.',
        ARRAY['org:read', 'org:admin', 'project:read', 'project:write',
@@ -1547,6 +1552,21 @@ BEGIN
            'resource_id', demo.det_uuid('gram-demo-mcpserver-github')::text)
   FROM organization_roles r
   WHERE r.organization_id = demo_org AND r.workos_slug = 'contractors';
+
+  -- Support Desk names its servers one by one, the MCP access tab's main
+  -- shape: Acme Support Tools with every tool (toolset-backed, so the grant
+  -- names the toolset), Slack only for tools annotated read-only.
+  INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+  SELECT demo_org, 'role:organization:' || r.id, 'mcp:connect', sel
+  FROM organization_roles r
+  CROSS JOIN (VALUES
+    (jsonb_build_object('resource_kind', 'mcp',
+       'resource_id', toolset_1::text)),
+    (jsonb_build_object('resource_kind', 'mcp',
+       'resource_id', demo.det_uuid('gram-demo-mcpserver-slack')::text,
+       'disposition', 'read_only'))
+  ) AS v(sel)
+  WHERE r.organization_id = demo_org AND r.workos_slug = 'support-desk';
 
   INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
   VALUES
