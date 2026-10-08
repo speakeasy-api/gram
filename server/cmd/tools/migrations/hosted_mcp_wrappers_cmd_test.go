@@ -2,13 +2,17 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"io"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/cmd/tools/migrations/hostedmcpbackfill"
 )
 
 func hostedMCPWrappersGetenv(key string) string {
@@ -77,4 +81,39 @@ func TestRunHostedMCPWrappersRejectsUnwritableReportBeforeRunning(t *testing.T) 
 	code := runHostedMCPWrappers([]string{"-apply", "-report", report}, &out, hostedMCPWrappersGetenv)
 	require.Equal(t, 2, code, "a bad report path must fail before any apply")
 	require.Empty(t, out.String())
+}
+
+func TestRunHostedMCPWrappersKeepsPreviousReportWhenConnectFails(t *testing.T) {
+	t.Parallel()
+
+	report := filepath.Join(t.TempDir(), "report.json")
+	require.NoError(t, os.WriteFile(report, []byte("previous run"), 0o600))
+	getenv := func(key string) string {
+		if key == "GRAM_DATABASE_URL" {
+			return "postgres://%zz"
+		}
+		return ""
+	}
+	code := runHostedMCPWrappers([]string{"-apply", "-report", report}, io.Discard, getenv)
+	require.Equal(t, 1, code)
+	got, err := os.ReadFile(report)
+	require.NoError(t, err)
+	require.Equal(t, "previous run", string(got), "a run that never wrote must keep the previous report")
+}
+
+func TestWriteHostedMCPWrappersReportReplacesPreviousContent(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "report.json")
+	require.NoError(t, os.WriteFile(path, bytes.Repeat([]byte("x"), 4096), 0o600))
+	f, err := os.OpenFile(path, os.O_WRONLY, 0o600)
+	require.NoError(t, err)
+	require.NoError(t, writeHostedMCPWrappersReport(f, hostedmcpbackfill.Report{Mode: "dry-run"}))
+	require.NoError(t, f.Close())
+
+	got, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var decoded hostedmcpbackfill.Report
+	require.NoError(t, json.Unmarshal(got, &decoded), "the old report must not trail the new one")
+	require.Equal(t, "dry-run", decoded.Mode)
 }

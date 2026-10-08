@@ -99,9 +99,10 @@ func runHostedMCPWrappers(args []string, stdout io.Writer, getenv func(string) s
 		return 2
 	}
 	// Open the report before any apply, so a bad path cannot strand committed rows without one.
+	// Truncate only when writing, so a failed run keeps the previous report.
 	var reportFile *os.File
 	if cfg.reportPath != "" {
-		reportFile, err = os.OpenFile(cfg.reportPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) // #nosec G304 -- operator-supplied report path
+		reportFile, err = os.OpenFile(cfg.reportPath, os.O_CREATE|os.O_WRONLY, 0o600) // #nosec G304 -- operator-supplied report path
 		if err != nil {
 			log.Printf("open hosted-mcp-wrappers report: %v", err)
 			return 2
@@ -145,6 +146,12 @@ func runHostedMCPWrappers(args []string, stdout io.Writer, getenv func(string) s
 }
 
 func writeHostedMCPWrappersReport(f *os.File, report hostedmcpbackfill.Report) error {
+	if err := f.Truncate(0); err != nil {
+		return fmt.Errorf("truncate report: %w", err)
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("rewind report: %w", err)
+	}
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(report); err != nil {
