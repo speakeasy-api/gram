@@ -621,8 +621,9 @@ func (b *stdioBridge) Close() {
 }
 
 // closeCredentials waits for every session's credentials to be removed, then
-// releases this agent's storage. Each removal is bounded, so this ends even
-// when a server could not be stopped.
+// releases this agent's storage. A removal waits for the session's process
+// group to stop, or for the bounded attempt to stop it to fail, and for any
+// admitted publisher to finish.
 func (b *stdioBridge) closeCredentials() {
 	if b.creds == nil {
 		return
