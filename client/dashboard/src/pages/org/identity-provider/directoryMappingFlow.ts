@@ -1,3 +1,4 @@
+import type { DirectoryRoleMapping } from "@gram/client/models/components/directoryrolemapping.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { SetDirectoryRoleMappingsForm } from "@gram/client/models/components/setdirectoryrolemappingsform.js";
 
@@ -94,11 +95,28 @@ export function completeCreateRoleFlow(
 /** The mapping to save on return, once the editor recorded a created role. */
 export function pendingMappingFromParams(
   params: URLSearchParams,
+  mappings: DirectoryRoleMapping[] = [],
 ): { key: string; form: SetDirectoryRoleMappingsForm } | undefined {
   const key = params.get(FLOW_PARAM);
   const record = key ? readRecord(key) : undefined;
   if (!key || !record?.roleUrn) return undefined;
-  return { key, form: { ...record.source, roleUrns: [record.roleUrn] } };
+  const existingRoles = mappings
+    .filter((mapping) =>
+      record.source.sourceKind === "group"
+        ? mapping.sourceKind === "group" &&
+          mapping.directoryGroupId === record.source.directoryGroupId
+        : mapping.sourceKind === "attribute" &&
+          mapping.attributeKey === record.source.attributeKey &&
+          mapping.attributeValue === record.source.attributeValue,
+    )
+    .map((mapping) => mapping.roleUrn);
+  return {
+    key,
+    form: {
+      ...record.source,
+      roleUrns: [...new Set([...existingRoles, record.roleUrn])],
+    },
+  };
 }
 
 /**
