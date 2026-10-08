@@ -140,9 +140,9 @@ export function DangerZoneSection({
   const routes = useRoutes();
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialog>(null);
   const closeDeleteDialog = () => setDeleteDialog(null);
-  const leavePage = () => {
+  const leavePage = (href: string = routes.mcp.href()) => {
     setDeleteDialog(null);
-    void navigate(routes.mcp.href());
+    void navigate(href);
   };
 
   // A tunnel is shared on purpose: its MCP servers are deleted one at a time,
@@ -424,7 +424,7 @@ function DeleteDialogBody({
   cascadeTarget: CascadeDeleteTarget | undefined;
   linkedMcpServers: McpServer[];
   onClose: () => void;
-  onLeave: () => void;
+  onLeave: (href?: string) => void;
 }): JSX.Element | null {
   if (dialog === "tunnel" && tunnelTarget) {
     return (
@@ -443,7 +443,7 @@ function DeleteDialogBody({
         target={cascadeTarget}
         linkedMcpServers={linkedMcpServers}
         onClose={onClose}
-        onSuccess={onLeave}
+        onSuccess={() => onLeave()}
       />
     );
   }
@@ -453,7 +453,7 @@ function DeleteDialogBody({
       endpoints={endpoints}
       keepsTunnel={!!mcpServer.tunneledMcpServerId}
       onClose={onClose}
-      onSuccess={onLeave}
+      onSuccess={() => onLeave()}
     />
   );
 }

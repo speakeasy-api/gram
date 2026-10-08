@@ -19,6 +19,7 @@ const state = vi.hoisted(() => ({
   gatewayId: null as string | null,
   mutateAsync: vi.fn(),
   createError: undefined as Error | undefined,
+  onNewTunnel: vi.fn<() => void>(),
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
@@ -140,6 +141,7 @@ function renderFlow(requestedTunnelId: string | null = null) {
       <TooltipProvider>
         <ExistingTunnelFlow
           modeSwitch={() => null}
+          onNewTunnel={state.onNewTunnel}
           requestedTunnelId={requestedTunnelId}
         />
       </TooltipProvider>
@@ -169,6 +171,15 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ExistingTunnelFlow", () => {
+  it("offers creating a new tunnel when the project has none", () => {
+    state.tunnels = [];
+    state.servers = [];
+    renderFlow();
+    expect(screen.getByText("No tunnels in this project")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "New tunnel" }));
+    expect(state.onNewTunnel).toHaveBeenCalledOnce();
+  });
+
   it("adds a server to the chosen tunnel without issuing a key", async () => {
     state.mutateAsync.mockResolvedValue({
       mcpServer: { id: "s2" },
