@@ -37,8 +37,8 @@ var (
 	ErrDistributionTargetUnavailable      = errors.New("platform mcp distribution target is unavailable")
 	ErrDistributionBlockedPendingApproval = errors.New("platform mcp distribution blocked by Shadow MCP approval enforcement")
 	ErrDistributionAdmissionUnavailable   = errors.New("platform mcp distribution admission unavailable")
-	ErrDistributionDisabled               = errors.New("platform mcp direct-remote distribution disabled")
 )
+
 
 // DistributionInput identifies the project selected by its slug and the plugin
 // inside it that receives the distribution. The active onboarding workflow
@@ -58,6 +58,11 @@ type DistributionInput struct {
 	// ExpectedVersion is the distribution version the caller read before
 	// writing.
 	ExpectedVersion int64
+
+	// Justification is the optional reason recorded on a Shadow MCP review
+	// request when an enabled block policy refuses the distribution. Empty
+	// uses a generated note naming the server, plugin, and project.
+	Justification string
 }
 
 // Distribution is the bounded state used by management and MCP tool adapters.
@@ -108,22 +113,29 @@ type DistributionService struct {
 	plugins       PluginTargetResolver
 	publish       ProjectPublisher
 	now           func() time.Time
-	approvals     DirectRemoteApprovalTxChecker
 	admission     *admission.Guard
-	organizations OrganizationSlugResolver
+	reviews       ShadowMCPReviewFiler
 }
 
 func NewDistributionService(db *pgxpool.Pool, auditLogger *audit.Logger, attach ExistingPluginAttacher, publish ProjectPublisher, plugins PluginTargetResolver) *DistributionService {
 	if auditLogger == nil {
 		auditLogger = audit.NewLogger()
 	}
-	return &DistributionService{db: db, audit: auditLogger, attach: attach, publish: publish, plugins: plugins, now: time.Now, approvals: NewPostgresDirectRemoteApprovals()}
+	return &DistributionService{db: db, audit: auditLogger, attach: attach, publish: publish, plugins: plugins, now: time.Now}
 }
 
-func (s *DistributionService) WithDistributionAdmission(guard *admission.Guard, organizations OrganizationSlugResolver) *DistributionService {
+func (s *DistributionService) WithDistributionAdmission(guard *admission.Guard) *DistributionService {
 	if s != nil {
 		s.admission = guard
-		s.organizations = organizations
+	}
+	return s
+}
+
+// WithShadowMCPReview lets a refused distribution file a review request on
+// the administrator's behalf instead of stopping at the refusal.
+func (s *DistributionService) WithShadowMCPReview(reviews ShadowMCPReviewFiler) *DistributionService {
+	if s != nil {
+		s.reviews = reviews
 	}
 	return s
 }
@@ -171,7 +183,6 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 	if err != nil {
 		return Distribution{}, ErrDistributionInvalid
 	}
-	rollout, rolloutErr := s.resolveDistributionRollout(ctx, principal, input.ProjectSlug)
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -216,8 +227,11 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 	if err != nil {
 		return Distribution{}, err
 	}
-	if err := s.requireDistributionAdmission(ctx, tx, q, principal, target, plugin.ID, rollout, rolloutErr); err != nil {
-		return Distribution{}, err
+	if err := s.requireDistributionAdmission(ctx, tx, q, principal, target, plugin.ID); err != nil {
+		// Filing a review does its own I/O; release the locked write transaction
+		// first so nothing partial is held while the request is recorded.
+		_ = tx.Rollback(ctx)
+		return Distribution{}, s.reviewRefusal(ctx, principal, target, plugin.Name, input.Justification, err)
 	}
 
 	pluginQueries := pluginsrepo.New(tx)
@@ -284,7 +298,7 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 // DistributeForOnboarding delegates to the same explicit-project distribution
 // path used by the dashboard. The active workflow supplies the registered MCP;
 // callers cannot target an arbitrary server or create a Default plugin.
-func (s *DistributionService) DistributeForOnboarding(ctx context.Context, principal Principal, projectSlug, targetPlugin string) (Distribution, error) {
+func (s *DistributionService) DistributeForOnboarding(ctx context.Context, principal Principal, projectSlug, targetPlugin, justification string) (Distribution, error) {
 	current, err := s.Current(ctx, principal, projectSlug, targetPlugin)
 	if err != nil {
 		return Distribution{}, err
@@ -293,6 +307,7 @@ func (s *DistributionService) DistributeForOnboarding(ctx context.Context, princ
 		ProjectSlug:     projectSlug,
 		Plugin:          targetPlugin,
 		ExpectedVersion: current.Version,
+		Justification:   justification,
 	})
 }
 
@@ -410,7 +425,6 @@ func (s *DistributionService) RepairPublication(ctx context.Context, principal P
 	if s == nil || s.db == nil || input.ProjectSlug == "" || input.ExpectedVersion <= 0 {
 		return Distribution{}, ErrDistributionInvalid
 	}
-	rollout, rolloutErr := s.resolveDistributionRollout(ctx, principal, input.ProjectSlug)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return Distribution{}, fmt.Errorf("begin platform mcp publication repair admission: %w", err)
@@ -435,8 +449,9 @@ func (s *DistributionService) RepairPublication(ctx context.Context, principal P
 	if err := admission.LockProject(ctx, tx, target.ProjectID); err != nil {
 		return Distribution{}, fmt.Errorf("lock platform mcp publication repair admission: %w", err)
 	}
-	if err := s.requireDistributionAdmission(ctx, tx, q, principal, target, plugin.ID, rollout, rolloutErr); err != nil {
-		return Distribution{}, err
+	if err := s.requireDistributionAdmission(ctx, tx, q, principal, target, plugin.ID); err != nil {
+		_ = tx.Rollback(ctx)
+		return Distribution{}, s.reviewRefusal(ctx, principal, target, plugin.Name, input.Justification, err)
 	}
 	// Publishing performs external I/O and must not hold a database transaction
 	// open. Release the admission snapshot immediately before the retry; every
@@ -488,26 +503,13 @@ func (s *DistributionService) onboardingTarget(ctx context.Context, q *repo.Quer
 	return target, nil
 }
 
-// requireApprovedDirectRemoteDistribution is the enforcement chokepoint for
-// user-supplied URLs. It runs before readiness because an open server can be
-// fresh-ready anonymously, which is insufficient to override an organization's
-// existing Shadow MCP policy. Reviewed catalogue registrations are unaffected.
-func (s *DistributionService) resolveDistributionRollout(ctx context.Context, principal Principal, projectSlug string) (admission.RolloutConfig, error) {
-	if s == nil || s.admission == nil || s.organizations == nil {
-		return admission.RolloutConfig{}, ErrDistributionAdmissionUnavailable
-	}
-	organizationSlug, err := s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
-	if err != nil || organizationSlug == "" {
-		return admission.RolloutConfig{}, fmt.Errorf("%w: resolve organization slug: %w", ErrDistributionAdmissionUnavailable, err)
-	}
-	rollout, err := s.admission.Resolve(ctx, principal.OrganizationID, organizationSlug, projectSlug)
-	if err != nil {
-		return admission.RolloutConfig{}, fmt.Errorf("resolve Platform MCP distribution rollout: %w", err)
-	}
-	return rollout, nil
-}
-
-func (s *DistributionService) requireDistributionAdmission(ctx context.Context, tx pgx.Tx, q *repo.Queries, principal Principal, target repo.GetPlatformMCPOnboardingDistributionTargetRow, pluginID uuid.UUID, rollout admission.RolloutConfig, rolloutErr error) error {
+// requireDistributionAdmission is the enforcement chokepoint for user-supplied
+// URLs. It runs before readiness because an open server can be fresh-ready
+// anonymously, which is insufficient to override an organization's enabled
+// Shadow MCP block policy. Reviewed catalogue registrations are unaffected.
+// A refusal wraps the guard's *admission.ApprovalRequiredError, which names
+// the refused URL, under ErrDistributionBlockedPendingApproval.
+func (s *DistributionService) requireDistributionAdmission(ctx context.Context, tx pgx.Tx, q *repo.Queries, principal Principal, target repo.GetPlatformMCPOnboardingDistributionTargetRow, pluginID uuid.UUID) error {
 	registration, err := lifecycleRegistration(ctx, q, principal, target.ProjectID, target.RegistrationID.UUID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrDistributionInvalid
@@ -518,49 +520,37 @@ func (s *DistributionService) requireDistributionAdmission(ctx context.Context, 
 	if registration.CatalogProvider != directRemoteProviderKey {
 		return nil
 	}
-	if rollout.Mode == admission.ModeLegacy || rollout.Mode == admission.ModeReport {
-		if err := s.requireApprovedDirectRemoteDistribution(ctx, tx, q, principal, target); err != nil {
-			return err
-		}
-	}
-	if s.admission == nil || !target.McpServerID.Valid {
+	if s.admission == nil || !target.McpServerID.Valid || registration.CatalogReference == "" {
 		return ErrDistributionAdmissionUnavailable
 	}
-	if err := s.admission.CheckAttachment(ctx, tx, rollout, rolloutErr, principal.OrganizationID, target.ProjectID, pluginID, target.McpServerID.UUID); err != nil {
-		switch {
-		case errors.Is(err, admission.ErrApprovalRequired):
-			return ErrDistributionBlockedPendingApproval
-		case errors.Is(err, admission.ErrDistributionDisabled):
-			return ErrDistributionDisabled
-		default:
-			return fmt.Errorf("%w: %w", ErrDistributionAdmissionUnavailable, err)
+	if err := s.admission.CheckAttachment(ctx, tx, principal.OrganizationID, target.ProjectID, pluginID, target.McpServerID.UUID); err != nil {
+		if errors.Is(err, admission.ErrApprovalRequired) {
+			return fmt.Errorf("%w: %w", ErrDistributionBlockedPendingApproval, err)
 		}
+		return fmt.Errorf("%w: %w", ErrDistributionAdmissionUnavailable, err)
 	}
 	return nil
 }
 
-func (s *DistributionService) requireApprovedDirectRemoteDistribution(ctx context.Context, tx pgx.Tx, q *repo.Queries, principal Principal, target repo.GetPlatformMCPOnboardingDistributionTargetRow) error {
-	registration, err := lifecycleRegistration(ctx, q, principal, target.ProjectID, target.RegistrationID.UUID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrDistributionInvalid
+// reviewRefusal turns a Shadow MCP refusal into a filed review request when a
+// filer is wired, and otherwise passes the refusal through unchanged. Any
+// other error is returned as is. It must run after the write transaction is
+// released: filing does its own database and evidence I/O.
+func (s *DistributionService) reviewRefusal(ctx context.Context, principal Principal, target repo.GetPlatformMCPOnboardingDistributionTargetRow, pluginName, justification string, err error) error {
+	var refused *admission.ApprovalRequiredError
+	if !errors.As(err, &refused) {
+		return err
 	}
-	if err != nil {
-		return fmt.Errorf("resolve direct remote distribution registration: %w", err)
-	}
-	if registration.CatalogProvider != directRemoteProviderKey {
-		return nil
-	}
-	if s.approvals == nil || registration.CatalogReference == "" {
+	if s.reviews == nil || refused.CanonicalURL == "" {
 		return ErrDistributionBlockedPendingApproval
 	}
-	approval, err := s.approvals.CheckDirectRemoteApprovalTx(ctx, tx, principal.OrganizationID, principal.UserID, target.ProjectID, registration.CatalogReference)
-	if err != nil {
-		return fmt.Errorf("consult direct remote approval enforcement for distribution: %w", err)
+	project := ResolvedProject{ID: target.ProjectID, Name: target.ProjectName, Slug: target.ProjectSlug}
+	activity := "adding " + refused.CanonicalURL + " to the " + pluginName + " plugin in project " + target.ProjectSlug
+	review, fileErr := s.reviews.FileShadowMCPReview(ctx, principal, project, refused.CanonicalURL, activity, justification)
+	if fileErr != nil {
+		return fmt.Errorf("%w: file Shadow MCP review: %w", ErrDistributionBlockedPendingApproval, fileErr)
 	}
-	if approval.EnforcementActive && !approval.Approved {
-		return ErrDistributionBlockedPendingApproval
-	}
-	return nil
+	return &ShadowMCPReviewRequiredError{Review: review, Cause: err}
 }
 
 func (s *DistributionService) requireFreshReadiness(ctx context.Context, q *repo.Queries, principal Principal, projectID, registrationID, connectionID, generation uuid.UUID) error {

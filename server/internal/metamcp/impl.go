@@ -793,14 +793,6 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sort_order").LogError(ctx, logger)
 	}
 
-	var rollout admission.RolloutConfig
-	var rolloutErr error
-	if s.distributionAdmission == nil {
-		rolloutErr = admission.ErrUnavailable
-	} else {
-		rollout, rolloutErr = s.distributionAdmission.ResolveProject(ctx, s.db, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, *authCtx.ProjectID)
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -864,12 +856,10 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 		return nil, oops.E(oops.CodeConflict, nil, "another member of this meta mcp server already fronts the same backend").LogError(ctx, logger)
 	}
 
-	if err := s.distributionAdmission.CheckGatewayMemberAddition(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, metaID, mcpServerID); err != nil {
+	if err := s.distributionAdmission.CheckGatewayMemberAddition(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, metaID, mcpServerID); err != nil {
 		switch {
 		case errors.Is(err, admission.ErrApprovalRequired):
 			return nil, oops.E(oops.CodeConflict, err, "gateway member requires Shadow MCP approval").LogError(ctx, logger)
-		case errors.Is(err, admission.ErrDistributionDisabled):
-			return nil, oops.E(oops.CodeConflict, err, "direct-remote distribution is temporarily disabled").LogError(ctx, logger)
 		default:
 			return nil, oops.E(oops.CodeUnavailable, err, "gateway member distribution approval could not be verified safely").LogError(ctx, logger)
 		}

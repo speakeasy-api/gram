@@ -489,7 +489,7 @@ func newWorkerCommand() *cli.Command {
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
 				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags).
-					WithDistributionAdmission(admission.NewGuard(featureFlags, admission.NewReportMetrics(meterProvider, logger)))
+					WithDistributionAdmission(admission.NewGuard())
 			} else {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
 			}

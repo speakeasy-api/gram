@@ -384,26 +384,9 @@ type RoleUpdateResult struct {
 	Slug   string
 }
 
-// PrepareRoleUpdate resolves role-delivery admission before the caller opens
-// a transaction. Pass the returned context to UpdateRoleTx to reuse the decision.
-func (r *RoleManager) PrepareRoleUpdate(ctx context.Context, gramOrgID string) (context.Context, error) {
-	prepared, err := roledelivery.PrepareAdmission(ctx, r.db, r.roleDeliveryGuard, gramOrgID)
-	if err != nil {
-		return prepared, fmt.Errorf("prepare role update admission: %w", err)
-	}
-	return prepared, nil
-}
-
 // UpdateRole updates an existing local role, optional grants/assignments, and
 // audit entry atomically, then best-effort syncs WorkOS after commit.
 func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID string, actor RoleAuditActor, payload *gen.UpdateRolePayload) (roleUpdateResult, error) {
-	if payload.AddGrants != nil || payload.RemoveGrants != nil {
-		var err error
-		ctx, err = r.PrepareRoleUpdate(ctx, gramOrgID)
-		if err != nil {
-			return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "prepare role delivery admission").LogError(ctx, r.logger)
-		}
-	}
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return roleUpdateResult{}, oops.E(oops.CodeUnexpected, err, "begin role transaction").LogError(ctx, r.logger)
@@ -423,18 +406,9 @@ func (r *RoleManager) UpdateRole(ctx context.Context, gramOrgID, workosOrgID str
 }
 
 // UpdateRoleTx performs the local role, grant, member-assignment, and audit
-// writes on tx. It neither commits tx nor contacts WorkOS. For grant changes,
-// callers must call PrepareRoleUpdate before opening tx and pass its context.
+// writes on tx. It neither commits tx nor contacts WorkOS. Role-delivery
+// admission is decided inside tx from the project's Shadow MCP policies.
 func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, workosOrgID string, actor RoleAuditActor, payload *gen.UpdateRolePayload) (RoleUpdateResult, RoleReconciliation, error) {
-	// Caller-owned transactions prepare before acquiring role/plugin locks;
-	// UpdateRole already prepared outside its transaction, so this uses its cache.
-	if payload.AddGrants != nil || payload.RemoveGrants != nil {
-		var err error
-		ctx, err = roledelivery.PrepareAdmission(ctx, tx, r.roleDeliveryGuard, gramOrgID)
-		if err != nil {
-			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "prepare role delivery admission").LogError(ctx, r.logger)
-		}
-	}
 	roleID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "invalid role ID").LogError(ctx, r.logger)

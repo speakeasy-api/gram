@@ -14,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
@@ -31,8 +30,7 @@ func TestUpdateMcpServer_EnableRoleDistributionRequiresApproval(t *testing.T) {
 	require.True(t, ok)
 	created, remoteID := createDisabledRemoteServer(t, ctx, ti, *ac.ProjectID, "Role distribution approval")
 	serverID := uuid.MustParse(created.ID)
-	flags := seedBlockedDirectRemoteDistribution(t, ctx, ti, serverID)
-	flags.SetFlag(feature.FlagPlatformMCPDirectRemoteDistributionDisabled, ac.ActiveOrganizationID, false)
+	seedBlockedDirectRemoteDistribution(t, ctx, ti, serverID)
 	seedEndpointFor(t, ctx, ti.conn, *ac.ProjectID, created.ID)
 
 	// The Default plugin has no audience, so only the role plugin needs approval.

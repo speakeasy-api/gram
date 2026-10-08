@@ -670,7 +670,7 @@ func newStreamsCommand() *cli.Command {
 			// Start subscription receivers in this block
 			{
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
-				roleDistributionGuard := admission.NewGuard(featureFlags, admission.NewReportMetrics(meterProvider, logger))
+				roleDistributionGuard := admission.NewGuard()
 				roleDistributionHandler := roledistribution.NewHandler(logger, roledistribution.Processors{
 					Setup: func(ctx context.Context, roleURN, organizationID string) (bool, error) {
 						return roledistribution.ProcessRoleDistributionSetup(ctx, db, plugins.PublicationRequests{Enabled: c.Bool(pluginPublicationEmitFlagName)}, roleDistributionGuard, roleURN, organizationID)

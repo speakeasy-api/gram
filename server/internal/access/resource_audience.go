@@ -297,11 +297,6 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		}
 	}
 
-	ctx, err = s.roleMgr.PrepareRoleUpdate(ctx, ac.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "prepare role delivery admission").LogError(ctx, s.logger)
-	}
-
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin resource audience transaction").LogError(ctx, s.logger)

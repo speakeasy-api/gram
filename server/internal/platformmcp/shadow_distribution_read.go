@@ -28,7 +28,6 @@ const (
 
 type DistributionAdmission struct {
 	State                 string                          `json:"state"`
-	Mode                  string                          `json:"mode,omitempty"`
 	MissingAudienceCounts admission.MissingAudienceCounts `json:"missing_audience_counts"`
 	CheckedAt             string                          `json:"checked_at"`
 	Complete              bool                            `json:"complete"`
@@ -48,17 +47,16 @@ type distributionAdmissionReader interface {
 type ShadowDistributionReadService struct {
 	logger        *slog.Logger
 	db            *pgxpool.Pool
-	guard         *admission.Guard
 	organizations OrganizationSlugResolver
 	now           func() time.Time
 }
 
-func NewShadowDistributionReadService(logger *slog.Logger, db *pgxpool.Pool, guard *admission.Guard, organizations OrganizationSlugResolver) *ShadowDistributionReadService {
-	return &ShadowDistributionReadService{logger: logger, db: db, guard: guard, organizations: organizations, now: time.Now}
+func NewShadowDistributionReadService(logger *slog.Logger, db *pgxpool.Pool, organizations OrganizationSlugResolver) *ShadowDistributionReadService {
+	return &ShadowDistributionReadService{logger: logger, db: db, organizations: organizations, now: time.Now}
 }
 
 func (s *ShadowDistributionReadService) valid() bool {
-	return s != nil && s.logger != nil && s.db != nil && s.guard != nil && s.organizations != nil && s.now != nil
+	return s != nil && s.logger != nil && s.db != nil && s.organizations != nil && s.now != nil
 }
 
 func (s *ShadowDistributionReadService) ForPlugin(ctx context.Context, organizationID string, projectID, pluginID uuid.UUID) DistributionAdmission {
@@ -160,12 +158,6 @@ func (s *ShadowDistributionReadService) read(ctx context.Context, organizationID
 		s.warn(ctx, "resolve organization slug", err)
 		return result
 	}
-	rollout, err := s.guard.ResolveProject(ctx, s.db, organizationID, organizationSlug, projectID)
-	if err != nil {
-		s.warn(ctx, "resolve rollout mode", err)
-		return result
-	}
-	result.Mode = string(rollout.Mode)
 	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: "", BeginQuery: "", CommitQuery: ""})
 	if err != nil {
 		s.warn(ctx, "begin snapshot", err)
@@ -239,7 +231,7 @@ func unavailableDistributionAdmission(now func() time.Time) DistributionAdmissio
 	if now != nil {
 		checkedAt = now().UTC().Format(time.RFC3339Nano)
 	}
-	return DistributionAdmission{State: DistributionAdmissionUnavailable, Mode: "", MissingAudienceCounts: admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, CheckedAt: checkedAt, Complete: false}
+	return DistributionAdmission{State: DistributionAdmissionUnavailable, MissingAudienceCounts: admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, CheckedAt: checkedAt, Complete: false}
 }
 
 func aggregateAdmissionState(current, next admission.State) admission.State {

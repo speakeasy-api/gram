@@ -1,7 +1,9 @@
 package platformmcp
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -21,7 +23,6 @@ func TestPluginAssignmentAdmissionErrorMappings(t *testing.T) {
 	}{
 		{cause: admission.ErrApprovalRequired, code: "approval_required"},
 		{cause: admission.ErrPrivateGatewayAudience, code: "conflict"},
-		{cause: admission.ErrDistributionDisabled, code: "distribution_disabled"},
 		{cause: admission.ErrUnavailable, code: "feature_unavailable"},
 	} {
 		err := pluginAssignmentAdmissionError(fmt.Errorf("guard: %w", test.cause))
@@ -151,4 +152,59 @@ func TestPluginAssignmentMutationToolRequiresConfirmation(t *testing.T) {
 	text, ok := refusal.Content[0].(*mcp.TextContent)
 	require.True(t, ok)
 	require.Contains(t, text.Text, "confirmation_required")
+}
+
+type stubAssignmentReviewFiler struct {
+	review   ShadowMCPReviewRequest
+	err      error
+	calls    int
+	url      string
+	activity string
+	note     string
+}
+
+func (f *stubAssignmentReviewFiler) FileShadowMCPReview(_ context.Context, _ Principal, _ ResolvedProject, canonicalURL, activity, justification string) (ShadowMCPReviewRequest, error) {
+	f.calls++
+	f.url, f.activity, f.note = canonicalURL, activity, justification
+	return f.review, f.err
+}
+
+func TestPluginAssignmentRefusalFilesAReviewForTheRefusedServer(t *testing.T) {
+	t.Parallel()
+
+	refused := fmt.Errorf("replace plugin assignments: %w", &admission.ApprovalRequiredError{CanonicalURL: "https://mcp.example.test/server"})
+	project := ResolvedProject{ID: uuid.New(), Slug: "project"}
+	principal := Principal{OrganizationID: "org", UserID: "admin"}
+
+	filer := &stubAssignmentReviewFiler{review: ShadowMCPReviewRequest{RequestID: "request-1", Status: "requested", Target: "https://mcp.example.test/server", ReviewURL: "https://app.example.test/review", Explanation: "why"}}
+	err := (&PluginsService{reviews: filer}).reviewAssignmentRefusal(t.Context(), principal, project, "Support", "", refused)
+	var mutation *PluginAssignmentMutationError
+	require.ErrorAs(t, err, &mutation)
+	require.Equal(t, "shadow_mcp_review_requested", mutation.Code)
+	require.Equal(t, "why", mutation.Message)
+	require.NotNil(t, mutation.Review)
+	require.Equal(t, "request-1", mutation.Review.RequestID)
+	require.ErrorIs(t, err, admission.ErrApprovalRequired, "the original refusal stays in the chain")
+	require.Equal(t, "https://mcp.example.test/server", filer.url)
+	require.Equal(t, "changing who receives the Support plugin in project project", filer.activity)
+	require.Empty(t, filer.note)
+
+	result, ok := pluginToolResult(err)
+	require.True(t, ok)
+	text, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.Contains(t, text.Text, `"code":"shadow_mcp_review_requested"`)
+	require.Contains(t, text.Text, `"review_url":"https://app.example.test/review"`)
+
+	// A user-supplied justification is passed through for the service to record.
+	_ = (&PluginsService{reviews: filer}).reviewAssignmentRefusal(t.Context(), principal, project, "Support", "for the on-call rota", refused)
+	require.Equal(t, "for the on-call rota", filer.note)
+
+	// Without a filer, or for any other error, the refusal passes through.
+	require.Equal(t, refused, (&PluginsService{}).reviewAssignmentRefusal(t.Context(), principal, project, "Support", "", refused))
+	other := errors.New("conflict")
+	require.Equal(t, other, (&PluginsService{reviews: filer}).reviewAssignmentRefusal(t.Context(), principal, project, "Support", "", other))
+	// A failed filing keeps the original refusal rather than inventing a review.
+	failing := &stubAssignmentReviewFiler{err: errors.New("queue down")}
+	require.Equal(t, refused, (&PluginsService{reviews: failing}).reviewAssignmentRefusal(t.Context(), principal, project, "Support", "", refused))
 }

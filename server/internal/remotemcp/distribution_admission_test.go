@@ -14,7 +14,7 @@ import (
 func TestCheckRemoteDistributionAdmission_NilService(t *testing.T) {
 	t.Parallel()
 	var service *Service
-	err := service.checkRemoteDistributionAdmission(t.Context(), nil, admission.RolloutConfig{}, nil, "", uuid.Nil, uuid.Nil, "")
+	err := service.checkRemoteDistributionAdmission(t.Context(), nil, "", uuid.Nil, uuid.Nil, "")
 	require.ErrorIs(t, err, admission.ErrUnavailable)
 	var fault *oops.ShareableError
 	require.ErrorAs(t, err, &fault)
@@ -25,7 +25,7 @@ func TestCheckRemoteDistributionAdmission_MissingGuard(t *testing.T) {
 	t.Parallel()
 	service := new(Service)
 	service.logger = testenv.NewLogger(t)
-	err := service.checkRemoteDistributionAdmission(t.Context(), nil, admission.RolloutConfig{}, nil, "", uuid.Nil, uuid.Nil, "")
+	err := service.checkRemoteDistributionAdmission(t.Context(), nil, "", uuid.Nil, uuid.Nil, "")
 	require.ErrorIs(t, err, admission.ErrUnavailable)
 	var fault *oops.ShareableError
 	require.ErrorAs(t, err, &fault)

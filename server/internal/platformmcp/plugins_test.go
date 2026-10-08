@@ -135,7 +135,7 @@ func TestGetPluginOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 			SkillCount:            1,
 			Assignments:           &PluginAssignmentSummary{AllMembers: true},
 			Publication:           PluginPublicationUnpublished,
-			DistributionAdmission: &DistributionAdmission{State: DistributionAdmissionCovered, Mode: string(admission.ModeEnforce), MissingAudienceCounts: admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, CheckedAt: "2026-09-04T12:00:00Z", Complete: true},
+			DistributionAdmission: &DistributionAdmission{State: DistributionAdmissionCovered, MissingAudienceCounts: admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, CheckedAt: "2026-09-04T12:00:00Z", Complete: true},
 		},
 		Servers: []PluginServer{{
 			DisplayName: "Billing",

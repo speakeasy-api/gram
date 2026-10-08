@@ -206,11 +206,7 @@ func seedBlockedDirectRemoteDistribution(t *testing.T, ctx context.Context, ti *
 		Status: "registered", McpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
 	})
 	require.NoError(t, err)
-	flags := new(feature.InMemory)
-	flags.SetFlag(feature.FlagPlatformMCPShadowAudienceEnforcement, authCtx.ActiveOrganizationID, true)
-	flags.SetFlagPayload(feature.FlagPlatformMCPShadowAudienceEnforcement, authCtx.ActiveOrganizationID, []byte(`{"mode":"enforce"}`))
-	flags.SetFlag(feature.FlagPlatformMCPDirectRemoteDistributionDisabled, authCtx.ActiveOrganizationID, true)
-	ti.service.WithDistributionAdmission(admission.NewGuard(flags, nil))
+	ti.service.WithDistributionAdmission(admission.NewGuard())
 }
 
 func withExactAuthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...authz.Grant) context.Context {

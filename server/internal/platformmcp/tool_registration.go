@@ -34,16 +34,18 @@ type RegisterRemoteMCPToolInput struct {
 	RemoteURL      string `json:"remote_url" jsonschema:"HTTPS Streamable HTTP MCP URL; safe endpoint query parameters are supported, but fragments, userinfo, headers, credentials, and credential-like query parameters are not accepted"`
 	DisplayName    string `json:"display_name,omitempty" jsonschema:"optional project-local display name for the MCP; maximum 256 bytes"`
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-generated idempotency key; reuse only to retry the same project and canonical remote URL"`
+	Justification  string `json:"justification,omitempty" jsonschema:"optional reason recorded on the Shadow MCP review request when the project's policy refuses this URL; empty uses a generated note naming the server and project"`
 }
 
 type RegisterRemoteMCPToolOutput struct {
-	ProjectSlug       string `json:"project_slug"`
-	CanonicalURL      string `json:"canonical_url"`
-	ReceiptID         string `json:"receipt_id"`
-	RegistrationID    string `json:"registration_id"`
-	Replayed          bool   `json:"replayed"`
-	NextAction        string `json:"next_action"`
-	DashboardSetupURL string `json:"dashboard_setup_url,omitempty"`
+	ProjectSlug       string                     `json:"project_slug"`
+	CanonicalURL      string                     `json:"canonical_url"`
+	ReceiptID         string                     `json:"receipt_id,omitempty"`
+	RegistrationID    string                     `json:"registration_id,omitempty"`
+	Replayed          bool                       `json:"replayed"`
+	NextAction        string                     `json:"next_action"`
+	DashboardSetupURL string                     `json:"dashboard_setup_url,omitempty"`
+	Review            *ShadowMCPReviewToolOutput `json:"review,omitempty"`
 }
 
 // registerCatalogRegistrationTool registers the reviewed-catalogue workflow in
@@ -120,7 +122,7 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 	addTool(reg, &mcp.Tool{
 		Name:        "register_remote_mcp",
 		Title:       "Add Your Own MCP Server to a Project",
-		Description: "Add one MCP server of the user's own, by its Streamable HTTP URL, to a named project. Constraints: the URL is revalidated and re-inspected first. This writes private project configuration only: nobody receives the MCP server until it is put into a plugin.",
+		Description: "Add one MCP server of the user's own, by its Streamable HTTP URL, to a named project. Constraints: the URL is revalidated and re-inspected first. This writes private project configuration only: nobody receives the MCP server until it is put into a plugin. When the project has a Shadow MCP policy that blocks unreviewed servers and this URL is not yet approved, nothing is added: a review request is filed on the administrator's behalf and returned with next_action await_shadow_mcp_review, the review page, and the policies in force. Relay its explanation, then run this again once the review is approved.",
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegisterRemoteMCPToolInput) (*mcp.CallToolResult, RegisterRemoteMCPToolOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
@@ -128,6 +130,15 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 		}
 		result, err := registrations.RegisterRemoteMCP(ctx, principal, RegisterRemoteMCPInput(input))
 		if err != nil {
+			if review, ok := shadowMCPReviewToolOutput(err); ok {
+				return nil, RegisterRemoteMCPToolOutput{
+					ProjectSlug:  input.ProjectSlug,
+					CanonicalURL: review.Target,
+					Replayed:     false,
+					NextAction:   shadowMCPReviewNextAction,
+					Review:       &review,
+				}, nil
+			}
 			if budgetResult, ok := operationBudgetToolResult(err); ok {
 				return budgetResult, RegisterRemoteMCPToolOutput{}, nil
 			}

@@ -530,7 +530,7 @@ func TestGetPluginResolvesAnExactTargetAndReportsMembership(t *testing.T) {
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	admissionResult := DistributionAdmission{State: DistributionAdmissionNotApplicable, Mode: "legacy", MissingAudienceCounts: admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, CheckedAt: "2026-09-10T00:00:00Z", Complete: true}
+	admissionResult := DistributionAdmission{State: DistributionAdmissionNotApplicable, MissingAudienceCounts: admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, CheckedAt: "2026-09-10T00:00:00Z", Complete: true}
 	service := testPluginTargets(conn).WithDistributionAdmissionReads(stubDistributionAdmissionReader{plugin: admissionResult}).
 		WithPublicationEvidence(stubPluginPublicationEvidence{items: []plugindelivery.PublicationEvidence{{
 			PluginSlug: "marketing", NotConfigured: false, Fresh: nil,

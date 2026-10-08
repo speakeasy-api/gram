@@ -85,7 +85,7 @@ func NewService(
 		policy:                policy,
 		audit:                 auditLogger,
 		provisioning:          NewRemoteMCPProvisioningService(db, policy, auditLogger, iconSetter),
-		distributionAdmission: admission.NewGuard(nil, nil),
+		distributionAdmission: admission.NewGuard(),
 		beforeClaim:           nil,
 	}
 }
@@ -278,9 +278,6 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid url").LogError(ctx, logger)
 		}
 	}
-	var rollout admission.RolloutConfig
-	var rolloutErr error
-	rollout, rolloutErr = s.distributionAdmission.ResolveProject(ctx, s.db, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, *authCtx.ProjectID)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -319,7 +316,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	// even when the URL didn't change (idempotent).
 	finalURL := conv.PtrValOr(payload.URL, existingServer.Url)
 	if payload.URL != nil && finalURL != existingServer.Url {
-		if err := s.checkRemoteDistributionAdmission(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, finalURL); err != nil {
+		if err := s.checkRemoteDistributionAdmission(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, finalURL); err != nil {
 			return nil, err
 		}
 	}

@@ -7,7 +7,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	approvalrepo "github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
@@ -49,8 +48,7 @@ func TestShadowDistributionReadReportsRepairForPluginAndTarget(t *testing.T) {
 	_, err = riskrepo.New(conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{ID: uuid.New(), ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: "Blocking Shadow MCP", PolicyType: "standard", Sources: []string{shadowmcp.SourceShadowMCP}, PresidioEntities: nil, AnalyzerConfig: nil, PromptInjectionRules: nil, DisabledRules: nil, CustomRuleIds: nil, Enabled: true, Action: "block", AudienceType: "everyone", ShadowMcpDisposition: pgtype.Text{}, AutoName: false, UserMessage: pgtype.Text{}, Prompt: pgtype.Text{}, ModelConfig: nil, Score: pgtype.Float8{}})
 	require.NoError(t, err)
 
-	flags := newFeatureRollout(principal.OrganizationID)
-	service := NewShadowDistributionReadService(testenv.NewLogger(t), conn, admission.NewGuard(flags, nil), NewPostgresOrganizationSlugResolver(conn))
+	service := NewShadowDistributionReadService(testenv.NewLogger(t), conn, NewPostgresOrganizationSlugResolver(conn))
 	pluginResult := service.ForPlugin(ctx, principal.OrganizationID, project.ID, plugin.ID)
 	targetResult := service.ForTarget(ctx, principal.OrganizationID, project.ID, canonicalTarget.CanonicalURL)
 
@@ -82,12 +80,4 @@ func TestShadowDistributionReadReportsRepairForPluginAndTarget(t *testing.T) {
 	require.Equal(t, DistributionAdmissionCovered, targetResult.State)
 	require.Equal(t, admission.MissingAudienceCounts{}, targetResult.MissingAudienceCounts)
 	require.True(t, targetResult.Complete)
-}
-
-func newFeatureRollout(organizationID string) *feature.InMemory {
-	flags := new(feature.InMemory)
-	flags.SetFlag(feature.FlagPlatformMCPShadowAudienceEnforcement, organizationID, true)
-	flags.SetFlagPayload(feature.FlagPlatformMCPShadowAudienceEnforcement, organizationID, []byte(`{"mode":"enforce"}`))
-	flags.SetFlag(feature.FlagPlatformMCPDirectRemoteDistributionDisabled, organizationID, false)
-	return flags
 }

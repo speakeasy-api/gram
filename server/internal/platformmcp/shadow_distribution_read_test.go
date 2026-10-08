@@ -26,7 +26,6 @@ func TestUnavailableDistributionAdmissionIsIncompleteAndBounded(t *testing.T) {
 	result := unavailableDistributionAdmission(func() time.Time { return checkedAt })
 
 	require.Equal(t, DistributionAdmissionUnavailable, result.State)
-	require.Empty(t, result.Mode)
 	require.Equal(t, admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, result.MissingAudienceCounts)
 	require.Equal(t, checkedAt.Format(time.RFC3339Nano), result.CheckedAt)
 	require.False(t, result.Complete)
@@ -58,5 +57,5 @@ func (s stubDistributionAdmissionReader) NotApplicable(_ context.Context, _ stri
 	if s.notApplicableCalls != nil {
 		*s.notApplicableCalls++
 	}
-	return DistributionAdmission{State: DistributionAdmissionNotApplicable, Mode: "legacy", MissingAudienceCounts: admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, CheckedAt: "2026-09-10T00:00:00Z", Complete: true}
+	return DistributionAdmission{State: DistributionAdmissionNotApplicable, MissingAudienceCounts: admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, CheckedAt: "2026-09-10T00:00:00Z", Complete: true}
 }

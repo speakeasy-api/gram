@@ -378,6 +378,7 @@ type PostgresReader struct {
 	shadowAI                  *ShadowAIService
 	reviewRequests            MCPReviewRequestService
 	reviewRequestBudget       OperationBudget
+	reviewLinks               ShadowMCPReviewLinker
 	toolExposure              *MCPToolExposureService
 	projectLifecycle          *ProjectLifecycleService
 }
@@ -505,6 +506,15 @@ func (r *PostgresReader) WithReviewRequests(service MCPReviewRequestService, bud
 	if r != nil && service != nil && budget.valid() {
 		r.reviewRequests = service
 		r.reviewRequestBudget = budget
+	}
+	return r
+}
+
+// WithShadowMCPReviewLinks lets review-request tools return the dashboard page
+// where a request is reviewed.
+func (r *PostgresReader) WithShadowMCPReviewLinks(links ShadowMCPReviewLinker) *PostgresReader {
+	if r != nil && links != nil {
+		r.reviewLinks = links
 	}
 	return r
 }
