@@ -124,6 +124,19 @@ func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor
 	if !created && (!canonical.ToolsetID.Valid || canonical.ToolsetID.UUID != toolset.ID) {
 		return nil, oops.E(oops.CodeConflict, nil, "hosted MCP identity belongs to another server")
 	}
+	if created {
+		// A legacy toolset whose address is taken stays legacy rather than failing its own save.
+		held, err := addressHeld(ctx, tx, toolset, !toolset.CustomDomainID.Valid || !dead[toolset.CustomDomainID.UUID])
+		if err != nil {
+			return nil, err
+		}
+		if held && requested != nil {
+			return nil, oops.E(oops.CodeConflict, ErrAddressInUse, "hosted MCP address is already in use; free it before configuring network access")
+		}
+		if held {
+			return nil, nil
+		}
+	}
 
 	mode := networkaccess.ModePublicOnly
 	if !created {
@@ -238,6 +251,31 @@ func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor
 		return nil, err
 	}
 	return tombstone.RootDomainIDs(append(clearedRoots, moved...)), nil
+}
+
+// addressHeld reports whether another live endpoint or server already holds the toolset's address or server slug.
+func addressHeld(ctx context.Context, tx pgx.Tx, toolset toolsetsrepo.Toolset, addressed bool) (bool, error) {
+	if addressed {
+		endpointRepo := mcpendpointsrepo.New(tx)
+		if err := endpointRepo.LockSlugScope(ctx, mcpendpointsrepo.LockSlugScopeParams{CustomDomainID: toolset.CustomDomainID, Slug: toolset.McpSlug.String}); err != nil {
+			return false, oops.E(oops.CodeUnexpected, err, "lock hosted MCP address")
+		}
+		_, err := endpointRepo.GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpointsrepo.GetMCPEndpointByCustomDomainAndSlugParams{Slug: toolset.McpSlug.String, CustomDomainID: toolset.CustomDomainID})
+		switch {
+		case err == nil:
+			return true, nil
+		case !errors.Is(err, pgx.ErrNoRows):
+			return false, oops.E(oops.CodeUnexpected, err, "check hosted MCP address")
+		}
+	}
+	_, err := mcpserversrepo.New(tx).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: toolset.McpSlug, ProjectID: toolset.ProjectID})
+	switch {
+	case err == nil:
+		return true, nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return false, oops.E(oops.CodeUnexpected, err, "check hosted MCP server slug")
+	}
+	return false, nil
 }
 
 // syncEndpoint re-keys the single endpoint in place so client references keep its identity.

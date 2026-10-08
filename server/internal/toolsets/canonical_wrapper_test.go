@@ -21,7 +21,9 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -387,4 +389,191 @@ func TestCanonicalWrapperSyncAcceptsAgentPrincipal(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, string(urn.PrincipalTypeAgent), record.ActorType)
 	require.Equal(t, agent.ID, record.ActorID)
+}
+
+// makeLegacy drops the toolset's canonical wrapper, as for a toolset that predates wrappers.
+func makeLegacy(t *testing.T, ctx context.Context, ti *testInstance, toolset *types.Toolset) {
+	t.Helper()
+	id := uuid.MustParse(toolset.ID)
+	_, err := ti.conn.Exec(ctx, `DELETE FROM mcp_endpoints WHERE mcp_server_id = $1`, id) //nolint:glint // notestingrawsql: legacy wrapper fixture
+	require.NoError(t, err)
+	_, err = ti.conn.Exec(ctx, `DELETE FROM mcp_servers WHERE id = $1`, id) //nolint:glint // notestingrawsql: legacy wrapper fixture
+	require.NoError(t, err)
+}
+
+func requireNoCanonical(t *testing.T, ctx context.Context, ti *testInstance, toolset *types.Toolset) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	_, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: uuid.MustParse(toolset.ID), ProjectID: *authCtx.ProjectID})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+func TestCanonicalWrapperCreatedForLegacyToolsetWithFreeAddress(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestToolsetsService(t)
+	toolset := createMinimalPublicToolset(t, ctx, ti, "Canonical Legacy Free")
+	makeLegacy(t, ctx, ti, toolset)
+
+	updated, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: toolset.Slug, Name: new("Canonical Legacy Free Renamed")})
+	require.NoError(t, err)
+	requireCanonicalMatches(t, ctx, ti, updated)
+}
+
+func TestCanonicalWrapperSkippedWhenForeignEndpointHoldsLegacyAddress(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestToolsetsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolset := createMinimalPublicToolset(t, ctx, ti, "Canonical Legacy Foreign")
+	makeLegacy(t, ctx, ti, toolset)
+	other := createMinimalPublicToolset(t, ctx, ti, "Canonical Legacy Holder")
+	holder, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: *authCtx.ProjectID, McpServerID: uuid.NullUUID{UUID: uuid.MustParse(other.ID), Valid: true}, Slug: string(*toolset.McpSlug),
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: toolset.Slug, Name: new("Canonical Legacy Foreign Renamed")})
+	require.NoError(t, err, "a taken address leaves the toolset legacy instead of failing its save")
+	requireNoCanonical(t, ctx, ti, toolset)
+	after, err := mcpendpointsrepo.New(ti.conn).GetMCPEndpointByID(ctx, mcpendpointsrepo.GetMCPEndpointByIDParams{ID: holder.ID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.Equal(t, holder, after)
+}
+
+func TestCanonicalWrapperSkippedWhenOwnFreshIDServerHoldsLegacyAddress(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestToolsetsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	toolset := createMinimalPublicToolset(t, ctx, ti, "Canonical Legacy Own")
+	makeLegacy(t, ctx, ti, toolset)
+
+	servers := mcpserversrepo.New(ti.conn)
+	member, err := servers.CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: projectID, Name: conv.ToPGText("Fresh member"), Slug: conv.ToPGText("fresh-member-" + uuid.NewString()[:8]),
+		ToolsetID: uuid.NullUUID{UUID: uuid.MustParse(toolset.ID), Valid: true}, Visibility: "public",
+	})
+	require.NoError(t, err)
+	memberEndpoint, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: projectID, McpServerID: uuid.NullUUID{UUID: member.ID, Valid: true}, Slug: string(*toolset.McpSlug),
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: toolset.Slug, Name: new("Canonical Legacy Own Renamed")})
+	require.NoError(t, err)
+	requireNoCanonical(t, ctx, ti, toolset)
+	afterServer, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: member.ID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, member, afterServer)
+	endpoints, err := mcpendpointsrepo.New(ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: projectID, McpServerID: member.ID})
+	require.NoError(t, err)
+	require.Equal(t, []mcpendpointsrepo.McpEndpoint{memberEndpoint}, endpoints)
+
+	// Requesting a network mode for a wrapper that cannot be created is a conflict, not a silent no-op.
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: hostedmcp.Sync runs in a caller-owned transaction.
+	require.NoError(t, err)
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(context.Background()) })
+	locked, err := toolsetsrepo.New(tx).GetToolsetForUpdate(ctx, toolsetsrepo.GetToolsetForUpdateParams{Slug: string(toolset.Slug), ProjectID: projectID})
+	require.NoError(t, err)
+	mode := networkaccess.ModePublicOnly
+	_, err = hostedmcp.Sync(ctx, tx, audit.NewLogger(), hostedmcp.Actor{UserID: authCtx.UserID, Email: nil}, locked, &mode)
+	require.ErrorIs(t, err, hostedmcp.ErrAddressInUse)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeConflict, shareable.Code)
+}
+
+func TestCanonicalWrapperMoveOntoTakenAddressStillConflicts(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestToolsetsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	toolset := createMinimalPublicToolset(t, ctx, ti, "Canonical Move Taken")
+	before := requireCanonicalMatches(t, ctx, ti, toolset)
+
+	member, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: projectID, Name: conv.ToPGText("Fresh member"), Slug: conv.ToPGText("fresh-member-" + uuid.NewString()[:8]),
+		ToolsetID: uuid.NullUUID{UUID: uuid.MustParse(toolset.ID), Valid: true}, Visibility: "public",
+	})
+	require.NoError(t, err)
+	taken := authCtx.OrganizationSlug + "-taken-" + uuid.NewString()[:8]
+	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: projectID, McpServerID: uuid.NullUUID{UUID: member.ID, Valid: true}, Slug: taken,
+	})
+	require.NoError(t, err)
+
+	takenSlug := types.Slug(taken)
+	_, err = ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: toolset.Slug, McpSlug: &takenSlug})
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeConflict, shareable.Code)
+	require.Equal(t, before, loadCanonical(t, ctx, ti, toolset))
+}
+
+func TestCanonicalWrapperSkippedWhenOwnFreshIDServerHoldsServerSlug(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestToolsetsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	toolset := createMinimalPublicToolset(t, ctx, ti, "Canonical Legacy Server Slug")
+	makeLegacy(t, ctx, ti, toolset)
+
+	servers := mcpserversrepo.New(ti.conn)
+	member, err := servers.CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: projectID, Name: conv.ToPGText("Fresh member"), Slug: conv.ToPGText(string(*toolset.McpSlug)),
+		ToolsetID: uuid.NullUUID{UUID: uuid.MustParse(toolset.ID), Valid: true}, Visibility: "public",
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: toolset.Slug, Name: new("Canonical Legacy Server Slug Renamed")})
+	require.NoError(t, err)
+	requireNoCanonical(t, ctx, ti, toolset)
+	after, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: member.ID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, member, after)
+}
+
+func TestCanonicalWrapperSkippedWhenOwnFreshIDServerHoldsSlugAndDomainRoot(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestToolsetsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	domain := createActiveCustomDomain(t, ctx, ti)
+	toolset := createMinimalPublicToolset(t, ctx, ti, "Canonical Legacy Disabled Domain")
+	domainID := domain.ID.String()
+	toolset, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: toolset.Slug, CustomDomainID: &domainID, McpEnabled: new(false)})
+	require.NoError(t, err)
+	makeLegacy(t, ctx, ti, toolset)
+
+	servers := mcpserversrepo.New(ti.conn)
+	member, err := servers.CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: projectID, Name: conv.ToPGText("Fresh member"), Slug: conv.ToPGText(string(*toolset.McpSlug)),
+		ToolsetID: uuid.NullUUID{UUID: uuid.MustParse(toolset.ID), Valid: true}, Visibility: "public",
+	})
+	require.NoError(t, err)
+	created, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: projectID, McpServerID: uuid.NullUUID{UUID: member.ID, Valid: true},
+		CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true}, Slug: string(*toolset.McpSlug),
+	})
+	require.NoError(t, err)
+	require.NoError(t, cdrepo.New(ti.conn).SetRootMcpEndpoint(ctx, cdrepo.SetRootMcpEndpointParams{McpEndpointID: created.ID, CustomDomainID: domain.ID}))
+	memberEndpoints, err := mcpendpointsrepo.New(ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: projectID, McpServerID: member.ID})
+	require.NoError(t, err)
+	require.Len(t, memberEndpoints, 1)
+	require.True(t, memberEndpoints[0].IsDomainRoot.Bool)
+
+	_, err = ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: toolset.Slug, Name: new("Canonical Legacy Disabled Domain Renamed")})
+	require.NoError(t, err)
+	requireNoCanonical(t, ctx, ti, toolset)
+	afterServer, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: member.ID, ProjectID: projectID})
+	require.NoError(t, err)
+	require.Equal(t, member, afterServer)
+	afterEndpoints, err := mcpendpointsrepo.New(ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: projectID, McpServerID: member.ID})
+	require.NoError(t, err)
+	require.Equal(t, memberEndpoints, afterEndpoints)
 }
