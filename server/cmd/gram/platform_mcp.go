@@ -153,10 +153,8 @@ type platformMCPConfig struct {
 	// inventory behind search_tool_calls and list_attribute_keys. Nil keeps
 	// both visible as unavailable.
 	ToolCallSearch platformmcp.ToolCallSearchReader
-	// Analytics is the semantic query engine behind describe_analytics_catalog,
-	// list_analytics_dimension_values and run_analytics_query: the one the
-	// analytics RPC and Explore answer through. Nil keeps the three visible
-	// as unavailable.
+	// Analytics is the engine behind the three analytics tools, shared with
+	// the analytics RPC. Nil keeps them visible as unavailable.
 	Analytics platformmcp.AnalyticsEngine
 
 	// WorkflowRun delivers shipped-workflow run reports to Speakeasy's own
@@ -483,8 +481,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey)).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
-	// Metered on the diagnostics allowance: these are the same kind of
-	// read-only aggregate queries an administrator runs while investigating.
+	// Metered on the diagnostics allowance, like the other aggregate reads.
 	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics))
 	attachShadowInventory(platformReader, config, budgets.SensitiveDiagnostics)
 	attachShadowAI(platformReader, config, authorizer, budgets.SensitiveDiagnostics)
@@ -1053,8 +1050,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey)).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
-	// Metered on the diagnostics allowance: these are the same kind of
-	// read-only aggregate queries an administrator runs while investigating.
+	// Metered on the diagnostics allowance, like the other aggregate reads.
 	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics))
 	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)
 	if shadowErr != nil {

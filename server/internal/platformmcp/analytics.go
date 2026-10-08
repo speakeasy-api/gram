@@ -11,11 +11,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 )
 
-// AnalyticsEngine is the semantic query path the analytics tools answer
-// through: the catalog, compiler and runner the analytics RPC uses, so a
-// request is held to the same guardrails on every surface. The engine owns
-// every rule about what a request may say; this package only authorizes the
-// caller and converts between the tool's shapes and the engine's.
+// AnalyticsEngine is the query path the analytics tools answer through: the
+// same catalog, compiler and runner as the analytics RPC.
 type AnalyticsEngine interface {
 	Catalog() *analytics.Catalog
 	Query(ctx context.Context, tenant analytics.Tenant, req analytics.Request) (*analytics.QueryResult, error)
@@ -23,33 +20,26 @@ type AnalyticsEngine interface {
 }
 
 var (
-	// ErrAnalyticsNotEnabled marks an analytics read whose capability is
-	// switched off for the caller's organization: Explore, and with it the
-	// query API, is still rolling out. It is distinct from ErrUnavailable,
-	// which means the deployment cannot answer right now.
+	// ErrAnalyticsNotEnabled marks a read for an organization that has
+	// Explore switched off.
 	ErrAnalyticsNotEnabled = errors.New("platform mcp analytics not enabled")
-	// ErrAnalyticsInvalid marks a request the tool could not hand to the
-	// engine at all: a project selector that does not name one exact project.
+	// ErrAnalyticsInvalid marks a read that does not name one exact project.
 	ErrAnalyticsInvalid = errors.New("invalid platform mcp analytics read")
 )
 
-// AnalyticsService serves the analytics catalog to the Platform MCP: what a
-// project's agent session data can be asked, the values a dimension holds,
-// and the answer to one query. It is a thin authorizing shell over the
-// engine, which is what Explore queries through too.
+// AnalyticsService serves the analytics catalog, values and queries to the
+// Platform MCP.
 type AnalyticsService struct {
 	engine        AnalyticsEngine
 	flags         feature.Provider
 	organizations OrganizationSlugResolver
-	// projects resolves the exact project a call names and holds the caller
-	// to project:read on it, the scope the analytics RPC requires.
+	// projects holds the caller to project:read on the exact project named.
 	projects ProjectReadResolver
 	budget   OperationBudget
 }
 
 // NewAnalyticsService returns nil without an engine, an organization
-// resolver or a project reader, so the registrar serves the tools as stubs
-// rather than answering from nothing.
+// resolver or a project reader, so the tools are served as stubs.
 func NewAnalyticsService(engine AnalyticsEngine, flags feature.Provider, organizations OrganizationSlugResolver, projects ProjectReadResolver, budget OperationBudget) *AnalyticsService {
 	if engine == nil || organizations == nil || projects == nil {
 		return nil
@@ -76,16 +66,13 @@ func analyticsTenant(principal Principal, project ResolvedProject) analytics.Ten
 	return analytics.Tenant{OrganizationID: principal.OrganizationID, ProjectID: project.ID.String()}
 }
 
-// DescribeAnalyticsCatalogInput names the project the catalog is read for.
-// The catalog is the same for every project; the project is what the
-// rollout flag and project:read are checked against.
+// DescribeAnalyticsCatalogInput names the project the rollout flag and
+// project:read are checked against; the catalog is the same for every project.
 type DescribeAnalyticsCatalogInput struct {
 	ProjectID string `json:"project_id"`
 }
 
-// AnalyticsLookup is a per-project map a dimension reads through at query
-// time: a reported value with an entry shows as its target, the rest as
-// reported.
+// AnalyticsLookup is a per-project map a dimension reads through at query time.
 type AnalyticsLookup struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -98,8 +85,7 @@ type AnalyticsField struct {
 	Type string `json:"type"`
 	// Role is dimension or measure.
 	Role string `json:"role"`
-	// Default marks a field in the query the dataset opens on: a default
-	// dimension is in the opening group-by.
+	// Default marks a field of the query the dataset opens on.
 	Default bool `json:"default"`
 	// Unit of a measure, when it has one.
 	Unit string `json:"unit,omitempty"`
@@ -108,11 +94,9 @@ type AnalyticsField struct {
 	// Aggregations the field admits: ops over a measure, count_distinct over
 	// a dimension.
 	Aggregations []string `json:"aggregations,omitempty"`
-	// Description says what the field is and which producers fill it, when
-	// the catalog has something to say beyond the name.
+	// Description is set when the catalog has more to say than the name.
 	Description string `json:"description,omitempty"`
-	// Lookup is the map this dimension reads through, when it reads through
-	// one.
+	// Lookup is the map this dimension reads through, if any.
 	Lookup *AnalyticsLookup `json:"lookup,omitempty"`
 }
 
@@ -124,14 +108,13 @@ type AnalyticsDataset struct {
 	// Grain is what one row represents, as a noun.
 	Grain       string `json:"grain"`
 	Description string `json:"description"`
-	// MaxTimeRangeDays is the longest window a query of this dataset may
-	// span, bounded by what its table retains.
+	// MaxTimeRangeDays is the longest window a query may span.
 	MaxTimeRangeDays int              `json:"max_time_range_days"`
 	Fields           []AnalyticsField `json:"fields"`
 }
 
-// AnalyticsLimits are the guardrails every query is held to, restated from
-// the compiler so a caller can stay inside them without being refused first.
+// AnalyticsLimits restates the compiler's guardrails so a caller can stay
+// inside them.
 type AnalyticsLimits struct {
 	MaxDimensions      int `json:"max_dimensions"`
 	MaxFilterValues    int `json:"max_filter_values"`
@@ -141,8 +124,7 @@ type AnalyticsLimits struct {
 	MaxValuesLimit     int `json:"max_values_limit"`
 }
 
-// DescribeAnalyticsCatalogOutput is the catalog: the contract every query
-// is written in.
+// DescribeAnalyticsCatalogOutput is the catalog every query is written in.
 type DescribeAnalyticsCatalogOutput struct {
 	Project  AnalyticsProject   `json:"project"`
 	Datasets []AnalyticsDataset `json:"datasets"`
@@ -206,8 +188,8 @@ func describeAnalyticsCatalog(project ResolvedProject, catalog *analytics.Catalo
 	return out
 }
 
-// analyticsNames renders a catalog enum as the strings the wire carries; an
-// empty list is omitted from the result rather than sent as null.
+// analyticsNames renders a catalog enum as strings, nil when empty so it is
+// omitted.
 func analyticsNames[T ~string](values []T) []string {
 	if len(values) == 0 {
 		return nil
@@ -219,8 +201,7 @@ func analyticsNames[T ~string](values []T) []string {
 	return out
 }
 
-// ListAnalyticsDimensionValuesInput asks for the values one dimension holds
-// inside a window.
+// ListAnalyticsDimensionValuesInput asks what one dimension holds in a window.
 type ListAnalyticsDimensionValuesInput struct {
 	ProjectID string `json:"project_id"`
 	Dataset   string `json:"dataset"`
@@ -230,15 +211,14 @@ type ListAnalyticsDimensionValuesInput struct {
 	Limit     int    `json:"limit,omitempty"`
 }
 
-// AnalyticsDimensionValue is one value and how many rows at the dataset's
-// grain carry it inside the window.
+// AnalyticsDimensionValue is one value and how many rows carry it.
 type AnalyticsDimensionValue struct {
 	Value string `json:"value"`
 	Count int64  `json:"count"`
 }
 
-// ListAnalyticsDimensionValuesOutput is the values a dimension actually holds
-// inside the window, most frequent first.
+// ListAnalyticsDimensionValuesOutput lists a dimension's values, most
+// frequent first.
 type ListAnalyticsDimensionValuesOutput struct {
 	Project   AnalyticsProject          `json:"project"`
 	Dataset   string                    `json:"dataset"`
@@ -246,8 +226,7 @@ type ListAnalyticsDimensionValuesOutput struct {
 	Values    []AnalyticsDimensionValue `json:"values"`
 }
 
-// Values lists what a dimension holds, through the same read a filter will
-// match against.
+// Values lists what a dimension holds, read the way a filter will match it.
 func (s *AnalyticsService) Values(ctx context.Context, principal Principal, input ListAnalyticsDimensionValuesInput) (ListAnalyticsDimensionValuesOutput, error) {
 	var zero ListAnalyticsDimensionValuesOutput
 	project, err := s.authorize(ctx, principal, input.ProjectID)
@@ -300,8 +279,8 @@ type AnalyticsOrderBy struct {
 	Direction string `json:"direction,omitempty"`
 }
 
-// RunAnalyticsQueryInput is a query against one dataset, in catalog
-// vocabulary, mirroring the analytics RPC's payload.
+// RunAnalyticsQueryInput is a query against one dataset, mirroring the
+// analytics RPC's payload.
 type RunAnalyticsQueryInput struct {
 	ProjectID  string             `json:"project_id"`
 	Dataset    string             `json:"dataset"`
@@ -316,30 +295,25 @@ type RunAnalyticsQueryInput struct {
 	Ungrouped  bool               `json:"ungrouped,omitempty"`
 }
 
-// AnalyticsColumn is one result column: a dimension, a measure alias, or
-// the time column of a bucketed or ungrouped result.
+// AnalyticsColumn is one result column.
 type AnalyticsColumn struct {
 	Name string `json:"name"`
 	// Kind is time, dimension or measure.
 	Kind string `json:"kind"`
 }
 
-// RunAnalyticsQueryOutput is one shape for both modes. Row keys are the
-// requested dimension names plus each measure's alias; time_bucket is present
-// only when a grain is set, and time on ungrouped rows.
+// RunAnalyticsQueryOutput serves both modes: row keys are the dimensions and
+// measure aliases, plus time_bucket under a grain or time when ungrouped.
 type RunAnalyticsQueryOutput struct {
 	Project AnalyticsProject `json:"project"`
 	Dataset string           `json:"dataset"`
-	// Plan is a stable diagnostic identifier for how the query was answered,
-	// deliberately not a table name.
+	// Plan is a stable diagnostic identifier, not a table name.
 	Plan    string            `json:"plan"`
 	Columns []AnalyticsColumn `json:"columns"`
 	Rows    []map[string]any  `json:"rows"`
 }
 
-// Query runs one query for a caller who may read the named project. The
-// request goes to the engine as written: what it may say is the engine's
-// decision, and a refusal names the field to correct.
+// Query runs one query for a caller who may read the named project.
 func (s *AnalyticsService) Query(ctx context.Context, principal Principal, input RunAnalyticsQueryInput) (RunAnalyticsQueryOutput, error) {
 	var zero RunAnalyticsQueryOutput
 	project, err := s.authorize(ctx, principal, input.ProjectID)
@@ -391,11 +365,9 @@ func (s *AnalyticsService) Query(ctx context.Context, principal Principal, input
 	return out, nil
 }
 
-// authorize is what every analytics read passes through first: the caller
-// must hold project:read on the exact project named, as the analytics RPC
-// requires, then Explore must be switched on for that organization and
-// project, then the read is charged to the diagnostics budget. A project the
-// caller cannot read is indistinguishable from one that does not exist.
+// authorize holds the caller to project:read on the exact project, then to
+// the Explore flag, then charges the read to the budget. A project the caller
+// cannot read reads as one that does not exist.
 func (s *AnalyticsService) authorize(ctx context.Context, principal Principal, projectID string) (ResolvedProject, error) {
 	var zero ResolvedProject
 	if !s.valid() {
@@ -418,9 +390,7 @@ func (s *AnalyticsService) authorize(ctx context.Context, principal Principal, p
 	if organizationSlug == "" {
 		return zero, fmt.Errorf("%w: organization slug is unavailable", ErrUnavailable)
 	}
-	// The key that gates Explore in the dashboard, evaluated the way the other
-	// rollout gates on this surface are: disabled, missing and indeterminate
-	// all fail closed.
+	// Disabled, missing and indeterminate all fail closed.
 	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagExplore, principal.OrganizationID, feature.OrgProjectGroups(organizationSlug, project.Slug))
 	if err != nil {
 		return zero, fmt.Errorf("%w: evaluate analytics capability: %w", ErrUnavailable, err)

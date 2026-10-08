@@ -17,8 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// platformAnalyticsToolCall is one terminal observation of a tool call, the
-// row the tool_calls dataset collapses to.
+// platformAnalyticsToolCall is one terminal tool call observation.
 func platformAnalyticsToolCall(organizationID, projectID, recordID, sessionID, user, tool string, at time.Time) chrepo.AgentEventRow {
 	return chrepo.AgentEventRow{
 		OrganizationID:     organizationID,
@@ -72,10 +71,6 @@ func platformAnalyticsToolCall(organizationID, projectID, recordID, sessionID, u
 	}
 }
 
-// TestAnalyticsToolsAnswerFromClickHouse walks the vertical under a real
-// project grant: the three tools resolve the project in Postgres, check the
-// rollout flag for its organization, and answer from ClickHouse through the
-// same engine the analytics RPC uses, scoped to that one project.
 func TestAnalyticsToolsAnswerFromClickHouse(t *testing.T) {
 	t.Parallel()
 
@@ -197,8 +192,6 @@ func TestAnalyticsToolsAnswerFromClickHouse(t *testing.T) {
 	})
 }
 
-// With Explore switched off for the organization the tools refuse readably,
-// and switching it on is all it takes for the same call to answer.
 func TestAnalyticsToolsFollowTheExploreFlag(t *testing.T) {
 	t.Parallel()
 

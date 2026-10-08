@@ -543,9 +543,8 @@ func (r *PostgresReader) WithRiskFindings(service *RiskFindingsService, budget O
 	return r
 }
 
-// WithAnalytics attaches the analytics catalog reads: describe, dimension
-// values and query, answered through the same engine as Explore. A nil or
-// incomplete service leaves the three tools served as stubs.
+// WithAnalytics attaches the analytics reads. A nil or incomplete service
+// leaves the three tools served as stubs.
 func (r *PostgresReader) WithAnalytics(service *AnalyticsService) *PostgresReader {
 	if r != nil && service.valid() {
 		r.analytics = service

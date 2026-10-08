@@ -15,7 +15,7 @@ import (
 )
 
 // stubAnalyticsEngine answers from the default catalog and records what it
-// was asked, so a test can see the request reach the engine unchanged.
+// was asked.
 type stubAnalyticsEngine struct {
 	result        *analytics.QueryResult
 	values        []analytics.DimensionValue
@@ -49,7 +49,7 @@ func (s *stubAnalyticsEngine) Values(_ context.Context, tenant analytics.Tenant,
 }
 
 // stubAnalyticsProjects resolves one project for every caller, or refuses
-// every caller, and records what it was asked to resolve.
+// every caller.
 type stubAnalyticsProjects struct {
 	project ResolvedProject
 	err     error
@@ -155,8 +155,6 @@ func TestAnalyticsToolsDeclareTheirContract(t *testing.T) {
 		require.NotContains(t, schema.Properties, "project_slug", "an explicit-project tool names the project by ID: %s", name)
 	}
 
-	// The query schema restates the compiler's vocabulary and bounds, so a
-	// model sees them before it is refused for crossing one.
 	var query struct {
 		Required   []string `json:"required"`
 		Properties struct {
@@ -214,9 +212,6 @@ func TestAnalyticsToolsDeclareTheirContract(t *testing.T) {
 	require.Equal(t, analytics.MaxValuesLimit, values.Properties.Limit.Maximum)
 }
 
-// Without an engine the three tools keep their names, schemas, audiences and
-// authorization and refuse readably, so the catalogue has one shape in every
-// deployment.
 func TestAnalyticsToolsStubWithoutAService(t *testing.T) {
 	t.Parallel()
 
@@ -265,7 +260,6 @@ func TestDescribeAnalyticsCatalogServesTheCatalog(t *testing.T) {
 	require.Equal(t, []string{"none", "hour", "day", "week", "month"}, output.Grains)
 	require.Equal(t, AnalyticsLimits{MaxDimensions: 3, MaxFilterValues: 100, DefaultLimit: 100, MaxLimit: 1000, DefaultValuesLimit: 50, MaxValuesLimit: 200}, output.Limits)
 
-	// Every dataset the catalog declares is served, in declaration order.
 	declared := make([]string, 0, len(analytics.Default.Datasets()))
 	for _, ds := range analytics.Default.Datasets() {
 		declared = append(declared, ds.Name)
@@ -301,8 +295,6 @@ func TestDescribeAnalyticsCatalogServesTheCatalog(t *testing.T) {
 	require.NotEmpty(t, toolFields["mcp_server"].Description)
 	require.Nil(t, toolFields["tool_name"].Lookup)
 
-	// The flag was evaluated for this organization and project, and the
-	// project resolved exactly as named.
 	require.Equal(t, feature.FlagExplore, h.flags.flag)
 	require.Equal(t, map[string]string{"organization": "org", "slug": "org/project"}, h.flags.groups)
 	require.Equal(t, []FindMCPInput{{ProjectID: h.project.ID.String(), ProjectSlug: "", Query: "", Cursor: "", Limit: 0, Readiness: ""}}, h.projects.inputs)
@@ -340,8 +332,6 @@ func TestAnalyticsToolsRefuseWhenExploreIsOff(t *testing.T) {
 	require.Zero(t, h.engine.calls)
 }
 
-// project:read on the exact project comes first: a caller who cannot read a
-// project learns nothing about it, not even whether analytics is on.
 func TestAnalyticsToolsRequireProjectReadBeforeAnythingElse(t *testing.T) {
 	t.Parallel()
 
@@ -415,8 +405,6 @@ func TestRunAnalyticsQueryHandsTheRequestToTheEngineUnchanged(t *testing.T) {
 	require.Equal(t, "Bash", output.Rows[0]["tool_name"])
 	require.EqualValues(t, 3, output.Rows[0]["calls"])
 
-	// An ungrouped request passes its mode through and carries nothing the
-	// mode has no use for; an omitted grain reaches the compiler as none.
 	_, err = h.invoke(t, runAnalyticsQueryToolName, h.queryArguments(`,"ungrouped":true,"dimensions":["tool_call","session"]`))
 	require.NoError(t, err)
 	require.True(t, h.engine.request.Ungrouped)
@@ -486,8 +474,6 @@ func TestListAnalyticsDimensionValuesListsWhatTheEngineReturns(t *testing.T) {
 	require.Zero(t, h.engine.valuesRequest.Limit, "an omitted limit reaches the engine as its default")
 }
 
-// The schema rejects what the compiler would refuse anyway, so a model is
-// told before the call and the resolver and engine never see it.
 func TestAnalyticsToolSchemasRejectWhatTheCompilerWouldRefuse(t *testing.T) {
 	t.Parallel()
 

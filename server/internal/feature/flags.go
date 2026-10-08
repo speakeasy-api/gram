@@ -94,17 +94,10 @@ const (
 	// Key matches the dashboard's page-level flag so a single PostHog flag
 	// controls both the UI and the API surface.
 	FlagRiskWatchdog Flag = "gram-risk-watchdog"
-	// FlagExplore gates Explore, the dashboard's analytics query builder, and
-	// the Platform MCP tools that expose the same semantic query API
-	// (describe_analytics_catalog, list_analytics_dimension_values and
-	// run_analytics_query). The key matches the dashboard's page-level flag
-	// so one PostHog flag controls both surfaces. Evaluated server-side at
-	// invocation time with distinct id = organization id and the
-	// organization / slug groups (OrgProjectGroups); targeted by PostHog
-	// organization group (org slug), like FlagBudgets. Fails closed: a missing
-	// key, a disabled provider or an error reads as off. A rollout gate, not
-	// authorization: the queries behind it are scoped by project:read
-	// whatever it says. Removed once Explore is GA.
+	// FlagExplore gates Explore and the Platform MCP analytics tools. The key
+	// matches the dashboard's page-level flag so one PostHog flag controls
+	// both surfaces; targeted by organization group (org slug), like
+	// FlagBudgets. A rollout gate, not authorization. Removed once Explore is GA.
 	FlagExplore Flag = "gram-explore"
 	// FlagRiskLLMAnalyzer selects the engine behind an organization's secret,
 	// PII, prompt injection and destructive tool call detection on both the

@@ -78,8 +78,7 @@ const (
 )
 
 // TimeGrains is every grain a grouped query may bucket by, narrowest first
-// after none. The compiler admits exactly these, and a surface that lists
-// them to a caller reads this rather than restating it.
+// after none.
 var TimeGrains = []TimeGrain{TimeGrainNone, TimeGrainHour, TimeGrainDay, TimeGrainWeek, TimeGrainMonth}
 
 // Guardrails are enforced in the compiler, not the transport, so a direct Go

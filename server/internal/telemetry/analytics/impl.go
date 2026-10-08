@@ -49,8 +49,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 }
 
 // Engine is the query path this service answers through, for a surface that
-// authorizes its own callers and must still answer from the same catalog,
-// compiler and runner.
+// authorizes its own callers.
 func (s *Service) Engine() *Engine {
 	return s.engine
 }

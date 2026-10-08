@@ -12,21 +12,16 @@ import (
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 )
 
-// Engine is the query path without its transport: the catalog bound to its
-// loaders, and the connection plans run on. The analytics RPC and the
-// Platform MCP both answer through one, so a request is validated, compiled
-// and run the same way whichever surface it came from, and the guardrails
-// the compiler enforces hold on both.
+// Engine is the query path without its transport, shared by the analytics
+// RPC and the Platform MCP: the catalog bound to its loaders and the
+// connection plans run on.
 type Engine struct {
 	catalog *Catalog
 	ch      Querier
 }
 
 // NewEngine binds the default catalog's lookups to their loaders over db and
-// runs plans on ch. The catalog declares the lookups; the engine is what can
-// load them. A declared lookup without a loader is a programming error of the
-// same kind as a half-declared dataset, so it fails here rather than reading
-// raw values in production.
+// runs plans on ch; a lookup without a loader is a programming error.
 func NewEngine(db *pgxpool.Pool, ch Querier) (*Engine, error) {
 	catalog, err := Default.WithLoaders(map[string]LookupLoader{
 		MCPServerDisplayNamesLookup: mcpServerDisplayNames(hooksRepo.New(db)),
@@ -45,16 +40,14 @@ func (e *Engine) Catalog() *Catalog {
 // QueryResult is a run query: the plan that answered it and its rows.
 type QueryResult struct {
 	Dataset string
-	// Plan is the stable diagnostic identifier of how the query was answered,
-	// deliberately not a table name.
+	// Plan is a stable diagnostic identifier, not a table name.
 	Plan    string
 	Columns []Column
 	Rows    []Row
 }
 
-// Query loads the lookups the request reads, compiles it against the catalog
-// and runs it. A request the compiler rejects comes back as an *Error naming
-// what is wrong; any other error is a failure of the engine, not the request.
+// Query loads the lookups the request reads, compiles it and runs it. A
+// request the compiler rejects comes back as an *Error.
 func (e *Engine) Query(ctx context.Context, tenant Tenant, req Request) (*QueryResult, error) {
 	lookups, err := e.catalog.LoadLookups(ctx, tenant, req.Dataset, req.Reads())
 	if err != nil {
@@ -71,9 +64,8 @@ func (e *Engine) Query(ctx context.Context, tenant Tenant, req Request) (*QueryR
 	return &QueryResult{Dataset: plan.Dataset, Plan: plan.Name, Columns: plan.Columns, Rows: rows}, nil
 }
 
-// Values lists the values a dimension holds inside a window, most frequent
-// first, read through the dimension's lookup the way a query reads it. Errors
-// are as for Query.
+// Values lists a dimension's values inside a window, most frequent first,
+// read through its lookup like a query. Errors are as for Query.
 func (e *Engine) Values(ctx context.Context, tenant Tenant, req ValuesRequest) ([]DimensionValue, error) {
 	lookups, err := e.catalog.LoadLookups(ctx, tenant, req.Dataset, []string{req.Dimension})
 	if err != nil {
@@ -90,10 +82,9 @@ func (e *Engine) Values(ctx context.Context, tenant Tenant, req ValuesRequest) (
 	return values, nil
 }
 
-// mcpServerDisplayNames loads a project's hook server-name overrides as the
-// map mcp_server reads through: raw name to display name. It is one indexed
-// Postgres read per request, since the overrides are mutable settings and
-// a query must speak the names the page shows now.
+// mcpServerDisplayNames loads a project's hook server-name overrides, raw
+// name to display name, on every request so a query speaks the names the
+// page shows now.
 func mcpServerDisplayNames(hooks *hooksRepo.Queries) LookupLoader {
 	return func(ctx context.Context, tenant Tenant) (map[string]string, error) {
 		projectID, err := uuid.Parse(tenant.ProjectID)
@@ -112,9 +103,8 @@ func mcpServerDisplayNames(hooks *hooksRepo.Queries) LookupLoader {
 	}
 }
 
-// The int64 nanosecond range covers the years 1678 to 2262. UnixNano is
-// undefined outside it, so a bound past it would reach the compiler as some
-// other window; representable is checked before the conversion.
+// UnixNano is undefined outside the years 1678 to 2262, so a bound is checked
+// against the int64 range before the conversion.
 var (
 	minUnixNanoTime = time.Unix(0, math.MinInt64)
 	maxUnixNanoTime = time.Unix(0, math.MaxInt64)
@@ -124,11 +114,8 @@ func representable(t time.Time) bool {
 	return !t.Before(minUnixNanoTime) && !t.After(maxUnixNanoTime)
 }
 
-// ParseWindow turns the RFC 3339 bounds of a request's window into the Unix
-// nanoseconds the compiler takes. A bound that does not parse, or lies
-// outside the years nanoseconds can hold, is an *Error with code
-// invalid_time_range naming the bound, so every surface refuses a malformed
-// window the same way the compiler refuses an empty one.
+// ParseWindow turns a request's RFC 3339 bounds into Unix nanoseconds; a
+// bound that does not parse or lies outside that range is an *Error naming it.
 func ParseWindow(from, to string) (fromUnixNano, toUnixNano int64, err error) {
 	start, err := parseBound("from", from)
 	if err != nil {

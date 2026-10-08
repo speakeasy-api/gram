@@ -241,8 +241,7 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 		"list_skill_feedback", "list_skill_suggestions", "list_skill_suggestion_feedback",
 		"create_skill", "add_skill_version", "update_skill_metadata", "list_skill_distributions",
 		"list_my_sessions", "continue_session",
-		// The analytics reads require what the analytics RPC requires:
-		// project:read on the exact project, checked in the handler.
+		// The analytics reads hold the caller to project:read in the handler.
 		describeAnalyticsCatalogToolName, listAnalyticsDimensionValuesToolName, runAnalyticsQueryToolName,
 	} {
 		require.Equal(t, ExternalAuthorizationMember, byName[name], name)
@@ -497,8 +496,6 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"mark_risk_findings_false_positive",
 		"unmark_risk_findings_false_positive",
 		listProjectToolsToolName,
-		// The analytics reads need only the project the assistant acts in and
-		// the organization's rollout flag, both of which it has.
 		describeAnalyticsCatalogToolName,
 		listAnalyticsDimensionValuesToolName,
 		runAnalyticsQueryToolName,

@@ -19,15 +19,12 @@ const (
 	listAnalyticsDimensionValuesToolName = "list_analytics_dimension_values"
 	runAnalyticsQueryToolName            = "run_analytics_query"
 
-	// analyticsFeature names the capability in refusals: the three tools are
-	// one capability, switched on together with Explore.
+	// analyticsFeature names the capability in refusals.
 	analyticsFeature = "analytics"
 )
 
-// analyticsRefusal is what an analytics tool says when it will not run. The
-// code names the kind of refusal; an invalid request also carries the
-// compiler's own reason, the position in the request that failed and the
-// value there, so an agent corrects that one field rather than guessing.
+// analyticsRefusal is what a tool says when it will not run; an invalid
+// request also names the field and value to correct.
 type analyticsRefusal struct {
 	Code    string `json:"code"`
 	Feature string `json:"feature"`
@@ -37,10 +34,8 @@ type analyticsRefusal struct {
 	Message string `json:"message"`
 }
 
-// registerAnalyticsTools registers the three analytics tools. Without a live
-// service each keeps its name, schema, audiences and authorization and
-// answers with the standard unavailable refusal, so the catalogue does not
-// change shape between deployments.
+// registerAnalyticsTools registers the three tools; without a live service
+// each is served as a stub of the same shape.
 func registerAnalyticsTools(reg *Registrar, service *AnalyticsService) {
 	meta := ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectRead}
 	live := service.valid()
@@ -106,9 +101,8 @@ func registerAnalyticsTools(reg *Registrar, service *AnalyticsService) {
 	})
 }
 
-// analyticsToolCall runs one read under the calling principal and turns the
-// service's refusals into readable error results, so a caller sees what to
-// correct rather than a failed call.
+// analyticsToolCall runs one read under the calling principal and turns
+// refusals into readable error results.
 func analyticsToolCall[Out any](ctx context.Context, call func(principal Principal) (Out, error)) (*mcp.CallToolResult, Out, error) {
 	var zero Out
 	principal, err := principalFromToolContext(ctx)
@@ -133,8 +127,7 @@ func analyticsToolCall[Out any](ctx context.Context, call func(principal Princip
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, zero, nil
 }
 
-// analyticsRefusalFor maps the errors a read can end in onto refusals. An
-// error it does not name is a failure of the call, not a refusal.
+// analyticsRefusalFor maps the errors a read can end in onto refusals.
 func analyticsRefusalFor(err error) (analyticsRefusal, bool) {
 	refusal := analyticsRefusal{Feature: analyticsFeature}
 	var invalid *analytics.Error
@@ -163,9 +156,8 @@ func analyticsRefusalFor(err error) (analyticsRefusal, bool) {
 	return refusal, true
 }
 
-// analyticsProjectSchema is the explicit-project input every analytics tool
-// takes: the exact project ID, as list_projects returns it, beside the
-// tool's own fields. The assistant injects its own project here.
+// analyticsProjectSchema is the tool's own fields beside the exact project ID
+// every analytics tool takes.
 func analyticsProjectSchema(common map[string]*jsonschema.Schema, required []string) *jsonschema.Schema {
 	properties := make(map[string]*jsonschema.Schema, len(common)+1)
 	maps.Copy(properties, common)
@@ -177,17 +169,14 @@ func dateTimeSchema(description string) *jsonschema.Schema {
 	return &jsonschema.Schema{Type: "string", Format: "date-time", Description: description}
 }
 
-// described sets the description of a schema built by a helper that takes
-// none, so an enum can still say what it is for.
+// described sets the description of a schema a helper built without one.
 func described(schema *jsonschema.Schema, description string) *jsonschema.Schema {
 	schema.Description = description
 	return schema
 }
 
-// runAnalyticsQuerySchema mirrors the analytics RPC's payload: the same
-// enums for ops, operators, grains and directions, and the compiler's bounds
-// on dimensions, filter values and limit, so the catalog of what a query may
-// say is read in one place and advertised here.
+// runAnalyticsQuerySchema mirrors the analytics RPC's payload and the
+// compiler's bounds.
 func runAnalyticsQuerySchema() *jsonschema.Schema {
 	ops := []string{analytics.AggregationCount, string(analytics.AggregationCountDistinct), string(analytics.AggregationSum), string(analytics.AggregationAvg), string(analytics.AggregationMin), string(analytics.AggregationMax), string(analytics.AggregationP50), string(analytics.AggregationP95), string(analytics.AggregationP99)}
 	measure := closedObject(map[string]*jsonschema.Schema{
