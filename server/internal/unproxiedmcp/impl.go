@@ -104,7 +104,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		return nil, err
 	}
 
-	if _, err := s.policy.ValidateHTTPURL(ctx, payload.URL); err != nil {
+	if _, err := s.policy.ValidateHTTPURL(ctx, payload.URL, guardian.WithInternalCatalog()); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid server url").LogWarn(ctx, logger)
 	}
 

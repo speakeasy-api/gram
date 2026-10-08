@@ -161,7 +161,7 @@ func (p *RemoteMCPReadinessProber) result(principal Principal, registrationID uu
 func (p *RemoteMCPReadinessProber) probe(ctx context.Context, remoteURL string, headers []remotemcprepo.RemoteMcpServerHeader, token string) (ReadinessState, string) {
 	ctx, cancel := context.WithTimeout(ctx, catalogProbeTimeout)
 	defer cancel()
-	httpClient := p.policy.Client()
+	httpClient := p.policy.Client(guardian.WithInternalCatalog())
 	httpClient.Timeout = catalogProbeTimeout
 	httpClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	baseTransport := httpClient.Transport

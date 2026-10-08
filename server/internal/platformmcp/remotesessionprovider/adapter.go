@@ -253,7 +253,7 @@ func (a *Adapter) probe(ctx context.Context, descriptor Descriptor, token string
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 
-	httpClient := a.policy.Client(guardian.WithAllowedCIDRBlocks(descriptor.TestOnlyAllowedCIDRBlocks...))
+	httpClient := a.policy.Client(guardian.WithInternalCatalog(), guardian.WithAllowedCIDRBlocks(descriptor.TestOnlyAllowedCIDRBlocks...))
 	httpClient.Timeout = probeTimeout
 	httpClient.CheckRedirect = func(*http.Request, []*http.Request) error { return errRedirectRejected }
 	authRT := &authorizationRoundTripper{

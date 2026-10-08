@@ -191,8 +191,8 @@ type Proxy struct {
 	GuardianPolicy *guardian.Policy
 
 	// GuardianClientOptions are applied to every HTTP client built from
-	// GuardianPolicy for this target. Remote MCP targets leave this nil so
-	// user-controlled upstream URLs get the policy's full SSRF enforcement.
+	// GuardianPolicy for this target. Remote MCP targets leave this nil;
+	// the proxy opts into the configured, destination-scoped catalog rule.
 	// Tunnel-backed targets use guardian.WithAllowedCIDRBlocks to permit
 	// dialing the tunnel gateway's cluster-internal (RFC1918) advertise
 	// address — those addresses come from the trusted route store, not from
@@ -973,7 +973,8 @@ func (p *Proxy) forwardRequest(
 		}
 	}
 
-	client := p.GuardianPolicy.Client(p.GuardianClientOptions...)
+	options := append([]guardian.ClientOption{guardian.WithInternalCatalog()}, p.GuardianClientOptions...)
+	client := p.GuardianPolicy.Client(options...)
 	if p.DisableRedirects || p.CallerAssertion != nil {
 		client.CheckRedirect = func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse

@@ -146,6 +146,7 @@ type httpClientOptions struct {
 	dialTimeout       *time.Duration
 	resilience        *resilienceOptions
 	checkRedirect     func(req *http.Request, via []*http.Request) error
+	internalCatalog   bool
 }
 
 // ClientOption configures a single [Policy.Client] / [Policy.PooledClient]
@@ -265,6 +266,7 @@ type Policy struct {
 	limiter           Limiter
 	breaker           Breaker
 	tlsRootCAs        *x509.CertPool
+	internalCatalog   *catalogRule
 }
 
 // WithResolver is a functional option that sets the Policy's resolver.
@@ -329,6 +331,7 @@ func newPolicy(tracerProvider trace.TracerProvider, blockedCIDRBlocks []*net.IPN
 		limiter:           nil,
 		breaker:           nil,
 		tlsRootCAs:        nil,
+		internalCatalog:   nil,
 	}
 
 	for _, option := range options {
@@ -423,8 +426,18 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	// the outbound HTTP span, and stamps the gram.resilience.* dimensions
 	// derived per request by the resilience transport.
 	var base http.RoundTripper = transport
+	closeIdleConnections := transport.CloseIdleConnections
+	if opts.internalCatalog && p.internalCatalog != nil {
+		transport.Proxy = nil
+		catalog := p.catalogTransport(transport, dialer)
+		base = &catalogRoundTripper{next: transport, catalog: catalog}
+		closeIdleConnections = func() {
+			transport.CloseIdleConnections()
+			catalog.CloseIdleConnections()
+		}
+	}
 	if opts.resilience != nil {
-		base = &resilienceSpanAnnotator{next: transport}
+		base = &resilienceSpanAnnotator{next: base}
 	}
 
 	// Retries sit outside the resilience layer so every attempt is admitted
@@ -442,7 +455,7 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	}
 	roundTripper = &closeIdleRoundTripper{
 		RoundTripper:         roundTripper,
-		closeIdleConnections: transport.CloseIdleConnections,
+		closeIdleConnections: closeIdleConnections,
 	}
 
 	if opts.retryConfig == nil {
@@ -491,7 +504,7 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	}
 	client.Transport = &closeIdleRoundTripper{
 		RoundTripper:         client.Transport,
-		closeIdleConnections: transport.CloseIdleConnections,
+		closeIdleConnections: closeIdleConnections,
 	}
 	return client
 }
@@ -613,18 +626,19 @@ func (p *Policy) ValidateHost(ctx context.Context, host string) error {
 // happens via [Policy.Dialer] on the subsequent request, including each
 // redirect. Callers that fetch user-supplied content (OpenAPI specs, images)
 // should use [Policy.ValidateHTTPSURL] instead so the body cannot travel in
-// the clear.
-func (p *Policy) ValidateHTTPURL(ctx context.Context, rawURL string) (*url.URL, error) {
-	return p.validateAbsoluteURL(ctx, rawURL, []string{"http", "https"})
+// the clear. WithInternalCatalog opts into the configured catalog rule;
+// other client options do not affect URL validation.
+func (p *Policy) ValidateHTTPURL(ctx context.Context, rawURL string, options ...ClientOption) (*url.URL, error) {
+	return p.validateAbsoluteURL(ctx, rawURL, []string{"http", "https"}, options...)
 }
 
 // ValidateHTTPSURL is [Policy.ValidateHTTPURL] restricted to https. Use it for
 // user-supplied fetch URLs so the request cannot be MITM'd in transit.
-func (p *Policy) ValidateHTTPSURL(ctx context.Context, rawURL string) (*url.URL, error) {
-	return p.validateAbsoluteURL(ctx, rawURL, []string{"https"})
+func (p *Policy) ValidateHTTPSURL(ctx context.Context, rawURL string, options ...ClientOption) (*url.URL, error) {
+	return p.validateAbsoluteURL(ctx, rawURL, []string{"https"}, options...)
 }
 
-func (p *Policy) validateAbsoluteURL(ctx context.Context, rawURL string, schemes []string) (*url.URL, error) {
+func (p *Policy) validateAbsoluteURL(ctx context.Context, rawURL string, schemes []string, options ...ClientOption) (*url.URL, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse url: %w", err)
@@ -639,6 +653,17 @@ func (p *Policy) validateAbsoluteURL(ctx context.Context, rawURL string, schemes
 
 	if u.Host == "" {
 		return nil, fmt.Errorf("url must include a host")
+	}
+
+	var opts httpClientOptions
+	for _, option := range options {
+		option(&opts)
+	}
+	if opts.internalCatalog && p.internalCatalog != nil && isCatalogHost(u.Hostname()) {
+		if err := p.validateCatalogURL(ctx, u); err != nil {
+			return nil, err
+		}
+		return u, nil
 	}
 
 	if err := p.ValidateHost(ctx, u.Hostname()); err != nil {

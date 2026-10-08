@@ -133,6 +133,10 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 }
 
 func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, redisClient redis.UniversalClient) (policy *guardian.Policy, err error) {
+	catalogOption, err := guardian.WithInternalCatalogCIDR(c.String("remote-mcp-catalog-ilb-cidr"))
+	if err != nil {
+		return nil, fmt.Errorf("configure remote MCP catalog: %w", err)
+	}
 	breaker := guardian.NewNoopBreaker(logger, meterProvider)
 	limiter := guardian.NewRedisRateLimiter(logger, meterProvider, redisClient)
 
@@ -166,6 +170,7 @@ func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace
 		}
 	}
 
+	catalogOption(policy)
 	return policy, nil
 }
 
