@@ -139,6 +139,7 @@ func TestServiceGetUserProfileReturnsOnlyActiveGroupsInStableOrder(t *testing.T)
 	require.NoError(t, err)
 
 	_, err = directoryrepo.New(conn).DeleteDirectoryGroupByWorkOSID(ctx, directoryrepo.DeleteDirectoryGroupByWorkOSIDParams{
+		OrganizationID:         organizationID,
 		WorkosDeletedAt:        conv.ToPGTimestamptz(syncedAt.Add(time.Hour)),
 		WorkosLastEventID:      conv.ToPGText("event_delete_group"),
 		WorkosDirectoryGroupID: "directory_group_deleted",
@@ -206,6 +207,7 @@ func TestServiceGetUserProfileExcludesDeletedUser(t *testing.T) {
 	seedDirectoryUser(t, conn, organizationID, userID, externalID, "deleted@example.invalid", []byte(`{"department":"Engineering"}`), syncedAt)
 
 	_, err := directoryrepo.New(conn).DeleteDirectoryUserByWorkOSID(ctx, directoryrepo.DeleteDirectoryUserByWorkOSIDParams{
+		OrganizationID:        organizationID,
 		WorkosDeletedAt:       conv.ToPGTimestamptz(syncedAt.Add(time.Hour)),
 		WorkosLastEventID:     conv.ToPGText("event_delete_user"),
 		WorkosDirectoryUserID: externalID,

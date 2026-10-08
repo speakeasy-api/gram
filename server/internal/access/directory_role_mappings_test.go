@@ -53,7 +53,10 @@ func seedMappingDirectoryGroupWithWorkOSID(t *testing.T, ctx context.Context, co
 func deleteMappingDirectoryGroup(t *testing.T, ctx context.Context, conn *pgxpool.Pool, workosGroupID string) {
 	t.Helper()
 
-	_, err := directoryrepo.New(conn).DeleteDirectoryGroupByWorkOSID(ctx, directoryrepo.DeleteDirectoryGroupByWorkOSIDParams{
+	group, err := directoryrepo.New(conn).GetDirectoryGroupForMembershipByWorkOSID(ctx, workosGroupID)
+	require.NoError(t, err)
+	_, err = directoryrepo.New(conn).DeleteDirectoryGroupByWorkOSID(ctx, directoryrepo.DeleteDirectoryGroupByWorkOSIDParams{
+		OrganizationID:         group.OrganizationID,
 		WorkosDeletedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
 		WorkosLastEventID:      conv.ToPGText("event_delete_" + workosGroupID),
 		WorkosDirectoryGroupID: workosGroupID,
