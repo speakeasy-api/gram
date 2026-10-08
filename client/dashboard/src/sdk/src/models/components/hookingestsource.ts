@@ -6,7 +6,7 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 /**
- * Metadata about the local hook adapter that translated a provider event into the Gram hook contract.
+ * Metadata about the local hook adapter that translated a provider event into the Speakeasy hook contract.
  */
 export type HookIngestSource = {
   /**

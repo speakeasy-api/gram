@@ -74,7 +74,7 @@ func TestServeSharedSkillPageOnCustomDomain(t *testing.T) {
 	require.Contains(t, body, "<code>gram</code>")
 	require.NotContains(t, body, "name: domain-shared")
 	require.Contains(t, body, "/shared/skills/"+link.Token+"/SKILL.md")
-	require.Contains(t, body, "Powered by Gram")
+	require.Contains(t, body, "Powered by Speakeasy")
 }
 
 func TestServeSharedSkillPageWrongOrganizationDomain(t *testing.T) {

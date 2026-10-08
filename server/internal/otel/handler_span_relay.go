@@ -389,7 +389,7 @@ func newRelayExportRequest(spans []*otelv1.Span, includeSensitiveData bool) (*co
 		if err := transcodeOTLPMessage(span, converted); err != nil {
 			return nil, fmt.Errorf("convert span: %w", err)
 		}
-		// Resource and scope are rebuilt above. Strip Gram's private extension
+		// Resource and scope are rebuilt above. Strip Speakeasy's private extension
 		// range while retaining unknown OTLP fields for wire compatibility.
 		if err := removeGramSpanFields(converted); err != nil {
 			return nil, err

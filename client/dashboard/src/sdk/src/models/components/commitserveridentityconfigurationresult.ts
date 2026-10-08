@@ -100,7 +100,7 @@ export type CommitServerIdentityConfigurationResult = {
    */
   manualSetupRequired: boolean;
   /**
-   * A remote_session_issuer record — upstream Authorization Server identity that Gram speaks OAuth to.
+   * A remote_session_issuer record — upstream Authorization Server identity that Speakeasy speaks OAuth to.
    */
   provider?: RemoteSessionIssuer | undefined;
   /**

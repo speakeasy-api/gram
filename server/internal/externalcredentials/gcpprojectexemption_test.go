@@ -30,7 +30,7 @@ func TestCreateGcpIamCredential_PlatformAdminExemptsGramProjectTarget(t *testing
 
 // The exemption is not a blanket bypass of the screening: it forgives one
 // refusal. An address that cannot be placed in a project was never compared
-// against Gram's, so there is nothing to forgive.
+// against Speakeasy's, so there is nothing to forgive.
 func TestCreateGcpIamCredential_PlatformAdminStillRefusedMalformedTarget(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)

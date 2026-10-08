@@ -65,7 +65,7 @@ func (p *FederatedProvider) CallbackBaseURL() pgtype.Text {
 	return p.client.CallbackBaseUrl
 }
 
-// ValidateResponseIssuer implements RFC 9207 before the code leaves Gram.
+// ValidateResponseIssuer implements RFC 9207 before the code leaves Speakeasy.
 // The response issuer is never used to select a provider. The shared callback
 // has no issuer-specific redirect URI fallback, so iss is always required.
 func (p *FederatedProvider) ValidateResponseIssuer(issuer string) error {

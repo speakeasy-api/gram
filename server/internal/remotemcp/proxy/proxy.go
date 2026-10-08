@@ -214,7 +214,7 @@ type Proxy struct {
 
 	// AuthorizationOverride is the Bearer token to set on the outgoing
 	// Authorization header. The caller's incoming Authorization is
-	// always dropped (Gram-issued credentials — API keys, OAuth tokens,
+	// always dropped (Speakeasy-issued credentials — API keys, OAuth tokens,
 	// chat-session JWTs — are not meaningful upstream); when this field
 	// is non-empty the proxy emits "Authorization: Bearer <override>"
 	// instead. Use it for two flows:
@@ -223,7 +223,7 @@ type Proxy struct {
 	//     setting this to the caller's own token (the upstream MCP
 	//     server is the AS).
 	//   - OAuth-proxy token swap: set this to a stored upstream
-	//     credential resolved from the caller's Gram-issued OAuth
+	//     credential resolved from the caller's Speakeasy-issued OAuth
 	//     token.
 	//
 	// Leave empty (default) to send no Authorization upstream.
@@ -248,7 +248,7 @@ type Proxy struct {
 
 	// DisableRedirects stops the upstream client from following redirect
 	// responses; the 3xx relays to the caller as-is. Following a redirect
-	// would replay Gram's internal forward headers (including the tunnel
+	// would replay Speakeasy's internal forward headers (including the tunnel
 	// forward token) against an upstream-controlled URL.
 	DisableRedirects bool
 

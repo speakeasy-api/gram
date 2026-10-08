@@ -542,7 +542,7 @@ function DeviceAgentConfigurationForm({
           <Text muted small>
             After the first successful fetch, these settings override the same
             non-secret fields from local and MDM configuration. Device identity
-            and credentials always remain local. If Gram is temporarily
+            and credentials always remain local. If Speakeasy is temporarily
             unreachable, agents use their last-known remote configuration; an
             agent without a cached remote configuration falls back to local
             settings.

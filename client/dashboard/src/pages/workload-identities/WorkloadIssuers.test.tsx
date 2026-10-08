@@ -10,7 +10,7 @@ import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { WorkloadIssuersPage } from "./WorkloadIssuers";
-import { testPlatform } from "./setup/testPlatform";
+import { claudeTagPlatform } from "./setup/catalogFixture";
 
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -73,7 +73,7 @@ vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
 }));
 vi.mock("@gram/client/react-query/workloadPlatforms.js", () => ({
   useWorkloadPlatforms: () => ({
-    data: { platforms: [testPlatform] },
+    data: { platforms: [claudeTagPlatform] },
     isPending: false,
   }),
 }));

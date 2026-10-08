@@ -57,7 +57,7 @@ pub type AppState = Arc<RuntimeHost>;
 
 /// Singleton host shared by every per-thread task on the VM.
 pub struct RuntimeHost {
-    /// Gram identity shared with the span processor registered in
+    /// Speakeasy identity shared with the span processor registered in
     /// `init_tracing`; see [`SpanIdentity`] for the set-once discipline.
     pub identity: Arc<SpanIdentity>,
     pub started_at: Instant,
@@ -630,7 +630,7 @@ where
 {
     loop {
         // A fresh root span per driver step (one model call plus its tool
-        // executions) bounds traces and carries the thread id. Gram identity
+        // executions) bounds traces and carries the thread id. Speakeasy identity
         // rides the span processor registered on the tracer provider, which
         // stamps every exported span.
         let step_span = tracing::info_span!("agent.step", thread_id = %thread_id);

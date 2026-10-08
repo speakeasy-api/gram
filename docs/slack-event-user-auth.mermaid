@@ -1,12 +1,12 @@
 sequenceDiagram
     participant SlackUser as Slack User
     participant Slack as Slack Platform
-    participant API as Gram Server
+    participant API as Speakeasy Server
     participant DB as Database
     participant Redis as Redis
     participant Temporal as Temporal Worker
     participant Browser as User's Browser
-    participant Dashboard as Gram Dashboard
+    participant Dashboard as Speakeasy Dashboard
 
     Note over SlackUser,Dashboard: Event Arrival
     SlackUser->>Slack: @bot or DM
@@ -27,7 +27,7 @@ sequenceDiagram
     else User NOT registered
         DB-->>API: no registration
         API->>Redis: SET slack_token:{token}<br/>{slack_app_id, slack_account_id, channel_id}<br/>TTL: expiry
-        API->>Slack: chat.postEphemeral<br/>"Register your Gram account: {GRAM_SITE_URL}/slack/register?token={token}"
+        API->>Slack: chat.postEphemeral<br/>"Register your Speakeasy account: {GRAM_SITE_URL}/slack/register?token={token}"
         Slack-->>SlackUser: Ephemeral message with link
 
         Note over SlackUser,Dashboard: User clicks link
@@ -37,7 +37,7 @@ sequenceDiagram
         Note over Browser,Dashboard: Dashboard requires authentication on all routes
         Browser->>Dashboard: /slack/register?token={token}
         Dashboard->>Dashboard: No session → redirect to /login?redirect=/slack/register?token={token}
-        Browser->>Dashboard: Gram login flow (email/OAuth/etc)
+        Browser->>Dashboard: Speakeasy login flow (email/OAuth/etc)
         Dashboard->>Dashboard: Session established
         Dashboard->>Dashboard: Redirect to /slack/register?token={token}
 

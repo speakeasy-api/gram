@@ -30,7 +30,7 @@ export function RoleEditorPage(): JSX.Element {
 
   const fromMapping = !roleId && isCreateRoleFlow(params);
   // Creating a role also closes the editor; the close must not undo the
-  // navigation that carries the new role back to the mapping.
+  // navigation to the new role's page, or back to the mapping.
   const created = useRef(false);
 
   const role = roleId
@@ -43,7 +43,8 @@ export function RoleEditorPage(): JSX.Element {
   const onRoleCreated = (createdRole: Role) => {
     created.current = true;
     if (!fromMapping) {
-      leave();
+      // Stay with the new role rather than drop back to the list.
+      void navigate(`${orgRoutes.access.roles.href()}/${createdRole.id}/edit`);
       return;
     }
     const back = completeCreateRoleFlow(params, createdRole.principalUrn);
@@ -83,7 +84,14 @@ export function RoleEditorPage(): JSX.Element {
                   hideAssignments={fromMapping}
                   defaultName={fromMapping ? suggestedRoleName(params) : ""}
                   onOpenChange={(open) => {
-                    if (!open && !created.current) leave();
+                    if (open) return;
+                    // The close that follows a create is the editor resetting
+                    // for the new role's page, not the user leaving.
+                    if (created.current) {
+                      created.current = false;
+                      return;
+                    }
+                    leave();
                   }}
                   onRoleCreated={onRoleCreated}
                 />

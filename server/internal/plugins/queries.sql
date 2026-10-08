@@ -551,7 +551,7 @@ ORDER BY t.id, ec.variable_name ASC;
 -- inside the selection keeps endpoint choice and URL-host construction in
 -- lockstep, so a dangling custom-domain endpoint is never picked and emitted as
 -- a (wrong) platform URL. A server backed by an unproxied MCP server never has
--- an mcp_endpoints row (Gram never proxies it), so it's resolved instead via
+-- an mcp_endpoints row (Speakeasy never proxies it), so it's resolved instead via
 -- unproxied_mcp_servers, exposing the vendor's own URL. Servers with neither a
 -- usable endpoint nor an unproxied backing are dropped unless their stored
 -- network mode needs fail-closed validation. Private-only endpoints are picked

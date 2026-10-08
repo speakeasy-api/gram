@@ -13,7 +13,7 @@ import (
 )
 
 // searchUsersExcludingHostedPage runs one page of the internal people search the
-// way Platform MCP's search_users runs it: Gram-hosted hook sources excluded,
+// way Platform MCP's search_users runs it: Speakeasy-hosted hook sources excluded,
 // newest activity first, one person per page. cursorLastSeen is the boundary the
 // previous page observed; zero leaves the repository to re-derive it.
 func searchUsersExcludingHostedPage(t *testing.T, ctx context.Context, queries *repo.Queries, projectID uuid.UUID, window time.Time, cursor string, cursorLastSeen int64) []repo.UserSummary {
@@ -44,7 +44,7 @@ func searchUsersExcludingHostedPage(t *testing.T, ctx context.Context, queries *
 }
 
 // TestSearchUsersPaginatesPastAnExcludedLaterEvent pins that a search excluding
-// Gram-hosted hook sources advances past a person whose excluded rows run later
+// Speakeasy-hosted hook sources advances past a person whose excluded rows run later
 // than their qualifying ones.
 //
 // The cursor's boundary used to be re-derived inside the repository by looking

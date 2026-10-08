@@ -54,7 +54,7 @@ type cimdDocServer struct {
 	status int
 
 	// onRequest, when set, runs on every document fetch before the response
-	// is written. It lets a test mutate Gram's state at the exact point the
+	// is written. It lets a test mutate Speakeasy's state at the exact point the
 	// refresh handler is mid-fetch — after its purge committed, before its
 	// persist runs — which is the window a concurrent revoke lands in.
 	onRequest func()
@@ -257,7 +257,7 @@ func TestRefreshUserSessionClientCIMD(t *testing.T) {
 
 // Back-to-back refreshes of the same client must not produce back-to-back
 // upstream fetches: the second call inside the cooldown is rejected before
-// any request leaves Gram, and a client whose last read has aged past the
+// any request leaves Speakeasy, and a client whose last read has aged past the
 // window is allowed again.
 // The operator refresh applies the same downgrade rule as the authorize-time
 // refresh: a document that drops private_key_jwt is refused with an error
@@ -376,7 +376,7 @@ func TestRefreshUserSessionClientCIMD_FetchFailureStillPurges(t *testing.T) {
 }
 
 // A document that re-reads as invalid is a validation rejection the operator
-// can act on, not a Gram fault: surfaced as invalid (422) with the
+// can act on, not a Speakeasy fault: surfaced as invalid (422) with the
 // client-safe description, distinct from the unreachable-host 502.
 func TestRefreshUserSessionClientCIMD_InvalidDocumentRejected(t *testing.T) {
 	t.Parallel()
@@ -460,7 +460,7 @@ func TestRefreshUserSessionClientCIMD_DCRClientRejected(t *testing.T) {
 }
 
 // The issuer-level off switch applies to refresh like it does to /authorize:
-// an issuer whose admission mode is `disabled` cannot have Gram fetch
+// an issuer whose admission mode is `disabled` cannot have Speakeasy fetch
 // documents on its behalf, and the rejection costs no upstream request.
 func TestRefreshUserSessionClientCIMD_AdmissionDisabled(t *testing.T) {
 	t.Parallel()

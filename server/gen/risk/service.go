@@ -394,8 +394,8 @@ type CreateRiskPolicyPayload struct {
 	// to create no URL-specific allow decisions.
 	ShadowMcpAllowedUrls []string `json:"shadow_mcp_allowed_urls"`
 	// Default disposition for shadow MCP blocking policies: block_all (default)
-	// blocks every non-Gram-hosted server unless allowed, allow_all permits every
-	// server unless blocked. Only valid with the shadow_mcp source and block
+	// blocks every non-Speakeasy-hosted server unless allowed, allow_all permits
+	// every server unless blocked. Only valid with the shadow_mcp source and block
 	// action. Immutable after create — switching requires delete + recreate.
 	ShadowMcpDisposition *string
 	// For allow_all policies: complete desired canonical URL block set. Omit or

@@ -39,20 +39,20 @@ const (
 
 	// toolCallLogEventSource is the gram.event.source value this relay
 	// forwards. The topic mirrors every telemetry_logs row, and most of them
-	// are agent-reported hook rows that already leave Gram through the
+	// are agent-reported hook rows that already leave Speakeasy through the
 	// product telemetry export; forwarding those here would double-deliver
 	// them.
 	toolCallLogEventSource = "tool_call"
 )
 
-// ToolCallLogRelayHandler forwards the tool call records Gram writes when it
+// ToolCallLogRelayHandler forwards the tool call records Speakeasy writes when it
 // executes a tool to the OTLP destination a project configured for the
 // tool_call_logs data export.
 //
 // These rows never reach the product telemetry relay. They are written
 // straight to ClickHouse by telemetry.Logger and mirrored onto
 // gram.telemetry.v1.LogRecord, whereas product telemetry relays what arrived
-// at the OTLP ingest endpoints. A tool Gram runs passes through neither, so
+// at the OTLP ingest endpoints. A tool Speakeasy runs passes through neither, so
 // without this relay a customer can watch a tool call fail in Tool Logs and
 // find nothing for it in their own collector.
 //
@@ -502,7 +502,7 @@ func decodeTelemetrySpanID(value string) []byte {
 }
 
 // decodeTelemetryID converts a hex trace or span id into OTLP's byte form.
-// Gram stamps ids from the active span, but remote MCP synthesizes them from
+// Speakeasy stamps ids from the active span, but remote MCP synthesizes them from
 // a UUID when no OTel context exists, so a wrong-length or non-hex value is
 // dropped rather than failing the whole record.
 func decodeTelemetryID(value string, size int) []byte {

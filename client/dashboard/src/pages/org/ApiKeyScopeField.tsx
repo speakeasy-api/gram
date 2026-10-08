@@ -71,7 +71,7 @@ const PURPOSE_BUILT_SCOPE_OPTIONS: ApiKeyScopeOption[] = [
   {
     value: "hooks",
     title: "Hooks",
-    tagline: "For agent plugins that report AI traffic back to Gram.",
+    tagline: "For agent plugins that report AI traffic back to Speakeasy.",
     grants: [
       "Send hook events, logs, metrics, and traces",
       "Send skill content and feedback",

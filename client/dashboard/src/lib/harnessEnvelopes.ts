@@ -6,7 +6,7 @@
 // and summary generation.
 //
 // Envelopes recognized, all anchored to the start of the text:
-// - `<message-context>…</message-context>` (Gram assistant runtime) and
+// - `<message-context>…</message-context>` (Speakeasy assistant runtime) and
 //   `<notification>…</notification>` (Claude Code background tasks).
 // - OpenClaw's inbound metadata on channel-originated turns (Discord / Slack /
 //   Telegram): a "Delivery: …" hint line, "<Label> (untrusted…):" headers over a

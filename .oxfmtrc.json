@@ -14,6 +14,7 @@
     "/client/dashboard/src/components/tools-badge.tsx",
     "/client/dashboard/src/lib/constants.ts",
     "/client/dashboard/src/sdk/**",
+    "/client/dashboard/src/pages/workload-identities/setup/catalog.gen.json",
     "/hooks/sdk/**",
     "/infra/gen/**",
     "/infra/gen/**/*",

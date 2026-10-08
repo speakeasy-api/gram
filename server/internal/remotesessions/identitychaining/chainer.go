@@ -71,7 +71,7 @@ const (
 	// not write on every proxied call. Matches interactive remote sessions.
 	lastUsedCutoff = 5 * time.Minute
 
-	// maxClockSkew tolerates drift between Gram and the identity provider when
+	// maxClockSkew tolerates drift between Speakeasy and the identity provider when
 	// validating an ID-JAG's temporal claims.
 	maxClockSkew = time.Minute
 )

@@ -1,5 +1,5 @@
 // The workload assertion grant: a workload presents the identity token its
-// platform issued and receives a resource-scoped Gram session (RFC 7523 §2.1).
+// platform issued and receives a resource-scoped Speakeasy session (RFC 7523 §2.1).
 // It holds no client registration and receives no refresh token; when the
 // session lapses it presents a fresh platform token.
 

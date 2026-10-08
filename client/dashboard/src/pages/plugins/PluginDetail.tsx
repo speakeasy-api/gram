@@ -1447,7 +1447,7 @@ function PluginServerCard({
             </Badge>
           )}
           {isRemote ? (
-            // Remote/unproxied MCP servers have no Gram-side tool
+            // Remote/unproxied MCP servers have no Speakeasy-side tool
             // catalog, so the tool-collection badge is omitted.
             <Badge variant="neutral" className="text-xs">
               {mcpServer?.unproxiedMcpServerId

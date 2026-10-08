@@ -23,7 +23,7 @@ var _ = Service("chat", func() {
 			security.ChatSessionsTokenPayload()
 			Attribute("search", String, "Search query (searches chat ID, user ID, user name, and title)")
 			Attribute("external_user_id", String, "Filter by external user ID")
-			Attribute("user_id", String, "Filter by Gram user ID")
+			Attribute("user_id", String, "Filter by Speakeasy user ID")
 			Attribute("source", String, "Filter by agent source. Comma-separated list of exact source values (e.g. 'claude-code,Codex,playground') matched against each session's inferred source; empty for no filter. Use chat.listSources to discover the available values.")
 			Attribute("assistant_id", String, "Filter to chats produced by this assistant", func() {
 				Format(FormatUUID)
@@ -654,7 +654,7 @@ var ChatParticipant = Type("ChatParticipant", func() {
 	Attribute("provider", String, "Directory provider that identifies this conversation participant.")
 	Attribute("provider_user_id", String, "Provider identity observed in the message envelope.")
 	Attribute("provider_team_id", String, "Workspace resolved from the organization directory, when unambiguous.")
-	Attribute("user_id", String, "Explicitly mapped Gram person at capture time; this attribution grants no permissions.")
+	Attribute("user_id", String, "Explicitly mapped Speakeasy person at capture time; this attribution grants no permissions.")
 	Attribute("display_name", String, "Directory display name at capture time.")
 	Required("provider", "provider_user_id")
 })

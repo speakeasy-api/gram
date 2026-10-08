@@ -28,7 +28,7 @@ const (
 	OwnedAgentTransfer  OwnerPredicate = "owned_agent_transfer"
 )
 
-// HumanContext is identity proven by an ordinary, nonsupport Gram session or
+// HumanContext is identity proven by an ordinary, nonsupport Speakeasy session or
 // scoped OAuth consent and an active organization membership.
 type HumanContext struct {
 	Auth   *contextvalues.AuthContext
@@ -70,7 +70,7 @@ func NewAuthorizer(engine authorizationEngine) *Authorizer {
 }
 
 // RequireHuman rejects credentials that only carry human attribution. Only an
-// ordinary validated Gram session with an active membership is accepted.
+// ordinary validated Speakeasy session with an active membership is accepted.
 func (a *Authorizer) RequireHuman(ctx context.Context, dbtx repo.DBTX) (HumanContext, error) {
 	return a.requireHumanWithMemberships(ctx, dbtx)
 }

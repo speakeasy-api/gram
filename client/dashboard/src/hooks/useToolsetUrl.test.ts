@@ -25,7 +25,7 @@ describe("platformEndpointSlug", () => {
 });
 
 describe("gatewayInstallPageUrl", () => {
-  it("links a platform endpoint on the Gram origin", () => {
+  it("links a platform endpoint on the Speakeasy origin", () => {
     expect(
       gatewayInstallPageUrl([
         { slug: "on-custom-domain", customDomainId: "domain-1" },
@@ -34,7 +34,7 @@ describe("gatewayInstallPageUrl", () => {
     ).toBe("https://gram.example/mcp/on-gram/install");
   });
 
-  it("marks a custom-domain-only slug so the Gram origin can resolve it", () => {
+  it("marks a custom-domain-only slug so the Speakeasy origin can resolve it", () => {
     expect(
       gatewayInstallPageUrl([
         { slug: "on-custom-domain", customDomainId: "domain-1" },

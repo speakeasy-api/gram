@@ -111,7 +111,7 @@ func TestParseRefusesInvalidPlatforms(t *testing.T) {
 		{name: "external icon", from: "icon: /access-hub/example.svg", to: "icon: https://evil.example.com/x.svg", wantErr: "dashboard's origin"},
 		{name: "tab-split icon", from: "icon: /access-hub/example.svg", to: "icon: \"/\\t/evil.example.com/x.svg\"", wantErr: "dashboard's origin"},
 		{name: "external image", from: "- type: agent_picker", to: "- type: image\n          src: https://evil.example.com/x.png\n          alt: x", wantErr: "dashboard's origin"},
-		{name: "unknown computed value", from: "value: token_endpoint", to: "value: client_secret", wantErr: "not one Gram derives"},
+		{name: "unknown computed value", from: "value: token_endpoint", to: "value: client_secret", wantErr: "not one Speakeasy derives"},
 		{name: "connect before create", from: "      title: Organization\n      phase: collect", to: "      title: Organization\n      phase: connect", wantErr: "collect, then create, then connect"},
 		{name: "no create step", from: "phase: create", to: "phase: collect", wantErr: "exactly one create step"},
 		{name: "issuer with a query", from: "value: https://issuer.example.com\n", to: "value: https://issuer.example.com?tenant=x\n", wantErr: "no userinfo, query or fragment"},
@@ -126,7 +126,7 @@ func TestParseRefusesInvalidPlatforms(t *testing.T) {
 		{name: "checklist item without a label", from: "- type: agent_picker", to: "- type: checklist_item\n          markdown: Leave empty", wantErr: "needs a label"},
 		{name: "checklist item with nothing to do", from: "- type: agent_picker", to: "- type: checklist_item\n          label: Resource", wantErr: "computed value or markdown"},
 		{name: "checklist item with both", from: "- type: agent_picker", to: "- type: checklist_item\n          label: Resource\n          value: token_endpoint\n          markdown: Leave empty", wantErr: "not both"},
-		{name: "checklist item with unknown value", from: "- type: agent_picker", to: "- type: checklist_item\n          label: Resource\n          value: client_secret", wantErr: "not one Gram derives"},
+		{name: "checklist item with unknown value", from: "- type: agent_picker", to: "- type: checklist_item\n          label: Resource\n          value: client_secret", wantErr: "not one Speakeasy derives"},
 		{name: "checklist item with an image", from: "- type: agent_picker", to: "- type: checklist_item\n          label: Resource\n          markdown: \"![x](https://evil.example.com/px)\"", wantErr: "use an image block"},
 		{name: "collect after create", from: "      title: Console\n      phase: connect", to: "      title: Console\n      phase: collect", wantErr: "collect, then create, then connect"},
 	}

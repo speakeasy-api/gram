@@ -792,7 +792,7 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 	// lookup is signup-only: ordinary login must not pay the extra WorkOS
 	// round trip. Fail open on a lookup error so a temporary API problem
 	// cannot block new users. Signup intent is still stored either way —
-	// a WorkOS account with no Gram org still provisions on callback.
+	// a WorkOS account with no Speakeasy org still provisions on callback.
 	screenHint := ""
 	if orgName != "" {
 		screenHint = "sign-up"
@@ -1215,7 +1215,7 @@ func loadTrial(
 }
 
 // applySignupWhitelist keeps the book-a-demo gate off for a signup that
-// reused a Gram identity. Prefer an already-whitelisted membership; otherwise
+// reused a Speakeasy identity. Prefer an already-whitelisted membership; otherwise
 // whitelist the org the session is about to activate.
 func (s *Service) applySignupWhitelist(ctx context.Context, organizations []authsessions.Organization, activeOrgID string, orgMetadata orgRepo.OrganizationMetadatum) (string, orgRepo.OrganizationMetadatum, error) {
 	if orgMetadata.Whitelisted {
@@ -1408,7 +1408,7 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *auth
 	return fmt.Sprintf("/%s/projects/%s/assistants/new?disposition=%s", org.Slug, projects[0].Slug, dispositionAssistants), nil
 }
 
-// persistProvisionedOrganization writes the Gram-side records for an
+// persistProvisionedOrganization writes the Speakeasy-side records for an
 // organization that already exists in WorkOS, and returns the row as it stood
 // before any trial arming. A trial armed under opts.ProvisionTrial joins the
 // same transaction, so a failure leaves neither behind.
@@ -1729,7 +1729,7 @@ func supportIntentKey(nonce string) string {
 }
 
 // validateAuthNonce validates that the OAuth callback was initiated by a Login call
-// that Gram controls, preventing CSRF attacks where an attacker crafts a
+// that Speakeasy controls, preventing CSRF attacks where an attacker crafts a
 // callback URL with a stolen authorization code. Without this, the state param
 // is caller-controlled base64 JSON with no server-side binding — an attacker
 // can forge it freely.

@@ -76,7 +76,9 @@ describe("copyable setup values", () => {
     const { container } = render(body({ apiKey: "EXAMPLE_GENERATED_KEY" }));
     expect(container.innerHTML).not.toContain("EXAMPLE_GENERATED_KEY");
     expect(
-      screen.getByText("Gram-Project=default,Gram-Key=••••••••"),
+      screen.getByText(
+        "Speakeasy-AI-Project=default,Speakeasy-AI-Key=••••••••",
+      ),
     ).toBeTruthy();
     expect(
       screen.getByText(
@@ -86,7 +88,10 @@ describe("copyable setup values", () => {
     for (const [label, value] of [
       ["endpoint", "https://app.getgram.ai/rpc/hooks.otel"],
       ["protocol", "http/json"],
-      ["headers", "Gram-Project=default,Gram-Key=EXAMPLE_GENERATED_KEY"],
+      [
+        "headers",
+        "Speakeasy-AI-Project=default,Speakeasy-AI-Key=EXAMPLE_GENERATED_KEY",
+      ],
     ] as const) {
       fireEvent.click(copy(label));
       await waitFor(() => expect(copy(label).textContent).toContain("Copied"));
@@ -148,7 +153,7 @@ describe("copyable setup values", () => {
       fireEvent.click(copy("headers"));
       await waitFor(() =>
         expect(writeText).toHaveBeenLastCalledWith(
-          "Gram-Project=default,Gram-Key=EXAMPLE_RETRY_KEY",
+          "Speakeasy-AI-Project=default,Speakeasy-AI-Key=EXAMPLE_RETRY_KEY",
         ),
       );
     },

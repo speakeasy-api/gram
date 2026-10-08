@@ -5,7 +5,7 @@ import { TunneledMcpConnectionsPanel } from "./TunneledMcpConnectionsPanel";
 import { UnproxiedMcpOverviewTab } from "./UnproxiedMcpOverviewTab";
 
 // Picks the overview for the server's backend. Unproxied servers have no
-// Gram-proxied traffic and get their own scoped-down tab; tunneled servers
+// Speakeasy-proxied traffic and get their own scoped-down tab; tunneled servers
 // get the live connections panel on top of the shared usage dashboard.
 export function OverviewTab({
   mcpServer,
