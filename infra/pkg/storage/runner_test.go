@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"strings"
@@ -335,6 +336,66 @@ func TestProcess_DeadlineAndShutdownNackUncommitted(t *testing.T) {
 		require.Zero(t, state.acks.Load())
 		require.Equal(t, int32(1), state.nacks.Load())
 	})
+}
+
+func TestProcess_ObjectWriteFailureAccounting(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		err      error
+		shutdown bool
+		failures int64
+	}{
+		{name: "shutdown cancellation", err: context.Canceled, shutdown: true, failures: 0},
+		{name: "independent cancellation", err: context.Canceled, failures: 1},
+		{name: "processing deadline", err: context.DeadlineExceeded, failures: 1},
+		{name: "write error during shutdown", err: errors.New("upload failed"), shutdown: true, failures: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+
+			r, reader := testRunner(t, storeFunc(func(context.Context, Object, func(io.Writer) error) error {
+				if tc.shutdown {
+					cancel()
+				}
+
+				return fmt.Errorf("commit object: %w", tc.err)
+			}), false, Settings{})
+			var logs bytes.Buffer
+			r.config.Logger = slog.New(slog.NewJSONHandler(&logs, nil))
+			message, state := testDelivery("payload", "region=one", time.Now())
+
+			r.process(ctx, []*delivery{message})
+
+			require.Zero(t, state.acks.Load())
+			require.Equal(t, int32(1), state.nacks.Load())
+			require.Equal(t, int(tc.failures), strings.Count(logs.String(), "write storage partition"))
+
+			var data metricdata.ResourceMetrics
+			require.NoError(t, reader.Collect(t.Context(), &data))
+
+			var failures int64
+			for _, scope := range data.ScopeMetrics {
+				for _, m := range scope.Metrics {
+					if m.Name != "storage_subscription_failures" {
+						continue
+					}
+
+					for _, point := range m.Data.(metricdata.Sum[int64]).DataPoints {
+						reason, _ := point.Attributes.Value("reason")
+						require.Equal(t, "object_write", reason.AsString())
+						failures += point.Value
+					}
+				}
+			}
+
+			require.Equal(t, tc.failures, failures)
+		})
+	}
 }
 
 func TestProcess_PoisonRowsDoNotDiscardGoodRows(t *testing.T) {

@@ -54,6 +54,10 @@ func ParseBucketMapping(raw string) (map[string]string, error) {
 		return nil, fmt.Errorf("close storage bucket mapping: %w", err)
 	}
 	if _, err := decoder.Token(); err != io.EOF {
+		if err != nil {
+			return nil, fmt.Errorf("read trailing storage bucket data: %w", err)
+		}
+
 		return nil, fmt.Errorf("unexpected data after storage bucket mapping")
 	}
 

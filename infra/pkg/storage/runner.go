@@ -417,7 +417,8 @@ func (r *runner) writePartitions(ctx context.Context, groups map[string][]*deliv
 				if recover() != nil {
 					err = errors.New("panic encoding storage partition")
 				}
-				if err != nil {
+				shutdown := ctx.Err() == context.Canceled && errors.Is(err, context.Canceled)
+				if err != nil && !shutdown {
 					r.failures.Add(ctx, 1, r.label, metric.WithAttributes(attr.StorageReason("object_write")))
 					r.config.Logger.ErrorContext(ctx, "write storage partition", attr.SlogError(err), attr.SlogSubscriptionProtoName(r.def.ProtoName))
 				}

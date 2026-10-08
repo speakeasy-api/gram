@@ -129,6 +129,45 @@ func TestRun_StreamFailureCancelsActiveAndRejectsQueued(t *testing.T) {
 	require.Equal(t, int32(1), rejected.Load())
 }
 
+func TestRun_StreamFailureWaitsForHandlerSettlement(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		active, release := make(chan struct{}), make(chan struct{})
+		var cancelled, settled atomic.Bool
+		failure := errors.New("stream disconnected")
+		done := make(chan error, 1)
+		go func() {
+			done <- Run(t.Context(), Settings{MaxMessages: 1, MaxLatency: time.Hour, OutstandingMessages: 2, OutstandingBytes: 10},
+				func(ctx context.Context, deliver func(context.Context, int)) error {
+					deliver(ctx, 1)
+					<-active
+					return failure
+				}, func(int) int { return 1 }, func(int) {},
+				func(ctx context.Context, _ []int) {
+					close(active)
+					<-ctx.Done()
+					cancelled.Store(true)
+					<-release
+					settled.Store(true)
+				})
+		}()
+
+		synctest.Wait()
+		require.True(t, cancelled.Load())
+		require.False(t, settled.Load())
+		select {
+		case <-done:
+			t.Fatal("Run returned before the active handler settled")
+		default:
+		}
+
+		close(release)
+		require.ErrorIs(t, <-done, failure)
+		require.True(t, settled.Load())
+	})
+}
+
 func TestRun_ByteThresholdFlushesBeforeLatency(t *testing.T) {
 	t.Parallel()
 

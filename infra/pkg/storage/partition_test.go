@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -85,4 +86,14 @@ func TestParseBucketMapping(t *testing.T) {
 	mapping, err := ParseBucketMapping(`{"event-archive":"123-dev-event-archive"}`)
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{"event-archive": "123-dev-event-archive"}, mapping)
+}
+
+func TestParseBucketMapping_PreservesTrailingSyntaxError(t *testing.T) {
+	t.Parallel()
+
+	_, err := ParseBucketMapping(`{"archive":"123-bucket"} xyz`)
+	var syntaxErr *json.SyntaxError
+	require.ErrorAs(t, err, &syntaxErr)
+	require.ErrorContains(t, err, "read trailing storage bucket data")
+	require.ErrorContains(t, err, "invalid character 'x'")
 }

@@ -93,11 +93,14 @@ func (s BatchReceiveSettings) bufferLimits() (messages, bytes int) {
 
 // boundBatchReceiver also bounds payloads retained by callbacks waiting for an
 // application permit. Preserve any tighter flow-control limits from the caller.
-func (s *psSubscriber[M]) boundBatchReceiver(settings BatchReceiveSettings) {
+// The returned cleanup restores the caller's limits after the receive loop ends.
+func (s *psSubscriber[M]) boundBatchReceiver(settings BatchReceiveSettings) func() {
 	if settings.MaxBufferedMessages <= 0 && settings.MaxBufferedBytes <= 0 {
-		return
+		return func() {}
 	}
 
+	originalMessages := s.sub.ReceiveSettings.MaxOutstandingMessages
+	originalBytes := s.sub.ReceiveSettings.MaxOutstandingBytes
 	messages, bytes := settings.bufferLimits()
 	if limit := s.sub.ReceiveSettings.MaxOutstandingMessages; limit > 0 {
 		messages = min(messages, limit)
@@ -108,6 +111,11 @@ func (s *psSubscriber[M]) boundBatchReceiver(settings BatchReceiveSettings) {
 
 	s.sub.ReceiveSettings.MaxOutstandingMessages = messages
 	s.sub.ReceiveSettings.MaxOutstandingBytes = bytes
+
+	return func() {
+		s.sub.ReceiveSettings.MaxOutstandingMessages = originalMessages
+		s.sub.ReceiveSettings.MaxOutstandingBytes = originalBytes
+	}
 }
 
 type SubscriberBroker interface {
@@ -318,7 +326,8 @@ func (s *psSubscriber[M]) handle(ctx context.Context, m incomingMessage, f func(
 // f returns an error (or panics) the whole batch is nacked. Messages that fail
 // to unmarshal are nacked individually and excluded from the batch handed to f.
 func (s *psSubscriber[M]) ReceiveBatch(ctx context.Context, settings BatchReceiveSettings, f func(context.Context, []M, []MessageMetadata) error) error {
-	s.boundBatchReceiver(settings)
+	restore := s.boundBatchReceiver(settings)
+	defer restore()
 
 	return s.batchLoop(ctx, settings, func(ctx context.Context, deliver func(incomingMessage)) error {
 		return s.sub.Receive(ctx, func(_ context.Context, m *pubsub.Message) {
@@ -345,7 +354,8 @@ func (s *psSubscriber[M]) ReceiveBatch(ctx context.Context, settings BatchReceiv
 // whole batch. Messages that fail to unmarshal are nacked individually and
 // excluded from f.
 func (s *psSubscriber[M]) ReceiveBatchWithResult(ctx context.Context, settings BatchReceiveSettings, f func(context.Context, []BatchMessage[M]) error) error {
-	s.boundBatchReceiver(settings)
+	restore := s.boundBatchReceiver(settings)
+	defer restore()
 
 	return s.batchLoopWithResult(ctx, settings, func(ctx context.Context, deliver func(incomingMessage)) error {
 		return s.sub.Receive(ctx, func(_ context.Context, m *pubsub.Message) {
