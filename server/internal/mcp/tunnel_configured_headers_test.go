@@ -19,6 +19,7 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -330,4 +331,46 @@ func TestTunnelConfiguredHeaders_MetaMember(t *testing.T) {
 	// The gateway call carried no region, and the optional pass-through
 	// sends nothing rather than failing.
 	require.Empty(t, forwarded.Values("X-Jamf-Region"))
+}
+
+// Headers are loaded by tunnel id: a tunnel in another project never sends
+// this project's headers, and each tunnel sends its own.
+func TestTunnelConfiguredHeaders_CrossProjectIsolation(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	slug := "other-" + uuid.NewString()[:8]
+	other, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: slug, Slug: slug, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	otherAuth := *authCtx
+	otherAuth.ProjectID = &other.ID
+	otherCtx := contextvalues.SetAuthContext(ctx, &otherAuth)
+
+	gatewayA := &fakeTunnelGateway{t: t, agentSessionID: "agent-a", backendSessionID: "backend-a", legacy: false, dead: false, busy: false, challenge: ""}
+	fixtureA := newPublicTunnelFixture(t, ctx, ti, gatewayA, true)
+	seedTunnelHeaders(t, ctx, ti, *authCtx.ProjectID, fixtureA.tunnelID, false)
+
+	gatewayB := &fakeTunnelGateway{t: t, agentSessionID: "agent-b", backendSessionID: "backend-b", legacy: false, dead: false, busy: false, challenge: ""}
+	fixtureB := newPublicTunnelFixture(t, otherCtx, ti, gatewayB, true)
+	_, err = tunneledmcp.NewHeaders(ti.logger, ti.conn, ti.enc).CreateServerHeader(ctx, tunneledmcprepo.CreateServerHeaderParams{
+		Name: "X-Jamf-Tenant", Description: conv.ToPGText(""), IsRequired: true, IsSecret: false,
+		Value: conv.ToPGText("tenant-b"), ValueFromRequestHeader: conv.PtrToPGTextEmpty(nil),
+		TunneledMcpServerID: fixtureB.tunnelID, ProjectID: other.ID,
+	})
+	require.NoError(t, err)
+
+	for _, fixture := range []publicTunnelFixture{fixtureA, fixtureB} {
+		w := httptest.NewRecorder()
+		require.NoError(t, ti.service.ServePublic(w, publicTunnelRequest(fixture.endpointSlug, makeInitializeBody(), "")))
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	}
+
+	requireConfiguredHeadersForwarded(t, gatewayA.lastForward(), "tenant-1")
+	forwardedB := gatewayB.lastForward()
+	require.Equal(t, "tenant-b", forwardedB.Get("X-Jamf-Tenant"))
+	require.Empty(t, forwardedB.Values("X-Api-Key"))
+	require.Empty(t, forwardedB.Values("X-Jamf-Region"))
 }

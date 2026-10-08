@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 )
 
@@ -300,26 +301,145 @@ func TestServerHeaderConcurrentCreatesOfOneNameConflict(t *testing.T) {
 	require.Equal(t, 1, succeeded)
 }
 
-func TestServerHeaderCreateRacingServerDeleteLeavesNoLiveHeader(t *testing.T) {
+// A create that waits on the tunnel lock while the tunnel is deleted must not
+// leave a live header behind: it re-reads the tunnel under the lock and finds
+// it gone.
+func TestServerHeaderCreateBlockedBehindServerDeleteIsNotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	authCtx := requireAuthContext(t, ctx)
+	server := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
 
-	for range 5 {
-		server := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
-		var wg sync.WaitGroup
-		wg.Go(func() {
-			_, _ = ti.service.CreateServerHeader(ctx, createHeaderPayload(server.ID, "X-Tenant"))
-		})
-		wg.Go(func() {
-			require.NoError(t, ti.service.DeleteServer(ctx, &gen.DeleteServerPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, ID: server.ID.String()}))
-		})
-		wg.Wait()
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	_, err := repo.New(tx).GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{ID: server.ID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
 
-		count, err := repo.New(ti.conn).CountLiveServerHeaders(ctx, server.ID)
+	var createErr error
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		_, createErr = ti.service.CreateServerHeader(ctx, createHeaderPayload(server.ID, "X-Tenant"))
+	})
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), 1)
+
+	_, err = repo.New(tx).DeleteServer(ctx, repo.DeleteServerParams{ID: server.ID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+	wg.Wait()
+
+	requireOopsCode(t, createErr, oops.CodeNotFound)
+	count, err := repo.New(ti.conn).CountLiveServerHeaders(ctx, server.ID)
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
+// A tunnel delete that waits on the lock held by a header write cascades to
+// the header that write committed.
+func TestServerDeleteBlockedBehindHeaderWriteCascadesIt(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx := requireAuthContext(t, ctx)
+	server := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	_, err := repo.New(tx).GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{ID: server.ID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	_, err = repo.New(tx).CreateServerHeader(ctx, repo.CreateServerHeaderParams{
+		Name:                   "X-Tenant",
+		Description:            pgtype.Text{String: "", Valid: false},
+		IsRequired:             false,
+		IsSecret:               false,
+		Value:                  conv.ToPGText("v"),
+		ValueFromRequestHeader: pgtype.Text{String: "", Valid: false},
+		TunneledMcpServerID:    server.ID,
+		ProjectID:              *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	var deleteErr error
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		deleteErr = ti.service.DeleteServer(ctx, &gen.DeleteServerPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, ID: server.ID.String()})
+	})
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), 1)
+	require.NoError(t, tx.Commit(ctx))
+	wg.Wait()
+
+	require.NoError(t, deleteErr)
+	count, err := repo.New(ti.conn).CountLiveServerHeaders(ctx, server.ID)
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
+func TestServerHeaderConcurrentRenamesToOneNameConflict(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx := requireAuthContext(t, ctx)
+	server := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
+	a, err := ti.service.CreateServerHeader(ctx, createHeaderPayload(server.ID, "X-A"))
+	require.NoError(t, err)
+	b, err := ti.service.CreateServerHeader(ctx, createHeaderPayload(server.ID, "X-B"))
+	require.NoError(t, err)
+
+	renames := []*gen.UpdateServerHeaderPayload{updateHeaderPayload(a.ID, "x-c"), updateHeaderPayload(b.ID, "X-C")}
+	errs := make([]error, len(renames))
+	var wg sync.WaitGroup
+	for i, rename := range renames {
+		rename.Value = new("v")
+		wg.Go(func() {
+			_, errs[i] = ti.service.UpdateServerHeader(ctx, rename)
+		})
+	}
+	wg.Wait()
+
+	succeeded := 0
+	for _, err := range errs {
+		if err == nil {
+			succeeded++
+			continue
+		}
+		requireOopsCode(t, err, oops.CodeConflict)
+	}
+	require.Equal(t, 1, succeeded)
+}
+
+// Concurrent updates of one header serialize: the stored row is wholly one
+// of them, never a mix of a static value and a pass-through source.
+func TestServerHeaderConcurrentSourceSwitchesSerialize(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx := requireAuthContext(t, ctx)
+	server := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
+	created, err := ti.service.CreateServerHeader(ctx, createHeaderPayload(server.ID, "X-Tenant"))
+	require.NoError(t, err)
+
+	toStatic := updateHeaderPayload(created.ID, "X-Tenant")
+	toStatic.Value = new("static-2")
+	toSource := updateHeaderPayload(created.ID, "X-Tenant")
+	toSource.ValueFromRequestHeader = new("X-Client-Tenant")
+
+	updates := []*gen.UpdateServerHeaderPayload{toStatic, toSource, toStatic, toSource, toStatic, toSource}
+	errs := make([]error, len(updates))
+	var wg sync.WaitGroup
+	for i, update := range updates {
+		wg.Go(func() {
+			_, errs[i] = ti.service.UpdateServerHeader(ctx, update)
+		})
+	}
+	wg.Wait()
+	for _, err := range errs {
 		require.NoError(t, err)
-		require.Zero(t, count)
+	}
+
+	stored := getHeader(t, ctx, ti, created.ID)
+	if stored.ValueFromRequestHeader != nil {
+		require.Nil(t, stored.Value)
+		require.Equal(t, "X-Client-Tenant", *stored.ValueFromRequestHeader)
+	} else {
+		require.Equal(t, "static-2", *stored.Value)
 	}
 }
 
