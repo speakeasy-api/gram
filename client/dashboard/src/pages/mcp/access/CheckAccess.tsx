@@ -49,8 +49,13 @@ export function CheckAccess({
   return (
     <Card.Dashboard
       title="Check access"
-      bodyClassName="p-0"
-      headerClassName="py-2.5"
+      // A gray title bar over white rows, so the card does not read as one more
+      // white panel in a stack.
+      className="bg-background h-auto"
+      bodyClassName="bg-card p-0"
+      // Fixed heights: the bar and the picker stay the same size whether or
+      // not someone is picked, so choosing a person does not shift the page.
+      headerClassName="h-12 py-0"
       action={
         selected && (
           <Button
@@ -75,7 +80,7 @@ export function CheckAccess({
           searchPlaceholder="Search people"
           emptyMessage="No people match."
           variant="secondary"
-          className="h-auto w-full justify-start py-2 text-left"
+          className="h-10 w-full justify-start text-left"
           contentClassName="w-[var(--radix-popover-trigger-width)]"
           disabledMessage={membersUnavailable(isLoading, failed)}
         >
@@ -123,23 +128,23 @@ function PickerLabel({
 }): JSX.Element {
   if (failed) {
     return (
-      <span className="text-muted-foreground font-normal">
+      <span className="text-muted-foreground truncate font-sans font-normal">
         People could not be loaded. Reload the page to try again.
       </span>
     );
   }
   if (selected) {
     return (
-      <span className="flex items-baseline gap-3">
-        <span>{selected.name}</span>
-        <Text as="span" muted small>
+      <span className="flex min-w-0 items-baseline gap-3 font-sans">
+        <span className="shrink-0 font-medium">{selected.name}</span>
+        <Text as="span" muted small className="truncate">
           {selected.email}
         </Text>
       </span>
     );
   }
   return (
-    <span className="text-muted-foreground flex items-center gap-2 font-normal">
+    <span className="text-muted-foreground flex items-center gap-2 font-sans font-normal">
       <Search className="h-4 w-4" />
       Check a person: can they use {serverName}, and why?
     </span>
