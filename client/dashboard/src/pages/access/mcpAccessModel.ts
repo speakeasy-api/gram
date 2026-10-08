@@ -82,15 +82,6 @@ export interface McpConnectAccess {
   denyAll: boolean;
 }
 
-export const EMPTY_MCP_CONNECT_ACCESS: McpConnectAccess = {
-  allServers: null,
-  servers: {},
-  forbidden: [],
-  preservedAllow: [],
-  preservedDeny: [],
-  denyAll: false,
-};
-
 function isPlainMcpSelector(s: Selector): boolean {
   return s.resourceKind === "mcp" && !s.projectId && !s.serverUrl;
 }

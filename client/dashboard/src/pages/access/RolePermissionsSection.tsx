@@ -39,7 +39,7 @@ export interface ScopeGroup {
  * under Platform access, but each still lets its holder connect to the servers
  * it covers with every tool (scopeExpansions in server/internal/authz/scopes.go).
  */
-export const MCP_ADMIN_SCOPES: ReadonlySet<string> = new Set([
+const MCP_ADMIN_SCOPES: ReadonlySet<string> = new Set([
   "mcp:read",
   "mcp:write",
 ]);
