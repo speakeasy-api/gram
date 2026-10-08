@@ -136,7 +136,7 @@ function PickerLabel({
   if (selected) {
     return (
       <span className="flex min-w-0 items-baseline gap-3 font-sans">
-        <span className="shrink-0 font-medium">{selected.name}</span>
+        <span className="min-w-0 truncate font-medium">{selected.name}</span>
         <Text as="span" muted small className="truncate">
           {selected.email}
         </Text>

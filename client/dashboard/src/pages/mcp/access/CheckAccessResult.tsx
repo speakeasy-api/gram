@@ -207,9 +207,13 @@ function LevelWhy({
     {
       key: "reach",
       header: "Applies to",
-      width: "200px",
+      width: "240px",
       render: (group) => (
-        <Badge variant="neutral" size="sm" className="self-start">
+        <Badge
+          variant="neutral"
+          size="sm"
+          className="max-w-full self-start truncate"
+        >
           {ruleReachLabel(group.rule, serverName)}
         </Badge>
       ),
