@@ -191,3 +191,16 @@ func TestAccessRoleMutationOutputsExposeNoRawIdentifiersOrSelectors(t *testing.T
 	}
 	require.ElementsMatch(t, []string{"name", "description", "reference", "version", "mcp_access"}, roleKeys)
 }
+
+// The disposition a check gives an unannotated tool is internal: a role rule
+// can never name it, so no rule written through the Platform MCP reaches an
+// unclassified tool by disposition.
+func TestAccessRoleRulesRejectUnauthorableDispositions(t *testing.T) {
+	t.Parallel()
+
+	service := &AccessRoleMutationService{}
+	for _, disposition := range []string{authz.DispositionUnclassified, "UNCLASSIFIED", authz.WildcardResource} {
+		_, err := service.resolveRules(t.Context(), Principal{}, ResolvedProject{}, []MCPAccessRoleRule{{MCPID: uuid.NewString(), Disposition: disposition}}, false, make(map[uuid.UUID]accessRoleRuleTarget))
+		require.Error(t, err, "disposition %q", disposition)
+	}
+}
