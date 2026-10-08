@@ -2184,6 +2184,32 @@ describe("RemoteMcpIdentitySectionBody", () => {
       expect(screen.getByText("Requested at sign-in")).toBeDefined();
     });
 
+    it("shows a writer blocked from reading no summary", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+      mocks.hasScope.mockImplementation(
+        (scope: string, resourceId?: string) =>
+          scope === "mcp:write" && resourceId === "mcp-server-1",
+      );
+
+      renderIdentity();
+
+      expect(screen.queryByText("Requested at sign-in")).toBeNull();
+    });
+
+    it("tells a reader when the requested scopes fail to load", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: undefined, isError: true });
+      mocks.hasScope.mockImplementation(
+        (scope: string, resourceId?: string) =>
+          scope === "mcp:read" && resourceId === "mcp-server-1",
+      );
+
+      renderIdentity();
+
+      expect(screen.getByText("Couldn't load requested scopes.")).toBeDefined();
+    });
+
     it("hides the summary while the pin has unsaved changes", () => {
       connectClient();
       mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
@@ -2236,7 +2262,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       expect(screen.queryByText("Set on this connection.")).toBeNull();
     });
 
-    it("shows no summary without a connected client", () => {
+    it("shows no summary on a server with no bound client", () => {
       mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
 
       renderIdentity();

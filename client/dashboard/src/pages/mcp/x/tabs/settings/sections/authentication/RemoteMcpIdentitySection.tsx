@@ -232,10 +232,10 @@ export function RemoteMcpIdentitySectionBody({
     canWrite && selectedMode === "user" && userDraft.connected;
   const showScopePin = scopePinSlot && !!scopePin.data;
   const scopePinDirty = showScopePin && scopePin.dirty;
-  // Same query as the pin, so writers make one request.
+  // Same query as the pin, so writers make one request. mcp:write satisfies
+  // mcp:read, but a read block applies independently.
   const canRead =
-    canWrite ||
-    (!rbacLoading && hasScope("mcp:read", target.permissionResourceId));
+    !rbacLoading && hasScope("mcp:read", target.permissionResourceId);
   const showScopesSummary =
     canRead &&
     identityResolved &&
@@ -638,6 +638,12 @@ export function RemoteMcpIdentitySectionBody({
                     connectedClientId={userDraft.connectedClientId}
                   />
                 </div>
+              ) : showScopesSummary &&
+                !scopePinSlot &&
+                scopesSummaryQuery.isError ? (
+                <Text muted small className="mt-4 block pl-[52px]">
+                  Couldn't load requested scopes.
+                </Text>
               ) : null}
             </div>
           ) : null}
