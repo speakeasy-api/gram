@@ -32,17 +32,6 @@ export interface SaveButtonInput {
   };
 }
 
-/** Effective grant count — scopes with at least one allow rule that has content. */
-export function effectiveGrantCount(grants: Record<string, RoleGrant>): number {
-  return Object.values(grants).filter((g) =>
-    g.rules.some(
-      (r) =>
-        r.effect === "allow" &&
-        (r.selectors === null || r.selectors.length > 0),
-    ),
-  ).length;
-}
-
 export function visiblePermissionCount(
   grants: Array<{ scope?: string }>,
 ): number {
@@ -98,9 +87,9 @@ export function hasFormChanges(input: SaveButtonInput): boolean {
 }
 
 /** Whether the form fields are valid enough to submit.
- *  Description is optional. */
+ *  Description and grants are optional. */
 function isFormValid(input: SaveButtonInput): boolean {
-  return input.name.trim().length > 0 && effectiveGrantCount(input.grants) > 0;
+  return input.name.trim().length > 0;
 }
 
 /** Returns true when the Save/Create button should be disabled */
