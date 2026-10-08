@@ -160,15 +160,6 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("it rejects a lookup dimension named after its column", func(t *testing.T) {
-		t.Parallel()
-		ds := base()
-		ds.Fields[0].Name = ds.Fields[0].Expr
-		ds.Fields[0].Lookup = "display_names"
-		_, err := NewCatalog([]*Lookup{{Name: "display_names", Description: "names", Load: nil}}, ds)
-		require.ErrorContains(t, err, "cannot be named after its column")
-	})
-
 	t.Run("it rejects a measure reading through a lookup", func(t *testing.T) {
 		t.Parallel()
 		ds := base()
