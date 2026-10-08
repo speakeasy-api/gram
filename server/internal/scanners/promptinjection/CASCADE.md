@@ -125,7 +125,10 @@ smoke cases. These check transport and composition, not representative accuracy.
 Evaluate the complete labeled corpus and real conversation examples to measure
 precision, recall, and provider failures.
 
-`mise run risk:pi-gate` is the merge gate. It runs the cascade on the 2,046 cases
+`mise run risk:pi-gate` is the merge gate. Run it locally before merging any
+change to this package or risk-pi-report that can change a verdict, and paste its
+`merge gate` lines in the PR description. No CI job runs it, because it calls paid
+models. It runs the cascade on the 2,046 cases
 the evaluation report scored (every fixture except `cascade_context`), deepset
 included, and fails unless no benign case is flagged and at least 80% of all
 attacks are caught (780 of 975). A unit test pins the corpus size. Before scoring, a
@@ -135,14 +138,6 @@ runs again after 5, 10 and 20 seconds. A confirmation still refused is a miss. T
 `floors.json` recall floors describe the single-call Gemini judge, so the gate
 does not check them. A run costs about $2.30. `--no-refusal-fallback` scores
 refusals without calling Opus 4.8, as the report scored the confirmer-only options.
-
-The `Prompt injection benchmark` check (`.github/workflows/pi-benchmark.yml`) runs
-the gate on pull requests that change this package, risk-pi-report, the gate task,
-or the benchmark workflow, and on
-manual dispatch, with the `OPENROUTER_API_KEY` repository secret. Its
-`pull_request` trigger stays commented out until the gate is enabled; until then
-`TestPromptInjectionBenchmarkGateIsEnabled` fails, so CI Gate blocks the merge
-with the lines to uncomment.
 
 ## Research and rollout evidence
 
