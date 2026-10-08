@@ -158,9 +158,13 @@ The encoder's generated schema and field mappings are committed for review.
 
 ## Install in a Go process
 
-The generated function name is the marker's Pascal-cased full name. Install it
-in the process's existing errgroup, sharing that process's broker, GCS client,
-logger and OpenTelemetry provider:
+The generated function name is the marker's Pascal-cased full name. The following
+installation template assumes you have explicitly added the illustrative
+`gram.events.v1.EventArchive` declaration above and regenerated its binding;
+`GramEventsV1EventArchive` does not exist in the default checkout. Replace it with
+your requested marker's generated function. Install it in the process's existing
+errgroup, sharing that process's broker, GCS client, logger and OpenTelemetry
+provider:
 
 ```go
 buckets, err := storage.ParseBucketMapping(os.Getenv("GRAM_STORAGE_BUCKETS"))
@@ -180,9 +184,13 @@ group.Go(func() error {
 
 Imports are `infra/pkg/storage` and `infra/pkg/storagebindings` under the Gram
 Go module. There is no application message handler. A missing bucket mapping,
-stale generated binding or invalid lease budget fails startup. Both production
-and emulator brokers expose a dedicated storage subscriber path; application
-subscriber helpers reject storage markers. Python has no storage runner.
+a binding whose topic, subscription, bucket or partition declaration no longer
+matches, or an invalid lease budget fails startup. The runner does not recompute
+the payload schema fingerprint at startup: additive payload fields can be omitted
+by stale encoders. Regenerate bindings after proto changes and run the generation
+drift checks before deployment. Both production and emulator brokers expose a
+dedicated storage subscriber path; application subscriber helpers reject storage
+markers. Python has no storage runner.
 
 For a runnable, isolated example:
 

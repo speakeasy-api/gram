@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -102,19 +103,30 @@ func (s *localStore) Write(ctx context.Context, object storage.Object, encode fu
 	if err := f.Close(); err != nil {
 		return err
 	}
-	// Linking is atomic and fails if the final name already exists.
-	if err := os.Link(f.Name(), path); err != nil {
-		return err
-	}
 	dir, err := os.Open(filepath.Dir(path))
 	if err != nil {
 		return err
 	}
 	defer dir.Close()
-	if err := dir.Sync(); err != nil {
+	if err := commitLocalFile(f.Name(), path, dir.Sync); err != nil {
 		return err
 	}
 	s.committed = path
 	s.cancel()
+	return nil
+}
+
+// commitLocalFile publishes without overwriting and rolls back the link if the
+// directory cannot be synced. syncDir is injectable for filesystem-failure tests.
+func commitLocalFile(temporary, final string, syncDir func() error) error {
+	if err := os.Link(temporary, final); err != nil {
+		return err
+	}
+	if err := syncDir(); err != nil {
+		if removeErr := os.Remove(final); removeErr != nil {
+			return errors.Join(err, fmt.Errorf("remove uncommitted local object: %w", removeErr))
+		}
+		return err
+	}
 	return nil
 }
