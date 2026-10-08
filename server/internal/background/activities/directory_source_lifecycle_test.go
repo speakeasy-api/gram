@@ -3,7 +3,7 @@ package activities_test
 import (
 	"context"
 	"encoding/json"
-
+	"strings"
 	"testing"
 	"time"
 
@@ -166,8 +166,20 @@ func TestDirectorySourceLifecycleDeletionAndRestoration(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Replays and list refreshes cannot restore the tombstone.
-	apply(sourceLifecycleEvent(t, "dsync.group.updated", "event_004", workosOrgID, "directory_a", "group_a", "Stale", at))
+	// Replays and list refreshes cannot restore the tombstone. Deletion advances
+	// each source's event cursor, so an older event is rejected even when its
+	// payload claims a later updated_at than the deletion.
+	apply(
+		sourceLifecycleEvent(t, "dsync.group.updated", "event_004", workosOrgID, "directory_a", "group_a", "Stale", at),
+		sourceLifecycleEvent(t, "dsync.user.updated", "event_005", workosOrgID, "directory_a", "directory_user_a", "", at.Add(3*time.Hour)),
+	)
+	staleUser, err := fixtures.GetDirectoryUserLifecycleFixture(ctx, testrepo.GetDirectoryUserLifecycleFixtureParams{OrganizationID: orgID, WorkosDirectoryUserID: "directory_user_a"})
+	require.NoError(t, err)
+	require.True(t, staleUser.WorkosDeleted, "a stale user event cannot restore a profile from a deleted directory")
+	require.Equal(t, "event_010", staleUser.WorkosLastEventID.String)
+	roles, err = accessrepo.New(conn).ListUserRolePrincipals(ctx, accessrepo.ListUserRolePrincipalsParams{OrganizationID: orgID, UserID: "directory-person"})
+	require.NoError(t, err)
+	require.Empty(t, roles)
 	_, err = queries.UpsertListedDirectoryGroup(ctx, directoryrepo.UpsertListedDirectoryGroupParams{
 		OrganizationID: orgID, WorkosDirectoryGroupID: "group_a", DirectoryID: conv.ToPGText("directory_a"),
 		Name: "Listed", Attributes: []byte(`{}`), WorkosCreatedAt: conv.ToPGTimestamptz(at), WorkosUpdatedAt: conv.ToPGTimestamptz(at.Add(2 * time.Hour)),
@@ -205,6 +217,64 @@ func TestDirectorySourceLifecycleDeletionAndRestoration(t *testing.T) {
 	current, err := fixtures.GetDirectoryGroupLifecycleFixture(ctx, testrepo.GetDirectoryGroupLifecycleFixtureParams{OrganizationID: orgID, WorkosDirectoryGroupID: "group_a"})
 	require.NoError(t, err)
 	require.Equal(t, "directory_a", current.DirectoryID.String)
+}
+
+func TestDirectoryDeletionFallsBackToProfileInSurvivingDirectory(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn := newOrgEventsTestConn(t, "directory_two_profiles")
+	const orgID, workosOrgID = "gram_two_profiles", "org_two_profiles"
+	seedWorkOSOrganization(t, ctx, conn, orgID, workosOrgID)
+	seedWorkOSUser(t, ctx, conn, "directory-person", "user_directory_person")
+	_, err := orgrepo.New(conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: orgID, UserID: conv.ToPGText("directory-person"),
+	})
+	require.NoError(t, err)
+	roleURNs := map[string]string{}
+	for _, department := range []string{"Engineering", "Sales"} {
+		role := seedOrganizationRole(t, ctx, conn, orgID, strings.ToLower(department))
+		roleURNs[department] = "role:organization:" + role.ID.String()
+		_, err := accessrepo.New(conn).UpsertDirectoryAttributeRoleMapping(ctx, accessrepo.UpsertDirectoryAttributeRoleMappingParams{
+			OrganizationID: orgID, AttributeKey: conv.ToPGText("department_name"), AttributeValue: conv.ToPGText(department), RoleUrn: roleURNs[department],
+		})
+		require.NoError(t, err)
+	}
+	withDepartment := func(event events.Event, department string) events.Event {
+		t.Helper()
+		var data map[string]any
+		require.NoError(t, json.Unmarshal(event.Data, &data))
+		data["custom_attributes"] = map[string]string{"department_name": department}
+		encoded, err := json.Marshal(data)
+		require.NoError(t, err)
+		event.Data = encoded
+		return event
+	}
+	effectiveRoles := func() []string {
+		t.Helper()
+		principals, err := accessrepo.New(conn).ListUserRolePrincipals(ctx, accessrepo.ListUserRolePrincipalsParams{OrganizationID: orgID, UserID: "directory-person"})
+		require.NoError(t, err)
+		urns := make([]string, 0, len(principals))
+		for _, principal := range principals {
+			urns = append(urns, principal.PrincipalUrn)
+		}
+		return urns
+	}
+	at := directorySyncTime()
+	// The same person has a profile in two directories. The newer profile is
+	// selected while both are live.
+	stub := newWorkOSClientWithEvents([][]events.Event{{
+		withDepartment(sourceLifecycleEvent(t, "dsync.user.created", "event_001", workosOrgID, "directory_a", "directory_user_a", "", at.Add(time.Minute)), "Engineering"),
+		withDepartment(sourceLifecycleEvent(t, "dsync.user.created", "event_002", workosOrgID, "directory_b", "directory_user_b", "", at), "Sales"),
+	}})
+	activity := activities.NewProcessWorkOSOrganizationEvents(testenv.NewLogger(t), conn, stub, cache.NoopCache, nil)
+	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, []string{roleURNs["Engineering"]}, effectiveRoles())
+
+	stub.SetEventPages([][]events.Event{{sourceLifecycleEvent(t, "dsync.deleted", "event_010", workosOrgID, "", "directory_a", "", at.Add(time.Hour))}})
+	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, []string{roleURNs["Sales"]}, effectiveRoles(), "the surviving directory's profile takes over")
 }
 
 func TestDirectorySourceLifecycleConflictingTenantDoesNotBlockEvents(t *testing.T) {
