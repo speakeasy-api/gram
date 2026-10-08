@@ -11,7 +11,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"log/slog"
+	"math/big"
 	"net/http"
 	"os"
 	"os/exec"
@@ -24,15 +26,22 @@ import (
 const (
 	defaultStdioMaxSessions = 16
 	defaultStdioIdleTimeout = 30 * time.Minute
-	// stdioInitializeTimeout bounds how long a freshly spawned server may take to answer initialize.
+	// stdioInitializeTimeout bounds delivering initialize to a fresh server and receiving its answer.
 	stdioInitializeTimeout = 60 * time.Second
 	// stdioShutdownGrace is how long a server gets after stdin closes before SIGTERM, then again before SIGKILL.
 	stdioShutdownGrace = 3 * time.Second
 	// stdioExitDrain bounds how long stdout may stay open after the process exits (e.g. held by a grandchild).
-	stdioExitDrain       = 2 * time.Second
-	stdioMaxRequestBytes = 32 << 20
-	stdioBacklogLimit    = 256
-	stdioStreamBuffer    = 64
+	stdioExitDrain = 2 * time.Second
+	// stdioPingTimeout bounds the bridge's own answer to a ping sent during initialize.
+	stdioPingTimeout = 5 * time.Second
+
+	// stdioMaxMessageBytes caps one JSON-RPC payload in either direction.
+	stdioMaxMessageBytes = 32 << 20
+	// stdioStreamMaxBytes caps what one HTTP stream may have queued but unsent;
+	// a stream past it is a slow consumer and is cut off.
+	stdioStreamMaxBytes = 64 << 20
+	// stdioBacklogMaxBytes caps server messages held for a GET stream that is not open.
+	stdioBacklogMaxBytes = 8 << 20
 
 	headerMCPSessionID = "Mcp-Session-Id"
 
@@ -47,6 +56,7 @@ var (
 	errStdioBridgeClosed  = errors.New("stdio bridge closed")
 	errStdioSessionClosed = errors.New("stdio session closed")
 	errStdioDuplicateID   = errors.New("duplicate in-flight JSON-RPC id")
+	errStdioFrameTooLarge = errors.New("stdio server message exceeds size limit")
 )
 
 // stdioBridge serves MCP Streamable HTTP by spawning one stdio MCP server
@@ -116,12 +126,12 @@ func (b *stdioBridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (b *stdioBridge) handlePost(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, stdioMaxRequestBytes+1))
+	body, err := io.ReadAll(io.LimitReader(r.Body, stdioMaxMessageBytes+1))
 	if err != nil {
 		writeRPCError(w, http.StatusBadRequest, nil, rpcCodeParseError, "failed to read request body")
 		return
 	}
-	if len(body) > stdioMaxRequestBytes {
+	if len(body) > stdioMaxMessageBytes {
 		writeRPCError(w, http.StatusRequestEntityTooLarge, nil, rpcCodeInvalidRequest, "request body too large")
 		return
 	}
@@ -146,7 +156,7 @@ func (b *stdioBridge) handlePost(w http.ResponseWriter, r *http.Request) {
 
 	ids := requestIDs(msgs)
 	if len(ids) == 0 {
-		if err := sess.send(msgs); err != nil {
+		if err := sess.send(r.Context(), msgs); err != nil {
 			writeRPCError(w, http.StatusNotFound, nil, rpcCodeSessionMissing, "session not found")
 			return
 		}
@@ -166,14 +176,14 @@ func (b *stdioBridge) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 	defer sess.closeStream(stream)
 
-	if err := sess.send(msgs); err != nil {
+	if err := sess.send(r.Context(), msgs); err != nil {
 		writeRPCError(w, http.StatusNotFound, nil, rpcCodeSessionMissing, "session not found")
 		return
 	}
 
 	if sse {
 		writeSSEHeaders(w, sid)
-		for msg := range stream.until(r.Context(), sess, len(ids)) {
+		for msg := range stream.events(r.Context(), sess, len(ids)) {
 			if err := writeSSEEvent(w, msg); err != nil {
 				return
 			}
@@ -182,7 +192,7 @@ func (b *stdioBridge) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	responses := make([]json.RawMessage, 0, len(ids))
-	for msg := range stream.until(r.Context(), sess, len(ids)) {
+	for msg := range stream.events(r.Context(), sess, len(ids)) {
 		responses = append(responses, msg)
 	}
 	if r.Context().Err() != nil {
@@ -214,10 +224,14 @@ func (b *stdioBridge) handleInitialize(w http.ResponseWriter, r *http.Request, m
 
 	committed := false
 	defer func() {
+		sess.endInitialize()
 		if !committed {
 			sess.close()
 		}
 	}()
+
+	ctx, cancel := context.WithTimeout(r.Context(), stdioInitializeTimeout)
+	defer cancel()
 
 	stream, err := sess.openStream([]string{msgs[0].id}, false)
 	if err != nil {
@@ -225,15 +239,16 @@ func (b *stdioBridge) handleInitialize(w http.ResponseWriter, r *http.Request, m
 		return
 	}
 	defer sess.closeStream(stream)
-	if err := sess.send(msgs); err != nil {
-		writeRPCError(w, http.StatusBadGateway, msgs[0].rawID, rpcCodeServerError, "MCP server exited during initialize")
+	if err := sess.send(ctx, msgs); err != nil {
+		if r.Context().Err() != nil {
+			return
+		}
+		writeRPCError(w, http.StatusBadGateway, msgs[0].rawID, rpcCodeServerError, "MCP server did not accept initialize")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), stdioInitializeTimeout)
-	defer cancel()
 	var response json.RawMessage
-	for msg := range stream.until(ctx, sess, 1) {
+	for msg := range stream.events(ctx, sess, 1) {
 		response = msg
 	}
 	if response == nil {
@@ -268,7 +283,7 @@ func (b *stdioBridge) handleGet(w http.ResponseWriter, r *http.Request) {
 	release := sess.acquire()
 	defer release()
 
-	listener, backlog, err := sess.attachListener()
+	listener, err := sess.attachListener()
 	if err != nil {
 		writeRPCError(w, http.StatusConflict, nil, rpcCodeInvalidRequest, "a GET stream is already open for this session")
 		return
@@ -276,12 +291,7 @@ func (b *stdioBridge) handleGet(w http.ResponseWriter, r *http.Request) {
 	defer sess.detachListener(listener)
 
 	writeSSEHeaders(w, sid)
-	for _, msg := range backlog {
-		if err := writeSSEEvent(w, msg); err != nil {
-			return
-		}
-	}
-	for msg := range listener.until(r.Context(), sess, -1) {
+	for msg := range listener.events(r.Context(), sess, -1) {
 		if err := writeSSEEvent(w, msg); err != nil {
 			return
 		}
@@ -398,7 +408,9 @@ type stdioSession struct {
 	stdin  io.WriteCloser
 	logger *slog.Logger
 
-	writeMu sync.Mutex
+	// writeSem serializes stdin writes; a channel rather than a mutex so a
+	// waiting writer can give up when its request is cancelled.
+	writeSem chan struct{}
 
 	// exited closes when the process has been reaped; done closes after stdout
 	// has drained too, so final messages reach their streams before teardown.
@@ -406,13 +418,17 @@ type stdioSession struct {
 	done      chan struct{}
 	closeOnce sync.Once
 
-	mu         sync.Mutex
-	pending    map[string]*rpcStream
-	streams    map[*rpcStream]struct{}
-	listener   *rpcStream
-	backlog    []json.RawMessage
-	inflight   int
-	lastActive time.Time
+	mu           sync.Mutex
+	initializing bool
+	pending      map[string]*rpcStream
+	// streams holds SSE POST streams still awaiting a response; they may carry
+	// server messages when no GET stream is open.
+	streams      map[*rpcStream]struct{}
+	listener     *rpcStream
+	backlog      []json.RawMessage
+	backlogBytes int
+	inflight     int
+	lastActive   time.Time
 }
 
 func startStdioSession(id, command string, env []string, logger *slog.Logger) (*stdioSession, error) {
@@ -442,27 +458,30 @@ func startStdioSession(id, command string, env []string, logger *slog.Logger) (*
 		_ = stdoutW.Close()
 		_ = stderrR.Close()
 		_ = stderrW.Close()
-		return nil, fmt.Errorf("start %q: %w", command, err)
+		// The command itself is left out: it commonly carries credentials.
+		return nil, fmt.Errorf("start stdio server: %w", err)
 	}
 	_ = stdoutW.Close()
 	_ = stderrW.Close()
 
 	s := &stdioSession{
-		id:         id,
-		cmd:        cmd,
-		stdin:      stdin,
-		logger:     logger.With(slog.Int("pid", cmd.Process.Pid)),
-		writeMu:    sync.Mutex{},
-		exited:     make(chan struct{}),
-		done:       make(chan struct{}),
-		closeOnce:  sync.Once{},
-		mu:         sync.Mutex{},
-		pending:    make(map[string]*rpcStream),
-		streams:    make(map[*rpcStream]struct{}),
-		listener:   nil,
-		backlog:    nil,
-		inflight:   0,
-		lastActive: time.Now(),
+		id:           id,
+		cmd:          cmd,
+		stdin:        stdin,
+		logger:       logger.With(slog.Int("pid", cmd.Process.Pid)),
+		writeSem:     make(chan struct{}, 1),
+		exited:       make(chan struct{}),
+		done:         make(chan struct{}),
+		closeOnce:    sync.Once{},
+		mu:           sync.Mutex{},
+		initializing: true,
+		pending:      make(map[string]*rpcStream),
+		streams:      make(map[*rpcStream]struct{}),
+		listener:     nil,
+		backlog:      nil,
+		backlogBytes: 0,
+		inflight:     0,
+		lastActive:   time.Now(),
 	}
 
 	stdoutDone := make(chan struct{})
@@ -474,11 +493,14 @@ func startStdioSession(id, command string, env []string, logger *slog.Logger) (*
 	go func() {
 		err := cmd.Wait()
 		close(s.exited)
+		// Children of the server can outlive it; shut the whole group down.
+		s.close()
 		select {
 		case <-stdoutDone:
 		case <-time.After(stdioExitDrain):
-			_ = stdoutR.Close()
 		}
+		_ = stdoutR.Close()
+		_ = stderrR.Close()
 		s.logger.Info("tunnel stdio server exited", slog.String("status", exitStatus(err)))
 		close(s.done)
 	}()
@@ -507,27 +529,64 @@ func (s *stdioSession) idleSince(now time.Time) time.Duration {
 	return now.Sub(s.lastActive)
 }
 
-func (s *stdioSession) send(msgs []rpcMessage) error {
+func (s *stdioSession) endInitialize() {
+	s.mu.Lock()
+	s.initializing = false
+	s.mu.Unlock()
+}
+
+// send writes messages to the server's stdin. A write that cannot finish
+// before ctx ends closes the session: a partly written message would corrupt
+// the framing of everything after it.
+func (s *stdioSession) send(ctx context.Context, msgs []rpcMessage) error {
 	select {
+	case s.writeSem <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
 	case <-s.done:
 		return errStdioSessionClosed
-	default:
 	}
+	defer func() { <-s.writeSem }()
+
 	var buf bytes.Buffer
 	for _, msg := range msgs {
 		buf.Write(msg.raw)
 		buf.WriteByte('\n')
 	}
-	s.writeMu.Lock()
-	defer s.writeMu.Unlock()
-	if _, err := s.stdin.Write(buf.Bytes()); err != nil {
-		return errors.Join(errStdioSessionClosed, err)
+	written := make(chan error, 1)
+	go func() {
+		_, err := s.stdin.Write(buf.Bytes())
+		written <- err
+	}()
+	select {
+	case err := <-written:
+		if err != nil {
+			return errors.Join(errStdioSessionClosed, err)
+		}
+		return nil
+	case <-ctx.Done():
+	case <-s.done:
 	}
-	return nil
+	select {
+	case err := <-written:
+		if err != nil {
+			return errors.Join(errStdioSessionClosed, err)
+		}
+		return nil
+	default:
+	}
+	s.logger.Warn("tunnel stdio server is not reading stdin; stopping server")
+	s.close()
+	// Closing stdin unblocks the write; wait so the next writer starts clean.
+	select {
+	case <-written:
+	case <-time.After(stdioShutdownGrace):
+	}
+	return errStdioSessionClosed
 }
 
 func (s *stdioSession) openStream(ids []string, unsolicited bool) (*rpcStream, error) {
-	stream := newRPCStream()
+	stream := newRPCStream(len(ids))
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	select {
@@ -561,16 +620,21 @@ func (s *stdioSession) closeStream(stream *rpcStream) {
 	stream.close()
 }
 
-func (s *stdioSession) attachListener() (*rpcStream, []json.RawMessage, error) {
+// attachListener opens the session's GET stream, preloaded with the backlog.
+func (s *stdioSession) attachListener() (*rpcStream, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.listener != nil {
-		return nil, nil, errors.New("listener already attached")
+		return nil, errors.New("listener already attached")
 	}
-	s.listener = newRPCStream()
-	backlog := s.backlog
+	listener := newRPCStream(0)
+	for _, msg := range s.backlog {
+		listener.deliver(rpcEvent{msg: msg, response: false})
+	}
 	s.backlog = nil
-	return s.listener, backlog, nil
+	s.backlogBytes = 0
+	s.listener = listener
+	return listener, nil
 }
 
 func (s *stdioSession) detachListener(listener *rpcStream) {
@@ -585,7 +649,12 @@ func (s *stdioSession) detachListener(listener *rpcStream) {
 func (s *stdioSession) readStdout(r io.Reader) {
 	reader := bufio.NewReader(r)
 	for {
-		line, err := reader.ReadBytes('\n')
+		line, err := readFrame(reader, stdioMaxMessageBytes)
+		if errors.Is(err, errStdioFrameTooLarge) {
+			s.logger.Warn("tunnel stdio server wrote a message over the size limit; stopping server", slog.Int("limit_bytes", stdioMaxMessageBytes))
+			s.close()
+			return
+		}
 		if trimmed := bytes.TrimSpace(line); len(trimmed) > 0 {
 			msgs, _, perr := parseRPCPayload(trimmed)
 			if perr != nil {
@@ -601,22 +670,56 @@ func (s *stdioSession) readStdout(r io.Reader) {
 	}
 }
 
-// route delivers one server message: responses go to the stream awaiting
-// their id; server-initiated requests and notifications prefer the GET
-// stream, then any open SSE POST stream, then a bounded backlog.
+// readFrame reads one newline-terminated line of at most limit bytes.
+func readFrame(r *bufio.Reader, limit int) ([]byte, error) {
+	var frame []byte
+	for {
+		chunk, err := r.ReadSlice('\n')
+		if len(frame)+len(chunk) > limit {
+			return nil, errStdioFrameTooLarge
+		}
+		frame = append(frame, chunk...)
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
+		return frame, err
+	}
+}
+
+// route delivers one server message without ever waiting on a consumer, so a
+// slow stream cannot stall the session's single stdout reader. Responses go
+// to the stream awaiting their id; server-initiated requests and
+// notifications prefer the GET stream, then an SSE POST stream still awaiting
+// responses, then a bounded backlog for the next GET stream.
 func (s *stdioSession) route(msg rpcMessage) {
 	s.mu.Lock()
 	if msg.method == "" && msg.id != "" {
 		stream, ok := s.pending[msg.id]
 		if ok {
 			delete(s.pending, msg.id)
+			stream.remaining--
+			if stream.remaining == 0 {
+				// Its handler stops reading after this response, so it must
+				// not be picked for any later server message.
+				delete(s.streams, stream)
+			}
 		}
 		s.mu.Unlock()
 		if !ok {
 			s.logger.Warn("tunnel stdio server answered an unknown request id")
 			return
 		}
-		stream.deliver(rpcEvent{msg: msg.raw, response: true})
+		if !stream.deliver(rpcEvent{msg: msg.raw, response: true}) {
+			s.logger.Warn("tunnel stdio response dropped: its HTTP stream is gone or over its buffer limit")
+		}
+		return
+	}
+
+	// Servers may ping before initialize completes, when the client has no
+	// way to answer yet, so the bridge answers for it.
+	if s.initializing && msg.method == "ping" && msg.id != "" {
+		s.mu.Unlock()
+		go s.answerPing(msg.rawID)
 		return
 	}
 
@@ -627,21 +730,31 @@ func (s *stdioSession) route(msg rpcMessage) {
 			break
 		}
 	}
-	if target == nil {
-		if len(s.backlog) >= stdioBacklogLimit {
-			s.backlog = s.backlog[1:]
-			s.logger.Warn("tunnel stdio backlog full; dropping oldest server message")
-		}
-		s.backlog = append(s.backlog, msg.raw)
-		s.mu.Unlock()
+	s.mu.Unlock()
+	if target != nil && target.deliver(rpcEvent{msg: msg.raw, response: false}) {
 		return
 	}
-	s.mu.Unlock()
-	target.deliver(rpcEvent{msg: msg.raw, response: false})
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.backlog = append(s.backlog, msg.raw)
+	s.backlogBytes += len(msg.raw)
+	for s.backlogBytes > stdioBacklogMaxBytes && len(s.backlog) > 0 {
+		s.backlogBytes -= len(s.backlog[0])
+		s.backlog[0] = nil
+		s.backlog = s.backlog[1:]
+		s.logger.Warn("tunnel stdio backlog full; dropping oldest server message")
+	}
 }
 
-func (s *stdioSession) logStderr(r io.ReadCloser) {
-	defer r.Close()
+func (s *stdioSession) answerPing(id json.RawMessage) {
+	ctx, cancel := context.WithTimeout(context.Background(), stdioPingTimeout)
+	defer cancel()
+	pong := fmt.Appendf(nil, `{"jsonrpc":"2.0","id":%s,"result":{}}`, id)
+	_ = s.send(ctx, []rpcMessage{{raw: pong, rawID: id, id: "", method: ""}})
+}
+
+func (s *stdioSession) logStderr(r io.Reader) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 4096), 64<<10)
 	for scanner.Scan() {
@@ -652,22 +765,18 @@ func (s *stdioSession) logStderr(r io.ReadCloser) {
 }
 
 // close shuts the server down the way the MCP stdio transport prescribes:
-// close stdin, then SIGTERM, then SIGKILL.
+// close stdin, then SIGTERM, then SIGKILL. Signals go to the whole process
+// group, whether or not its leader has already exited.
 func (s *stdioSession) close() {
 	s.closeOnce.Do(func() {
 		_ = s.stdin.Close()
 		go func() {
 			select {
 			case <-s.exited:
-				return
 			case <-time.After(stdioShutdownGrace):
 			}
 			terminateProcessGroup(s.cmd)
-			select {
-			case <-s.exited:
-				return
-			case <-time.After(stdioShutdownGrace):
-			}
+			time.Sleep(stdioShutdownGrace)
 			killProcessGroup(s.cmd)
 		}()
 	})
@@ -678,72 +787,116 @@ type rpcEvent struct {
 	response bool
 }
 
+// rpcStream queues messages for one HTTP response stream. Delivery never
+// blocks; a consumer that falls behind by more than limit bytes is cut off.
 type rpcStream struct {
-	ch       chan rpcEvent
+	mu     sync.Mutex
+	queue  []rpcEvent
+	bytes  int
+	limit  int
+	notify chan struct{}
+
 	gone     chan struct{}
 	goneOnce sync.Once
+
+	// remaining counts responses not yet routed; guarded by the session's mu.
+	remaining int
 }
 
-func newRPCStream() *rpcStream {
+func newRPCStream(remaining int) *rpcStream {
 	return &rpcStream{
-		ch:       make(chan rpcEvent, stdioStreamBuffer),
-		gone:     make(chan struct{}),
-		goneOnce: sync.Once{},
+		mu:        sync.Mutex{},
+		queue:     nil,
+		bytes:     0,
+		limit:     stdioStreamMaxBytes,
+		notify:    make(chan struct{}, 1),
+		gone:      make(chan struct{}),
+		goneOnce:  sync.Once{},
+		remaining: remaining,
 	}
 }
 
-func (s *rpcStream) deliver(event rpcEvent) {
+// deliver queues event and reports whether it was accepted.
+func (s *rpcStream) deliver(event rpcEvent) bool {
+	s.mu.Lock()
 	select {
-	case s.ch <- event:
 	case <-s.gone:
+		s.mu.Unlock()
+		return false
+	default:
 	}
+	if s.bytes+len(event.msg) > s.limit {
+		s.mu.Unlock()
+		s.close()
+		return false
+	}
+	s.queue = append(s.queue, event)
+	s.bytes += len(event.msg)
+	s.mu.Unlock()
+	select {
+	case s.notify <- struct{}{}:
+	default:
+	}
+	return true
+}
+
+func (s *rpcStream) pop() (rpcEvent, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.queue) == 0 {
+		return rpcEvent{msg: nil, response: false}, false
+	}
+	event := s.queue[0]
+	s.queue[0] = rpcEvent{msg: nil, response: false}
+	s.queue = s.queue[1:]
+	s.bytes -= len(event.msg)
+	return event, true
 }
 
 func (s *rpcStream) close() {
 	s.goneOnce.Do(func() { close(s.gone) })
 }
 
-// until yields messages until wantResponses responses have arrived (-1 for
-// never), the context ends, or the session's process exits.
-func (s *rpcStream) until(ctx context.Context, sess *stdioSession, wantResponses int) <-chan json.RawMessage {
-	out := make(chan json.RawMessage)
-	go func() {
-		defer close(out)
+// events yields queued messages until wantResponses responses have been
+// yielded (-1 for never), the context ends, the stream is cut off, or the
+// session's process exits.
+func (s *rpcStream) events(ctx context.Context, sess *stdioSession, wantResponses int) iter.Seq[json.RawMessage] {
+	return func(yield func(json.RawMessage) bool) {
 		received := 0
 		for wantResponses < 0 || received < wantResponses {
-			var event rpcEvent
-			select {
-			case event = <-s.ch:
-			case <-ctx.Done():
-				return
-			case <-sess.done:
-				// Flush anything routed before the exit.
-				select {
-				case event = <-s.ch:
-				default:
+			if event, ok := s.pop(); ok {
+				if event.response {
+					received++
+				}
+				if !yield(event.msg) {
 					return
 				}
-			case <-s.gone:
-				return
-			}
-			if event.response {
-				received++
+				continue
 			}
 			select {
-			case out <- event.msg:
+			case <-s.notify:
 			case <-ctx.Done():
 				return
 			case <-s.gone:
 				return
+			case <-sess.done:
+				// Flush anything routed before the exit, then stop.
+				for {
+					event, ok := s.pop()
+					if !ok || !yield(event.msg) {
+						return
+					}
+				}
 			}
 		}
-	}()
-	return out
+	}
 }
 
 type rpcMessage struct {
-	raw    json.RawMessage
-	rawID  json.RawMessage
+	raw   json.RawMessage
+	rawID json.RawMessage
+	// id is the canonical form of the JSON-RPC id, for matching responses
+	// to requests by value rather than by spelling.
 	id     string
 	method string
 }
@@ -792,15 +945,42 @@ func parseRPCMessage(raw []byte) (rpcMessage, error) {
 		return rpcMessage{}, err
 	}
 	msg := rpcMessage{raw: compact.Bytes(), rawID: nil, id: "", method: envelope.Method}
-	if id := bytes.TrimSpace(envelope.ID); len(id) > 0 && !bytes.Equal(id, []byte("null")) {
+	if rawID := bytes.TrimSpace(envelope.ID); len(rawID) > 0 && !bytes.Equal(rawID, []byte("null")) {
+		id, err := canonicalRPCID(rawID)
+		if err != nil {
+			return rpcMessage{}, err
+		}
 		var compactID bytes.Buffer
-		if err := json.Compact(&compactID, id); err != nil {
+		if err := json.Compact(&compactID, rawID); err != nil {
 			return rpcMessage{}, err
 		}
 		msg.rawID = compactID.Bytes()
-		msg.id = compactID.String()
+		msg.id = id
 	}
 	return msg, nil
+}
+
+// canonicalRPCID maps a JSON-RPC id to a key that is equal for equal values:
+// "ab" and "ab" match, as do 1 and 1.0.
+func canonicalRPCID(raw json.RawMessage) (string, error) {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var value any
+	if err := dec.Decode(&value); err != nil {
+		return "", err
+	}
+	switch v := value.(type) {
+	case string:
+		return "s:" + v, nil
+	case json.Number:
+		n, ok := new(big.Rat).SetString(v.String())
+		if !ok {
+			return "", fmt.Errorf("invalid JSON-RPC id %s", raw)
+		}
+		return "n:" + n.RatString(), nil
+	default:
+		return "", fmt.Errorf("JSON-RPC id must be a string or number, got %s", raw)
+	}
 }
 
 func requestIDs(msgs []rpcMessage) []string {
