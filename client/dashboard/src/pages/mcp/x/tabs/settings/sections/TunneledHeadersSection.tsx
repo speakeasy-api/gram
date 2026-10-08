@@ -17,7 +17,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { HeadersSection } from "./HeadersSection";
 
-export const MCP_TUNNELED_HEADERS_SECTION_ID = "tunnel-headers";
+const MCP_TUNNELED_HEADERS_SECTION_ID = "tunnel-headers";
 
 /**
  * Headers the tunnel sends to the upstream MCP server on every request.

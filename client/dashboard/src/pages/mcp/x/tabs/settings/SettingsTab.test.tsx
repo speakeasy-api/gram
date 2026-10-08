@@ -41,7 +41,6 @@ vi.mock("./sections/ResourceIdentifierSection", () => ({
   ResourceIdentifierSection: () => <h2>Resource Identifier</h2>,
 }));
 vi.mock("./sections/TunneledHeadersSection", () => ({
-  MCP_TUNNELED_HEADERS_SECTION_ID: "tunnel-headers",
   TunneledHeadersSection: () => <h2>Upstream Headers</h2>,
 }));
 vi.mock("./sections/CallerIdentitySection", () => ({
