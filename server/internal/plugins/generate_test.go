@@ -3959,6 +3959,8 @@ func TestGeneratePlatformMCPPackageEmitsToolExposureWorkflow(t *testing.T) {
 		"while preserving prior removal history",
 		"people holding the listed plugins lose the removed tools",
 		"locally installed ZIPs require replacement",
+		"stop before requesting confirmation or calling a mutation, and hand off to the AICP dashboard",
+		"Do not infer platform-tool absence, automatic-membership changes, or restored eligibility from a partial list.",
 		"Never reuse the old exposure version",
 		"refused to avoid overwriting somebody else's edit",
 		// A shared tool list is structural, so the workflow must not send the
