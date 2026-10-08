@@ -17,8 +17,8 @@ function selectorNamesServer(
   projectId: string,
 ): boolean {
   if (s.resourceKind !== "mcp") return false;
-  if (s.resourceId === serverId) return true;
-  return s.resourceId === "*" && (!s.projectId || s.projectId === projectId);
+  if (s.resourceId !== serverId && s.resourceId !== "*") return false;
+  return !s.projectId || s.projectId === "*" || s.projectId === projectId;
 }
 
 /**

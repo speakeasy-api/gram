@@ -369,7 +369,7 @@ function ToolChecklist({
         className="bg-card w-full"
       />
       <div className={LIST_FRAME}>
-        {shown.length === 0 && (
+        {query && shown.length === 0 && (
           <Text muted small className="px-3 py-2">
             No tools match &ldquo;{query}&rdquo;.
           </Text>

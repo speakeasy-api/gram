@@ -354,6 +354,7 @@ describe("McpAccessPanel", () => {
     // The checkbox inside the row toggles once, not once for it and once
     // for the row.
     fireEvent.click(screen.getByLabelText("Slack"));
+    expect(onChange).toHaveBeenCalledTimes(2);
     expect(onChange.mock.calls.at(-1)?.[0]).toBeUndefined();
   });
 
