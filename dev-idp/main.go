@@ -93,6 +93,7 @@ func run() error {
 	loginClientID := flag.String("login-client-id", envOr("GRAM_IDP_CLIENT_ID", "gram-local-dev"), "Statically provisioned first-party client id used for dashboard login (skips dynamic client registration)")
 	clientSecret := flag.String("client-secret", os.Getenv("GRAM_IDP_CLIENT_SECRET"), "Client secret used by Speakeasy callers to authenticate to dev-idp")
 	workosKey := flag.String("workos-api-key", os.Getenv("WORKOS_API_KEY"), "WorkOS API key (required when --backend=workos)")
+	emaAudienceAliases := flag.String("ema-audience-aliases", os.Getenv("GRAM_DEVIDP_EMA_AUDIENCE_ALIASES"), "Extra ID-JAG audiences per resource AS as slug=aud[,slug=aud...]; an aliased assertion may omit the resource claim")
 	workosUpstream := flag.String("workos-upstream-url", envOr("GRAM_DEVIDP_WORKOS_UPSTREAM_URL", "https://api.workos.com"), "Real WorkOS API base URL proxied to when --backend=workos")
 	flag.Parse()
 
@@ -182,8 +183,15 @@ func run() error {
 	// Resource authorization servers -- the redeeming half of cross-app
 	// access. One per ema_resources row, addressed by slug, so a request can
 	// arrive here before any resource is configured and simply 404.
+	audienceAliases, err := resourceas.ParseAudienceAliases(pubURL, *emaAudienceAliases)
+	if err != nil {
+		return fmt.Errorf("parse ema audience aliases: %w", err)
+	}
+	if len(audienceAliases) > 0 {
+		logger.InfoContext(ctx, "ema audience aliases loaded", slog.Any("aliases", audienceAliases))
+	}
 	resourceASHandler := resourceas.NewHandler(
-		resourceas.Config{ExternalURL: pubURL},
+		resourceas.Config{ExternalURL: pubURL, AudienceAliases: audienceAliases},
 		ks, logger, tp, db,
 	)
 	outer.Handle(resourceas.Prefix+"/", http.StripPrefix(resourceas.Prefix, resourceASHandler.Handler()))
