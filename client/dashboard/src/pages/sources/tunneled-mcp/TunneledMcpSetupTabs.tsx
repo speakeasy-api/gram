@@ -10,15 +10,20 @@ import { Badge } from "@/components/ui/Badge";
 import { useEffect, useRef, useState } from "react";
 
 const DEFAULT_MCP_URL = "https://placeholder.net/mcp";
+const DEFAULT_MCP_COMMAND = "npx -y @modelcontextprotocol/server-everything";
 const DEFAULT_SERVICE_VERSION = "1.0.0";
+const TUNNEL_AGENT_IMAGE = `ghcr.io/speakeasy-api/gram-tunnel-agent:${__GRAM_TUNNEL_AGENT_VERSION__}`;
 
 // Sentinels embedded in the snippet text; CodeBlock swaps the shiki token
 // containing each one for a live-updating <FlashOnChange> node, so the code
 // string itself is stable across keystrokes and never re-tokenizes.
 const MCP_URL_SENTINEL = "__SLOT_mcpUrl__";
+const MCP_COMMAND_SENTINEL = "__SLOT_mcpCommand__";
 const SERVICE_VERSION_SENTINEL = "__SLOT_serviceVersion__";
 
 type SetupMode = "existing" | "new";
+
+type Transport = "http" | "stdio";
 
 type Platform = "kubernetes" | "docker";
 
@@ -36,6 +41,7 @@ type SnippetContext = {
   slug: string;
   gateway: string;
   mcpUrl: string;
+  mcpCommand: string;
   serviceVersion: string;
 };
 
@@ -50,7 +56,9 @@ export function TunneledMcpSetupTabs({
 }): JSX.Element {
   const [mode, setMode] = useState<SetupMode>("existing");
   const [platform, setPlatform] = useState<Platform>("kubernetes");
+  const [transport, setTransport] = useState<Transport>("http");
   const [mcpUrlDraft, setMcpUrlDraft] = useState("");
+  const [mcpCommandDraft, setMcpCommandDraft] = useState("");
   const [serviceVersionDraft, setServiceVersionDraft] = useState("");
 
   const ctx: SnippetContext = {
@@ -58,16 +66,20 @@ export function TunneledMcpSetupTabs({
     slug: slugForSnippet(serverName),
     gateway: tunnelGatewayURL(),
     mcpUrl: mcpUrlDraft.trim() || DEFAULT_MCP_URL,
+    mcpCommand: mcpCommandDraft.trim() || DEFAULT_MCP_COMMAND,
     serviceVersion: serviceVersionDraft.trim() || DEFAULT_SERVICE_VERSION,
   };
 
-  const snippetTabs =
-    mode === "existing" ? existingServerTabs(ctx) : newServerTabs(ctx);
+  const snippetTabs = snippetTabsFor(mode, transport, ctx);
   const activeSnippet =
     snippetTabs.find((tab) => tab.value === platform) ?? snippetTabs[0]!;
 
   const handleModeChange = (value: string) => {
     if (value === "existing" || value === "new") setMode(value);
+  };
+
+  const handleTransportChange = (value: string) => {
+    if (value === "http" || value === "stdio") setTransport(value);
   };
 
   const handlePlatformChange = (value: string) => {
@@ -108,6 +120,19 @@ export function TunneledMcpSetupTabs({
                 : "Deploy a sample hello-world MCP server together with the tunnel agent to try the tunnel end to end."}
             </Text>
           </ConfigGroup>
+          {mode === "existing" && (
+            <ConfigGroup label="Transport">
+              <Tabs value={transport} onValueChange={handleTransportChange}>
+                <TabsList className="w-full">
+                  <TabsTrigger value="http">HTTP</TabsTrigger>
+                  <TabsTrigger value="stdio">Stdio</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <Text muted small>
+                {TRANSPORT_DESCRIPTIONS[transport]}
+              </Text>
+            </ConfigGroup>
+          )}
           <ConfigGroup label="Platform">
             <Tabs value={platform} onValueChange={handlePlatformChange}>
               <TabsList className="w-full">
@@ -119,7 +144,7 @@ export function TunneledMcpSetupTabs({
               </TabsList>
             </Tabs>
           </ConfigGroup>
-          {mode === "existing" && (
+          {mode === "existing" && transport === "http" && (
             <SnippetField
               id="tunnel-config-mcp-url"
               label="MCP server address"
@@ -127,6 +152,16 @@ export function TunneledMcpSetupTabs({
               value={mcpUrlDraft}
               onChange={setMcpUrlDraft}
               placeholder={DEFAULT_MCP_URL}
+            />
+          )}
+          {mode === "existing" && transport === "stdio" && (
+            <SnippetField
+              id="tunnel-config-mcp-command"
+              label="Server command"
+              description="Shell command that starts the stdio MCP server. The agent runs it once per MCP session."
+              value={mcpCommandDraft}
+              onChange={setMcpCommandDraft}
+              placeholder={DEFAULT_MCP_COMMAND}
             />
           )}
           <SnippetField
@@ -153,6 +188,26 @@ export function TunneledMcpSetupTabs({
       </div>
     </div>
   );
+}
+
+const TRANSPORT_DESCRIPTIONS: Record<Transport, string> = {
+  http: "The MCP server listens on a Streamable HTTP endpoint.",
+  stdio:
+    "The MCP server speaks over stdin and stdout. The agent starts one server process per MCP session.",
+};
+
+function snippetTabsFor(
+  mode: SetupMode,
+  transport: Transport,
+  ctx: SnippetContext,
+): SnippetTab[] {
+  if (mode === "new") return newServerTabs(ctx);
+  switch (transport) {
+    case "http":
+      return existingServerTabs(ctx);
+    case "stdio":
+      return stdioServerTabs(ctx);
+  }
 }
 
 // Snippets for pointing the tunnel agent at an MCP server the user already
@@ -184,7 +239,7 @@ spec:
     spec:
       containers:
         - name: tunnel-agent
-          image: ghcr.io/speakeasy-api/gram-tunnel-agent:latest
+          image: ${TUNNEL_AGENT_IMAGE}
           env:
             - name: TUNNEL_KEY
               valueFrom:
@@ -203,7 +258,7 @@ spec:
   -e TUNNEL_LOCAL_MCP_URL='${MCP_URL_SENTINEL}' \\
   -e TUNNEL_GATEWAY_URL=${shellQuote(gateway)} \\
   -e TUNNEL_SERVICE_VERSION='${SERVICE_VERSION_SENTINEL}' \\
-  ghcr.io/speakeasy-api/gram-tunnel-agent:latest`;
+  ${TUNNEL_AGENT_IMAGE}`;
 
   return [
     {
@@ -225,6 +280,106 @@ spec:
       code: docker,
       slots: {
         [MCP_URL_SENTINEL]: shellSlot(mcpUrl, "TUNNEL_LOCAL_MCP_URL="),
+        [SERVICE_VERSION_SENTINEL]: shellSlot(
+          serviceVersion,
+          "TUNNEL_SERVICE_VERSION=",
+        ),
+      },
+    },
+  ];
+}
+
+// Snippets for a stdio MCP server. The published agent image carries no
+// language runtime, so each platform builds an image that adds the agent
+// binary to a base image with the runtime the command needs.
+function stdioServerTabs(ctx: SnippetContext): SnippetTab[] {
+  const { renderedKey, slug, gateway, mcpCommand, serviceVersion } = ctx;
+  const localImage = `gram-tunnel-${slug}:local`;
+
+  const dockerfile = `cat > Dockerfile <<'DOCKERFILE'
+# Use a base image with the runtime your command needs, e.g. python:3.12-slim.
+FROM node:22-alpine
+COPY --from=${TUNNEL_AGENT_IMAGE} /usr/local/bin/tunnel-agent /usr/local/bin/tunnel-agent
+USER node
+ENTRYPOINT ["/usr/local/bin/tunnel-agent"]
+DOCKERFILE`;
+
+  const docker = `mkdir -p gram-tunnel-${slug}
+cd gram-tunnel-${slug}
+
+${dockerfile}
+
+docker build -t ${localImage} .
+docker run --rm --name gram-tunnel-${slug} \\
+  -e TUNNEL_KEY=${shellQuote(renderedKey)} \\
+  -e TUNNEL_LOCAL_MCP_COMMAND='${MCP_COMMAND_SENTINEL}' \\
+  -e TUNNEL_GATEWAY_URL=${shellQuote(gateway)} \\
+  -e TUNNEL_SERVICE_VERSION='${SERVICE_VERSION_SENTINEL}' \\
+  ${localImage}`;
+
+  const kubernetes = `apiVersion: v1
+kind: Secret
+metadata:
+  name: gram-tunnel-key
+type: Opaque
+stringData:
+  TUNNEL_KEY: ${yamlQuote(renderedKey)}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gram-tunnel-${slug}
+spec:
+  # MCP sessions live in one agent's server processes; keep one replica.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gram-tunnel-${slug}
+  template:
+    metadata:
+      labels:
+        app: gram-tunnel-${slug}
+    spec:
+      containers:
+        - name: tunnel-agent
+          # Built from the Dockerfile on the Docker tab and pushed to your registry.
+          image: registry.example.com/gram-tunnel-${slug}:${__GRAM_TUNNEL_AGENT_VERSION__}
+          env:
+            - name: TUNNEL_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gram-tunnel-key
+                  key: TUNNEL_KEY
+            - name: TUNNEL_LOCAL_MCP_COMMAND
+              value: ${yamlQuote(MCP_COMMAND_SENTINEL)}
+            - name: TUNNEL_GATEWAY_URL
+              value: ${yamlQuote(gateway)}
+            - name: TUNNEL_SERVICE_VERSION
+              value: ${yamlQuote(SERVICE_VERSION_SENTINEL)}`;
+
+  return [
+    {
+      value: "kubernetes",
+      label: "Kubernetes",
+      language: "yaml",
+      hint: "Build the image from the Docker tab, push it to a registry your cluster can pull from, and replace the image below.",
+      code: kubernetes,
+      slots: {
+        [MCP_COMMAND_SENTINEL]: yamlSlot(mcpCommand),
+        [SERVICE_VERSION_SENTINEL]: yamlSlot(serviceVersion),
+      },
+    },
+    {
+      value: "docker",
+      label: "Docker",
+      language: "bash",
+      hint: "Build an image that adds the tunnel agent to a base image with your server's runtime, then run it.",
+      code: docker,
+      slots: {
+        [MCP_COMMAND_SENTINEL]: shellSlot(
+          mcpCommand,
+          "TUNNEL_LOCAL_MCP_COMMAND=",
+        ),
         [SERVICE_VERSION_SENTINEL]: shellSlot(
           serviceVersion,
           "TUNNEL_SERVICE_VERSION=",
@@ -309,7 +464,7 @@ spec:
               mountPath: /app
               readOnly: true
         - name: tunnel-agent
-          image: ghcr.io/speakeasy-api/gram-tunnel-agent:latest
+          image: ${TUNNEL_AGENT_IMAGE}
           env:
             - name: TUNNEL_KEY
               valueFrom:
@@ -358,7 +513,7 @@ docker run --rm --name gram-tunnel-${slug} \\
   -e TUNNEL_LOCAL_MCP_URL=${shellQuote(dockerUpstream)} \\
   -e TUNNEL_GATEWAY_URL=${shellQuote(gateway)} \\
   -e TUNNEL_SERVICE_VERSION='${SERVICE_VERSION_SENTINEL}' \\
-  ghcr.io/speakeasy-api/gram-tunnel-agent:latest`;
+  ${TUNNEL_AGENT_IMAGE}`;
 
   return [
     {

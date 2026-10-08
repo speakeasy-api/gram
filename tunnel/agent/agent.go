@@ -1,4 +1,6 @@
-// Package agent reverse-proxies a pinned local MCP server over one outbound yamux/WebSocket tunnel.
+// Package agent serves a pinned local MCP server over one outbound
+// yamux/WebSocket tunnel: either reverse-proxying a local HTTP MCP URL or
+// bridging Streamable HTTP onto a stdio MCP server command.
 package agent
 
 import (
@@ -49,18 +51,28 @@ type Config struct {
 	GatewayURL string
 	APIKey     string
 	// LocalMCPURL is pinned at startup; the gateway cannot redirect agent traffic.
-	LocalMCPURL    string
-	ServiceVersion string
-	Metadata       map[string]string
-	MinBackoff     time.Duration
-	MaxBackoff     time.Duration
+	// Exactly one of LocalMCPURL and LocalMCPCommand is set.
+	LocalMCPURL string
+	// LocalMCPCommand is a shell command that starts a stdio MCP server; the
+	// agent runs one process per MCP session.
+	LocalMCPCommand string
+	// StdioMaxSessions caps concurrent stdio server processes.
+	StdioMaxSessions int
+	// StdioIdleTimeout stops a stdio server after this long without traffic.
+	StdioIdleTimeout time.Duration
+	ServiceVersion   string
+	Metadata         map[string]string
+	MinBackoff       time.Duration
+	MaxBackoff       time.Duration
 }
 
 type Agent struct {
 	cfg     Config
-	target  *url.URL
 	handler http.Handler
-	logger  *slog.Logger
+	// stdio is set in stdio mode and outlives individual gateway connections,
+	// so MCP sessions survive a tunnel reconnect.
+	stdio  *stdioBridge
+	logger *slog.Logger
 }
 
 func New(cfg Config, logger *slog.Logger) (*Agent, error) {
@@ -72,9 +84,10 @@ func New(cfg Config, logger *slog.Logger) (*Agent, error) {
 		return nil, err
 	}
 	cfg.GatewayURL = gatewayURL
-	target, err := url.Parse(cfg.LocalMCPURL)
-	if err != nil {
-		return nil, err
+	hasURL := strings.TrimSpace(cfg.LocalMCPURL) != ""
+	hasCommand := strings.TrimSpace(cfg.LocalMCPCommand) != ""
+	if hasURL == hasCommand {
+		return nil, errors.New("exactly one of a local MCP URL or a local MCP command is required")
 	}
 	if cfg.MinBackoff <= 0 {
 		cfg.MinBackoff = defaultMinBackoff
@@ -83,12 +96,27 @@ func New(cfg Config, logger *slog.Logger) (*Agent, error) {
 		cfg.MaxBackoff = defaultMaxBackoff
 	}
 
-	a := &Agent{cfg: cfg, target: target, logger: logger}
-	a.handler = a.buildHandler(target)
+	a := &Agent{cfg: cfg, handler: nil, stdio: nil, logger: logger}
+	var upstream http.Handler
+	if hasCommand {
+		a.stdio = newStdioBridge(cfg.LocalMCPCommand, cfg.StdioMaxSessions, cfg.StdioIdleTimeout, logger)
+		upstream = a.stdio
+	} else {
+		target, err := url.Parse(cfg.LocalMCPURL)
+		if err != nil {
+			return nil, err
+		}
+		upstream = a.buildProxy(target)
+	}
+	a.handler = a.buildHandler(upstream)
 	return a, nil
 }
 
 func (a *Agent) Run(ctx context.Context) error {
+	if a.stdio != nil {
+		go a.stdio.reap(ctx)
+		defer a.stdio.Close()
+	}
 	backoff := a.cfg.MinBackoff
 	for {
 		if ctx.Err() != nil {
@@ -218,7 +246,7 @@ func isLocalGatewayHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-func (a *Agent) buildHandler(target *url.URL) http.Handler {
+func (a *Agent) buildProxy(target *url.URL) http.Handler {
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.FlushInterval = -1 // stream SSE immediately
 	baseDirector := proxy.Director
@@ -248,7 +276,10 @@ func (a *Agent) buildHandler(target *url.URL) http.Handler {
 		a.logger.Warn("tunnel agent upstream error", slog.Any("error", err))
 		w.WriteHeader(http.StatusBadGateway)
 	}
+	return proxy
+}
 
+func (a *Agent) buildHandler(upstream http.Handler) http.Handler {
 	// Control paths terminate on the agent; all other requests hit the pinned MCP upstream.
 	mux := http.NewServeMux()
 	mux.HandleFunc(wire.ControlHelloPath, func(w http.ResponseWriter, r *http.Request) {
@@ -263,7 +294,7 @@ func (a *Agent) buildHandler(target *url.URL) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
-		proxy.ServeHTTP(w, r)
+		upstream.ServeHTTP(w, r)
 	})
 	return mux
 }

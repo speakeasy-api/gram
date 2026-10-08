@@ -30,7 +30,7 @@ claims, verification and rotation.
 
 | Piece       | Code                                          | Responsibility                                                                                                                     |
 | ----------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Agent       | `tunnel/agent`, `tunnel/cmd/tunnel-agent`     | Customer-side process. Dials the gateway and proxies substream HTTP to one pinned local MCP URL.                                   |
+| Agent       | `tunnel/agent`, `tunnel/cmd/tunnel-agent`     | Customer-side process. Dials the gateway and serves substream HTTP from one pinned local MCP URL or stdio MCP server command.      |
 | Gateway     | `tunnel/gateway`, `tunnel/cmd/tunnel-gateway` | Accepts agent WebSockets on the public listener, owns yamux sessions, and forwards requests by tunnel ID on the internal listener. |
 | MCP serve   | `server/internal/mcp/serveendpoint.go`        | Resolves the tunnel route, injects `X-Gram-Tunnel-Id`, and runs the remote MCP proxy path.                                         |
 | Management  | `server/internal/tunneledmcp`                 | Goa service backed by Postgres plus Redis connection metadata.                                                                     |
@@ -46,12 +46,38 @@ MCP client
   -> gram-server selects one gateway by client affinity or random fallback
   -> gram-server proxies to gateway with X-Gram-Tunnel-Id
   -> gateway opens yamux substream to a live agent
-  -> agent proxies to TUNNEL_LOCAL_MCP_URL
+  -> agent proxies to TUNNEL_LOCAL_MCP_URL, or bridges to TUNNEL_LOCAL_MCP_COMMAND
   -> customer MCP server
 ```
 
 The caller never supplies the tunnel ID. Speakeasy derives it from the project-scoped
 MCP server row and overwrites any inbound tunnel header before forwarding.
+
+## Stdio MCP Servers
+
+Set `TUNNEL_LOCAL_MCP_COMMAND` instead of `TUNNEL_LOCAL_MCP_URL` to serve an
+MCP server that speaks the stdio transport. The agent runs the command with
+`/bin/sh -c` and bridges Streamable HTTP onto it:
+
+- Each MCP session gets its own server process, started by `initialize` and
+  addressed by an agent-minted `Mcp-Session-Id`.
+- Messages are relayed verbatim. Server-initiated requests and notifications go
+  to the session's GET stream when one is open, otherwise to an open POST
+  stream, otherwise to a bounded backlog drained by the next GET stream.
+- DELETE, `TUNNEL_STDIO_IDLE_TIMEOUT` (default `30m`), and agent shutdown stop
+  the process: stdin closes, then SIGTERM, then SIGKILL to its process group.
+- `TUNNEL_STDIO_MAX_SESSIONS` (default `16`) caps concurrent processes; an
+  `initialize` past the cap gets HTTP 503.
+- The process inherits the agent's environment minus every `TUNNEL_*`
+  variable, so credentials for the server go in the agent's environment.
+- Processes outlive gateway reconnects, but sessions are local to one agent.
+  Run a single agent replica per stdio tunnel.
+
+Only MCP traffic at the root path is served. OAuth back-channel paths return
+404, so a stdio tunnel cannot back an OAuth issuer.
+
+The published image contains no language runtimes. To run a Node or Python
+server, build on top of it and add the runtime the command needs.
 
 ## OAuth Back-Channel Requests
 
@@ -94,6 +120,16 @@ run the agent against any local MCP server with the one-time key it issues:
 TUNNEL_GATEWAY_URL=ws://localhost:8090/connect \
 TUNNEL_KEY=<one-time tunnel key> \
 TUNNEL_LOCAL_MCP_URL=<local MCP server url> \
+TUNNEL_SERVICE_VERSION=dev \
+go run ./tunnel/cmd/tunnel-agent
+```
+
+For a stdio server, swap the URL for a command:
+
+```bash
+TUNNEL_GATEWAY_URL=ws://localhost:8090/connect \
+TUNNEL_KEY=<one-time tunnel key> \
+TUNNEL_LOCAL_MCP_COMMAND='npx -y @modelcontextprotocol/server-everything' \
 TUNNEL_SERVICE_VERSION=dev \
 go run ./tunnel/cmd/tunnel-agent
 ```
