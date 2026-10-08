@@ -165,7 +165,7 @@ func TestGetPluginOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 		"plugin", "id", "name", "slug", "is_default", "auto_created",
 		"server_count", "skill_count",
 		"assignments", "all_members", "roles", "users",
-		"publication", "distribution_admission", "state", "mode", "missing_audience_counts", "everyone", "roles", "groups", "attributes", "users", "checked_at", "complete",
+		"publication", "distribution_admission", "state", "missing_audience_counts", "everyone", "roles", "groups", "attributes", "users", "checked_at", "complete",
 		"servers", "display_name", "backend", "mcp_slug", "policy", "enabled",
 		"skills", "name", "follows_latest",
 		"assignment_version",
