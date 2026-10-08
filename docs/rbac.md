@@ -742,6 +742,8 @@ idempotent
 open_world
 ```
 
+A tool with no annotations has no disposition. `authz.MCPToolCallCheck` gives such a tool the internal disposition `unclassified`, which `ValidateSelector` rejects in any grant. A grant narrowed only by disposition therefore never reaches an unannotated tool; a grant naming the tool, or a grant for the whole server or project, still does. To make such a tool available to an annotation rule, record its annotations (hosted tools carry them on their definitions; remote and tunneled servers store them as tool metadata) or grant it by name.
+
 Only add a dimension when the resource family needs finer-grained grants without creating a new scope for every variation. New dimensions must be explicitly allowed in `authz.ValidateSelector`; otherwise role grants using them will be rejected.
 
 ### Selector matching

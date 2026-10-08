@@ -867,6 +867,40 @@ func TestService_SetResourceAudience_RejectsToolsAndAnnotationsTogether(t *testi
 	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
 }
 
+// The disposition a check gives an unannotated tool is internal and cannot be
+// written as an annotation rule.
+func TestService_SetResourceAudience_RejectsUnauthorableDisposition(t *testing.T) {
+	t.Parallel()
+
+	for _, disposition := range []string{authz.DispositionUnclassified, authz.WildcardResource} {
+		t.Run(disposition, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestAccessService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+
+			serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
+			_, err := ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+				ResourceKind: "mcp",
+				ResourceID:   serverID,
+				Entries: []*gen.SetResourceAudienceEntry{
+					{
+						PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID).String(),
+						Level:        "use",
+						Dispositions: []string{disposition},
+					},
+				},
+				ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+				SessionToken:    nil,
+				ApikeyToken:     nil,
+			})
+			require.Error(t, err)
+		})
+	}
+}
+
 // A suspended agent keeps the access it already had, and nothing more. The
 // guard matches the rule, not just the principal: otherwise a tool-limited
 // grant could be rewritten as an unrestricted one, widening what the agent

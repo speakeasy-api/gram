@@ -1,21 +1,41 @@
 package authz
 
 // MCPToolCallDimensions carries the typed attributes of an MCP tool call.
-// Zero-value fields are omitted from the check dimensions.
+// Zero-value Tool and ProjectID are omitted from the check dimensions. A
+// zero-value Disposition on a named tool means the tool has no classification
+// and becomes [DispositionUnclassified].
 type MCPToolCallDimensions struct {
-	Tool        string
+	// Tool is the name of the tool being listed or called.
+	Tool string
+
+	// Disposition is the tool's classification derived from its annotations,
+	// or empty when it carries none.
 	Disposition string
-	ProjectID   string
+
+	// ProjectID is the project the MCP server belongs to, so project-wide
+	// grants match.
+	ProjectID string
 }
 
 // MCPToolCallCheck builds a Check for an MCP tool call with the given dimensions.
+//
+// A named tool always carries a disposition dimension. Without one, a grant
+// narrowed only by disposition would match through the selector rule that
+// skips grant keys a check does not constrain, so a "read_only" grant would
+// admit every tool that has no annotations. An unclassified tool is therefore
+// checked as [DispositionUnclassified], which no grant can name: it is reached
+// only by grants that do not constrain disposition, such as a whole-server
+// grant or a grant naming the tool.
 func MCPToolCallCheck(toolsetID string, dims MCPToolCallDimensions) Check {
 	dimensions := map[string]string{}
 	if dims.Tool != "" {
 		dimensions[SelectorKeyTool] = dims.Tool
 	}
-	if dims.Disposition != "" {
+	switch {
+	case dims.Disposition != "":
 		dimensions[SelectorKeyDisposition] = dims.Disposition
+	case dims.Tool != "":
+		dimensions[SelectorKeyDisposition] = DispositionUnclassified
 	}
 	if dims.ProjectID != "" {
 		dimensions[SelectorKeyProjectID] = dims.ProjectID

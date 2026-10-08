@@ -686,6 +686,45 @@ func TestServePublic_MetaEndpoint_ListServers_RBACFiltersPrivateMembers(t *testi
 // authenticated caller whose tool-scoped connect grant passes the
 // toolset-level gate but names a different tool gets an empty catalog, not
 // the schemas the member endpoint would hide.
+// describe_server applies the same per-tool check as the member's own
+// tools/list: a grant narrowed only by disposition does not reach a tool that
+// carries no annotations, while a server-level grant does.
+func TestServePublic_MetaEndpoint_DescribeServer_DispositionGrantHidesUnannotatedTool(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	slug := "meta-" + uuid.NewString()
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
+
+	setToolsetMcpPrivate(t, ctx, ti, member.toolsetID, *authCtx.ProjectID)
+
+	var described struct {
+		Tools []struct {
+			Name string `json:"name"`
+		} `json:"tools"`
+	}
+
+	readOnlySelector := authz.NewSelector(authz.ScopeMCPConnect, member.toolsetID.String())
+	readOnlySelector[authz.SelectorKeyDisposition] = authz.DispositionReadOnly
+	readOnlyCtx := authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeMCPConnect,
+		Selector: readOnlySelector,
+	})
+	result := decodeMetaToolResult(t, callMetaTool(t, readOnlyCtx, ti, slug, "describe_server", map[string]any{"server": member.slug}))
+	require.NoError(t, json.Unmarshal(result.StructuredContent, &described))
+	require.Empty(t, described.Tools)
+
+	serverCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeMCPConnect, member.toolsetID.String()))
+	result = decodeMetaToolResult(t, callMetaTool(t, serverCtx, ti, slug, "describe_server", map[string]any{"server": member.slug}))
+	require.NoError(t, json.Unmarshal(result.StructuredContent, &described))
+	require.Len(t, described.Tools, 1)
+	require.Equal(t, member.slug+"--alpha_tool", described.Tools[0].Name)
+}
+
 func TestServePublic_MetaEndpoint_DescribeServer_FiltersRBACHiddenTools(t *testing.T) {
 	t.Parallel()
 

@@ -66,6 +66,9 @@ type fakeTunnelGateway struct {
 	// challenge, when set, is emitted as WWW-Authenticate on every backend
 	// response to prove Speakeasy strips it for anonymous callers.
 	challenge string
+	// toolsJSON is the JSON array a tools/list answers with. Empty answers
+	// with no tools.
+	toolsJSON string
 
 	mu       sync.Mutex
 	forwards []http.Header
@@ -163,8 +166,12 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":`+requestID(buf.String())+`,"result":{"content":[{"type":"text","text":"pong through the tunnel"}],"isError":false}}`)
 			return
 		}
+		tools := g.toolsJSON
+		if tools == "" {
+			tools = "[]"
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":`+requestID(buf.String())+`,"result":{"tools":[]}}`)
+		_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":`+requestID(buf.String())+`,"result":{"tools":`+tools+`}}`)
 		return
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
