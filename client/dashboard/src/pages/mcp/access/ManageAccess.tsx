@@ -370,16 +370,14 @@ export function ManageAccess({
                 : "grid-cols-[auto_repeat(2,minmax(0,1fr))_max-content_auto]",
             )}
           >
-            {showPlugins && (
-              <div className="text-muted-foreground border-border col-span-full grid grid-cols-subgrid items-center gap-x-6 border-b px-4 py-2 text-xs">
-                <span>Type</span>
-                <span>Name</span>
-                <span>Access</span>
-                <span>Distributed via</span>
-                <span>Members</span>
-                <span />
-              </div>
-            )}
+            <div className="text-muted-foreground border-border col-span-full grid grid-cols-subgrid items-center gap-x-6 border-b px-4 py-2 text-xs">
+              <span>Type</span>
+              <span>Name</span>
+              <span>Access</span>
+              {showPlugins && <span>Distributed via</span>}
+              <span>Members</span>
+              <span />
+            </div>
             {visible.map((row) => (
               <PrincipalRow
                 key={row.principalUrn}
