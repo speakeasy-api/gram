@@ -20,7 +20,7 @@ import {
   type ToolLimitKind,
 } from "./mcpAccessModel";
 
-/** Elements inside a row that act on their own rather than open the sheet. */
+/** Elements inside a row that act on their own rather than tick the server. */
 const ROW_CONTROLS =
   "button, a, input, label, [role=checkbox], [role=menuitem], [data-slot=checkbox]";
 
@@ -54,8 +54,9 @@ export function McpServerRow({
   const checked = locked || !!limit;
 
   return (
-    // The whole row opens the tool access sheet, except the controls inside
-    // it. The name is the keyboard way in; the row is for the pointer.
+    // The whole row ticks the server, except the controls inside it; the
+    // checkbox is the keyboard way in. Tool limits open from the badges and
+    // the ellipsis menu.
     <div
       className={cn(
         LIST_ROW,
@@ -75,7 +76,7 @@ export function McpServerRow({
         const control =
           target instanceof Element ? target.closest(ROW_CONTROLS) : null;
         if (control && event.currentTarget.contains(control)) return;
-        onOpenSheet();
+        onToggle(!checked);
       }}
     >
       <Checkbox
@@ -88,20 +89,9 @@ export function McpServerRow({
       />
       <ServerMark />
       <span className="flex min-w-0 flex-[1_1_16rem] flex-col items-start">
-        {locked ? (
-          <Text as="span" id={nameId} className="truncate text-sm font-medium">
-            {server.name}
-          </Text>
-        ) : (
-          <button
-            type="button"
-            onClick={onOpenSheet}
-            className="max-w-full truncate text-left text-sm font-medium hover:underline"
-          >
-            <span id={nameId}>{server.name}</span>
-            <span className="sr-only">, edit tool access</span>
-          </button>
-        )}
+        <Text as="span" id={nameId} className="truncate text-sm font-medium">
+          {server.name}
+        </Text>
         <Text as="span" id={handleId} mono small muted className="truncate">
           {serverHandle(server)}
         </Text>

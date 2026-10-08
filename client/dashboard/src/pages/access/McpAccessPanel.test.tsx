@@ -344,17 +344,28 @@ describe("McpAccessPanel", () => {
     expect(live.lastOptions?.enabled).toBe(false);
   });
 
-  it("opens the tool sheet from the row, and the first choice grants the server", () => {
+  it("ticks a server from anywhere on its row, once per click", () => {
     const { onChange } = renderPanel();
-    // Ticking a server is its own action: it grants without opening the sheet.
-    fireEvent.click(screen.getByLabelText("Linear"));
+    fireEvent.click(screen.getByText("slack"));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(allowSelectors(onChange.mock.calls.at(-1)?.[0])).toEqual([
-      { resourceKind: "mcp", resourceId: "linear" },
+      { resourceKind: "mcp", resourceId: "slack" },
     ]);
+    // The checkbox inside the row toggles once, not once for it and once
+    // for the row.
+    fireEvent.click(screen.getByLabelText("Slack"));
+    expect(onChange.mock.calls.at(-1)?.[0]).toBeUndefined();
+  });
 
-    fireEvent.click(screen.getByText("slack"));
+  it("opens an ungranted server's sheet from its menu with nothing chosen", () => {
+    const { onChange } = renderPanel();
+    const trigger = screen.getByRole("button", {
+      name: "More options for Slack",
+    });
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    fireEvent.click(screen.getByRole("menuitem", { name: /Edit by tool/ }));
     expect(screen.getByRole("dialog", { name: /Slack/ })).toBeTruthy();
+    expect(onChange).not.toHaveBeenCalled();
     expect(
       (
         screen.getByRole("radio", { name: "All tools" }) as HTMLButtonElement
@@ -362,8 +373,33 @@ describe("McpAccessPanel", () => {
     ).toBe("unchecked");
     fireEvent.click(screen.getByRole("radio", { name: "Specific tools" }));
     expect(allowSelectors(onChange.mock.calls.at(-1)?.[0])).toEqual([
-      { resourceKind: "mcp", resourceId: "linear" },
       { resourceKind: "mcp", resourceId: "slack", tool: "search" },
     ]);
+  });
+
+  it("pins the Default project first wherever the inventory lists it", () => {
+    inventory.groups = [...inventory.groups].reverse();
+    renderPanel();
+    const headings = screen
+      .getAllByRole("heading", { level: 3 })
+      .map((heading) => heading.textContent);
+    expect(headings.slice(0, 2)).toEqual(["Default", "Data Platform"]);
+  });
+
+  it("searches a server's tools in the sheet", () => {
+    renderPanel({
+      "mcp:connect": connect([
+        { resourceKind: "mcp", resourceId: "linear", tool: "search" },
+      ]),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "1 Tool" }));
+    fireEvent.change(screen.getByPlaceholderText("Search tools"), {
+      target: { value: "zzz" },
+    });
+    expect(screen.getByText(/No tools match/)).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText("Search tools"), {
+      target: { value: "srch" },
+    });
+    expect(screen.queryByText(/No tools match/)).toBeNull();
   });
 });

@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
+import { SearchBar } from "@/components/ui/SearchBar";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import {
   Sheet,
@@ -29,6 +30,7 @@ import { LIST_FRAME, LIST_ROW, LIST_ROW_SELECTED } from "./mcpAccessStyles";
 import {
   convertToolLimit,
   DISPOSITION_COPY,
+  fuzzyMatch,
   DISPOSITIONS,
   toolDisposition,
   type ServerWithProject,
@@ -259,6 +261,7 @@ function ToolChecklist({
   selected: string[];
   onChange: (tools: string[]) => void;
 }): JSX.Element {
+  const [query, setQuery] = useState("");
   switch (source.status) {
     case "loading":
       return (
@@ -304,6 +307,10 @@ function ToolChecklist({
   const chosen = new Set(selected);
   const { tools } = source;
   const picked = tools.filter((tool) => chosen.has(tool.name)).length;
+  // Servers carry a hundred tools or more, so the list searches. Select all
+  // and Clear act on what the search shows.
+  const shown = tools.filter((tool) => fuzzyMatch(query, tool.name));
+  const shownNames = new Set(shown.map((tool) => tool.name));
   const toggle = (name: string, on: boolean) =>
     onChange(
       on ? [...selected, name] : selected.filter((tool) => tool !== name),
@@ -318,16 +325,38 @@ function ToolChecklist({
         <Button
           variant="tertiary"
           size="xs"
-          onClick={() => onChange(tools.map((tool) => tool.name))}
+          onClick={() =>
+            onChange([
+              ...selected.filter((name) => !shownNames.has(name)),
+              ...shown.map((tool) => tool.name),
+            ])
+          }
         >
           <Button.Text>Select all</Button.Text>
         </Button>
-        <Button variant="tertiary" size="xs" onClick={() => onChange([])}>
+        <Button
+          variant="tertiary"
+          size="xs"
+          onClick={() =>
+            onChange(selected.filter((name) => !shownNames.has(name)))
+          }
+        >
           <Button.Text>Clear</Button.Text>
         </Button>
       </div>
+      <SearchBar
+        value={query}
+        onChange={setQuery}
+        placeholder="Search tools"
+        className="bg-card w-full"
+      />
       <div className={LIST_FRAME}>
-        {tools.map((tool) => {
+        {shown.length === 0 && (
+          <Text muted small className="px-3 py-2">
+            No tools match &ldquo;{query}&rdquo;.
+          </Text>
+        )}
+        {shown.map((tool) => {
           const disposition = toolDisposition(tool);
           return (
             <label

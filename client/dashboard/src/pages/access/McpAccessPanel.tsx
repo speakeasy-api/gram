@@ -99,20 +99,23 @@ export function McpAccessPanel({
     [inventory.groups],
   );
   const forbidden = new Set(access.forbidden);
+  const defaultSlugId = organization.projects.find(
+    (p) => p.slug === "default",
+  )?.id;
+  // The default project is pinned first, and opens first; the first project
+  // with servers opens instead when the default one has none.
   const pickerGroups = inventory.groups
     .map((group) => ({
       ...group,
       servers: group.servers.filter((s) => !forbidden.has(s.id)),
     }))
-    .filter((group) => group.servers.length > 0);
-  // The default project opens first, or the first project with servers when
-  // the default one has none.
-  const defaultSlugId = organization.projects.find(
-    (p) => p.slug === "default",
-  )?.id;
-  const defaultProjectId =
-    pickerGroups.find((group) => group.projectId === defaultSlugId)
-      ?.projectId ?? pickerGroups[0]?.projectId;
+    .filter((group) => group.servers.length > 0)
+    .sort(
+      (a, b) =>
+        Number(b.projectId === defaultSlugId) -
+        Number(a.projectId === defaultSlugId),
+    );
+  const defaultProjectId = pickerGroups[0]?.projectId;
 
   const openSheet = (entry: ServerWithProject, tab: ToolSheetTab) =>
     setSheet({ target: { kind: "server", entry }, tab });
