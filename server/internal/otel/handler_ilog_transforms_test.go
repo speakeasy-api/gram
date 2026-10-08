@@ -271,7 +271,7 @@ func TestLogTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 		require.Contains(t, attributes, "gen_ai.input.messages", "the producer's own attributes stay")
 	})
 
-	t.Run("a record that sends nothing reserved counts nothing", func(t *testing.T) {
+	t.Run("a record that sends nothing reserved keeps its own attributes", func(t *testing.T) {
 		t.Parallel()
 		inbound := (&otelv1.InboundLogRecord_builder{
 			RecordId:  new("record-id"),
@@ -285,7 +285,7 @@ func TestLogTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 			Attributes: []*otelv1.InboundLogRecord_KeyValue{logStringAttribute("model", "claude-sonnet-4")},
 		}).Build()
 
-		require.NotNil(t, publish(t, inbound))
+		require.Equal(t, "claude-sonnet-4", publish(t, inbound)["model"].GetStringValue())
 	})
 }
 

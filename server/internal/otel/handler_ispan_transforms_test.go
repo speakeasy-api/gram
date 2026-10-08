@@ -367,9 +367,10 @@ func TestSpanTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 		require.Contains(t, attributes, "http.request.method", "the producer's own attributes stay")
 	})
 
-	t.Run("a span that sends nothing reserved passes through", func(t *testing.T) {
+	t.Run("a span that sends nothing reserved keeps its own attributes", func(t *testing.T) {
 		t.Parallel()
-		require.NotNil(t, publish(t, span("chat gpt-4o", spanTestStringAttribute("gen_ai.operation.name", "chat"))))
+		attributes := publish(t, span("chat gpt-4o", spanTestStringAttribute("gen_ai.operation.name", "chat")))
+		require.Equal(t, "chat", attributes["gen_ai.operation.name"].GetStringValue())
 	})
 }
 

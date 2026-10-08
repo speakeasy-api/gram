@@ -106,8 +106,8 @@ func rewriteInstrumentationScope(span *otelv1.Span) error {
 }
 
 // dropReservedSpanAttributes removes what a producer sent under the
-// namespaces the pipeline writes, speakeasy and directory, and says how many
-// attributes went, exactly as the log transform does for a log record: only
+// namespaces the pipeline writes, speakeasy and directory, exactly as the
+// log transform does for a log record: only
 // the pipeline writes there, and a producer that sends one would otherwise
 // classify its own span, claim another tenant, pose as another producer's
 // scope, or give a person a group or department. The enrichers read

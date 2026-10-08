@@ -106,8 +106,8 @@ func rewriteLogInstrumentationScope(record *otelv1.LogRecord) error {
 }
 
 // dropReservedLogAttributes removes what a producer sent under the
-// namespaces the pipeline writes, speakeasy and directory, and says how many
-// attributes went. Only the pipeline writes there, and it leaves a key off
+// namespaces the pipeline writes, speakeasy and directory. Only the
+// pipeline writes there, and it leaves a key off
 // when a record carries no value for it, so a producer that sends one would
 // otherwise classify its own record, claim another tenant, pose as another
 // producer's scope, or give a person a group or department. The enrichers
