@@ -814,6 +814,12 @@ func TestToolExposureUnavailableRegistrationMatchesLiveManifest(t *testing.T) {
 		require.Equal(t, ExternalAuthorizationOrgAdmin, unavailable[name].Meta.Authorization, "%s", name)
 		require.Equal(t, ProjectScopeExplicit, unavailable[name].Meta.ProjectScope, "%s", name)
 		require.Contains(t, unavailable[name].Description, "confirmed: true", "%s", name)
+		for _, description := range []string{unavailable[name].Description, live[name].Description} {
+			require.Contains(t, description, "requests publication for affected plugins", "%s", name)
+			require.Contains(t, description, "proven automatic role-plugin memberships are removed", "%s", name)
+			require.Contains(t, description, "preserving prior removal history", "%s", name)
+			require.Contains(t, description, "locally installed ZIPs require replacement", "%s", name)
+		}
 	}
 
 	// The refusals themselves must differ: a caller that only asked to list a

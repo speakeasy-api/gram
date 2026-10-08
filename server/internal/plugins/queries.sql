@@ -1394,3 +1394,15 @@ WHERE p.organization_id = @organization_id AND p.project_id = @project_id
   AND ps.id = ANY(@membership_ids::uuid[])
 ORDER BY ps.id
 FOR UPDATE OF ps;
+
+-- name: RemovePlatformCleanupMembership :one
+-- Reassert tenant scope on the write after cleanup's scoped reads and row locks.
+UPDATE plugin_servers ps
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+FROM plugins p, projects project
+WHERE ps.id = @id AND ps.plugin_id = @plugin_id AND ps.deleted IS FALSE
+  AND p.id = ps.plugin_id AND p.deleted IS FALSE
+  AND p.organization_id = @organization_id AND p.project_id = @project_id
+  AND project.id = p.project_id AND project.organization_id = @organization_id
+  AND project.deleted IS FALSE
+RETURNING ps.*;

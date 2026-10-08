@@ -1,5 +1,7 @@
 // Command cleanup_platform_plugins previews or applies one authorized batch of
 // existing automatic plugin memberships. It is run locally, not by the server.
+// Database credentials authorize this maintenance operation; -actor records the
+// initiating operator for audit, not an application-user authorization check.
 //
 // With GRAM_DATABASE_URL set to an authorized database connection:
 //

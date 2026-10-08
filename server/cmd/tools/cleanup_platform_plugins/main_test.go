@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
@@ -89,6 +90,8 @@ func testCleanupPreviewAndApply(t *testing.T, connected bool) {
 	require.NoError(t, err)
 	ordinary, err := toolsetsrepo.New(db).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{OrganizationID: org, ProjectID: project.ID, Name: "Ordinary", Slug: "ordinary"})
 	require.NoError(t, err)
+	_, err = toolsetsrepo.New(db).CreateToolsetVersion(ctx, toolsetsrepo.CreateToolsetVersionParams{ToolsetID: ordinary.ID, Version: 1, ToolUrns: []urn.Tool{urn.NewTool(urn.ToolKindHTTP, "example", "get_status")}, ResourceUrns: []urn.Resource{}})
+	require.NoError(t, err)
 	wrapper, err := mcprepo.New(db).CreateMCPServer(ctx, mcprepo.CreateMCPServerParams{ID: uuid.New(), ProjectID: project.ID, Name: pgtype.Text{String: "Wrapper", Valid: true}, ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: "private"})
 	require.NoError(t, err)
 	autoIDs := []uuid.UUID{}
@@ -156,6 +159,14 @@ func testCleanupPreviewAndApply(t *testing.T, connected bool) {
 		return n
 	}
 	require.Zero(t, count(), "preview must not request publication")
+	// The cleanup write independently rejects both wrong organization and project.
+	for _, scope := range []pluginsrepo.RemovePlatformCleanupMembershipParams{
+		{ID: candidates[0], PluginID: automatic.ID, OrganizationID: "wrong-org", ProjectID: project.ID},
+		{ID: candidates[0], PluginID: automatic.ID, OrganizationID: org, ProjectID: uuid.New()},
+	} {
+		_, err := q.RemovePlatformCleanupMembership(ctx, scope)
+		require.ErrorIs(t, err, pgx.ErrNoRows)
+	}
 	cfg = options{org: "wrong-org", project: project.ID, apply: true, memberships: append(candidates, manualID), actor: "test-operator"}
 	wrongScope, err := execute(ctx, db, cfg)
 	require.NoError(t, err)

@@ -936,7 +936,7 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 	}
 
 	ctx = roledelivery.WithProjectAdmission(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, rollout, rolloutErr)
-	pluginCreated, err := plugins.AttachToDefaultAndRolePluginsAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
+	outcome, err := plugins.AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		ToolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
@@ -950,7 +950,7 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 		return false, false, oops.E(oops.CodeUnexpected, err, "attach mcp server to default plugin").LogError(ctx, s.logger)
 	}
 
-	return true, pluginCreated, nil
+	return outcome.Attached, outcome.PluginCreated, nil
 }
 
 // triggerPluginPublish enqueues the marketplace publish for the project whose

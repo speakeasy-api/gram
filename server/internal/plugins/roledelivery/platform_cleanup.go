@@ -89,7 +89,7 @@ func applyPlatformCleanup(ctx context.Context, tx pgx.Tx, org string, projectID 
 		if !platform {
 			continue
 		}
-		removed, err := pluginsrepo.New(tx).RemovePluginServer(ctx, pluginsrepo.RemovePluginServerParams{ID: membership.ID, PluginID: membership.PluginID})
+		removed, err := pluginsrepo.New(tx).RemovePlatformCleanupMembership(ctx, pluginsrepo.RemovePlatformCleanupMembershipParams{ID: membership.ID, PluginID: membership.PluginID, OrganizationID: org, ProjectID: projectID})
 		if errors.Is(err, pgx.ErrNoRows) {
 			continue
 		}

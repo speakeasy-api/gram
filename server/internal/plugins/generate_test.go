@@ -3955,6 +3955,10 @@ func TestGeneratePlatformMCPPackageEmitsToolExposureWorkflow(t *testing.T) {
 		"`tool_exposure.exposure_version`",
 		"the `exposure_version` from the step-4 read",
 		"`removed_plugin_ids`",
+		"even when the edit only adds ordinary tools",
+		"while preserving prior removal history",
+		"people holding the listed plugins lose the removed tools",
+		"locally installed ZIPs require replacement",
 		"Never reuse the old exposure version",
 		"refused to avoid overwriting somebody else's edit",
 		// A shared tool list is structural, so the workflow must not send the

@@ -2970,6 +2970,52 @@ func (q *Queries) RemoveDeletedRolePluginAssignment(ctx context.Context, arg Rem
 	return result.RowsAffected(), nil
 }
 
+const removePlatformCleanupMembership = `-- name: RemovePlatformCleanupMembership :one
+UPDATE plugin_servers ps
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+FROM plugins p, projects project
+WHERE ps.id = $1 AND ps.plugin_id = $2 AND ps.deleted IS FALSE
+  AND p.id = ps.plugin_id AND p.deleted IS FALSE
+  AND p.organization_id = $3 AND p.project_id = $4
+  AND project.id = p.project_id AND project.organization_id = $3
+  AND project.deleted IS FALSE
+RETURNING ps.id, ps.plugin_id, ps.project_id, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id, ps.display_name, ps.policy, ps.sort_order, ps.created_at, ps.updated_at, ps.deleted_at, ps.deleted
+`
+
+type RemovePlatformCleanupMembershipParams struct {
+	ID             uuid.UUID
+	PluginID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// Reassert tenant scope on the write after cleanup's scoped reads and row locks.
+func (q *Queries) RemovePlatformCleanupMembership(ctx context.Context, arg RemovePlatformCleanupMembershipParams) (PluginServer, error) {
+	row := q.db.QueryRow(ctx, removePlatformCleanupMembership,
+		arg.ID,
+		arg.PluginID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	var i PluginServer
+	err := row.Scan(
+		&i.ID,
+		&i.PluginID,
+		&i.ProjectID,
+		&i.ToolsetID,
+		&i.McpServerID,
+		&i.MetaMcpServerID,
+		&i.DisplayName,
+		&i.Policy,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const removePluginServer = `-- name: RemovePluginServer :one
 UPDATE plugin_servers
 SET deleted_at = clock_timestamp(),
