@@ -1,9 +1,12 @@
 package gcp
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -36,6 +39,49 @@ func TestStorageCodegen_CommittedArtifactsAndDescriptorOrder(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, string(manifest), string(reorderedManifest))
 	require.Equal(t, string(code), string(reorderedCode))
+}
+
+func TestStorageCodegen_FingerprintIncludesOneofMembership(t *testing.T) {
+	t.Parallel()
+	raw, err := os.ReadFile("../storagefixture/descriptors.pb")
+	require.NoError(t, err)
+	var set descriptorpb.FileDescriptorSet
+	require.NoError(t, proto.Unmarshal(raw, &set))
+	var moved *descriptorpb.FieldDescriptorProto
+	for _, file := range set.File {
+		if file.GetName() != "fixture/v1/event.proto" {
+			continue
+		}
+		event := file.MessageType[0]
+		event.OneofDecl = append(event.OneofDecl, &descriptorpb.OneofDescriptorProto{Name: new("other")})
+		for _, field := range event.Field {
+			if field.GetName() == "chosen_data" {
+				field.OneofIndex = new(int32(1))
+			}
+			if field.GetName() == "chosen_child" {
+				moved = field
+			}
+		}
+	}
+	require.NotNil(t, moved)
+	raw, err = proto.Marshal(&set)
+	require.NoError(t, err)
+	_, before, err := RenderStorage(raw, "fixture", "example.com/fixture")
+	require.NoError(t, err)
+	moved.OneofIndex = new(int32(1))
+	raw, err = proto.Marshal(&set)
+	require.NoError(t, err)
+	_, after, err := RenderStorage(raw, "fixture", "example.com/fixture")
+	require.NoError(t, err)
+	var oldManifest, newManifest storageManifest
+	require.NoError(t, json.Unmarshal(before, &oldManifest))
+	require.NoError(t, json.Unmarshal(after, &newManifest))
+	old, updated := oldManifest.Subscriptions[1], newManifest.Subscriptions[1]
+	require.Equal(t, old.Schema, updated.Schema)
+	require.NotEqual(t, old.Fingerprint, updated.Fingerprint)
+	require.Equal(t, StorageMappingVersion, newManifest.MappingVersion)
+	hash := sha256.Sum256([]byte("mapping=" + newManifest.MappingVersion + "\n" + updated.Schema + "\n" + strings.Join(updated.Fields, "\n")))
+	require.Equal(t, fmt.Sprintf("%x", hash), updated.Fingerprint)
 }
 
 func TestStorageCodegen_ReservedAndCaseInsensitiveColumns(t *testing.T) {

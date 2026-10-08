@@ -43,7 +43,7 @@ assert pop["fixed32"] == 2**32 - 1
 assert pop["fixed64"] == 2**64 - 1
 assert pop["flag"] is False
 assert pop["data"] == b"\x00\xff"
-assert math.isinf(pop["fraction"])
+assert pop["fraction"] == math.inf
 assert pop["small_fraction"] == -1.5
 assert pop["child"]["value"] == ""
 assert pop["child"]["numbers"] == [1, -2]

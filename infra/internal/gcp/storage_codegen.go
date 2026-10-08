@@ -19,6 +19,10 @@ import (
 )
 
 const (
+	// StorageMappingVersion identifies the frozen protobuf-to-Parquet mapping
+	// contract used by generated manifests, fingerprints and object metadata.
+	StorageMappingVersion = "1"
+
 	// maxStorageDepth leaves room for LIST/MAP levels within Parquet's limit.
 	maxStorageDepth = 40
 
@@ -73,6 +77,9 @@ func RenderStorage(raw []byte, packageName, importPath string) ([]byte, []byte, 
 	if err := proto.Unmarshal(raw, &set); err != nil {
 		return nil, nil, fmt.Errorf("decode descriptors: %w", err)
 	}
+	if len(set.File) == 0 {
+		return nil, nil, fmt.Errorf("storage descriptors contain no files")
+	}
 	plugin, err := (protogen.Options{}).New(&pluginpb.CodeGeneratorRequest{ProtoFile: set.File})
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolve generated Go names: %w", err)
@@ -96,7 +103,7 @@ func RenderStorage(raw []byte, packageName, importPath string) ([]byte, []byte, 
 	}
 	storage := func(name string) string { return q("github.com/speakeasy-api/gram/infra/pkg/storage", name) }
 	pq := func(name string) string { return q("github.com/parquet-go/parquet-go", name) }
-	manifest := storageManifest{MappingVersion: "1", Subscriptions: []storageManifestEntry{}}
+	manifest := storageManifest{MappingVersion: StorageMappingVersion, Subscriptions: []storageManifestEntry{}}
 	slices.SortFunc(subs, func(a, b DesiredSubscription) int { return cmp.Compare(a.ProtoMessage, b.ProtoMessage) })
 	names := map[string]string{}
 	for _, sub := range subs {
@@ -104,6 +111,12 @@ func RenderStorage(raw []byte, packageName, importPath string) ([]byte, []byte, 
 			continue
 		}
 		payload, marker := messages[sub.TopicMessage], messages[sub.ProtoMessage]
+		if payload == nil {
+			return nil, nil, fmt.Errorf("storage payload %s is missing from descriptors", sub.TopicMessage)
+		}
+		if marker == nil {
+			return nil, nil, fmt.Errorf("storage marker %s is missing from descriptors", sub.ProtoMessage)
+		}
 		name := constNameFor(protoreflect.FullName(sub.ProtoMessage))
 		if previous, exists := names[name]; exists {
 			return nil, nil, fmt.Errorf("storage Go name %s collides: %s and %s", name, previous, sub.ProtoMessage)
@@ -128,7 +141,7 @@ func RenderStorage(raw []byte, packageName, importPath string) ([]byte, []byte, 
 		schema := parquet.NewSchema(sub.TopicMessage, root.schema())
 		entry := storageManifestEntry{Marker: sub.ProtoMessage, Payload: sub.TopicMessage, Schema: schema.String(), Fields: []string{}}
 		root.collectFields("", &entry.Fields)
-		hash := sha256.Sum256([]byte("mapping=1\n" + entry.Schema + "\n" + strings.Join(entry.Fields, "\n")))
+		hash := sha256.Sum256([]byte("mapping=" + manifest.MappingVersion + "\n" + entry.Schema + "\n" + strings.Join(entry.Fields, "\n")))
 		entry.Fingerprint = fmt.Sprintf("%x", hash)
 		manifest.Subscriptions = append(manifest.Subscriptions, entry)
 		g.P("var schema", name, " = ", pq("NewSchema"), "(", strconv.Quote(sub.TopicMessage), ",", root.schemaCode(pq), ")")
@@ -248,7 +261,11 @@ func (n *storageNode) collectFields(path string, fields *[]string) {
 		path += "." + n.name
 	}
 	if n.field != nil {
-		*fields = append(*fields, fmt.Sprintf("%s = %d (%s, presence=%t)", path, n.field.Desc.Number(), n.field.Desc.Kind(), n.field.Desc.HasPresence()))
+		oneof := ""
+		if n.field.Oneof != nil && !n.field.Oneof.Desc.IsSynthetic() {
+			oneof = ", oneof=" + string(n.field.Oneof.Desc.Name())
+		}
+		*fields = append(*fields, fmt.Sprintf("%s = %d (%s, presence=%t%s)", path, n.field.Desc.Number(), n.field.Desc.Kind(), n.field.Desc.HasPresence(), oneof))
 	}
 	for _, child := range n.children {
 		child.collectFields(path, fields)

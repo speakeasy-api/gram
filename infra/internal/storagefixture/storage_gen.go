@@ -40,7 +40,7 @@ func FixtureOpenArchive() storage.Definition {
 		Marker: &open.Archive{}, Payload: &open.Event{},
 		ProtoName: "fixture.open.Archive", SubscriptionID: "fixture-open-archive", TopicID: "fixture-open-event", Bucket: "fixture-archive",
 		Partitioning:       v1.StoragePartitioning_STORAGE_PARTITIONING_HIVE_DAILY,
-		PartitionAttribute: "", PartitionKeys: []string{}, Schema: schemaFixtureOpenArchive, Fingerprint: "473604432e25a9a9688bb588ebdf3dc77b7e90246ae0e12f0d8d9d28550aebb4",
+		PartitionAttribute: "", PartitionKeys: []string{}, Schema: schemaFixtureOpenArchive, Fingerprint: "1de05d2a93dadef7747853eaf608af9b38a71118a42953b010a1bd5a1649168b",
 		Decode: func(data []byte, meta storage.Metadata) (parquet_go.Row, error) {
 			m := &open.Event{}
 			if err := proto.Unmarshal(data, m); err != nil {
@@ -170,7 +170,7 @@ func FixtureV1Archive() storage.Definition {
 		Marker: &v11.Archive{}, Payload: &v11.Event{},
 		ProtoName: "fixture.v1.Archive", SubscriptionID: "fixture-v1-archive", TopicID: "fixture-v1-event", Bucket: "lake",
 		Partitioning:       v1.StoragePartitioning_STORAGE_PARTITIONING_HIVE_DAILY,
-		PartitionAttribute: "", PartitionKeys: []string{}, Schema: schemaFixtureV1Archive, Fingerprint: "5444cd09d825532ecd59d66509d6835de10053eb2550f556c7240368dcf0c679",
+		PartitionAttribute: "", PartitionKeys: []string{}, Schema: schemaFixtureV1Archive, Fingerprint: "afcf5436a709f1642de76f9282dac37cafa86bcd635717574168c5329bd1cbf7",
 		Decode: func(data []byte, meta storage.Metadata) (parquet_go.Row, error) {
 			m := &v11.Event{}
 			if err := proto.Unmarshal(data, m); err != nil {
@@ -535,7 +535,7 @@ func FixtureV2Archive() storage.Definition {
 		Marker: &v2.Archive{}, Payload: &v2.Event{},
 		ProtoName: "fixture.v2.Archive", SubscriptionID: "fixture-v2-archive", TopicID: "fixture-v2-event", Bucket: "fixture-archive",
 		Partitioning:       v1.StoragePartitioning_STORAGE_PARTITIONING_HIVE_DAILY,
-		PartitionAttribute: "", PartitionKeys: []string{}, Schema: schemaFixtureV2Archive, Fingerprint: "c66c0fc33b0fa5cd5b3e47560433fb135c0128f93833c2972d8ff50722ed7c68",
+		PartitionAttribute: "", PartitionKeys: []string{}, Schema: schemaFixtureV2Archive, Fingerprint: "5c089c616c026c1f7814cc74a743fc7d7ef7496fdb3c60c7abc584bd04ecd0de",
 		Decode: func(data []byte, meta storage.Metadata) (parquet_go.Row, error) {
 			m := &v2.Event{}
 			if err := proto.Unmarshal(data, m); err != nil {

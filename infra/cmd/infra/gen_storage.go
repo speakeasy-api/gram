@@ -24,6 +24,10 @@ func newGenStorageCommand() *cli.Command {
 			&cli.BoolFlag{Name: "check", Usage: "Fail if committed storage artifacts have drifted"},
 		},
 		Action: func(c *cli.Context) error {
+			outDir := c.Path("out")
+			if outDir == "" {
+				return fmt.Errorf("--out must not be empty")
+			}
 			raw := gen.Descriptors
 			if source := c.Path("descriptors"); source != "" {
 				var err error
@@ -31,6 +35,9 @@ func newGenStorageCommand() *cli.Command {
 				if err != nil {
 					return fmt.Errorf("read storage descriptors: %w", err)
 				}
+			}
+			if len(raw) == 0 {
+				return fmt.Errorf("storage descriptors are empty")
 			}
 			topics, subs, err := gcp.DiscoverPubSub(raw)
 			if err != nil {
@@ -51,7 +58,7 @@ func newGenStorageCommand() *cli.Command {
 				name string
 				data []byte
 			}{{"storage_gen.go", code}, {"storage_manifest.json", manifest}} {
-				out := filepath.Join(c.Path("out"), artifact.name)
+				out := filepath.Join(outDir, artifact.name)
 				if c.Bool("check") {
 					existing, err := os.ReadFile(out)
 					if err != nil {
@@ -70,6 +77,10 @@ func newGenStorageCommand() *cli.Command {
 					return fmt.Errorf("create storage artifact: %w", err)
 				}
 				defer os.Remove(tmp.Name())
+				if err := tmp.Chmod(0o644); err != nil {
+					_ = tmp.Close()
+					return fmt.Errorf("chmod storage artifact: %w", err)
+				}
 				_, writeErr := tmp.Write(artifact.data)
 				closeErr := tmp.Close()
 				if writeErr != nil {

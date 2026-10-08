@@ -7,9 +7,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// MappingVersion identifies the frozen protobuf-to-Parquet mapping contract.
-const MappingVersion = "1"
-
 // Metadata is the transport identity stored alongside every payload row.
 type Metadata struct {
 	// MessageID supports deduplication of Pub/Sub redelivery.
