@@ -414,25 +414,33 @@ func TestParseVerdict_SalvagesCleanShorthandFromUndecodableReply(t *testing.T) {
 	require.Len(t, verdict.Risks, 4)
 }
 
-func TestParseVerdict_SalvageTakesFirstScorePerKey(t *testing.T) {
+func TestParseVerdict_SalvageRepeatedKeys(t *testing.T) {
 	t.Parallel()
 
-	// A looping reply repeats the keys; the first scores are the verdict.
+	// A looping reply that repeats the same scores is salvaged.
 	text := strings.Repeat(`{"destructive_tool_call": 0, "prompt_injection": 0, "secrets_leak": 1, "personal_data_leak": 0, "reasoning": "secrets_leak: `, 3)
 	verdict, err := llmanalyzer.ParseVerdict(text)
 	require.NoError(t, err)
 	require.Equal(t, []string{llmanalyzer.KeySecretsLeak}, verdict.Flagged())
+
+	// One that changes a score between repetitions is ambiguous and fails.
+	text = `{"destructive_tool_call": 0, "prompt_injection": 0, "secrets_leak": 1, "personal_data_leak": 0, "reasoning": "first ` +
+		`{"destructive_tool_call": 0, "prompt_injection": 0, "secrets_leak": 0, "personal_data_leak": 0, "reasoning": "second `
+	_, err = llmanalyzer.ParseVerdict(text)
+	require.ErrorIs(t, err, llmanalyzer.ErrParse)
 }
 
 func TestParseVerdict_SalvageNeedsEveryRiskKey(t *testing.T) {
 	t.Parallel()
 
 	for name, text := range map[string]string{
-		"three keys only":         `{"destructive_tool_call": 0, "prompt_injection": 1, "secrets_leak": 0, "reasoning": "`,
-		"score out of range":      `{"destructive_tool_call": 0, "prompt_injection": 2, "secrets_leak": 0, "personal_data_leak": 0, "reasoning": "`,
-		"shorthand flagged":       `{"risk": 1, "note": "`,
-		"shorthand next to a key": `{"risk": 0, "prompt_injection": 1, "reasoning": "`,
-		"prose naming keys":       `I checked secrets_leak and prompt_injection and found nothing.`,
+		"three keys only":           `{"destructive_tool_call": 0, "prompt_injection": 1, "secrets_leak": 0, "reasoning": "`,
+		"score out of range":        `{"destructive_tool_call": 0, "prompt_injection": 2, "secrets_leak": 0, "personal_data_leak": 0, "reasoning": "`,
+		"score starts with a digit": `{"destructive_tool_call": 0, "prompt_injection": 10, "secrets_leak": 0, "personal_data_leak": 0, "reasoning": "`,
+		"fractional score":          `{"destructive_tool_call": 0, "prompt_injection": 0.5, "secrets_leak": 0, "personal_data_leak": 0, "reasoning": "`,
+		"shorthand flagged":         `{"risk": 1, "note": "`,
+		"shorthand next to a key":   `{"risk": 0, "prompt_injection": 1, "reasoning": "`,
+		"prose naming keys":         `I checked secrets_leak and prompt_injection and found nothing.`,
 	} {
 		_, err := llmanalyzer.ParseVerdict(text)
 		require.ErrorIs(t, err, llmanalyzer.ErrParse, name)

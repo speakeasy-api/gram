@@ -265,23 +265,28 @@ func findVerdictObject(text string) (map[string]json.RawMessage, error) {
 
 // scorePattern matches one `"<key>": <score>` pair as the model writes it in
 // any of the reply shapes: a bare score, a quoted score, or the nested
-// `{"score": <score>` opener. Only 0 and 1 count; anything else is left to
-// the error path.
+// `{"score": <score>` opener. Only a whole 0 or 1 counts: the score must be
+// followed by a delimiter or the end of the text, so `10` and `0.5` are not
+// salvaged; anything else is left to the error path.
 var scorePattern = regexp.MustCompile(
-	`"(` + strings.Join(append(append([]string{}, riskKeys...), cleanShorthandKey), "|") + `)"\s*:\s*(?:\{\s*"score"\s*:\s*)?"?([01])"?`)
+	`"(` + strings.Join(append(append([]string{}, riskKeys...), cleanShorthandKey), "|") + `)"\s*:\s*(?:\{\s*"score"\s*:\s*)?"?([01])"?\s*(?:[,}]|\z)`)
 
 // salvageScores is the last resort for a reply in which no JSON object
 // decodes as a verdict: one cut off inside a reasoning string, or with a stray
-// quote or brace in it. It takes the first `"<key>": <score>` pair of each
-// key straight from the text and returns a verdict when all four risk keys
-// were found, or an all-clear when none was and `"risk": 0` was. Reasoning is
-// dropped: the string it lived in is what failed to decode.
+// quote or brace in it. It takes the `"<key>": <score>` pairs straight from
+// the text and returns a verdict when all four risk keys were found, or an
+// all-clear when none was and `"risk": 0` was. A key that appears with two
+// different scores (a looping reply that changed its mind) is ambiguous and
+// nothing is salvaged. Reasoning is dropped: the string it lived in is what
+// failed to decode.
 func salvageScores(text string) (map[string]RiskVerdict, bool) {
 	scores := make(map[string]int, len(riskKeys)+1)
 	for _, m := range scorePattern.FindAllStringSubmatch(text, -1) {
-		if _, seen := scores[m[1]]; !seen {
-			scores[m[1]] = int(m[2][0] - '0')
+		score := int(m[2][0] - '0')
+		if prev, seen := scores[m[1]]; seen && prev != score {
+			return nil, false
 		}
+		scores[m[1]] = score
 	}
 
 	risks := make(map[string]RiskVerdict, len(riskKeys))

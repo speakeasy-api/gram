@@ -367,10 +367,11 @@ numeric strings or booleans. A top-level `"reasoning"` string (flat format)
 is split on `<key>:` markers and attached to the flagged risks; without
 markers it is attached to every flagged risk; nested per-risk reasoning wins
 when both are present. Reasoning is trimmed and capped at 500 runes.
-When no object decodes at all (a reply cut off or garbled inside a reasoning
-string), the first `"<key>": 0|1` pair of each risk key is salvaged straight
-from the text and the verdict is built from those, without reasoning; an
-all-clear needs `"risk": 0` and no risk key. Anything else is an error
+When no object decodes as a verdict (a reply cut off or garbled inside a
+reasoning string), the `"<key>": 0|1` pairs are salvaged straight from the
+text and the verdict is built from those, without reasoning; an all-clear
+needs `"risk": 0` and no risk key, and a key seen with two different scores
+makes the reply ambiguous and unparsable. Anything else is an error
 wrapping `ErrParse`, and the analyzer then logs the raw reply verbatim as
 `gram.risk.llm.completion` (the only place the model's text is recorded, so a
 parse failure can be diagnosed). No `max_tokens` is sent: the reply is parsed

@@ -117,7 +117,7 @@ type Client struct {
 	endpoint   string
 }
 
-// NewClient validates cfg, applies the default timeout and max tokens, and
+// NewClient validates cfg, applies the default timeout, and
 // builds the guardian-backed HTTP client with the retry policy the analyzer
 // relies on: up to three retries on 5xx, 429 and connection errors with
 // 100ms to 1s backoff, never on a context deadline.
