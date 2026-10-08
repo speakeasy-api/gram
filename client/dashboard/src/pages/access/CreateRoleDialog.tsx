@@ -11,6 +11,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
@@ -234,7 +235,7 @@ export function CreateRoleDialog({
     [scopeDefinitions],
   );
 
-  const mcpAccessCount = useMcpAccessCount(grants);
+  const mcpAccessCount = useMcpAccessCount(grants, open);
 
   const projectList = useMemo(
     () => organization.projects.map((p) => ({ id: p.id, name: p.name })),
@@ -777,13 +778,23 @@ export function CreateRoleDialog({
               markAgentIneligible={selectedAgents.size > 0}
               onToggleScope={toggleScope}
               mcpAccessCount={mcpAccessCount}
-              renderMcpAccess={({ showPlatformAccess }) => (
-                <McpAccessPanel
-                  grants={grants}
-                  onChangeConnectGrant={setConnectGrant}
-                  onShowPlatformAccess={showPlatformAccess}
-                />
-              )}
+              renderMcpAccess={({ showPlatformAccess }) =>
+                // An existing role's grants replace the form once they load,
+                // so the panel waits for them rather than take edits that
+                // would be overwritten.
+                isEditing && !initialized ? (
+                  <Skeleton className="m-4">
+                    <div className="h-24 w-full" />
+                    <div className="h-40 w-full" />
+                  </Skeleton>
+                ) : (
+                  <McpAccessPanel
+                    grants={grants}
+                    onChangeConnectGrant={setConnectGrant}
+                    onShowPlatformAccess={showPlatformAccess}
+                  />
+                )
+              }
               renderScopeRule={(scopeDef) => {
                 const grant = grants[scopeDef.slug];
                 if (!grant) return null;

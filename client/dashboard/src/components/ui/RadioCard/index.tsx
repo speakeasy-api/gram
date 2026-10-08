@@ -226,6 +226,9 @@ export function RadioCard({
       {hasLabelContent(trailing) ? (
         <div
           data-slot="radio-card-trailing"
+          // A disabled card refuses its trailing control too, rather than
+          // letting it act while the card looks unavailable.
+          inert={effectiveDisabled}
           className="flex shrink-0 cursor-auto items-center self-center"
         >
           {trailing}

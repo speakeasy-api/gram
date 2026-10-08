@@ -346,9 +346,12 @@ describe("McpAccessPanel", () => {
 
   it("opens the tool sheet from the row, and the first choice grants the server", () => {
     const { onChange } = renderPanel();
+    // Ticking a server is its own action: it grants without opening the sheet.
     fireEvent.click(screen.getByLabelText("Linear"));
     expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.click(screen.getByLabelText("Linear"));
+    expect(allowSelectors(onChange.mock.calls.at(-1)?.[0])).toEqual([
+      { resourceKind: "mcp", resourceId: "linear" },
+    ]);
 
     fireEvent.click(screen.getByText("slack"));
     expect(screen.getByRole("dialog", { name: /Slack/ })).toBeTruthy();
@@ -359,6 +362,7 @@ describe("McpAccessPanel", () => {
     ).toBe("unchecked");
     fireEvent.click(screen.getByRole("radio", { name: "Specific tools" }));
     expect(allowSelectors(onChange.mock.calls.at(-1)?.[0])).toEqual([
+      { resourceKind: "mcp", resourceId: "linear" },
       { resourceKind: "mcp", resourceId: "slack", tool: "search" },
     ]);
   });

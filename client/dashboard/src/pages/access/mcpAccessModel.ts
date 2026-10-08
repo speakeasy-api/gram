@@ -172,9 +172,15 @@ export function parseMcpConnectGrant(
   for (const [id, part] of parts) {
     const limit = limitFromParts(part.full, part.tools, part.dispositions);
     if (!limit) continue;
-    // A server is limited one way or the other. Rows for the other way still
-    // grant access, so they are kept rather than shown.
-    if (limit.kind === "tools") {
+    // A server is limited one way or the other, and a full row covers both.
+    // The rows the limit does not show are kept as stored, so saving never
+    // drops one.
+    if (limit.kind !== "tools") {
+      for (const tool of part.tools) {
+        preservedAllow.push({ resourceKind: "mcp", resourceId: id, tool });
+      }
+    }
+    if (limit.kind !== "annotations") {
       for (const disposition of part.dispositions) {
         preservedAllow.push({
           resourceKind: "mcp",

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -33,6 +33,27 @@ describe("RoleLink", () => {
     expect(
       screen.getByRole("link", { name: "Support Desk" }).getAttribute("href"),
     ).toBe("/acme/access/roles/role-2/edit");
+  });
+
+  it("encodes the id and keeps clicks from reaching the row around it", () => {
+    const onRowClick = vi.fn();
+    render(
+      <MemoryRouter>
+        <div
+          onClick={() => {
+            onRowClick();
+          }}
+        >
+          <RoleLink roleId="role/with?chars">Support Desk</RoleLink>
+        </div>
+      </MemoryRouter>,
+    );
+    const link = screen.getByRole("link", { name: "Support Desk" });
+    expect(link.getAttribute("href")).toBe(
+      "/acme/access/roles/role%2Fwith%3Fchars/edit",
+    );
+    fireEvent.click(link);
+    expect(onRowClick).not.toHaveBeenCalled();
   });
 
   it("leaves the name plain without a role id", () => {

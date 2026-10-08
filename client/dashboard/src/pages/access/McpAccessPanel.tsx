@@ -105,9 +105,14 @@ export function McpAccessPanel({
       servers: group.servers.filter((s) => !forbidden.has(s.id)),
     }))
     .filter((group) => group.servers.length > 0);
+  // The default project opens first, or the first project with servers when
+  // the default one has none.
+  const defaultSlugId = organization.projects.find(
+    (p) => p.slug === "default",
+  )?.id;
   const defaultProjectId =
-    organization.projects.find((p) => p.slug === "default")?.id ??
-    pickerGroups[0]?.projectId;
+    pickerGroups.find((group) => group.projectId === defaultSlugId)
+      ?.projectId ?? pickerGroups[0]?.projectId;
 
   const openSheet = (entry: ServerWithProject, tab: ToolSheetTab) =>
     setSheet({ target: { kind: "server", entry }, tab });
@@ -130,11 +135,14 @@ export function McpAccessPanel({
         setServerLimit(server.id, { kind: "all" });
         return;
       }
-      // The sheet carries access over once the server's tools are known.
-      if (!access.servers[server.id]) {
-        setServerLimit(server.id, { kind: "all" });
-      }
-      setSheet({ target: { kind: "server", entry }, tab: kind, apply: true });
+      // A server the role does not reach yet opens with nothing chosen, so
+      // closing the sheet grants nothing. One it reaches converts in place
+      // once the sheet knows its tools.
+      setSheet({
+        target: { kind: "server", entry },
+        tab: kind,
+        apply: !!access.servers[server.id],
+      });
     },
     onOpenSheet: (entry) => {
       const limit = access.servers[entry.server.id];
@@ -178,7 +186,12 @@ export function McpAccessPanel({
           entry ? `${entry.server.name} ${serverHandle(entry.server)}` : id,
         ),
     );
+  // A server the role names but the inventory no longer lists (deleted, or
+  // its MCP switched off) has no row to show, so it counts as hidden too.
   const hasHiddenRules =
+    (inventory.settled &&
+      !access.allServers &&
+      Object.keys(access.servers).some((id) => !serverIndex.has(id))) ||
     access.preservedAllow.length > 0 ||
     access.preservedDeny.length > 0 ||
     access.denyAll;
@@ -212,28 +225,24 @@ export function McpAccessPanel({
           </RadioCard>
           <RadioCard
             value="all"
-            title={
-              // The limit sits beside the name, as Recommended does on the
-              // other card, so choosing it never adds a row.
-              <span className="flex flex-wrap items-center gap-2">
-                All servers
-                {access.allServers && (
+            title="All servers"
+            trailing={
+              // Outside the title, so the radio is named "All servers" alone,
+              // and on the card's one line, so choosing it never adds a row.
+              access.allServers && (
+                <span className="flex items-center gap-2">
                   <ToolLimitBadges
                     limit={access.allServers}
                     onOpen={() =>
                       setSheet({ target: { kind: "all" }, tab: "annotations" })
                     }
                   />
-                )}
-              </span>
-            }
-            trailing={
-              access.allServers && (
-                <ToolLimitMenu
-                  label="More options for all servers"
-                  offerByTool={false}
-                  onPick={pickAllServersLimit}
-                />
+                  <ToolLimitMenu
+                    label="More options for all servers"
+                    offerByTool={false}
+                    onPick={pickAllServersLimit}
+                  />
+                </span>
               )
             }
           >

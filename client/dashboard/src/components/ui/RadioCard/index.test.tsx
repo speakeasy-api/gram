@@ -446,6 +446,26 @@ describe("RadioCard", () => {
     expect(onValueChange).not.toHaveBeenCalled();
   });
 
+  it("disables trailing controls with the card", () => {
+    render(
+      <RadioCardGroup aria-label="Scope">
+        <RadioCard
+          value="all"
+          title="All servers"
+          disabled
+          trailing={<button type="button">Edit</button>}
+        >
+          Every server
+        </RadioCard>
+      </RadioCardGroup>,
+    );
+    expect(
+      document
+        .querySelector("[data-slot=radio-card-trailing]")
+        ?.hasAttribute("inert"),
+    ).toBe(true);
+  });
+
   it("renders a numeric zero detail", () => {
     render(
       <RadioCardGroup aria-label="Count">

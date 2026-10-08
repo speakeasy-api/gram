@@ -1062,7 +1062,11 @@ function EmployeeCostTable({
           <div className="flex items-center gap-2">
             <span className="font-medium">
               <RoleLink
-                roleId={role.roleId === "unassigned" ? undefined : role.roleId}
+                roleId={
+                  role.roleId && role.roleId !== "unassigned"
+                    ? role.roleId
+                    : undefined
+                }
               >
                 {role.roleName}
               </RoleLink>

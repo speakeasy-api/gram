@@ -48,6 +48,14 @@ function isMcpAccessScope(scope: ScopeDefinition): boolean {
   return scope.resourceType === "mcp" && !MCP_ADMIN_SCOPES.has(scope.slug);
 }
 
+function mcpTabLabel(
+  serverCount: number | null | undefined,
+  permissionCount: number,
+): string {
+  if (serverCount === null) return "MCP access";
+  return `MCP access (${serverCount ?? permissionCount})`;
+}
+
 /**
  * The permissions a role carries, as a list you build rather than a tree you
  * walk: pick permissions from one searchable menu, then narrow each one on its
@@ -86,8 +94,11 @@ export function RolePermissionsSection({
    * connect are managed.
    */
   renderMcpAccess?: (controls: { showPlatformAccess: () => void }) => ReactNode;
-  /** What the MCP access tab counts when it shows servers, not permissions. */
-  mcpAccessCount?: number;
+  /**
+   * What the MCP access tab counts when it shows servers, not permissions.
+   * Null while that count is still loading.
+   */
+  mcpAccessCount?: number | null;
 }): JSX.Element {
   const [tab, setTab] = useState("mcp");
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -143,7 +154,7 @@ export function RolePermissionsSection({
           <div className="border-border bg-muted/30 flex items-center justify-between gap-3 border-b px-4">
             <PageTabsList>
               <PageTabsTrigger value="mcp">
-                MCP access ({mcpAccessCount ?? mcpSelected.length})
+                {mcpTabLabel(mcpAccessCount, mcpSelected.length)}
               </PageTabsTrigger>
               <PageTabsTrigger value="organization">
                 Platform access ({otherSelected.length})

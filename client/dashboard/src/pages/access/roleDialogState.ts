@@ -56,14 +56,16 @@ export function membersHaveChanged(
 }
 
 function selectorIdentity(s: Selector): string {
-  return [
+  // JSON, not a joined string: a tool name or server URL can hold any
+  // delimiter, and two different selectors must never share an identity.
+  return JSON.stringify([
     s.resourceKind,
     s.resourceId,
     s.projectId ?? "",
     s.tool ?? "",
     s.disposition ?? "",
     s.serverUrl ?? "",
-  ].join("/");
+  ]);
 }
 
 /** Sorted, comma-joined grant keys for cheap equality check.

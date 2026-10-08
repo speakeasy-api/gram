@@ -36,7 +36,8 @@ export function ForbiddenServers({
         </h3>
         <Text as="span" small muted>
           Members of this role can&rsquo;t connect to these servers, even if
-          another role allows it.
+          another role allows it. Only a grant made to a member directly for the
+          server overrides this.
         </Text>
       </div>
       {servers.length === 0 ? (

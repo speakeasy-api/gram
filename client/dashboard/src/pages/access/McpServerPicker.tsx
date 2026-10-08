@@ -82,7 +82,15 @@ export function McpServerPicker({
             access={access}
             coverage={coverage}
             query={query}
-            open={expanded.has(group.projectId)}
+            // A search opens every project holding a match, so it never
+            // looks as if a collapsed project has nothing.
+            open={
+              expanded.has(group.projectId) ||
+              (!!query &&
+                group.servers.some((s) =>
+                  fuzzyMatch(query, `${s.name} ${serverHandle(s)}`),
+                ))
+            }
             onOpenChange={(open) => setGroupOpen(group.projectId, open)}
             actions={actions}
           />

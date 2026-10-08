@@ -125,6 +125,14 @@ describe("serializeMcpConnectAccess", () => {
       ),
     ],
     [
+      "a full row beside narrower rows for the same server",
+      grant([
+        server("c"),
+        server("c", { disposition: "read_only" }),
+        server("c", { tool: "search" }),
+      ]),
+    ],
+    [
       "all servers plus a named server",
       grant([server("*", { disposition: "read_only" }), server("a")]),
     ],

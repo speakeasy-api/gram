@@ -139,9 +139,14 @@ function ToolAccessSheetBody({
   const [pendingApply, setPendingApply] = useState(applyTab);
   useEffect(() => {
     if (!pendingApply || source.status === "loading") return;
+    // A conversion that reads the tool list waits until the list is known;
+    // converting before then would narrow the server to no tools. A remote
+    // server that needs connecting converts once it lists.
+    const toolsKnown = source.status === "ready" || isAllServers;
+    if (!toolsKnown && (tab === "tools" || limit.kind === "tools")) return;
     setPendingApply(false);
     onChange(convertToolLimit(limit, tab, tools));
-  }, [pendingApply, source.status, limit, tab, tools, onChange]);
+  }, [pendingApply, source.status, isAllServers, limit, tab, tools, onChange]);
 
   const chooseTab = (next: ToolSheetTab) => {
     setTab(next);

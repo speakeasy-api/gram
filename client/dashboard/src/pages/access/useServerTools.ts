@@ -48,8 +48,10 @@ export function useServerTools(
     [project],
   );
 
+  // Named by project: on this org-level page an unnamed request would resolve
+  // against whatever project the URL happens to carry.
   const stored = useToolMetadata(server?.id, {
-    enabled: remote,
+    enabled: remote && !!project,
     projectSlug: project?.slug,
   });
   const storedTools = useMemo(
@@ -72,8 +74,10 @@ export function useServerTools(
 
   // Only a remote server with nothing stored opens a live session, the way
   // the Inspect tab does; one that lists records its tools as it goes.
+  // A failed metadata read is no reason to give up: the server may still list
+  // its tools live.
   const nothingStored =
-    remote && !stored.isLoading && !stored.isError && storedTools.length === 0;
+    remote && !!project && !stored.isLoading && storedTools.length === 0;
   const needsLive = nothingStored && canRecordTools;
   const mcpServer = useGetMcpServer(
     { id: server?.id, gramProject: project?.slug },
@@ -110,9 +114,12 @@ export function useServerTools(
   if (!server.dynamicTools) return { status: "ready", tools: server.tools };
   if (!server.remoteBacked) return { status: "dynamic" };
   if (stored.isLoading) return { status: "loading" };
-  if (stored.isError) return { status: "error", retry: stored.refetch };
   if (storedTools.length > 0) return { status: "ready", tools: storedTools };
-  if (!canRecordTools) return { status: "needs-write" };
+  if (!canRecordTools) {
+    return stored.isError
+      ? { status: "error", retry: stored.refetch }
+      : { status: "needs-write" };
+  }
   if (mcpServer.isError || endpoints.isError) {
     return {
       status: "error",

@@ -116,7 +116,9 @@ export function useRemoteMcpToolConnection({
 
   const { tools, isLoading, needsAuth, isError, refetch } = useProxiedMcpTools(
     connectUrl,
-    { headers, enabled: connectionEnabled },
+    // Every failure stays inline as `isError`, so each consumer can offer its
+    // own retry instead of an error boundary.
+    { headers, enabled: connectionEnabled, throwOnError: false },
   );
 
   // The first-party connect page is opened as a top-level new tab, so it rides
