@@ -263,7 +263,7 @@ function hostOf(url: string | undefined | null): string {
 }
 
 /** Host plus path, minus the scheme — how the mock renders an issuer URL. */
-export function displayUrl(url: string): string {
+function displayUrl(url: string): string {
   return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
 }
 
