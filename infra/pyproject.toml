@@ -38,7 +38,7 @@ dev = [
   "anyio[trio]>=4.14.0",
   "ty>=0.0.64",
   "types-protobuf>=7.34.1.20260518",
-  "duckdb==1.4.3",
+  "duckdb==1.5.6",
 ]
 
 [build-system]
