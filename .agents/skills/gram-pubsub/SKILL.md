@@ -333,7 +333,10 @@ logger/meter provider and `storage.ParseBucketMapping` of `GRAM_STORAGE_BUCKETS`
 No application handler is needed. Ordinary subscriber helpers reject storage
 markers. The Go runner owns bounded batches, partition routing and per-object
 acknowledgment after durable commit. Delivery remains at least once. Python has
-no storage runtime. `mise run demo:storage --out /tmp/opencode/storage-demo`
+no storage runtime. Encoded column pages spool to disk under `Config.TempDir`
+(default: `os.TempDir()`); per-object scratch directories are cleaned up on normal
+and error exits. Use disk-backed ephemeral storage for crash leftovers.
+`mise run demo:storage --out /tmp/opencode/storage-demo`
 provides an isolated runnable example. The complete mapping, query examples,
 limits and rollout contract are in `docs/pubsub-storage-subscriptions.md`.
 

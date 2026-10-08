@@ -239,9 +239,25 @@ There is one processing batch and one accumulating/pending batch, with at most
 one carry message when a new partition exceeds the limit. Permits remain held
 through settlement. A larger-than-budget single message acquires the full byte
 budget exclusively; a byte-triggered batch may overshoot by one message. These
-are raw-input bounds: decoded values, Parquet pages and the SDK's separately
-bounded outstanding deliveries add to process memory. No complete encoded file
-is buffered. Row groups, column pages and GCS upload buffers are also bounded.
+are raw-input bounds: decoded values, page construction, compression and the SDK's
+separately bounded outstanding deliveries add to process memory. They are not a
+hard total-memory cap.
+
+Encoded Parquet column pages are **spooled to temporary files** while each row
+group is assembled. Completed row groups stream to GCS; no complete encoded file
+is staged. The writer uses 256-row groups, a 64 KiB in-memory page-buffer target,
+a 64 KiB output buffer and a 1 MiB GCS upload buffer per active writer. Large
+values can exceed the page target, and wide schemas need buffers per column.
+
+`Config.TempDir` selects an existing scratch directory; omitted, it uses
+`os.TempDir()` (normally controlled by `TMPDIR`). Choose disk-backed ephemeral
+storage, rather than tmpfs, to reduce memory pressure. Each object gets its own
+`gram-parquet-*` subdirectory. Writer reset closes page files before that directory
+is removed on success, failure, cancellation or panic. A scratch-directory or
+page-write failure nacks the affected object; directory-removal failures are
+logged. Abrupt process termination such as SIGKILL can leave scratch files until
+the ephemeral volume is reclaimed. The runner does not sweep other writers'
+directories on startup.
 
 Each batch is split into immutable, uniquely named objects by partition. A
 successful object is acked independently of sibling failures. Decode errors are
