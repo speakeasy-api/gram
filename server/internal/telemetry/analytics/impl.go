@@ -3,12 +3,8 @@ package analytics
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
-	"math"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -21,19 +17,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // Service is the analytics query API: query and describe over the catalog.
 type Service struct {
-	tracer  trace.Tracer
-	logger  *slog.Logger
-	auth    *auth.Auth
-	authz   *authz.Engine
-	ch      Querier
-	catalog *Catalog
+	tracer trace.Tracer
+	logger *slog.Logger
+	auth   *auth.Auth
+	authz  *authz.Engine
+	engine *Engine
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -41,52 +35,24 @@ var _ gen.Auther = (*Service)(nil)
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, ch Querier, sessions *sessions.Manager, authzEngine *authz.Engine) *Service {
 	logger = logger.With(attr.SlogComponent("analytics"))
-	// A lookup without a loader is a programming error, so it panics like
-	// MustCatalog.
-	catalog, err := Default.WithLoaders(map[string]LookupLoader{
-		MCPServerDisplayNamesLookup: mcpServerDisplayNames(hooksRepo.New(db)),
-	})
+	engine, err := NewEngine(db, ch)
 	if err != nil {
 		panic(err)
 	}
 	return &Service{
-		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry/analytics"),
-		logger:  logger,
-		auth:    auth.New(logger, db, sessions, authzEngine),
-		authz:   authzEngine,
-		ch:      ch,
-		catalog: catalog,
+		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/telemetry/analytics"),
+		logger: logger,
+		auth:   auth.New(logger, db, sessions, authzEngine),
+		authz:  authzEngine,
+		engine: engine,
 	}
 }
 
-// mcpServerDisplayNames loads a project's hook server-name overrides, raw
-// name to display name, on every request so a query speaks the names the
-// page shows now.
-func mcpServerDisplayNames(hooks *hooksRepo.Queries) LookupLoader {
-	return func(ctx context.Context, tenant Tenant) (map[string]string, error) {
-		projectID, err := uuid.Parse(tenant.ProjectID)
-		if err != nil {
-			return nil, fmt.Errorf("parse project id: %w", err)
-		}
-		overrides, err := hooks.ListHooksServerNameOverrides(ctx, projectID)
-		if err != nil {
-			return nil, fmt.Errorf("list hook server name overrides: %w", err)
-		}
-		names := make(map[string]string, len(overrides))
-		for _, override := range overrides {
-			names[override.RawServerName] = override.DisplayName
-		}
-		return names, nil
-	}
-}
-
-// loadLookups is LoadLookups with a failure mapped to an unexpected error.
-func (s *Service) loadLookups(ctx context.Context, tenant Tenant, dataset string, reads []string) (LookupMaps, error) {
-	lookups, err := s.catalog.LoadLookups(ctx, tenant, dataset, reads)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load the dataset's lookups").LogError(ctx, s.logger)
-	}
-	return lookups, nil
+// Engine is the query path this service answers through, for a surface that
+// authorizes its own callers and must still answer from the same catalog,
+// compiler and runner.
+func (s *Service) Engine() *Engine {
+	return s.engine
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -114,6 +80,15 @@ func (s *Service) authorize(ctx context.Context) (*contextvalues.AuthContext, er
 	return authCtx, nil
 }
 
+// failure maps an engine error onto the API: a request the compiler rejected
+// is the caller's to correct, anything else is unexpected and logged.
+func (s *Service) failure(ctx context.Context, err error, message string) error {
+	if invalid, ok := errors.AsType[*Error](err); ok {
+		return oops.E(oops.CodeBadRequest, err, "%s", invalid.Error())
+	}
+	return oops.E(oops.CodeUnexpected, err, "%s", message).LogError(ctx, s.logger)
+}
+
 // Query compiles the request against the catalog and runs it.
 func (s *Service) Query(ctx context.Context, payload *gen.QueryPayload) (*gen.AnalyticsQueryResult, error) {
 	authCtx, err := s.authorize(ctx)
@@ -123,32 +98,19 @@ func (s *Service) Query(ctx context.Context, payload *gen.QueryPayload) (*gen.An
 
 	req, err := requestFromPayload(payload)
 	if err != nil {
-		return nil, err
+		return nil, s.failure(ctx, err, "failed to read analytics query")
 	}
 	tenant := Tenant{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: authCtx.ProjectID.String()}
-	lookups, err := s.loadLookups(ctx, tenant, req.Dataset, req.Reads())
+	result, err := s.engine.Query(ctx, tenant, req)
 	if err != nil {
-		return nil, err
+		return nil, s.failure(ctx, err, "failed to run analytics query")
 	}
 
-	plan, err := Compile(s.catalog, tenant, lookups, req)
-	if err != nil {
-		if invalid, ok := errors.AsType[*Error](err); ok {
-			return nil, oops.E(oops.CodeBadRequest, err, "%s", invalid.Error())
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to compile analytics query").LogError(ctx, s.logger)
-	}
-
-	rows, err := plan.Run(ctx, s.ch)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to run analytics query").LogError(ctx, s.logger)
-	}
-
-	out := make([]map[string]any, len(rows))
-	for i, row := range rows {
+	out := make([]map[string]any, len(result.Rows))
+	for i, row := range result.Rows {
 		out[i] = row
 	}
-	return &gen.AnalyticsQueryResult{Dataset: plan.Dataset, Plan: plan.Name, Rows: out}, nil
+	return &gen.AnalyticsQueryResult{Dataset: result.Dataset, Plan: result.Plan, Rows: out}, nil
 }
 
 // Describe serves the catalog: every dataset and what each field admits.
@@ -156,43 +118,21 @@ func (s *Service) Describe(ctx context.Context, _ *gen.DescribePayload) (*gen.An
 	if _, err := s.authorize(ctx); err != nil {
 		return nil, err
 	}
-	return &gen.AnalyticsDescribeResult{Datasets: describeDatasets(s.catalog)}, nil
-}
-
-// The int64 nanosecond range covers the years 1678 to 2262. UnixNano is
-// undefined outside it, so a bound past it would reach the compiler as some
-// other window; representable is checked before the conversion.
-var (
-	minUnixNanoTime = time.Unix(0, math.MinInt64)
-	maxUnixNanoTime = time.Unix(0, math.MaxInt64)
-)
-
-func representable(t time.Time) bool {
-	return !t.Before(minUnixNanoTime) && !t.After(maxUnixNanoTime)
+	return &gen.AnalyticsDescribeResult{Datasets: describeDatasets(s.engine.Catalog())}, nil
 }
 
 func requestFromPayload(payload *gen.QueryPayload) (Request, error) {
 	var zero Request
 
-	from, err := time.Parse(time.RFC3339Nano, payload.From)
+	from, to, err := ParseWindow(payload.From, payload.To)
 	if err != nil {
-		return zero, oops.E(oops.CodeBadRequest, err, "invalid_time_range: from is not an RFC 3339 time")
-	}
-	to, err := time.Parse(time.RFC3339Nano, payload.To)
-	if err != nil {
-		return zero, oops.E(oops.CodeBadRequest, err, "invalid_time_range: to is not an RFC 3339 time")
-	}
-	if !representable(from) {
-		return zero, oops.E(oops.CodeBadRequest, nil, "invalid_time_range: from is outside the years 1678 to 2262")
-	}
-	if !representable(to) {
-		return zero, oops.E(oops.CodeBadRequest, nil, "invalid_time_range: to is outside the years 1678 to 2262")
+		return zero, err
 	}
 
 	req := Request{
 		Dataset:      payload.Dataset,
-		FromUnixNano: from.UnixNano(),
-		ToUnixNano:   to.UnixNano(),
+		FromUnixNano: from,
+		ToUnixNano:   to,
 		Grain:        TimeGrainNone,
 		Dimensions:   payload.Dimensions,
 		Measures:     make([]Measure, 0, len(payload.Measures)),
@@ -206,19 +146,19 @@ func requestFromPayload(payload *gen.QueryPayload) (Request, error) {
 	}
 	for _, m := range payload.Measures {
 		if m == nil {
-			return zero, oops.E(oops.CodeBadRequest, nil, "unsatisfiable: measures must not contain null entries")
+			return zero, newError(ErrUnsatisfiable, payload.Dataset, "measures", "", "measures must not contain null entries")
 		}
 		req.Measures = append(req.Measures, Measure{Op: m.Op, Field: deref(m.Field), Alias: deref(m.Alias)})
 	}
 	for _, f := range payload.Filters {
 		if f == nil {
-			return zero, oops.E(oops.CodeBadRequest, nil, "unsatisfiable: filters must not contain null entries")
+			return zero, newError(ErrUnsatisfiable, payload.Dataset, "filters", "", "filters must not contain null entries")
 		}
 		req.Filters = append(req.Filters, Filter{Field: f.Field, Operator: f.Operator, Values: f.Values})
 	}
 	for _, o := range payload.OrderBy {
 		if o == nil {
-			return zero, oops.E(oops.CodeBadRequest, nil, "unsatisfiable: order_by must not contain null entries")
+			return zero, newError(ErrUnsatisfiable, payload.Dataset, "order_by", "", "order_by must not contain null entries")
 		}
 		req.OrderBy = append(req.OrderBy, OrderBy{Measure: o.Measure, Direction: o.Direction})
 	}
