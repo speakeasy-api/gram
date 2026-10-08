@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/google/uuid"
 
@@ -30,6 +31,7 @@ var (
 // AnalyticsService serves the analytics catalog, values and queries to the
 // Platform MCP.
 type AnalyticsService struct {
+	logger        *slog.Logger
 	engine        AnalyticsEngine
 	flags         feature.Provider
 	organizations OrganizationSlugResolver
@@ -38,17 +40,17 @@ type AnalyticsService struct {
 	budget   OperationBudget
 }
 
-// NewAnalyticsService returns nil without an engine, an organization
-// resolver or a project reader, so the tools are served as stubs.
-func NewAnalyticsService(engine AnalyticsEngine, flags feature.Provider, organizations OrganizationSlugResolver, projects ProjectReadResolver, budget OperationBudget) *AnalyticsService {
-	if engine == nil || organizations == nil || projects == nil {
+// NewAnalyticsService returns nil without a logger, an engine, an
+// organization resolver or a project reader, so the tools are served as stubs.
+func NewAnalyticsService(logger *slog.Logger, engine AnalyticsEngine, flags feature.Provider, organizations OrganizationSlugResolver, projects ProjectReadResolver, budget OperationBudget) *AnalyticsService {
+	if logger == nil || engine == nil || organizations == nil || projects == nil {
 		return nil
 	}
-	return &AnalyticsService{engine: engine, flags: flags, organizations: organizations, projects: projects, budget: budget}
+	return &AnalyticsService{logger: logger, engine: engine, flags: flags, organizations: organizations, projects: projects, budget: budget}
 }
 
 func (s *AnalyticsService) valid() bool {
-	return s != nil && s.engine != nil && s.organizations != nil && s.projects != nil && s.budget.valid()
+	return s != nil && s.logger != nil && s.engine != nil && s.organizations != nil && s.projects != nil && s.budget.valid()
 }
 
 // AnalyticsProject is the project a result was read for.
@@ -233,6 +235,9 @@ func (s *AnalyticsService) Values(ctx context.Context, principal Principal, inpu
 	if err != nil {
 		return zero, err
 	}
+	if err := s.budget.Allow(ctx, principal); err != nil {
+		return zero, err
+	}
 	from, to, err := analytics.ParseWindow(input.From, input.To)
 	if err != nil {
 		return zero, fmt.Errorf("read dimension values window: %w", err)
@@ -320,6 +325,9 @@ func (s *AnalyticsService) Query(ctx context.Context, principal Principal, input
 	if err != nil {
 		return zero, err
 	}
+	if err := s.budget.Allow(ctx, principal); err != nil {
+		return zero, err
+	}
 	from, to, err := analytics.ParseWindow(input.From, input.To)
 	if err != nil {
 		return zero, fmt.Errorf("read analytics query window: %w", err)
@@ -366,8 +374,9 @@ func (s *AnalyticsService) Query(ctx context.Context, principal Principal, input
 }
 
 // authorize holds the caller to project:read on the exact project, then to
-// the Explore flag, then charges the read to the budget. A project the caller
-// cannot read reads as one that does not exist.
+// the Explore flag. A project the caller cannot read reads as one that does
+// not exist. Values and Query then charge the budget; Describe, which returns
+// only the static catalog, is not charged.
 func (s *AnalyticsService) authorize(ctx context.Context, principal Principal, projectID string) (ResolvedProject, error) {
 	var zero ResolvedProject
 	if !s.valid() {
@@ -397,9 +406,6 @@ func (s *AnalyticsService) authorize(ctx context.Context, principal Principal, p
 	}
 	if evaluation != feature.EvaluationEnabled {
 		return zero, ErrAnalyticsNotEnabled
-	}
-	if err := s.budget.Allow(ctx, principal); err != nil {
-		return zero, err
 	}
 	return project, nil
 }

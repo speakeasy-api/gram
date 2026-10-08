@@ -482,7 +482,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
 	// Metered on the diagnostics allowance, like the other aggregate reads.
-	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics))
+	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics))
 	attachShadowInventory(platformReader, config, budgets.SensitiveDiagnostics)
 	attachShadowAI(platformReader, config, authorizer, budgets.SensitiveDiagnostics)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
@@ -1051,7 +1051,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
 	// Metered on the diagnostics allowance, like the other aggregate reads.
-	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics))
+	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics))
 	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)
 	if shadowErr != nil {
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(shadowErr))

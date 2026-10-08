@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 )
 
@@ -21,6 +23,9 @@ const (
 
 	// analyticsFeature names the capability in refusals.
 	analyticsFeature = "analytics"
+	// analyticsNotEnabledCode is the refusal when Explore is off for the
+	// organization, as opposed to unavailableCode, which asks for a retry.
+	analyticsNotEnabledCode = "feature_not_enabled"
 )
 
 // analyticsRefusal is what a tool says when it will not run; an invalid
@@ -85,25 +90,26 @@ func registerAnalyticsTools(reg *Registrar, service *AnalyticsService) {
 	}
 
 	addTool(reg, describe, meta, func(ctx context.Context, _ *mcp.CallToolRequest, input DescribeAnalyticsCatalogInput) (*mcp.CallToolResult, DescribeAnalyticsCatalogOutput, error) {
-		return analyticsToolCall(ctx, func(principal Principal) (DescribeAnalyticsCatalogOutput, error) {
+		return analyticsToolCall(ctx, service.logger, describe.Name, func(principal Principal) (DescribeAnalyticsCatalogOutput, error) {
 			return service.Describe(ctx, principal, input)
 		})
 	})
 	addTool(reg, values, meta, func(ctx context.Context, _ *mcp.CallToolRequest, input ListAnalyticsDimensionValuesInput) (*mcp.CallToolResult, ListAnalyticsDimensionValuesOutput, error) {
-		return analyticsToolCall(ctx, func(principal Principal) (ListAnalyticsDimensionValuesOutput, error) {
+		return analyticsToolCall(ctx, service.logger, values.Name, func(principal Principal) (ListAnalyticsDimensionValuesOutput, error) {
 			return service.Values(ctx, principal, input)
 		})
 	})
 	addTool(reg, query, meta, func(ctx context.Context, _ *mcp.CallToolRequest, input RunAnalyticsQueryInput) (*mcp.CallToolResult, RunAnalyticsQueryOutput, error) {
-		return analyticsToolCall(ctx, func(principal Principal) (RunAnalyticsQueryOutput, error) {
+		return analyticsToolCall(ctx, service.logger, query.Name, func(principal Principal) (RunAnalyticsQueryOutput, error) {
 			return service.Query(ctx, principal, input)
 		})
 	})
 }
 
 // analyticsToolCall runs one read under the calling principal and turns
-// refusals into readable error results.
-func analyticsToolCall[Out any](ctx context.Context, call func(principal Principal) (Out, error)) (*mcp.CallToolResult, Out, error) {
+// refusals into readable error results. A failure the tool did not expect is
+// logged and reads as unavailable, so the agent never sees its text.
+func analyticsToolCall[Out any](ctx context.Context, logger *slog.Logger, tool string, call func(principal Principal) (Out, error)) (*mcp.CallToolResult, Out, error) {
 	var zero Out
 	principal, err := principalFromToolContext(ctx)
 	if err != nil {
@@ -116,9 +122,9 @@ func analyticsToolCall[Out any](ctx context.Context, call func(principal Princip
 	if result, ok := operationBudgetToolResult(err); ok {
 		return result, zero, nil
 	}
-	refusal, ok := analyticsRefusalFor(err)
-	if !ok {
-		return nil, zero, err
+	refusal, named := analyticsRefusalFor(err)
+	if !named {
+		logger.ErrorContext(ctx, "platform mcp analytics read failed", attr.SlogError(err), attr.SlogToolName(tool), attr.SlogOrganizationID(principal.OrganizationID))
 	}
 	content, marshalErr := json.Marshal(refusal)
 	if marshalErr != nil {
@@ -127,9 +133,10 @@ func analyticsToolCall[Out any](ctx context.Context, call func(principal Princip
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, zero, nil
 }
 
-// analyticsRefusalFor maps the errors a read can end in onto refusals.
-func analyticsRefusalFor(err error) (analyticsRefusal, bool) {
-	refusal := analyticsRefusal{Feature: analyticsFeature}
+// analyticsRefusalFor maps the errors a read can end in onto refusals; named
+// is false for an error the tool did not expect, which reads as unavailable.
+func analyticsRefusalFor(err error) (refusal analyticsRefusal, named bool) {
+	refusal = analyticsRefusal{Feature: analyticsFeature}
 	var invalid *analytics.Error
 	switch {
 	case errors.As(err, &invalid):
@@ -142,7 +149,7 @@ func analyticsRefusalFor(err error) (analyticsRefusal, bool) {
 		refusal.Code = "invalid_request"
 		refusal.Message = "Name exactly one project by its ID, as list_projects returns it."
 	case errors.Is(err, ErrAnalyticsNotEnabled):
-		refusal.Code = unavailableCode
+		refusal.Code = analyticsNotEnabledCode
 		refusal.Message = "Analytics queries are not switched on for your organization yet. They arrive with Explore; ask your Speakeasy contact to turn it on."
 	case errors.Is(err, ErrForbidden):
 		refusal.Code = "forbidden"
@@ -151,7 +158,9 @@ func analyticsRefusalFor(err error) (analyticsRefusal, bool) {
 		refusal.Code = unavailableCode
 		refusal.Message = "Analytics queries are temporarily unavailable. Try again shortly."
 	default:
-		return analyticsRefusal{}, false
+		refusal.Code = unavailableCode
+		refusal.Message = "Analytics queries are temporarily unavailable. Try again shortly."
+		return refusal, false
 	}
 	return refusal, true
 }

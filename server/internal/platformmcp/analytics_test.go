@@ -1,9 +1,11 @@
 package platformmcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -70,6 +72,7 @@ type analyticsTestHarness struct {
 	projects *stubAnalyticsProjects
 	flags    *riskMutationFlagProvider
 	project  ResolvedProject
+	logs     *bytes.Buffer
 }
 
 var (
@@ -87,12 +90,13 @@ func newAnalyticsTestHarness(t *testing.T, evaluation feature.Evaluation, budget
 	engine := &stubAnalyticsEngine{}
 	projects := &stubAnalyticsProjects{project: project, err: nil, inputs: nil}
 	flags := &riskMutationFlagProvider{evaluation: evaluation, err: nil, flag: "", groups: nil}
-	service := NewAnalyticsService(engine, flags, riskMutationOrganizationResolver{slug: "org", err: nil}, projects, budget)
+	logs := &bytes.Buffer{}
+	service := NewAnalyticsService(slog.New(slog.NewJSONHandler(logs, nil)), engine, flags, riskMutationOrganizationResolver{slug: "org", err: nil}, projects, budget)
 	require.NotNil(t, service)
 
 	reg := newRegistrar(newTestMCPServer())
 	registerAnalyticsTools(reg, service)
-	return &analyticsTestHarness{reg: reg, engine: engine, projects: projects, flags: flags, project: project}
+	return &analyticsTestHarness{reg: reg, engine: engine, projects: projects, flags: flags, project: project, logs: logs}
 }
 
 func (h *analyticsTestHarness) invoke(t *testing.T, tool, arguments string) (any, error) {
@@ -231,9 +235,11 @@ func TestAnalyticsToolsStubWithoutAService(t *testing.T) {
 		require.Contains(t, refusal.Payload, `"feature":"analytics"`, name)
 	}
 
-	require.Nil(t, NewAnalyticsService(nil, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, &stubAnalyticsProjects{}, allowAnalyticsBudget))
-	require.Nil(t, NewAnalyticsService(&stubAnalyticsEngine{}, nil, nil, &stubAnalyticsProjects{}, allowAnalyticsBudget))
-	require.Nil(t, NewAnalyticsService(&stubAnalyticsEngine{}, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, nil, allowAnalyticsBudget))
+	logger := slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil))
+	require.Nil(t, NewAnalyticsService(nil, &stubAnalyticsEngine{}, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, &stubAnalyticsProjects{}, allowAnalyticsBudget))
+	require.Nil(t, NewAnalyticsService(logger, nil, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, &stubAnalyticsProjects{}, allowAnalyticsBudget))
+	require.Nil(t, NewAnalyticsService(logger, &stubAnalyticsEngine{}, nil, nil, &stubAnalyticsProjects{}, allowAnalyticsBudget))
+	require.Nil(t, NewAnalyticsService(logger, &stubAnalyticsEngine{}, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, nil, allowAnalyticsBudget))
 }
 
 func indexOfDescriptor(t *testing.T, reg *Registrar, name string) int {
@@ -313,7 +319,7 @@ func TestAnalyticsToolsRefuseWhenExploreIsOff(t *testing.T) {
 		for name, arguments := range h.validArguments() {
 			_, err := h.invoke(t, name, arguments)
 			refusal := requireAnalyticsRefusal(t, err)
-			require.Equal(t, unavailableCode, refusal.Code, name)
+			require.Equal(t, analyticsNotEnabledCode, refusal.Code, name)
 			require.Equal(t, analyticsFeature, refusal.Feature, name)
 			require.Contains(t, refusal.Message, "not switched on", name)
 			require.Contains(t, refusal.Message, "Explore", name)
@@ -361,9 +367,17 @@ func TestAnalyticsToolsChargeTheDiagnosticsBudget(t *testing.T) {
 
 	h := newAnalyticsTestHarness(t, feature.EvaluationEnabled, OperationBudget{Connection: denyOperationLimiter{}, Organization: allowOperationLimiter{}})
 	_, err := h.invoke(t, describeAnalyticsCatalogToolName, h.projectArguments())
-	var refusal *ToolRefusalError
-	require.ErrorAs(t, err, &refusal)
-	require.Contains(t, refusal.Payload, `"code":"rate_limited"`)
+	require.NoError(t, err, "describe returns the static catalog and is not charged")
+
+	for name, arguments := range map[string]string{
+		listAnalyticsDimensionValuesToolName: h.valuesArguments(""),
+		runAnalyticsQueryToolName:            h.queryArguments(`,"measures":[{"op":"count"}]`),
+	} {
+		_, err := h.invoke(t, name, arguments)
+		var refusal *ToolRefusalError
+		require.ErrorAs(t, err, &refusal, name)
+		require.Contains(t, refusal.Payload, `"code":"rate_limited"`, name)
+	}
 	require.Zero(t, h.engine.calls)
 }
 
@@ -437,12 +451,31 @@ func TestRunAnalyticsQueryRefusesWhatTheEngineRefusesByName(t *testing.T) {
 	require.Equal(t, "invalid_time_range", refusal.Reason)
 	require.Equal(t, "from", refusal.Field)
 	require.Equal(t, 1, h.engine.calls)
+}
 
-	// Anything else the engine fails with is a failure of the call, not a
-	// refusal the model should act on.
+func TestAnalyticsToolsHideWhatTheEngineFailsWith(t *testing.T) {
+	t.Parallel()
+
+	h := newAnalyticsTestHarness(t, feature.EvaluationEnabled, allowAnalyticsBudget)
 	h.engine.err = errors.New("the warehouse is away")
-	_, err = h.invoke(t, runAnalyticsQueryToolName, h.queryArguments(`,"measures":[{"op":"count"}]`))
-	require.ErrorContains(t, err, "the warehouse is away")
+	for name, arguments := range map[string]string{
+		listAnalyticsDimensionValuesToolName: h.valuesArguments(""),
+		runAnalyticsQueryToolName:            h.queryArguments(`,"measures":[{"op":"count"}]`),
+	} {
+		_, err := h.invoke(t, name, arguments)
+		require.Equal(t, analyticsRefusal{
+			Code:    unavailableCode,
+			Feature: analyticsFeature,
+			Reason:  "",
+			Field:   "",
+			Value:   "",
+			Message: "Analytics queries are temporarily unavailable. Try again shortly.",
+		}, requireAnalyticsRefusal(t, err), name)
+		require.NotContains(t, err.Error(), "warehouse", "the agent never sees the failure's text: %s", name)
+	}
+	require.Equal(t, 2, h.engine.calls)
+	require.Contains(t, h.logs.String(), "the warehouse is away", "the failure is logged")
+	require.Contains(t, h.logs.String(), runAnalyticsQueryToolName)
 }
 
 func TestListAnalyticsDimensionValuesListsWhatTheEngineReturns(t *testing.T) {
