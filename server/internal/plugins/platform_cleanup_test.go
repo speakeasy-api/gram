@@ -1,12 +1,14 @@
 package plugins_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	endpointrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -39,16 +41,24 @@ func TestPlatformCleanupPreservesManualAndPublishes(t *testing.T) {
 			toolsetID := backend.ID.String()
 			manualPayload := &gen.AddPluginServerPayload{ToolsetID: &toolsetID, Policy: "required"}
 			endpointSlug := backend.McpSlug.String
+			var endpointID uuid.UUID
 			if wrapped {
 				wrapperID := uuid.New()
 				_, err := mcprepo.New(ti.conn).CreateMCPServer(ctx, mcprepo.CreateMCPServerParams{ID: wrapperID, ProjectID: projectID, Name: pgtype.Text{String: "Cleanup wrapper", Valid: true}, Slug: pgtype.Text{String: "cleanup-wrapper", Valid: true}, ToolsetID: uuid.NullUUID{UUID: backend.ID, Valid: true}, Visibility: "private"})
 				require.NoError(t, err)
 				endpointSlug = "cleanup-wrapper"
-				_, err = endpointrepo.New(ti.conn).CreateMCPEndpoint(ctx, endpointrepo.CreateMCPEndpointParams{ProjectID: projectID, McpServerID: uuid.NullUUID{UUID: wrapperID, Valid: true}, Slug: endpointSlug})
+				endpoint, err := endpointrepo.New(ti.conn).CreateMCPEndpoint(ctx, endpointrepo.CreateMCPEndpointParams{ProjectID: projectID, McpServerID: uuid.NullUUID{UUID: wrapperID, Valid: true}, Slug: endpointSlug})
 				require.NoError(t, err)
+				endpointID = endpoint.ID
 				id := wrapperID.String()
 				manualPayload.ToolsetID, manualPayload.McpServerID = nil, &id
 			}
+			assistant, err := assistantsrepo.New(ti.conn).CreateAssistant(ctx, assistantsrepo.CreateAssistantParams{
+				ProjectID: projectID, OrganizationID: org, Name: "Cleanup assistant", Model: "test-model", Instructions: "Test distribution", WarmTtlSeconds: 60, MaxConcurrency: 1, Status: "active",
+			})
+			require.NoError(t, err)
+			_, err = assistantsrepo.New(ti.conn).AddAssistantToolsets(ctx, []assistantsrepo.AddAssistantToolsetsParams{{AssistantID: assistant.ID, ToolsetID: backend.ID, ProjectID: projectID}})
+			require.NoError(t, err)
 			role := createTestRolePrincipal(t, ctx, ti, "cleanup")
 			principal, err := urn.ParsePrincipal(role)
 			require.NoError(t, err)
@@ -86,16 +96,25 @@ func TestPlatformCleanupPreservesManualAndPublishes(t *testing.T) {
 
 			// The caller owns publication configuration; audit, removals and publication
 			// commit together, exactly as the toolset mutation services do.
+			publishedServers := func(path string) map[string]json.RawMessage {
+				content, ok := publisher.lastPushedFiles[path]
+				require.True(t, ok, "published package must include %s", path)
+				var config struct {
+					Servers map[string]json.RawMessage `json:"mcpServers"`
+				}
+				require.NoError(t, json.Unmarshal(content, &config))
+				require.NotNil(t, config.Servers)
+				return config.Servers
+			}
 			_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 			require.NoError(t, err)
-			require.Contains(t, string(publisher.lastPushedFiles["cursor-plugins/cleanup-automatic-cursor/mcp.json"]), endpointSlug)
+			require.Contains(t, publishedServers("cursor-plugins/cleanup-automatic-cursor/mcp.json"), before.Servers[0].DisplayName)
 			beforeEvents, err := testrepo.New(ti.conn).ListPublishOutboxRows(ctx)
 			require.NoError(t, err)
 			tx = testenv.BeginTx(t, ctx, ti.conn)
 			removed, err = roledelivery.ContentChanged(ctx, tx, org, projectID, backend.ID, nil)
 			require.NoError(t, err)
 			require.NoError(t, (plugins.PublicationRequests{Enabled: true}).Project(ctx, tx, org, projectID, ac.UserID))
-			require.NoError(t, err)
 			require.Equal(t, []uuid.UUID{uuid.MustParse(automatic.ID)}, removed)
 			pendingEvents, err := testrepo.New(tx).ListPublishOutboxRows(ctx)
 			require.NoError(t, err)
@@ -134,8 +153,22 @@ func TestPlatformCleanupPreservesManualAndPublishes(t *testing.T) {
 			require.True(t, found)
 			_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 			require.NoError(t, err)
-			require.NotContains(t, string(publisher.lastPushedFiles["cursor-plugins/cleanup-automatic-cursor/mcp.json"]), endpointSlug)
-			require.Contains(t, string(publisher.lastPushedFiles["cursor-plugins/cleanup-manual-cursor/mcp.json"]), endpointSlug)
+			require.NotContains(t, publishedServers("cursor-plugins/cleanup-automatic-cursor/mcp.json"), before.Servers[0].DisplayName)
+			require.Contains(t, publishedServers("cursor-plugins/cleanup-manual-cursor/mcp.json"), manualMembership.DisplayName)
+			_, err = assistantsrepo.New(ti.conn).GetAssistant(ctx, assistantsrepo.GetAssistantParams{AssistantID: assistant.ID, ProjectID: projectID})
+			require.NoError(t, err, "cleanup must preserve the assistant")
+			attached, err := assistantsrepo.New(ti.conn).LoadAssistantToolsets(ctx, assistantsrepo.LoadAssistantToolsetsParams{AssistantIds: []uuid.UUID{assistant.ID}, ProjectID: projectID})
+			require.NoError(t, err)
+			require.Len(t, attached, 1)
+			require.Equal(t, backend.ID, attached[0].ToolsetID)
+			require.True(t, attached[0].McpEnabled)
+			require.Equal(t, backend.McpSlug, attached[0].McpSlug)
+			if wrapped {
+				endpoint, err := endpointrepo.New(ti.conn).GetMCPEndpointByID(ctx, endpointrepo.GetMCPEndpointByIDParams{ID: endpointID, ProjectID: projectID})
+				require.NoError(t, err, "cleanup must preserve the MCP endpoint")
+				require.Equal(t, endpointSlug, endpoint.Slug)
+				require.Equal(t, *manualPayload.McpServerID, endpoint.McpServerID.UUID.String())
+			}
 
 			// Removing the last platform tool does not undo existing deletion history.
 			tx = testenv.BeginTx(t, ctx, ti.conn)

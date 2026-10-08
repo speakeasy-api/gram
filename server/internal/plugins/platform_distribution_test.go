@@ -46,7 +46,12 @@ func TestPlatformToolsetAutomaticDistribution(t *testing.T) {
 			{name: "deleted_highest_platform", versions: [][]urn.Tool{{ordinary}, {platform}}, deleteHighest: true},
 			{name: "deleted_highest_ordinary", versions: [][]urn.Tool{{platform}, {ordinary}}, deleteHighest: true, excluded: true},
 		} {
-			for _, entrypoint := range []string{"audience", "role_grant", "setup", "eligible"} {
+			// Cover classification once; other entrypoints only need wiring controls.
+			entrypoints := []string{"audience"}
+			if tc.name == "mixed" || tc.name == "ordinary" {
+				entrypoints = append(entrypoints, "role_grant", "setup", "eligible")
+			}
+			for _, entrypoint := range entrypoints {
 				t.Run(model+"/"+tc.name+"/"+entrypoint, func(t *testing.T) {
 					t.Parallel()
 					ctx, ti := newTestPluginsService(t)
@@ -110,21 +115,6 @@ func TestPlatformToolsetAutomaticDistribution(t *testing.T) {
 							require.NoError(t, err)
 							require.Empty(t, details.Servers, "implicit Default attachment must also exclude platform tools")
 						}
-					}
-					if tc.excluded {
-						payload := &gen.AddPluginServerPayload{PluginID: plugin.ID, Policy: "required"}
-						id := toolsetID.String()
-						payload.ToolsetID = &id
-						if wrapped {
-							id = params.McpServerID.UUID.String()
-							payload.ToolsetID = nil
-							payload.McpServerID = &id
-						}
-						_, err := ti.service.AddPluginServer(ctx, payload)
-						require.NoError(t, err, "explicit administrator membership remains allowed")
-						got, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
-						require.NoError(t, err)
-						require.Len(t, got.Servers, 1)
 					}
 				})
 			}
@@ -200,5 +190,39 @@ func TestPlatformToolsetDistributionAfterAssistantRemoval(t *testing.T) {
 				assertExcluded("After assistant removal")
 			})
 		}
+	}
+}
+
+func TestPlatformToolsetExplicitPluginAttachment(t *testing.T) {
+	t.Parallel()
+	for _, wrapped := range []bool{false, true} {
+		name := "direct"
+		if wrapped {
+			name = "wrapped"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestPluginsService(t)
+			params, toolsetID := platformDistributionServer(t, ctx, ti, wrapped)
+			_, err := toolsetsrepo.New(ti.conn).CreateToolsetVersion(ctx, toolsetsrepo.CreateToolsetVersionParams{
+				ToolsetID: toolsetID, Version: 1, ResourceUrns: []urn.Resource{},
+				ToolUrns: []urn.Tool{urn.NewTool(urn.ToolKindPlatform, "slack", "send_message"), urn.NewTool(urn.ToolKindHTTP, "example", "get_status")},
+			})
+			require.NoError(t, err)
+			plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Manual distribution"})
+			require.NoError(t, err)
+			id := toolsetID.String()
+			payload := &gen.AddPluginServerPayload{PluginID: plugin.ID, Policy: "required", ToolsetID: &id}
+			if wrapped {
+				id = params.McpServerID.UUID.String()
+				payload.ToolsetID, payload.McpServerID = nil, &id
+			}
+			added, err := ti.service.AddPluginServer(ctx, payload)
+			require.NoError(t, err)
+			got, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+			require.NoError(t, err)
+			require.Len(t, got.Servers, 1)
+			require.Equal(t, added.ID, got.Servers[0].ID)
+		})
 	}
 }

@@ -80,9 +80,13 @@ func TestUpdateToolsetPlatformContentRemovesOnlyAutomaticDelivery(t *testing.T) 
 	require.NoError(t, err)
 	require.Greater(t, afterAudit, beforeAudit)
 	ac, _ := contextvalues.GetAuthContext(ctx)
-	grants, err := authz.GrantsForRole(ctx, testenv.NewLogger(t), ti.conn, ac.ActiveOrganizationID, role)
+	principal, err := urn.ParsePrincipal(role)
 	require.NoError(t, err)
-	require.Len(t, grants, 1, "delivery cleanup must not revoke MCP access")
+	grants, err := authz.LoadGrants(ctx, ti.conn, ac.ActiveOrganizationID, []urn.Principal{principal})
+	require.NoError(t, err)
+	allowed, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPConnect, id.String(), ac.ProjectID.String()))
+	require.NoError(t, err)
+	require.True(t, allowed, "the same role must still be able to connect to the toolset")
 }
 
 func TestChangeToolsetToolsPlatformCleanupRollsBackWithContent(t *testing.T) {

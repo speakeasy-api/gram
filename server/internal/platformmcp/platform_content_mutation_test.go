@@ -9,9 +9,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
@@ -53,6 +55,16 @@ func TestChangeMCPToolsReportsAndReplaysRemovedAutomaticPlugins(t *testing.T) {
 	_, err := mcpendpointsrepo.New(fixture.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{ProjectID: fixture.project.ID, McpServerID: uuid.NullUUID{UUID: fixture.toolsetID, Valid: true}, Slug: "cleanup-" + uuid.NewString()[:8]})
 	require.NoError(t, err)
 	automatic, manual, _ := seedExposureMutationMemberships(t, ctx, fixture, fixture.toolsetID)
+	fixture.service.publication = plugins.PublicationRequests{Enabled: true}
+	_, err = pluginsrepo.New(fixture.conn).UpsertGitHubConnection(ctx, pluginsrepo.UpsertGitHubConnectionParams{ProjectID: fixture.project.ID, InstallationID: 1, RepoOwner: "test-owner", RepoName: "test-marketplace"})
+	require.NoError(t, err)
+	requestCount := func() int64 {
+		count, err := testrepo.New(fixture.conn).CountPublishOutboxRowsByTopic(ctx, testrepo.CountPublishOutboxRowsByTopicParams{OrganizationID: fixture.principal.OrganizationID, Topic: "gram.plugins.v1.PublicationRequested"})
+		require.NoError(t, err)
+		return count
+	}
+	beforeRequests := requestCount()
+
 	_, err = toolsetsrepo.New(fixture.conn).CreateToolsetVersion(ctx, toolsetsrepo.CreateToolsetVersionParams{ToolsetID: fixture.toolsetID, Version: 1, ResourceUrns: []urn.Resource{}, ToolUrns: []urn.Tool{urn.NewTool(urn.ToolKindPlatform, "logs", "search_logs")}})
 	require.NoError(t, err)
 	current, err := fixture.service.Exposure(ctx, fixture.principal, fixture.project.ID, fixture.toolsetID)
@@ -62,9 +74,15 @@ func TestChangeMCPToolsReportsAndReplaysRemovedAutomaticPlugins(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{automatic.String()}, first.RemovedPluginIDs)
 	require.False(t, first.Receipt.Replayed)
+	require.Equal(t, string(plugins.ProjectPublicationEnqueued), first.PublicationRequest)
+	require.Equal(t, beforeRequests+1, requestCount())
 	payload, err := json.Marshal(first)
 	require.NoError(t, err)
-	require.Contains(t, string(payload), `"removed_plugin_ids":["`+automatic.String()+`"]`)
+	var wire map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(payload, &wire))
+	var removedIDs []string
+	require.NoError(t, json.Unmarshal(wire["removed_plugin_ids"], &removedIDs))
+	require.Equal(t, []string{automatic.String()}, removedIDs)
 	rows, err := pluginsrepo.New(fixture.conn).ListPluginServers(ctx, automatic)
 	require.NoError(t, err)
 	require.Empty(t, rows)
@@ -74,6 +92,7 @@ func TestChangeMCPToolsReportsAndReplaysRemovedAutomaticPlugins(t *testing.T) {
 	replay, err := fixture.service.AddTools(ctx, fixture.principal, input)
 	require.NoError(t, err)
 	require.True(t, replay.Receipt.Replayed)
+	require.Equal(t, beforeRequests+1, requestCount(), "replay must not enqueue publication again")
 	require.Equal(t, first.Receipt.ID, replay.Receipt.ID)
 	require.Equal(t, first.RemovedPluginIDs, replay.RemovedPluginIDs)
 	require.Equal(t, first.Exposure, replay.Exposure)
