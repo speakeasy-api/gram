@@ -760,8 +760,10 @@ func writeMermaid(b *strings.Builder, topics []gcp.DesiredTopic, subs []gcp.Desi
 				fmt.Fprintf(b, "  %s[(\"%s<br/>GCS / Parquet\")]:::topic\n", nodeID("b_", bucket), bucket)
 				buckets[bucket] = true
 			}
+
 			fmt.Fprintf(b, "  %s --> %s\n", id, nodeID("b_", bucket))
 		}
+
 		fmt.Fprintf(b, "  %s[\"%s<br/>(%s)\"]:::sub\n", id, s.Name, kind)
 		if isDeprecated(s.Labels) {
 			deprecated = append(deprecated, id)
@@ -836,10 +838,12 @@ func writeTables(b *strings.Builder, topics []gcp.DesiredTopic, subs []gcp.Desir
 		if isDeprecated(s.Labels) {
 			name += " _(deprecated)_"
 		}
+
 		consumer := siteList(consumers[s.Name])
 		if s.Storage != nil {
 			consumer = fmt.Sprintf("Go storage runner → `%s/%s/` (%s); explicit installation required", s.Storage.Bucket, s.ProtoMessage, strings.TrimPrefix(s.Storage.Partitioning.String(), "STORAGE_PARTITIONING_"))
 		}
+
 		fmt.Fprintf(b, "| %s | `%s` | %s | %s | %s |\n", name, s.Topic, orDash(humanDur(s.AckDeadline)), orDash(codeOrDash(s.DeadLetterTopic)), consumer)
 	}
 	b.WriteString("\n")
