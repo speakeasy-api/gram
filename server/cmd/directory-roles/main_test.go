@@ -80,9 +80,24 @@ func TestDirectoryRolesConnectionSafety(t *testing.T) {
 	}
 }
 
-func TestDirectoryRolesRequiresSupportSession(t *testing.T) {
+func TestDirectoryRolesRequiresCredentials(t *testing.T) {
 	t.Parallel()
 	inventory := `{"organization_id":"example-org","workos_organization_id":"example-workos-org","default_role_slug":"member","assignments":[]}`
-	err := run(t.Context(), []string{"shadow"}, strings.NewReader(inventory), io.Discard, func(string) string { return "" })
-	require.EqualError(t, err, "database, Redis connection and support-session credentials are required")
+	complete := map[string]string{
+		"GRAM_DATABASE_URL":          "postgres://127.0.0.1/example?sslmode=disable",
+		"GRAM_REDIS_CACHE_ADDR":      "127.0.0.1:6379",
+		"GRAM_SUPPORT_SESSION_TOKEN": "example-token",
+	}
+	for _, missing := range []string{"GRAM_DATABASE_URL", "GRAM_REDIS_CACHE_ADDR", "GRAM_SUPPORT_SESSION_TOKEN"} {
+		t.Run(missing, func(t *testing.T) {
+			t.Parallel()
+			err := run(t.Context(), []string{"shadow"}, strings.NewReader(inventory), io.Discard, func(key string) string {
+				if key == missing {
+					return ""
+				}
+				return complete[key]
+			})
+			require.EqualError(t, err, "database, Redis connection and support-session credentials are required")
+		})
+	}
 }

@@ -205,6 +205,7 @@ func TestDirectoryRoleInventoryShadowReportsLossAndRetainsOtherSources(t *testin
 	ctx = directoryInventorySupportContext(t, ctx, ti)
 	orgID := testAccessAuthContext(t, ctx).ActiveOrganizationID
 	seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_member", "Member", "member", ""))
 	builder := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder").String()
 	groupID, group := seedMappingDirectoryGroupWithWorkOSID(t, ctx, ti.conn, orgID, "Engineering")
 	for _, userID := range []string{"mapped-member", "unmapped-member"} {
@@ -267,6 +268,12 @@ func TestDirectoryRoleInventoryShadowFlagsDefaultRoleChange(t *testing.T) {
 	report, err = RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.audit, inventory, true, false)
 	require.Error(t, err)
 	require.Equal(t, []string{"missing-default"}, report.MissingRoleSlugs)
+	require.Empty(t, report.Differences)
+
+	inventory.DefaultRoleSlug, inventory.TargetDefaultRoleSlug = "missing-current", ""
+	report, err = RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.audit, inventory, true, false)
+	require.Error(t, err, "an unresolved current default blocks the report even without a target")
+	require.Equal(t, []string{"missing-current"}, report.MissingRoleSlugs)
 	require.Empty(t, report.Differences)
 }
 
