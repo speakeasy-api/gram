@@ -239,7 +239,9 @@ describe("McpAccessPanel", () => {
       ),
     });
     expect(screen.queryByLabelText("Slack")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Unblock Slack" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove Slack from Forbidden" }),
+    );
     const grant = onChange.mock.calls.at(-1)?.[0] as RoleGrant;
     expect(denySelectors(grant)).toBeUndefined();
     expect(allowSelectors(grant)).toEqual([

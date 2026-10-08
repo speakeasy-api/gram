@@ -490,7 +490,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     project expanded: Acme Support Tools is ticked with no badge, and Slack
     is ticked with a **Read-Only Tools** badge that opens its tool access
     sheet on By annotation. Edit **Contractors**: GitHub sits in the
-    Forbidden section with Unblock. Edit **Engineer**: every server row is
+    Forbidden section with Remove. Edit **Engineer**: every server row is
     ticked and locked, and the lock's card links to Platform access, where
     `mcp:read` and `mcp:write` carry the note that they also connect. Edit
     **Read-only Tools**: All servers is chosen with a Read-Only Tools badge.

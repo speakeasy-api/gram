@@ -201,6 +201,7 @@ export function McpAccessPanel({
         <legend className="text-eyebrow mb-2">Server access</legend>
         <RadioCardGroup
           size="sm"
+          orientation="horizontal"
           value={access.allServers ? "all" : "specific"}
           onValueChange={(value) =>
             update((prev) => ({
@@ -288,7 +289,7 @@ export function McpAccessPanel({
 
       <ForbiddenServers
         servers={forbiddenRows}
-        onUnblock={(id) =>
+        onRemove={(id) =>
           update((prev) => ({
             ...prev,
             forbidden: prev.forbidden.filter((other) => other !== id),

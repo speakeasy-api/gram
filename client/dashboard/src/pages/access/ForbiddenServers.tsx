@@ -5,7 +5,7 @@ import type { JSX } from "react";
 
 import { ServerMark } from "./McpAccessParts";
 import { serverHandle, type ServerWithProject } from "./mcpAccessModel";
-import { LIST_FRAME, LIST_GROUP_HEADER, LIST_ROW } from "./mcpAccessStyles";
+import { LIST_FRAME, LIST_ROW } from "./mcpAccessStyles";
 
 export interface ForbiddenServer {
   id: string;
@@ -19,22 +19,26 @@ export interface ForbiddenServer {
  */
 export function ForbiddenServers({
   servers,
-  onUnblock,
+  onRemove,
 }: {
   servers: ForbiddenServer[];
-  onUnblock: (id: string) => void;
+  onRemove: (id: string) => void;
 }): JSX.Element {
   return (
     <section aria-labelledby="forbidden-servers-heading" className={LIST_FRAME}>
-      <div className={LIST_GROUP_HEADER}>
-        <Ban className="text-default-destructive h-3.5 w-3.5" />
-        <h3
-          id="forbidden-servers-heading"
-          className="text-eyebrow text-default-destructive"
-        >
-          Forbidden ({servers.length})
-        </h3>
-        <Text as="span" small muted>
+      {/* Title over its explanation, with room around both: the explanation
+          runs long, and wrapped beside the title it crowded the row. */}
+      <div className="bg-muted/40 flex flex-col gap-1.5 px-3 py-3">
+        <span className="flex items-center gap-2">
+          <Ban className="text-default-destructive h-3.5 w-3.5" />
+          <h3
+            id="forbidden-servers-heading"
+            className="text-eyebrow text-default-destructive"
+          >
+            Forbidden ({servers.length})
+          </h3>
+        </span>
+        <Text small muted>
           Members of this role can&rsquo;t connect to these servers, even if
           another role allows it. Only a grant made to a member directly for the
           server overrides this.
@@ -65,10 +69,10 @@ export function ForbiddenServers({
               <Button
                 variant="secondary"
                 size="sm"
-                aria-label={`Unblock ${name}`}
-                onClick={() => onUnblock(id)}
+                aria-label={`Remove ${name} from Forbidden`}
+                onClick={() => onRemove(id)}
               >
-                <Button.Text>Unblock</Button.Text>
+                <Button.Text>Remove</Button.Text>
               </Button>
             </div>
           );

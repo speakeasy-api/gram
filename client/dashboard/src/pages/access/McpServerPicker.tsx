@@ -148,7 +148,8 @@ function ProjectServerGroup({
             </button>
           </CollapsibleTrigger>
         </h3>
-        {!open && (
+        {/* While searching, the count of matches beside it says enough. */}
+        {!open && !query && (
           <Badge
             variant={selectedCount > 0 ? "information" : "neutral"}
             size="md"
