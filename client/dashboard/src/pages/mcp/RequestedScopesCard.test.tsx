@@ -28,6 +28,10 @@ vi.mock("@gram/client/react-query/members.js", () => ({
   useMembers: () => ({ data: { members: [] } }),
 }));
 
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({ hasAnyScope: () => false }),
+}));
+
 vi.mock("./access/CheckAccess", () => ({ CheckAccess: () => null }));
 vi.mock("./access/ManageAccess", () => ({ ManageAccess: () => null }));
 
