@@ -168,7 +168,7 @@ var schemaFixtureV1Archive = parquet_go.NewSchema("fixture.v1.Event", parquet_go
 func FixtureV1Archive() storage.Definition {
 	return storage.Definition{
 		Marker: &v11.Archive{}, Payload: &v11.Event{},
-		ProtoName: "fixture.v1.Archive", SubscriptionID: "fixture-v1-archive", TopicID: "fixture-v1-event", Bucket: "fixture-archive",
+		ProtoName: "fixture.v1.Archive", SubscriptionID: "fixture-v1-archive", TopicID: "fixture-v1-event", Bucket: "lake",
 		Partitioning:       v1.StoragePartitioning_STORAGE_PARTITIONING_HIVE_DAILY,
 		PartitionAttribute: "", PartitionKeys: []string{}, Schema: schemaFixtureV1Archive, Fingerprint: "5444cd09d825532ecd59d66509d6835de10053eb2550f556c7240368dcf0c679",
 		Decode: func(data []byte, meta storage.Metadata) (parquet_go.Row, error) {

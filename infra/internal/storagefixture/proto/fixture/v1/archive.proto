@@ -9,6 +9,5 @@ option go_package = "github.com/speakeasy-api/gram/infra/internal/storagefixture
 message Archive {
   option (gcp.pubsub.v1.storage_subscription) = {
     topic: "fixture.v1.Event"
-    bucket: "fixture-archive"
   };
 }

@@ -37,6 +37,8 @@ func writeFixture(t *testing.T, path string, def storage.Definition, messages ..
 
 func TestGeneratedEncoding_DuckDBInteroperability(t *testing.T) {
 	t.Parallel()
+	require.Equal(t, "lake", FixtureV1Archive().Bucket)
+	require.Equal(t, "fixture-archive", FixtureV2Archive().Bucket)
 	root := t.TempDir()
 	populated := v1.Event_builder{
 		Id: new("populated"), Signed: new(int64(math.MinInt64)), Unsigned: new(uint64(math.MaxUint64)), Unsigned32: new(uint32(math.MaxUint32)),

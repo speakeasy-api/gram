@@ -69,8 +69,8 @@ var File_fixture_v1_archive_proto protoreflect.FileDescriptor
 const file_fixture_v1_archive_proto_rawDesc = "" +
 	"\n" +
 	"\x18fixture/v1/archive.proto\x12\n" +
-	"fixture.v1\x1a\x1bgcp/pubsub/v1/options.proto\"2\n" +
-	"\aArchive:'\x9a\xb5\x18#R\x10fixture.v1.EventZ\x0ffixture-archiveBUZSgithub.com/speakeasy-api/gram/infra/internal/storagefixture/pb/fixture/v1;fixturepbb\beditionsp\xe9\a"
+	"fixture.v1\x1a\x1bgcp/pubsub/v1/options.proto\"!\n" +
+	"\aArchive:\x16\x9a\xb5\x18\x12R\x10fixture.v1.EventBUZSgithub.com/speakeasy-api/gram/infra/internal/storagefixture/pb/fixture/v1;fixturepbb\beditionsp\xe9\a"
 
 var file_fixture_v1_archive_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_fixture_v1_archive_proto_goTypes = []any{
