@@ -300,6 +300,7 @@ function stdioServerTabs(ctx: SnippetContext): SnippetTab[] {
 FROM node:22-alpine
 COPY --from=${TUNNEL_AGENT_IMAGE} /usr/local/bin/tunnel-agent /usr/local/bin/tunnel-agent
 USER node
+ENV TUNNEL_LOCAL_MCP_COMMAND="${MCP_COMMAND_SENTINEL}"
 ENTRYPOINT ["/usr/local/bin/tunnel-agent"]
 DOCKERFILE`;
 
@@ -311,7 +312,6 @@ ${dockerfile}
 docker build -t ${localImage} .
 docker run --rm --name gram-tunnel-${slug} \\
   -e TUNNEL_KEY=${shellQuote(renderedKey)} \\
-  -e TUNNEL_LOCAL_MCP_COMMAND='${MCP_COMMAND_SENTINEL}' \\
   -e TUNNEL_GATEWAY_URL=${shellQuote(gateway)} \\
   -e TUNNEL_SERVICE_VERSION='${SERVICE_VERSION_SENTINEL}' \\
   ${localImage}`;
@@ -349,8 +349,6 @@ spec:
                 secretKeyRef:
                   name: gram-tunnel-key
                   key: TUNNEL_KEY
-            - name: TUNNEL_LOCAL_MCP_COMMAND
-              value: ${yamlQuote(MCP_COMMAND_SENTINEL)}
             - name: TUNNEL_GATEWAY_URL
               value: ${yamlQuote(gateway)}
             - name: TUNNEL_SERVICE_VERSION
@@ -364,7 +362,6 @@ spec:
       hint: "Build the image from the Docker tab, push it to a registry your cluster can pull from, and replace the image below.",
       code: kubernetes,
       slots: {
-        [MCP_COMMAND_SENTINEL]: yamlSlot(mcpCommand),
         [SERVICE_VERSION_SENTINEL]: yamlSlot(serviceVersion),
       },
     },
@@ -372,12 +369,12 @@ spec:
       value: "docker",
       label: "Docker",
       language: "bash",
-      hint: "Build an image that adds the tunnel agent to a base image with your server's runtime, then run it.",
+      hint: "Build an image that adds the tunnel agent and your server command to a base image with your server's runtime, then run it.",
       code: docker,
       slots: {
-        [MCP_COMMAND_SENTINEL]: shellSlot(
+        [MCP_COMMAND_SENTINEL]: dockerfileEnvSlot(
           mcpCommand,
-          "TUNNEL_LOCAL_MCP_COMMAND=",
+          "ENV TUNNEL_LOCAL_MCP_COMMAND=",
         ),
         [SERVICE_VERSION_SENTINEL]: shellSlot(
           serviceVersion,
@@ -561,6 +558,15 @@ function shellSlot(value: string, tokenPrefix = ""): CodeBlockSlot {
   };
 }
 
+function dockerfileEnvSlot(value: string, tokenPrefix: string): CodeBlockSlot {
+  return {
+    node: (
+      <FlashOnChange text={`${tokenPrefix}"${dockerfileEnvEscape(value)}"`} />
+    ),
+    copyText: dockerfileEnvEscape(value),
+  };
+}
+
 // Highlights its text with a background fade-in whenever the text changes,
 // then fades back out shortly after the last change.
 function FlashOnChange({ text }: { text: string }) {
@@ -663,6 +669,11 @@ function indentSnippet(value: string, spaces: number): string {
     .split("\n")
     .map((line) => (line ? `${indent}${line}` : ""))
     .join("\n");
+}
+
+// A double-quoted Dockerfile ENV value expands $VARS and takes backslash escapes.
+function dockerfileEnvEscape(value: string): string {
+  return value.replace(/[\\"$]/g, "\\$&");
 }
 
 function shellEscape(value: string): string {
