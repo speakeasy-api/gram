@@ -414,7 +414,7 @@ func (s *Service) standaloneValidationTarget(
 			OrganizationID:     endpoint.OrganizationID,
 			MCPServer:          &server,
 			ResourceIdentifier: endpoint.UpstreamResource,
-			UpstreamAuth:       token,
+			Upstream:           routedUpstreamBearer(routed),
 			WWWAuthenticate:    "",
 			Selection:          nil,
 		}, remotemcp.WithoutToolsCallIdentityCoverage())
