@@ -391,8 +391,10 @@ func newRoutingSession() *stdioSession {
 		logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
 		writeSem:     make(chan struct{}, 1),
 		exited:       make(chan struct{}),
+		terminated:   make(chan struct{}),
 		done:         make(chan struct{}),
 		closeOnce:    sync.Once{},
+		pings:        make(chan json.RawMessage, stdioPingQueue),
 		mu:           sync.Mutex{},
 		initializing: false,
 		pending:      make(map[string]*rpcStream),
@@ -431,12 +433,36 @@ func TestStdioRouteCutsOffSlowListenerWithoutBlocking(t *testing.T) {
 	default:
 		t.Fatal("a listener over its byte limit must be cut off")
 	}
-	require.NotEmpty(t, sess.backlog, "messages the listener could not take are kept for the next GET stream")
 
 	sess.route(mustParseRPC(t, `{"jsonrpc":"2.0","id":7,"result":{}}`))
-	event, ok := post.pop()
-	require.True(t, ok)
-	require.True(t, event.response)
+	notifications := 0
+	for {
+		event, ok := post.pop()
+		require.True(t, ok, "the response must reach its POST stream")
+		if event.response {
+			break
+		}
+		notifications++
+	}
+	require.Positive(t, notifications, "messages the cut-off listener could not take fall back to an open POST stream")
+	require.Empty(t, sess.backlog)
+}
+
+func TestStdioRouteBacklogsWhenNoStreamCanTakeMessage(t *testing.T) {
+	t.Parallel()
+	sess := newRoutingSession()
+	listener, err := sess.attachListener()
+	require.NoError(t, err)
+	sess.detachListener(listener)
+
+	sess.route(mustParseRPC(t, `{"jsonrpc":"2.0","id":"srv","method":"ping"}`))
+	require.Len(t, sess.backlog, 1)
+
+	next, err := sess.attachListener()
+	require.NoError(t, err)
+	event, ok := next.pop()
+	require.True(t, ok, "the next GET stream receives the backlog")
+	require.Contains(t, string(event.msg), `"srv"`)
 }
 
 func TestStdioRouteRetiresAnsweredStream(t *testing.T) {
@@ -453,6 +479,18 @@ func TestStdioRouteRetiresAnsweredStream(t *testing.T) {
 	_, ok = post.pop()
 	require.False(t, ok, "a server request after the final response must not go to the finished stream")
 	require.Len(t, sess.backlog, 1)
+}
+
+func TestStdioRouteBoundsInitializePings(t *testing.T) {
+	t.Parallel()
+	sess := newRoutingSession()
+	sess.initializing = true
+
+	for i := range 100 {
+		sess.route(mustParseRPC(t, fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"method":"ping"}`, i)))
+	}
+	require.Len(t, sess.pings, stdioPingQueue, "pings past the queue are dropped, not buffered")
+	require.Empty(t, sess.backlog)
 }
 
 func TestStdioBridgeReleasesSessionWhenServerIgnoresStdin(t *testing.T) {

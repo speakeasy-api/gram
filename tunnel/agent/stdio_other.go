@@ -16,6 +16,17 @@ func terminateProcessGroup(cmd *exec.Cmd) {
 	}
 }
 
+// processGroupAlive falls back to the server process itself, since there is
+// no process group to inspect here.
+func processGroupAlive(_ *exec.Cmd, exited <-chan struct{}) bool {
+	select {
+	case <-exited:
+		return false
+	default:
+		return true
+	}
+}
+
 func killProcessGroup(cmd *exec.Cmd) {
 	terminateProcessGroup(cmd)
 }

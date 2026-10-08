@@ -34,6 +34,10 @@ const (
 	stdioExitDrain = 2 * time.Second
 	// stdioPingTimeout bounds the bridge's own answer to a ping sent during initialize.
 	stdioPingTimeout = 5 * time.Second
+	// stdioPingQueue caps pings awaiting the bridge's answer during initialize.
+	stdioPingQueue = 8
+	// stdioKillWait bounds waiting for a process group to vanish after SIGKILL.
+	stdioKillWait = time.Second
 
 	// stdioMaxMessageBytes caps one JSON-RPC payload in either direction.
 	stdioMaxMessageBytes = 32 << 20
@@ -412,11 +416,17 @@ type stdioSession struct {
 	// waiting writer can give up when its request is cancelled.
 	writeSem chan struct{}
 
-	// exited closes when the process has been reaped; done closes after stdout
-	// has drained too, so final messages reach their streams before teardown.
-	exited    chan struct{}
-	done      chan struct{}
-	closeOnce sync.Once
+	// exited closes when the process has been reaped; terminated when its
+	// whole process group is gone; done after stdout has drained too, so
+	// final messages reach their streams before teardown.
+	exited     chan struct{}
+	terminated chan struct{}
+	done       chan struct{}
+	closeOnce  sync.Once
+
+	// pings queues ids of pings to answer during initialize; bounded so a
+	// flood of them is dropped rather than buffered.
+	pings chan json.RawMessage
 
 	mu           sync.Mutex
 	initializing bool
@@ -471,8 +481,10 @@ func startStdioSession(id, command string, env []string, logger *slog.Logger) (*
 		logger:       logger.With(slog.Int("pid", cmd.Process.Pid)),
 		writeSem:     make(chan struct{}, 1),
 		exited:       make(chan struct{}),
+		terminated:   make(chan struct{}),
 		done:         make(chan struct{}),
 		closeOnce:    sync.Once{},
+		pings:        make(chan json.RawMessage, stdioPingQueue),
 		mu:           sync.Mutex{},
 		initializing: true,
 		pending:      make(map[string]*rpcStream),
@@ -490,11 +502,14 @@ func startStdioSession(id, command string, env []string, logger *slog.Logger) (*
 		s.readStdout(stdoutR)
 	}()
 	go s.logStderr(stderrR)
+	go s.answerPings()
 	go func() {
 		err := cmd.Wait()
 		close(s.exited)
-		// Children of the server can outlive it; shut the whole group down.
+		// Children of the server can outlive it; the session is not done
+		// until the whole group is gone.
 		s.close()
+		<-s.terminated
 		select {
 		case <-stdoutDone:
 		case <-time.After(stdioExitDrain):
@@ -690,24 +705,25 @@ func readFrame(r *bufio.Reader, limit int) ([]byte, error) {
 // slow stream cannot stall the session's single stdout reader. Responses go
 // to the stream awaiting their id; server-initiated requests and
 // notifications prefer the GET stream, then an SSE POST stream still awaiting
-// responses, then a bounded backlog for the next GET stream.
+// responses, then a bounded backlog for the next GET stream. Delivery never
+// blocks, so all of it runs under s.mu and cannot race a GET stream being
+// replaced.
 func (s *stdioSession) route(msg rpcMessage) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if msg.method == "" && msg.id != "" {
 		stream, ok := s.pending[msg.id]
-		if ok {
-			delete(s.pending, msg.id)
-			stream.remaining--
-			if stream.remaining == 0 {
-				// Its handler stops reading after this response, so it must
-				// not be picked for any later server message.
-				delete(s.streams, stream)
-			}
-		}
-		s.mu.Unlock()
 		if !ok {
 			s.logger.Warn("tunnel stdio server answered an unknown request id")
 			return
+		}
+		delete(s.pending, msg.id)
+		stream.remaining--
+		if stream.remaining == 0 {
+			// Its handler stops reading after this response, so it must not
+			// be picked for any later server message.
+			delete(s.streams, stream)
 		}
 		if !stream.deliver(rpcEvent{msg: msg.raw, response: true}) {
 			s.logger.Warn("tunnel stdio response dropped: its HTTP stream is gone or over its buffer limit")
@@ -718,25 +734,24 @@ func (s *stdioSession) route(msg rpcMessage) {
 	// Servers may ping before initialize completes, when the client has no
 	// way to answer yet, so the bridge answers for it.
 	if s.initializing && msg.method == "ping" && msg.id != "" {
-		s.mu.Unlock()
-		go s.answerPing(msg.rawID)
+		select {
+		case s.pings <- msg.rawID:
+		default:
+			s.logger.Warn("tunnel stdio server sent too many pings during initialize; dropping one")
+		}
 		return
 	}
 
-	target := s.listener
-	if target == nil {
-		for stream := range s.streams {
-			target = stream
-			break
+	event := rpcEvent{msg: msg.raw, response: false}
+	if s.listener != nil && s.listener.deliver(event) {
+		return
+	}
+	for stream := range s.streams {
+		if stream.deliver(event) {
+			return
 		}
 	}
-	s.mu.Unlock()
-	if target != nil && target.deliver(rpcEvent{msg: msg.raw, response: false}) {
-		return
-	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.backlog = append(s.backlog, msg.raw)
 	s.backlogBytes += len(msg.raw)
 	for s.backlogBytes > stdioBacklogMaxBytes && len(s.backlog) > 0 {
@@ -747,11 +762,20 @@ func (s *stdioSession) route(msg rpcMessage) {
 	}
 }
 
-func (s *stdioSession) answerPing(id json.RawMessage) {
-	ctx, cancel := context.WithTimeout(context.Background(), stdioPingTimeout)
-	defer cancel()
-	pong := fmt.Appendf(nil, `{"jsonrpc":"2.0","id":%s,"result":{}}`, id)
-	_ = s.send(ctx, []rpcMessage{{raw: pong, rawID: id, id: "", method: ""}})
+// answerPings writes the bridge's answers to pings sent during initialize,
+// one at a time, until the session ends.
+func (s *stdioSession) answerPings() {
+	for {
+		select {
+		case <-s.done:
+			return
+		case id := <-s.pings:
+			ctx, cancel := context.WithTimeout(context.Background(), stdioPingTimeout)
+			pong := fmt.Appendf(nil, `{"jsonrpc":"2.0","id":%s,"result":{}}`, id)
+			_ = s.send(ctx, []rpcMessage{{raw: pong, rawID: id, id: "", method: ""}})
+			cancel()
+		}
+	}
 }
 
 func (s *stdioSession) logStderr(r io.Reader) {
@@ -766,20 +790,43 @@ func (s *stdioSession) logStderr(r io.Reader) {
 
 // close shuts the server down the way the MCP stdio transport prescribes:
 // close stdin, then SIGTERM, then SIGKILL. Signals go to the whole process
-// group, whether or not its leader has already exited.
+// group, whether or not its leader has already exited, and terminated closes
+// once the group is gone.
 func (s *stdioSession) close() {
 	s.closeOnce.Do(func() {
 		_ = s.stdin.Close()
 		go func() {
+			defer close(s.terminated)
 			select {
 			case <-s.exited:
 			case <-time.After(stdioShutdownGrace):
 			}
+			if !s.awaitGroupExit(0) {
+				return
+			}
 			terminateProcessGroup(s.cmd)
-			time.Sleep(stdioShutdownGrace)
+			if !s.awaitGroupExit(stdioShutdownGrace) {
+				return
+			}
 			killProcessGroup(s.cmd)
+			s.awaitGroupExit(stdioKillWait)
 		}()
 	})
+}
+
+// awaitGroupExit polls until the server's process group is gone or wait
+// elapses, and reports whether the group is still alive.
+func (s *stdioSession) awaitGroupExit(wait time.Duration) bool {
+	deadline := time.Now().Add(wait)
+	for {
+		if !processGroupAlive(s.cmd, s.exited) {
+			return false
+		}
+		if !time.Now().Before(deadline) {
+			return true
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 type rpcEvent struct {
