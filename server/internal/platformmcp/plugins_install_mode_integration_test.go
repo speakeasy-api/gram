@@ -123,3 +123,42 @@ func TestSetPluginAssignmentsConflictsAfterModeOnlyEdit(t *testing.T) {
 	})
 	require.ErrorIs(t, err, ErrPluginAssignmentMutationConflict)
 }
+
+func TestSetPluginAssignmentsRejectsConflictingModesForOneAssignment(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_plugin_install_mode_references")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagPlatformMCPPluginAssignmentMutations, principal.OrganizationID, true)
+	service := testPluginTargets(conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget())
+	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Shared Tools", "shared-tools")
+
+	first, err := service.ListPluginAssignments(ctx, principal, ListPluginAssignmentsInput{ProjectID: project.ID.String()})
+	require.NoError(t, err)
+	second, err := service.ListPluginAssignments(ctx, principal, ListPluginAssignmentsInput{ProjectID: project.ID.String()})
+	require.NoError(t, err)
+	everyoneA := assignmentReferenceByName(t, first.Assignments, "Everyone")
+	everyoneB := assignmentReferenceByName(t, second.Assignments, "Everyone")
+	require.NotEqual(t, everyoneA, everyoneB, "each read issues a fresh reference")
+	read, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID.String()})
+	require.NoError(t, err)
+
+	_, err = service.SetPluginAssignments(ctx, principal, SetPluginAssignmentsInput{
+		ProjectID: project.ID.String(), Plugin: plugin.Slug, AssignmentReferences: []string{everyoneA, everyoneB},
+		InstallModes:              map[string]string{everyoneA: "required", everyoneB: "available"},
+		ExpectedAssignmentVersion: read.AssignmentVersion, IdempotencyKey: "conflicting-references", Confirmed: true,
+	})
+	require.ErrorIs(t, err, ErrPluginAssignmentMutationInvalid)
+
+	agreed, err := service.SetPluginAssignments(ctx, principal, SetPluginAssignmentsInput{
+		ProjectID: project.ID.String(), Plugin: plugin.Slug, AssignmentReferences: []string{everyoneA, everyoneB},
+		InstallModes:              map[string]string{everyoneA: "required", everyoneB: "required"},
+		ExpectedAssignmentVersion: read.AssignmentVersion, IdempotencyKey: "agreeing-references", Confirmed: true,
+	})
+	require.NoError(t, err)
+	require.Len(t, agreed.Assignments, 1)
+	require.Equal(t, "required", agreed.Assignments[0].InstallMode)
+}

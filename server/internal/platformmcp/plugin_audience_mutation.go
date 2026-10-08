@@ -442,7 +442,8 @@ func normalizePluginAssignmentInstallModes(raw map[string]string, references []s
 }
 
 // resolveMutationInstallModes decodes reference-keyed install modes into the
-// principal-keyed form the shared assignment write expects.
+// principal-keyed form the shared assignment write expects. Distinct references
+// to one principal must agree, or the stored mode would depend on map order.
 func (s *PluginsService) resolveMutationInstallModes(principal Principal, project ResolvedProject, modes map[string]string) (map[string]string, error) {
 	if len(modes) == 0 {
 		return nil, nil
@@ -453,7 +454,11 @@ func (s *PluginsService) resolveMutationInstallModes(principal Principal, projec
 		if err != nil {
 			return nil, pluginAssignmentMutationNotFound()
 		}
-		resolved[canonicalPluginAssignmentURN(value)] = mode
+		principalURN := canonicalPluginAssignmentURN(value)
+		if previous, ok := resolved[principalURN]; ok && previous != mode {
+			return nil, pluginAssignmentMutationInvalid("Two references to the same assignment were given different install modes.")
+		}
+		resolved[principalURN] = mode
 	}
 	return resolved, nil
 }
