@@ -599,10 +599,10 @@ func TestToolsetRowLockBlocksAttachingAnotherServerToIt(t *testing.T) {
 }
 
 // Lock ORDER, not lock presence. toolsets.UpdateToolset holds the toolset row
-// (GetToolsetForUpdate) and then, inside reconcileHostedNetworkAccess, runs a
-// plain `UPDATE mcp_servers ... WHERE id = $6 AND toolset_id = $6` — an
-// exclusive row lock taken without any FOR UPDATE syntax. For a hosted server
-// both ids are the toolset id, so that is the same pair of rows this path
+// (GetToolsetForUpdate) and then, inside hostedmcp.Sync, locks the hosted
+// mcp_servers row FOR UPDATE (LockMCPServerByIDAndProjectID) before writing
+// it. For a hosted server both ids are the toolset id, so that is the same
+// pair of rows this path
 // touches. Taking them servers-first here would be an ABBA cycle that
 // PostgreSQL breaks by aborting one side with deadlock_detected, turning a
 // concurrent dashboard edit and tool-exposure change into a failed request.

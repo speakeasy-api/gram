@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,10 +36,12 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -48,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -1163,6 +1167,8 @@ func (s *ServiceCore) hydrateAssistantSkills(ctx context.Context, projectID uuid
 func writeAssistantToolsets(
 	ctx context.Context,
 	tx pgx.Tx,
+	auditLogger *audit.Logger,
+	actor hostedmcp.Actor,
 	assistantID, projectID uuid.UUID,
 	resolved []resolvedToolsetInsert,
 ) error {
@@ -1194,24 +1200,23 @@ func writeAssistantToolsets(
 	// to be MCP-reachable; assistants address tools via the MCP server.
 	// Auto-enable on attach so the user doesn't have to toggle it
 	// separately on each toolset.
-	if err := queries.EnableMCPForToolsets(ctx, assistantrepo.EnableMCPForToolsetsParams{
+	enabled, err := queries.EnableMCPForToolsets(ctx, assistantrepo.EnableMCPForToolsetsParams{
 		ToolsetIds: toolsetIDs,
 		ProjectID:  projectID,
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("enable mcp for assistant toolsets: %w", err)
 	}
-	// A hosted MCP wrapper mirrors the toolset's enabled state. Assistant
-	// attachment can enable the toolset outside the toolset update API.
-	if _, err := tx.Exec(ctx, `UPDATE mcp_servers AS server
-		SET visibility = CASE WHEN toolset.mcp_is_public THEN 'public' ELSE 'private' END,
-			updated_at = clock_timestamp()
-		FROM toolsets AS toolset
-		WHERE server.id = toolset.id AND server.toolset_id = toolset.id
-			AND server.project_id = $2 AND toolset.project_id = $2
-			AND toolset.id = ANY($1::uuid[]) AND toolset.mcp_enabled IS TRUE
-			AND toolset.deleted IS FALSE AND server.deleted IS FALSE
-			AND server.visibility = 'disabled'`, toolsetIDs, projectID); err != nil {
-		return fmt.Errorf("enable hosted mcp wrappers for assistant toolsets: %w", err)
+	// Toolset rows are already locked FOR NO KEY UPDATE, in id order.
+	slices.SortFunc(enabled, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
+	for _, id := range enabled {
+		toolset, err := toolsetsrepo.New(tx).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: id, ProjectID: projectID})
+		if err != nil {
+			return fmt.Errorf("load enabled assistant toolset: %w", err)
+		}
+		if _, err := hostedmcp.Sync(ctx, tx, auditLogger, actor, toolset, nil); err != nil {
+			return fmt.Errorf("sync hosted mcp for assistant toolset: %w", err)
+		}
 	}
 	return nil
 }
@@ -1341,11 +1346,6 @@ func (s *ServiceCore) CreateAssistant(
 	if err != nil {
 		return assistantRecord{}, err
 	}
-	resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers)
-	if err != nil {
-		return assistantRecord{}, err
-	}
-
 	queries := assistantrepo.New(tx)
 	created, err := queries.CreateAssistant(ctx, assistantrepo.CreateAssistantParams{
 		ProjectID:       projectID,
@@ -1363,7 +1363,12 @@ func (s *ServiceCore) CreateAssistant(
 	}
 	record := assistantRecordFromCreateRow(created)
 
-	if err := writeAssistantToolsets(ctx, tx, record.ID, projectID, resolved); err != nil {
+	if err := writeAssistantToolsets(ctx, tx, s.audit, assistantActor(ctx, createdByUserID), record.ID, projectID, resolved); err != nil {
+		return assistantRecord{}, err
+	}
+	// Server rows lock after the hosted sync's domain -> endpoint -> server locks.
+	resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers)
+	if err != nil {
 		return assistantRecord{}, err
 	}
 	if err := writeAssistantMcpServers(ctx, tx, record.ID, projectID, resolvedMcpServers); err != nil {
@@ -1485,15 +1490,6 @@ func (s *ServiceCore) UpdateAssistant(
 		}
 		resolved = r
 	}
-	var resolvedMcpServers []resolvedMcpServerInsert
-	if mcpServers != nil {
-		r, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers)
-		if err != nil {
-			return assistantRecord{}, err
-		}
-		resolvedMcpServers = r
-	}
-
 	queries := assistantrepo.New(tx)
 	updated, err := queries.UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{
 		Name:           conv.PtrToPGText(name),
@@ -1511,11 +1507,16 @@ func (s *ServiceCore) UpdateAssistant(
 	record := assistantRecordFromUpdateRow(updated)
 
 	if toolsets != nil {
-		if err := writeAssistantToolsets(ctx, tx, record.ID, projectID, resolved); err != nil {
+		if err := writeAssistantToolsets(ctx, tx, s.audit, assistantActor(ctx, record.CreatedByUserID), record.ID, projectID, resolved); err != nil {
 			return assistantRecord{}, err
 		}
 	}
 	if mcpServers != nil {
+		// Server rows lock after the hosted sync's domain -> endpoint -> server locks.
+		resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers)
+		if err != nil {
+			return assistantRecord{}, err
+		}
 		if err := writeAssistantMcpServers(ctx, tx, record.ID, projectID, resolvedMcpServers); err != nil {
 			return assistantRecord{}, err
 		}
@@ -3973,4 +3974,13 @@ func (s *ServiceCore) stopRuntimeRecord(ctx context.Context, projectID, runtimeI
 		return fmt.Errorf("stop assistant runtime: %w", err)
 	}
 	return nil
+}
+
+// assistantActor attributes hosted MCP changes made by an assistant write.
+func assistantActor(ctx context.Context, fallbackUserID string) hostedmcp.Actor {
+	actor := hostedmcp.Actor{UserID: fallbackUserID, Email: nil}
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.UserID != "" {
+		actor.UserID, actor.Email = authCtx.UserID, authCtx.Email
+	}
+	return actor
 }

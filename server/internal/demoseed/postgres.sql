@@ -1539,6 +1539,27 @@ BEGIN
      NULL, demo.det_uuid('gram-demo-remotemcp-github'),
      demo.det_uuid('gram-demo-issuer-workforce'), 'private');
 
+  -- Every toolset with an MCP slug owns a canonical hosted wrapper (id = the
+  -- toolset id) and one endpoint at its address, mirroring its hosting
+  -- columns. The fresh-id servers above stay separate servers over the same
+  -- toolsets.
+  INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
+                           user_session_issuer_id, tool_variations_group_id,
+                           visibility)
+  SELECT t.id, t.project_id, t.name, t.mcp_slug, t.id, t.user_session_issuer_id,
+         t.tool_variations_group_id,
+         CASE WHEN NOT t.mcp_enabled THEN 'disabled'
+              WHEN t.mcp_is_public THEN 'public'
+              ELSE 'private' END
+  FROM toolsets t
+  WHERE t.project_id = proj_a AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL;
+
+  INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, custom_domain_id, slug)
+  SELECT demo.det_uuid('gram-demo-endpoint-hosted-' || t.slug), t.project_id,
+         t.id, t.custom_domain_id, t.mcp_slug
+  FROM toolsets t
+  WHERE t.project_id = proj_a AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL;
+
   -- Check Access scenarios on GitHub. Contractors blocks connecting, which
   -- wins over every other role's grant: Mateo (a contractor through the
   -- directory) is blocked even though Engineer reaches every server, and his
@@ -1592,6 +1613,9 @@ BEGIN
   CROSS JOIN mcp_servers s
   WHERE p.organization_id = demo_org AND p.project_id = proj_a
     AND s.project_id = proj_a
+    -- Canonical hosted wrappers share their toolset's name with the
+    -- fresh-id servers above; distribute those servers only.
+    AND s.id IS DISTINCT FROM s.toolset_id
     AND EXISTS (
       SELECT 1 FROM principal_grants g
       WHERE g.organization_id = demo_org AND g.principal_urn = a.principal_urn
@@ -3409,6 +3433,29 @@ Channel context stays in the Raw view.
   WHERE m.project_id = proj_a AND m.deleted IS TRUE;
   IF stray <> 1 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 1 removed gateway member, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM toolsets t
+  LEFT JOIN mcp_servers s
+    ON s.id = t.id AND s.toolset_id = t.id AND s.deleted IS FALSE
+   AND s.slug = t.mcp_slug AND s.name = t.name
+   AND s.user_session_issuer_id IS NOT DISTINCT FROM t.user_session_issuer_id
+   AND s.tool_variations_group_id IS NOT DISTINCT FROM t.tool_variations_group_id
+   AND s.visibility = CASE WHEN NOT t.mcp_enabled THEN 'disabled'
+                           WHEN t.mcp_is_public THEN 'public'
+                           ELSE 'private' END
+  WHERE t.project_id = proj_a AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL
+    AND (s.id IS NULL
+      OR 1 <> (SELECT count(*) FROM mcp_endpoints e
+               WHERE e.mcp_server_id = t.id AND e.deleted IS FALSE)
+      OR NOT EXISTS (
+        SELECT 1 FROM mcp_endpoints e
+        WHERE e.mcp_server_id = t.id AND e.deleted IS FALSE
+          AND e.slug = t.mcp_slug
+          AND e.custom_domain_id IS NOT DISTINCT FROM t.custom_domain_id));
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % hosted toolsets lack a matching canonical wrapper and endpoint', stray;
   END IF;
 
   SELECT count(*) INTO stray

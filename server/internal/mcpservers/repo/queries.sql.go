@@ -1652,6 +1652,75 @@ func (q *Queries) SetMCPServerToolMetadata(ctx context.Context, arg SetMCPServer
 	return items, nil
 }
 
+const syncHostedMCPServer = `-- name: SyncHostedMCPServer :one
+UPDATE mcp_servers
+SET
+    name = $1,
+    slug = $2,
+    visibility = $3,
+    user_session_issuer_id = $4,
+    remote_session_issuer_id = CASE
+        WHEN $4::uuid IS NULL THEN NULL
+        ELSE remote_session_issuer_id
+    END,
+    tool_variations_group_id = $5,
+    network_access_mode = $6,
+    updated_at = clock_timestamp()
+WHERE id = $7
+  AND project_id = $8
+  AND toolset_id = $7
+  AND deleted IS FALSE
+RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
+`
+
+type SyncHostedMCPServerParams struct {
+	Name                  pgtype.Text
+	Slug                  pgtype.Text
+	Visibility            string
+	UserSessionIssuerID   uuid.NullUUID
+	ToolVariationsGroupID uuid.NullUUID
+	NetworkAccessMode     pgtype.Text
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+}
+
+// Projects a toolset's hosting columns onto its canonical wrapper (id = toolset id).
+// Unsetting the issuer clears the derived remote issuer, which no resync can reach.
+func (q *Queries) SyncHostedMCPServer(ctx context.Context, arg SyncHostedMCPServerParams) (McpServer, error) {
+	row := q.db.QueryRow(ctx, syncHostedMCPServer,
+		arg.Name,
+		arg.Slug,
+		arg.Visibility,
+		arg.UserSessionIssuerID,
+		arg.ToolVariationsGroupID,
+		arg.NetworkAccessMode,
+		arg.ID,
+		arg.ProjectID,
+	)
+	var i McpServer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.EnvironmentID,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionIssuerID,
+		&i.RemoteMcpServerID,
+		&i.TunneledMcpServerID,
+		&i.ToolsetID,
+		&i.UnproxiedMcpServerID,
+		&i.ToolVariationsGroupID,
+		&i.Visibility,
+		&i.NetworkAccessMode,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const updateMCPServer = `-- name: UpdateMCPServer :one
 UPDATE mcp_servers
 SET

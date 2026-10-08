@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
-	"slices"
 	"strings"
 	"time"
 
@@ -34,13 +33,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/tombstone"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -1036,159 +1035,30 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	txRepo := repo.New(dbtx)
-
-	affectedDomainIDs, err := mcpendpointsrepo.New(dbtx).ListCustomDomainIDsByMCPServerID(ctx, mcpendpointsrepo.ListCustomDomainIDsByMCPServerIDParams{
-		McpServerID: serverID,
-		ProjectID:   *authCtx.ProjectID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list custom domains for mcp server").LogError(ctx, logger)
-	}
-
-	if err := lockMcpServerCustomDomains(ctx, dbtx, affectedDomainIDs); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "lock custom domains").LogError(ctx, logger)
-	}
-	if _, err := mcpendpointsrepo.New(dbtx).LockMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockMCPEndpointsByMCPServerIDParams{
-		McpServerID: serverID,
-		ProjectID:   *authCtx.ProjectID,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "lock mcp endpoints").LogError(ctx, logger)
-	}
-	locked, err := txRepo.LockMCPServerByIDAndProjectID(ctx, repo.LockMCPServerByIDAndProjectIDParams{
-		ID:        serverID,
-		ProjectID: *authCtx.ProjectID,
-	})
+	lockedServer, err := tombstone.Lock(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "lock mcp server").LogError(ctx, logger)
 	}
-
-	if isCanonicalHostedWrapper(locked) {
+	if isCanonicalHostedWrapper(lockedServer.Server) {
 		return oops.E(oops.CodeInvalid, nil, "delete the hosted MCP through the toolset")
 	}
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(locked.ID, locked.ToolsetID), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(lockedServer.Server.ID, lockedServer.Server.ToolsetID), authCtx.ProjectID.String())); err != nil {
 		return err
 	}
-	// Post-server-lock read is the authoritative root set: the server FOR SHARE in root selection means no new root can commit past this point, and rows here carry pre-delete is_domain_root.
-	rootEndpoints, err := mcpendpointsrepo.New(dbtx).LockMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockMCPEndpointsByMCPServerIDParams{
-		McpServerID: serverID,
-		ProjectID:   *authCtx.ProjectID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "lock root mcp endpoints").LogError(ctx, logger)
-	}
-	rootEndpoints = slices.DeleteFunc(rootEndpoints, func(endpoint mcpendpointsrepo.McpEndpoint) bool {
-		return !endpoint.IsDomainRoot.Valid || !endpoint.IsDomainRoot.Bool
-	})
 
-	deleted, err := txRepo.DeleteMCPServer(ctx, repo.DeleteMCPServerParams{
-		ID:        serverID,
-		ProjectID: *authCtx.ProjectID,
+	tombstoned, err := tombstone.Tombstone(ctx, dbtx, s.audit, lockedServer, tombstone.Input{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		ActorUserID:    authCtx.UserID,
+		ActorEmail:     authCtx.Email,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return oops.E(oops.CodeNotFound, err, "mcp server not found").LogError(ctx, logger)
-		}
 		return oops.E(oops.CodeUnexpected, err, "delete mcp server").LogError(ctx, logger)
 	}
-
-	if err := txRepo.DeleteAssistantMCPServersByMCPServer(ctx, repo.DeleteAssistantMCPServersByMCPServerParams{
-		McpServerID: deleted.ID,
-		ProjectID:   *authCtx.ProjectID,
-	}); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to detach assistant mcp servers").LogError(ctx, logger)
-	}
-
-	// The mcp_endpoints.mcp_server_id FK has ON DELETE CASCADE, but that only
-	// fires for hard deletes. Soft-delete endpoints explicitly so callers don't
-	// resolve to a tombstoned mcp server after this commits.
-	deletedEndpoints, err := mcpendpointsrepo.New(dbtx).SoftDeleteMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.SoftDeleteMCPEndpointsByMCPServerIDParams{
-		McpServerID: deleted.ID,
-		ProjectID:   *authCtx.ProjectID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete child mcp endpoints").LogError(ctx, logger)
-	}
-	if err := logMCPServerRootAutoClears(ctx, dbtx, s.audit, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authCtx.Email, rootEndpoints); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "log automatic root endpoint cleanup").LogError(ctx, logger)
-	}
-
-	for _, endpoint := range deletedEndpoints {
-		if err := s.audit.LogMcpEndpointDelete(ctx, dbtx, audit.LogMcpEndpointDeleteEvent{
-			OrganizationID:   authCtx.ActiveOrganizationID,
-			ProjectID:        *authCtx.ProjectID,
-			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-			ActorDisplayName: authCtx.Email,
-			ActorSlug:        nil,
-			McpEndpointURN:   urn.NewMcpEndpoint(endpoint.ID),
-			Slug:             endpoint.Slug,
-		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "log mcp endpoint deletion").LogError(ctx, logger)
-		}
-	}
-
-	// Detach the server from any plugins (Default or manually curated). The
-	// (plugin_id, display_name) unique index only excludes soft-deleted rows,
-	// so a live attachment left behind would keep holding the display name and
-	// block a later same-named server from ever attaching — i.e. from being
-	// enabled at all via UpdateMcpServer's attach-on-enable path.
-	detachedPluginServers, err := pluginsrepo.New(dbtx).SoftDeletePluginServersByMCPServerID(ctx, pluginsrepo.SoftDeletePluginServersByMCPServerIDParams{
-		ProjectID:   *authCtx.ProjectID,
-		McpServerID: uuid.NullUUID{UUID: deleted.ID, Valid: true},
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "detach mcp server from plugins").LogError(ctx, logger)
-	}
-
-	// Meta MCP memberships reference this server through a soft-delete-aware
-	// join table; tombstone them so member listings and the meta runtime stop
-	// projecting a deleted server.
-	deletedMemberships, err := metamcprepo.New(dbtx).DeleteMetaMCPMembersByMCPServerID(ctx, metamcprepo.DeleteMetaMCPMembersByMCPServerIDParams{
-		McpServerID: deleted.ID,
-		ProjectID:   *authCtx.ProjectID,
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "delete meta mcp memberships").LogError(ctx, logger)
-	}
-	for _, membership := range deletedMemberships {
-		if err := s.audit.LogMetaMcpMemberRemove(ctx, dbtx, audit.LogMetaMcpMemberEvent{
-			OrganizationID:   authCtx.ActiveOrganizationID,
-			ProjectID:        *authCtx.ProjectID,
-			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-			ActorDisplayName: authCtx.Email,
-			ActorSlug:        nil,
-			MetaMcpServerURN: urn.NewMetaMcpServer(membership.MetaMcpServerID),
-			Name:             membership.MetaMcpServerName,
-			MembershipURN:    urn.NewMetaMcpServerMember(membership.ID),
-			McpServerURN:     urn.NewMcpServer(membership.McpServerID),
-			SortOrder:        membership.SortOrder,
-		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "log meta mcp membership removal").LogError(ctx, logger)
-		}
-	}
-
-	deletedServerURN := urn.NewMcpServer(deleted.ID)
-	for _, pluginServer := range detachedPluginServers {
-		if err := s.audit.LogPluginServerRemove(ctx, dbtx, audit.LogPluginServerRemoveEvent{
-			OrganizationID:   authCtx.ActiveOrganizationID,
-			ProjectID:        *authCtx.ProjectID,
-			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-			ActorDisplayName: authCtx.Email,
-			ActorSlug:        nil,
-			PluginID:         pluginServer.PluginID,
-			PluginName:       pluginServer.PluginName,
-			PluginSlug:       pluginServer.PluginSlug,
-			ServerID:         pluginServer.ID,
-			ToolsetURN:       nil,
-			McpServerURN:     &deletedServerURN,
-			MetaMcpServerURN: nil,
-		}); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "log mcp server plugin detachment").LogError(ctx, logger)
-		}
-	}
+	deleted := tombstoned.Server
 
 	// Remote- and tunneled-backed servers own the issuer minted with them.
 	// An issuer may also be referenced by another server or toolset, so only
@@ -1281,7 +1151,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
-	if len(detachedPluginServers) > 0 {
+	if tombstoned.DetachedPluginServers > 0 {
 		connected, connectionErr := pluginsrepo.New(s.db).HasPluginGithubConnectionForProject(ctx, *authCtx.ProjectID)
 		if connectionErr != nil {
 			logger.WarnContext(ctx, "check marketplace connection after MCP deletion", attr.SlogError(connectionErr))
@@ -1293,43 +1163,11 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	// Post-commit, best-effort: RFC 7009 for the orphaned grants.
 	s.revoker.RevokeAllDetached(ctx, orphanCreds)
 
-	if err := s.reconcileMcpServerCustomDomains(ctx, rootDomainIDs(rootEndpoints)); err != nil {
+	if err := s.reconcileMcpServerCustomDomains(ctx, tombstone.RootDomainIDs(lockedServer.RootEndpoints)); err != nil {
 		return err
 	}
 
 	return nil
-}
-
-func lockMcpServerCustomDomains(ctx context.Context, dbtx pgx.Tx, domainIDs []uuid.UUID) error {
-	slices.SortFunc(domainIDs, func(a, b uuid.UUID) int {
-		return strings.Compare(a.String(), b.String())
-	})
-	repository := customdomainsrepo.New(dbtx)
-	for _, domainID := range domainIDs {
-		if _, err := repository.LockCustomDomainByID(ctx, domainID); err != nil {
-			return fmt.Errorf("lock custom domain %s: %w", domainID, err)
-		}
-	}
-	return nil
-}
-
-func rootDomainIDs(endpoints []mcpendpointsrepo.McpEndpoint) []uuid.UUID {
-	seen := make(map[uuid.UUID]struct{}, len(endpoints))
-	result := make([]uuid.UUID, 0, len(endpoints))
-	for _, endpoint := range endpoints {
-		if !endpoint.CustomDomainID.Valid {
-			continue
-		}
-		if _, ok := seen[endpoint.CustomDomainID.UUID]; ok {
-			continue
-		}
-		seen[endpoint.CustomDomainID.UUID] = struct{}{}
-		result = append(result, endpoint.CustomDomainID.UUID)
-	}
-	slices.SortFunc(result, func(a, b uuid.UUID) int {
-		return strings.Compare(a.String(), b.String())
-	})
-	return result
 }
 
 func (s *Service) reconcileMcpServerCustomDomains(ctx context.Context, customDomainIDs []uuid.UUID) error {
