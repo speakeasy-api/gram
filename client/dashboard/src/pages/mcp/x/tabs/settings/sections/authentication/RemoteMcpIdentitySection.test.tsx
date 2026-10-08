@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -2125,8 +2126,136 @@ describe("RemoteMcpIdentitySectionBody", () => {
       expect(
         screen.getByRole("combobox", { name: "Pinned scopes" }),
       ).toBeDefined();
-      expect(screen.getByText("read")).toBeDefined();
+      // The combobox overlays the chips it selects.
+      const picker = screen.getByRole("combobox", {
+        name: "Pinned scopes",
+      }).parentElement!;
+      expect(within(picker).getByText("read")).toBeDefined();
       expect(screen.getByText("Sign-ins request these scopes.")).toBeDefined();
+    });
+
+    it("summarises the saved request under the pin for a writer", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+
+      renderIdentity();
+
+      const pin = screen.getByRole("combobox", { name: "Pinned scopes" });
+      const requested = screen.getByRole("list", { name: "Requested scopes" });
+      expect(
+        pin.compareDocumentPosition(requested) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        within(requested)
+          .getAllByRole("listitem")
+          .map((li) => li.textContent),
+      ).toEqual(["read"]);
+      expect(screen.getByText("Requested at sign-in")).toBeDefined();
+      expect(
+        screen.getByText("Pinned for this MCP server's URL."),
+      ).toBeDefined();
+    });
+
+    it("shows a reader the summary without the pin picker", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+      mocks.hasScope.mockImplementation(
+        (scope: string, resourceId?: string) =>
+          scope === "mcp:read" && resourceId === "mcp-server-1",
+      );
+
+      renderIdentity();
+
+      expect(mocks.scopes).toHaveBeenCalledWith(
+        { mcpServerId: "mcp-server-1" },
+        undefined,
+        expect.objectContaining({ enabled: true, throwOnError: false }),
+      );
+      expect(
+        screen.queryByRole("combobox", { name: "Pinned scopes" }),
+      ).toBeNull();
+      expect(screen.queryByText("Loading pinned scopes…")).toBeNull();
+      expect(
+        within(
+          screen.getByRole("list", { name: "Requested scopes" }),
+        ).getByText("read"),
+      ).toBeDefined();
+      expect(screen.getByText("Requested at sign-in")).toBeDefined();
+    });
+
+    it("hides the summary while the pin has unsaved changes", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+
+      renderIdentity();
+      expect(screen.getByText("Requested at sign-in")).toBeDefined();
+      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
+      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
+
+      expect(screen.queryByText("Requested at sign-in")).toBeNull();
+      expect(
+        screen.queryByRole("list", { name: "Requested scopes" }),
+      ).toBeNull();
+    });
+
+    it("shows only the connected client's request", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({
+        data: serverScopes({
+          clients: [
+            {
+              clientId: "client-1",
+              scopeSource: "resource_pin",
+              requestedScopes: ["read"],
+              unadvertisedPinnedScopes: [],
+              pinWouldDecide: true,
+            },
+            {
+              clientId: "client-2",
+              scopeSource: "client_scope",
+              requestedScopes: ["admin"],
+              unadvertisedPinnedScopes: [],
+              pinWouldDecide: false,
+            },
+          ],
+        }),
+        isError: false,
+      });
+
+      renderIdentity();
+
+      const lists = screen.getAllByRole("list", { name: "Requested scopes" });
+      expect(lists).toHaveLength(1);
+      expect(
+        within(lists[0]!)
+          .getAllByRole("listitem")
+          .map((li) => li.textContent),
+      ).toEqual(["read"]);
+      expect(screen.queryByText("admin")).toBeNull();
+      expect(screen.queryByText("Set on this connection.")).toBeNull();
+    });
+
+    it("shows no summary without a connected client", () => {
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+
+      renderIdentity();
+
+      expect(screen.queryByText("Requested at sign-in")).toBeNull();
+    });
+
+    it("shows no summary in Service Account mode", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+
+      renderIdentity();
+      expect(screen.getByText("Requested at sign-in")).toBeDefined();
+      fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
+
+      expect(screen.queryByText("Requested at sign-in")).toBeNull();
+      expect(
+        screen.queryByRole("list", { name: "Requested scopes" }),
+      ).toBeNull();
     });
 
     it("neither fetches nor shows the pin without mcp:write", () => {

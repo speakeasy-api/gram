@@ -18,7 +18,10 @@ import { useDetachUserSessionIssuerMutation } from "@gram/client/react-query/det
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
-import { invalidateAllGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes.js";
+import {
+  invalidateAllGetRemoteMcpServerScopes,
+  useGetRemoteMcpServerScopes,
+} from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import {
   invalidateAllRemoteMcpServerHeaders,
@@ -46,6 +49,7 @@ import { AgentIdentityRow } from "@/lib/remote-identity";
 import { identityModeCards } from "@/lib/remote-identity";
 import { useAgentCredentialDraft } from "@/lib/remote-identity";
 import { AuthRow } from "./AuthRow";
+import { RequestedScopesSummary } from "./RequestedScopesSummary";
 import { ResourceScopePinField } from "./ResourceScopePinField";
 import { useResourceScopePin } from "./resourceScopePin";
 import type { AuthTarget } from "./authTarget";
@@ -228,6 +232,24 @@ export function RemoteMcpIdentitySectionBody({
     canWrite && selectedMode === "user" && userDraft.connected;
   const showScopePin = scopePinSlot && !!scopePin.data;
   const scopePinDirty = showScopePin && scopePin.dirty;
+  // Same query as the pin, so writers make one request.
+  const canRead =
+    canWrite ||
+    (!rbacLoading && hasScope("mcp:read", target.permissionResourceId));
+  const showScopesSummary =
+    canRead &&
+    identityResolved &&
+    actualMode === "user" &&
+    selectedMode === "user" &&
+    userDraft.connectedClientId !== null;
+  const scopesSummaryQuery = useGetRemoteMcpServerScopes(
+    { mcpServerId: target.permissionResourceId },
+    undefined,
+    {
+      enabled: showScopesSummary && target.permissionResourceId !== "",
+      throwOnError: false,
+    },
+  );
 
   const detachIssuer = useDetachUserSessionIssuerMutation();
 
@@ -605,6 +627,17 @@ export function RemoteMcpIdentitySectionBody({
                 <Text muted small className="mt-4 block pl-[52px]">
                   Loading pinned scopes…
                 </Text>
+              ) : null}
+              {/* Shows the saved request, so an unsaved pin would contradict it. */}
+              {showScopesSummary &&
+              scopesSummaryQuery.data &&
+              !scopePin.dirty ? (
+                <div className="mt-4 pl-[52px] empty:hidden">
+                  <RequestedScopesSummary
+                    scopes={scopesSummaryQuery.data}
+                    connectedClientId={userDraft.connectedClientId}
+                  />
+                </div>
               ) : null}
             </div>
           ) : null}
