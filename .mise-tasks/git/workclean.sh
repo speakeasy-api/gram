@@ -50,6 +50,7 @@ fi
 # Loop through each selected worktree and remove it
 while IFS= read -r worktree; do
     echo "Cleaning up worktree: $worktree"
+    (cd "$worktree" && mise run git:workmcp --remove) || echo "Warning: MCP cleanup failed" >&2
     (cd "$worktree" && mise run nuke --keep-shared --delete-namespace)
     git worktree remove "${flags[@]}" "$worktree"
 done <<< "$selected_worktrees"
