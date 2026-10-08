@@ -3,7 +3,7 @@
 The hooks service supports two hook generations:
 
 - Legacy provider endpoints: `/rpc/hooks.claude`, `/rpc/hooks.cursor`, `/rpc/hooks.codex`, and Claude OTEL ingestion. These keep existing installed hooks working.
-- Unified ingest: `/rpc/hooks.ingest`. Latest generated hooks use this endpoint and translate provider-native events into Gram feature events before sending.
+- Unified ingest: `/rpc/hooks.ingest`. Latest generated hooks use this endpoint and translate provider-native events into Speakeasy feature events before sending.
 
 ## Unified Ingest
 
@@ -18,7 +18,7 @@ The payload is feature-first:
 - `data`: feature payload blocks such as `prompt`, `tool_call`, `mcp`, `usage`, `message`, `skill`, and `notification`
 - `raw`: original provider payload for debugging only
 
-Provider-specific logic belongs in generated hook glue code and shared bash helpers. The backend dispatches by canonical Gram feature events and data blocks, not by Claude/Cursor/Codex payload shape.
+Provider-specific logic belongs in generated hook glue code and shared bash helpers. The backend dispatches by canonical Speakeasy feature events and data blocks, not by Claude/Cursor/Codex payload shape.
 
 The response is provider-neutral:
 

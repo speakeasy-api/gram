@@ -24,7 +24,7 @@ type RemoteMessage struct {
 	// RemoteHTTPRequest is the outbound HTTP request the proxy built and
 	// sent to the remote MCP server: the URL the proxy resolved to, the
 	// method, and the headers the proxy applied (configured static and
-	// secret headers, plus any forwarded user headers — minus the Gram
+	// secret headers, plus any forwarded user headers — minus the Speakeasy
 	// Authorization header, which is intentionally stripped). Available
 	// so interceptors can inspect exactly what was sent on behalf of the
 	// user.

@@ -2963,8 +2963,8 @@ type ChatParticipantResponseBody struct {
 	ProviderUserID *string `form:"provider_user_id,omitempty" json:"provider_user_id,omitempty" xml:"provider_user_id,omitempty"`
 	// Workspace resolved from the organization directory, when unambiguous.
 	ProviderTeamID *string `form:"provider_team_id,omitempty" json:"provider_team_id,omitempty" xml:"provider_team_id,omitempty"`
-	// Explicitly mapped Gram person at capture time; this attribution grants no
-	// permissions.
+	// Explicitly mapped Speakeasy person at capture time; this attribution grants
+	// no permissions.
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// Directory display name at capture time.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`

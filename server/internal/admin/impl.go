@@ -75,7 +75,7 @@ type Service struct {
 	dashboardURL         *url.URL
 	supportHandoffIssuer supportHandoffIssuer
 
-	// mcpServerURL is the public Gram server origin that platform-domain MCP
+	// mcpServerURL is the public Speakeasy server origin that platform-domain MCP
 	// URLs are built on. Nil leaves those URLs out.
 	mcpServerURL *url.URL
 
@@ -1481,10 +1481,10 @@ func (s *Service) rejectTrialChange(ctx context.Context, logger *slog.Logger, or
 
 const organizationCreationUncertain = "Creation could not be confirmed. Check existing organizations before retrying."
 
-// CreateOrganization creates an organization in WorkOS and then in Gram.
+// CreateOrganization creates an organization in WorkOS and then in Speakeasy.
 //
 // The WorkOS create happens before the transaction opens, because it is the one
-// step that cannot be rolled back. Everything Gram stores is written inside a
+// step that cannot be rolled back. Everything Speakeasy stores is written inside a
 // single transaction afterwards. A transaction failure rolls back local writes;
 // a response read failure can occur after those writes have committed.
 //
@@ -1897,7 +1897,7 @@ func (s *Service) reconcileRearmedTrialKeys(ctx context.Context, logger *slog.Lo
 }
 
 // adminActor identifies the operator behind an admin-app write. An admin session
-// carries an OIDC subject rather than a Gram user id, and a call without one
+// carries an OIDC subject rather than a Speakeasy user id, and a call without one
 // records the system actor the demotion sweeper uses. The email is returned
 // separately for private structured logs.
 func adminActor(ctx context.Context) (actor urn.Principal, displayName, operatorEmail *string) {

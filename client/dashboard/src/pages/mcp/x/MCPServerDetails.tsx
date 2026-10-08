@@ -179,7 +179,7 @@ export default function MCPServerDetails(): JSX.Element {
                   scope kind as toolset-backed ones (see selector.go), so
                   MCPTeamAccessTab is reused as-is with the mcp_server's
                   id as the resource id. No `tools` prop because the
-                  Remote MCP backend doesn't expose a Gram-side tool
+                  Remote MCP backend doesn't expose a Speakeasy-side tool
                   catalog. */}
                 <MCPTeamAccessTab
                   resourceId={mcpServer.id}
@@ -327,7 +327,7 @@ export function MCPServerStatusDropdown({
   const routes = useRoutes();
   const publicAccessHref = `${mcpServerTabHref(routes, mcpServerRouteParam(server), "settings")}#${MCP_PUBLIC_ACCESS_SECTION_ID}`;
 
-  // Unproxied servers have no Gram-hosted endpoint for disabled/private to
+  // Unproxied servers have no Speakeasy-hosted endpoint for disabled/private to
   // gate — the vendor's own server is reachable regardless of this setting —
   // so there's nothing to toggle. Still show the record's actual stored
   // value (not a hardcoded "Public") so this can't drift from what Settings

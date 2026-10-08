@@ -1,5 +1,5 @@
 -- Remote session issuers — upstream Authorization Server identity records
--- that Gram talks to as an OAuth client.
+-- that Speakeasy talks to as an OAuth client.
 
 -- name: CreateRemoteSessionIssuer :one
 -- Serves both creation paths: a project-level issuer passes a valid project_id
@@ -487,9 +487,9 @@ WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: UpdateRemoteSessionIssuerDiscoveredMetadata :one
--- Write only the columns Gram derives from an upstream RFC 8414 metadata
+-- Write only the columns Speakeasy derives from an upstream RFC 8414 metadata
 -- document. refreshMetadata shares this single query across all three issuer
--- tiers, which is what keeps "a refresh never touches Gram's own behavior or
+-- tiers, which is what keeps "a refresh never touches Speakeasy's own behavior or
 -- display fields" an invariant of the schema rather than of remembering which
 -- of UpdateRemoteSessionIssuer's twenty-odd parameters to leave unset: slug,
 -- issuer, name, logo_asset_id, client_setup_documentation_url, oidc, and
@@ -689,7 +689,7 @@ WHERE remote_session_issuer_id = @remote_session_issuer_id
   AND (project_id IS NOT NULL OR organization_id IS NOT NULL)
   AND deleted IS FALSE;
 
--- Remote session clients — credentials Gram uses when acting as an OAuth
+-- Remote session clients — credentials Speakeasy uses when acting as an OAuth
 -- client of a remote_session_issuer. client_secret_encrypted is stored
 -- encrypted via the project encryption key.
 
@@ -1010,7 +1010,7 @@ WHERE link.remote_session_client_id = c.id
 -- name: GetRemoteSessionClientForClientMetadataDocument :one
 -- Public CIMD document endpoint lookup. Intentionally NOT project-scoped: the
 -- endpoint is unauthenticated and addresses clients by their globally unique
--- primary key, and the served document exposes only the client identity Gram
+-- primary key, and the served document exposes only the client identity Speakeasy
 -- already sends the upstream AS as client_id (CIMD rows never carry a secret).
 -- Mirrors GetRemoteSessionClientWithIssuerByID's id-only justification. A NULL
 -- client_id_metadata_uri (non-CIMD client) yields no row, so the handler 404s.
@@ -2251,7 +2251,7 @@ RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_
 -- Preferences are read, never rewritten, so restoring the opt-in policy
 -- restores each subject's original choice.
 --
--- A live Gram identity provider bound to this client, plus an unexpired user
+-- A live Speakeasy identity provider bound to this client, plus an unexpired user
 -- session on that issuer, is what keeps the grant eligible. user_session_issuer_id
 -- on the remote_sessions row is provenance from INSERT and is never rewritten
 -- on reconnect, so requiring that exact issuer to still be live would skip a
@@ -2263,7 +2263,7 @@ WITH due AS (
   -- The credential is shared by every user_session_issuer bound to its
   -- client; its own user_session_issuer_id is provenance only. Keepalive
   -- stays eligible while ANY bound issuer is live, the subject holds a live
-  -- Gram session or exact agent attachment, and its organization policy authorizes
+  -- Speakeasy session or exact agent attachment, and its organization policy authorizes
   -- the refresh — detaching or deleting the surface that happened to mint
   -- the credential must not stop refresh for its siblings. The LATERAL picks
   -- the first such issuer's organization, which becomes the batch the
@@ -2387,7 +2387,7 @@ WHERE s.id = @id
   AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > @now_ts::timestamptz)
   AND s.updated_at <= @keepalive_cutoff::timestamptz
   -- Some bound issuer in the organization the session was claimed under must
-  -- still be live, with a live Gram session or exact agent attachment, and that
+  -- still be live, with a live Speakeasy session or exact agent attachment, and that
   -- organization's automatic-refresh policy (applied to the session's own
   -- preference) must still authorize the refresh. This predicate is spelled
   -- out again in ClaimDueRemoteSessionRefreshCandidates' LATERAL; the two
@@ -2463,8 +2463,8 @@ WHERE s.id = @id
 
 -- name: ClaimDueRemoteSessionRecheckCandidates :many
 -- Due once the verdict (or, before any, the grant) is older than the interval and no claim lease is live; last_refresh_attempt_at is the lease.
--- Routability, not the auto-refresh opt-in, is the population: a bound issuer entitled to the client (project client under its own or an org-tier issuer of its org; org client under either), with a live Gram session for the subject.
--- Rejected and inactive grants stay in the population and are re-probed each interval until their Gram session lapses.
+-- Routability, not the auto-refresh opt-in, is the population: a bound issuer entitled to the client (project client under its own or an org-tier issuer of its org; org client under either), with a live Speakeasy session for the subject.
+-- Rejected and inactive grants stay in the population and are re-probed each interval until their Speakeasy session lapses.
 -- Every organization the grant is eligible under comes back, so the probe can try each one's endpoints; excluded_hosts skips issuer hosts this pass already found rate limited.
 WITH due AS (
   SELECT s.id, s.updated_at, COALESCE(s.last_validated_at, s.created_at) AS due_at, elig.organization_ids, i.issuer AS issuer_url
@@ -2570,7 +2570,7 @@ WHERE s.id = @id
   );
 
 -- name: GetRemoteSessionRecheckEndpoints :many
--- Endpoints a keepalive re-check may present the grant through: backed by a server gated on an issuer bound to the client under the interactive tenancy rule, in any claimed organization, with a live Gram session for the subject.
+-- Endpoints a keepalive re-check may present the grant through: backed by a server gated on an issuer bound to the client under the interactive tenancy rule, in any claimed organization, with a live Speakeasy session for the subject.
 -- Ordered own issuer first, then platform origin over custom domain, then oldest; the caller tries them in turn until one presents the grant.
 WITH bound AS (
   SELECT usi.id, c.project_id AS client_project_id, COALESCE(p.organization_id, usi.organization_id) AS organization_id

@@ -211,7 +211,7 @@ func (r *timeoutRelay) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	responseBody, readErr := io.ReadAll(response.Body)
 	closeErr := response.Body.Close()
 	if readErr != nil || closeErr != nil {
-		http.Error(w, "read Gram response", http.StatusBadGateway)
+		http.Error(w, "read Speakeasy response", http.StatusBadGateway)
 		return
 	}
 

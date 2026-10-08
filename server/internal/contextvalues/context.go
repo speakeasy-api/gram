@@ -77,7 +77,7 @@ func WithValidatedGramSession(ctx context.Context, authCtx *AuthContext, legacyI
 	return SetAuthContext(ctx, &validated)
 }
 
-// HasValidatedGramSession reports whether ordinary Gram session authentication
+// HasValidatedGramSession reports whether ordinary Speakeasy session authentication
 // positively validated the request credential.
 func HasValidatedGramSession(ctx context.Context) bool {
 	authCtx, ok := GetAuthContext(ctx)

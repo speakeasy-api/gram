@@ -44,7 +44,7 @@ func TestRoleDistributionSetup_PopulatesExistingGrants(t *testing.T) {
 	for _, action := range []audit.Action{audit.ActionPluginCreate, audit.ActionPluginAssignmentsSet, audit.ActionPluginServerAdd} {
 		record, err := audittest.LatestAuditLogByAction(ctx, f.db, action)
 		require.NoError(t, err)
-		require.Equal(t, "Gram", record.ActorDisplay, "actor label for %s", action)
+		require.Equal(t, "Speakeasy", record.ActorDisplay, "actor label for %s", action)
 		require.Equal(t, "system", record.ActorType)
 		require.Equal(t, "automatic-role-distribution", record.ActorID)
 	}

@@ -33,7 +33,7 @@ func NewPaygTierLimits() *gen.TierLimits {
 			"30 day log retention",
 			"SSO",
 			"Audit logs",
-			"Self-hosting Gram dataplane",
+			"Self-hosting Speakeasy dataplane",
 		},
 		IncludedBullets: []string{
 			"Other inference billed at provider cost",

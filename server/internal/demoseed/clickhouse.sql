@@ -664,7 +664,7 @@ FROM (
   WHERE (number + 1) % 2 = 1
 );
 
--- Calls the Gram hook denied before they ran (PreToolUse). These are the only
+-- Calls the Speakeasy hook denied before they ran (PreToolUse). These are the only
 -- rows that carry gram.hook.block_reason, so without them the blocked status
 -- filter on Tool Logs and the blocked counters on Insights are dead controls in
 -- the demo org. Denials cluster on the destructive tools, and on the two users
@@ -1090,7 +1090,7 @@ FROM (
 -- end. Zed and Goose are the two new targets that publish CIMD, so they are
 -- the ones carrying a real decision below.
 --
--- The two assistants are deliberately a pair: both speak MCP to Gram like a
+-- The two assistants are deliberately a pair: both speak MCP to Speakeasy like a
 -- harness does without being coding tools, but Hermes publishes a CIMD
 -- document and OpenClaw does not. So a decision on Hermes is enforceable and
 -- shows as one, while OpenClaw reads unreviewed however hard somebody wants

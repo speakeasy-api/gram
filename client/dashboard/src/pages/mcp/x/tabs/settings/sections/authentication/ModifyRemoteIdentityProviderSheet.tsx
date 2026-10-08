@@ -305,7 +305,7 @@ function ModifyRemoteIdentityProviderSheetBody({
       // NULL"; an omitted field keeps the existing value. Send the trimmed
       // input directly (including "") so blanking out a field in the UI
       // actually clears the saved record — especially registration_endpoint,
-      // which is the signal Gram uses for "DCR is supported on this issuer".
+      // which is the signal Speakeasy uses for "DCR is supported on this issuer".
       await client.remoteSessionIssuers.update({
         updateRemoteSessionIssuerForm: {
           id: issuer.id,

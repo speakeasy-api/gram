@@ -221,7 +221,7 @@ func (c *PluginMetadataCore) CreateInTransaction(ctx context.Context, tx pgx.Tx,
 	}
 	if isDefaultProject {
 		// agent.getPlugins scopes delivery by assignment; "*" (all org members)
-		// is the closest "everyone" primitive Gram has, since there's no
+		// is the closest "everyone" primitive Speakeasy has, since there's no
 		// project-scoped membership.
 		if _, err := queries.AddPluginAssignment(ctx, repo.AddPluginAssignmentParams{
 			PluginID:       plugin.ID,

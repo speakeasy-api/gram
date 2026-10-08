@@ -1232,8 +1232,8 @@ type LiteLLMInstanceDiagnosticsResponseBody struct {
 	// Percentage of model requests in the last 24 hours that supplied a
 	// virtual-key email.
 	VirtualKeyEmailPct24h *float64 `form:"virtual_key_email_pct_24h,omitempty" json:"virtual_key_email_pct_24h,omitempty" xml:"virtual_key_email_pct_24h,omitempty"`
-	// Percentage of model requests in the last 24 hours that resolved to a Gram
-	// user.
+	// Percentage of model requests in the last 24 hours that resolved to a
+	// Speakeasy user.
 	PlatformUserPct24h *float64 `form:"platform_user_pct_24h,omitempty" json:"platform_user_pct_24h,omitempty" xml:"platform_user_pct_24h,omitempty"`
 }
 

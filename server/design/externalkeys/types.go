@@ -14,7 +14,7 @@ var ExternalKeySummary = Type("ExternalKeySummary", func() {
 		Format(FormatUUID)
 	})
 	Attribute("organization_id", String, "The organization that owns the key.")
-	Attribute("external_credential_id", String, "The external credential Gram uses to authenticate to the key.", func() {
+	Attribute("external_credential_id", String, "The external credential Speakeasy uses to authenticate to the key.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("provider", String, "The cloud KMS provider of the key.", func() {
@@ -24,7 +24,7 @@ var ExternalKeySummary = Type("ExternalKeySummary", func() {
 		Enum("RS256", "ES256")
 	})
 	Attribute("name", String, "A human-readable name for the key.")
-	Attribute("customer_grant_reference", String, "The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.")
+	Attribute("customer_grant_reference", String, "The Speakeasy identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.")
 	Attribute("created_at", String, func() {
 		Description("When the key was created.")
 		Format(FormatDateTime)
@@ -64,14 +64,14 @@ var GcpKmsKey = Type("GcpKmsKey", func() {
 // customer grant reference. The update forms deliberately do not extend this —
 // see UpdateAwsKmsKeyForm.
 var CreateExternalKeyFields = Type("CreateExternalKeyFields", func() {
-	Attribute("external_credential_id", String, "The external credential Gram uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).", func() {
+	Attribute("external_credential_id", String, "The external credential Speakeasy uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).", func() {
 		Format(FormatUUID)
 	})
 	Attribute("algorithm", String, "The signing algorithm of the key.", func() {
 		Enum("RS256", "ES256")
 	})
 	Attribute("name", String, "A human-readable name for the key.")
-	Attribute("customer_grant_reference", String, "Optional. The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.")
+	Attribute("customer_grant_reference", String, "Optional. The Speakeasy identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.")
 
 	Required("external_credential_id", "algorithm", "name")
 })
@@ -126,7 +126,7 @@ var CreateGcpKmsKeyForm = Type("CreateGcpKmsKeyForm", func() {
 // explicit `openapi:typename` to keep their generated schemas (and so their SDK
 // types) distinct. Descriptions alone do not break that tie.
 var UpdateAwsKmsKeyForm = Type("UpdateAwsKmsKeyForm", func() {
-	Attribute("external_credential_id", String, "The external credential Gram uses to authenticate to the key. Must be an aws_iam credential belonging to the same organization.", func() {
+	Attribute("external_credential_id", String, "The external credential Speakeasy uses to authenticate to the key. Must be an aws_iam credential belonging to the same organization.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("name", String, "A human-readable name for the key.")
@@ -139,16 +139,16 @@ var UpdateAwsKmsKeyForm = Type("UpdateAwsKmsKeyForm", func() {
 // configuration. See UpdateAwsKmsKeyForm for why the two forms do not share a
 // parent type.
 var UpdateGcpKmsKeyForm = Type("UpdateGcpKmsKeyForm", func() {
-	Attribute("external_credential_id", String, "The external credential Gram uses to authenticate to the key. Must be a gcp_iam credential belonging to the same organization.", func() {
+	Attribute("external_credential_id", String, "The external credential Speakeasy uses to authenticate to the key. Must be a gcp_iam credential belonging to the same organization.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("name", String, "A human-readable name for the key.")
-	Attribute("customer_grant_reference", String, "Optional. The Gram service-account email the customer granted on the key in an IAM binding. Not a secret.")
+	Attribute("customer_grant_reference", String, "Optional. The Speakeasy service-account email the customer granted on the key in an IAM binding. Not a secret.")
 
 	Required("external_credential_id", "name")
 })
 
-// VerifyKmsKeyResult is the outcome of a live probe that Gram can reach an
+// VerifyKmsKeyResult is the outcome of a live probe that Speakeasy can reach an
 // external key and use it to sign. It is ephemeral and never persisted.
 //
 // A probe that reaches the provider and is refused is a reportable outcome
@@ -161,7 +161,7 @@ var UpdateGcpKmsKeyForm = Type("UpdateGcpKmsKeyForm", func() {
 // names on a first-come-first-served basis, so a generic one collides with an
 // unrelated endpoint that happens to pick the same word.
 var VerifyKmsKeyResult = Type("VerifyKmsKeyResult", func() {
-	Description("Result of a live probe that Gram can reach an external key and use it to sign.")
+	Description("Result of a live probe that Speakeasy can reach an external key and use it to sign.")
 
 	Attribute("verified", Boolean, "Whether the key produced a signature that validated against its own public half.")
 	Attribute("probe_outcome", String, "The machine-readable outcome of the probe.", func() {

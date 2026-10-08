@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-//MISE description="Setup Gram encryption keys for local development."
+//MISE description="Setup Speakeasy encryption keys for local development."
 //MISE hide=true
 
 import { randomBytes } from "node:crypto";

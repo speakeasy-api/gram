@@ -1,6 +1,6 @@
 package aivendors
 
-// registry is Gram's curated list of AI products.
+// registry is Speakeasy's curated list of AI products.
 //
 // Every Document here becomes a CIMD admission entry. A MISSING one is a hard,
 // unrecoverable auth failure: MCP clients pick CIMD over dynamic registration
@@ -281,7 +281,7 @@ var registry = []Product{
 			{
 				// The stable shared Codex document. Verified 2026-09: Codex
 				// CLI 0.154.0 presents this one, not the per-server document
-				// above, when it authorizes against a Gram MCP server.
+				// above, when it authorizes against a Speakeasy MCP server.
 				// OpenAI's docs tie that switch to authorization servers
 				// advertising RFC 9207. Both forms stay registered: older
 				// CLIs still mint a document per server, and which one a
@@ -520,7 +520,7 @@ var registry = []Product{
 	},
 
 	// Products below publish no CIMD document. They register dynamically or
-	// do not speak MCP to Gram at all, so an access decision about them is
+	// do not speak MCP to Speakeasy at all, so an access decision about them is
 	// recorded and enforces nothing — the dashboard says so rather than
 	// implying the gateway turns them away. They carry reported client names
 	// for attribution only.
@@ -941,7 +941,7 @@ var registry = []Product{
 		Documents:       nil,
 	},
 
-	// Local model runtimes. They never speak MCP to Gram, so they carry no
+	// Local model runtimes. They never speak MCP to Speakeasy, so they carry no
 	// documents and no reported names: there is no caller to recognize.
 	// Bundle id and data path verified 2026-09-11 from the Homebrew cask. Jan
 	// is both a runtime and a chat UI; filed as a runtime because that is the

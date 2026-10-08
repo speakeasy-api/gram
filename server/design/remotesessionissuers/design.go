@@ -8,7 +8,7 @@ import (
 )
 
 var _ = Service("remoteSessionIssuers", func() {
-	Description("Manage remote_session_issuer records — upstream Authorization Server identity records that Gram talks to as an OAuth client.")
+	Description("Manage remote_session_issuer records — upstream Authorization Server identity records that Speakeasy talks to as an OAuth client.")
 	Security(security.Session, security.ProjectSlug)
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("producer")
@@ -42,7 +42,7 @@ var _ = Service("remoteSessionIssuers", func() {
 	})
 
 	Method("refreshRemoteSessionIssuerMetadata", func() {
-		Description("Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires project:write.")
+		Description("Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Speakeasy behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires project:write.")
 
 		Payload(func() {
 			Attribute("id", String, "The remote_session_issuer id.", func() {
@@ -570,7 +570,7 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 	})
 
 	Method("refreshIssuerMetadata", func() {
-		Description("Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id; serves both organizational and project-specific issuers in the caller's organization. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires org:admin.")
+		Description("Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id; serves both organizational and project-specific issuers in the caller's organization. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Speakeasy behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires org:admin.")
 
 		Payload(func() {
 			Attribute("id", String, "The remote_session_issuer id.", func() {
@@ -694,7 +694,7 @@ var UpdateRemoteSessionIssuerForm = Type("UpdateRemoteSessionIssuerForm", func()
 var RemoteSessionIssuer = Type("RemoteSessionIssuer", func() {
 	Meta("struct:pkg:path", "types")
 
-	Description("A remote_session_issuer record — upstream Authorization Server identity that Gram speaks OAuth to.")
+	Description("A remote_session_issuer record — upstream Authorization Server identity that Speakeasy speaks OAuth to.")
 
 	Attribute("id", String, "The remote_session_issuer id.", func() {
 		Format(FormatUUID)
@@ -715,7 +715,7 @@ var RemoteSessionIssuer = Type("RemoteSessionIssuer", func() {
 	Attribute("revocation_endpoint", String, "Upstream RFC 7009 revocation endpoint; null when the issuer advertises none.")
 	Attribute("registration_endpoint", String, "Upstream RFC 7591 registration endpoint; null for issuers without DCR.")
 	Attribute("jwks_uri", String, "Upstream JWKS URI; null when not advertised.")
-	Attribute("jwks_fetched_at", String, "When Gram last successfully fetched or revalidated the JWK Set. Null until the first successful refresh.", func() {
+	Attribute("jwks_fetched_at", String, "When Speakeasy last successfully fetched or revalidated the JWK Set. Null until the first successful refresh.", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("jwks_cache_expires_at", String, "When the persisted JWK Set becomes stale under the upstream cache policy. Null until the first successful refresh.", func() {

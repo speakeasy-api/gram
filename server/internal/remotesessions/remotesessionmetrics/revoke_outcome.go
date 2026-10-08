@@ -9,7 +9,7 @@ type RevokeOutcome string
 const (
 	RevokeOutcomeSuccess RevokeOutcome = "success"
 
-	// RevokeOutcomeSkipped means Gram had nothing to send: the issuer advertises
+	// RevokeOutcomeSkipped means Speakeasy had nothing to send: the issuer advertises
 	// no revocation endpoint, or the session stored no token to revoke.
 	RevokeOutcomeSkipped RevokeOutcome = "skipped"
 
@@ -23,9 +23,9 @@ const (
 	// DNS, TLS, connection, or the revoke path's timeout.
 	RevokeOutcomeUnreachable RevokeOutcome = "unreachable"
 
-	// RevokeOutcomeInternal means Gram could not even build the request: an
+	// RevokeOutcomeInternal means Speakeasy could not even build the request: an
 	// unreadable stored token, an unusable client auth configuration. Separated
-	// from the upstream-fault outcomes because it is Gram's bug to fix, not an
+	// from the upstream-fault outcomes because it is Speakeasy's bug to fix, not an
 	// upstream's behavior to tolerate.
 	RevokeOutcomeInternal RevokeOutcome = "internal_error"
 

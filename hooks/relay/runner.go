@@ -33,7 +33,7 @@ const (
 	stateReauthNeeded
 )
 
-// Relay translates coding-agent hook events into Gram ingest requests and
+// Relay translates coding-agent hook events into Speakeasy ingest requests and
 // enforces the server's verdict.
 type Relay struct {
 	cfg    Config
@@ -147,7 +147,7 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	if insecureServerURL(r.cfg.ServerURL) {
 		r.debugf("event=%s insecure-server-url server=%s", agenthooks.EventOf(typed).NativeName, r.cfg.ServerURL)
 		if authEstablished() {
-			msg := fmt.Sprintf("Speakeasy hooks refused insecure Gram server URL %q; use https:// (or an http://localhost dev server).", r.cfg.ServerURL)
+			msg := fmt.Sprintf("Speakeasy hooks refused insecure Speakeasy server URL %q; use https:// (or an http://localhost dev server).", r.cfg.ServerURL)
 			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}, stateBroken
 		}
 		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil, cause: causeNone, causeDetail: ""}, stateNeverAuthed

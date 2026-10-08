@@ -20,8 +20,8 @@ type CreateServerRequestBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// RFC 9728 protected resource identifier of the tunneled server, used for
 	// credential routing and as the signed caller assertion audience; never dialed
-	// by Gram. The exact identifier is preserved, including trailing slashes. When
-	// unset, caller assertions use tunneled-mcp-server:<ID>. Omit unless the
+	// by Speakeasy. The exact identifier is preserved, including trailing slashes.
+	// When unset, caller assertions use tunneled-mcp-server:<ID>. Omit unless the
 	// identifier is already known; it is usually recorded later, once the tunnel
 	// is up.
 	ResourceIdentifier *string `form:"resource_identifier,omitempty" json:"resource_identifier,omitempty" xml:"resource_identifier,omitempty"`
@@ -40,9 +40,9 @@ type UpdateServerRequestBody struct {
 	AllowPublic *bool `form:"allow_public,omitempty" json:"allow_public,omitempty" xml:"allow_public,omitempty"`
 	// RFC 9728 protected resource identifier of the tunneled server, used for
 	// credential routing and as the signed caller assertion audience; never dialed
-	// by Gram. The exact identifier is preserved, including trailing slashes. When
-	// unset, caller assertions use tunneled-mcp-server:<ID>. Pass an empty string
-	// to clear. Omit to leave unchanged.
+	// by Speakeasy. The exact identifier is preserved, including trailing slashes.
+	// When unset, caller assertions use tunneled-mcp-server:<ID>. Pass an empty
+	// string to clear. Omit to leave unchanged.
 	ResourceIdentifier *string `form:"resource_identifier,omitempty" json:"resource_identifier,omitempty" xml:"resource_identifier,omitempty"`
 	// Sustained anonymous MCP requests per second admitted when this source is
 	// served through a public MCP endpoint. Applies to every MCP interaction; one
@@ -100,8 +100,8 @@ type GetServerResponseBody struct {
 	AgentVersion *string `form:"agent_version,omitempty" json:"agent_version,omitempty" xml:"agent_version,omitempty"`
 	// RFC 9728 protected resource identifier of the tunneled server, used for
 	// credential routing and as the signed caller assertion audience; never dialed
-	// by Gram. The exact identifier is preserved, including trailing slashes. When
-	// unset, caller assertions use tunneled-mcp-server:<ID>
+	// by Speakeasy. The exact identifier is preserved, including trailing slashes.
+	// When unset, caller assertions use tunneled-mcp-server:<ID>
 	ResourceIdentifier *string `form:"resource_identifier,omitempty" json:"resource_identifier,omitempty" xml:"resource_identifier,omitempty"`
 	// Sustained anonymous MCP requests per second admitted for this tunnel when it
 	// is served through a public MCP endpoint. Applies to every MCP interaction.
@@ -164,8 +164,8 @@ type UpdateServerResponseBody struct {
 	AgentVersion *string `form:"agent_version,omitempty" json:"agent_version,omitempty" xml:"agent_version,omitempty"`
 	// RFC 9728 protected resource identifier of the tunneled server, used for
 	// credential routing and as the signed caller assertion audience; never dialed
-	// by Gram. The exact identifier is preserved, including trailing slashes. When
-	// unset, caller assertions use tunneled-mcp-server:<ID>
+	// by Speakeasy. The exact identifier is preserved, including trailing slashes.
+	// When unset, caller assertions use tunneled-mcp-server:<ID>
 	ResourceIdentifier *string `form:"resource_identifier,omitempty" json:"resource_identifier,omitempty" xml:"resource_identifier,omitempty"`
 	// Sustained anonymous MCP requests per second admitted for this tunnel when it
 	// is served through a public MCP endpoint. Applies to every MCP interaction.
@@ -1518,8 +1518,8 @@ type TunneledMcpServerResponseBody struct {
 	AgentVersion *string `form:"agent_version,omitempty" json:"agent_version,omitempty" xml:"agent_version,omitempty"`
 	// RFC 9728 protected resource identifier of the tunneled server, used for
 	// credential routing and as the signed caller assertion audience; never dialed
-	// by Gram. The exact identifier is preserved, including trailing slashes. When
-	// unset, caller assertions use tunneled-mcp-server:<ID>
+	// by Speakeasy. The exact identifier is preserved, including trailing slashes.
+	// When unset, caller assertions use tunneled-mcp-server:<ID>
 	ResourceIdentifier *string `form:"resource_identifier,omitempty" json:"resource_identifier,omitempty" xml:"resource_identifier,omitempty"`
 	// Sustained anonymous MCP requests per second admitted for this tunnel when it
 	// is served through a public MCP endpoint. Applies to every MCP interaction.

@@ -447,7 +447,7 @@ func (s *Service) resolveOrganizationClientProject(ctx context.Context, dbtx pgx
 // Like CreateClient the project is resolved from the issuer or the
 // caller-supplied project_id (and may be organization-level under an
 // organization-level issuer), but the caller supplies no
-// credentials: Gram generates the client_id and serves the metadata document,
+// credentials: Speakeasy generates the client_id and serves the metadata document,
 // and the issuer must advertise CIMD support.
 func (s *Service) CreateCimdClient(ctx context.Context, payload *orgclientsgen.CreateCimdClientPayload) (*types.RemoteSessionClient, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

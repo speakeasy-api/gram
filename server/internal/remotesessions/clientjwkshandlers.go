@@ -30,7 +30,7 @@ import (
 // requireOrgAccess). Gating the link is not an inherited default: a set is
 // always backed by a customer-provisioned KMS key, because
 // json_web_key_sets.external_key_id is NOT NULL and chains to an external_keys
-// row with provider IN ('aws_kms','gcp_kms'). There is no Gram-managed key
+// row with provider IN ('aws_kms','gcp_kms'). There is no Speakeasy-managed key
 // path, so an organization without the entitlement has no set to attach and
 // this refusal is the honest answer rather than an upsell.
 //

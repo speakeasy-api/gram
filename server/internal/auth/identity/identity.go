@@ -37,7 +37,7 @@ import (
 )
 
 // IDPClient is the slim interface for IDP code exchange. Wraps the WorkOS
-// user-management SDK so Gram doesn't leak SDK types with irrelevant
+// user-management SDK so Speakeasy doesn't leak SDK types with irrelevant
 // browser-flow fields (CodeVerifier, IPAddress, UserAgent).
 type IDPClient interface {
 	AuthenticateWithCode(ctx context.Context, clientID, code string) (*AuthenticateResult, error)
@@ -61,7 +61,7 @@ type AuthorizationURLParams struct {
 	ScreenHint string
 }
 
-// AuthenticateResult holds the fields Gram uses from the IDP code exchange.
+// AuthenticateResult holds the fields Speakeasy uses from the IDP code exchange.
 type AuthenticateResult struct {
 	AccessToken       string
 	OrganizationID    string // WorkOS org ID the user selected during auth (may be empty)
@@ -74,7 +74,7 @@ type MagicAuthChallenge struct {
 	Code  string
 }
 
-// AuthenticatedUser holds the user fields Gram reads after IDP authentication.
+// AuthenticatedUser holds the user fields Speakeasy reads after IDP authentication.
 type AuthenticatedUser struct {
 	ID                string
 	FirstName         string
@@ -276,7 +276,7 @@ func extractSessionIDFromJWT(token string) string {
 	return claims.SID
 }
 
-// UpsertUserResult describes the Gram user selected for an IDP identity.
+// UpsertUserResult describes the Speakeasy user selected for an IDP identity.
 type UpsertUserResult struct {
 	UserID      string
 	Reactivated bool
@@ -470,9 +470,9 @@ type IDPLoginOptions struct {
 	SkipMembershipSync bool
 }
 
-// IDPLoginResult is the Gram identity established by CompleteIDPLogin.
+// IDPLoginResult is the Speakeasy identity established by CompleteIDPLogin.
 type IDPLoginResult struct {
-	// UserID is the Gram user selected for the IDP identity.
+	// UserID is the Speakeasy user selected for the IDP identity.
 	UserID string
 
 	// Reactivated reports that the login revived a user previously deleted
@@ -835,8 +835,8 @@ type ProvisionedOrganization struct {
 }
 
 // ProvisionOrgInWorkOS creates a WorkOS organization, derives a deterministic
-// Gram org ID (UUIDv5) from the returned WorkOS org ID, sets the external_id
-// on the WorkOS org to the derived Gram ID, and creates an admin membership
+// Speakeasy org ID (UUIDv5) from the returned WorkOS org ID, sets the external_id
+// on the WorkOS org to the derived Speakeasy ID, and creates an admin membership
 // linking the first user.
 // When no WorkOS client is configured (tests, OSS), returns a random UUID as gramOrgID.
 func (r *Resolver) ProvisionOrgInWorkOS(ctx context.Context, orgName, gramUserID string) (ProvisionedOrganization, error) {

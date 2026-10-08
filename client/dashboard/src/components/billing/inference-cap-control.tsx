@@ -50,7 +50,7 @@ const DISABLED_NOTE =
   "This inference is turned off for this organization, so its cap can't be changed.";
 
 /**
- * One organization's cap on one Gram-managed inference key: what it has spent
+ * One organization's cap on one Speakeasy-managed inference key: what it has spent
  * this month, what the ceiling is, and — for an admin who can move it — the
  * field that does.
  *

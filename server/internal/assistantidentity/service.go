@@ -8,7 +8,7 @@ import (
 	"github.com/speakeasy-api/gram/tunnel/jwks"
 )
 
-// Service registers assistant trigger workloads under the deployment's Gram
+// Service registers assistant trigger workloads under the deployment's Speakeasy
 // signing issuer through ordinary project trust registrations. It neither
 // mints credentials nor treats issuer URL equality as tenant identity.
 type Service struct {

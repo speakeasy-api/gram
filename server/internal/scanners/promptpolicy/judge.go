@@ -33,7 +33,7 @@ func NoopEvaluator(context.Context, Input) (*Verdict, error) {
 type Input struct {
 	OrgID     string
 	ProjectID string
-	// UserID is the Gram user whose message is being scanned (the scanned
+	// UserID is the Speakeasy user whose message is being scanned (the scanned
 	// chat's owner), empty when the session is unattributed. It rides on the
 	// judge's completion telemetry so the billing page attributes scanning
 	// volume to whose traffic was analyzed; email/roles/division hydrate

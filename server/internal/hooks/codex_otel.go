@@ -371,7 +371,7 @@ func normalizeCodexLogAttributes(attrs map[attr.Key]any) {
 	}
 }
 
-// codexOTELUserInfo attributes a row to the Gram user resolved from the
+// codexOTELUserInfo attributes a row to the Speakeasy user resolved from the
 // record's user.email, memoizing lookups in emailToUserID across the payload.
 // The resolved email and user id are returned alongside the UserInfo so the
 // session-attribution path can reuse them without a second resolution.

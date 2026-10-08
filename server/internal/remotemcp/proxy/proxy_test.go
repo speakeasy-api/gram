@@ -464,7 +464,7 @@ func TestProxy_Post_StripsAuthorizationHeader(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 	require.NoError(t, p.Post(rr, req))
-	require.Empty(t, gotAuth, "Gram API key must never be forwarded to the remote MCP server")
+	require.Empty(t, gotAuth, "Speakeasy API key must never be forwarded to the remote MCP server")
 }
 
 func TestProxy_Post_StripsBrowserHeaders(t *testing.T) {

@@ -57,7 +57,7 @@ type Config struct {
 	// Backend selects emulation or passthrough.
 	Backend Backend
 
-	// ClientSecret authenticates Gram callers to the dev-idp WorkOS surface.
+	// ClientSecret authenticates Speakeasy callers to the dev-idp WorkOS surface.
 	// It is never forwarded to WorkOS.
 	ClientSecret string
 
@@ -66,7 +66,7 @@ type Config struct {
 	UpstreamURL string
 
 	// APIKey authenticates dev-idp to upstream WorkOS. Ignored under
-	// BackendLocal and never shared with downstream Gram callers.
+	// BackendLocal and never shared with downstream Speakeasy callers.
 	APIKey string
 }
 
@@ -319,7 +319,7 @@ func handleInspectUnavailable(w http.ResponseWriter, _ *http.Request) {
 
 // handleAuthenticate completes the login started at /oauth2-1/authorize.
 // It consumes the locally minted auth code, then reports the real WorkOS
-// identity so the Gram server stores a genuine workos_id and can sync
+// identity so the Speakeasy server stores a genuine workos_id and can sync
 // memberships from the live API.
 func (h *Handler) handleAuthenticate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -369,7 +369,7 @@ func (h *Handler) handleAuthenticate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// organization_id drives SyncMembershipsFromWorkOS on the Gram side.
+	// organization_id drives SyncMembershipsFromWorkOS on the Speakeasy side.
 	var orgID string
 	if members, merr := h.client.ListUserMemberships(ctx, user.ID); merr != nil {
 		h.logger.WarnContext(ctx, "list workos memberships for login", slog.Any("error", merr))
@@ -397,7 +397,7 @@ func (h *Handler) handleAuthenticate(w http.ResponseWriter, r *http.Request) {
 }
 
 // unsignedSessionJWT builds a minimal unsigned JWT carrying a "sid" claim.
-// The Gram server parses the claim out of the access token to record a
+// The Speakeasy server parses the claim out of the access token to record a
 // session id; it never verifies this signature.
 func unsignedSessionJWT(sessionID string) string {
 	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
