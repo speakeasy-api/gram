@@ -21,8 +21,8 @@ import (
 
 // workloadTenantEndpoint names the tenancy an admission resolves under, which
 // is what the flight key is built from.
-func workloadTenantEndpoint(organizationID string, projectID, issuerID uuid.UUID) *ResolvedMcpEndpoint {
-	return &ResolvedMcpEndpoint{
+func newWorkloadTestTenancy(organizationID string, projectID, issuerID uuid.UUID) workloadTenancy {
+	return workloadTenancy{
 		OrganizationID:      organizationID,
 		ProjectID:           projectID,
 		UserSessionIssuerID: issuerID,
@@ -30,8 +30,8 @@ func workloadTenantEndpoint(organizationID string, projectID, issuerID uuid.UUID
 }
 
 // workloadTestTenant is a fresh, fully distinct tenancy.
-func workloadTestTenant() *ResolvedMcpEndpoint {
-	return workloadTenantEndpoint(uuid.NewString(), uuid.New(), uuid.New())
+func workloadTestTenant() workloadTenancy {
+	return newWorkloadTestTenancy(uuid.NewString(), uuid.New(), uuid.New())
 }
 
 // newWorkloadTestAdmission builds admission with no store behind it. There is
@@ -61,7 +61,7 @@ type countingLookup struct {
 }
 
 func (l *countingLookup) fn() workloadIssuerLookup {
-	return func(_ context.Context, _ *ResolvedMcpEndpoint, _ string) (workloadidentity_repo.WorkloadIssuer, bool, error) {
+	return func(_ context.Context, _ workloadTenancy, _ string) (workloadidentity_repo.WorkloadIssuer, bool, error) {
 		l.calls.Add(1)
 		l.enter()
 		defer l.running.Add(-1)
@@ -230,9 +230,9 @@ func TestWorkloadIssuerAdmission_FlightIsNotSharedAcrossProjectsOnOneIssuer(t *t
 	sharedIssuer := uuid.New()
 	const issuerURL = "https://idp.example.test"
 
-	_, err := admission.admit(t.Context(), workloadTenantEndpoint(organizationID, uuid.New(), sharedIssuer), issuerURL)
+	_, err := admission.admit(t.Context(), newWorkloadTestTenancy(organizationID, uuid.New(), sharedIssuer), issuerURL)
 	require.ErrorIs(t, err, errWorkloadIssuerUntrusted)
-	_, err = admission.admit(t.Context(), workloadTenantEndpoint(organizationID, uuid.New(), sharedIssuer), issuerURL)
+	_, err = admission.admit(t.Context(), newWorkloadTestTenancy(organizationID, uuid.New(), sharedIssuer), issuerURL)
 	require.ErrorIs(t, err, errWorkloadIssuerUntrusted)
 
 	require.EqualValues(t, 2, lookup.calls.Load(), "two projects sharing one issuer must not share a flight")
@@ -261,12 +261,12 @@ func TestWorkloadIssuerAdmission_UnresolvableInputsFailClosed(t *testing.T) {
 
 	cases := map[string]struct {
 		lookup    func(*countingLookup) workloadIssuerLookup
-		endpoint  *ResolvedMcpEndpoint
+		tenancy   workloadTenancy
 		issuerURL string
 	}{
-		"unwired lookup": {lookup: func(*countingLookup) workloadIssuerLookup { return nil }, endpoint: workloadTestTenant(), issuerURL: "https://idp.example.test"},
-		"no endpoint":    {lookup: (*countingLookup).fn, endpoint: nil, issuerURL: "https://idp.example.test"},
-		"empty issuer":   {lookup: (*countingLookup).fn, endpoint: workloadTestTenant(), issuerURL: ""},
+		"unwired lookup":  {lookup: func(*countingLookup) workloadIssuerLookup { return nil }, tenancy: workloadTestTenant(), issuerURL: "https://idp.example.test"},
+		"no organization": {lookup: (*countingLookup).fn, tenancy: workloadTenancy{OrganizationID: "", ProjectID: uuid.New(), UserSessionIssuerID: uuid.New()}, issuerURL: "https://idp.example.test"},
+		"empty issuer":    {lookup: (*countingLookup).fn, tenancy: workloadTestTenant(), issuerURL: ""},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -279,7 +279,7 @@ func TestWorkloadIssuerAdmission_UnresolvableInputsFailClosed(t *testing.T) {
 				return allowAllWorkloadLookups(ctx, scope)
 			})
 
-			row, err := admission.admit(t.Context(), tc.endpoint, tc.issuerURL)
+			row, err := admission.admit(t.Context(), tc.tenancy, tc.issuerURL)
 
 			require.ErrorIs(t, err, errWorkloadIssuerUntrusted)
 			require.Equal(t, workloadidentity_repo.WorkloadIssuer{}, row)
@@ -317,16 +317,16 @@ func TestWorkloadIssuerFlightKey_SeparatesTenancyAndSpelling(t *testing.T) {
 
 	organizationID := uuid.NewString()
 	projectID, issuerID := uuid.New(), uuid.New()
-	endpoint := workloadTenantEndpoint(organizationID, projectID, issuerID)
+	endpoint := newWorkloadTestTenancy(organizationID, projectID, issuerID)
 	const issuerURL = "https://idp.example.test"
 
 	base := workloadIssuerFlightKey(endpoint, issuerURL)
 
-	require.Equal(t, base, workloadIssuerFlightKey(workloadTenantEndpoint(organizationID, projectID, issuerID), issuerURL),
+	require.Equal(t, base, workloadIssuerFlightKey(newWorkloadTestTenancy(organizationID, projectID, issuerID), issuerURL),
 		"one tenancy and one spelling must produce one key")
-	require.NotEqual(t, base, workloadIssuerFlightKey(workloadTenantEndpoint(organizationID, uuid.New(), issuerID), issuerURL),
+	require.NotEqual(t, base, workloadIssuerFlightKey(newWorkloadTestTenancy(organizationID, uuid.New(), issuerID), issuerURL),
 		"a different project resolves differently and must not share a key")
-	require.NotEqual(t, base, workloadIssuerFlightKey(workloadTenantEndpoint(uuid.NewString(), projectID, issuerID), issuerURL),
+	require.NotEqual(t, base, workloadIssuerFlightKey(newWorkloadTestTenancy(uuid.NewString(), projectID, issuerID), issuerURL),
 		"a different organization resolves differently and must not share a key")
 	require.NotEqual(t, base, workloadIssuerFlightKey(endpoint, "https://IDP.example.test"),
 		"a spelling the lookup may resolve differently must not share a key")
@@ -419,10 +419,10 @@ func TestWorkloadIssuerLookupScope_SeparatesEndpoints(t *testing.T) {
 	t.Parallel()
 
 	issuerID := uuid.New()
-	shared := workloadTenantEndpoint(uuid.NewString(), uuid.New(), issuerID)
+	shared := newWorkloadTestTenancy(uuid.NewString(), uuid.New(), issuerID)
 
 	require.Equal(t, workloadIssuerLookupScope(shared),
-		workloadIssuerLookupScope(workloadTenantEndpoint(uuid.NewString(), uuid.New(), issuerID)),
+		workloadIssuerLookupScope(newWorkloadTestTenancy(uuid.NewString(), uuid.New(), issuerID)),
 		"one authorization server is one budget, whatever project addresses it")
 	require.NotEqual(t, workloadIssuerLookupScope(shared), workloadIssuerLookupScope(workloadTestTenant()),
 		"a different endpoint must not spend this one's budget")

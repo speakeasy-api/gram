@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 )
 
@@ -67,6 +68,28 @@ func TestAuthenticationHostSharedAuthorizationServer_WorkloadGrantBindsResource(
 			require.Equal(t, []any{f.resource}, claims["aud"])
 		})
 	}
+}
+
+// A workload grant naming no resource, as Claude Tag sends when its Resource
+// field is left empty, mints a session on the authentication host for all of
+// the issuer's MCP servers, which the MCP side admits.
+func TestAuthenticationHostSharedAuthorizationServer_WorkloadGrantWithoutResourceCoversIssuer(t *testing.T) {
+	t.Parallel()
+
+	f := newWorkloadGrantFixture(t)
+	harness := newAuthenticationHostHarness(t, f.ti)
+	issuerURL := f.pinWorkloadIssuerToAuthenticationHost(t)
+
+	form := url.Values{
+		oauthwire.ParamGrantType: {oauthwire.GrantTypeJWTBearer},
+		oauthwire.ParamAssertion: {f.assertion(t, issuerURL)},
+	}
+	w := harness.serve(t, http.MethodPost, "auth.example.com", "/oauth/usi/"+f.fx.target.UserSessionIssuerID.String()+"/token", form)
+	f.requireWorkloadSession(t, w, issuerURL)
+	require.False(t, *harness.passedThrough)
+
+	claims := accessTokenClaims(t, w.Body.Bytes())
+	require.Equal(t, []any{urn.NewUserSessionIssuerMCPServers(f.fx.target.UserSessionIssuerID).String()}, claims["aud"])
 }
 
 // A workload assertion addressed to the issuer's server URL form is refused on
