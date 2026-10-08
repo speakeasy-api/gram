@@ -568,7 +568,7 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, clientID uuid.UUID, to
 	form.Set("token", token)
 	form.Set("token_type_hint", hint)
 
-	req, err := newTokenEndpointRequest(ctx, endpoint, form, tokenEndpointClientAuth{
+	req, err := NewTokenEndpointRequest(ctx, endpoint, form, TokenEndpointClientAuth{
 		Method:                authMethod,
 		RemoteSessionClientID: clientID,
 		OrganizationID:        client.ClientOrganizationID.String,

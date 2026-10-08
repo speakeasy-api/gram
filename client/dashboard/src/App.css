@@ -561,7 +561,7 @@ html.chat-launching::view-transition-new(root) {
 
 
 /* Icon tile breathes while the pointer is over the card, alongside the
-   confetti. Paired with it rather than standing alone: the burst is the
+   halftone. Paired with it rather than standing alone: the halftone is the
    arrival, the pulse is what keeps the card feeling live during a long hover. */
 @keyframes icon-hover-pulse {
   0%,

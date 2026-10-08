@@ -1,0 +1,145 @@
+# Claude Tag (Claude in Slack).
+#
+# Every Anthropic organization's tokens come from the same issuer, so the issuer
+# and its keys are constants and the organization ID in the subject is what pins
+# an access rule to one customer. The wildcard is sound because the segment it
+# covers is the agent ID, minted by Anthropic and never chosen by the caller,
+# and the stem ends at /agent/. The organization ID pattern refuses "/", which
+# would otherwise let a value extend the stem past the organization segment.
+key: claude-tag
+display_name: Claude Tag
+description: Let Claude in Slack call your MCP servers from any channel in your Anthropic organization.
+icon: /access-hub/claude-tag.svg
+enabled: true
+
+issuer:
+  value: https://identity.anthropic.com/agents
+  visibility: hidden
+jwks_uri:
+  value: https://identity.anthropic.com/agents/jwks.json
+  visibility: hidden
+
+variables:
+  - key: org_id
+    tier: rule
+    label: Anthropic organization ID
+    help: At the very bottom of Claude's organization settings, labeled Organization ID. The Claude Tag console shows the same value as Tenant ID for tokens.
+    placeholder: Your organization ID
+    pattern: "[A-Za-z0-9-]+"
+    pattern_message: An organization ID is letters, numbers and hyphens.
+
+subject:
+  template: wimse://identity.anthropic.com/org/{org_id}/agent/
+  wildcard: true
+
+setup:
+  steps:
+    - id: before
+      title: Before you start
+      phase: collect
+      blocks:
+        - type: text
+          markdown: |
+            You need:
+
+            - **Claude Tag federated access** in your Anthropic organization, and an Owner or an admin with full Claude Tag management permission there.
+            - **A Speakeasy MCP server** reached on a Speakeasy host, not a custom domain.
+        - type: text
+          markdown: |
+            Keep Claude Tag's federated access settings open in another tab. You'll switch to them after step 3.
+        - type: link
+          href: https://claude.ai/admin-settings/claude-tag/federated-cloud-access
+          label: Open Claude Tag federated access settings
+        - type: link
+          href: https://claude.com/docs/claude-tag/admins/federated-access/authorization-server
+          label: "Claude Tag docs: connect an authorization server"
+
+    - id: organization
+      title: Your Anthropic organization
+      phase: collect
+      blocks:
+        - type: link
+          href: https://claude.ai/admin-settings/organization
+          label: Open Claude organization settings
+        - type: field
+          variable: org_id
+        - type: subject_rule
+
+    - id: agent
+      title: Choose an agent and connect
+      phase: create
+      blocks:
+        - type: text
+          markdown: |
+            Every Claude Tag channel in this organization acts under the agent you choose, and can do only what its policy allows. Connecting saves the access rule from the previous step with this agent. You can remove it from the Access Hub at any time.
+        - type: agent_picker
+        - type: tags
+
+    - id: console
+      title: Connect an authorization server
+      phase: connect
+      blocks:
+        - type: text
+          markdown: |
+            In Claude Tag's federated access settings, under **Authorization servers**, click **Connect an authorization server**. Fill in each field below and tick it off as you go.
+        - type: link
+          href: https://claude.ai/admin-settings/claude-tag/federated-cloud-access
+          label: Open Claude Tag federated access settings
+        - type: computed_status
+        # TODO(AIM-402): remove once the shared token endpoint accepts workload grants.
+        - type: text
+          markdown: |
+            **Not ready yet:** Speakeasy's token endpoint can't accept Claude's token until workload sign-in reaches shared authorization servers. You can save these values in Claude now, but sign-in fails until then.
+        - type: checklist_item
+          label: Token endpoint
+          value: token_endpoint
+        - type: checklist_item
+          label: Issuer URL (optional)
+          value: issuer_url
+          help: Fill this in even though Claude marks it optional. Claude's token must be issued for this issuer, or Speakeasy refuses it.
+        - type: checklist_item
+          label: Set your authorization server to accept these values
+          markdown: Nothing to copy. Speakeasy already accepts Claude's issuer and your organization's subject prefix from the steps you completed here.
+        - type: checklist_item
+          label: This authorization server checks that each token's subject belongs to your organization
+          markdown: Tick this checkbox. Speakeasy's access rule is that check.
+        - type: checklist_item
+          label: Register server
+          markdown: Click it. Claude then opens **Add authorization server to a bundle**.
+
+    - id: bundle
+      title: Add the server to a bundle
+      phase: connect
+      blocks:
+        - type: text
+          markdown: |
+            In **Add authorization server to a bundle**, fill in each field below and tick it off as you go.
+        # TODO: the workload grant requires resource to be the MCP server's canonical URL, exactly as its protected resource metadata publishes it, so this should show that URL per MCP server rather than "Leave empty".
+        - type: checklist_item
+          label: Resource (optional)
+          markdown: Leave empty.
+        - type: checklist_item
+          label: Scope (optional)
+          markdown: Leave empty.
+        # TODO(AIM-415): the MCP host is also the token endpoint's host until shared authorization servers move to the authentication host; confirm the path format Claude expects.
+        - type: checklist_item
+          label: Allowed API hosts
+          value: mcp_host
+          help: This is also the token endpoint's host, so Claude asks for the API paths it may call too. List your MCP servers' paths, such as /mcp/your-server.
+        - type: checklist_item
+          label: Access bundle
+          markdown: Choose the bundle assigned to the channels Claude Tag should work in, or create one with **New bundle**.
+        - type: checklist_item
+          label: Connect server
+          markdown: Click it.
+
+    - id: check
+      title: Check it worked
+      phase: connect
+      blocks:
+        - type: text
+          markdown: |
+            In a Slack **channel** where the bundle applies, start a new thread and ask Claude to list the MCP server's tools. A direct message with Claude will not work: federated connections only run in channel threads.
+        - type: text
+          markdown: |
+            Each channel that signs in appears in **Sessions**, under Claude Tag's issuer and the channel's own subject.

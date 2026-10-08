@@ -45,6 +45,7 @@ import { adminGetStripeSubscription } from "../funcs/adminGetStripeSubscription.
 import { adminGetStripeSubscriptionCandidate } from "../funcs/adminGetStripeSubscriptionCandidate.js";
 import { adminGetSupportCoverage } from "../funcs/adminGetSupportCoverage.js";
 import { adminGetSupportMatrix } from "../funcs/adminGetSupportMatrix.js";
+import { adminListCustomerUsage } from "../funcs/adminListCustomerUsage.js";
 import { adminListGlobalIssuerConvergenceCandidates } from "../funcs/adminListGlobalIssuerConvergenceCandidates.js";
 import { adminListGlobalIssuers } from "../funcs/adminListGlobalIssuers.js";
 import { adminListOnboardingPlaybooks } from "../funcs/adminListOnboardingPlaybooks.js";
@@ -86,6 +87,7 @@ import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AdminBulkUpdateAccountTypeResult } from "../models/components/adminbulkupdateaccounttyperesult.js";
 import { AdminChatAnalysisSettings } from "../models/components/adminchatanalysissettings.js";
 import { AdminChatAnalysisTriggerResult } from "../models/components/adminchatanalysistriggerresult.js";
+import { AdminCustomerUsageResponse } from "../models/components/admincustomerusageresponse.js";
 import { AdminInferenceKey } from "../models/components/admininferencekey.js";
 import { AdminInferenceKeyLimit } from "../models/components/admininferencekeylimit.js";
 import { AdminInferenceSpendMonth } from "../models/components/admininferencespendmonth.js";
@@ -189,6 +191,7 @@ import { AdminGetStripeCustomerRequest } from "../models/operations/admingetstri
 import { AdminGetStripeSubscriptionRequest } from "../models/operations/admingetstripesubscription.js";
 import { AdminGetStripeSubscriptionCandidateRequest } from "../models/operations/admingetstripesubscriptioncandidate.js";
 import { AdminGetSupportCoverageRequest } from "../models/operations/admingetsupportcoverage.js";
+import { AdminListCustomerUsageRequest } from "../models/operations/adminlistcustomerusage.js";
 import {
   AdminListGlobalIssuerConvergenceCandidatesRequest,
   AdminListGlobalIssuerConvergenceCandidatesResponse,
@@ -938,6 +941,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminBulkUpdateAccountTypeResult> {
     return unwrapAsync(adminBulkUpdateAccountType(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listCustomerUsage admin
+   *
+   * @remarks
+   * Returns estimated usage at current PAYG list prices for every active paying organization: enterprise organizations not on a running or ending trial, and pro or payg organizations that never trialled.
+   */
+  async listCustomerUsage(
+    request?: AdminListCustomerUsageRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<AdminCustomerUsageResponse> {
+    return unwrapAsync(adminListCustomerUsage(
       this,
       request,
       options,

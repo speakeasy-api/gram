@@ -78,6 +78,7 @@ var AdminMcpServerHealthRemoteSessionIssuer = Type("AdminMcpServerHealthRemoteSe
 	})
 	Attribute("cimd_supported", Boolean, "Whether the issuer accepts a Client ID Metadata Document URL as client_id.")
 	Attribute("scope_override", ArrayOf(String), "Operator-pinned scopes sent in place of the discovered set. Absent when unset.")
+	Attribute("omit_scope_fallback", Boolean, "Whether a login with no other scope source sends no scope instead of the issuer's whole scopes_supported. Absent when unset, which behaves as false.")
 	Attribute("metadata_fetched_at", String, "Last successful metadata discovery.", func() { Format(FormatDateTime) })
 	Attribute("metadata_last_error_at", String, "Last failed metadata discovery.", func() { Format(FormatDateTime) })
 	Attribute("jwks_last_error_at", String, "Last failed JWK Set fetch.", func() { Format(FormatDateTime) })

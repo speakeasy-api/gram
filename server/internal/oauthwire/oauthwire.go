@@ -76,6 +76,10 @@ const (
 	// ResponseTypeCode requests an authorization code from the authorization
 	// endpoint (RFC 6749 §4.1.1).
 	ResponseTypeCode = "code"
+
+	// TokenTypeBearer is the bearer token_type value and Authorization scheme
+	// (RFC 6750 §4, §2.1).
+	TokenTypeBearer = "Bearer"
 )
 
 // Client authentication parameters as they appear in a token or revocation

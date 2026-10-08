@@ -103,7 +103,7 @@ var ListApplicationsResult = Type("ListIdentityProviderConnectionApplicationsRes
 
 var Connection = Type("OktaIdentityProviderConnection", func() {
 	Description("An organization's Okta connection: the service application Speakeasy authenticates to the Okta Management API with, its verification state, and the console checklist. Never carries key material or tokens.")
-	Required("id", "organization_id", "provider", "status", "org_url", "issuer_url", "listing_mode", "jwks_url", "client_id_submitted", "dpop_required", "required_scopes", "granted_scopes", "missing_scopes", "verification_reasons", "checklist", "applications_sync", "created_at", "updated_at")
+	Required("id", "organization_id", "provider", "status", "org_url", "issuer_url", "listing_mode", "client_id_submitted", "dpop_required", "required_scopes", "granted_scopes", "missing_scopes", "verification_reasons", "checklist", "applications_sync", "created_at", "updated_at")
 	Attribute("id", String, "Connection ID.", func() {
 		Format(FormatUUID)
 	})
@@ -119,7 +119,7 @@ var Connection = Type("OktaIdentityProviderConnection", func() {
 	Attribute("listing_mode", String, "Which checklist template applies: custom_app when the admin creates the API Services app by hand, oin when the Speakeasy OIN listing is added from the catalog.", func() {
 		Enum("custom_app", "oin")
 	})
-	Attribute("jwks_url", String, "Public JWKS URL the Okta app is configured to trust for private_key_jwt.")
+	Attribute("jwks_url", String, "Public JWKS URL the Okta app is configured to trust for private_key_jwt. Omitted for connections installed from the Okta Integration Network, which authenticate with a client secret.")
 	Attribute("client_id", String, "Okta application client ID. Omitted until submitted.")
 	Attribute("client_id_submitted", Boolean, "Whether the real Okta client ID has replaced the provisioning placeholder.")
 	Attribute("dpop_required", Boolean, "Whether Okta issued a DPoP-bound token at the last verification.")
@@ -128,7 +128,7 @@ var Connection = Type("OktaIdentityProviderConnection", func() {
 	Attribute("missing_scopes", ArrayOf(String), "Required scopes Okta did not grant at the last verification.")
 	Attribute("verification_reasons", ArrayOf(String), "Typed reasons recorded by the last verification; empty when verified or not yet verified. missing_role is reserved for a later release.", func() {
 		Elem(func() {
-			Enum("missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read")
+			Enum("missing_scope", "missing_role", "dpop_not_bound", "key_not_fetched", "secret_rejected", "read_failed:okta.apps.read", "read_failed:okta.users.read", "read_failed:okta.groups.read")
 		})
 	})
 	Attribute("last_verified_at", String, "ISO 8601 timestamp of the last verification that found every required scope granted. Omitted until then.", func() {
@@ -207,7 +207,7 @@ var _ = Service("identityProviderConnections", func() {
 	})
 
 	Method("submitClientId", func() {
-		Description("Record the client ID of the Okta API Services application and verify it. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.")
+		Description("Record the client ID of the Okta API Services application and verify it. Connections installed from the Okta Integration Network also take the client secret. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.")
 		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
 		Error(string(oops.CodeRateLimitExceeded), func() { Description(oops.CodeRateLimitExceeded.UserMessage()) })
 
@@ -220,6 +220,7 @@ var _ = Service("identityProviderConnections", func() {
 				Format(FormatUUID)
 			})
 			Attribute("client_id", String, "Okta application client ID (0oa...).")
+			Attribute("client_secret", String, "Client secret from the Speakeasy integration installed from the Okta Integration Network. Required for connections created with listing_mode oin; rejected otherwise. Encrypted before persisting and never returned.")
 			Required("id", "client_id")
 		})
 
@@ -240,6 +241,80 @@ var _ = Service("identityProviderConnections", func() {
 		Meta("openapi:operationId", "submitIdentityProviderConnectionClientId")
 		Meta("openapi:extension:x-speakeasy-name-override", "submitClientId")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SubmitIdentityProviderConnectionClientId"}`)
+	})
+
+	Method("replaceClientSecret", func() {
+		Description("Replace the client secret of a connection installed from the Okta Integration Network and re-verify it. The previous secret is kept if Okta rejects the new one. Requires org:admin.")
+		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
+		Error(string(oops.CodeRateLimitExceeded), func() { Description(oops.CodeRateLimitExceeded.UserMessage()) })
+
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Meta("openapi:typename", "ReplaceIdentityProviderConnectionClientSecretRequestBody")
+			Attribute("id", String, "Connection ID.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("client_secret", String, "New client secret from the Speakeasy integration in Okta. Encrypted before persisting and never returned.")
+			Required("id", "client_secret")
+		})
+
+		Result(Connection)
+
+		HTTP(func() {
+			POST("/rpc/identityProviderConnections.replaceClientSecret")
+			security.SessionHeader()
+			Response(StatusOK)
+			Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
+				ContentType("application/json")
+			})
+			Response(string(oops.CodeRateLimitExceeded), StatusTooManyRequests, func() {
+				ContentType("application/json")
+			})
+		})
+
+		Meta("openapi:operationId", "replaceIdentityProviderConnectionClientSecret")
+		Meta("openapi:extension:x-speakeasy-name-override", "replaceClientSecret")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ReplaceIdentityProviderConnectionClientSecret"}`)
+	})
+
+	Method("setSetupMethod", func() {
+		Description("Switch how a pending connection connects to Okta: an install from the Okta Integration Network (client secret) or a custom API Services app (private key). Allowed until the client ID is submitted. Switching to the custom app provisions a signing key and JWKS URL once; switching away stops serving the key and switching back reuses it. A key left unused is retired when the client ID is submitted or the connection is revoked. Requires org:admin.")
+		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
+		Error(string(oops.CodeRateLimitExceeded), func() { Description(oops.CodeRateLimitExceeded.UserMessage()) })
+
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Meta("openapi:typename", "SetIdentityProviderConnectionSetupMethodRequestBody")
+			Attribute("id", String, "Connection ID.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("listing_mode", String, "Setup method.", func() {
+				Enum("custom_app", "oin")
+			})
+			Required("id", "listing_mode")
+		})
+
+		Result(Connection)
+
+		HTTP(func() {
+			POST("/rpc/identityProviderConnections.setSetupMethod")
+			security.SessionHeader()
+			Response(StatusOK)
+			Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
+				ContentType("application/json")
+			})
+			Response(string(oops.CodeRateLimitExceeded), StatusTooManyRequests, func() {
+				ContentType("application/json")
+			})
+		})
+
+		Meta("openapi:operationId", "setIdentityProviderConnectionSetupMethod")
+		Meta("openapi:extension:x-speakeasy-name-override", "setSetupMethod")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetIdentityProviderConnectionSetupMethod"}`)
 	})
 
 	Method("verify", func() {

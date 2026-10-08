@@ -363,6 +363,7 @@ func discoveredIssuerParams(principal Principal, project ResolvedProject, regist
 		BackchannelLogoutSupported:                 pgtype.Bool{Bool: metadata.BackchannelLogoutSupported, Valid: true},
 		AuthorizationResponseIssParameterSupported: pgtype.Bool{Bool: metadata.AuthorizationResponseIssParameterSupported, Valid: true},
 		ScopeOverride:                              nil,
+		OmitScopeFallback:                          pgtype.Bool{Bool: false, Valid: false},
 		ResourceIndicatorSupported:                 pgtype.Bool{Bool: false, Valid: false},
 		Metadata:                                   metadata.Metadata,
 		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},

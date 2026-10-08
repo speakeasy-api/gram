@@ -118,7 +118,6 @@ export function OktaWorkspace(): JSX.Element {
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           All identity providers
         </Link>
-        <Heading variant="h2">Okta</Heading>
         {connected && (
           <Text muted>
             Leverage your Okta connection for application syncing and automated

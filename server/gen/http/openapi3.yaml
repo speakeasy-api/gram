@@ -3796,6 +3796,96 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organizations.customerUsage:
+        get:
+            description: 'Returns estimated usage at current PAYG list prices for every active paying organization: enterprise organizations not on a running or ending trial, and pro or payg organizations that never trialled.'
+            operationId: adminListCustomerUsage
+            parameters:
+                - allowEmptyValue: true
+                  description: Chart bucketing. monthly gives one bucket per billing cycle over the last six cycles. daily and weekly bucket the current cycle.
+                  in: query
+                  name: interval
+                  schema:
+                    default: monthly
+                    description: Chart bucketing. monthly gives one bucket per billing cycle over the last six cycles. daily and weekly bucket the current cycle.
+                    enum:
+                        - daily
+                        - weekly
+                        - monthly
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminCustomerUsageResponse'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: listCustomerUsage admin
+            tags:
+                - admin
+            x-speakeasy-name-override: listCustomerUsage
     /admin/organizations.getMeterUsage:
         get:
             tags:
@@ -32420,6 +32510,111 @@ paths:
             x-speakeasy-name-override: recordAgent
             x-speakeasy-react-hook:
                 name: RecordIdentityProviderConnectionAgent
+    /rpc/identityProviderConnections.replaceClientSecret:
+        post:
+            description: Replace the client secret of a connection installed from the Okta Integration Network and re-verify it. The previous secret is kept if Okta rejects the new one. Requires org:admin.
+            operationId: replaceIdentityProviderConnectionClientSecret
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ReplaceIdentityProviderConnectionClientSecretRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OktaIdentityProviderConnection'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'rate_limit_exceeded: rate limit exceeded'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - session_header_Gram-Session: []
+            summary: replaceClientSecret identityProviderConnections
+            tags:
+                - identityProviderConnections
+            x-speakeasy-name-override: replaceClientSecret
+            x-speakeasy-react-hook:
+                name: ReplaceIdentityProviderConnectionClientSecret
     /rpc/identityProviderConnections.revoke:
         post:
             description: 'Revoke the connection: withdraw every signing key from the JWKS, disable the key material, and tombstone the connection so a new one can be created. Idempotent. Requires org:admin.'
@@ -32513,9 +32708,114 @@ paths:
             x-speakeasy-name-override: revoke
             x-speakeasy-react-hook:
                 name: RevokeIdentityProviderConnection
+    /rpc/identityProviderConnections.setSetupMethod:
+        post:
+            description: 'Switch how a pending connection connects to Okta: an install from the Okta Integration Network (client secret) or a custom API Services app (private key). Allowed until the client ID is submitted. Switching to the custom app provisions a signing key and JWKS URL once; switching away stops serving the key and switching back reuses it. A key left unused is retired when the client ID is submitted or the connection is revoked. Requires org:admin.'
+            operationId: setIdentityProviderConnectionSetupMethod
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetIdentityProviderConnectionSetupMethodRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/OktaIdentityProviderConnection'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "429":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'rate_limit_exceeded: rate limit exceeded'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - session_header_Gram-Session: []
+            summary: setSetupMethod identityProviderConnections
+            tags:
+                - identityProviderConnections
+            x-speakeasy-name-override: setSetupMethod
+            x-speakeasy-react-hook:
+                name: SetIdentityProviderConnectionSetupMethod
     /rpc/identityProviderConnections.submitClientId:
         post:
-            description: Record the client ID of the Okta API Services application and verify it. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.
+            description: Record the client ID of the Okta API Services application and verify it. Connections installed from the Okta Integration Network also take the client secret. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.
             operationId: submitIdentityProviderConnectionClientId
             parameters:
                 - allowEmptyValue: true
@@ -54126,6 +54426,113 @@ paths:
             x-speakeasy-name-override: getServerHeader
             x-speakeasy-react-hook:
                 name: GetRemoteMcpServerHeader
+    /rpc/remoteMcp.getServerScopes:
+        get:
+            description: 'Report the scope state of the protected resource a remote-backed MCP server''s logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization''s resource scope discovery flag, and what a login through each bound client would request now. Reads cached state only; never contacts the resource.'
+            operationId: getRemoteMcpServerScopes
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the remote-backed MCP server.
+                  in: query
+                  name: mcp_server_id
+                  required: true
+                  schema:
+                    description: The ID of the remote-backed MCP server.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteMcpServerScopes'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getServerScopes remoteMcp
+            tags:
+                - remoteMcp
+            x-speakeasy-name-override: getServerScopes
+            x-speakeasy-react-hook:
+                name: GetRemoteMcpServerScopes
     /rpc/remoteMcp.listServerHeaders:
         get:
             description: List the headers configured for a remote MCP server
@@ -54435,6 +54842,110 @@ paths:
             x-speakeasy-name-override: probeURL
             x-speakeasy-react-hook:
                 name: ProbeRemoteMcpURL
+    /rpc/remoteMcp.setServerScopePin:
+        post:
+            description: Pin the scopes logins to a remote-backed MCP server's protected resource request, or clear the pin with an empty list. The pin belongs to the protected resource, so it applies to every server in the project with the same upstream URL, and the caller needs write access to all of them. Returns the scope state re-read after the write.
+            operationId: setRemoteMcpServerScopePin
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetServerScopePinRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RemoteMcpServerScopes'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: setServerScopePin remoteMcp
+            tags:
+                - remoteMcp
+            x-speakeasy-name-override: setServerScopePin
+            x-speakeasy-react-hook:
+                name: SetRemoteMcpServerScopePin
     /rpc/remoteMcp.updateServer:
         post:
             description: Update a remote MCP server
@@ -82307,6 +82818,200 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: WorkloadIdentities
+    /rpc/workloadIdentities.listPlatforms:
+        get:
+            description: List the platforms the catalog offers to trust without looking anything up, each with the guided setup that connects it. The same for every organization. Requires workload:read.
+            operationId: listWorkloadPlatforms
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkloadPlatformCatalog'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listPlatforms workloadIdentities
+            tags:
+                - workloadIdentities
+            x-speakeasy-name-override: listPlatforms
+            x-speakeasy-react-hook:
+                name: WorkloadPlatforms
+    /rpc/workloadIdentities.listTokenEndpoints:
+        get:
+            description: 'List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. Requires workload:read.'
+            operationId: listWorkloadTokenEndpoints
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkloadTokenEndpoints'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listTokenEndpoints workloadIdentities
+            tags:
+                - workloadIdentities
+            x-speakeasy-name-override: listTokenEndpoints
+            x-speakeasy-react-hook:
+                name: WorkloadTokenEndpoints
     /rpc/workloadIdentities.registerIssuer:
         post:
             description: Trust an external issuer to vouch for workloads. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
@@ -83969,6 +84674,107 @@ components:
                     format: int64
             required:
                 - projects_signaled
+        AdminCustomerUsage:
+            type: object
+            properties:
+                account_type:
+                    type: string
+                    enum:
+                        - enterprise
+                        - pro
+                        - payg
+                current_cycle:
+                    $ref: '#/components/schemas/MeterUsageWindow'
+                error:
+                    type: string
+                    description: Why this organization's usage could not be read. products is empty when set.
+                name:
+                    type: string
+                organization_id:
+                    type: string
+                previous_period:
+                    $ref: '#/components/schemas/MeterUsageWindow'
+                previous_period_costs:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminCustomerUsageProductCost'
+                    description: Per-product costs over previous_period. Empty when previous_period is absent.
+                products:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SpendProduct'
+                    description: 'The three metered products in stable display order. quantity and cost_usd cover the current cycle to date. buckets are the chart buckets for the requested interval: billing cycles for monthly, days or Monday-start weeks of the current cycle otherwise.'
+                slug:
+                    type: string
+                trial_state:
+                    type: string
+                    enum:
+                        - none
+                        - running
+                        - ending_soon
+                        - expired
+                        - demoted
+                        - converted
+                window:
+                    $ref: '#/components/schemas/MeterUsageWindow'
+            description: One paying organization's estimated usage at current PAYG list prices.
+            required:
+                - organization_id
+                - name
+                - slug
+                - account_type
+                - trial_state
+                - current_cycle
+                - window
+                - products
+                - previous_period_costs
+        AdminCustomerUsageProductCost:
+            type: object
+            properties:
+                cost_usd:
+                    type: string
+                    description: Exact estimated cost at current PAYG list prices
+                product_id:
+                    type: string
+                    enum:
+                        - agent_session_storage
+                        - risk_content_scans
+                        - mcp_egress
+            required:
+                - product_id
+                - cost_usd
+        AdminCustomerUsageResponse:
+            type: object
+            properties:
+                currency:
+                    type: string
+                    enum:
+                        - USD
+                customers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminCustomerUsage'
+                    description: Every qualifying organization, ordered by name
+                interval:
+                    type: string
+                    enum:
+                        - daily
+                        - weekly
+                        - monthly
+                pricing_basis:
+                    type: string
+                    enum:
+                        - current_payg_list_price
+                queried_at:
+                    type: string
+                    description: Retrieval timestamp used to distinguish current and future buckets
+                    format: date-time
+            required:
+                - interval
+                - currency
+                - pricing_basis
+                - queried_at
+                - customers
         AdminDashboardRedirect:
             type: object
             properties:
@@ -84312,6 +85118,9 @@ components:
                 oidc:
                     type: boolean
                     description: Whether the issuer is treated as an OpenID Connect provider.
+                omit_scope_fallback:
+                    type: boolean
+                    description: Whether a login with no other scope source sends no scope instead of the issuer's whole scopes_supported. Absent when unset, which behaves as false.
                 passthrough:
                     type: boolean
                     description: Whether upstream tokens are passed through to the server.
@@ -89412,6 +90221,9 @@ components:
                 oidc:
                     type: boolean
                     description: When true, may unlock OIDC-aware behaviour. Default false.
+                omit_scope_fallback:
+                    type: boolean
+                    description: 'When true, a login that would otherwise request the authorization server''s whole scopes_supported omits the scope parameter so the server applies its default. Omit to leave it unset: such a login requests the provider''s whole scopes_supported.'
                 op_policy_uri:
                     type: string
                     description: RFC 8414 op_policy_uri; the issuer's client data-usage policy. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
@@ -90102,6 +90914,9 @@ components:
                 oidc:
                     type: boolean
                     description: When true, may unlock OIDC-aware behaviour. Default false.
+                omit_scope_fallback:
+                    type: boolean
+                    description: 'When true, a login that would otherwise request the authorization server''s whole scopes_supported omits the scope parameter so the server applies its default. Omit to leave it unset: such a login requests the provider''s whole scopes_supported.'
                 op_policy_uri:
                     type: string
                     description: RFC 8414 op_policy_uri; the issuer's client data-usage policy. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
@@ -101231,7 +102046,7 @@ components:
                     description: Discovered authorization server issuer. Equal to org_url by construction.
                 jwks_url:
                     type: string
-                    description: Public JWKS URL the Okta app is configured to trust for private_key_jwt.
+                    description: Public JWKS URL the Okta app is configured to trust for private_key_jwt. Omitted for connections installed from the Okta Integration Network, which authenticate with a client secret.
                 last_error:
                     type: string
                     description: 'Why the last verification did not complete: Okta rejected the credential, or could not be reached. Omitted when it completed.'
@@ -101289,6 +102104,7 @@ components:
                             - missing_role
                             - dpop_not_bound
                             - key_not_fetched
+                            - secret_rejected
                             - read_failed:okta.apps.read
                             - read_failed:okta.users.read
                             - read_failed:okta.groups.read
@@ -101302,7 +102118,6 @@ components:
                 - org_url
                 - issuer_url
                 - listing_mode
-                - jwks_url
                 - client_id_submitted
                 - dpop_required
                 - required_scopes
@@ -104434,6 +105249,46 @@ components:
                 - transport_type
                 - created_at
                 - updated_at
+        RemoteMcpServerClientScopes:
+            type: object
+            properties:
+                client_id:
+                    type: string
+                    description: The remote session client's ID.
+                    format: uuid
+                pin_would_decide:
+                    type: boolean
+                    description: 'Whether a pin, if set, decides this client''s request: discovery is on, the client owns the resource, and neither its own scope nor a challenge outranks the pin.'
+                requested_scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: The scope parameter the login would send; empty sends none.
+                scope_source:
+                    type: string
+                    description: The precedence step that decided the request.
+                    enum:
+                        - resource_pin
+                        - client_scope
+                        - challenge_scope
+                        - live_resource
+                        - cached_resource
+                        - issuer_override
+                        - issuer_omitted
+                        - issuer_catalogue
+                        - none
+                unadvertised_pinned_scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: Pinned scopes the resource does not advertise; sent regardless. Empty when the pin does not decide or the resource's list is unknown.
+            description: What a login through one client bound to the MCP server would request now, resolved from cached state.
+            required:
+                - client_id
+                - scope_source
+                - requested_scopes
+                - unadvertised_pinned_scopes
+                - pin_would_decide
         RemoteMcpServerHeader:
             type: object
             properties:
@@ -104475,6 +105330,52 @@ components:
                 - is_secret
                 - created_at
                 - updated_at
+        RemoteMcpServerScopes:
+            type: object
+            properties:
+                advertised_scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: The resource's advertised scopes_supported from that read. Absent when unknown or empty; see advertised_scopes_known.
+                advertised_scopes_known:
+                    type: boolean
+                    description: Whether a read of the resource's metadata within the last good window captured an advertised list.
+                challenge_scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: The scope parameter of the resource's last WWW-Authenticate challenge; empty when none was seen.
+                clients:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RemoteMcpServerClientScopes'
+                    description: One entry per client bound to the server's user session issuer.
+                discovery_enabled:
+                    type: boolean
+                    description: Whether the organization's logins consult the protected resource (challenge scopes, pin, advertised list). Off, the pin is stored but not applied.
+                pinned_scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: The operator's scope pin on the protected resource, shared by servers with the same upstream URL; empty when unset.
+                resource_url:
+                    type: string
+                    description: 'The protected resource: the server''s upstream URL.'
+                    format: uri
+                shared_server_count:
+                    type: integer
+                    description: How many other live MCP servers in the project share this upstream URL, and so this pin.
+                    format: int64
+            description: Scope state of the protected resource a remote-backed MCP server's logins are for.
+            required:
+                - resource_url
+                - pinned_scopes
+                - advertised_scopes_known
+                - challenge_scopes
+                - discovery_enabled
+                - clients
+                - shared_server_count
         RemoteSession:
             type: object
             properties:
@@ -104717,6 +105618,9 @@ components:
                 oidc:
                     type: boolean
                     description: When true, may unlock OIDC-aware behaviour.
+                omit_scope_fallback:
+                    type: boolean
+                    description: When true, a login that would otherwise request the authorization server's whole scopes_supported omits the scope parameter so the server applies its default. Null when unset.
                 op_policy_uri:
                     type: string
                     description: RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not advertised.
@@ -105046,6 +105950,19 @@ components:
                     description: The rendered prompt
             required:
                 - prompt
+        ReplaceIdentityProviderConnectionClientSecretRequestBody:
+            type: object
+            properties:
+                client_secret:
+                    type: string
+                    description: New client secret from the Speakeasy integration in Okta. Encrypted before persisting and never returned.
+                id:
+                    type: string
+                    description: Connection ID.
+                    format: uuid
+            required:
+                - id
+                - client_secret
         ReportAIScanRequestBody:
             type: object
             properties:
@@ -108617,6 +109534,22 @@ components:
             required:
                 - source_kind
                 - role_urn
+        SetIdentityProviderConnectionSetupMethodRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: Connection ID.
+                    format: uuid
+                listing_mode:
+                    type: string
+                    description: Setup method.
+                    enum:
+                        - custom_app
+                        - oin
+            required:
+                - id
+                - listing_mode
         SetInferenceKeyMonthlyLimitRequestBody:
             type: object
             properties:
@@ -108983,6 +109916,23 @@ components:
                 - provider
                 - schedule
                 - enabled
+        SetServerScopePinRequestBody:
+            type: object
+            properties:
+                mcp_server_id:
+                    type: string
+                    description: The ID of the remote-backed MCP server.
+                    format: uuid
+                scopes:
+                    type: array
+                    items:
+                        type: string
+                        maxLength: 256
+                    description: Scopes to pin on the server's protected resource, shared by servers with the same upstream URL, in request order. Whitespace is trimmed, blanks and duplicates are dropped, and at most 100 scopes may remain; an empty list clears the pin.
+                    maxItems: 1000
+            required:
+                - mcp_server_id
+                - scopes
         SetSlackIdentityMappingRequestBody:
             type: object
             properties:
@@ -111427,6 +112377,9 @@ components:
                 client_id:
                     type: string
                     description: Okta application client ID (0oa...).
+                client_secret:
+                    type: string
+                    description: Client secret from the Speakeasy integration installed from the Okta Integration Network. Required for connections created with listing_mode oin; rejected otherwise. Encrypted before persisting and never returned.
                 id:
                     type: string
                     description: Connection ID.
@@ -115602,6 +116555,9 @@ components:
                     description: Set or clear the display name. An empty string clears it to NULL.
                 oidc:
                     type: boolean
+                omit_scope_fallback:
+                    type: boolean
+                    description: When true, a login that would otherwise request the authorization server's whole scopes_supported omits the scope parameter so the server applies its default. Omit or send null to keep the stored value; false restores the default.
                 op_policy_uri:
                     type: string
                     description: Set or clear RFC 8414 op_policy_uri. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
@@ -117893,6 +118849,260 @@ components:
                 - tags
                 - created_at
                 - updated_at
+        WorkloadPlatform:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: What connecting the platform does.
+                display_name:
+                    type: string
+                    description: What the operator sees.
+                enabled:
+                    type: boolean
+                    description: False for a platform listed but not offered.
+                icon:
+                    type: string
+                    description: The platform's logo, a path on the dashboard's origin. Empty where it has none.
+                issuer:
+                    $ref: '#/components/schemas/WorkloadPlatformConstant'
+                jwks_uri:
+                    $ref: '#/components/schemas/WorkloadPlatformConstant'
+                key:
+                    type: string
+                    description: Identifies the entry permanently.
+                steps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkloadPlatformStep'
+                    description: The guided setup. Empty for a platform without one, which is listed as coming soon and cannot be opened.
+                subject:
+                    $ref: '#/components/schemas/WorkloadPlatformSubject'
+                variables:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkloadPlatformVariable'
+                    description: What the operator supplies.
+            description: A platform the catalog offers to trust, with what the operator supplies and the guided setup that connects it.
+            required:
+                - key
+                - display_name
+                - description
+                - icon
+                - enabled
+                - issuer
+                - jwks_uri
+                - variables
+                - subject
+                - steps
+        WorkloadPlatformBlock:
+            type: object
+            properties:
+                alt:
+                    type: string
+                    description: An image's alternative text.
+                caption:
+                    type: string
+                    description: Shown under an image.
+                help:
+                    type: string
+                    description: Shown under a computed value or checklist item.
+                href:
+                    type: string
+                    description: A link's https target.
+                label:
+                    type: string
+                    description: A link's or computed value's label, or the console field or control a checklist item names.
+                markdown:
+                    type: string
+                    description: A text block's Markdown, or what a checklist item without a value asks the operator to do. Raw HTML in it must not be rendered.
+                src:
+                    type: string
+                    description: An image's path on the dashboard's origin.
+                type:
+                    type: string
+                    description: The kind of content.
+                    enum:
+                        - text
+                        - image
+                        - link
+                        - field
+                        - subject_rule
+                        - agent_picker
+                        - tags
+                        - computed_status
+                        - computed
+                        - checklist_item
+                value:
+                    type: string
+                    description: The value a computed block or checklist item shows.
+                    enum:
+                        - ""
+                        - token_endpoint
+                        - issuer_url
+                        - mcp_host
+                variable:
+                    type: string
+                    description: The variable key a field collects.
+            description: One piece of a guided setup step. Which fields are set depends on type; the rest are empty.
+            required:
+                - type
+                - markdown
+                - src
+                - alt
+                - caption
+                - href
+                - label
+                - variable
+                - value
+                - help
+        WorkloadPlatformCatalog:
+            type: object
+            properties:
+                platforms:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkloadPlatform'
+                    description: The catalog entries.
+            description: Every platform the catalog offers, ordered by key.
+            required:
+                - platforms
+        WorkloadPlatformConstant:
+            type: object
+            properties:
+                value:
+                    type: string
+                    description: The value, with {key} placeholders for platform-tier variables.
+                visibility:
+                    type: string
+                    description: Whether the operator sees the value.
+                    enum:
+                        - hidden
+                        - read-only
+            description: A value a catalog platform supplies, the same for every customer.
+            required:
+                - value
+                - visibility
+        WorkloadPlatformStep:
+            type: object
+            properties:
+                blocks:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkloadPlatformBlock'
+                    description: Rendered in order.
+                id:
+                    type: string
+                    description: Stable within the platform; used in the dashboard URL.
+                phase:
+                    type: string
+                    description: collect steps gather values, the create step writes the rows, connect steps describe the platform's side.
+                    enum:
+                        - collect
+                        - create
+                        - connect
+                title:
+                    type: string
+                    description: Heads the step.
+            description: One screen of a guided setup.
+            required:
+                - id
+                - title
+                - phase
+                - blocks
+        WorkloadPlatformSubject:
+            type: object
+            properties:
+                template:
+                    type: string
+                    description: The subject with {key} placeholders for rule-tier variables; the stem, for a wildcard rule.
+                wildcard:
+                    type: boolean
+                    description: Whether the rule is the filled template followed by *.
+            description: The access rule a catalog platform produces.
+            required:
+                - template
+                - wildcard
+        WorkloadPlatformVariable:
+            type: object
+            properties:
+                help:
+                    type: string
+                    description: Where the operator finds the value. Empty where there is no help.
+                key:
+                    type: string
+                    description: Names the variable in templates, as {key}.
+                label:
+                    type: string
+                    description: The field's label.
+                pattern:
+                    type: string
+                    description: A regular expression the whole value must match.
+                pattern_message:
+                    type: string
+                    description: Shown when the value does not match. Empty where there is none.
+                placeholder:
+                    type: string
+                    description: Shown in the empty field. Empty where there is none.
+                tier:
+                    type: string
+                    description: Whether it is supplied once per trusted platform or once per access rule.
+                    enum:
+                        - platform
+                        - rule
+            description: Something the operator supplies when connecting a catalog platform.
+            required:
+                - key
+                - tier
+                - label
+                - help
+                - placeholder
+                - pattern
+                - pattern_message
+        WorkloadTokenEndpoint:
+            type: object
+            properties:
+                issuer:
+                    type: string
+                    description: The authorization server's issuer identifier, as its RFC 8414 metadata publishes it.
+                mcp_host:
+                    type: string
+                    description: The host MCP servers are served on, which a platform calls with the tokens it is issued.
+                project_id:
+                    type: string
+                    description: The owning project id; empty for an organization-level issuer.
+                project_name:
+                    type: string
+                    description: The owning project name; empty for an organization-level issuer.
+                token_endpoint:
+                    type: string
+                    description: The authorization server's token endpoint.
+                user_session_issuer_id:
+                    type: string
+                    description: The user session issuer id.
+                    format: uuid
+                user_session_issuer_slug:
+                    type: string
+                    description: The user session issuer slug.
+            description: The shared authorization server of a user session issuer, which an external platform exchanges its workload token at.
+            required:
+                - user_session_issuer_id
+                - user_session_issuer_slug
+                - project_id
+                - project_name
+                - issuer
+                - token_endpoint
+                - mcp_host
+        WorkloadTokenEndpoints:
+            type: object
+            properties:
+                items:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkloadTokenEndpoint'
+                    description: Organization-level issuers first, then by project name and issuer slug.
+            required:
+                - items
     securitySchemes:
         admin_auth_header_Authorization:
             type: apiKey

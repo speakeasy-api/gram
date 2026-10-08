@@ -1,4 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { RoleLink } from "@/components/role-link";
 import { Badge } from "@/components/ui/Badge";
 import {
   Command,
@@ -20,7 +21,7 @@ import { useUpdateMemberRolesMutation } from "@gram/client/react-query/updateMem
 import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   addRoleToSelection,
   removeRoleFromSelection,
@@ -69,10 +70,10 @@ export function ChangeRoleDialog({
   };
 
   const unselectedRoles = getUnselectedRoles(roles, selectedRoleIds);
-  const directoryRoleNames = (member?.directoryRoleIds ?? [])
-    .map((id) => roleById.get(id)?.name)
-    .filter(Boolean)
-    .join(", ");
+  const directoryRoles = (member?.directoryRoleIds ?? []).flatMap((id) => {
+    const role = roleById.get(id);
+    return role ? [role] : [];
+  });
 
   const updateDisabled = isUpdateDisabled({
     isPending: updateMemberRoles.isPending,
@@ -198,10 +199,16 @@ export function ChangeRoleDialog({
               )}
             </div>
 
-            {directoryRoleNames && (
+            {directoryRoles.length > 0 && (
               <Text variant="body" className="text-muted-foreground text-xs">
-                Also granted by directory role mappings: {directoryRoleNames}.
-                These follow the member's directory groups and attributes, so
+                Also granted by directory role mappings:{" "}
+                {directoryRoles.map((role, index) => (
+                  <Fragment key={role.id}>
+                    {index > 0 && ", "}
+                    <RoleLink roleId={role.id}>{role.name}</RoleLink>
+                  </Fragment>
+                ))}
+                . These follow the member's directory groups and attributes, so
                 they can't be removed here.
               </Text>
             )}
