@@ -343,6 +343,6 @@ func TestCompileFoldsAFilterValueThroughItsLookup(t *testing.T) {
 
 	plain, err := Compile(Default, tenant, nil, req)
 	require.NoError(t, err)
-	require.Contains(t, plain.SQL, "= ?")
+	require.Contains(t, plain.SQL, "WHERE mcp_server_name = ?")
 	require.Equal(t, "gh", plain.Args[len(plain.Args)-1], "no loaded map, the value is read as given")
 }
