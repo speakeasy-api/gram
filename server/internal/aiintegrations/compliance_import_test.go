@@ -136,6 +136,7 @@ func complianceDiscoveryProgress(firstSync bool) *ComplianceSyncProgress {
 		ChatActivities:      0,
 		ChatListPages:       0,
 		ChatsListed:         0,
+		ChatsUnavailable:    0,
 		ChatsImported:       0,
 		MessagePagesFetched: 0,
 		MessagePagesWritten: 0,
@@ -457,4 +458,90 @@ func TestWriteMessagePagesAdvancesChatsCursor(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "chats:cur_200", reloaded.LastCursor)
 	require.Equal(t, "cur_200", chatsCursorFromStored(reloaded.LastCursor))
+}
+
+// complianceMessagesStatusServer answers every messages request with one
+// status and an Anthropic-shaped error body.
+func complianceMessagesStatusServer(t *testing.T, status int) *httptest.Server {
+	t.Helper()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(`{"type":"error","error":{"type":"not_found_error","message":"Chat conversation not found"}}`))
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+func collectBatches(out chan messagePageBatch) []messagePageBatch {
+	close(out)
+	var batches []messagePageBatch
+	for b := range out {
+		batches = append(batches, b)
+	}
+	return batches
+}
+
+func TestFetchChatMessagesSkipsUnretrievableChat(t *testing.T) {
+	t.Parallel()
+
+	// Anthropic answers 404 for a chat whose content was hard-deleted. The
+	// chat is skipped and counted, and the list page it closed out still
+	// checkpoints through a cursor-only batch.
+	server := complianceMessagesStatusServer(t, http.StatusNotFound)
+	svc, client := complianceDiscoveryService(t, server.URL)
+	cfg := complianceDiscoveryConfig("chats:cur_start")
+	progress := complianceDiscoveryProgress(false)
+
+	out := make(chan messagePageBatch, 4)
+	err := svc.fetchChatMessages(t.Context(), client, cfg, uuid.New(), "claude_chat_gone", chatClient{source: "claude-chat-web", userAgent: "", ipAddress: ""}, "", "list_cur_1", nil, out, progress)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, progress.ChatsUnavailable)
+	require.Equal(t, 0, progress.MessagePagesFetched)
+	batches := collectBatches(out)
+	require.Len(t, batches, 1)
+	require.True(t, batches[0].cursorOnly)
+	require.Equal(t, "list_cur_1", batches[0].chatsCursor)
+	require.Empty(t, batches[0].rows)
+}
+
+func TestFetchChatMessagesSkipsUnretrievableFeedChatSilently(t *testing.T) {
+	t.Parallel()
+
+	// A feed-discovered chat carries no list cursor, so skipping it sends
+	// nothing to the writer.
+	server := complianceMessagesStatusServer(t, http.StatusNotFound)
+	svc, client := complianceDiscoveryService(t, server.URL)
+	cfg := complianceDiscoveryConfig("chats:cur_start")
+	progress := complianceDiscoveryProgress(false)
+
+	out := make(chan messagePageBatch, 4)
+	err := svc.fetchChatMessages(t.Context(), client, cfg, uuid.New(), "claude_chat_gone", chatClient{source: "claude", userAgent: "Claude/1.2.3", ipAddress: ""}, "", "", nil, out, progress)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, progress.ChatsUnavailable)
+	require.Empty(t, collectBatches(out))
+}
+
+func TestFetchChatMessagesFailsOnRejectedRequest(t *testing.T) {
+	t.Parallel()
+
+	// Only a missing chat is skipped; a refused request is still the
+	// provider rejecting the configuration and must fail the run.
+	server := complianceMessagesStatusServer(t, http.StatusForbidden)
+	svc, client := complianceDiscoveryService(t, server.URL)
+	cfg := complianceDiscoveryConfig("chats:cur_start")
+	progress := complianceDiscoveryProgress(false)
+
+	out := make(chan messagePageBatch, 4)
+	err := svc.fetchChatMessages(t.Context(), client, cfg, uuid.New(), "claude_chat_1", chatClient{source: "claude-chat-web", userAgent: "", ipAddress: ""}, "", "list_cur_1", nil, out, progress)
+	require.Error(t, err)
+
+	var httpErr *anthropicapi.HTTPError
+	require.ErrorAs(t, err, &httpErr)
+	require.Equal(t, http.StatusForbidden, httpErr.StatusCode)
+	require.Equal(t, 0, progress.ChatsUnavailable)
+	require.Empty(t, collectBatches(out))
 }

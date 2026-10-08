@@ -25,6 +25,7 @@ func TestNewSyncErrorAccumulatesAllStageFailures(t *testing.T) {
 		ChatActivities:      312,
 		ChatListPages:       2,
 		ChatsListed:         150,
+		ChatsUnavailable:    1,
 		ChatsImported:       57,
 		MessagePagesFetched: 210,
 		MessagePagesWritten: 208,
@@ -48,6 +49,7 @@ func TestNewSyncErrorAccumulatesAllStageFailures(t *testing.T) {
 	require.Contains(t, msg, "activity_pages=4")
 	require.Contains(t, msg, "chat_list_pages=2")
 	require.Contains(t, msg, "chats_listed=150")
+	require.Contains(t, msg, "chats_unavailable=1")
 	require.Contains(t, msg, "chats_imported=57")
 	require.Contains(t, msg, `cursor_reached="chats_9"`)
 	require.Contains(t, msg, `cursor_persisted="chats_5"`)
@@ -129,6 +131,7 @@ func TestComplianceSyncProgressMarshalsToJSON(t *testing.T) {
 		ChatActivities:      2,
 		ChatListPages:       6,
 		ChatsListed:         7,
+		ChatsUnavailable:    8,
 		ChatsImported:       3,
 		MessagePagesFetched: 4,
 		MessagePagesWritten: 5,
@@ -142,6 +145,7 @@ func TestComplianceSyncProgressMarshalsToJSON(t *testing.T) {
 		"chat_activities": 2,
 		"chat_list_pages": 6,
 		"chats_listed": 7,
+		"chats_unavailable": 8,
 		"chats_imported": 3,
 		"message_pages_fetched": 4,
 		"message_pages_written": 5,

@@ -114,6 +114,10 @@ type ComplianceSyncProgress struct {
 	// of which became a chat import.
 	ChatsListed int `json:"chats_listed"`
 
+	// ChatsUnavailable counts chats skipped because Anthropic no longer
+	// serves their messages (the chats endpoint answered 404).
+	ChatsUnavailable int `json:"chats_unavailable"`
+
 	// ChatsImported counts chat rows upserted across both feeds; a chat seen
 	// in both is counted twice.
 	ChatsImported int `json:"chats_imported"`
@@ -138,8 +142,8 @@ type ComplianceSyncProgress struct {
 
 func (p ComplianceSyncProgress) String() string {
 	return fmt.Sprintf(
-		"first_sync=%t activity_pages=%d chat_activities=%d chat_list_pages=%d chats_listed=%d chats_imported=%d message_pages_fetched=%d message_pages_written=%d cursor_reached=%q cursor_persisted=%q",
-		p.FirstSync, p.ActivityPages, p.ChatActivities, p.ChatListPages, p.ChatsListed, p.ChatsImported, p.MessagePagesFetched, p.MessagePagesWritten, p.CursorReached, p.CursorPersisted,
+		"first_sync=%t activity_pages=%d chat_activities=%d chat_list_pages=%d chats_listed=%d chats_unavailable=%d chats_imported=%d message_pages_fetched=%d message_pages_written=%d cursor_reached=%q cursor_persisted=%q",
+		p.FirstSync, p.ActivityPages, p.ChatActivities, p.ChatListPages, p.ChatsListed, p.ChatsUnavailable, p.ChatsImported, p.MessagePagesFetched, p.MessagePagesWritten, p.CursorReached, p.CursorPersisted,
 	)
 }
 

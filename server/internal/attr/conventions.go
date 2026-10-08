@@ -183,6 +183,7 @@ const (
 	DeviceIDKey          = attribute.Key("gram.device_id")
 	AccountEmailKey      = attribute.Key("gram.account_email")
 	ChatIDKey            = attribute.Key("gram.chat.id")
+	ChatExternalIDKey    = attribute.Key("gram.chat.external_id")
 	ChatContentPartIDKey = attribute.Key("gram.chat.content_part_id")
 	MessageIDKey         = attribute.Key("gram.message.id")
 	// Chat-analysis score event attributes: stamped on the synthetic
@@ -1503,6 +1504,9 @@ func SlogAssetURL(v string) slog.Attr      { return slog.String(string(AssetURLK
 
 func ChatID(v string) attribute.KeyValue { return ChatIDKey.String(v) }
 func SlogChatID(v string) slog.Attr      { return slog.String(string(ChatIDKey), v) }
+func SlogChatExternalID(v string) slog.Attr {
+	return slog.String(string(ChatExternalIDKey), v)
+}
 
 func ChatContentPartID(v string) attribute.KeyValue { return ChatContentPartIDKey.String(v) }
 func SlogChatContentPartID(v string) slog.Attr {
