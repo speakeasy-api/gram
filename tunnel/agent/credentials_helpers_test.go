@@ -178,6 +178,9 @@ func (s *testSigner) sign(t *testing.T, claims jwt.MapClaims) string {
 // fakeCredentialStore keeps session files in a temporary directory, for
 // bridge tests on any Unix host. The Linux store has its own tests.
 type fakeCredentialStore struct {
+	// failWrites makes every token write fail.
+	failWrites atomic.Bool
+
 	root    string
 	mu      sync.Mutex
 	writes  int
@@ -219,6 +222,9 @@ type fakeCredentialDir struct {
 }
 
 func (d *fakeCredentialDir) writeToken(token string) error {
+	if d.store.failWrites.Load() {
+		return os.ErrPermission
+	}
 	tmp := filepath.Join(d.path, ".token-tmp")
 	if err := os.WriteFile(tmp, []byte(token), 0o600); err != nil {
 		return err

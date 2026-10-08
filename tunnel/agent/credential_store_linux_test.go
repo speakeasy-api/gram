@@ -93,18 +93,13 @@ func TestCredentialStoreWritesPrivateTokenFiles(t *testing.T) {
 
 func TestCredentialStoreRefusesUnsafeRoots(t *testing.T) {
 	t.Parallel()
-	disk := t.TempDir()
-	var st unix.Statfs_t
-	require.NoError(t, unix.Statfs(disk, &st))
-	if st.Type != unix.TMPFS_MAGIC && st.Type != unix.RAMFS_MAGIC {
-		_, err := openCredentialStore(t.Context(), disk, discardLogger())
-		require.ErrorContains(t, err, "memory-backed")
-	}
+	_, err := openCredentialStore(t.Context(), diskDir(t), discardLogger())
+	require.ErrorContains(t, err, "memory-backed")
 
 	root := memoryRoot(t)
 	target := memoryRoot(t)
 	require.NoError(t, os.Symlink(target, filepath.Join(root, "link")))
-	_, err := openCredentialStore(t.Context(), filepath.Join(root, "link"), discardLogger())
+	_, err = openCredentialStore(t.Context(), filepath.Join(root, "link"), discardLogger())
 	require.Error(t, err, "a symlinked root is refused")
 
 	require.NoError(t, os.Symlink(target, filepath.Join(root, credentialBaseName)))
@@ -118,14 +113,28 @@ func TestCredentialStoreRefusesUnsafeRoots(t *testing.T) {
 	require.ErrorContains(t, err, "permissions")
 }
 
+// diskDir returns a fresh directory on a filesystem that is not memory
+// backed, failing when the host has none.
+func diskDir(t *testing.T) string {
+	t.Helper()
+	for _, parent := range []string{os.TempDir(), "/var/tmp", "/root"} {
+		dir, err := os.MkdirTemp(parent, "tunnel-agent-disk-")
+		if err != nil {
+			continue
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
+		var st unix.Statfs_t
+		if unix.Statfs(dir, &st) == nil && st.Type != unix.TMPFS_MAGIC && st.Type != unix.RAMFS_MAGIC {
+			return dir
+		}
+	}
+	t.Fatal("credentials tests need a disk-backed directory to prove it is refused")
+	return ""
+}
+
 func TestCredentialTokenRefusedOnDiskBackedDirectory(t *testing.T) {
 	t.Parallel()
-	disk := t.TempDir()
-	var st unix.Statfs_t
-	require.NoError(t, unix.Statfs(disk, &st))
-	if st.Type == unix.TMPFS_MAGIC || st.Type == unix.RAMFS_MAGIC {
-		t.Skip("the test temporary directory is itself memory-backed")
-	}
+	disk := diskDir(t)
 	fd, err := unix.Open(disk, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
 	require.NoError(t, err)
 	d := &linuxCredentialDir{store: nil, name: "x", fd: fd, path: disk}
@@ -315,4 +324,43 @@ func TestCredentialsModeEndToEndOnLinux(t *testing.T) {
 			_ = unix.Kill(n, unix.SIGKILL)
 		}
 	}
+}
+
+func TestCredentialTokenFollowsTheOpenedDirectory(t *testing.T) {
+	t.Parallel()
+	root := memoryRoot(t)
+	store := openTestStore(t, root)
+	dir, err := store.createSession()
+	require.NoError(t, err)
+	sessionPath := filepath.Dir(dir.tokenPath())
+
+	// Swap the session directory for a symlink to somewhere else.
+	moved := sessionPath + "-moved"
+	require.NoError(t, os.Rename(sessionPath, moved))
+	elsewhere := memoryRoot(t)
+	require.NoError(t, os.Symlink(elsewhere, sessionPath))
+
+	require.NoError(t, dir.writeToken(testTokenA))
+	entries, err := os.ReadDir(elsewhere)
+	require.NoError(t, err)
+	require.Empty(t, entries, "the token never follows a swapped-in symlink")
+	_, err = os.Stat(filepath.Join(moved, tokenFileName))
+	require.NoError(t, err, "it lands in the directory that was opened")
+
+	require.NoError(t, os.Remove(sessionPath))
+	require.NoError(t, os.Rename(moved, sessionPath))
+	require.NoError(t, dir.remove())
+	require.NoError(t, store.Close())
+}
+
+func TestCredentialTokenWriteFailsWhenDirectoryIsGone(t *testing.T) {
+	t.Parallel()
+	root := memoryRoot(t)
+	store := openTestStore(t, root)
+	dir, err := store.createSession()
+	require.NoError(t, err)
+	require.NoError(t, os.RemoveAll(filepath.Dir(dir.tokenPath())))
+	require.Error(t, dir.writeToken(testTokenA))
+	_ = dir.remove()
+	require.NoError(t, store.Close())
 }
