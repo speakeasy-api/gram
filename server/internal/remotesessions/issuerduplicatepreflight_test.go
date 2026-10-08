@@ -210,7 +210,7 @@ func TestGetRemoteSessionIssuerDuplicatePreflight_CollapsesEquivalentSpellings(t
 }
 
 // http and https are deliberately distinct: same host, different security
-// properties, and an upstream reachable over both is a misconfiguration Gram
+// properties, and an upstream reachable over both is a misconfiguration Speakeasy
 // should not paper over.
 func TestGetRemoteSessionIssuerDuplicatePreflight_DoesNotEquateSchemes(t *testing.T) {
 	t.Parallel()

@@ -45,7 +45,7 @@ export function useCustomDomains(enabled = true): {
 
 // useMcpEndpointUrl resolves the runtime install URL for a single mcp_endpoint
 // row. Platform-domain endpoints (`custom_domain_id` empty) resolve under the
-// Gram-hosted `/mcp/<slug>` runtime path; custom-domain endpoints resolve
+// Speakeasy-hosted `/mcp/<slug>` runtime path; custom-domain endpoints resolve
 // under the matching `custom_domains.domain` value with the same suffix.
 // Returns `undefined` when the endpoint has no slug or when its custom domain
 // hasn't resolved yet (loading or denied), so callers can gracefully render an
@@ -67,7 +67,7 @@ function useMcpEndpointUrl(endpoint: McpEndpoint | undefined): {
     const match = domains.find((d) => d?.id === endpoint.customDomainId);
     if (!match) {
       // Domain not yet resolved (loading or denied); avoid emitting a partial
-      // URL that points at the Gram domain when the customer expected their
+      // URL that points at the Speakeasy domain when the customer expected their
       // custom domain.
       return { mcpUrl: undefined, installPageUrl: undefined };
     }
@@ -78,7 +78,7 @@ function useMcpEndpointUrl(endpoint: McpEndpoint | undefined): {
   return { mcpUrl, installPageUrl: `${mcpUrl}/install` };
 }
 
-// Slug registered on the Gram origin. Custom-domain endpoints share the slug
+// Slug registered on the Speakeasy origin. Custom-domain endpoints share the slug
 // column but live in another namespace, so using one of those slugs on
 // getServerURL() 404s — including the first-party connect route.
 export function platformEndpointSlug(
@@ -89,7 +89,7 @@ export function platformEndpointSlug(
 }
 
 // Gateway install pages are session-gated and the session cookie is host-only,
-// so they open on the Gram origin; ?domain=custom resolves a custom-domain slug there.
+// so they open on the Speakeasy origin; ?domain=custom resolves a custom-domain slug there.
 export function gatewayInstallPageUrl(
   endpoints: Array<Pick<McpEndpoint, "slug" | "customDomainId">>,
 ): string | undefined {
@@ -103,7 +103,7 @@ export function gatewayInstallPageUrl(
 // useResolvedMcpServerUrl resolves the runtime MCP URL for an mcp_server from
 // its endpoints, preferring a custom-domain endpoint. While that domain is
 // unresolved, it falls back only to a separately registered platform endpoint;
-// custom-domain slugs are not valid on the Gram origin. First-party connect
+// custom-domain slugs are not valid on the Speakeasy origin. First-party connect
 // still needs a platform slug directly — use platformEndpointSlug.
 export function useResolvedMcpServerUrl(
   endpoints: McpEndpoint[],
@@ -198,7 +198,7 @@ export function useMcpUrl(
 }
 
 /**
- * Returns an MCP URL that always uses the Gram domain, ignoring any custom domain.
+ * Returns an MCP URL that always uses the Speakeasy domain, ignoring any custom domain.
  * Use this for internal tools like the playground where we want consistent routing.
  */
 export function useInternalMcpUrl(

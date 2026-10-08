@@ -217,7 +217,7 @@ func TestCIMDAuthorize_NonLoopbackRedirectStaysExact(t *testing.T) {
 	t.Parallel()
 
 	service, ds := newTestCIMDOAuthHTTP(t)
-	// Same-origin with the document URL, as Gram's origin-binding policy
+	// Same-origin with the document URL, as Speakeasy's origin-binding policy
 	// requires, and https rather than http so it is not an RFC 8252 §7.3
 	// loopback redirect: the variable-port exception must not apply.
 	ds.set(t, func(ds *cimdDocServer) {

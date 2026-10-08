@@ -602,7 +602,7 @@ func handleToolsCall(
 // — arguments naming a resource that does not exist, a payload an upstream
 // rejected as malformed, a scope the configured credential never had — with a
 // bad request logged at warn, and reports true. It reports false for a failure
-// that Gram or an upstream is answerable for, which the caller then reports as
+// that Speakeasy or an upstream is answerable for, which the caller then reports as
 // the server fault it is.
 //
 // Caller mistakes are ordinary and arrive in volume: a single misconfigured
@@ -636,8 +636,8 @@ func resolveUserConfiguration(
 ) (*toolconfig.CaseInsensitiveEnv, error) {
 	userConfig := toolconfig.NewCaseInsensitiveEnv()
 
-	// IMPORTANT: we must only attach gram environments to authenticated payloads. Gram environments contain
-	// secrets owned by Gram projects and should not be usable by public clients
+	// IMPORTANT: we must only attach gram environments to authenticated payloads. Speakeasy environments contain
+	// secrets owned by Speakeasy projects and should not be usable by public clients
 	if payload.environment != "" && payload.authenticated {
 		storedEnvVars, err := env.Load(ctx, payload.projectID, toolconfig.Slug(payload.environment))
 		switch {

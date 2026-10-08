@@ -15,7 +15,7 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Manages audit logs in Gram.
+// Manages audit logs in Speakeasy.
 type Service interface {
 	// List audit logs across organization and projects.
 	List(context.Context, *ListPayload) (res *ListAuditLogsResult, err error)

@@ -133,5 +133,5 @@ func TestPlatformToolsetIdentityIsStableAndDistinct(t *testing.T) {
 	assistantsID := PlatformToolsetID(AssistantsPlatformToolsetSlug)
 	require.Equal(t, assistantsID, PlatformToolsetID(AssistantsPlatformToolsetSlug))
 	require.NotEqual(t, assistantsID, PlatformToolsetID(ManagedAssistantPlatformToolsetSlug))
-	require.Equal(t, "Gram assistant tools", PlatformToolsetName(AssistantsPlatformToolsetSlug))
+	require.Equal(t, "Speakeasy assistant tools", PlatformToolsetName(AssistantsPlatformToolsetSlug))
 }

@@ -171,8 +171,8 @@ export function RegisterIssuerSheet({
           </SheetTitle>
           <SheetDescription>
             {isEditing
-              ? "The issuer URL is fixed once a platform is registered. Changing the JWKS URI changes which keys Gram accepts assertions from."
-              : "Both values come from the platform issuing your machines' tokens. Gram trims surrounding spaces and otherwise stores them exactly as entered, because an assertion is matched against the spelling you register."}
+              ? "The issuer URL is fixed once a platform is registered. Changing the JWKS URI changes which keys Speakeasy accepts assertions from."
+              : "Both values come from the platform issuing your machines' tokens. Speakeasy trims surrounding spaces and otherwise stores them exactly as entered, because an assertion is matched against the spelling you register."}
           </SheetDescription>
         </SheetHeader>
 
@@ -295,7 +295,7 @@ export function RegisterIssuerSheet({
               ) : (
                 <Text muted small>
                   Where the issuer publishes its signing keys. This is the only
-                  field Gram reads when verifying an assertion.
+                  field Speakeasy reads when verifying an assertion.
                 </Text>
               )}
             </Stack>

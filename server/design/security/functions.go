@@ -9,7 +9,7 @@ import (
 
 var (
 	FunctionToken = JWTSecurity(constants.FunctionTokenSecurityScheme, func() {
-		Description("Gram Functions token based auth.")
+		Description("Speakeasy Functions token based auth.")
 	})
 
 	FunctionTokenPayload = func() {

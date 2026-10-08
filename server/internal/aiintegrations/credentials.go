@@ -144,12 +144,25 @@ func (v *CredentialVerifier) probe(ctx context.Context, schedule string, creds C
 		if creds.ExternalOrganizationID == nil {
 			return nil
 		}
-		_, err := v.anthropicClient(creds).ListActivities(ctx, anthropicapi.ListActivitiesParams{
-			ActivityTypes:   []string{anthropicComplianceActivityCreated, anthropicComplianceActivityUpdated},
+		// The sync reads the activity feed and the chat list, which Anthropic
+		// grants under separate scopes, so the key is probed against both.
+		client := v.anthropicClient(creds)
+		if _, err := client.ListActivities(ctx, anthropicapi.ListActivitiesParams{
+			ActivityTypes:   []string{anthropicComplianceActivityCreated},
 			OrganizationIDs: []string{*creds.ExternalOrganizationID},
 			CreatedAtGTE:    since,
+			CreatedAtLT:     time.Time{},
 			AfterID:         "",
 			BeforeID:        "",
+			Limit:           1,
+		}); err != nil {
+			return err //nolint:wrapcheck // providerRejectedCredentials needs the HTTPError.
+		}
+		_, err := client.ListChats(ctx, anthropicapi.ListChatsParams{
+			OrganizationIDs: []string{*creds.ExternalOrganizationID},
+			OrderBy:         anthropicapi.ChatOrderByUpdatedAt,
+			UpdatedAtGTE:    since,
+			AfterID:         "",
 			Limit:           1,
 		})
 		return err //nolint:wrapcheck // providerRejectedCredentials needs the HTTPError.

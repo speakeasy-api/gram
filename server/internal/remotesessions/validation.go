@@ -41,7 +41,7 @@ type RemoteSessionValidation struct {
 	// Status is the observed verdict.
 	Status ValidationOutcome
 
-	// Reason is the Gram-authored explanation of a non-valid status; empty when valid.
+	// Reason is the Speakeasy-authored explanation of a non-valid status; empty when valid.
 	Reason string
 
 	// At is when the credential was presented.

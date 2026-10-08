@@ -1,6 +1,6 @@
 /**
  * Apps that drive Elements often prepend a machine-only context block to the
- * outgoing user turn — e.g. the Gram dashboard prefixes `<dashboard_context>…`
+ * outgoing user turn — e.g. the Speakeasy dashboard prefixes `<dashboard_context>…`
  * so the model knows which chart/date-range the user was looking at. The block
  * is meant for the model, not the human, but it rides along in the persisted
  * turn and reappears verbatim when the thread is reopened from history.

@@ -63,7 +63,7 @@ export type SpendRuleEvent = {
    */
   spendUsd: number;
   /**
-   * Gram user ID of the actor, when linked.
+   * Speakeasy user ID of the actor, when linked.
    */
   userId?: string | undefined;
   /**

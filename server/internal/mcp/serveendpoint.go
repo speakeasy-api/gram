@@ -761,7 +761,7 @@ func serveProxyBackend(w http.ResponseWriter, r *http.Request, p *proxy.Proxy) e
 	}
 }
 
-// Tunneled MCP reuses the remote proxy stack; Gram injects the tunnel ID header server-side.
+// Tunneled MCP reuses the remote proxy stack; Speakeasy injects the tunnel ID header server-side.
 func (s *Service) serveTunneledBackend(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -879,7 +879,7 @@ func (s *Service) prepareProxyBackendContext(
 			ctx = setProxyBackendProjectContext(ctx, authCtx, project.ID, project.Slug)
 		}
 	case mcpservers.VisibilityPublic:
-		// Public, no OAuth: optionally probe Gram identity if the
+		// Public, no OAuth: optionally probe Speakeasy identity if the
 		// caller supplied an Authorization or Gram-Chat-Session
 		// token so authenticated callers carry the right context
 		// downstream. Nothing meaningful to forward upstream.

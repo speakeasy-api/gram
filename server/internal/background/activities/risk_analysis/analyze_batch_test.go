@@ -755,30 +755,33 @@ func TestAnalyzeBatch_PromptInjectionPublishesBoundedOversizedInputs(t *testing.
 	t.Parallel()
 
 	const bound = 50 * 1024
+	// Oversized inputs are spaced words, not one repeated character: the token
+	// counter's BPE merge is quadratic on a single unbroken run, which turned
+	// this test into ten minutes of tokenizing under -race.
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
 	userID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
 		ChatID:    td.chatID,
 		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
 		Role:      "user",
-		Content:   strings.Repeat("u", 4*bound),
+		Content:   strings.Repeat("u ", 2*bound),
 	})
 	require.NoError(t, err)
-	toolID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{"command": strings.Repeat("c", 4*bound)})
+	toolID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{"command": strings.Repeat("c ", 2*bound)})
 	// Several calls publish as structured tool calls; the last runs past the budget.
 	multiID := insertAssistantToolCallsWithArgs(t, conn, td, []struct {
 		name string
 		args map[string]any
 	}{
 		{name: "Bash", args: map[string]any{"command": "ls"}},
-		{name: "Write", args: map[string]any{"content": strings.Repeat("w", 4*bound)}},
-		{name: "Bash", args: map[string]any{"command": strings.Repeat("c", 4*bound)}},
+		{name: "Write", args: map[string]any{"content": strings.Repeat("w ", 2*bound)}},
+		{name: "Bash", args: map[string]any{"command": strings.Repeat("c ", 2*bound)}},
 	})
 
 	assetStorage := assetstest.NewTestBlobStore(t)
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, assetStorage)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
-	assetURL, err := writer.WriteContentPartAsset(t.Context(), td.projectID, td.chatID, []byte(strings.Repeat("p", 4*bound)))
+	assetURL, err := writer.WriteContentPartAsset(t.Context(), td.projectID, td.chatID, []byte(strings.Repeat("p ", 2*bound)))
 	require.NoError(t, err)
 	partID, err := riskrepo.New(conn).CreateChatContentPartForTest(t.Context(), riskrepo.CreateChatContentPartForTestParams{
 		ChatID:              td.chatID,
@@ -1242,7 +1245,7 @@ func TestAnalyzeBatch_ShadowMCPPublishesFindingsToTopic(t *testing.T) {
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
 
-	// An MCP-shaped tool call with no Gram toolset marker and no recorded
+	// An MCP-shaped tool call with no Speakeasy toolset marker and no recorded
 	// provenance is shadow MCP by signature validation.
 	msgID := insertAssistantToolCallWithArgs(t, conn, td, "mcp__rogue__exfiltrate", map[string]any{"target": "data"})
 
@@ -1731,7 +1734,7 @@ func TestAnalyzeBatch_CustomDetectionRuleToolServer(t *testing.T) {
 }
 
 // insertAssistantToolCallWithArgs is a sibling of insertAssistantToolCall for
-// CLI scenarios where the recorded arguments don't carry a Gram toolset id -
+// CLI scenarios where the recorded arguments don't carry a Speakeasy toolset id -
 // the cli_destructive scanner is content-driven, so the args field is the
 // thing under test.
 func insertAssistantToolCallWithArgs(t *testing.T, conn *pgxpool.Pool, td testData, callName string, argsMap map[string]any) uuid.UUID {

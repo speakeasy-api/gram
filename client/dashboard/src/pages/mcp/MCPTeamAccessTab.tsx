@@ -1,4 +1,6 @@
+import { useRBAC } from "@/hooks/useRBAC";
 import { IdentityLink } from "@/components/identity-link";
+import { useHideInsightsDock } from "@/components/insights-context";
 import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Heading } from "@/components/ui/Heading";
@@ -14,7 +16,7 @@ import { useResourceAudience } from "@gram/client/react-query/resourceAudience.j
 import { useMemo, type ReactElement } from "react";
 import { CheckAccess } from "./access/CheckAccess";
 import { ManageAccess } from "./access/ManageAccess";
-import { RoleLink } from "./access/RoleLink";
+import { RoleLink } from "@/components/role-link";
 import { blockingRules } from "./access/serverAudience";
 
 /** The annotations a tool carries, in the vocabulary selectors store. */
@@ -76,6 +78,11 @@ export function MCPTeamAccessTab({
    */
   checkAccess?: boolean;
 }): ReactElement | null {
+  const { hasAnyScope } = useRBAC();
+  const canManage = hasAnyScope(["org:admin"]);
+  // The dock floats over the bottom of the page, which here is rows with
+  // edit and remove controls and the access check.
+  useHideInsightsDock();
   const {
     data: audienceData,
     isLoading: audienceLoading,
@@ -183,15 +190,6 @@ export function MCPTeamAccessTab({
         this server only.
       </Page.Section.Description>
       <Page.Section.Body>
-        {checkAccess && (
-          <div className="mb-8">
-            <CheckAccess
-              resourceId={resourceId}
-              serverName={serverName ?? "this server"}
-            />
-          </div>
-        )}
-
         {audienceFailed ? (
           <Text muted small>
             Access rules could not be loaded, so they cannot be changed here
@@ -202,10 +200,29 @@ export function MCPTeamAccessTab({
             resourceId={resourceId}
             resourceName={serverName}
             entries={entries}
+            rolePlugins={canManage ? audienceData?.rolePlugins : undefined}
             version={audienceData?.version ?? ""}
             toolCatalog={toolCatalog}
             isLoading={audienceLoading}
           />
+        )}
+
+        {/* Below the rules it explains: the list above is what gets changed,
+            this is where one person's outcome is read back. */}
+        {checkAccess && (
+          <>
+            <div className="mt-10 mb-4">
+              <Heading variant="h4">Check a person&rsquo;s access</Heading>
+              <Text muted small className="mt-1">
+                Pick one person to see what they can do on{" "}
+                {serverName ?? "this server"}, and which rules decide it.
+              </Text>
+            </div>
+            <CheckAccess
+              resourceId={resourceId}
+              serverName={serverName ?? "this server"}
+            />
+          </>
         )}
 
         {/* Two rules disagreeing about the same person. Nothing on the rules

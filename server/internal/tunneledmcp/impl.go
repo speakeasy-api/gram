@@ -99,7 +99,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // normalizeResourceIdentifier trims surrounding whitespace and validates an
 // absolute http(s) URI without a fragment. The identifier is otherwise preserved
 // for exact JWT audience matching. Blank input unsets or clears the identifier.
-// Gram never dials this address, so private hosts are allowed.
+// Speakeasy never dials this address, so private hosts are allowed.
 func normalizeResourceIdentifier(raw string) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {

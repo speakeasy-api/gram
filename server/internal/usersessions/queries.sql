@@ -66,6 +66,42 @@ LEFT JOIN projects AS project ON project.id = issuer.project_id
 WHERE issuer.id = @id
   AND issuer.deleted IS FALSE;
 
+-- name: HasWorkloadGrantResourceForIssuer :one
+-- Discovery is issuer-scoped and advisory; the token endpoint re-resolves
+-- the exact resource and applies its live trust and agent policy. Meta MCP
+-- does not carry workload sessions. Private-only and public tunnel servers
+-- expose no shared OAuth surface.
+SELECT EXISTS (
+    SELECT 1
+    FROM mcp_servers AS server
+    JOIN projects AS project ON project.id = server.project_id
+    JOIN mcp_endpoints AS endpoint ON endpoint.mcp_server_id = server.id AND endpoint.project_id = server.project_id
+    WHERE server.user_session_issuer_id = @user_session_issuer_id
+      AND project.organization_id = @organization_id::text
+      AND project.deleted IS FALSE
+      AND server.deleted IS FALSE
+      AND endpoint.deleted IS FALSE
+      AND server.visibility <> 'disabled'
+      AND NOT (server.tunneled_mcp_server_id IS NOT NULL AND server.visibility = 'public')
+      AND COALESCE(NULLIF(server.network_access_mode, ''), 'public_only') IN ('public_only', 'dual')
+    UNION ALL
+    SELECT 1
+    FROM toolsets AS toolset
+    JOIN projects AS project ON project.id = toolset.project_id
+    WHERE toolset.user_session_issuer_id = @user_session_issuer_id
+      AND project.organization_id = @organization_id::text
+      AND project.deleted IS FALSE
+      AND toolset.deleted IS FALSE
+      AND toolset.mcp_enabled IS TRUE
+      AND toolset.mcp_slug IS NOT NULL
+      AND NOT EXISTS (
+          SELECT 1 FROM mcp_servers AS server
+          WHERE server.toolset_id = toolset.id
+            AND server.project_id = toolset.project_id
+            AND server.deleted IS FALSE
+      )
+) AS available;
+
 -- name: GetProjectUserSessionIssuerByID :one
 SELECT *
 FROM user_session_issuers
@@ -1467,13 +1503,17 @@ WHERE user_session_issuer_id = @user_session_issuer_id
   AND deleted IS FALSE
 RETURNING *;
 
--- name: GetUserSessionToolSelectionByJTI :one
--- Serve-path lookup for the consent-screen tool selection, keyed the same way
+-- name: GetUserSessionPolicyByJTI :one
+-- Serve-path lookup for immutable session policy, keyed the same way
 -- runtime requests are addressed (issuer + jti). Deliberately narrow: request
 -- handling must not haul refresh-token material around. Project scoping is
 -- intentionally NOT applied here -- the OAuth surface is public and the
 -- issuer_id is the authoritative scope.
-SELECT tool_selection, expires_at
+-- Actual refresh tokens are stored as a 43-character base64url SHA-256 hash.
+-- Access-only sessions instead store NULL or a colon-delimited source marker.
+-- Only the derived capability leaves SQL.
+SELECT tool_selection, expires_at,
+       COALESCE(refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false)::boolean AS refreshable
 FROM user_sessions
 WHERE user_session_issuer_id = @user_session_issuer_id
   AND jti = @jti

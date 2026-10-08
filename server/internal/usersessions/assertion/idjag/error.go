@@ -20,7 +20,7 @@ func (e *Error) Unwrap() error { return e.Err }
 func reject(reason Reason, err error) error { return &Error{Reason: reason, Err: err} }
 
 // ErrNotProvisioned is returned by a subject store when no active directory
-// identity maps to an active Gram member in the same organization.
+// identity maps to an active Speakeasy member in the same organization.
 var ErrNotProvisioned = errors.New("enterprise identity is not provisioned")
 
 // ErrNoTrustedIssuer is returned when the user session issuer has no active,

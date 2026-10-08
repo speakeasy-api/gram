@@ -16,7 +16,7 @@ import (
 )
 
 // Manage remote_session_issuer records — upstream Authorization Server
-// identity records that Gram talks to as an OAuth client.
+// identity records that Speakeasy talks to as an OAuth client.
 type Service interface {
 	// Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server
 	// document and return a draft suitable for createRemoteSessionIssuer. Keyed by
@@ -26,7 +26,7 @@ type Service interface {
 	// Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and
 	// persist the discovered values. Keyed by issuer id. Only RFC 8414-derived
 	// columns are written — endpoints, the *_supported arrays,
-	// client_id_metadata_document_supported, and the documentation URLs. Gram
+	// client_id_metadata_document_supported, and the documentation URLs. Speakeasy
 	// behavior and display fields (oidc, passthrough, name, slug, logo, client
 	// setup documentation) are left alone. Requires project:write.
 	RefreshRemoteSessionIssuerMetadata(context.Context, *RefreshRemoteSessionIssuerMetadataPayload) (res *types.RemoteSessionIssuerRefresh, err error)

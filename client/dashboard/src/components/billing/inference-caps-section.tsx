@@ -51,7 +51,7 @@ const NO_SUBSCRIPTION_NOTE =
 const NOT_BILLING_NOTE =
   "Changing a cap needs pay-as-you-go billing through Stripe. This organization's subscription isn't billing, so the caps below are read-only.";
 
-// The endpoint answers with the Gram-managed inference keys that have been
+// The endpoint answers with the Speakeasy-managed inference keys that have been
 // materialized for this organization, which can be none of them.
 const NO_CAPS_HEADING = "No keys available";
 const NO_CAPS_NOTE =
@@ -166,8 +166,8 @@ function useScrollToInferenceCapHash(
 }
 
 /**
- * The monthly ceilings on the inference Gram runs for this organization — one
- * independent control per Gram-managed key it has.
+ * The monthly ceilings on the inference Speakeasy runs for this organization — one
+ * independent control per Speakeasy-managed key it has.
  *
  * The tier rule lives here rather than at the call site so the billing page can
  * place the section in both of its branches without either one re-deriving when
@@ -287,9 +287,9 @@ function InferenceCapsSkeleton(): JSX.Element {
 }
 
 /**
- * One control per Gram-managed inference key this organization has.
+ * One control per Speakeasy-managed inference key this organization has.
  *
- * The list is the whole story: it carries the materialized, undeleted keys Gram
+ * The list is the whole story: it carries the materialized, undeleted keys Speakeasy
  * manages, and the section renders exactly those — two, one, or none — rather
  * than a shape it assumed.
  */

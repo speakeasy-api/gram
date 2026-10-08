@@ -25,9 +25,10 @@ type Service interface {
 	// Read observed Slack members across the organization or within one workspace.
 	// Does not create identity mappings.
 	ListMembers(context.Context, *ListMembersPayload) (res *ListMembersResult, err error)
-	// Read mapped Slack accounts for an active organization person by exact Gram
-	// user ID. Browser session only; caller must be that person or an organization
-	// administrator. Does not infer associations from email or grant permissions.
+	// Read mapped Slack accounts for an active organization person by exact
+	// Speakeasy user ID. Browser session only; caller must be that person or an
+	// organization administrator. Does not infer associations from email or grant
+	// permissions.
 	ListPersonAccounts(context.Context, *ListPersonAccountsPayload) (res *ListPersonAccountsResult, err error)
 	// Read current Slack profile and mapping before an administrator confirms a
 	// selection.
@@ -143,7 +144,7 @@ type ListPayload struct {
 // slackDirectoryConnections service listPersonAccounts method.
 type ListPersonAccountsPayload struct {
 	SessionToken *string
-	// Exact Gram user ID of the active organization person.
+	// Exact Speakeasy user ID of the active organization person.
 	UserID string
 	// Continue after the last membership ID.
 	Cursor *string
@@ -237,7 +238,7 @@ type SlackDirectoryMember struct {
 	SlackUserID string
 	// Optional observed display name.
 	DisplayName *string
-	// Observed email; never evidence of a confirmed Gram identity.
+	// Observed email; never evidence of a confirmed Speakeasy identity.
 	Email *string
 	// Observed account state.
 	Status string

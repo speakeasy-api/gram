@@ -35,19 +35,22 @@ export function useSyncToolMetadata({
   live,
   stored,
   enabled,
+  project,
 }: {
   mcpServerId: string | undefined;
   live: Record<string, ProxiedMcpTool> | undefined;
   stored: ToolMetadataByName;
   /** False until both sides have loaded, and for servers without metadata. */
   enabled: boolean;
+  /** The server's project, for org-level pages with no ambient project. */
+  project?: { id: string; slug: string };
 }): UseSyncToolMetadataResult {
   const queryClient = useQueryClient();
   const { hasAnyScope } = useRBAC();
 
   // Writing is gated on mcp:write like any other mutation; a read-only viewer
   // must not have a page visit silently write on their behalf.
-  const canWrite = hasAnyScope(["mcp:write"], mcpServerId);
+  const canWrite = hasAnyScope(["mcp:write"], mcpServerId, project?.id);
 
   const refresh = () =>
     invalidateAllListMcpServerToolMetadata(queryClient, {
@@ -95,6 +98,7 @@ export function useSyncToolMetadata({
 
     add.mutate({
       request: {
+        gramProject: project?.slug,
         setToolMetadataBatchRequestBody: { mcpServerId, tools },
       },
     });
@@ -106,6 +110,7 @@ export function useSyncToolMetadata({
       if (!live || !mcpServerId) return;
       set.mutate({
         request: {
+          gramProject: project?.slug,
           setToolMetadataBatchRequestBody: {
             mcpServerId,
             tools: fullSyncBatch(live),

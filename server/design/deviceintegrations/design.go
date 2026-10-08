@@ -108,7 +108,7 @@ var ManagedDevice = Type("ManagedDevice", func() {
 	Attribute("os_name", String, "Operating system name.")
 	Attribute("os_version", String, "Operating system version.")
 	Attribute("user_email", String, "Assigned user's email exactly as the MDM reported it. Omitted when the MDM has no assignment.")
-	Attribute("user_id", String, "Resolved Gram user for the assigned email. Omitted when the email is missing or does not resolve to an org member.")
+	Attribute("user_id", String, "Resolved Speakeasy user for the assigned email. Omitted when the email is missing or does not resolve to an org member.")
 	Attribute("mdm_last_check_in_at", String, "Last device check-in as reported by the MDM.", func() {
 		Format(FormatDateTime)
 	})
@@ -417,7 +417,7 @@ var _ = Service("deviceIntegrations", func() {
 			Attribute("coverage_bucket", String, "Only devices in this coverage bucket.", func() {
 				Enum("agent_active", "agent_stale", "agent_other_device", "no_agent", "no_email", "unresolved_email", "missing")
 			})
-			Attribute("user_ids", ArrayOf(String), "Only devices assigned to these Gram users. Combined with user_emails as an OR, because a device only carries a resolved user id when the MDM's reported email matched a member.")
+			Attribute("user_ids", ArrayOf(String), "Only devices assigned to these Speakeasy users. Combined with user_emails as an OR, because a device only carries a resolved user id when the MDM's reported email matched a member.")
 			Attribute("user_emails", ArrayOf(String), "Only devices whose MDM-reported assigned email is one of these, matched case-insensitively.")
 			Attribute("cursor", String, "Pagination cursor from a previous page.")
 			Attribute("limit", Int, "Page size. Defaults to 50, maximum 200.", func() {

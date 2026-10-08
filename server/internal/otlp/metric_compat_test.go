@@ -19,14 +19,14 @@ func TestOTLPMetricsUnmarshalAsGram(t *testing.T) {
 
 		for _, copy := range metricCopies() {
 			gramMetric := copy.newMetric()
-			require.NoError(t, proto.Unmarshal(raw, gramMetric), "%s: unmarshal OTLP metric %s as Gram", copy.name, src.GetName())
+			require.NoError(t, proto.Unmarshal(raw, gramMetric), "%s: unmarshal OTLP metric %s as Speakeasy", copy.name, src.GetName())
 
 			roundTripRaw, err := proto.Marshal(gramMetric)
-			require.NoError(t, err, "%s: marshal Gram metric %s", copy.name, src.GetName())
+			require.NoError(t, err, "%s: marshal Speakeasy metric %s", copy.name, src.GetName())
 
 			var got otlpmetrics.Metric
-			require.NoError(t, proto.Unmarshal(roundTripRaw, &got), "%s: unmarshal Gram metric %s as OTLP", copy.name, src.GetName())
-			require.True(t, proto.Equal(src, &got), "%s: %s changed across OTLP → Gram → OTLP", copy.name, src.GetName())
+			require.NoError(t, proto.Unmarshal(roundTripRaw, &got), "%s: unmarshal Speakeasy metric %s as OTLP", copy.name, src.GetName())
+			require.True(t, proto.Equal(src, &got), "%s: %s changed across OTLP → Speakeasy → OTLP", copy.name, src.GetName())
 		}
 	}
 }

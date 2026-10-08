@@ -393,7 +393,7 @@ func TestRemoteSessionRefreshActivity_SweepBackfillsNullResource(t *testing.T) {
 	const mcpURL = "https://mcp.example.com/mcp"
 	seedRemoteMCPServerForIssuer(t, ctx, ti, row.UserSessionIssuerID, "backfill-sweep-mcp", mcpURL)
 
-	// Make the row a due keepalive candidate: stale, org-enforced, live Gram session.
+	// Make the row a due keepalive candidate: stale, org-enforced, live Speakeasy session.
 	require.NoError(t, repo.New(ti.conn).SetRemoteSessionUpdatedAt(ctx, repo.SetRemoteSessionUpdatedAtParams{
 		ID:        row.ID,
 		ProjectID: conv.ToNullUUID(*authCtx.ProjectID),

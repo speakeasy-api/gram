@@ -17,7 +17,7 @@ func TruncateString(s string, maxRunes int) string {
 
 // truncatedDetailNotice tells a reader the text was cut and where the whole of
 // it can be found.
-const truncatedDetailNotice = "… (truncated, see Gram logs for the full error)"
+const truncatedDetailNotice = "… (truncated, see Speakeasy logs for the full error)"
 
 // TruncateDetail bounds third-party error text that is echoed back to an API
 // caller, appending a notice when it had to cut.

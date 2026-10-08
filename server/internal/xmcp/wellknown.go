@@ -18,7 +18,7 @@ import (
 // Unlike /mcp, /x/mcp has no legacy toolsets.mcp_slug fallback — it is a
 // fresh surface keyed entirely on mcp_endpoints. See
 // [mcp.Service.ServeWellKnownAuthorizationServerForServer] for the
-// per-backend semantics (issuer-gated → Gram-hosted metadata; remote-backed
+// per-backend semantics (issuer-gated → Speakeasy-hosted metadata; remote-backed
 // → 404; toolset-backed → legacy wellknown resolver).
 func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()

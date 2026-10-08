@@ -5,7 +5,7 @@
 // Four routed tabs rather than one page with a toggle, so a link to any of
 // them survives being pasted into a ticket. The order is deliberate:
 // harnesses and assistants are what people run and the only things blocking
-// applies to; models are local runtimes that never speak MCP to Gram, so they
+// applies to; models are local runtimes that never speak MCP to Speakeasy, so they
 // are inventory only; MCP servers are what those tools reached.
 const SHADOW_AI_SEGMENT = "shadow-ai";
 

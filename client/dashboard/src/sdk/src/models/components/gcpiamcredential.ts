@@ -34,7 +34,7 @@ export type GcpIamCredential = {
    */
   id: string;
   /**
-   * The service account Gram impersonates (impersonation approach, or the WIF hop).
+   * The service account Speakeasy impersonates (impersonation approach, or the WIF hop).
    */
   impersonateServiceAccount?: string | undefined;
   /**

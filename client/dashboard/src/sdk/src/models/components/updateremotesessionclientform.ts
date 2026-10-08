@@ -46,7 +46,7 @@ export type UpdateRemoteSessionClientForm = {
    */
   audience?: string | undefined;
   /**
-   * Rotate the client secret. Gram re-encrypts before persisting.
+   * Rotate the client secret. Speakeasy re-encrypts before persisting.
    */
   clientSecret?: string | undefined;
   /**

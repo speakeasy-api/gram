@@ -10,7 +10,7 @@ import (
 
 // BuildRemoteSessionView converts a remote_sessions row into its API view.
 // subjectDisplayName and subjectEmail carry the resolved identity when the
-// subject is a Gram user; pass nil for apikey/anonymous subjects or when the
+// subject is a Speakeasy user; pass nil for apikey/anonymous subjects or when the
 // user could not be resolved.
 func BuildRemoteSessionView(row repo.RemoteSession, subjectDisplayName, subjectEmail *string) *types.RemoteSession {
 	var refreshExpiresAt *string

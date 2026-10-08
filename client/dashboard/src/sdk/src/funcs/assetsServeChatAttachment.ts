@@ -40,7 +40,7 @@ import { Result } from "../types/fp.js";
  * serveChatAttachment assets
  *
  * @remarks
- * Serve a chat attachment from Gram.
+ * Serve a chat attachment from Speakeasy.
  */
 export function assetsServeChatAttachment(
   client: GramCore,

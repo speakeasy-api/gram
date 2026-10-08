@@ -1,3 +1,4 @@
+import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { AttachedUserSessions } from "@/components/sessions/AttachedUserSessions";
@@ -179,7 +180,7 @@ export default function MCPServerDetails(): JSX.Element {
                   scope kind as toolset-backed ones (see selector.go), so
                   MCPTeamAccessTab is reused as-is with the mcp_server's
                   id as the resource id. No `tools` prop because the
-                  Remote MCP backend doesn't expose a Gram-side tool
+                  Remote MCP backend doesn't expose a Speakeasy-side tool
                   catalog. */}
                 <MCPTeamAccessTab
                   resourceId={mcpServer.id}
@@ -327,7 +328,7 @@ export function MCPServerStatusDropdown({
   const routes = useRoutes();
   const publicAccessHref = `${mcpServerTabHref(routes, mcpServerRouteParam(server), "settings")}#${MCP_PUBLIC_ACCESS_SECTION_ID}`;
 
-  // Unproxied servers have no Gram-hosted endpoint for disabled/private to
+  // Unproxied servers have no Speakeasy-hosted endpoint for disabled/private to
   // gate — the vendor's own server is reachable regardless of this setting —
   // so there's nothing to toggle. Still show the record's actual stored
   // value (not a hardcoded "Public") so this can't drift from what Settings
@@ -477,6 +478,7 @@ function useMcpServerVisibilityUpdate(server: McpServer): {
       await Promise.all([
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        invalidateAllResourceAudience(queryClient, { refetchType: "all" }),
         // Enabling a disabled server (e.g. disabled -> private) auto-attaches
         // it to the Default plugin server-side, which the plugin banner's
         // membership check and publish-freshness state need to pick up.

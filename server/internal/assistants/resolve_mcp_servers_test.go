@@ -178,7 +178,7 @@ func TestResolveAssistantMCPServers_AttachedMCPServerDefaults(t *testing.T) {
 	require.Empty(t, servers[0].Headers)
 }
 
-// Defensive: a row that reached the resolver without a Gram-hosted endpoint
+// Defensive: a row that reached the resolver without a Speakeasy-hosted endpoint
 // (loadAssistantMcpServers already filters these) is skipped rather than
 // producing a slugless /mcp/ URL.
 func TestResolveAssistantMCPServers_AttachedMCPServerWithoutEndpointOmitted(t *testing.T) {

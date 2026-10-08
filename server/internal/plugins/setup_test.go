@@ -419,7 +419,7 @@ func createTestMcpServerWithEndpoint(t *testing.T, ctx context.Context, conn *pg
 
 // createTestUnproxiedMcpServer creates an unproxied-backed mcp_server
 // with no mcp_endpoints row, mirroring how the real create flow leaves it
-// (there is no Gram-hosted endpoint to serve for a server Gram never
+// (there is no Speakeasy-hosted endpoint to serve for a server Speakeasy never
 // proxies). visibility controls publishability.
 func createTestUnproxiedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name, visibility string) mcpServerFixture {
 	t.Helper()

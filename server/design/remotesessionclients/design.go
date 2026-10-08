@@ -46,14 +46,14 @@ func AudienceAttribute() {
 // Dynamic Client Registration against the upstream provider through that
 // endpoint — a raw HTTP handler in the remotesessions package, not a Goa
 // method, because it proxies an arbitrary upstream registration_endpoint under
-// the guardian SSRF gate rather than a typed Gram payload.
+// the guardian SSRF gate rather than a typed Speakeasy payload.
 //
 // The path stays under /oauth/ even though the handler no longer lives in the
 // retired oauth proxy package: it is a stable contract the dashboard's
 // proxyRegisterUpstreamClient helper already calls from several surfaces, so
 // renaming it would break those clients for no behavioural gain.
 var _ = Service("remoteSessionClients", func() {
-	Description("Manage remote_session_client records — credentials Gram uses when acting as an OAuth client of a remote_session_issuer. client_secret_encrypted is never returned.")
+	Description("Manage remote_session_client records — credentials Speakeasy uses when acting as an OAuth client of a remote_session_issuer. client_secret_encrypted is never returned.")
 	Security(security.Session, security.ProjectSlug)
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("producer")
@@ -87,7 +87,7 @@ var _ = Service("remoteSessionClients", func() {
 	})
 
 	Method("createCimd", func() {
-		Description("Register a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the client carries no secret and authenticates with token_endpoint_auth_method=none. The owning issuer must advertise client_id_metadata_document_supported.")
+		Description("Register a remote_session_client in Client ID Metadata Document (CIMD) mode. Speakeasy generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the client carries no secret and authenticates with token_endpoint_auth_method=none. The owning issuer must advertise client_id_metadata_document_supported.")
 
 		Payload(func() {
 			Extend(CreateCimdForm)
@@ -554,7 +554,7 @@ var _ = Service("organizationRemoteSessionClients", func() {
 	})
 
 	Method("createCimdClient", func() {
-		Description("Register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing remote_session_issuer in the caller's organization, with no user_session_issuer attachments. Gram generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported. The client is project-scoped: it inherits a project-specific issuer's project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.")
+		Description("Register a standalone remote_session_client in Client ID Metadata Document (CIMD) mode under an existing remote_session_issuer in the caller's organization, with no user_session_issuer attachments. Speakeasy generates the client_id and hosts the metadata document; the issuer must advertise client_id_metadata_document_supported. The client is project-scoped: it inherits a project-specific issuer's project, or the caller names a project (which must belong to the organization) when the issuer is organization-level. Requires org:admin.")
 
 		Payload(func() {
 			Extend(CreateCimdOrganizationRemoteSessionClientForm)
@@ -765,7 +765,7 @@ var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func()
 		})
 	})
 	Attribute("client_id", String, "client_id supplied by the caller.")
-	Attribute("client_secret", String, "client_secret supplied by the caller. Gram encrypts before persisting.")
+	Attribute("client_secret", String, "client_secret supplied by the caller. Speakeasy encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
 	Attribute("token_endpoint_auth_audience_format", String, "Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.", tokenEndpointAuthAudienceFormatEnum)
 	Attribute("scope", ArrayOf(String), func() {
@@ -778,7 +778,7 @@ var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func()
 
 // RegistrationProvenanceAttributes are the optional lifecycle stamps a create
 // form carries when the credentials came from Dynamic Client Registration
-// through /oauth/proxy-register. They let Gram track when the registration
+// through /oauth/proxy-register. They let Speakeasy track when the registration
 // expires and re-register the client in place at its issuer's registration
 // endpoint before that. Forms for credentials obtained out-of-band omit them.
 func RegistrationProvenanceAttributes() {
@@ -791,7 +791,7 @@ func RegistrationProvenanceAttributes() {
 }
 
 var CreateCimdForm = Type("CreateCimdForm", func() {
-	Description("Form for creating a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the row carries no secret and authenticates with token_endpoint_auth_method=none. The caller supplies no client_id or credentials.")
+	Description("Form for creating a remote_session_client in Client ID Metadata Document (CIMD) mode. Speakeasy generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the row carries no secret and authenticates with token_endpoint_auth_method=none. The caller supplies no client_id or credentials.")
 
 	Attribute("remote_session_issuer_id", String, "The owning remote_session_issuer id. Must advertise client_id_metadata_document_supported.", func() {
 		Format(FormatUUID)
@@ -815,7 +815,7 @@ var UpdateRemoteSessionClientForm = Type("UpdateRemoteSessionClientForm", func()
 	Attribute("id", String, "The remote_session_client id.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("client_secret", String, "Rotate the client secret. Gram re-encrypts before persisting.")
+	Attribute("client_secret", String, "Rotate the client secret. Speakeasy re-encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "Change how the client authenticates at the issuer's token endpoint.", tokenEndpointAuthMethodEnum)
 	Attribute("token_endpoint_auth_audience_format", String, "Change the aud claim format used in private_key_jwt assertions. Omit to leave unchanged.", tokenEndpointAuthAudienceFormatEnum)
 	Attribute("scope", ArrayOf(String), func() {
@@ -900,7 +900,7 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 		})
 	})
 	Attribute("client_id", String, "The client_id used to identify this client at the issuer's token and authorization endpoints.")
-	Attribute("client_id_metadata_uri", String, "When set, the client is in Client ID Metadata Document (CIMD) mode: Gram hosts its OAuth client metadata document at this URL and uses it as the client_id. Null for non-CIMD clients.")
+	Attribute("client_id_metadata_uri", String, "When set, the client is in Client ID Metadata Document (CIMD) mode: Speakeasy hosts its OAuth client metadata document at this URL and uses it as the client_id. Null for non-CIMD clients.")
 	Attribute("client_id_issued_at", String, func() {
 		Format(FormatDateTime)
 	})

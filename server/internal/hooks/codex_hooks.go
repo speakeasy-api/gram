@@ -60,7 +60,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 		)
 		return &gen.CodexHookResult{
 			Decision: new("deny"),
-			Reason:   new("Speakeasy hooks: unauthorized — check your Gram API key and project slug."),
+			Reason:   new("Speakeasy hooks: unauthorized — check your Speakeasy API key and project slug."),
 		}, nil
 	}
 
@@ -157,7 +157,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 					// unmatched server is simply allowed here.
 					detail, denied = s.enforceShadowMCPToolAccess(ctx, orgID, projectID, metadata.UserID, policy, toolName, evidence)
 				case isCodexMetaTool:
-					// Codex's built-in MCP resource tools are not Gram
+					// Codex's built-in MCP resource tools are not Speakeasy
 					// toolset calls, so they never carry x-gram-toolset-id.
 					// Enforce them from the inventory target instead.
 					if codexMetaServer == "" {
@@ -180,7 +180,7 @@ func (s *Service) Codex(ctx context.Context, payload *gen.CodexPayload) (res *ge
 				// blocked-list check above is the whole gate.
 				if !policy.IsAllowAll() && !denied && !isCodexMetaTool {
 					// The inventory snapshot pins where the call actually
-					// routes: deny when it points at a non-Gram target, or
+					// routes: deny when it points at a non-Speakeasy target, or
 					// when the active inventory cannot uniquely prove the
 					// target.
 					inventoryDetail := s.codexInventoryProvenanceDetail(ctx, matched, orgID)
