@@ -269,12 +269,17 @@ type userSessionMigrationPreflight struct {
 	conflictingClientIDs                                                         []string
 	principalBindingConflictCount, emaBindingConflictCount                       int32
 	platformOwned                                                                bool
-	warnings                                                                     []*orggen.UserSessionIssuerFieldMismatch
-	warningsFingerprint                                                          string
+	// multiClientProvider is set when the merged issuer would bind more than
+	// one client of the same provider: per-member gateway credentials on
+	// either side, or two single clients of one provider. The moved consumers
+	// would then resolve credentials ambiguously.
+	multiClientProvider bool
+	warnings            []*orggen.UserSessionIssuerFieldMismatch
+	warningsFingerprint string
 }
 
 func (p userSessionMigrationPreflight) canMigrate() bool {
-	return len(p.conflictingClientIDs) == 0 && p.principalBindingConflictCount == 0 && p.emaBindingConflictCount == 0 && !p.platformOwned
+	return len(p.conflictingClientIDs) == 0 && p.principalBindingConflictCount == 0 && p.emaBindingConflictCount == 0 && !p.platformOwned && !p.multiClientProvider
 }
 
 // userSessionMigrationWarnings lists the configuration differences an
@@ -360,11 +365,15 @@ func buildUserSessionMigrationPreflight(ctx context.Context, q *repo.Queries, or
 	if err != nil {
 		return userSessionMigrationPreflight{}, fmt.Errorf("check target Platform MCP ownership: %w", err)
 	}
+	multiClient, err := q.UserSessionIssuerMergeHasMultiClientProvider(ctx, repo.UserSessionIssuerMergeHasMultiClientProviderParams{SourceIssuerID: source.ID, TargetIssuerID: target.ID})
+	if err != nil {
+		return userSessionMigrationPreflight{}, fmt.Errorf("check merged issuer clients: %w", err)
+	}
 	warnings := userSessionMigrationWarnings(source, target)
 	return userSessionMigrationPreflight{
 		clientCount: clients, sessionCount: sessions, consentCount: consents, cimdClientCount: cimdClients, remoteSessionCount: remoteSessions,
 		conflictingClientIDs: conflicts, principalBindingConflictCount: principalConflicts, emaBindingConflictCount: emaConflicts,
-		platformOwned: sourceOwned || targetOwned, warnings: warnings,
+		platformOwned: sourceOwned || targetOwned, multiClientProvider: multiClient, warnings: warnings,
 		warningsFingerprint: userSessionMigrationWarningsFingerprint(source.ID, target.ID, warnings),
 	}, nil
 }

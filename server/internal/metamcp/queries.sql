@@ -476,6 +476,133 @@ WHERE l.remote_session_client_id = c.id
       )
   );
 
+-- name: AutoAttachMemberOwnClient :execrows
+-- Gateway member credentials: bind the member's own configured client to the
+-- gateway's issuer even when the gateway already holds another client of the
+-- same remote issuer. The member's client is the unique live client bound to
+-- the member's own user session issuer for its remote issuer; zero or several
+-- candidates attach nothing. Callers only use this while the gateway owns its
+-- issuer exclusively and hold the gateway issuer's owner-binding lock.
+INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
+SELECT own.id, @gateway_issuer_id
+FROM (
+  SELECT c.id, count(*) OVER () AS candidates
+  FROM remote_session_clients AS c
+  JOIN remote_session_client_user_session_issuers AS l
+    ON l.remote_session_client_id = c.id
+  JOIN projects AS p
+    ON p.id = @project_id
+  WHERE l.user_session_issuer_id = @member_issuer_id
+    AND c.remote_session_issuer_id = @remote_issuer_id
+    AND c.deleted IS FALSE
+    AND (c.project_id = @project_id
+         OR (c.project_id IS NULL AND c.organization_id = p.organization_id))
+) AS own
+WHERE own.candidates = 1
+  AND @member_issuer_id::uuid <> @gateway_issuer_id::uuid
+ON CONFLICT DO NOTHING;
+
+-- name: AutoDetachMemberOwnClient :execrows
+-- Client-specific reverse of AutoAttachMemberOwnClient: unbind the removed
+-- member's own client from the gateway issuer unless a surviving consumer
+-- still needs that exact client. A direct server on the gateway issuer for
+-- the same remote issuer keeps every client (legacy shared issuers); a live
+-- member of any gateway on the issuer keeps the client its own issuer binds.
+-- Run after the member row is soft-deleted.
+DELETE FROM remote_session_client_user_session_issuers AS l
+WHERE l.user_session_issuer_id = @gateway_issuer_id
+  AND @member_issuer_id::uuid <> @gateway_issuer_id::uuid
+  AND l.remote_session_client_id IN (
+    SELECT c.id
+    FROM remote_session_clients AS c
+    JOIN remote_session_client_user_session_issuers AS ml
+      ON ml.remote_session_client_id = c.id
+    WHERE ml.user_session_issuer_id = @member_issuer_id
+      AND c.remote_session_issuer_id = @remote_issuer_id
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_servers AS s
+    WHERE s.deleted IS FALSE
+      AND s.project_id = @project_id
+      AND s.remote_session_issuer_id = @remote_issuer_id
+      AND s.user_session_issuer_id = @gateway_issuer_id
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM meta_mcp_server_members AS m
+    JOIN meta_mcp_servers AS mm
+      ON mm.project_id = m.project_id
+     AND mm.id = m.meta_mcp_server_id
+     AND mm.deleted IS FALSE
+    JOIN mcp_servers AS s
+      ON s.id = m.mcp_server_id
+     AND s.project_id = m.project_id
+     AND s.deleted IS FALSE
+    JOIN remote_session_client_user_session_issuers AS sl
+      ON sl.user_session_issuer_id = s.user_session_issuer_id
+     AND sl.remote_session_client_id = l.remote_session_client_id
+    WHERE m.project_id = @project_id
+      AND m.deleted IS FALSE
+      AND mm.user_session_issuer_id = @gateway_issuer_id
+      AND s.remote_session_issuer_id = @remote_issuer_id
+  );
+
+-- name: DetachOrphanedGatewayMemberCredentials :execrows
+-- Clears per-member gateway credentials from an issuer its gateway has left:
+-- every binding of a remote issuer for which it holds more than one live
+-- client, once no live consumer references it. A lone client per remote
+-- issuer stays, as before. Only an issuer the caller's project can use, its
+-- own or its organization's, is touched. Callers hold the issuer's
+-- owner-binding lock.
+DELETE FROM remote_session_client_user_session_issuers AS l
+USING remote_session_clients AS c
+WHERE l.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND EXISTS (
+    SELECT 1
+    FROM user_session_issuers AS i
+    WHERE i.id = @user_session_issuer_id::uuid
+      AND (i.project_id = @project_id::uuid
+           OR (i.project_id IS NULL AND i.organization_id = @organization_id::text))
+  )
+  AND c.id = l.remote_session_client_id
+  AND c.remote_session_issuer_id IN (
+    SELECT mc.remote_session_issuer_id
+    FROM remote_session_client_user_session_issuers AS ml
+    JOIN remote_session_clients AS mc
+      ON mc.id = ml.remote_session_client_id
+     AND mc.deleted IS FALSE
+    WHERE ml.user_session_issuer_id = @user_session_issuer_id::uuid
+    GROUP BY mc.remote_session_issuer_id
+    HAVING count(*) > 1
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM meta_mcp_servers AS mm
+    WHERE mm.user_session_issuer_id = @user_session_issuer_id::uuid AND mm.deleted IS FALSE
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM mcp_servers AS s
+    WHERE s.user_session_issuer_id = @user_session_issuer_id::uuid AND s.deleted IS FALSE
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM toolsets AS t
+    WHERE t.user_session_issuer_id = @user_session_issuer_id::uuid AND t.deleted IS FALSE
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM platform_mcp_catalog_registrations AS r
+    WHERE r.user_session_issuer_id = @user_session_issuer_id::uuid AND r.deleted IS FALSE
+  );
+
+-- name: CountGatewayIssuerProviderClients :one
+-- How many live clients of one remote issuer a gateway's issuer binds.
+SELECT count(*)::bigint AS clients
+FROM remote_session_client_user_session_issuers AS l
+JOIN remote_session_clients AS c
+  ON c.id = l.remote_session_client_id
+ AND c.deleted IS FALSE
+WHERE l.user_session_issuer_id = @gateway_issuer_id::uuid
+  AND c.remote_session_issuer_id = @remote_issuer_id::uuid;
+
 -- name: ListMemberProviderIdentities :many
 -- Distinct provider identity pairs across a meta server's live members, for
 -- re-running consent wiring when the gateway's issuer changes. Ordered so

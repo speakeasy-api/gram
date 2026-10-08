@@ -59,10 +59,80 @@ func (s *Service) guardSingleClientPerRemoteIssuer(
 	organizationID string,
 	projectID, userSessionIssuerID, remoteSessionIssuerID, excludeClientID uuid.UUID,
 ) error {
+	conflict, err := remoteIssuerClientConflict(ctx, logger, txRepo, organizationID, projectID, userSessionIssuerID, remoteSessionIssuerID, excludeClientID)
+	if err != nil {
+		return err
+	}
+	if conflict {
+		return errRemoteIssuerClientConflict(ctx, logger)
+	}
+	return nil
+}
+
+func errRemoteIssuerClientConflict(ctx context.Context, logger *slog.Logger) error {
+	return oops.E(oops.CodeConflict, nil, "a remote session client is already bound to this user session issuer for the same remote session issuer").LogError(ctx, logger)
+}
+
+// guardExistingClientAttachment is guardSingleClientPerRemoteIssuer for
+// attaching an existing client. With gateway member credentials enabled it
+// also admits a second client of the same remote issuer when exactly one live
+// gateway, and nothing else, consumes the user session issuer, and both the
+// client and every client of that remote issuer already bound are configured
+// clients of that gateway's members. The caller holds
+// the user session issuer's owner-binding lock, which every consumer writer
+// takes, so the ownership read cannot go stale before the binding commits.
+func (s *Service) guardExistingClientAttachment(
+	ctx context.Context,
+	logger *slog.Logger,
+	txRepo *repo.Queries,
+	organizationID string,
+	projectID, userSessionIssuerID, remoteSessionIssuerID, clientID uuid.UUID,
+	memberCredentials bool,
+) error {
+	conflict, err := remoteIssuerClientConflict(ctx, logger, txRepo, organizationID, projectID, userSessionIssuerID, remoteSessionIssuerID, clientID)
+	if err != nil || !conflict {
+		return err
+	}
+	if !memberCredentials {
+		return errRemoteIssuerClientConflict(ctx, logger)
+	}
+
+	exclusive, err := GatewayOwnsIssuerExclusively(ctx, txRepo, userSessionIssuerID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check gateway issuer ownership").LogError(ctx, logger)
+	}
+	if !exclusive {
+		return oops.E(oops.CodeConflict, nil, "a remote session client is already bound to this user session issuer for the same remote session issuer; several clients are only allowed on an issuer used by one gateway and nothing else").LogError(ctx, logger)
+	}
+	memberClients, err := txRepo.AreGatewayMemberOwnClients(ctx, repo.AreGatewayMemberOwnClientsParams{
+		RemoteSessionClientID: clientID,
+		GatewayIssuerID:       userSessionIssuerID,
+		ProjectID:             projectID,
+		RemoteSessionIssuerID: remoteSessionIssuerID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check gateway member clients").LogError(ctx, logger)
+	}
+	if !memberClients {
+		return oops.E(oops.CodeConflict, nil, "a remote session client is already bound to this gateway's user session issuer for the same remote session issuer; several clients are allowed only when each is the client configured on one of the gateway's members").LogError(ctx, logger)
+	}
+	return nil
+}
+
+// remoteIssuerClientConflict reports whether a client other than
+// excludeClientID is already bound to the (user_session_issuer,
+// remote_session_issuer) pair, after taking the remote issuer binding lock.
+func remoteIssuerClientConflict(
+	ctx context.Context,
+	logger *slog.Logger,
+	txRepo *repo.Queries,
+	organizationID string,
+	projectID, userSessionIssuerID, remoteSessionIssuerID, excludeClientID uuid.UUID,
+) (bool, error) {
 	// Serialize against any other writer binding a client to this remote issuer,
 	// including migrateIssuer's re-point, before reading the current bindings.
 	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, remoteSessionIssuerID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "lock remote session issuer for client binding").LogError(ctx, logger)
+		return false, oops.E(oops.CodeUnexpected, err, "lock remote session issuer for client binding").LogError(ctx, logger)
 	}
 
 	// Two rows are enough to detect a conflict: at most one row can be
@@ -77,14 +147,14 @@ func (s *Service) guardSingleClientPerRemoteIssuer(
 		LimitValue:            2,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list remote session clients for user/remote issuer").LogError(ctx, logger)
+		return false, oops.E(oops.CodeUnexpected, err, "list remote session clients for user/remote issuer").LogError(ctx, logger)
 	}
 	for _, c := range bound {
 		if c.RemoteSessionClient.ID != excludeClientID {
-			return oops.E(oops.CodeConflict, nil, "a remote session client is already bound to this user session issuer for the same remote session issuer").LogError(ctx, logger)
+			return true, nil
 		}
 	}
-	return nil
+	return false, nil
 }
 
 // parseUserSessionIssuerIDs parses and de-duplicates the user_session_issuer id
@@ -711,6 +781,9 @@ func (s *Service) AttachUserSessionIssuer(ctx context.Context, payload *gen.Atta
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogError(ctx, logger)
 	}
 
+	// Evaluated before the transaction so a slow flag lookup holds no locks.
+	memberCredentials := GatewayMemberCredentialsEnabled(ctx, logger, s.features, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug)
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -738,8 +811,27 @@ func (s *Service) AttachUserSessionIssuer(ctx context.Context, payload *gen.Atta
 		return nil, err
 	}
 
+	// Remote issuer migration re-points clients under the remote issuer lock,
+	// so take that lock before the client row (migration's order) and confirm
+	// the client still belongs to the issuer read above. The row lock also
+	// holds off a concurrent detach until the member-client check below runs.
+	remoteIssuerID := existing.RemoteSessionClient.RemoteSessionIssuerID
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, remoteIssuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock remote session issuer for client binding").LogError(ctx, logger)
+	}
+	locked, err := txRepo.LockEMAClient(ctx, repo.LockEMAClientParams{ID: clientID, ProjectID: conv.ToNullUUID(*authCtx.ProjectID), OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID)})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "remote session client not found").LogError(ctx, logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "lock remote session client").LogError(ctx, logger)
+	}
+	if locked.RemoteSessionIssuerID != remoteIssuerID {
+		return nil, oops.E(oops.CodeConflict, nil, "remote session client moved to another remote session issuer while attaching; retry").LogError(ctx, logger)
+	}
+
 	// Exclude this client so re-attaching an existing binding is a no-op.
-	if err := s.guardSingleClientPerRemoteIssuer(ctx, logger, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userIssuerID, existing.RemoteSessionClient.RemoteSessionIssuerID, clientID); err != nil {
+	if err := s.guardExistingClientAttachment(ctx, logger, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userIssuerID, remoteIssuerID, clientID, memberCredentials); err != nil {
 		return nil, err
 	}
 

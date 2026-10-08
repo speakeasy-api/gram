@@ -123,6 +123,9 @@ func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.C
 		if errors.Is(err, usersessionbindings.ErrNotFound) {
 			return RemoteMCPProvisioningResult{}, oops.E(oops.CodeNotFound, err, "user session issuer not found")
 		}
+		if errors.Is(err, usersessionbindings.ErrGatewayMemberCredentials) {
+			return RemoteMCPProvisioningResult{}, oops.E(oops.CodeConflict, err, "user session issuer holds per-member gateway credentials and cannot be shared")
+		}
 		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeUnexpected, err, "materialize remote-backed MCP server")
 	}
 	if err := tx.Commit(ctx); err != nil {

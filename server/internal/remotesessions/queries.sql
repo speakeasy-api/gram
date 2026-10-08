@@ -3228,6 +3228,93 @@ SELECT pg_advisory_lock(hashtextextended((@remote_session_issuer_id::uuid)::text
 -- name: UnlockRemoteSessionIssuerForClientBindingSession :one
 SELECT pg_advisory_unlock(hashtextextended((@remote_session_issuer_id::uuid)::text, 0));
 
+-- name: GetUserSessionIssuerGatewayOwnership :one
+-- Who consumes a user session issuer, for the gateway member credential rule:
+-- the issuer may hold several clients of one remote issuer only while exactly
+-- one live gateway and nothing else consumes it. Callers hold the issuer's
+-- owner-binding lock, which every consumer writer takes before referencing it.
+SELECT
+    (
+      SELECT count(*)
+      FROM meta_mcp_servers AS mm
+      WHERE mm.user_session_issuer_id = @user_session_issuer_id::uuid
+        AND mm.deleted IS FALSE
+    )::bigint AS gateways,
+    (
+      (
+        SELECT count(*)
+        FROM mcp_servers AS s
+        WHERE s.user_session_issuer_id = @user_session_issuer_id::uuid
+          AND s.deleted IS FALSE
+      ) + (
+        SELECT count(*)
+        FROM toolsets AS t
+        WHERE t.user_session_issuer_id = @user_session_issuer_id::uuid
+          AND t.deleted IS FALSE
+      ) + (
+        SELECT count(*)
+        FROM platform_mcp_catalog_registrations AS r
+        WHERE r.user_session_issuer_id = @user_session_issuer_id::uuid
+          AND r.deleted IS FALSE
+      )
+    )::bigint AS other_consumers;
+
+-- name: AreGatewayMemberOwnClients :one
+-- Whether @remote_session_client_id and every client of the same remote
+-- issuer already bound to @gateway_issuer_id is the configured client of a
+-- live member of the gateway that fronts that issuer: bound to the member's
+-- own user session issuer, which holds exactly one live client for the
+-- member's remote issuer. A member that uses the gateway's issuer as its own
+-- cannot justify a binding.
+WITH member_clients AS (
+  SELECT ml.remote_session_client_id AS id
+  FROM meta_mcp_server_members AS m
+  JOIN meta_mcp_servers AS mm
+    ON mm.id = m.meta_mcp_server_id
+   AND mm.project_id = m.project_id
+   AND mm.deleted IS FALSE
+  JOIN mcp_servers AS s
+    ON s.id = m.mcp_server_id
+   AND s.project_id = m.project_id
+   AND s.deleted IS FALSE
+  JOIN remote_session_client_user_session_issuers AS ml
+    ON ml.user_session_issuer_id = s.user_session_issuer_id
+  JOIN remote_session_clients AS mc
+    ON mc.id = ml.remote_session_client_id
+   AND mc.deleted IS FALSE
+   AND mc.remote_session_issuer_id = @remote_session_issuer_id::uuid
+  WHERE mm.user_session_issuer_id = @gateway_issuer_id::uuid
+    AND mm.project_id = @project_id
+    AND m.deleted IS FALSE
+    AND s.remote_session_issuer_id = @remote_session_issuer_id::uuid
+    AND s.user_session_issuer_id <> @gateway_issuer_id::uuid
+    AND 1 = (
+      SELECT count(*)
+      FROM remote_session_client_user_session_issuers AS ol
+      JOIN remote_session_clients AS oc
+        ON oc.id = ol.remote_session_client_id
+       AND oc.deleted IS FALSE
+      WHERE ol.user_session_issuer_id = s.user_session_issuer_id
+        AND oc.remote_session_issuer_id = @remote_session_issuer_id::uuid
+    )
+),
+candidates AS (
+  SELECT @remote_session_client_id::uuid AS id
+  UNION
+  SELECT gl.remote_session_client_id
+  FROM remote_session_client_user_session_issuers AS gl
+  JOIN remote_session_clients AS gc
+    ON gc.id = gl.remote_session_client_id
+   AND gc.deleted IS FALSE
+  WHERE gl.user_session_issuer_id = @gateway_issuer_id::uuid
+    AND gc.remote_session_issuer_id = @remote_session_issuer_id::uuid
+)
+SELECT NOT EXISTS (
+  SELECT 1
+  FROM candidates AS c
+  WHERE c.id NOT IN (SELECT id FROM member_clients)
+) AS all_member_clients;
+
 -- name: GetTrustedRemoteSessionIssuerForOrganization :one
 -- A trusted issuer must be either global or organization-owned by the caller.
 -- Project-specific issuers are deliberately excluded, including projects in

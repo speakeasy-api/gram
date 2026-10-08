@@ -599,6 +599,55 @@ func TestOrganizationUserSessionIssuerMigratePreservesRemoteBindings(t *testing.
 	require.False(t, mcpServerAfter.RemoteSessionIssuerID.Valid, "two distinct target upstream issuers must fail closed")
 }
 
+func TestOrganizationUserSessionIssuerMigrateRejectsMergedProviderClients(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sourceID := seedIssuer(t, ctx, ti, "merge-provider-source")
+	targetID := seedIssuer(t, ctx, ti, "merge-provider-target")
+	remoteRepo := remotesessionsrepo.New(ti.conn)
+	remoteIssuer, err := remoteRepo.CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                              "merge-provider-issuer",
+		Issuer:                            "https://merge-provider.example.com",
+		AuthorizationEndpoint:             conv.ToPGText("https://merge-provider.example.com/authorize"),
+		TokenEndpoint:                     conv.ToPGText("https://merge-provider.example.com/token"),
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"none"},
+		CodeChallengeMethodsSupported:     []string{"S256"},
+	})
+	require.NoError(t, err)
+	// Each issuer binds its own client of the same provider; the merge would
+	// leave the target with two.
+	for clientID, userSessionIssuerID := range map[string]uuid.UUID{"merge-provider-source-client": sourceID, "merge-provider-target-client": targetID} {
+		client, err := remoteRepo.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+			ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
+			OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
+			RemoteSessionIssuerID: remoteIssuer.ID,
+			ClientID:              clientID,
+			ClientIDIssuedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		})
+		require.NoError(t, err)
+		require.NoError(t, remoteRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
+			RemoteSessionClientID: client.ID,
+			UserSessionIssuerID:   userSessionIssuerID,
+		}))
+	}
+
+	preflight, err := ti.service.GetIssuerMigratePreflight(ctx, &orggen.GetIssuerMigratePreflightPayload{SourceID: sourceID.String(), TargetID: targetID.String()})
+	require.NoError(t, err)
+	require.False(t, preflight.CanMigrate, "the preflight reports the merge blocker before submission")
+	_, err = ti.service.MigrateIssuer(ctx, &orggen.MigrateIssuerPayload{SourceID: sourceID.String(), TargetID: targetID.String(), ConfirmedWarningsFingerprint: &preflight.WarningsFingerprint})
+	requireOopsCode(t, err, oops.CodeConflict)
+}
+
 func TestOrganizationUserSessionIssuerMigrateScopeAndRBAC(t *testing.T) {
 	t.Parallel()
 
