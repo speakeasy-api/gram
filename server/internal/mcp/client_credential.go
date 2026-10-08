@@ -149,12 +149,14 @@ func metaMemberClientCredentialError(member metaMember, err error) error {
 	return &metaMemberError{message: fmt.Sprintf("server %q has an upstream credential that is misconfigured or was rejected; contact the MCP server administrator", member.slug)}
 }
 
-// subjectConnectedClients drops the clients that hold their upstream
-// credential for themselves. The consent and connect flows show, connect,
-// verify and refresh a subject's own connections, and nobody connects a self
-// client: its credential is presented for every caller without one.
+// subjectConnectedClients returns the clients that do not hold their upstream
+// credential for themselves, leaving clients untouched. The consent and
+// connect flows show, connect, verify and refresh a subject's own
+// connections, and nobody connects a self client: its credential is presented
+// for every caller without one. A self client still claims its upstream, so
+// resource derivation weighs every bound client.
 func subjectConnectedClients(clients []remotesessions.Client) []remotesessions.Client {
-	return slices.DeleteFunc(clients, func(c remotesessions.Client) bool {
+	return slices.DeleteFunc(slices.Clone(clients), func(c remotesessions.Client) bool {
 		return c.CredentialOwner == remotesessions.CredentialOwnerSelf
 	})
 }

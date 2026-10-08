@@ -234,4 +234,10 @@ func TestUpstreamTokenPresent_SelfCredential(t *testing.T) {
 		issuer: {CredentialOwner: remotesessions.CredentialOwnerSelf, ClientCredentialErr: remotesessions.ErrClientCredentialMisconfigured},
 	}
 	require.True(t, upstreamTokenPresent(unavailable, "https://upstream.example.test/mcp", false, uuid.NullUUID{UUID: issuer, Valid: true}), "routing must report the failure rather than chain around it")
+
+	audienceBound := map[uuid.UUID]remotesessions.UpstreamToken{
+		issuer: {Token: "self-token", Resource: "https://upstream.example.test/mcp/", CredentialOwner: remotesessions.CredentialOwnerSelf},
+	}
+	require.True(t, upstreamTokenPresent(audienceBound, "https://upstream.example.test/mcp", false, uuid.NullUUID{UUID: issuer, Valid: true}), "a self credential requested for this upstream is present")
+	require.False(t, upstreamTokenPresent(audienceBound, "https://sibling.example.test/mcp", false, uuid.NullUUID{UUID: issuer, Valid: true}), "a self credential requested for a sibling upstream is not")
 }

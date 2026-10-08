@@ -172,7 +172,7 @@ func newSelfClientEndpoint(t *testing.T, ctx context.Context, ti *testInstance, 
 	token, jti, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
 		Subject:  urn.NewUserSubject(mockidp.MockUserID),
 		Audience: urn.NewUserSessionIssuer(issuerID).String(),
-		Issuer:   ti.serverURL.String() + "/x/mcp/" + slug,
+		Issuer:   ti.serverURL.String() + "/mcp/" + slug,
 		Lifetime: time.Hour,
 	})
 	require.NoError(t, err)

@@ -138,3 +138,57 @@ func TestServeConsentAction_RefusesConnectingSelfClient(t *testing.T) {
 	require.Equal(t, oops.CodeBadRequest, shareable.Code)
 	require.Empty(t, w.Header().Get("Location"), "no upstream authorize redirect for a self client")
 }
+
+// connectAmbiguousClient posts a connect for a subject client attached to two
+// upstreams, on an endpoint whose upstream is the first, and returns the
+// resource the login recorded. withSelfClient also binds a self client that
+// serves the endpoint's upstream.
+func connectAmbiguousClient(t *testing.T, slug string, withSelfClient bool) string {
+	t.Helper()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	other := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, shared, slug+"-srv-a", consentUpstreamA)
+	attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, other, slug+"-srv-b", consentUpstreamB)
+
+	subjectClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, slug+"-subject", "", []uuid.UUID{shared, other})
+	if withSelfClient {
+		selfClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, slug+"-self", "", []uuid.UUID{shared})
+		markConsentClientSelf(t, ctx, ti.conn, projectID, orgID, selfClient)
+	}
+
+	endpoint, stateID, subject := mintConsentEndpointState(t, ctx, ti, projectID, orgID, shared, slug+"-consent")
+	endpoint.UpstreamResource = consentUpstreamA
+	fx := consentActionFixture{
+		ti:        ti,
+		endpoint:  endpoint,
+		stateID:   stateID,
+		projectID: projectID,
+		orgID:     orgID,
+		shared:    shared,
+		subject:   subject,
+		clientA:   subjectClient,
+		clientB:   uuid.Nil,
+		clientC:   uuid.Nil,
+		clientD:   uuid.Nil,
+	}
+
+	loc := postConnectAction(t, fx, subjectClient)
+	return mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state")).Resource
+}
+
+func TestServeConsentAction_SelfClientKeepsItsUpstreamFromSiblings(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, consentUpstreamA, connectAmbiguousClient(t, "self-sibling-control", false),
+		"with no other client serving it, the ambiguous client claims the endpoint's upstream")
+	require.Empty(t, connectAmbiguousClient(t, "self-sibling", true),
+		"a self client serving the upstream keeps a subject client from claiming it, or both would route there")
+}

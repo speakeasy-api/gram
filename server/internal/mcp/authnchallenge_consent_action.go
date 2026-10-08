@@ -99,11 +99,11 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return s.retryFederatedDelegation(w, r, endpoint, challengeState)
 	}
 
-	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+	bound, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
 	}
-	clients = subjectConnectedClients(clients)
+	clients := subjectConnectedClients(bound)
 
 	// The posted client_id is only a lookup key; the acted-on client is
 	// re-resolved through the endpoint's current bindings so a crafted form
@@ -146,7 +146,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 				autoRefresh = &v
 			}
 		}
-		challengeURL, hop, berr := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, clients, autoRefresh)
+		challengeURL, hop, berr := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, bound, autoRefresh)
 		if berr != nil {
 			return berr
 		}
@@ -263,6 +263,8 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 // identically — an auto-connect that qualified the credential differently from
 // a manual one would mint a session the runtime then rejects. hop reports a
 // URL to the remote login browser hop rather than the upstream provider.
+// bound is every client bound to the endpoint, self clients included, since
+// each one's upstream decides what client may claim.
 func (s *Service) buildRemoteConnectURL(
 	ctx context.Context,
 	logger *slog.Logger,
