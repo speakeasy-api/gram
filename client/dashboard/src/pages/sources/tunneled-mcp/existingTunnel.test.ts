@@ -2,6 +2,8 @@ import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { describe, expect, it, vi } from "vitest";
 import {
+  serverSetKey,
+  tunnelDeleteRecovery,
   addMcpServerOnTunnelHref,
   deleteTunnelAndConfirmedServers,
   isDefiniteRejection,
@@ -126,6 +128,10 @@ describe("deleteTunnelAndConfirmedServers", () => {
       ...d,
     }).catch((e: unknown) => e);
     expect((error as TunnelDeleteIncompleteError).progressed).toBe(true);
+    expect((error as Error).message).toContain(
+      "outcome for 1 MCP server is unknown",
+    );
+    expect((error as Error).message).not.toContain("could not be deleted");
   });
 
   it("treats an already deleted server as done", async () => {
@@ -157,6 +163,38 @@ describe("deleteTunnelAndConfirmedServers", () => {
       ...d,
     }).catch((e: unknown) => e);
     expect((error as TunnelDeleteIncompleteError).progressed).toBe(false);
-    expect((error as Error).message).toContain("Retry to finish");
+    expect((error as Error).message).toContain(
+      "could not be confirmed deleted",
+    );
+  });
+});
+
+describe("tunnelDeleteRecovery", () => {
+  it("stays when this server is still on the tunnel", () => {
+    expect(tunnelDeleteRecovery([server("a"), server("b")], "a")).toEqual({
+      kind: "stay",
+    });
+  });
+
+  it("continues from another server that is still on the tunnel", () => {
+    expect(tunnelDeleteRecovery([server("b")], "a")).toEqual({
+      kind: "server",
+      mcpServer: server("b"),
+    });
+  });
+
+  it("finishes from the tunnel list when no visible server is left", () => {
+    expect(tunnelDeleteRecovery([], "a")).toEqual({ kind: "tunnel" });
+  });
+});
+
+describe("serverSetKey", () => {
+  it("ignores order but not membership", () => {
+    expect(serverSetKey([server("b"), server("a")])).toBe(
+      serverSetKey([server("a"), server("b")]),
+    );
+    expect(serverSetKey([server("a")])).not.toBe(
+      serverSetKey([server("a"), server("c")]),
+    );
   });
 });

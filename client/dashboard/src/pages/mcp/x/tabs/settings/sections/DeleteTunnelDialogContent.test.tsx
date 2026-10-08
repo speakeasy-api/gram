@@ -6,6 +6,7 @@ import {
 } from "@/pages/sources/tunneled-mcp/existingTunnel";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
   cleanup,
@@ -22,6 +23,7 @@ const state = vi.hoisted(() => ({
   isError: false,
   error: undefined as Error | undefined,
   toastError: vi.fn(),
+  remaining: vi.fn(),
 }));
 
 vi.mock("@/components/mcp/use-shared-tunnel-impact", () => ({
@@ -44,6 +46,18 @@ vi.mock("@/pages/sources/tunneled-mcp/hooks", () => ({
     error: state.error,
   }),
 }));
+vi.mock("./sourceDelete", () => ({
+  fetchLinkedMcpServers: state.remaining,
+}));
+vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    mcp: {
+      add: { tunneled: { href: () => "/mcp/add/tunneled" } },
+      x: { settings: { href: (id: string) => `/mcp/x/${id}/settings` } },
+    },
+  }),
+}));
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: state.toastError },
 }));
@@ -51,47 +65,74 @@ vi.mock("sonner", () => ({
 const tunnel = { id: "tunnel-1", name: "JAMF" } as TunneledMcpServer;
 
 function servers(...ids: string[]): McpServer[] {
-  return ids.map((id) => ({ id, name: `Server ${id}` }) as McpServer);
+  return ids.map(
+    (id) => ({ id, slug: `slug-${id}`, name: `Server ${id}` }) as McpServer,
+  );
+}
+
+function setImpact(
+  list: McpServer[],
+  overrides: Partial<SharedTunnelImpactState> = {},
+) {
+  state.impact = {
+    servers: list,
+    isReady: true,
+    isLoading: false,
+    isError: false,
+    retry: state.impact.retry ?? vi.fn<() => void>(),
+    ...overrides,
+  };
+}
+
+function dialog(onLeave: (href?: string) => void) {
+  return (
+    <QueryClientProvider client={new QueryClient()}>
+      <Dialog open>
+        <Dialog.Content>
+          <DeleteTunnelDialogContent
+            tunnel={tunnel}
+            mcpServerId="a"
+            onClose={() => {}}
+            onLeave={onLeave}
+          />
+        </Dialog.Content>
+      </Dialog>
+    </QueryClientProvider>
+  );
 }
 
 function renderDialog() {
-  const onClose = vi.fn<() => void>();
-  const onLeave = vi.fn<() => void>();
-  render(
-    <Dialog open>
-      <Dialog.Content>
-        <DeleteTunnelDialogContent
-          tunnel={tunnel}
-          mcpServerId="a"
-          onClose={onClose}
-          onLeave={onLeave}
-        />
-      </Dialog.Content>
-    </Dialog>,
-  );
-  return { onClose, onLeave };
+  const onLeave = vi.fn<(href?: string) => void>();
+  const view = render(dialog(onLeave));
+  return { onLeave, rerender: () => view.rerender(dialog(onLeave)) };
+}
+
+function input(): HTMLInputElement {
+  return screen.getByLabelText(
+    "Type the tunnel name to confirm",
+  ) as HTMLInputElement;
 }
 
 function typeName(value = "JAMF") {
-  fireEvent.change(screen.getByLabelText("Type the tunnel name to confirm"), {
-    target: { value },
-  });
+  fireEvent.change(input(), { target: { value } });
 }
 
 function deleteButton(): HTMLButtonElement {
   return screen.getByRole("button", { name: "Delete" }) as HTMLButtonElement;
 }
 
+async function clickDelete() {
+  await act(async () => {
+    fireEvent.click(deleteButton());
+  });
+}
+
 beforeEach(() => {
-  state.impact = {
-    servers: servers("a", "b"),
-    isReady: true,
-    isLoading: false,
-    isError: false,
-    retry: vi.fn<() => void>(),
-  };
+  state.impact = {} as SharedTunnelImpactState;
+  setImpact(servers("a", "b"), { retry: vi.fn<() => void>() });
   state.mutateAsync.mockReset();
   state.toastError.mockReset();
+  state.remaining.mockReset();
   state.isError = false;
   state.error = undefined;
 });
@@ -103,20 +144,18 @@ describe("DeleteTunnelDialogContent", () => {
     state.mutateAsync.mockResolvedValue(undefined);
     const { onLeave } = renderDialog();
     typeName();
-    await act(async () => {
-      fireEvent.click(deleteButton());
-    });
+    await clickDelete();
     expect(state.mutateAsync).toHaveBeenCalledWith({
       tunneledMcpServerId: "tunnel-1",
       confirmedMcpServerIds: ["a", "b"],
     });
-    expect(onLeave).toHaveBeenCalledOnce();
+    expect(onLeave).toHaveBeenCalledWith();
   });
 
   it("stays disabled until the tunnel's servers are freshly read", () => {
-    state.impact = { ...state.impact, isReady: false, isLoading: true };
+    setImpact(servers("a", "b"), { isReady: false, isLoading: true });
     renderDialog();
-    typeName();
+    expect(input().disabled).toBe(true);
     expect(deleteButton().disabled).toBe(true);
   });
 
@@ -126,49 +165,117 @@ describe("DeleteTunnelDialogContent", () => {
     expect(deleteButton().disabled).toBe(true);
   });
 
-  it("asks again when the servers changed, without leaving", async () => {
+  it.each([
+    ["a server was added", servers("a", "b", "c")],
+    ["a server was removed", servers("a")],
+    ["a server was swapped", servers("a", "c")],
+  ])(
+    "disarms a typed confirmation when %s in a background refresh",
+    async (_case, refreshed) => {
+      state.mutateAsync.mockResolvedValue(undefined);
+      const { rerender } = renderDialog();
+      typeName();
+      expect(deleteButton().disabled).toBe(false);
+
+      setImpact(refreshed);
+      rerender();
+
+      expect(deleteButton().disabled).toBe(true);
+      expect(input().value).toBe("");
+      expect(screen.getByText(/changed after you confirmed/)).toBeTruthy();
+
+      typeName();
+      await clickDelete();
+      expect(state.mutateAsync).toHaveBeenCalledWith({
+        tunneledMcpServerId: "tunnel-1",
+        confirmedMcpServerIds: refreshed.map((server) => server.id),
+      });
+    },
+  );
+
+  it("keeps a confirmation when only the order of the list changes", () => {
+    const { rerender } = renderDialog();
+    typeName();
+    setImpact(servers("b", "a"));
+    rerender();
+    expect(deleteButton().disabled).toBe(false);
+  });
+
+  it("asks again when the servers changed at the last moment", async () => {
     state.mutateAsync.mockRejectedValue(new TunnelServersChangedError());
     const { onLeave } = renderDialog();
     typeName();
-    await act(async () => {
-      fireEvent.click(deleteButton());
-    });
+    await clickDelete();
     expect(state.impact.retry).toHaveBeenCalledOnce();
-    expect(
-      (
-        screen.getByLabelText(
-          "Type the tunnel name to confirm",
-        ) as HTMLInputElement
-      ).value,
-    ).toBe("");
+    expect(input().value).toBe("");
     expect(onLeave).not.toHaveBeenCalled();
   });
 
-  it("leaves the page with the outcome once servers may be gone", async () => {
+  it("stays to show what is left when this server survived a partial delete", async () => {
     state.mutateAsync.mockRejectedValue(
-      new TunnelDeleteIncompleteError("Deleted 1 of 2", true),
+      new TunnelDeleteIncompleteError("Deleted 1 of 2 MCP servers.", true),
     );
+    state.remaining.mockResolvedValue(servers("a"));
     const { onLeave } = renderDialog();
     typeName();
-    await act(async () => {
-      fireEvent.click(deleteButton());
-    });
+    await clickDelete();
+    expect(onLeave).not.toHaveBeenCalled();
+    expect(state.impact.retry).toHaveBeenCalledOnce();
+    expect(input().value).toBe("");
+  });
+
+  it("continues from a surviving server once this one is gone", async () => {
+    state.mutateAsync.mockRejectedValue(
+      new TunnelDeleteIncompleteError("Deleted 1 of 2 MCP servers.", true),
+    );
+    state.remaining.mockResolvedValue(servers("b"));
+    const { onLeave } = renderDialog();
+    typeName();
+    await clickDelete();
+    expect(onLeave).toHaveBeenCalledWith("/mcp/x/slug-b/settings");
     expect(state.toastError).toHaveBeenCalledWith(
-      "Deleted 1 of 2",
+      expect.stringContaining("Server b still uses the tunnel"),
       expect.anything(),
     );
-    expect(onLeave).toHaveBeenCalledOnce();
+  });
+
+  it("finishes from the tunnel list when no visible server is left", async () => {
+    state.mutateAsync.mockRejectedValue(
+      new TunnelDeleteIncompleteError(
+        "Deleted 2 MCP servers, but the tunnel could not be confirmed deleted.",
+        true,
+      ),
+    );
+    state.remaining.mockResolvedValue([]);
+    const { onLeave } = renderDialog();
+    typeName();
+    await clickDelete();
+    expect(onLeave).toHaveBeenCalledWith("/mcp/add/tunneled?tunnel=tunnel-1");
+    expect(state.toastError).toHaveBeenCalledWith(
+      expect.stringContaining("ask a project admin"),
+      expect.anything(),
+    );
+  });
+
+  it("falls back to the tunnel list when what is left cannot be read", async () => {
+    state.mutateAsync.mockRejectedValue(
+      new TunnelDeleteIncompleteError("Deleted 1 of 2 MCP servers.", true),
+    );
+    state.remaining.mockRejectedValue(new Error("offline"));
+    const { onLeave } = renderDialog();
+    typeName();
+    await clickDelete();
+    expect(onLeave).toHaveBeenCalledWith("/mcp/add/tunneled?tunnel=tunnel-1");
   });
 
   it("stays open for a retry when nothing was deleted", async () => {
     state.mutateAsync.mockRejectedValue(
-      new TunnelDeleteIncompleteError("Retry to finish", false),
+      new TunnelDeleteIncompleteError("could not be confirmed deleted", false),
     );
     const { onLeave } = renderDialog();
     typeName();
-    await act(async () => {
-      fireEvent.click(deleteButton());
-    });
+    await clickDelete();
     expect(onLeave).not.toHaveBeenCalled();
+    expect(state.remaining).not.toHaveBeenCalled();
   });
 });
