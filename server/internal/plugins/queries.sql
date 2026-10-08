@@ -1300,3 +1300,23 @@ FOR UPDATE;
 SELECT id FROM projects
 WHERE id = @project_id AND organization_id = @organization_id AND deleted IS FALSE
 FOR SHARE;
+
+-- name: ListRolePluginsForResource :many
+-- Live contents only; a legacy toolset is equivalent only to its sole active wrapper.
+SELECT DISTINCT a.principal_urn, p.id AS plugin_id, p.name, p.slug
+FROM plugins p
+JOIN plugin_assignments a ON a.plugin_id = p.id AND a.organization_id = p.organization_id
+JOIN plugin_servers ps ON ps.plugin_id = p.id AND (ps.project_id IS NULL OR ps.project_id = p.project_id)
+WHERE p.organization_id = @organization_id AND p.project_id = @project_id
+  AND p.deleted_at IS NULL AND ps.deleted_at IS NULL
+  AND a.principal_urn = ANY(@principal_urns::text[])
+  AND (
+    EXISTS (SELECT 1 FROM mcp_servers m WHERE m.id = @resource_id AND m.project_id = p.project_id AND m.deleted IS FALSE
+      AND (ps.mcp_server_id = m.id OR (ps.toolset_id = m.toolset_id AND m.visibility <> 'disabled'
+        AND EXISTS (SELECT 1 FROM toolsets t WHERE t.id = m.toolset_id AND t.project_id = p.project_id AND t.organization_id = p.organization_id AND t.deleted_at IS NULL)
+        AND NOT EXISTS (SELECT 1 FROM mcp_servers other WHERE other.toolset_id = m.toolset_id AND other.id <> m.id AND other.deleted IS FALSE AND other.visibility <> 'disabled' AND other.project_id = p.project_id))))
+    OR EXISTS (SELECT 1 FROM toolsets t WHERE t.id = @resource_id AND t.project_id = p.project_id AND t.organization_id = p.organization_id AND t.deleted_at IS NULL
+      AND (ps.toolset_id = t.id OR EXISTS (SELECT 1 FROM mcp_servers m WHERE m.id = ps.mcp_server_id AND m.toolset_id = t.id AND m.project_id = p.project_id AND m.deleted IS FALSE AND m.visibility <> 'disabled')))
+    OR EXISTS (SELECT 1 FROM meta_mcp_servers m WHERE m.id = @resource_id AND m.id = ps.meta_mcp_server_id AND m.project_id = p.project_id AND m.deleted IS FALSE)
+  )
+ORDER BY a.principal_urn, p.name, p.id;

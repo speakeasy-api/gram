@@ -2484,6 +2484,71 @@ func (q *Queries) ListRoleDeliveryServers(ctx context.Context, arg ListRoleDeliv
 	return items, nil
 }
 
+const listRolePluginsForResource = `-- name: ListRolePluginsForResource :many
+SELECT DISTINCT a.principal_urn, p.id AS plugin_id, p.name, p.slug
+FROM plugins p
+JOIN plugin_assignments a ON a.plugin_id = p.id AND a.organization_id = p.organization_id
+JOIN plugin_servers ps ON ps.plugin_id = p.id AND (ps.project_id IS NULL OR ps.project_id = p.project_id)
+WHERE p.organization_id = $1 AND p.project_id = $2
+  AND p.deleted_at IS NULL AND ps.deleted_at IS NULL
+  AND a.principal_urn = ANY($3::text[])
+  AND (
+    EXISTS (SELECT 1 FROM mcp_servers m WHERE m.id = $4 AND m.project_id = p.project_id AND m.deleted IS FALSE
+      AND (ps.mcp_server_id = m.id OR (ps.toolset_id = m.toolset_id AND m.visibility <> 'disabled'
+        AND EXISTS (SELECT 1 FROM toolsets t WHERE t.id = m.toolset_id AND t.project_id = p.project_id AND t.organization_id = p.organization_id AND t.deleted_at IS NULL)
+        AND NOT EXISTS (SELECT 1 FROM mcp_servers other WHERE other.toolset_id = m.toolset_id AND other.id <> m.id AND other.deleted IS FALSE AND other.visibility <> 'disabled' AND other.project_id = p.project_id))))
+    OR EXISTS (SELECT 1 FROM toolsets t WHERE t.id = $4 AND t.project_id = p.project_id AND t.organization_id = p.organization_id AND t.deleted_at IS NULL
+      AND (ps.toolset_id = t.id OR EXISTS (SELECT 1 FROM mcp_servers m WHERE m.id = ps.mcp_server_id AND m.toolset_id = t.id AND m.project_id = p.project_id AND m.deleted IS FALSE AND m.visibility <> 'disabled')))
+    OR EXISTS (SELECT 1 FROM meta_mcp_servers m WHERE m.id = $4 AND m.id = ps.meta_mcp_server_id AND m.project_id = p.project_id AND m.deleted IS FALSE)
+  )
+ORDER BY a.principal_urn, p.name, p.id
+`
+
+type ListRolePluginsForResourceParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	PrincipalUrns  []string
+	ResourceID     uuid.UUID
+}
+
+type ListRolePluginsForResourceRow struct {
+	PrincipalUrn string
+	PluginID     uuid.UUID
+	Name         string
+	Slug         string
+}
+
+// Live contents only; a legacy toolset is equivalent only to its sole active wrapper.
+func (q *Queries) ListRolePluginsForResource(ctx context.Context, arg ListRolePluginsForResourceParams) ([]ListRolePluginsForResourceRow, error) {
+	rows, err := q.db.Query(ctx, listRolePluginsForResource,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.PrincipalUrns,
+		arg.ResourceID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRolePluginsForResourceRow
+	for rows.Next() {
+		var i ListRolePluginsForResourceRow
+		if err := rows.Scan(
+			&i.PrincipalUrn,
+			&i.PluginID,
+			&i.Name,
+			&i.Slug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockMarketplaceSettings = `-- name: LockMarketplaceSettings :one
 INSERT INTO project_marketplace_settings (project_id)
 VALUES ($1)

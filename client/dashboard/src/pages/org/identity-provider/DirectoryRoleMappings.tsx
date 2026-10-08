@@ -1,3 +1,4 @@
+import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -214,6 +215,7 @@ export function DirectoryRoleMappings({
           void Promise.all([
             invalidateAllDirectoryRoleMappings(queryClient),
             invalidateAllRoles(queryClient),
+            invalidateAllResourceAudience(queryClient),
           ]).then(() => toast.success("Role created and mapped"));
         },
       },
@@ -551,6 +553,7 @@ function RolePicker({
     Promise.all([
       invalidateAllDirectoryRoleMappings(queryClient),
       invalidateAllRoles(queryClient),
+      invalidateAllResourceAudience(queryClient),
     ]);
   // Returning the refresh keeps the mutation pending until the row reloads.
   const save = useSetDirectoryRoleMappingMutation({
@@ -699,6 +702,7 @@ function RemoveMappingButton({
       Promise.all([
         invalidateAllDirectoryRoleMappings(queryClient),
         invalidateAllRoles(queryClient),
+        invalidateAllResourceAudience(queryClient),
       ]),
     onError: (error) => {
       toast.error(errorMessage(error, "Failed to remove role mapping"));
