@@ -17,7 +17,9 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/speakeasy-api/agenthooks"
@@ -42,32 +44,131 @@ type fakeServer struct {
 func newFakeServer(t *testing.T, respond func(components.IngestRequestBody) (int, decision)) *fakeServer {
 	t.Helper()
 	fs := &fakeServer{Server: nil, mu: sync.Mutex{}, requests: nil, headers: nil, respond: respond, effects: nil}
-	fs.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		var p components.IngestRequestBody
-		_ = json.Unmarshal(body, &p)
-		fs.mu.Lock()
-		fs.requests = append(fs.requests, p)
-		fs.headers = append(fs.headers, r.Header.Clone())
-		fs.mu.Unlock()
-
-		status, dec := http.StatusOK, decision{Decision: "allow", Reason: "", Message: ""}
-		if fs.respond != nil {
-			status, dec = fs.respond(p)
-		}
-		out := struct {
-			decision
-			Effects map[string]any `json:"effects,omitempty"`
-		}{decision: dec, Effects: nil}
-		if fs.effects != nil {
-			out.Effects = fs.effects(p)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(out)
-	}))
+	fs.Server = httptest.NewServer(http.HandlerFunc(fs.serve))
 	t.Cleanup(fs.Close)
 	return fs
+}
+
+// newPipeFakeServer is newFakeServer over in-memory connections, for tests
+// that run inside a synctest bubble.
+func newPipeFakeServer(t *testing.T, respond func(components.IngestRequestBody) (int, decision)) *fakeServer {
+	t.Helper()
+	fs := &fakeServer{Server: nil, mu: sync.Mutex{}, requests: nil, headers: nil, respond: respond, effects: nil}
+	fs.Server = newPipeServer(t, http.HandlerFunc(fs.serve))
+	return fs
+}
+
+func (fs *fakeServer) serve(w http.ResponseWriter, r *http.Request) {
+	body, _ := io.ReadAll(r.Body)
+	var p components.IngestRequestBody
+	_ = json.Unmarshal(body, &p)
+	fs.mu.Lock()
+	fs.requests = append(fs.requests, p)
+	fs.headers = append(fs.headers, r.Header.Clone())
+	fs.mu.Unlock()
+
+	status, dec := http.StatusOK, decision{Decision: "allow", Reason: "", Message: ""}
+	if fs.respond != nil {
+		status, dec = fs.respond(p)
+	}
+	out := struct {
+		decision
+		Effects map[string]any `json:"effects,omitempty"`
+	}{decision: dec, Effects: nil}
+	if fs.effects != nil {
+		out.Effects = fs.effects(p)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+// newPipeServer starts an httptest server on a pipeListener and routes the
+// relay's ingest dials to it for the rest of the test. Everything runs on the
+// real HTTP client and server stacks, so transport timeouts and the device
+// headers stay under test, while the connections stay in memory and count as
+// idle to synctest. The server closes during cleanup; a handler that blocks
+// must be released by a cleanup registered after this call.
+func newPipeServer(t *testing.T, handler http.Handler) *httptest.Server {
+	t.Helper()
+	listener := newPipeListener()
+	srv := httptest.NewUnstartedServer(handler)
+	require.NoError(t, srv.Listener.Close())
+	srv.Listener = listener
+	srv.Start()
+	t.Cleanup(srv.Close)
+
+	prev := ingestDialContext
+	ingestDialContext = listener.DialContext
+	t.Cleanup(func() { ingestDialContext = prev })
+	return srv
+}
+
+// pipeListener is a net.Listener whose connections are net.Pipe pairs handed
+// over by DialContext.
+type pipeListener struct {
+	conns     chan net.Conn
+	closed    chan struct{}
+	closeOnce sync.Once
+}
+
+func newPipeListener() *pipeListener {
+	return &pipeListener{conns: make(chan net.Conn), closed: make(chan struct{}), closeOnce: sync.Once{}}
+}
+
+func (l *pipeListener) Accept() (net.Conn, error) {
+	select {
+	case conn := <-l.conns:
+		return conn, nil
+	case <-l.closed:
+		return nil, net.ErrClosed
+	}
+}
+
+func (l *pipeListener) Close() error {
+	l.closeOnce.Do(func() { close(l.closed) })
+	return nil
+}
+
+// Addr reports a loopback address so the server URL passes the relay's
+// plaintext-only-on-loopback check. The port is never dialed.
+func (l *pipeListener) Addr() net.Addr {
+	return &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1, Zone: ""}
+}
+
+// DialContext ignores the address and connects to this listener. Once the
+// listener is closed it refuses the dial the way a dead port does, so a closed
+// pipe server stands in for an unreachable control plane.
+func (l *pipeListener) DialContext(ctx context.Context, network, _ string) (net.Conn, error) {
+	refused := &net.OpError{Op: "dial", Net: network, Source: nil, Addr: l.Addr(), Err: syscall.ECONNREFUSED}
+	select {
+	case <-l.closed:
+		return nil, refused
+	default:
+	}
+
+	server, client := net.Pipe()
+	select {
+	case l.conns <- server:
+		return client, nil
+	case <-ctx.Done():
+		_ = server.Close()
+		_ = client.Close()
+		return nil, ctx.Err()
+	case <-l.closed:
+		_ = server.Close()
+		_ = client.Close()
+		return nil, refused
+	}
+}
+
+// refusedPipeURL is closedPortURL for tests inside a synctest bubble: a server
+// URL whose every ingest dial is refused without touching the network.
+func refusedPipeURL(t *testing.T) string {
+	t.Helper()
+	srv := newPipeServer(t, http.NotFoundHandler())
+	srv.Close()
+	return srv.URL
 }
 
 func (fs *fakeServer) count() int {
@@ -507,15 +608,17 @@ func TestServerErrorBlocksToolCall(t *testing.T) {
 // unreachable server lets the gating event through — while a definitive 4xx
 // (TestLegacyNonblockingKeepsClientErrorsClosed) still blocks.
 func TestLegacyNonblockingFailsOpenOnOutage(t *testing.T) {
-	fs := newFakeServer(t, nil)
-	cfg := authedConfig(t, fs.URL)
-	cfg.Nonblocking = true
-	fs.Close()
+	synctest.Test(t, func(t *testing.T) {
+		fs := newPipeFakeServer(t, nil)
+		cfg := authedConfig(t, fs.URL)
+		cfg.Nonblocking = true
+		fs.Close()
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+		res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
-	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+		require.Equal(t, 0, res.ExitCode)
+		require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+	})
 }
 
 // TestLegacyNonblockingKeepsClientErrorsClosed: the legacy flag maps to
@@ -1263,18 +1366,19 @@ func TestMissingVerdictBlocksGatingEvent(t *testing.T) {
 // content type — e.g. an intercepting proxy) carries no verdict and must not
 // read as an implicit allow on a blocking hook.
 func TestUnparseable2xxBlocksGatingEvent(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		_, _ = w.Write([]byte("<html>intercepted</html>"))
-	}))
-	t.Cleanup(srv.Close)
-	cfg := authedConfig(t, srv.URL)
-	// Cached posture: without it the cold-start pass would fail this open.
-	writeOrgSettings(cfg, false)
+	synctest.Test(t, func(t *testing.T) {
+		srv := newPipeServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte("<html>intercepted</html>"))
+		}))
+		cfg := authedConfig(t, srv.URL)
+		// Cached posture: without it the cold-start pass would fail this open.
+		writeOrgSettings(cfg, false)
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
-	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
-	require.Contains(t, string(res.Stdout), "verdict")
+		res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+		require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
+		require.Contains(t, string(res.Stdout), "verdict")
+	})
 }
 
 // TestRejectedCachedKeyNudgesPromptReconnect covers the stale-cache recovery
@@ -1596,31 +1700,34 @@ func TestBrokenConfigFailsOpenNeverAuthed(t *testing.T) {
 // accepts connections but never responds must not stack the SDK's internal
 // retry budget with the transport replays past a controlled deadline.
 func TestSendBoundsTotalRetryTime(t *testing.T) {
-	// The handler never reads the request body, so the server cannot see the
-	// client abandon the connection; cleanup runs LIFO, so close(hung) must be
-	// registered after srv.Close to release the handler before Close waits on
-	// its outstanding request.
-	hung := make(chan struct{})
-	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		<-hung
-	}))
-	t.Cleanup(srv.Close)
-	t.Cleanup(func() { close(hung) })
+	// End the budget during the second attempt so the overall deadline,
+	// rather than the attempt limit, must stop the retries.
+	synctest.Test(t, func(t *testing.T) {
+		// The handler never reads the request body, so the server cannot see
+		// the client abandon the connection; cleanup runs LIFO, so close(hung)
+		// is registered after newPipeServer to release the handler before the
+		// server's Close waits on its outstanding request.
+		hung := make(chan struct{})
+		srv := newPipeServer(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			<-hung
+		}))
+		t.Cleanup(func() { close(hung) })
 
-	cl := newClient(srv.URL)
-	cl.budget = 2 * time.Second
-	start := time.Now()
-	res := cl.send(t.Context(), creds{ServerURL: "", APIKey: "k", Project: "p", Email: "", Org: "", Source: credEnv}, components.IngestRequestBody{
-		SchemaVersion: schemaVersion,
-		Source:        components.HookIngestSource{Adapter: "claude", AdapterVersion: nil, RawEventName: nil, Hostname: nil, UserEmail: nil},
-		Session:       nil,
-		Event:         components.HookIngestEvent{Type: components.TypeSessionUpdated, OccurredAt: nil},
-		Data:          nil,
-		Raw:           nil,
-	}, newIdempotencyToken())
+		cl := newClient(srv.URL)
+		cl.budget = perAttemptTime + time.Second
+		start := time.Now()
+		res := cl.send(t.Context(), creds{ServerURL: "", APIKey: "k", Project: "p", Email: "", Org: "", Source: credEnv}, components.IngestRequestBody{
+			SchemaVersion: schemaVersion,
+			Source:        components.HookIngestSource{Adapter: "claude", AdapterVersion: nil, RawEventName: nil, Hostname: nil, UserEmail: nil},
+			Session:       nil,
+			Event:         components.HookIngestEvent{Type: components.TypeSessionUpdated, OccurredAt: nil},
+			Data:          nil,
+			Raw:           nil,
+		}, newIdempotencyToken())
 
-	require.Equal(t, 0, res.statusCode, "a hung endpoint yields a transport failure, not a verdict")
-	require.Less(t, time.Since(start), 10*time.Second, "the send budget must bound retries end to end")
+		require.Equal(t, 0, res.statusCode, "a hung endpoint yields a transport failure, not a verdict")
+		require.Equal(t, cl.budget, time.Since(start), "the send budget must bound retries end to end")
+	})
 }
 
 // TestEnvelopeReportsBinaryVersion keeps relay version skew diagnosable from

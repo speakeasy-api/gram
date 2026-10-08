@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/speakeasy-api/agenthooks"
@@ -105,60 +106,69 @@ func TestIngestWithoutEffectsLeavesOrgSettings(t *testing.T) {
 // TestServerErrorFailsOpenWithCachedSetting is the feature's core case: a 5xx
 // with a cached fail-open choice lets the gating event through.
 func TestServerErrorFailsOpenWithCachedSetting(t *testing.T) {
-	shrinkRetryBudget(t)
-	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
-		return http.StatusServiceUnavailable, decision{Decision: "", Reason: "", Message: ""}
+	synctest.Test(t, func(t *testing.T) {
+		shrinkRetryBudget(t)
+		fs := newPipeFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+			return http.StatusServiceUnavailable, decision{Decision: "", Reason: "", Message: ""}
+		})
+		cfg := authedConfig(t, fs.URL)
+		writeOrgSettings(cfg, true)
+
+		res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+		require.Equal(t, 0, res.ExitCode)
+		require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
 	})
-	cfg := authedConfig(t, fs.URL)
-	writeOrgSettings(cfg, true)
-
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
-
-	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
 }
 
 // TestServerErrorBlocksWhenCachedFailClosed: an explicit fail-closed choice
 // blocks on 5xx like the default.
 func TestServerErrorBlocksWhenCachedFailClosed(t *testing.T) {
-	shrinkRetryBudget(t)
-	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
-		return http.StatusInternalServerError, decision{Decision: "", Reason: "", Message: ""}
+	// The SDK's retry backoff runs on the bubble's fake clock.
+	synctest.Test(t, func(t *testing.T) {
+		shrinkRetryBudget(t)
+		fs := newPipeFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+			return http.StatusInternalServerError, decision{Decision: "", Reason: "", Message: ""}
+		})
+		cfg := authedConfig(t, fs.URL)
+		writeOrgSettings(cfg, false)
+
+		res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+		require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
 	})
-	cfg := authedConfig(t, fs.URL)
-	writeOrgSettings(cfg, false)
-
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
-
-	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
 }
 
 // TestUnreachableFailsOpenWithCachedSetting covers the actual outage shape:
 // the server is gone entirely (connection refused, statusCode 0).
 func TestUnreachableFailsOpenWithCachedSetting(t *testing.T) {
-	fs := newFakeServer(t, nil)
-	cfg := authedConfig(t, fs.URL)
-	writeOrgSettings(cfg, true)
-	fs.Close()
+	synctest.Test(t, func(t *testing.T) {
+		fs := newPipeFakeServer(t, nil)
+		cfg := authedConfig(t, fs.URL)
+		writeOrgSettings(cfg, true)
+		fs.Close()
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+		res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
-	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+		require.Equal(t, 0, res.ExitCode)
+		require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+	})
 }
 
 // TestUnreachableBlocksWhenCachedFailClosed mirrors the default posture for a
 // dead server once a posture has been cached (a never-cached machine instead
 // gets the cold-start pass — see TestColdStartNoCacheFailsOpen).
 func TestUnreachableBlocksWhenCachedFailClosed(t *testing.T) {
-	fs := newFakeServer(t, nil)
-	cfg := authedConfig(t, fs.URL)
-	writeOrgSettings(cfg, false)
-	fs.Close()
+	synctest.Test(t, func(t *testing.T) {
+		fs := newPipeFakeServer(t, nil)
+		cfg := authedConfig(t, fs.URL)
+		writeOrgSettings(cfg, false)
+		fs.Close()
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+		res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
-	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
+		require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
+	})
 }
 
 // TestClientErrorStaysClosedDespiteFailOpen: a definitive 4xx means the server
@@ -219,62 +229,70 @@ func TestCachedKeyRejectionRatchetUnchangedByFailOpen(t *testing.T) {
 // TestOrgSettingsCacheScopedToServer: a value learned from one deployment must
 // not govern another (dev cache must not fail production open).
 func TestOrgSettingsCacheScopedToServer(t *testing.T) {
-	fs := newFakeServer(t, nil)
-	cfg := authedConfig(t, fs.URL)
-	other := cfg
-	other.ServerURL = "https://other.gram.test"
-	writeOrgSettings(other, true)
-	fs.Close()
+	synctest.Test(t, func(t *testing.T) {
+		fs := newPipeFakeServer(t, nil)
+		cfg := authedConfig(t, fs.URL)
+		other := cfg
+		other.ServerURL = "https://other.gram.test"
+		writeOrgSettings(other, true)
+		fs.Close()
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+		res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
-	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "another server's cached setting must be ignored")
+		require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "another server's cached setting must be ignored")
+	})
 }
 
 // TestOrgSettingsCacheScopedToOrg: within one server, another org's posture
 // must not apply.
 func TestOrgSettingsCacheScopedToOrg(t *testing.T) {
-	fs := newFakeServer(t, nil)
-	cfg := authedConfig(t, fs.URL)
-	cfg.OrgID = "org-1"
-	other := cfg
-	other.OrgID = "org-2"
-	writeOrgSettings(other, true)
-	fs.Close()
+	synctest.Test(t, func(t *testing.T) {
+		fs := newPipeFakeServer(t, nil)
+		cfg := authedConfig(t, fs.URL)
+		cfg.OrgID = "org-1"
+		other := cfg
+		other.OrgID = "org-2"
+		writeOrgSettings(other, true)
+		fs.Close()
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+		res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
-	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "another org's cached setting must be ignored")
+		require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "another org's cached setting must be ignored")
+	})
 }
 
 // TestOrgSettingsCacheRequiresExactOrgMatch: a config that does not declare an
 // org must not inherit a posture recorded under some org's identity — the
 // match is exact, not one-sided like the credential cache.
 func TestOrgSettingsCacheRequiresExactOrgMatch(t *testing.T) {
-	fs := newFakeServer(t, nil)
-	cfg := authedConfig(t, fs.URL)
-	other := cfg
-	other.OrgID = "org-1"
-	writeOrgSettings(other, true)
-	fs.Close()
+	synctest.Test(t, func(t *testing.T) {
+		fs := newPipeFakeServer(t, nil)
+		cfg := authedConfig(t, fs.URL)
+		other := cfg
+		other.OrgID = "org-1"
+		writeOrgSettings(other, true)
+		fs.Close()
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+		res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
-	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "an org-scoped cached setting must not apply to an org-less config")
+		require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "an org-scoped cached setting must not apply to an org-less config")
+	})
 }
 
 // TestFutureTimestampedOrgSettingsIgnored: a future updated_at (clock rolled
 // back since the write) has an unknowable age, so it must read as stale
 // instead of surviving the max-age cutoff indefinitely.
 func TestFutureTimestampedOrgSettingsIgnored(t *testing.T) {
-	fs := newFakeServer(t, nil)
-	cfg := authedConfig(t, fs.URL)
-	seedOrgSettings(t, cfg, true, -48*time.Hour)
-	fs.Close()
+	synctest.Test(t, func(t *testing.T) {
+		fs := newPipeFakeServer(t, nil)
+		cfg := authedConfig(t, fs.URL)
+		seedOrgSettings(t, cfg, true, -48*time.Hour)
+		fs.Close()
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+		res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
-	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "a future-stamped cached setting must be ignored")
+		require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "a future-stamped cached setting must be ignored")
+	})
 }
 
 // TestForgetAuthLeavesOrgSettings: losing a credential must not flip the org's
@@ -295,28 +313,32 @@ func TestForgetAuthLeavesOrgSettings(t *testing.T) {
 // than the max age must not govern enforcement — the org may have reversed it
 // while the machine was offline.
 func TestStaleOrgSettingsRevertToFailClosed(t *testing.T) {
-	fs := newFakeServer(t, nil)
-	cfg := authedConfig(t, fs.URL)
-	seedOrgSettings(t, cfg, true, orgSettingsMaxAge+time.Hour)
-	fs.Close()
+	synctest.Test(t, func(t *testing.T) {
+		fs := newPipeFakeServer(t, nil)
+		cfg := authedConfig(t, fs.URL)
+		seedOrgSettings(t, cfg, true, orgSettingsMaxAge+time.Hour)
+		fs.Close()
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+		res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
-	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "a stale cached fail-open must not apply")
+		require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "a stale cached fail-open must not apply")
+	})
 }
 
 // TestAgedOrgSettingsWithinMaxAgeStillApply pins the cutoff boundary: an
 // entry just inside the max age still governs.
 func TestAgedOrgSettingsWithinMaxAgeStillApply(t *testing.T) {
-	fs := newFakeServer(t, nil)
-	cfg := authedConfig(t, fs.URL)
-	seedOrgSettings(t, cfg, true, orgSettingsMaxAge-time.Hour)
-	fs.Close()
+	synctest.Test(t, func(t *testing.T) {
+		fs := newPipeFakeServer(t, nil)
+		cfg := authedConfig(t, fs.URL)
+		seedOrgSettings(t, cfg, true, orgSettingsMaxAge-time.Hour)
+		fs.Close()
 
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+		res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
-	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+		require.Equal(t, 0, res.ExitCode)
+		require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
+	})
 }
 
 // TestUnchangedOrgSettingsRefreshWhenAged: a successful exchange rewrites an
@@ -357,47 +379,53 @@ func TestUnchangedRecentOrgSettingsSkipRewrite(t *testing.T) {
 
 // TestFailOpenEnvOverride: the escape hatch works with no cache file at all.
 func TestFailOpenEnvOverride(t *testing.T) {
-	shrinkRetryBudget(t)
-	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
-		return http.StatusServiceUnavailable, decision{Decision: "", Reason: "", Message: ""}
+	synctest.Test(t, func(t *testing.T) {
+		shrinkRetryBudget(t)
+		fs := newPipeFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+			return http.StatusServiceUnavailable, decision{Decision: "", Reason: "", Message: ""}
+		})
+		cfg := authedConfig(t, fs.URL)
+		t.Setenv("SPEAKEASY_AI_HOOKS_FAIL_OPEN", "1")
+
+		res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+		require.Equal(t, 0, res.ExitCode)
+		require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
 	})
-	cfg := authedConfig(t, fs.URL)
-	t.Setenv("SPEAKEASY_AI_HOOKS_FAIL_OPEN", "1")
-
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
-
-	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
 }
 
 // TestColdStartNoCacheFailsOpen: a machine that has never cached an org
 // posture must not brick on its first gate during a control-plane outage.
 func TestColdStartNoCacheFailsOpen(t *testing.T) {
-	shrinkRetryBudget(t)
-	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
-		return http.StatusServiceUnavailable, decision{Decision: "", Reason: "", Message: ""}
+	synctest.Test(t, func(t *testing.T) {
+		shrinkRetryBudget(t)
+		fs := newPipeFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+			return http.StatusServiceUnavailable, decision{Decision: "", Reason: "", Message: ""}
+		})
+		cfg := authedConfig(t, fs.URL)
+
+		res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+		require.Equal(t, 0, res.ExitCode)
+		require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
 	})
-	cfg := authedConfig(t, fs.URL)
-
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
-
-	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, "{}", string(bytes.TrimSpace(res.Stdout)))
 }
 
 // TestStaleCacheIsNotAColdStart: a present-but-expired posture keeps the
 // fail-closed default — only a never-cached machine gets the cold-start pass.
 func TestStaleCacheIsNotAColdStart(t *testing.T) {
-	shrinkRetryBudget(t)
-	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
-		return http.StatusServiceUnavailable, decision{Decision: "", Reason: "", Message: ""}
+	synctest.Test(t, func(t *testing.T) {
+		shrinkRetryBudget(t)
+		fs := newPipeFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+			return http.StatusServiceUnavailable, decision{Decision: "", Reason: "", Message: ""}
+		})
+		cfg := authedConfig(t, fs.URL)
+		seedOrgSettings(t, cfg, true, orgSettingsMaxAge+time.Hour)
+
+		res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+
+		require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "stale cache must not fail open")
 	})
-	cfg := authedConfig(t, fs.URL)
-	seedOrgSettings(t, cfg, true, orgSettingsMaxAge+time.Hour)
-
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
-
-	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "stale cache must not fail open")
 }
 
 // TestGateBudgetBeatsHangingServer: a hanging control plane must resolve the
@@ -406,20 +434,27 @@ func TestStaleCacheIsNotAColdStart(t *testing.T) {
 // budget is capped at maxGateSendBudget, so the verdict lands far inside
 // Claude Code's own hook timeout rather than at the 45s sendBudget.
 func TestGateBudgetBeatsHangingServer(t *testing.T) {
-	shrinkRetryBudget(t)
-	release := make(chan struct{})
-	defer close(release)
-	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
-		<-release
-		return http.StatusServiceUnavailable, decision{Decision: "", Reason: "", Message: ""}
+	// The bubble's fake clock makes the budget's wait instant. Everything,
+	// including seedOrgSettings, runs inside it: the fake clock starts in
+	// 2000, so a cache stamped by the real clock would read as future-dated.
+	synctest.Test(t, func(t *testing.T) {
+		shrinkRetryBudget(t)
+		release := make(chan struct{})
+		fs := newPipeFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+			<-release
+			return http.StatusServiceUnavailable, decision{Decision: "", Reason: "", Message: ""}
+		})
+		// Registered after the server so it runs first and unblocks the
+		// handler before the server's Close waits on it.
+		t.Cleanup(func() { close(release) })
+		cfg := authedConfig(t, fs.URL)
+		seedOrgSettings(t, cfg, false, time.Minute)
+
+		start := time.Now()
+		res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+		elapsed := time.Since(start)
+
+		require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "fail-closed posture must block")
+		require.LessOrEqual(t, elapsed, maxGateSendBudget, "gate verdict must resolve within the gate budget, not ride the full sendBudget")
 	})
-	cfg := authedConfig(t, fs.URL)
-	seedOrgSettings(t, cfg, false, time.Minute)
-
-	start := time.Now()
-	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
-	elapsed := time.Since(start)
-
-	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "fail-closed posture must block")
-	require.Less(t, elapsed, maxGateSendBudget+5*time.Second, "gate verdict must resolve within the gate budget, not ride the full sendBudget")
 }
