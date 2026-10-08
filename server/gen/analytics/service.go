@@ -97,6 +97,9 @@ type AnalyticsField struct {
 	Operators []string
 	// Ops a field admits: aggregations on a measure, count_distinct on a dimension
 	Aggregations []string
+	// What the field is and which producers fill it, when the catalog has
+	// something to say beyond the name
+	Description *string
 }
 
 // A filter on a dimension. All filters are ANDed.

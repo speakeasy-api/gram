@@ -193,10 +193,15 @@ func describeDatasets(catalog *Catalog) []*gen.AnalyticsDataset {
 				Unit:         nil,
 				Operators:    nil,
 				Aggregations: nil,
+				Description:  nil,
 			}
 			if f.Unit != "" {
 				unit := f.Unit
 				field.Unit = &unit
+			}
+			if f.Description != "" {
+				description := f.Description
+				field.Description = &description
 			}
 			for _, op := range f.Operators {
 				field.Operators = append(field.Operators, string(op))

@@ -104,13 +104,22 @@ func sessionsSource(scope Scope) squirrel.SelectBuilder {
 		GroupBy("organization_id", "project_id", "session_id")
 }
 
-// toolCallsSource collapses agent_events to one row per tool call. Pre- and
-// post-observations of one call are separate rows by design (the canonical
-// event type is part of identity), so argMax by observation time resolves to
-// the terminal observation. A call that was blocked never ran, so its only
-// observation is the decision that blocked it: that row alone is the call,
-// and its outcome resolves to rejected.
+// toolCallsSource is one row per tool call, Skill invocations included.
 func toolCallsSource(scope Scope) squirrel.SelectBuilder {
+	return collapsedToolCalls(scope)
+}
+
+// skillsSource is one row per tool call that named a skill. The filter runs
+// after the collapse because not every observation of a call carries the
+// name: a blocked invocation's decision does not, its result does.
+func skillsSource(scope Scope) squirrel.SelectBuilder {
+	return collapsedToolCalls(scope).Having("skill_name != ''")
+}
+
+// collapsedToolCalls folds the observations of each tool call (decision,
+// call, result) into one row at its latest observation. A blocked call has
+// only its decision, so that row is the call and its status is rejected.
+func collapsedToolCalls(scope Scope) squirrel.SelectBuilder {
 	return sq.Select(
 		"organization_id",
 		"project_id",
@@ -118,6 +127,7 @@ func toolCallsSource(scope Scope) squirrel.SelectBuilder {
 		"argMaxIf(tool_name, observed_at_unix_nano, tool_name != '') AS tool_name",
 		"argMaxIf(mcp_server_name, observed_at_unix_nano, mcp_server_name != '') AS mcp_server_name",
 		"argMaxIf(mcp_tool_name, observed_at_unix_nano, mcp_tool_name != '') AS mcp_tool_name",
+		"argMaxIf(skill_name, observed_at_unix_nano, skill_name != '') AS skill_name",
 		"argMaxIf(session_id, observed_at_unix_nano, session_id != '') AS session_id",
 		"argMaxIf(user_email, observed_at_unix_nano, user_email != '') AS user_email",
 		"argMaxIf(surface, observed_at_unix_nano, surface != '') AS surface",

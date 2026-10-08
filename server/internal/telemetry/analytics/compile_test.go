@@ -100,6 +100,42 @@ func TestCompileCountDistinct(t *testing.T) {
 	require.Contains(t, plan.SQL, "ORDER BY people DESC, mcp_server ASC")
 }
 
+// TestCompileSkills: skills is its own dataset over the calls that named a
+// skill, so skill is grouped, filtered and distinct-counted like any other
+// dimension, over a source that keeps only those calls.
+func TestCompileSkills(t *testing.T) {
+	t.Parallel()
+
+	plan, err := compileTest(t, Request{
+		Dataset:    "skills",
+		Grain:      "",
+		Dimensions: []string{"skill"},
+		Measures: []Measure{
+			{Op: "count", Field: "", Alias: ""},
+			{Op: "count_distinct", Field: "user", Alias: "people"},
+			{Op: "count_distinct", Field: "skill", Alias: ""},
+		},
+		Filters:   []Filter{{Field: "skill", Operator: "in", Values: []string{"deploy", "review"}}},
+		OrderBy:   nil,
+		Limit:     0,
+		Ungrouped: false,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, []Column{
+		{Name: "skill", Kind: ColumnDimension},
+		{Name: "count", Kind: ColumnMeasure},
+		{Name: "people", Kind: ColumnMeasure},
+		{Name: "count_distinct_skill", Kind: ColumnMeasure},
+	}, plan.Columns)
+	require.Contains(t, plan.SQL, "skill_name AS skill")
+	require.Contains(t, plan.SQL, "uniqExactIf(skill_name, skill_name != '') AS count_distinct_skill", "skills used counts the invocations that named one")
+	require.Contains(t, plan.SQL, "HAVING skill_name != ''", "the source keeps only the collapsed calls that named a skill")
+	require.Contains(t, plan.SQL, "WHERE skill_name IN (?,?)")
+	require.Contains(t, plan.SQL, "GROUP BY skill")
+	require.Equal(t, []any{"deploy", "review"}, plan.Args[len(plan.Args)-2:], "the filter values are bound last")
+}
+
 func TestCompileUngrouped(t *testing.T) {
 	t.Parallel()
 
@@ -140,6 +176,7 @@ func TestCompileRejects(t *testing.T) {
 		{name: "unknown dimension", req: Request{Dataset: "sessions", Dimensions: []string{"department"}, Measures: count}, code: ErrUnknownField, field: "dimensions[0]"},
 		{name: "measure used as a dimension", req: Request{Dataset: "sessions", Dimensions: []string{"turn_count"}, Measures: count}, code: ErrUnknownField, field: "dimensions[0]"},
 		{name: "project is not a field", req: Request{Dataset: "sessions", Dimensions: []string{"project"}, Measures: count}, code: ErrUnknownField, field: "dimensions[0]"},
+		{name: "skill on tool_calls, where a Skill call is an ordinary call", req: Request{Dataset: "tool_calls", Dimensions: []string{"skill"}, Measures: count}, code: ErrUnknownField, field: "dimensions[0]"},
 		{name: "repeated dimension", req: Request{Dataset: "sessions", Dimensions: []string{"user", "user"}, Measures: count}, code: ErrUnsatisfiable, field: "dimensions[1]"},
 		{name: "too many dimensions", req: Request{Dataset: "sessions", Dimensions: []string{"user", "model", "surface", "provider"}, Measures: count}, code: ErrTooManyDimensions, field: "dimensions"},
 		{name: "aggregation the field does not admit", req: Request{Dataset: "sessions", Measures: []Measure{{Op: "p95", Field: "turn_count", Alias: ""}}}, code: ErrUnsupportedAggregation, field: "measures[0].op"},

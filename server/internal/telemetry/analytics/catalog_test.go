@@ -12,11 +12,11 @@ import (
 func TestDefaultCatalog(t *testing.T) {
 	t.Parallel()
 
-	names := make([]string, 0, 2)
+	names := make([]string, 0, 3)
 	for _, ds := range Default.Datasets() {
 		names = append(names, ds.Name)
 	}
-	require.Equal(t, []string{"sessions", "tool_calls"}, names)
+	require.Equal(t, []string{"sessions", "tool_calls", "skills"}, names)
 
 	sessions, ok := Default.Dataset("sessions")
 	require.True(t, ok)
@@ -37,6 +37,24 @@ func TestDefaultCatalog(t *testing.T) {
 	status, ok := toolCalls.Field("status")
 	require.True(t, ok)
 	require.False(t, status.AdmitsAggregation("count_distinct"), "a dimension that does not declare it does not admit it")
+	_, ok = toolCalls.Field("skill")
+	require.False(t, ok, "a Skill call is an ordinary tool call here; skills are their own dataset")
+
+	skills, ok := Default.Dataset("skills")
+	require.True(t, ok)
+	require.Equal(t, "skill invocation", skills.Grain)
+	require.Contains(t, skills.Description, "Claude Code", "the one dataset a single producer family fills says so")
+	skill, ok := skills.Field("skill")
+	require.True(t, ok)
+	require.Equal(t, RoleDimension, skill.Role)
+	require.True(t, skill.Default, "the skills view opens broken down by skill")
+	require.True(t, skill.AdmitsOperator("in"))
+	require.True(t, skill.AdmitsAggregation("count_distinct"), "skills used is a distinct count")
+	require.Empty(t, skill.Description, "the producer caveat is on the dataset, not the field")
+	for _, name := range []string{"session", "user", "surface", "status", "duration_ms"} {
+		_, ok := skills.Field(name)
+		require.True(t, ok, "%s reads on a skill invocation as on any call", name)
+	}
 
 	duration, ok := sessions.Field("duration_seconds")
 	require.True(t, ok)
@@ -60,7 +78,7 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 			Description: "things",
 			TimeExpr:    "started_at",
 			Fields: []Field{
-				{Name: "thing", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "thing_id"},
+				{Name: "thing", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "thing_id", Description: ""},
 			},
 			Source: sessionsSource,
 		}
@@ -76,13 +94,13 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 		{name: "it rejects a dimension with no operators", mutate: func(d *Dataset) { d.Fields[0].Operators = nil }, want: "must declare operators"},
 		{name: "it names an aggregation a dimension declares that nothing knows", mutate: func(d *Dataset) { d.Fields[0].Aggregations = []Aggregation{"count_distinctt"} }, want: `unknown aggregation "count_distinctt"`},
 		{name: "it rejects a measure declaring count_distinct", mutate: func(d *Dataset) {
-			d.Fields[0] = Field{Name: "n", Type: TypeInt64, Role: RoleMeasure, Default: false, Unit: "", Operators: nil, Aggregations: []Aggregation{AggregationCountDistinct}, Expr: "n"}
+			d.Fields[0] = Field{Name: "n", Type: TypeInt64, Role: RoleMeasure, Default: false, Unit: "", Operators: nil, Aggregations: []Aggregation{AggregationCountDistinct}, Expr: "n", Description: ""}
 		}, want: "cannot declare count_distinct"},
 		{name: "it rejects a measure with operators", mutate: func(d *Dataset) {
-			d.Fields[0] = Field{Name: "n", Type: TypeInt64, Role: RoleMeasure, Default: false, Unit: "", Operators: equalsIn, Aggregations: []Aggregation{AggregationSum}, Expr: "n"}
+			d.Fields[0] = Field{Name: "n", Type: TypeInt64, Role: RoleMeasure, Default: false, Unit: "", Operators: equalsIn, Aggregations: []Aggregation{AggregationSum}, Expr: "n", Description: ""}
 		}, want: "must declare aggregations and no operators"},
 		{name: "it rejects a string measure", mutate: func(d *Dataset) {
-			d.Fields[0] = Field{Name: "n", Type: TypeString, Role: RoleMeasure, Default: false, Unit: "", Operators: nil, Aggregations: []Aggregation{AggregationSum}, Expr: "n"}
+			d.Fields[0] = Field{Name: "n", Type: TypeString, Role: RoleMeasure, Default: false, Unit: "", Operators: nil, Aggregations: []Aggregation{AggregationSum}, Expr: "n", Description: ""}
 		}, want: "cannot be a string"},
 		{name: "it rejects a duplicate field", mutate: func(d *Dataset) { d.Fields = append(d.Fields, d.Fields[0]) }, want: "twice"},
 		{name: "it rejects a field named like the time bucket", mutate: func(d *Dataset) { d.Fields[0].Name = timeBucketColumn }, want: "time bucket"},
@@ -98,7 +116,7 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 		{name: "it rejects an unknown field type", mutate: func(d *Dataset) { d.Fields[0].Type = "uuid" }, want: "unknown type"},
 		{name: "it rejects an unknown operator", mutate: func(d *Dataset) { d.Fields[0].Operators = []Operator{"like"} }, want: "unknown operator"},
 		{name: "it rejects an unknown aggregation", mutate: func(d *Dataset) {
-			d.Fields[0] = Field{Name: "n", Type: TypeInt64, Role: RoleMeasure, Default: false, Unit: "", Operators: nil, Aggregations: []Aggregation{"median"}, Expr: "n"}
+			d.Fields[0] = Field{Name: "n", Type: TypeInt64, Role: RoleMeasure, Default: false, Unit: "", Operators: nil, Aggregations: []Aggregation{"median"}, Expr: "n", Description: ""}
 		}, want: "unknown aggregation"},
 	}
 	for _, tc := range cases {
@@ -140,13 +158,16 @@ func TestSourceQueriesDeduplicateBeforeAggregating(t *testing.T) {
 	// What each dataset binds after the scope: the whole list, so a dropped or
 	// reordered predicate fails here rather than passing unseen, and a new
 	// dataset has to declare its binds before it passes at all.
-	eventTypes := make([]any, 0, len(toolCallEventTypes))
+	toolCallBinds := make([]any, 0, len(toolCallEventTypes)+1)
 	for _, eventType := range toolCallEventTypes {
-		eventTypes = append(eventTypes, eventType)
+		toolCallBinds = append(toolCallBinds, eventType)
 	}
+	toolCallBinds = append(toolCallBinds, "") // event_type IN (...), event_id != ''
 	trailing := map[string][]any{
-		Sessions.Name:  {""},                   // session_id != ''
-		ToolCalls.Name: append(eventTypes, ""), // event_type IN (...), event_id != ''
+		Sessions.Name:  {""}, // session_id != ''
+		ToolCalls.Name: toolCallBinds,
+		// The same collapse; the skill predicate is a literal on the collapsed row.
+		Skills.Name: toolCallBinds,
 	}
 
 	for _, ds := range Default.Datasets() {

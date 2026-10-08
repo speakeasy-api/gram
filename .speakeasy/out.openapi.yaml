@@ -78992,6 +78992,9 @@ components:
           type: boolean
           description: 'Part of the query the dataset opens on: a default dimension is in the opening group-by'
           example: true
+        description:
+          type: string
+          description: What the field is and which producers fill it, when the catalog has something to say beyond the name
         name:
           type: string
           example: user

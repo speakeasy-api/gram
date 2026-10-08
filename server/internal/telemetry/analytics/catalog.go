@@ -118,6 +118,11 @@ type Field struct {
 	Operators    []Operator
 	Aggregations []Aggregation
 	Expr         string
+	// Description says what the field is and, when it matters, which
+	// producers fill it: a field one producer family reports and the rest
+	// do not needs to say so, or a sparse breakdown reads as "none". It is
+	// shown by describe and the builder's pickers; most fields need none.
+	Description string
 }
 
 // Dataset is a logical entity at a declared grain. It owns a source query,
