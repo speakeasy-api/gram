@@ -977,6 +977,20 @@ WITH ordered AS (
   WHERE cm.chat_id = $2
     AND cm.project_id = $1::uuid
     AND cm.generation = $3::integer
+),
+attachment_risk_prompts AS (
+  SELECT ccp.parent_chat_message_id AS id
+  FROM chat_content_parts ccp
+  JOIN risk_results rr ON rr.chat_content_part_id = ccp.id
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+  WHERE ccp.chat_id = $2
+    AND ccp.project_id = $1::uuid
+    AND ccp.deleted IS FALSE
+    AND ccp.parent_chat_message_id IS NOT NULL
+    AND rr.project_id = $1::uuid
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.false_positive_at IS NULL
 )
 SELECT
   COUNT(*) FILTER (WHERE has_tool_calls OR role IN ('user', 'assistant', 'tool'))::bigint AS total,
@@ -997,6 +1011,7 @@ SELECT
         AND rr.excluded_at IS NULL
         AND rr.false_positive_at IS NULL
     )
+    OR o.id IN (SELECT id FROM attachment_risk_prompts)
   )::bigint AS risk_findings
 FROM ordered
 `
@@ -1022,7 +1037,10 @@ type GetChatEntryTotalsRow struct {
 // is in view. Each message maps to exactly one entry, mirroring the client's
 // getTraceEntryType precedence: a message carrying a non-empty tool_calls array
 // is a tool call regardless of role, otherwise the role decides. risk_findings
-// counts messages with an active (found, non-suppressed) risk result.
+// counts messages with an active (found, non-suppressed) risk result on the
+// message or on an attachment hanging off it.
+// Prompts whose attachments hold an active finding. Such a finding has no
+// chat_message_id, so it flags the prompt the attachment hangs off.
 func (q *Queries) GetChatEntryTotals(ctx context.Context, arg GetChatEntryTotalsParams) (GetChatEntryTotalsRow, error) {
 	row := q.db.QueryRow(ctx, getChatEntryTotals, arg.ProjectID, arg.ChatID, arg.Generation)
 	var i GetChatEntryTotalsRow
@@ -3543,6 +3561,20 @@ WITH ordered AS (
     AND cm.project_id = $3::uuid
     AND cm.generation = $4::integer
 ),
+attachment_risk_prompts AS (
+  SELECT ccp.parent_chat_message_id AS id
+  FROM chat_content_parts ccp
+  JOIN risk_results rr ON rr.chat_content_part_id = ccp.id
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+  WHERE ccp.chat_id = $2
+    AND ccp.project_id = $3::uuid
+    AND ccp.deleted IS FALSE
+    AND ccp.parent_chat_message_id IS NOT NULL
+    AND rr.project_id = $3::uuid
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.false_positive_at IS NULL
+),
 risk_rns AS (
   SELECT o.rn FROM ordered o
   WHERE EXISTS (
@@ -3557,6 +3589,7 @@ risk_rns AS (
       AND rr.excluded_at IS NULL
       AND rr.false_positive_at IS NULL
   )
+  OR o.id IN (SELECT id FROM attachment_risk_prompts)
 )
 SELECT
   o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_id, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.tool_call_summaries, o.content_hash, o.generation, o.replayed, o.created_at, o.risk_analyzed_at, o.rn, o.total,
@@ -3624,6 +3657,8 @@ type ListRiskWindowedMessagesRow struct {
 // membership. is_risk flags the seed rows (the flagged messages themselves) so
 // the caller can return the explicit risk seq list (context rows are
 // is_risk = false).
+// Prompts whose attachments hold an active finding. Such a finding has no
+// chat_message_id, so it flags the prompt the attachment hangs off.
 func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWindowedMessagesParams) ([]ListRiskWindowedMessagesRow, error) {
 	rows, err := q.db.Query(ctx, listRiskWindowedMessages,
 		arg.ContextSize,
@@ -4214,6 +4249,35 @@ func (q *Queries) SeedChatTranscriptMessage(ctx context.Context, arg SeedChatTra
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const seedContentPartRiskResult = `-- name: SeedContentPartRiskResult :exec
+INSERT INTO risk_results (
+    project_id, organization_id, risk_policy_id, risk_policy_version,
+    chat_content_part_id, source, found
+)
+VALUES (
+    $1, $2, $3, 1,
+    $4, 'test', TRUE
+)
+`
+
+type SeedContentPartRiskResultParams struct {
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	RiskPolicyID      uuid.UUID
+	ChatContentPartID uuid.NullUUID
+}
+
+// Test fixture: insert a risk result linking a chat content part to a risk policy.
+func (q *Queries) SeedContentPartRiskResult(ctx context.Context, arg SeedContentPartRiskResultParams) error {
+	_, err := q.db.Exec(ctx, seedContentPartRiskResult,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.RiskPolicyID,
+		arg.ChatContentPartID,
+	)
+	return err
 }
 
 const seedDisabledRiskPolicy = `-- name: SeedDisabledRiskPolicy :one

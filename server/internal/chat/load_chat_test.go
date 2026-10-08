@@ -531,6 +531,79 @@ func TestLoadChat_RiskOnly_OverlapMerges(t *testing.T) {
 	require.Len(t, res.Messages, 14)
 }
 
+// TestLoadChat_RiskOnly_AttachmentFinding verifies a finding on an attachment
+// flags the prompt it hangs off: the risk-only view windows around that prompt
+// and returns the attachment marked risky. The finding carries no message id,
+// so a message-only lookup would return an empty transcript.
+func TestLoadChat_RiskOnly_AttachmentFinding(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+
+	chatID := seedChat(t, ctx, ti, "u", "", "attachment risk chat")
+	ids := seedNMessages(t, ctx, ti, chatID, 30)
+	seqs := allSeqs(t, ctx, ti, chatID, ids)
+
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, ti.assets)
+	t.Cleanup(func() { _ = shutdown(t.Context()) })
+	assetURL, err := writer.WriteContentPartAsset(ctx, ti.projectID, chatID, []byte("attachment body"))
+	require.NoError(t, err)
+
+	r := repo.New(ti.conn)
+	_, err = r.CreateChatContentPart(ctx, []repo.CreateChatContentPartParams{{
+		ChatID:              chatID,
+		ProjectID:           ti.projectID,
+		Kind:                message.PromptAttachment,
+		ContentAssetUrl:     assetURL,
+		ExternalID:          pgtype.Text{String: "attachment", Valid: true},
+		ParentChatMessageID: uuid.NullUUID{UUID: ids[12], Valid: true},
+		Version:             pgtype.Int4{},
+		Source:              pgtype.Text{},
+		Metadata:            []byte(`{"display_path":"data.csv","kind":"file"}`),
+		RiskAnalyzedAt:      pgtype.Timestamptz{},
+		CreatedAt:           pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+	}})
+	require.NoError(t, err)
+	parts, err := r.ListChatContentPartsByChatID(ctx, repo.ListChatContentPartsByChatIDParams{
+		ChatID:               chatID,
+		ProjectID:            ti.projectID,
+		ParentChatMessageIds: []uuid.UUID{ids[12]},
+	})
+	require.NoError(t, err)
+	require.Len(t, parts, 1)
+
+	policyID, err := r.SeedRiskPolicy(ctx, repo.SeedRiskPolicyParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+	require.NoError(t, r.SeedContentPartRiskResult(ctx, repo.SeedContentPartRiskResultParams{
+		ProjectID:         ti.projectID,
+		OrganizationID:    ti.orgID,
+		RiskPolicyID:      policyID,
+		ChatContentPartID: uuid.NullUUID{UUID: parts[0].ID, Valid: true},
+	}))
+
+	p := loadPayload(chatID.String())
+	p.RiskOnly = true
+	res, err := ti.service.LoadChat(ctx, p)
+	require.NoError(t, err)
+	require.Len(t, res.Messages, 11)
+	require.Equal(t, seqs[7], res.Messages[0].Seq)
+	require.Equal(t, seqs[17], res.Messages[10].Seq)
+	require.True(t, isRiskAt(res.Messages, seqs[12]), "the attachment's prompt is the flagged message")
+	require.Len(t, res.RiskSegments, 1)
+
+	require.Len(t, res.ContentParts, 1)
+	require.Equal(t, parts[0].ID.String(), res.ContentParts[0].ID)
+	require.True(t, res.ContentParts[0].IsRisk)
+	require.Equal(t, ids[12].String(), conv.PtrValOr(res.ContentParts[0].ParentChatMessageID, ""))
+
+	full, err := ti.service.LoadChat(ctx, loadPayload(chatID.String()))
+	require.NoError(t, err)
+	require.Equal(t, int64(1), full.Totals.RiskOnly, "the risky-only count includes the attachment's prompt")
+}
+
 // TestLoadChat_RiskOnly_Empty verifies a chat with no findings returns nothing
 // in risk-only mode.
 func TestLoadChat_RiskOnly_Empty(t *testing.T) {

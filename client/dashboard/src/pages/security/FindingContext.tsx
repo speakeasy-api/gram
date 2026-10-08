@@ -11,11 +11,16 @@ import {
   sensitiveMatchStrings,
   withJsonEscaped,
 } from "@/pages/chatLogs/chatHelpers";
-import { argsToString, messageText } from "@/pages/chatLogs/transcript";
+import {
+  argsToString,
+  messageText,
+  promptAttachmentFromContentPart,
+} from "@/pages/chatLogs/transcript";
 import {
   getTraceEntryType,
   parseToolCalls,
 } from "@/pages/chatLogs/traceEntries";
+import type { ChatContentPart } from "@gram/client/models/components/chatcontentpart.js";
 import type { ChatMessage } from "@gram/client/models/components/chatmessage.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
@@ -75,6 +80,16 @@ function excerptMessage(message: ChatMessage): ExcerptMessage {
     case "system":
       return { id: message.id, role: "System", mono: false, text: body };
   }
+}
+
+function excerptAttachment(part: ChatContentPart): ExcerptMessage {
+  const { displayPath, content } = promptAttachmentFromContentPart(part);
+  return {
+    id: part.id,
+    role: `Attachment · ${displayPath}`,
+    mono: true,
+    text: content,
+  };
 }
 
 /** Splits `text` at every match into plain and flagged pieces. When `masked`,
@@ -249,7 +264,15 @@ export function FindingContext({
     )?.matchRedacted;
 
   const messages = chatQuery.data?.messages ?? [];
-  const idx = messages.findIndex((m) => m.id === result.chatMessageId);
+  // A finding in an attachment has no message of its own; anchor the excerpt
+  // on the prompt the attachment hangs off and show the attachment under it.
+  const flaggedPart = result.chatContentPartId
+    ? chatQuery.data?.contentParts.find(
+        (p) => p.id === result.chatContentPartId,
+      )
+    : undefined;
+  const anchorId = result.chatMessageId ?? flaggedPart?.parentChatMessageId;
+  const idx = messages.findIndex((m) => m.id === anchorId);
   const excerpt = idx >= 0 ? messages.slice(Math.max(0, idx - 2), idx + 2) : [];
   const position =
     chatQuery.data && idx >= 0
@@ -262,23 +285,29 @@ export function FindingContext({
     (kind === "analyzer" && resultIsSpanlessSensitive(result));
   // Other spanless findings, or matches that could not all be loaded, leave
   // only the whole message to mask, and this finding's reveal doesn't cover them.
-  const othersMaskWholeMessage = (messageId: string): boolean =>
+  const othersMaskWholeMessage = (entryId: string): boolean =>
     !chatResultsComplete ||
     needsWholeMessageMask(
       chatResults?.filter(
-        (r) => r.chatMessageId === messageId && r.id !== result.id,
+        (r) =>
+          (r.chatMessageId === entryId || r.chatContentPartId === entryId) &&
+          r.id !== result.id,
       ),
     );
-  const rows = excerpt.map((raw) => {
-    const message = excerptMessage(raw);
-    return {
-      raw,
-      message,
-      flagged: raw.id === result.chatMessageId,
-      othersMask: othersMaskWholeMessage(raw.id),
-      masksSpans: matchRanges(message.text, sensitiveMatches).length > 0,
-    };
+  const excerptRow = (message: ExcerptMessage, flagged: boolean) => ({
+    message,
+    flagged,
+    othersMask: othersMaskWholeMessage(message.id),
+    masksSpans: matchRanges(message.text, sensitiveMatches).length > 0,
   });
+  const rows = excerpt.map((raw) =>
+    excerptRow(excerptMessage(raw), raw.id === result.chatMessageId),
+  );
+  if (flaggedPart) {
+    // Unparented attachments have no prompt to anchor on, so they stand alone.
+    const at = excerpt.findIndex((m) => m.id === anchorId) + 1;
+    rows.splice(at, 0, excerptRow(excerptAttachment(flaggedPart), true));
+  }
   // The toggle reveals only this finding, so it shows only when that is masked.
   const revealable =
     resultIsWhole || (kind === "chat" && resultsAreSensitive([result]));
@@ -325,7 +354,7 @@ export function FindingContext({
         </Button>
       </div>
     );
-  } else if (excerpt.length === 0) {
+  } else if (rows.length === 0) {
     body = (
       <p className="text-muted-foreground text-sm">
         The flagged message is outside the loaded transcript. Open the
@@ -345,12 +374,12 @@ export function FindingContext({
               : `${total ?? messages.length} messages`}
           </span>
         </div>
-        {rows.map(({ raw, message, flagged, othersMask, masksSpans }, i) => {
+        {rows.map(({ message, flagged, othersMask, masksSpans }, i) => {
           const ownMask = resultIsWhole && flagged && !shown;
           const chipReveals = ownMask && canReveal;
           return (
             <ExcerptRow
-              key={raw.id}
+              key={message.id}
               message={message}
               flagged={flagged}
               first={i === 0}
