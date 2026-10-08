@@ -32,7 +32,12 @@ export function RolePluginLinks({
     <div className="text-muted-foreground flex min-w-0 items-start gap-1.5 text-sm">
       <Tooltip>
         <TooltipTrigger asChild>
-          <span tabIndex={0} aria-label="Plugins" className="mt-0.5 shrink-0">
+          <span
+            role="img"
+            tabIndex={0}
+            aria-label="Plugins"
+            className="focus-visible:ring-ring mt-0.5 shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2"
+          >
             <Puzzle className="size-3.5" aria-hidden="true" />
           </span>
         </TooltipTrigger>
