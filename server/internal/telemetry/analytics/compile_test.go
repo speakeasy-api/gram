@@ -265,9 +265,11 @@ func TestCompileFoldsADimensionThroughItsLookup(t *testing.T) {
 	t.Parallel()
 
 	req := Request{
-		Dataset:    "tool_calls",
-		Grain:      "",
-		Dimensions: []string{"mcp_server"},
+		Dataset:      "tool_calls",
+		FromUnixNano: testFrom,
+		ToUnixNano:   testTo,
+		Grain:        "",
+		Dimensions:   []string{"mcp_server"},
 		Measures: []Measure{
 			{Op: "count", Field: "", Alias: ""},
 			{Op: "count_distinct", Field: "mcp_server", Alias: "servers"},
@@ -277,11 +279,9 @@ func TestCompileFoldsADimensionThroughItsLookup(t *testing.T) {
 		Limit:     0,
 		Ungrouped: false,
 	}
+	tenant := Tenant{OrganizationID: "org-1", ProjectID: "project-1"}
 	maps := LookupMaps{MCPServerDisplayNamesLookup: {"gh": "GitHub", "github-mcp": "GitHub"}}
-	plan, err := Compile(Default, Tenant{OrganizationID: "org-1", ProjectID: "project-1"}, maps, Request{
-		Dataset: req.Dataset, FromUnixNano: testFrom, ToUnixNano: testTo, Grain: req.Grain, Dimensions: req.Dimensions,
-		Measures: req.Measures, Filters: req.Filters, OrderBy: req.OrderBy, Limit: req.Limit, Ungrouped: req.Ungrouped,
-	})
+	plan, err := Compile(Default, tenant, maps, req)
 	require.NoError(t, err)
 	const fold = "transform(mcp_server_name, ?, ?, mcp_server_name)"
 	require.Contains(t, plan.SQL, fold+" AS mcp_server")
@@ -299,10 +299,7 @@ func TestCompileFoldsADimensionThroughItsLookup(t *testing.T) {
 
 	in := req
 	in.Filters = []Filter{{Field: "mcp_server", Operator: "in", Values: []string{"GitHub", "linear"}}}
-	plan, err = Compile(Default, Tenant{OrganizationID: "org-1", ProjectID: "project-1"}, maps, Request{
-		Dataset: in.Dataset, FromUnixNano: testFrom, ToUnixNano: testTo, Grain: in.Grain, Dimensions: in.Dimensions,
-		Measures: in.Measures, Filters: in.Filters, OrderBy: in.OrderBy, Limit: in.Limit, Ungrouped: in.Ungrouped,
-	})
+	plan, err = Compile(Default, tenant, maps, in)
 	require.NoError(t, err)
 	require.Contains(t, plan.SQL, "WHERE "+fold+" IN (?,?)")
 	require.Equal(t, []any{"GitHub", "linear"}, plan.Args[len(plan.Args)-2:])

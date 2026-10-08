@@ -136,7 +136,7 @@ func (s *Service) DimensionValues(ctx context.Context, payload *gen.DimensionVal
 	}
 
 	tenant := Tenant{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: authCtx.ProjectID.String()}
-	lookups, err := s.loadLookups(ctx, tenant, req.Dataset)
+	lookups, err := s.loadLookups(ctx, tenant, req.Dataset, []string{req.Dimension})
 	if err != nil {
 		return nil, err
 	}

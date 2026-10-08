@@ -83,10 +83,10 @@ func mcpServerDisplayNames(hooks *hooksRepo.Queries) LookupLoader {
 	}
 }
 
-// loadLookups fetches the tenant's maps for the dataset a request names. A
+// loadLookups fetches the tenant's maps for the fields a request reads. A
 // load failure is unexpected, as the project overview treats it.
-func (s *Service) loadLookups(ctx context.Context, tenant Tenant, dataset string) (LookupMaps, error) {
-	lookups, err := s.catalog.LoadLookups(ctx, tenant, dataset)
+func (s *Service) loadLookups(ctx context.Context, tenant Tenant, dataset string, reads []string) (LookupMaps, error) {
+	lookups, err := s.catalog.LoadLookups(ctx, tenant, dataset, reads)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load the dataset's lookups").LogError(ctx, s.logger)
 	}
@@ -130,7 +130,7 @@ func (s *Service) Query(ctx context.Context, payload *gen.QueryPayload) (*gen.An
 		return nil, err
 	}
 	tenant := Tenant{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: authCtx.ProjectID.String()}
-	lookups, err := s.loadLookups(ctx, tenant, req.Dataset)
+	lookups, err := s.loadLookups(ctx, tenant, req.Dataset, req.Reads())
 	if err != nil {
 		return nil, err
 	}

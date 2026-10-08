@@ -64,18 +64,20 @@ func (c *Catalog) WithLoaders(loaders map[string]LookupLoader) (*Catalog, error)
 	return &Catalog{datasets: c.datasets, lookups: bound}, nil
 }
 
-// LoadLookups fetches the maps the dataset's fields read through, one load
-// per lookup however many fields share it. A lookup without a loader is
-// skipped, so the fields read raw values. An unknown dataset loads nothing;
-// the compiler reports it.
-func (c *Catalog) LoadLookups(ctx context.Context, tenant Tenant, dataset string) (LookupMaps, error) {
+// LoadLookups fetches the maps the fields a request reads go through, one
+// load per lookup however many of those fields share it. A field the request
+// does not read costs nothing and cannot fail it, so a bare count never
+// touches a lookup's store. A lookup without a loader is skipped, so the
+// field reads raw values. An unknown dataset loads nothing; the compiler
+// reports it.
+func (c *Catalog) LoadLookups(ctx context.Context, tenant Tenant, dataset string, reads []string) (LookupMaps, error) {
 	ds, ok := c.Dataset(dataset)
 	if !ok {
 		return nil, nil
 	}
 	maps := make(LookupMaps)
 	for _, f := range ds.Fields {
-		if f.Lookup == "" {
+		if f.Lookup == "" || !slices.Contains(reads, f.Name) {
 			continue
 		}
 		if _, loaded := maps[f.Lookup]; loaded {

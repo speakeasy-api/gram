@@ -89,6 +89,23 @@ type Request struct {
 	Ungrouped    bool
 }
 
+// Reads names the fields the request touches: its dimensions, the fields
+// its measures aggregate and the fields it filters on. A lookup is loaded
+// only for a field in this list.
+func (r Request) Reads() []string {
+	reads := make([]string, 0, len(r.Dimensions)+len(r.Measures)+len(r.Filters))
+	reads = append(reads, r.Dimensions...)
+	for _, m := range r.Measures {
+		if m.Field != "" {
+			reads = append(reads, m.Field)
+		}
+	}
+	for _, f := range r.Filters {
+		reads = append(reads, f.Field)
+	}
+	return reads
+}
+
 // ColumnKind says what a result column is, so a client can lay it out
 // without inspecting values.
 type ColumnKind string
