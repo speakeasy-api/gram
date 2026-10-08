@@ -69,7 +69,7 @@ func cloneHookTelemetryRows(rows []hookTelemetryRow) []hookTelemetryRow {
 // agent_events through the same transform as every other producer's
 // records. The rows carry what the stored row carries, plus what the
 // request knew and the row did not: the adapter, the raw and canonical
-// event names, the permission type, Gram's verdict, the turn and the
+// event names, the permission type, Speakeasy's verdict, the turn and the
 // session, and the actor the endpoint attributed the event to.
 //
 // The same org gates the telemetry writer applies hold here: an org
@@ -204,7 +204,7 @@ func (s *Service) hookEventFeedFeature(ctx context.Context, orgID string, featur
 
 // stampHookTeeAttributes adds what the request knew and the stored row
 // does not say: the adapter and its names for the event, the permission
-// type, Gram's verdict, the turn, the agent's own session id, the actor
+// type, Speakeasy's verdict, the turn, the agent's own session id, the actor
 // the endpoint attributed the event to and the AI account it resolved. The stored row keeps the chat id
 // under gen_ai.conversation.id; the raw session id is what the other
 // dialects answer for the same session, so it rides as session.id.

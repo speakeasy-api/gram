@@ -98,12 +98,12 @@ func TestHooksLogEventAccessors(t *testing.T) {
 			eventType: EventTypePrompt,
 		},
 		{
-			name:      "PermissionRequest Gram allowed is a tool_decision with the verdict as text and no outcome",
+			name:      "PermissionRequest Speakeasy allowed is a tool_decision with the verdict as text and no outcome",
 			record:    hooksRecord("PermissionRequest", append(toolCall, accessorTestKV("gram.hook.decision", "allow"))...),
 			eventType: EventTypeToolDecision, subjectKey: "gen_ai.tool.call.id", subject: "call-1", text: "allow",
 		},
 		{
-			name:      "PermissionRequest Gram denied was rejected",
+			name:      "PermissionRequest Speakeasy denied was rejected",
 			record:    hooksRecord("PermissionRequest", append(toolCall, accessorTestKV("gram.hook.decision", "deny"), accessorTestKV("gram.hook.block_reason", "shadow MCP"))...),
 			eventType: EventTypeToolDecision, subjectKey: "gen_ai.tool.call.id", subject: "call-1",
 			outcomeKey: "gram.hook.block_reason", outcome: OutcomeRejected, text: "deny",
@@ -208,13 +208,13 @@ func TestHooksLogWhoAndWhere(t *testing.T) {
 
 	key, value, err = selected.ExternalUserID(record)
 	require.NoError(t, err)
-	require.Equal(t, "gram.external_user.id", key, "the AI account the endpoint attributed the session to, not the Gram user")
+	require.Equal(t, "gram.external_user.id", key, "the AI account the endpoint attributed the session to, not the Speakeasy user")
 	require.Equal(t, "acct-1", value)
 
 	bare := hooksRecord("PostToolUse", accessorTestKV("user.id", "user-1"))
 	key, value, err = HooksLog{}.ExternalUserID(bare)
 	require.NoError(t, err)
-	require.Empty(t, key, "the dialect itself never reads the Gram user as an external account")
+	require.Empty(t, key, "the dialect itself never reads the Speakeasy user as an external account")
 	require.Empty(t, value)
 
 	key, value, err = selected.ExternalOrgID(record)

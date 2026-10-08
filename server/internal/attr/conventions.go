@@ -687,7 +687,7 @@ const (
 	HookHostnameKey             = attribute.Key("gram.hook.hostname")
 	// The hooks ingest endpoint stamps these on the copy of a hook row it
 	// republishes into the OTel pipeline, so the row says where it came
-	// from and what Gram decided without a join back to the request.
+	// from and what Speakeasy decided without a join back to the request.
 	HookAdapterKey            = attribute.Key("gram.hook.adapter")
 	HookRawEventNameKey       = attribute.Key("gram.hook.raw_event_name")
 	HookCanonicalEventTypeKey = attribute.Key("gram.hook.canonical_event_type")
