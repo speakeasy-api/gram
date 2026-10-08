@@ -71,10 +71,14 @@ export function InstallModeList({
 
   return (
     <div className="mt-6">
-      <div className="mb-2 block text-sm font-medium">Install mode</div>
+      <div className="block text-sm font-medium">Install mode</div>
+      <Text muted small className="mt-1 mb-2">
+        How the Speakeasy agent installs this plugin for each audience: whether
+        it's installed, and whether people can turn it off or on themselves.
+      </Text>
       <div className="border-border divide-border divide-y border px-4">
         {rows.map(({ row, label, icon, mode }) => (
-          <div key={row.key} className="flex items-center gap-3 py-3">
+          <div key={row.key} className="flex items-center gap-3 py-2">
             <PrincipalIconTile icon={icon} />
             <Text as="span" className="min-w-0 flex-1 truncate font-medium">
               {label}
@@ -93,7 +97,7 @@ export function InstallModeList({
               >
                 <SelectValue placeholder="Mixed" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent align="end">
                 {INSTALL_MODES.map((option) => (
                   <SelectItem
                     key={option.value}
