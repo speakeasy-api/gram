@@ -37,6 +37,9 @@ type DirectoryRoleInventory struct {
 	WorkOSOrganizationID string `json:"workos_organization_id"`
 	// DefaultRoleSlug records the WorkOS default, without importing or changing it.
 	DefaultRoleSlug string `json:"default_role_slug"`
+	// TargetDefaultRoleSlug optionally names the default planned for cutover.
+	// The shadow report flags members who hold the current default directly.
+	TargetDefaultRoleSlug string `json:"target_default_role_slug,omitempty"`
 	// Assignments lists explicit group-to-role rules, not membership role rows.
 	Assignments []DirectoryRoleInventoryAssignment `json:"assignments"`
 }
@@ -49,14 +52,35 @@ type DirectoryRoleInventoryAssignment struct {
 	RoleSlug string `json:"role_slug"`
 }
 
-// DirectoryRoleInventoryDifference describes a conservative role-removal simulation.
+// DirectoryRoleInventoryDifference lists one member's roles that need review
+// before cutover. Gram stores no provenance for direct roles, so the report
+// cannot tell a group-derived role from an independent assignment of the same
+// role; it classifies each case instead of guessing.
 type DirectoryRoleInventoryDifference struct {
 	// UserID identifies the affected live member, without enumerating emails.
 	UserID string `json:"user_id"`
-	// LostRoleURNs are roles no longer reached after excluding inventoried direct roles.
+	// LostRoleURNs are inventoried roles held directly and not reached through
+	// any directory mapping. They are lost at cutover if WorkOS derived them from
+	// a group rule; an independent WorkOS assignment would survive.
 	LostRoleURNs []string `json:"lost_role_urns"`
 	// GainedRoleURNs are roles reached only in the simulated result.
 	GainedRoleURNs []string `json:"gained_role_urns"`
+	// CoveredRoleURNs are inventoried roles held directly and also reached
+	// through a directory mapping. Access is kept, but if the direct role was an
+	// independent assignment it will now follow directory membership.
+	CoveredRoleURNs []string `json:"covered_role_urns"`
+	// DefaultRoleChange is set when the member holds the current WorkOS default
+	// directly and a different target default was supplied. WorkOS may replace it
+	// when it recomputes the membership; an explicit assignment would survive.
+	DefaultRoleChange *DirectoryRoleInventoryDefaultRoleChange `json:"default_role_change"`
+}
+
+// DirectoryRoleInventoryDefaultRoleChange describes a planned default-role change.
+type DirectoryRoleInventoryDefaultRoleChange struct {
+	// FromRoleURN is the current default role, held directly by the member.
+	FromRoleURN string `json:"from_role_urn"`
+	// ToRoleURN is the target default role supplied in the inventory.
+	ToRoleURN string `json:"to_role_urn"`
 }
 
 // DirectoryRoleInventoryStaleMapping identifies an existing mapping that needs
@@ -86,7 +110,7 @@ type DirectoryRoleInventoryReport struct {
 	StaleMappings []DirectoryRoleInventoryStaleMapping `json:"stale_mappings"`
 	// MembersChecked counts live members evaluated by the shadow report.
 	MembersChecked int `json:"members_checked"`
-	// Differences lists every member whose effective role set differs.
+	// Differences lists every member with a lost, gained, covered or default role to review.
 	Differences []DirectoryRoleInventoryDifference `json:"differences"`
 }
 
@@ -94,7 +118,7 @@ type DirectoryRoleInventoryReport struct {
 func DecodeDirectoryRoleInventory(reader io.Reader) (DirectoryRoleInventory, error) {
 	content, err := io.ReadAll(io.LimitReader(reader, maxDirectoryRoleInventoryBytes+1))
 	if err != nil || len(content) > maxDirectoryRoleInventoryBytes {
-		return DirectoryRoleInventory{OrganizationID: "", WorkOSOrganizationID: "", DefaultRoleSlug: "", Assignments: nil}, errors.New("inventory is unreadable or exceeds 1 MiB")
+		return DirectoryRoleInventory{OrganizationID: "", WorkOSOrganizationID: "", DefaultRoleSlug: "", TargetDefaultRoleSlug: "", Assignments: nil}, errors.New("inventory is unreadable or exceeds 1 MiB")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(content))
 	decoder.DisallowUnknownFields()
@@ -208,6 +232,10 @@ func RunDirectoryRoleInventory(ctx context.Context, logger *slog.Logger, db *pgx
 	}
 
 	if shadow {
+		defaultChange, err := resolveDirectoryRoleInventoryDefaultChange(ctx, queries, ac.ActiveOrganizationID, inventory, report)
+		if err != nil {
+			return report, err
+		}
 		members, err := queries.ListDirectoryRoleInventoryMembers(ctx, ac.ActiveOrganizationID)
 		if err != nil {
 			return report, fmt.Errorf("list shadow members: %w", err)
@@ -221,14 +249,19 @@ func RunDirectoryRoleInventory(ctx context.Context, logger *slog.Logger, db *pgx
 			if err != nil {
 				return report, fmt.Errorf("evaluate shadow member: %w", err)
 			}
-			current, simulated := map[string]bool{}, map[string]bool{}
+			current, simulated, direct, mapped := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
 			for _, principal := range principals {
 				current[principal.PrincipalUrn] = true
+				if principal.FromDirectoryMapping {
+					mapped[principal.PrincipalUrn] = true
+				} else {
+					direct[principal.PrincipalUrn] = true
+				}
 				if principal.FromDirectoryMapping || !excluded[principal.PrincipalUrn] {
 					simulated[principal.PrincipalUrn] = true
 				}
 			}
-			difference := DirectoryRoleInventoryDifference{UserID: memberID, LostRoleURNs: []string{}, GainedRoleURNs: []string{}}
+			difference := DirectoryRoleInventoryDifference{UserID: memberID, LostRoleURNs: []string{}, GainedRoleURNs: []string{}, CoveredRoleURNs: []string{}, DefaultRoleChange: nil}
 			for roleURN := range current {
 				if !simulated[roleURN] {
 					difference.LostRoleURNs = append(difference.LostRoleURNs, roleURN)
@@ -239,9 +272,18 @@ func RunDirectoryRoleInventory(ctx context.Context, logger *slog.Logger, db *pgx
 					difference.GainedRoleURNs = append(difference.GainedRoleURNs, roleURN)
 				}
 			}
+			for roleURN := range direct {
+				if excluded[roleURN] && mapped[roleURN] {
+					difference.CoveredRoleURNs = append(difference.CoveredRoleURNs, roleURN)
+				}
+			}
+			if defaultChange != nil && direct[defaultChange.FromRoleURN] {
+				difference.DefaultRoleChange = defaultChange
+			}
 			slices.Sort(difference.LostRoleURNs)
 			slices.Sort(difference.GainedRoleURNs)
-			if len(difference.LostRoleURNs)+len(difference.GainedRoleURNs) > 0 {
+			slices.Sort(difference.CoveredRoleURNs)
+			if len(difference.LostRoleURNs)+len(difference.GainedRoleURNs)+len(difference.CoveredRoleURNs) > 0 || difference.DefaultRoleChange != nil {
 				report.Differences = append(report.Differences, difference)
 			}
 		}
@@ -309,4 +351,34 @@ func RunDirectoryRoleInventory(ctx context.Context, logger *slog.Logger, db *pgx
 		report.Committed = true
 	}
 	return report, nil
+}
+
+// resolveDirectoryRoleInventoryDefaultChange resolves the current and target
+// default roles for the shadow report. It returns nil when no different target
+// was supplied. Unresolved default roles block the report like inventoried roles.
+func resolveDirectoryRoleInventoryDefaultChange(ctx context.Context, queries *repo.Queries, organizationID string, inventory DirectoryRoleInventory, report *DirectoryRoleInventoryReport) (*DirectoryRoleInventoryDefaultRoleChange, error) {
+	if inventory.TargetDefaultRoleSlug == "" || inventory.TargetDefaultRoleSlug == inventory.DefaultRoleSlug {
+		return nil, nil
+	}
+	slugs := []string{inventory.DefaultRoleSlug, inventory.TargetDefaultRoleSlug}
+	roles, err := queries.ListDirectoryRoleInventoryRoles(ctx, repo.ListDirectoryRoleInventoryRolesParams{OrganizationID: organizationID, RoleSlugs: slugs})
+	if err != nil {
+		return nil, fmt.Errorf("resolve default roles: %w", err)
+	}
+	roleURNs := make(map[string]string, len(roles))
+	for _, role := range roles {
+		if _, exists := roleURNs[role.RoleSlug]; exists {
+			report.AmbiguousRoleSlugs = append(report.AmbiguousRoleSlugs, role.RoleSlug)
+		}
+		roleURNs[role.RoleSlug] = role.RoleUrn
+	}
+	for _, slug := range slugs {
+		if _, exists := roleURNs[slug]; !exists {
+			report.MissingRoleSlugs = append(report.MissingRoleSlugs, slug)
+		}
+	}
+	if len(report.MissingRoleSlugs)+len(report.AmbiguousRoleSlugs) > 0 {
+		return nil, errors.New("default roles cannot be resolved; no report produced")
+	}
+	return &DirectoryRoleInventoryDefaultRoleChange{FromRoleURN: roleURNs[inventory.DefaultRoleSlug], ToRoleURN: roleURNs[inventory.TargetDefaultRoleSlug]}, nil
 }

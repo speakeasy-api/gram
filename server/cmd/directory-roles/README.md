@@ -18,6 +18,7 @@ Do not attach them to PRs or public comments. Every example below is a placehold
   "organization_id": "<ORG_ID>",
   "workos_organization_id": "<WORKOS_ORG_ID>",
   "default_role_slug": "<DEFAULT_ROLE_SLUG>",
+  "target_default_role_slug": "<TARGET_DEFAULT_ROLE_SLUG>",
   "assignments": [
     {
       "workos_directory_group_id": "<WORKOS_GROUP_ID>",
@@ -28,8 +29,10 @@ Do not attach them to PRs or public comments. Every example below is a placehold
 ```
 
 Several assignments may share a group ID. Duplicate assignments are harmless.
-The default role is recorded but is neither imported nor changed. An empty
-assignment list is valid and does not clear mappings.
+The default role is recorded but is neither imported nor changed. The optional
+`target_default_role_slug` is the default you plan to set at cutover; the shadow
+report uses it to flag members whose default would change, and import ignores
+it. An empty assignment list is valid and does not clear mappings.
 
 Configure `GRAM_DATABASE_URL`, `GRAM_REDIS_CACHE_ADDR`, and, if needed,
 `GRAM_REDIS_CACHE_PASSWORD` for the same environment as the Gram server. For a
@@ -97,15 +100,31 @@ state before retrying.
 The shadow report calls the runtime `ListUserRolePrincipals` query. It compares
 its normal result with the result excluding direct rows whose role matches an
 inventoried rule, while retaining directory-mapped and other direct roles.
-Because direct rows have no provenance, this is deliberately conservative: it
-also excludes independently assigned copies of an inventoried role, even for a
-member no longer in that group. Review each difference with an administrator;
-do not infer provenance or approve a cutover merely from current group membership.
-The simulation only removes a role channel, so it cannot produce gains. It does
-not predict WorkOS recomputation, changing the default role, or future events.
-Check newly widened directory-mapped access and the intended default role
-separately with the administrator. A missing/tombstoned inventoried source blocks
-the report rather than silently giving an incomplete result.
+
+A direct role row does not record where it came from. The same row can be the
+WorkOS group rule, an explicit assignment made in WorkOS, or the WorkOS default
+role. The report cannot tell these apart, so it classifies what it can see and
+leaves the decision to an administrator:
+
+- `lost_role_urns`: an inventoried role held directly and not reached through
+  any mapping. If the direct row was an independent assignment, cutover does not
+  remove it; if it came from the group rule, the member loses it. Confirm which.
+- `covered_role_urns`: an inventoried role held directly and also reached
+  through a mapping. Access is kept either way, but an independent assignment
+  will now follow directory group membership instead.
+- `default_role_change`: set when `target_default_role_slug` differs from the
+  current default and the member holds the current default directly. WorkOS may
+  move them to the target default when it recomputes the membership; an explicit
+  assignment of the same role would survive.
+- `gained_role_urns`: always empty today, because the simulation only removes a
+  role channel. Newly widened directory-mapped access must be checked separately.
+
+Every listed member needs an administrator decision. Do not infer provenance or
+approve a cutover from current group membership alone, and re-run the report
+after cutover to confirm the result. The report does not predict WorkOS
+recomputation timing or future events. Missing, ambiguous or tombstoned
+inventoried sources and default roles block the report rather than silently
+giving an incomplete result.
 
 ## Cutover checklist, operator-owned
 
@@ -114,13 +133,14 @@ inventory (explicit rules and default role), and confirmation from WorkOS of whe
 removing a rule recomputes membership roles. The code does not clear these gates.
 
 - [ ] Import is committed, and every intended rule is present in Gram.
-- [ ] Shadow report is empty, or an administrator explicitly approved each difference.
+- [ ] Shadow report (with `target_default_role_slug` set) is empty, or an administrator explicitly approved each difference.
 - [ ] Review the least-privilege built-in default and its permissions separately.
 - [ ] Remove explicit group-to-role assignments in the WorkOS Dashboard.
 - [ ] Set that organisation's default role to the agreed least-privilege built-in role.
 - [ ] Hide Admin Portal role assignment in WorkOS's environment-level Admin Portal settings; inspect the organisation Roles tab for an override that re-enables it.
 - [ ] Confirm the environment default hides the step for new organisations and audit existing overrides.
 - [ ] Observe subsequent membership events and confirm effective access in Gram.
+- [ ] Re-run the shadow report and confirm no unexpected differences remain.
 
 The portal setting is owned by WorkOS. Gram's portal-link API has no verified
 visibility parameter, so this change adds no Gram toggle. Its onboarding default
