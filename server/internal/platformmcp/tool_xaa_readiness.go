@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 
 	"github.com/google/uuid"
@@ -13,8 +14,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	srv "github.com/speakeasy-api/gram/server/gen/okta_resource_connections"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	idpc "github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -26,8 +29,14 @@ type xaaConnectionsReader interface {
 	List(context.Context, *srv.ListPayload) (*srv.ListOktaResourceConnectionsResult, error)
 }
 
+type oktaSignInReader interface {
+	Read(ctx context.Context, organizationID string) (*idpc.SignInSetup, error)
+}
+
 type xaaReadinessService struct {
+	logger      *slog.Logger
 	connections xaaConnectionsReader
+	signIn      oktaSignInReader
 	enabled     FeatureChecker
 	identity    xaaIdentityInspector
 }
@@ -41,8 +50,8 @@ type xaaIdentityInspector interface {
 // WithXAAReadiness reuses the dashboard service's org-admin authorization,
 // MCP visibility filtering and readiness derivation. List itself is not gated,
 // so the agent surface checks the same rollout flag before reading it.
-func (r *PostgresReader) WithXAAReadiness(connections xaaConnectionsReader, flags feature.Provider) *PostgresReader {
-	r.xaaReadiness = &xaaReadinessService{connections: connections, enabled: func(ctx context.Context, orgID string) (bool, error) {
+func (r *PostgresReader) WithXAAReadiness(connections xaaConnectionsReader, signIn oktaSignInReader, flags feature.Provider) *PostgresReader {
+	r.xaaReadiness = &xaaReadinessService{logger: r.logger, connections: connections, signIn: signIn, enabled: func(ctx context.Context, orgID string) (bool, error) {
 		if flags == nil {
 			return false, ErrUnavailable
 		}
@@ -71,7 +80,8 @@ type GetXAAReadinessInput struct {
 }
 
 // Deliberately omit organization totals, other servers, provider app IDs,
-// client IDs, URLs and administrator-entered labels from List.
+// client IDs, scopes, URLs and administrator-entered labels from List.
+// Okta sign-in carries only the public values Okta must be given.
 type GetXAAReadinessOutput struct {
 	ProjectID           string  `json:"project_id"`
 	MCPServerID         string  `json:"mcp_server_id"`
@@ -83,6 +93,7 @@ type GetXAAReadinessOutput struct {
 	ObservedAt          *string `json:"observed_at,omitempty"`
 	// Absent when this deployment cannot inspect identity chaining.
 	IdentityChaining     *XAAIdentityChaining `json:"identity_chaining,omitempty"`
+	OktaSignIn           *OktaSignInStatus    `json:"okta_sign_in,omitempty" jsonschema:"organization Okta sign-in setup, which XAA relies on; omitted when it could not be read"`
 	FederatedCallbackURL *string              `json:"federated_callback_url,omitempty" jsonschema:"redirect URI to register in the identity provider sign-in app for this server's user sign-in"`
 }
 
@@ -101,10 +112,37 @@ type XAAIdentityChainingBinding struct {
 	ConfiguredScopes []string `json:"configured_scopes" jsonschema:"scopes configured on the binding"`
 }
 
+type OktaSignInStatus struct {
+	NextStep             string             `json:"next_step" jsonschema:"one of verify_connection, record_ai_agent, await_provisioning, resolve_duplicate_sign_in_clients, set_up_sign_in, trust_sign_in, register_in_okta; register_in_okta means Speakeasy's side is done and the Okta-side steps cannot be observed"`
+	NextStepGuidance     string             `json:"next_step_guidance"`
+	AgentRecorded        bool               `json:"agent_recorded" jsonschema:"whether the Okta AI agent ID is recorded on the connection"`
+	ClientRegistered     bool               `json:"sign_in_client_registered" jsonschema:"whether the agent's linked app is registered as the organization's sign-in client"`
+	DuplicateClients     int                `json:"duplicate_sign_in_clients,omitempty" jsonschema:"number of organization sign-in clients claiming the agent ID when more than one; none is chosen until the extras are deleted"`
+	ClientReady          bool               `json:"sign_in_client_ready" jsonschema:"whether that client uses a signing key with the scopes sign-in needs"`
+	RedirectURI          *string            `json:"redirect_uri,omitempty" jsonschema:"sign-in redirect URI to add to the linked app in Okta"`
+	KeyURL               *string            `json:"key_url,omitempty" jsonschema:"key URL (JWKS URI) that publishes the sign-in client's public keys; Okta's agent Credentials take the pasted public_jwk, not this URL"`
+	KeyID                *string            `json:"key_id,omitempty" jsonschema:"kid of the active signing key"`
+	PublicJWK            map[string]any     `json:"public_jwk,omitempty" jsonschema:"active public signing key (public members only) to paste in the agent's Credentials in Okta and Activate; re-register it after rotating the key set or publishing a new key"`
+	TrustingIssuers      []OktaSignInIssuer `json:"trusting_issuers" jsonschema:"organization sign-in issuers that trust the agent's sign-in client"`
+	StaleTrustingIssuers []OktaSignInIssuer `json:"stale_trusting_issuers" jsonschema:"organization sign-in issuers that still trust a sign-in client for a previous agent ID or a deleted client"`
+	ChecklistNextStep    *OktaChecklistStep `json:"checklist_next_step,omitempty" jsonschema:"first Okta setup checklist step not yet confirmed done; once Speakeasy's side is done, steps Speakeasy cannot observe are skipped"`
+}
+
+type OktaSignInIssuer struct {
+	ID   string `json:"id"`
+	Slug string `json:"slug"`
+}
+
+type OktaChecklistStep struct {
+	Key       string `json:"key"`
+	Title     string `json:"title"`
+	Completed *bool  `json:"completed,omitempty" jsonschema:"false when observed not done; omitted when Speakeasy cannot observe the step"`
+}
+
 func registerXAAReadinessTool(reg *Registrar, service *xaaReadinessService) {
 	addTool(reg, &mcp.Tool{
 		Name: "get_xaa_readiness", Title: "Check Cross-App Access Readiness",
-		Description: "Inspect stored Okta Cross-App Access (XAA) readiness for one exact project and MCP server. Reports the dashboard's derived state and exchange evidence; does not probe, connect or change anything. Connected means administrator-confirmed, not verified. identity_chaining lists this server's identity-chaining bindings with state, remediation, configured scopes and the scopes actually requested after dropping OpenID Connect scopes; served is true only when exactly one ready binding serves the upstream at runtime. federated_callback_url is the redirect URI to register in the identity provider sign-in app for this server's user sign-in. Changing bindings is not available here. Requires organization administration and read access to the server. Unlike get_mcp_readiness, this checks organization XAA configuration, not a registration's provider readiness.",
+		Description: "Inspect stored Okta Cross-App Access (XAA) readiness for one exact project and MCP server. Reports the dashboard's derived state and exchange evidence; does not probe, connect or change anything. Connected means administrator-confirmed, not verified. identity_chaining lists this server's identity-chaining bindings with state, remediation, configured scopes and the scopes actually requested after dropping OpenID Connect scopes; served is true only when exactly one ready binding serves the upstream at runtime. federated_callback_url is the redirect URI to register in the identity provider sign-in app for this server's user sign-in. okta_sign_in reports the organization's Okta sign-in setup: whether the agent's sign-in client exists, the public key to paste in the agent's Credentials in Okta and Activate (re-register it after rotating or publishing a new key), the redirect URI for the linked app, which sign-in issuers trust it or still trust a previous agent's client, and the next setup step. Changing bindings or setting up sign-in is not available here; sign-in setup needs a signing key choice and a confirmed trust change, so send the administrator to the dashboard for it. Requires organization administration and read access to the server. Unlike get_mcp_readiness, this checks organization XAA configuration, not a registration's provider readiness.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, DiscoveryScopes: discoveryMCPRead, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetXAAReadinessInput) (*mcp.CallToolResult, GetXAAReadinessOutput, error) {
 		// External-only: the service reads an org-wide snapshot under a live member
@@ -150,7 +188,7 @@ func registerXAAReadinessTool(reg *Registrar, service *xaaReadinessService) {
 		if result != nil {
 			for _, row := range result.Servers {
 				if row != nil && row.ProjectID == projectID.String() && row.McpServerID == serverID.String() {
-					output := GetXAAReadinessOutput{ProjectID: row.ProjectID, MCPServerID: row.McpServerID, State: row.State, Pending: row.Pending, NotApplicableReason: row.NotApplicableReason, BrokenReason: row.BrokenReason, ObservedResult: row.ObservedResult, ObservedAt: row.ObservedAt}
+					output := GetXAAReadinessOutput{ProjectID: row.ProjectID, MCPServerID: row.McpServerID, State: row.State, Pending: row.Pending, NotApplicableReason: row.NotApplicableReason, BrokenReason: row.BrokenReason, ObservedResult: row.ObservedResult, ObservedAt: row.ObservedAt, OktaSignIn: service.readSignIn(ctx, principal.OrganizationID)}
 					if service.identity != nil {
 						issuerID := uuid.Nil
 						if row.IssuerID != nil {
@@ -168,6 +206,69 @@ func registerXAAReadinessTool(reg *Registrar, service *xaaReadinessService) {
 		}
 		return xaaReadinessRefusal("not_found", "That project or eligible MCP server is not available to you.")
 	})
+}
+
+// readSignIn is advisory: a failed read omits it rather than failing readiness.
+func (s *xaaReadinessService) readSignIn(ctx context.Context, organizationID string) *OktaSignInStatus {
+	if s.signIn == nil {
+		return nil
+	}
+	setup, err := s.signIn.Read(ctx, organizationID)
+	if err != nil {
+		if !errors.Is(err, idpc.ErrConnectionNotFound) && s.logger != nil {
+			s.logger.ErrorContext(ctx, "read okta sign-in setup", attr.SlogError(err))
+		}
+		return nil
+	}
+	if setup == nil {
+		return nil
+	}
+	status := &OktaSignInStatus{
+		NextStep:             setup.NextStep,
+		NextStepGuidance:     oktaSignInGuidance[setup.NextStep],
+		AgentRecorded:        setup.AgentRecorded,
+		ClientRegistered:     setup.ClientRegistered,
+		DuplicateClients:     setup.DuplicateClients,
+		ClientReady:          setup.ClientReady,
+		RedirectURI:          conv.PtrEmpty(setup.RedirectURI),
+		KeyURL:               conv.PtrEmpty(setup.JWKSURL),
+		KeyID:                conv.PtrEmpty(setup.ActiveKeyID),
+		PublicJWK:            setup.PublicJWK,
+		TrustingIssuers:      signInIssuers(setup.TrustingIssuers),
+		StaleTrustingIssuers: signInIssuers(setup.StaleTrustingIssuers),
+		ChecklistNextStep:    nil,
+	}
+	speakeasyDone := setup.NextStep == idpc.SignInStepRegisterInOkta
+	for _, item := range setup.Checklist {
+		if item.Completed == nil && speakeasyDone {
+			continue
+		}
+		if item.Completed == nil || !*item.Completed {
+			status.ChecklistNextStep = &OktaChecklistStep{Key: item.Key, Title: item.Title, Completed: item.Completed}
+			break
+		}
+	}
+	return status
+}
+
+func signInIssuers(issuers []idpc.SignInIssuer) []OktaSignInIssuer {
+	out := make([]OktaSignInIssuer, 0, len(issuers))
+	for _, issuer := range issuers {
+		out = append(out, OktaSignInIssuer{ID: issuer.ID, Slug: issuer.Slug})
+	}
+	return out
+}
+
+const oktaSignInDashboard = " in the dashboard (IDP and SSO > Identity providers > Okta); Platform MCP cannot make this change."
+
+var oktaSignInGuidance = map[string]string{
+	idpc.SignInStepVerifyConnection:  "Finish and verify the Okta connection" + oktaSignInDashboard,
+	idpc.SignInStepRecordAgent:       "Register the Okta AI agent and record its ID" + oktaSignInDashboard,
+	idpc.SignInStepAwaitProvision:    "Speakeasy is still provisioning the connection; check again shortly.",
+	idpc.SignInStepResolveDuplicates: "Several organization sign-in clients use the agent ID under the Okta connection's issuer, so none is used. Delete the extras under Remote identity providers" + oktaSignInDashboard,
+	idpc.SignInStepSetUpSignIn:       "Use Set up Okta sign-in, which needs customer-managed encryption keys enabled for the organization and a Google Cloud KMS key to sign with," + oktaSignInDashboard,
+	idpc.SignInStepTrustSignIn:       "Confirm which sign-in issuer trusts Okta sign-in" + oktaSignInDashboard,
+	idpc.SignInStepRegisterInOkta:    "In Okta, paste public_jwk in the agent's Credentials and click Activate, then enable Authorization Code and Refresh Token on the linked app and add redirect_uri. Rotating the signing key set or publishing a new key needs the new public key pasted in Okta again. Speakeasy cannot observe these Okta settings.",
 }
 
 func xaaReadinessRefusal(code, message string) (*mcp.CallToolResult, GetXAAReadinessOutput, error) {

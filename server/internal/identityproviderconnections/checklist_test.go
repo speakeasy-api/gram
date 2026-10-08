@@ -15,8 +15,9 @@ const checklistJWKSURL = "https://example.test/jwks.json"
 var agentKeys = []string{
 	idpc.ChecklistKeyRegisterAIAgent,
 	idpc.ChecklistKeyLinkAgentApp,
-	idpc.ChecklistKeyActivateAgentApp,
 	idpc.ChecklistKeyRecordAIAgent,
+	idpc.ChecklistKeyAddAgentPublicKey,
+	idpc.ChecklistKeyActivateAgentApp,
 	idpc.ChecklistKeyFirstResourceConnection,
 }
 
@@ -219,5 +220,72 @@ func TestOktaChecklist_CopyInvariants(t *testing.T) {
 	require.Empty(t, verified[idpc.ChecklistKeyAssignAdminRoles].Details, "roles drop out once access is observed")
 	for _, key := range agentKeys {
 		require.NotContains(t, strings.ToLower(itemText(items[key])), "optional", key)
+	}
+}
+
+func detailIndex(t *testing.T, item idpc.ChecklistItem, substr string) int {
+	t.Helper()
+	for i, d := range item.Details {
+		if strings.Contains(d, substr) {
+			return i
+		}
+	}
+	require.Failf(t, "missing detail", "%s has no detail mentioning %q", item.Key, substr)
+	return -1
+}
+
+func TestOktaChecklist_LinkedAppIsTheSignInClient(t *testing.T) {
+	t.Parallel()
+	items := checklist(t, idpc.ChecklistSignal{})
+
+	require.Contains(t, itemText(items[idpc.ChecklistKeyLinkAgentApp]), "sign in to Speakeasy")
+	key := itemText(items[idpc.ChecklistKeyAddAgentPublicKey])
+	for _, want := range []string{"Set up Okta sign-in", "paste this key in the agent's Credentials and click Activate", "pasting the new public key in Okta again", "Google Cloud KMS", "customer-managed encryption keys"} {
+		require.Contains(t, key, want)
+	}
+	require.NotContains(t, key, "JWKS URI", "Okta takes a pasted key, not a key URL")
+	activate := itemText(items[idpc.ChecklistKeyActivateAgentApp])
+	for _, want := range []string{"Authorization Code", "Refresh Token", "redirect URI", "Okta sign-in section"} {
+		require.Contains(t, activate, want)
+	}
+	for _, key := range agentKeys {
+		require.NotContains(t, strings.ToLower(itemText(items[key])), "upcoming release", key)
+	}
+}
+
+func TestOktaChecklist_AgentPublicKeyBeforeLinkedAppEdits(t *testing.T) {
+	t.Parallel()
+	items := idpc.OktaChecklist(remotesessions.TokenEndpointAuthMethodPrivateKeyJWT, idpc.ChecklistSignal{AgentRecorded: true})
+	position := make(map[string]int, len(items))
+	for i, item := range items {
+		position[item.Key] = i
+	}
+	require.Less(t, position[idpc.ChecklistKeyLinkAgentApp], position[idpc.ChecklistKeyRecordAIAgent], "the agent ID exists once the agent is registered")
+	require.Less(t, position[idpc.ChecklistKeyRecordAIAgent], position[idpc.ChecklistKeyAddAgentPublicKey], "Set up Okta sign-in needs the recorded agent")
+	require.Less(t, position[idpc.ChecklistKeyAddAgentPublicKey], position[idpc.ChecklistKeyActivateAgentApp], "Okta rejects linked app edits until the agent has a public key")
+	require.Nil(t, items[position[idpc.ChecklistKeyAddAgentPublicKey]].Completed, "Speakeasy cannot observe the agent's Okta credentials")
+}
+
+func TestOktaChecklist_RecordAgentSignInFollowUpsAreUnmonitored(t *testing.T) {
+	t.Parallel()
+	record := checklist(t, idpc.ChecklistSignal{AgentRecorded: true})[idpc.ChecklistKeyRecordAIAgent]
+	require.NotNil(t, record.Completed)
+	require.True(t, *record.Completed)
+	note := record.Details[detailIndex(t, record, "does not check")]
+	require.Contains(t, note, "agent ID is recorded")
+}
+
+func TestOktaChecklist_AssignedUsersMustAlreadyExist(t *testing.T) {
+	t.Parallel()
+	activate := checklist(t, idpc.ChecklistSignal{})[idpc.ChecklistKeyActivateAgentApp]
+	require.Contains(t, activate.Description, "SCIM")
+}
+
+func TestOktaChecklist_FirstResourceConnectionNamesVendorTrustStep(t *testing.T) {
+	t.Parallel()
+	first := checklist(t, idpc.ChecklistSignal{})[idpc.ChecklistKeyFirstResourceConnection]
+	trust := first.Details[detailIndex(t, first, "enterprise-managed authorization")]
+	for _, want := range []string{"Okta issuer", "Linear", "Speakeasy cannot"} {
+		require.Contains(t, trust, want)
 	}
 }

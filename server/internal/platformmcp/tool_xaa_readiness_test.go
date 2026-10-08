@@ -1,15 +1,19 @@
 package platformmcp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	srv "github.com/speakeasy-api/gram/server/gen/okta_resource_connections"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	idpc "github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/stretchr/testify/require"
 )
@@ -143,7 +147,8 @@ func TestXAAReadinessRefusals(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			reader := &xaaReaderStub{err: tc.serviceErr, result: &srv.ListOktaResourceConnectionsResult{Servers: []*srv.OktaResourceConnectionServer{{ProjectID: xaaProjectID, McpServerID: "44444444-4444-4444-8444-444444444444", State: "verified"}}}}
-			service := &xaaReadinessService{connections: reader, enabled: func(context.Context, string) (bool, error) { return tc.enabled, tc.flagErr }}
+			signIn := &signInReaderStub{}
+			service := &xaaReadinessService{connections: reader, signIn: signIn, enabled: func(context.Context, string) (bool, error) { return tc.enabled, tc.flagErr }}
 			if tc.absent {
 				service = nil
 			}
@@ -167,6 +172,7 @@ func TestXAAReadinessRefusals(t *testing.T) {
 			require.Contains(t, text, `"code":"`+tc.code+`"`)
 			require.NotContains(t, text, "private")
 			require.Equal(t, tc.calls, reader.calls)
+			require.Empty(t, signIn.orgs, "a refusal never reads sign-in setup")
 		})
 	}
 }
@@ -226,4 +232,184 @@ func TestXAAReadinessReportsIdentityChainingAndFederatedCallback(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, string(wire), "identity_chaining")
 	require.NotContains(t, string(wire), "federated_callback_url")
+}
+
+type signInReaderStub struct {
+	setup *idpc.SignInSetup
+	err   error
+	orgs  []string
+}
+
+func (s *signInReaderStub) Read(_ context.Context, organizationID string) (*idpc.SignInSetup, error) {
+	s.orgs = append(s.orgs, organizationID)
+	return s.setup, s.err
+}
+
+func xaaSignInCall(t *testing.T, signIn *signInReaderStub) (GetXAAReadinessOutput, string) {
+	t.Helper()
+	return xaaSignInCallLogged(t, signIn, nil)
+}
+
+func xaaSignInCallLogged(t *testing.T, signIn *signInReaderStub, logger *slog.Logger) (GetXAAReadinessOutput, string) {
+	t.Helper()
+	reader := &xaaReaderStub{result: &srv.ListOktaResourceConnectionsResult{Servers: []*srv.OktaResourceConnectionServer{{ProjectID: xaaProjectID, McpServerID: xaaServerID, State: "needs_connection"}}}}
+	session := xaaTestSession(t, &xaaReadinessService{logger: logger, connections: reader, signIn: signIn, enabled: func(context.Context, string) (bool, error) { return true, nil }}, false)
+	result := xaaCall(t, session, xaaProjectID, xaaServerID)
+	require.False(t, result.IsError)
+	wire, err := json.Marshal(result.StructuredContent)
+	require.NoError(t, err)
+	var output GetXAAReadinessOutput
+	require.NoError(t, json.Unmarshal(wire, &output))
+	require.Equal(t, "needs_connection", output.State)
+	return output, string(wire)
+}
+
+func TestXAAReadinessReportsOktaSignInSetup(t *testing.T) {
+	t.Parallel()
+	done, notDone := true, false
+	signIn := &signInReaderStub{setup: &idpc.SignInSetup{
+		ConnectionStatus:     idpc.StatusVerified,
+		AgentRecorded:        true,
+		ClientRegistered:     true,
+		ClientReady:          true,
+		RedirectURI:          "https://app.example.com/mcp/idp_callback/client",
+		JWKSURL:              "https://app.example.com/.well-known/oauth-client/client/jwks.json",
+		ActiveKeyID:          "kid-1",
+		PublicJWK:            map[string]any{"kid": "kid-1", "kty": "RSA", "alg": "RS256", "use": "sig", "n": "modulus", "e": "AQAB"},
+		TrustingIssuers:      []idpc.SignInIssuer{{ID: "issuer-id", Slug: "okta-sign-in"}},
+		StaleTrustingIssuers: []idpc.SignInIssuer{{ID: "stale-id", Slug: "old-agent"}},
+		Checklist: []idpc.ChecklistItem{
+			{Key: idpc.ChecklistKeySubmitClientID, Title: "Submit", Completed: &done, Description: "private copy"},
+			{Key: idpc.ChecklistKeyAddAgentPublicKey, Title: "Key", Completed: nil},
+			{Key: idpc.ChecklistKeyActivateAgentApp, Title: "Activate", Completed: &notDone},
+			{Key: idpc.ChecklistKeyFirstResourceConnection, Title: "First", Completed: nil},
+		},
+		NextStep: idpc.SignInStepRegisterInOkta,
+	}}
+	output, wire := xaaSignInCall(t, signIn)
+	require.Equal(t, []string{testPrincipal().OrganizationID}, signIn.orgs)
+	got := output.OktaSignIn
+	require.NotNil(t, got)
+	require.Equal(t, idpc.SignInStepRegisterInOkta, got.NextStep)
+	for _, want := range []string{"paste public_jwk in the agent's Credentials and click Activate", "redirect_uri", "pasted in Okta again"} {
+		require.Contains(t, got.NextStepGuidance, want)
+	}
+	require.Equal(t, "kid-1", *got.KeyID)
+	require.Equal(t, map[string]any{"kid": "kid-1", "kty": "RSA", "alg": "RS256", "use": "sig", "n": "modulus", "e": "AQAB"}, got.PublicJWK)
+	require.Equal(t, []OktaSignInIssuer{{ID: "stale-id", Slug: "old-agent"}}, got.StaleTrustingIssuers)
+	require.True(t, got.AgentRecorded)
+	require.True(t, got.ClientRegistered)
+	require.True(t, got.ClientReady)
+	require.Equal(t, "https://app.example.com/mcp/idp_callback/client", *got.RedirectURI)
+	require.Equal(t, "https://app.example.com/.well-known/oauth-client/client/jwks.json", *got.KeyURL)
+	require.Equal(t, []OktaSignInIssuer{{ID: "issuer-id", Slug: "okta-sign-in"}}, got.TrustingIssuers)
+	require.Equal(t, &OktaChecklistStep{Key: idpc.ChecklistKeyActivateAgentApp, Title: "Activate", Completed: &notDone}, got.ChecklistNextStep, "unobservable steps are skipped once Speakeasy's side is done")
+	require.NotContains(t, wire, "private copy")
+}
+
+func TestXAAReadinessOktaSignInChecklistSkipsOnlyUnobservableSteps(t *testing.T) {
+	t.Parallel()
+	done := true
+	checklist := []idpc.ChecklistItem{
+		{Key: idpc.ChecklistKeySubmitClientID, Title: "Submit", Completed: &done},
+		{Key: idpc.ChecklistKeyAddAgentPublicKey, Title: "Key", Completed: nil},
+		{Key: idpc.ChecklistKeyFirstResourceConnection, Title: "First", Completed: nil},
+	}
+	for _, tc := range []struct {
+		step string
+		want *OktaChecklistStep
+	}{
+		{step: idpc.SignInStepRegisterInOkta, want: nil},
+		{step: idpc.SignInStepTrustSignIn, want: &OktaChecklistStep{Key: idpc.ChecklistKeyAddAgentPublicKey, Title: "Key", Completed: nil}},
+	} {
+		t.Run(tc.step, func(t *testing.T) {
+			t.Parallel()
+			output, _ := xaaSignInCall(t, &signInReaderStub{setup: &idpc.SignInSetup{ConnectionStatus: idpc.StatusVerified, TrustingIssuers: []idpc.SignInIssuer{}, Checklist: checklist, NextStep: tc.step}})
+			require.NotNil(t, output.OktaSignIn)
+			require.Equal(t, tc.want, output.OktaSignIn.ChecklistNextStep)
+		})
+	}
+}
+
+func TestXAAReadinessOktaSignInReportsDuplicateClients(t *testing.T) {
+	t.Parallel()
+	output, wire := xaaSignInCall(t, &signInReaderStub{setup: &idpc.SignInSetup{
+		ConnectionStatus: idpc.StatusVerified, AgentRecorded: true, ClientRegistered: true, DuplicateClients: 2,
+		TrustingIssuers: []idpc.SignInIssuer{}, NextStep: idpc.SignInStepResolveDuplicates,
+	}})
+	got := output.OktaSignIn
+	require.NotNil(t, got)
+	require.Equal(t, idpc.SignInStepResolveDuplicates, got.NextStep)
+	require.Equal(t, 2, got.DuplicateClients)
+	require.Contains(t, got.NextStepGuidance, "Delete the extras")
+	require.Nil(t, got.PublicJWK)
+	require.NotContains(t, wire, "redirect_uri")
+}
+
+func TestXAAReadinessLogsFailedOktaSignInRead(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		err    error
+		logged bool
+	}{
+		"read failure":  {err: errors.New("database unavailable"), logged: true},
+		"no connection": {err: idpc.ErrConnectionNotFound, logged: false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			var logs bytes.Buffer
+			output, _ := xaaSignInCallLogged(t, &signInReaderStub{err: tc.err}, slog.New(slog.NewTextHandler(&logs, nil)))
+			require.Nil(t, output.OktaSignIn)
+			require.Equal(t, tc.logged, strings.Contains(logs.String(), "database unavailable"))
+		})
+	}
+}
+
+func TestXAAReadinessOktaSignInBeforeSetup(t *testing.T) {
+	t.Parallel()
+	signIn := &signInReaderStub{setup: &idpc.SignInSetup{ConnectionStatus: idpc.StatusVerified, TrustingIssuers: []idpc.SignInIssuer{}, Checklist: []idpc.ChecklistItem{{Key: idpc.ChecklistKeyRegisterAIAgent, Title: "Register"}}, NextStep: idpc.SignInStepRecordAgent}}
+	output, wire := xaaSignInCall(t, signIn)
+	got := output.OktaSignIn
+	require.NotNil(t, got)
+	require.Equal(t, idpc.SignInStepRecordAgent, got.NextStep)
+	require.Contains(t, got.NextStepGuidance, "Platform MCP cannot")
+	require.Nil(t, got.RedirectURI)
+	require.Nil(t, got.KeyURL)
+	require.NotContains(t, wire, "redirect_uri")
+	require.Equal(t, idpc.ChecklistKeyRegisterAIAgent, got.ChecklistNextStep.Key)
+	require.Nil(t, got.ChecklistNextStep.Completed, "an unobservable step reads as not confirmed")
+}
+
+func TestXAAReadinessOmitsOktaSignInWhenUnreadable(t *testing.T) {
+	t.Parallel()
+	for name, signIn := range map[string]*signInReaderStub{
+		"read failure":  {err: errors.New("private database detail")},
+		"no connection": {err: idpc.ErrConnectionNotFound},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			output, wire := xaaSignInCall(t, signIn)
+			require.Nil(t, output.OktaSignIn)
+			require.NotContains(t, wire, "private")
+		})
+	}
+}
+
+func TestXAAReadinessOktaSignInGuidanceCoversEveryStep(t *testing.T) {
+	t.Parallel()
+	dashboardSteps := []string{idpc.SignInStepVerifyConnection, idpc.SignInStepRecordAgent, idpc.SignInStepResolveDuplicates, idpc.SignInStepSetUpSignIn, idpc.SignInStepTrustSignIn}
+	for _, step := range append(dashboardSteps, idpc.SignInStepAwaitProvision, idpc.SignInStepRegisterInOkta) {
+		require.NotEmpty(t, oktaSignInGuidance[step], step)
+	}
+	for _, step := range dashboardSteps {
+		require.Contains(t, oktaSignInGuidance[step], "Platform MCP cannot make this change", step)
+	}
+	require.Contains(t, oktaSignInGuidance[idpc.SignInStepSetUpSignIn], "customer-managed encryption keys")
+	require.Contains(t, oktaSignInGuidance[idpc.SignInStepSetUpSignIn], "Google Cloud KMS key")
+	descriptor := func() Descriptor {
+		reg := newRegistrar(newTestMCPServer())
+		registerXAAReadinessTool(reg, nil)
+		return reg.Descriptors()[0]
+	}()
+	require.Contains(t, descriptor.Description, "send the administrator to the dashboard")
 }

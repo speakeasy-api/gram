@@ -1786,12 +1786,16 @@ func (p *Provisioner) lookupManagedClientRow(ctx context.Context, q *repo.Querie
 		return row, nil, fmt.Errorf("load managed client: %w", err)
 	}
 
+	return row, managedClientFromRow(row, p.cfg.ServerURL), nil
+}
+
+func managedClientFromRow(row repo.GetManagedClientRow, serverURL *url.URL) *ManagedClient {
 	method := remotesessions.TokenEndpointAuthMethod(row.RemoteSessionClient.TokenEndpointAuthMethod.String)
 	jwksURL := ""
 	if row.JsonWebKeySetID.Valid {
-		jwksURL = remotesessions.ClientJSONWebKeySetURL(p.cfg.ServerURL, row.RemoteSessionClient.ID)
+		jwksURL = remotesessions.ClientJSONWebKeySetURL(serverURL, row.RemoteSessionClient.ID)
 	}
-	return row, &ManagedClient{
+	return &ManagedClient{
 		ClientRowID:           row.RemoteSessionClient.ID,
 		ClientID:              row.RemoteSessionClient.ClientID,
 		IssuerID:              row.RemoteSessionClient.RemoteSessionIssuerID,
@@ -1803,7 +1807,7 @@ func (p *Provisioner) lookupManagedClientRow(ctx context.Context, q *repo.Querie
 		ActiveKid:             row.Kid.String,
 		ActivatedAt:           row.ActivatedAt.Time,
 		JSONWebKeySetURL:      jwksURL,
-	}, nil
+	}
 }
 
 // ProbeSigningCredential resolves and screens the platform signing credential without minting anything.

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OktaIdentityProviderConnection } from "@gram/client/models/components/oktaidentityproviderconnection.js";
@@ -114,7 +114,9 @@ describe("OktaConnectionTab", () => {
         "Verify once the app’s client secret is submitted and its permissions are granted.",
       ),
     ).toBeTruthy();
-    expect(screen.queryByText(/JWKS/)).toBeNull();
+    const card = document.getElementById("connection");
+    expect(card).toBeTruthy();
+    expect(within(card as HTMLElement).queryByText(/JWKS/)).toBeNull();
   });
 
   it("offers to replace the secret on secret-based OIN connections", () => {
