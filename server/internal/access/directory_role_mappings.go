@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -191,6 +192,23 @@ func (s *Service) setDirectoryRoleMappings(ctx context.Context, payload *gen.Set
 		attr.UserID(ac.UserID),
 	)
 
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	mappings, err := s.setDirectoryRoleMappingsTx(ctx, dbtx, ac, payload, legacy)
+	if err != nil {
+		return nil, err
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit directory role mappings").LogError(ctx, s.logger)
+	}
+	return mappings, nil
+}
+
+func (s *Service) setDirectoryRoleMappingsTx(ctx context.Context, dbtx pgx.Tx, ac *contextvalues.AuthContext, payload *gen.SetDirectoryRoleMappingsPayload, legacy bool) ([]*gen.DirectoryRoleMapping, error) {
 	var groupID uuid.NullUUID
 	switch payload.SourceKind {
 	case directoryRoleMappingSourceGroup:
@@ -209,12 +227,6 @@ func (s *Service) setDirectoryRoleMappings(ctx context.Context, payload *gen.Set
 	default:
 		return nil, oops.E(oops.CodeBadRequest, nil, "unknown source kind").LogError(ctx, s.logger)
 	}
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := repo.New(dbtx)
 
@@ -359,9 +371,6 @@ func (s *Service) setDirectoryRoleMappings(ctx context.Context, payload *gen.Set
 		})
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit directory role mappings").LogError(ctx, s.logger)
-	}
 	return mappings, nil
 }
 

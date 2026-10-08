@@ -1685,6 +1685,42 @@ WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS FALSE;
 
+-- name: CheckDirectoryRoleInventoryOperator :one
+SELECT id FROM users
+WHERE id = @id AND admin IS TRUE AND deleted_at IS NULL
+FOR SHARE;
+
+-- name: GetDirectoryRoleInventoryOrganization :one
+SELECT workos_id FROM organization_metadata
+WHERE id = @id AND disabled_at IS NULL
+FOR SHARE;
+
+-- name: ListDirectoryRoleInventoryRoles :many
+SELECT workos_slug::text AS role_slug, ('role:organization:' || id::text)::text AS role_urn
+FROM organization_roles
+WHERE organization_id = @organization_id AND deleted IS FALSE AND workos_deleted IS FALSE
+  AND workos_slug = ANY(@role_slugs::text[])
+UNION ALL
+SELECT workos_slug::text AS role_slug, ('role:global:' || id::text)::text AS role_urn
+FROM global_roles
+WHERE deleted IS FALSE AND workos_deleted IS FALSE
+  AND workos_slug = ANY(@role_slugs::text[])
+ORDER BY role_slug, role_urn;
+
+-- name: ListDirectoryRoleInventoryGroups :many
+SELECT id, workos_directory_group_id
+FROM directory_groups
+WHERE organization_id = @organization_id AND deleted IS FALSE AND workos_deleted IS FALSE
+  AND workos_directory_group_id = ANY(@workos_group_ids::text[])
+ORDER BY id;
+
+-- name: ListDirectoryRoleInventoryMembers :many
+SELECT u.id
+FROM organization_user_relationships AS m
+JOIN users AS u ON u.id = m.user_id AND u.deleted_at IS NULL
+WHERE m.organization_id = @organization_id AND m.deleted IS FALSE
+ORDER BY u.id;
+
 -- name: DeleteDirectoryRoleMapping :execrows
 UPDATE directory_role_mappings
 SET deleted_at = clock_timestamp(),
