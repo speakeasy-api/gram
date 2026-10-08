@@ -78458,15 +78458,29 @@ components:
     AgentPlugin:
       type: object
       properties:
+        description:
+          type: string
+          description: Short description of the plugin, when one is set.
+        install_mode:
+          type: string
+          description: 'How the agent installs the plugin. `required`: installed, and the user can''t turn it off. `default`: installed, and the user can turn it off. `available`: not installed until the user turns it on. Agents that predate this field install every listed plugin.'
+          enum:
+            - required
+            - default
+            - available
         marketplace_name:
           type: string
           description: Name of the marketplace this plugin lives in. Always equals the `name` of one of the marketplaces in the same response.
+        name:
+          type: string
+          description: Display name of the plugin. Absent for the synthesized observability plugin.
         slug:
           type: string
-          description: Plugin slug. Combined with marketplace_name, this identifies the plugin the agent enables in the managed tool.
+          description: Plugin slug. Combined with marketplace_name, this identifies the plugin in the managed tool.
       required:
         - slug
         - marketplace_name
+        - install_mode
     AgentPolicyGrant:
       type: object
       properties:
@@ -86734,7 +86748,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AgentPlugin'
-          description: Plugins the agent should enable. Each entry references one of the marketplaces above by name.
+          description: 'Plugins for the caller: the observability plugin of each listed marketplace, when enabled, and the plugins assigned to the caller. Each entry''s install_mode says whether the agent installs it (`required`, `default`) or only offers it for the user to turn on (`available`). Each entry references one of the marketplaces above by name.'
         principal:
           $ref: '#/components/schemas/AgentPollingPrincipal'
       required:
@@ -94748,12 +94762,20 @@ components:
           type: string
           description: Unique assignment identifier.
           format: uuid
+        install_mode:
+          type: string
+          description: 'How the device agent installs the plugin for this audience. `required`: installed, and the user can''t turn it off. `default`: installed, and the user can turn it off. `available`: not installed until the user turns it on.'
+          enum:
+            - required
+            - default
+            - available
         principal_urn:
           type: string
           description: Principal URN (e.g. role:organization:<uuid>, user:id, or *).
       required:
         - id
         - principal_urn
+        - install_mode
         - created_at
     PluginAudience:
       type: object
@@ -100549,6 +100571,15 @@ components:
     SetPluginAssignmentsForm:
       type: object
       properties:
+        install_modes:
+          type: object
+          description: Install mode per principal URN in principal_urns. A principal missing from this map keeps its current mode, or gets `default` when it is newly assigned.
+          additionalProperties:
+            type: string
+            enum:
+              - required
+              - default
+              - available
         plugin_id:
           type: string
           format: uuid

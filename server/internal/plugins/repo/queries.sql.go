@@ -60,10 +60,10 @@ func (q *Queries) AddGatewayPluginServer(ctx context.Context, arg AddGatewayPlug
 }
 
 const addPluginAssignment = `-- name: AddPluginAssignment :one
-INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
-SELECT p.id, $1, $2
+INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn, install_mode)
+SELECT p.id, $1, $2, COALESCE(NULLIF($3::text, ''), 'default')
 FROM plugins p
-WHERE p.id = $3
+WHERE p.id = $4
   AND p.organization_id = $1
   AND p.deleted IS FALSE
 ON CONFLICT (plugin_id, principal_urn) DO UPDATE
@@ -74,15 +74,22 @@ RETURNING id, plugin_id, organization_id, principal_urn, install_mode, created_a
 type AddPluginAssignmentParams struct {
 	OrganizationID string
 	PrincipalUrn   string
+	InstallMode    string
 	PluginID       uuid.UUID
 }
 
 // Scoped to the org: the row is inserted only when @plugin_id resolves to a
 // non-deleted plugin in @organization_id, so a mismatched (plugin, org) pair
 // can never create a cross-tenant assignment. Returns no row (ErrNoRows) when
-// the plugin does not belong to the org.
+// the plugin does not belong to the org. An empty @install_mode stores
+// 'default'. An existing row keeps its install mode.
 func (q *Queries) AddPluginAssignment(ctx context.Context, arg AddPluginAssignmentParams) (PluginAssignment, error) {
-	row := q.db.QueryRow(ctx, addPluginAssignment, arg.OrganizationID, arg.PrincipalUrn, arg.PluginID)
+	row := q.db.QueryRow(ctx, addPluginAssignment,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.InstallMode,
+		arg.PluginID,
+	)
 	var i PluginAssignment
 	err := row.Scan(
 		&i.ID,
@@ -1425,7 +1432,7 @@ func (q *Queries) ListPluginAssignments(ctx context.Context, arg ListPluginAssig
 }
 
 const listPluginAudienceForRoleDeletionAudit = `-- name: ListPluginAudienceForRoleDeletionAudit :many
-SELECT pa.principal_urn
+SELECT pa.principal_urn, pa.install_mode
 FROM plugin_assignments pa
 JOIN plugins p ON p.id = pa.plugin_id AND p.organization_id = pa.organization_id
 WHERE pa.organization_id = $1
@@ -1440,20 +1447,25 @@ type ListPluginAudienceForRoleDeletionAuditParams struct {
 	PluginID       uuid.UUID
 }
 
+type ListPluginAudienceForRoleDeletionAuditRow struct {
+	PrincipalUrn string
+	InstallMode  string
+}
+
 // Include archived plugins: cleanup changes their audience too.
-func (q *Queries) ListPluginAudienceForRoleDeletionAudit(ctx context.Context, arg ListPluginAudienceForRoleDeletionAuditParams) ([]string, error) {
+func (q *Queries) ListPluginAudienceForRoleDeletionAudit(ctx context.Context, arg ListPluginAudienceForRoleDeletionAuditParams) ([]ListPluginAudienceForRoleDeletionAuditRow, error) {
 	rows, err := q.db.Query(ctx, listPluginAudienceForRoleDeletionAudit, arg.OrganizationID, arg.ProjectID, arg.PluginID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []ListPluginAudienceForRoleDeletionAuditRow
 	for rows.Next() {
-		var principal_urn string
-		if err := rows.Scan(&principal_urn); err != nil {
+		var i ListPluginAudienceForRoleDeletionAuditRow
+		if err := rows.Scan(&i.PrincipalUrn, &i.InstallMode); err != nil {
 			return nil, err
 		}
-		items = append(items, principal_urn)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

@@ -417,9 +417,10 @@ SELECT EXISTS (
 -- Scoped to the org: the row is inserted only when @plugin_id resolves to a
 -- non-deleted plugin in @organization_id, so a mismatched (plugin, org) pair
 -- can never create a cross-tenant assignment. Returns no row (ErrNoRows) when
--- the plugin does not belong to the org.
-INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
-SELECT p.id, @organization_id, @principal_urn
+-- the plugin does not belong to the org. An empty @install_mode stores
+-- 'default'. An existing row keeps its install mode.
+INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn, install_mode)
+SELECT p.id, @organization_id, @principal_urn, COALESCE(NULLIF(@install_mode::text, ''), 'default')
 FROM plugins p
 WHERE p.id = @plugin_id
   AND p.organization_id = @organization_id
@@ -479,7 +480,7 @@ WHERE p.id = pa.plugin_id
 
 -- name: ListPluginAudienceForRoleDeletionAudit :many
 -- Include archived plugins: cleanup changes their audience too.
-SELECT pa.principal_urn
+SELECT pa.principal_urn, pa.install_mode
 FROM plugin_assignments pa
 JOIN plugins p ON p.id = pa.plugin_id AND p.organization_id = pa.organization_id
 WHERE pa.organization_id = @organization_id
