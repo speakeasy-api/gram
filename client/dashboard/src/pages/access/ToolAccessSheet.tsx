@@ -1,4 +1,9 @@
+import { InlineEmptyState } from "@/components/inline-empty-state";
+import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
@@ -16,11 +21,12 @@ import { useToolMetadata } from "@/hooks/useToolMetadata";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { Disposition } from "@gram/client/models/components/selector.js";
-import { Check, PlugZap } from "lucide-react";
+import { Check } from "lucide-react";
 import { useEffect, useMemo, useState, type JSX } from "react";
 import { Link } from "react-router";
 
-import { ServerTile } from "./McpAccessParts";
+import { ServerMark } from "./McpAccessParts";
+import { LIST_FRAME, LIST_ROW, LIST_ROW_SELECTED } from "./mcpAccessStyles";
 import {
   convertToolLimit,
   DISPOSITION_COPY,
@@ -177,7 +183,7 @@ function ToolAccessSheetBody({
     <>
       <SheetHeader className="border-border border-b">
         <div className="flex items-center gap-3 pr-6">
-          {entry && <ServerTile />}
+          {entry && <ServerMark />}
           <div className="min-w-0">
             <p className="text-eyebrow">
               Tool access · {entry ? entry.projectName : "Every project"}
@@ -221,9 +227,9 @@ function ToolAccessSheetBody({
 
         {specific && !isAllServers && (
           <SegmentedControl
+            className="self-start"
             value={tab}
             onChange={chooseTab}
-            className="w-full [&>button]:flex-1 [&>button]:justify-center"
             options={[
               { value: "tools", label: "By tool" },
               { value: "annotations", label: "By annotation" },
@@ -275,23 +281,31 @@ function ToolChecklist({
 }): JSX.Element {
   switch (source.status) {
     case "loading":
-      return <SheetNote>Loading tools…</SheetNote>;
+      return (
+        <Skeleton>
+          <div className="h-9 w-full" />
+          <div className="h-9 w-full" />
+          <div className="h-9 w-full" />
+        </Skeleton>
+      );
     case "error":
       return (
-        <SheetNote>
-          Couldn&rsquo;t load this server&rsquo;s tools.{" "}
-          <Button variant="tertiary" size="xs" onClick={source.retry}>
-            <Button.Text>Retry</Button.Text>
-          </Button>
-        </SheetNote>
+        <Alert variant="error" alignTop className="text-sm">
+          <span className="flex flex-wrap items-center gap-2">
+            Couldn&rsquo;t load this server&rsquo;s tools.
+            <Button variant="tertiary" size="xs" onClick={source.retry}>
+              <Button.Text>Retry</Button.Text>
+            </Button>
+          </span>
+        </Alert>
       );
     case "dynamic":
     case "none":
       return (
-        <SheetNote>
+        <Alert variant="default" alignTop className="text-sm">
           This server resolves its tools when they&rsquo;re called, so it
           can&rsquo;t be limited by tool. Limit it by annotation instead.
-        </SheetNote>
+        </Alert>
       );
     case "needs-connect":
       return <ConnectPrompt entry={entry} />;
@@ -310,9 +324,9 @@ function ToolChecklist({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <span className="text-muted-foreground mr-auto text-sm">
+        <Text as="span" muted small className="mr-auto">
           {picked} of {tools.length} tools selected
-        </span>
+        </Text>
         <Button
           variant="tertiary"
           size="xs"
@@ -324,21 +338,25 @@ function ToolChecklist({
           <Button.Text>Clear</Button.Text>
         </Button>
       </div>
-      <div className="border-border divide-border divide-y border">
+      <div className={LIST_FRAME}>
         {tools.map((tool) => {
           const disposition = toolDisposition(tool);
           return (
             <label
               key={tool.id}
-              className="hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2"
+              className={cn(
+                LIST_ROW,
+                "cursor-pointer",
+                chosen.has(tool.name) && LIST_ROW_SELECTED,
+              )}
             >
               <Checkbox
                 checked={chosen.has(tool.name)}
                 onCheckedChange={(next) => toggle(tool.name, next === true)}
               />
-              <span className="min-w-0 flex-1 truncate font-mono text-xs">
+              <Text as="span" mono small className="min-w-0 flex-1 truncate">
                 {tool.name}
-              </span>
+              </Text>
               {disposition && (
                 <Badge variant="neutral" size="sm">
                   {DISPOSITION_COPY[disposition].label}
@@ -369,7 +387,7 @@ function AnnotationChecklist({
       ),
     );
   return (
-    <div className="border-border divide-border divide-y border">
+    <div className={LIST_FRAME}>
       {DISPOSITIONS.map((disposition) => {
         const copy = DISPOSITION_COPY[disposition];
         const count = tools?.filter(
@@ -378,17 +396,23 @@ function AnnotationChecklist({
         return (
           <label
             key={disposition}
-            className="hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2.5"
+            className={cn(
+              LIST_ROW,
+              "cursor-pointer",
+              selected.includes(disposition) && LIST_ROW_SELECTED,
+            )}
           >
             <Checkbox
               checked={selected.includes(disposition)}
               onCheckedChange={(next) => toggle(disposition, next === true)}
             />
             <span className="flex min-w-0 flex-1 flex-col">
-              <span className="text-sm">{copy.label}</span>
-              <span className="text-muted-foreground text-xs">
+              <Text as="span" className="text-sm">
+                {copy.label}
+              </Text>
+              <Text as="span" muted small>
                 {copy.description}
-              </span>
+              </Text>
             </span>
             {count !== undefined && (
               <Badge variant="neutral" size="sm">
@@ -413,35 +437,26 @@ function ConnectPrompt({ entry }: { entry: ServerWithProject }): JSX.Element {
   )?.slug;
   const routes = useRoutes({ projectSlug });
   return (
-    <div className="border-border bg-card flex flex-col items-start gap-3 border p-4">
-      <div className="flex items-center gap-2">
-        <PlugZap className="text-muted-foreground h-4 w-4" />
-        <p className="text-sm">
-          You must connect in order to permission by tool
-        </p>
-      </div>
-      <Button variant="secondary" size="sm" asChild>
-        <Link
-          to={routes.mcp.x.inspect.href(
-            mcpServerRouteParam({
-              id: entry.server.id,
-              slug: entry.server.slug,
-            }),
-          )}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Button.Text>Connect</Button.Text>
-        </Link>
-      </Button>
-    </div>
-  );
-}
-
-function SheetNote({ children }: { children: React.ReactNode }): JSX.Element {
-  return (
-    <div className="border-border text-muted-foreground flex items-center gap-2 border px-3 py-3 text-sm">
-      {children}
-    </div>
+    <InlineEmptyState
+      icon="plug-zap"
+      heading="You must connect in order to permission by tool"
+      description="This server lists its tools once someone has connected to it."
+      action={
+        <Button variant="secondary" size="sm" asChild>
+          <Link
+            to={routes.mcp.x.inspect.href(
+              mcpServerRouteParam({
+                id: entry.server.id,
+                slug: entry.server.slug,
+              }),
+            )}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Button.Text>Connect</Button.Text>
+          </Link>
+        </Button>
+      }
+    />
   );
 }

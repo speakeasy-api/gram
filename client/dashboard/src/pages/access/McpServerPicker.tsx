@@ -5,6 +5,8 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/Collapsible";
 import { SearchBar } from "@/components/ui/SearchBar";
+import { Text } from "@/components/ui/Text";
+import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/utils";
 import { ChevronRight } from "lucide-react";
 import { useState, type JSX } from "react";
@@ -17,6 +19,7 @@ import {
   type ServerWithProject,
   type ToolLimitKind,
 } from "./mcpAccessModel";
+import { LIST_FRAME, LIST_GROUP_HEADER } from "./mcpAccessStyles";
 import { McpServerRow } from "./McpServerRow";
 import type { ServerGroup } from "./serverMerge";
 
@@ -119,17 +122,17 @@ function ProjectServerGroup({
   }`;
 
   return (
-    <Collapsible open={open} onOpenChange={onOpenChange}>
-      <div className="flex min-h-10 items-center gap-3">
+    <Collapsible open={open} onOpenChange={onOpenChange} className={LIST_FRAME}>
+      <div className={LIST_GROUP_HEADER}>
         <h3 className="min-w-0">
           <CollapsibleTrigger asChild>
             <button
               type="button"
-              className="hover:text-foreground flex items-center gap-1.5 text-sm font-medium"
+              className="text-eyebrow hover:text-foreground flex items-center gap-1.5"
             >
               <ChevronRight
                 className={cn(
-                  "h-4 w-4 shrink-0 transition-transform",
+                  "h-3.5 w-3.5 shrink-0 transition-transform",
                   open && "rotate-90",
                 )}
               />
@@ -138,22 +141,17 @@ function ProjectServerGroup({
           </CollapsibleTrigger>
         </h3>
         {!open && (
-          // Filled in ink once the collapsed project holds a choice, so a
-          // glance down the list finds them.
-          <span
-            title={`${selectedCount} of ${total} servers selected`}
+          <Badge
+            variant={selectedCount > 0 ? "information" : "neutral"}
+            size="md"
             aria-label={`${selectedCount} of ${total} servers selected`}
-            className={cn(
-              "inline-flex h-5 min-w-5 items-center justify-center px-1.5 font-mono text-xs",
-              selectedCount > 0
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground",
-            )}
           >
             {selectedCount}
-          </span>
+          </Badge>
         )}
-        <span className="text-muted-foreground text-xs">{countLabel}</span>
+        <Text as="span" small muted>
+          {countLabel}
+        </Text>
         {open && (
           <Button
             variant="tertiary"
@@ -172,11 +170,11 @@ function ProjectServerGroup({
           </Button>
         )}
       </div>
-      <CollapsibleContent className="flex flex-col gap-1 pt-1">
+      <CollapsibleContent className="divide-border divide-y">
         {matches.length === 0 && (
-          <p className="text-muted-foreground px-1 py-2 text-sm">
+          <Text muted small className="px-3 py-2">
             No servers match &ldquo;{query}&rdquo; in this project.
-          </p>
+          </Text>
         )}
         {matches.map((server) => {
           const entry: ServerWithProject = {

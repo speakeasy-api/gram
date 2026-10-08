@@ -1,5 +1,7 @@
 import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { useOrganization } from "@/contexts/Auth";
@@ -200,9 +202,9 @@ export function McpAccessPanel({
             title={
               <span className="flex flex-wrap items-center gap-2">
                 Specific servers
-                <span className="text-muted-foreground text-xs font-normal">
+                <Badge variant="neutral" size="sm">
                   Recommended
-                </span>
+                </Badge>
               </span>
             }
           >
@@ -319,10 +321,14 @@ function ServerPickerArea({
 }): JSX.Element | null {
   if (isError) return null;
   if (!settled) {
+    // Shaped like the picker it stands in for: a search box over rows.
     return (
-      <p className="text-muted-foreground py-6 text-center text-sm">
-        Loading servers…
-      </p>
+      <Skeleton>
+        <div className="h-[42px] w-80" />
+        <div className="h-10 w-full" />
+        <div className="h-10 w-full" />
+        <div className="h-10 w-full" />
+      </Skeleton>
     );
   }
   if (isEmpty) {

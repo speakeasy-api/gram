@@ -274,7 +274,7 @@ export function RolePermissionsSection({
                           <Alert
                             iconName="lock"
                             alignTop
-                            className="bg-muted mt-2 text-xs"
+                            className="mt-2 text-xs"
                           >
                             Also allows connecting to these servers with every
                             tool.

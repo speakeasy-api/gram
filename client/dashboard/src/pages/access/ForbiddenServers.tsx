@@ -1,10 +1,11 @@
 import { Button } from "@/components/ui/Button";
+import { Text } from "@/components/ui/Text";
 import { Ban } from "lucide-react";
 import type { JSX } from "react";
 
-import { ServerTile } from "./McpAccessParts";
+import { ServerMark } from "./McpAccessParts";
 import { serverHandle, type ServerWithProject } from "./mcpAccessModel";
-import { SERVER_ROW_FRAME } from "./McpServerRow";
+import { LIST_FRAME, LIST_GROUP_HEADER, LIST_ROW } from "./mcpAccessStyles";
 
 export interface ForbiddenServer {
   id: string;
@@ -24,57 +25,53 @@ export function ForbiddenServers({
   onUnblock: (id: string) => void;
 }): JSX.Element {
   return (
-    <section
-      aria-labelledby="forbidden-servers-heading"
-      className="border-destructive-softest bg-card flex flex-col gap-3 border p-4"
-    >
-      <div className="flex items-center gap-2">
-        <Ban className="text-default-destructive h-4 w-4" />
+    <section aria-labelledby="forbidden-servers-heading" className={LIST_FRAME}>
+      <div className={LIST_GROUP_HEADER}>
+        <Ban className="text-default-destructive h-3.5 w-3.5" />
         <h3
           id="forbidden-servers-heading"
-          className="text-default-destructive text-sm"
+          className="text-eyebrow text-default-destructive"
         >
-          Forbidden
+          Forbidden ({servers.length})
         </h3>
-        <span className="text-default-destructive font-mono text-xs">
-          {servers.length}
-        </span>
+        <Text as="span" small muted>
+          Members of this role can&rsquo;t connect to these servers, even if
+          another role allows it.
+        </Text>
       </div>
-      <p className="text-muted-foreground text-sm">
-        Members of this role can&rsquo;t connect to these servers, even if
-        another role allows it.
-      </p>
       {servers.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No forbidden servers.</p>
+        <Text muted small className="px-3 py-2">
+          No forbidden servers.
+        </Text>
       ) : (
-        <div className="flex flex-col gap-1">
-          {servers.map(({ id, entry }) => {
-            const name = entry?.server.name ?? id;
-            return (
-              <div key={id} className={SERVER_ROW_FRAME}>
-                <span className="flex min-w-0 flex-1 items-center gap-3 py-1">
-                  <ServerTile />
-                  <span className="flex min-w-0 flex-col">
-                    <span className="truncate text-sm font-medium">{name}</span>
-                    <span className="text-muted-foreground truncate font-mono text-xs">
-                      {entry
-                        ? `${entry.projectName} · ${serverHandle(entry.server)}`
-                        : "Not in this organization's servers"}
-                    </span>
-                  </span>
+        servers.map(({ id, entry }) => {
+          const name = entry?.server.name ?? id;
+          return (
+            <div key={id} className={LIST_ROW}>
+              <span className="flex min-w-0 flex-1 items-center gap-3">
+                <ServerMark />
+                <span className="flex min-w-0 flex-col">
+                  <Text as="span" className="truncate text-sm font-medium">
+                    {name}
+                  </Text>
+                  <Text as="span" mono small muted className="truncate">
+                    {entry
+                      ? `${entry.projectName} · ${serverHandle(entry.server)}`
+                      : "Not in this organization's servers"}
+                  </Text>
                 </span>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  aria-label={`Unblock ${name}`}
-                  onClick={() => onUnblock(id)}
-                >
-                  <Button.Text>Unblock</Button.Text>
-                </Button>
-              </div>
-            );
-          })}
-        </div>
+              </span>
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-label={`Unblock ${name}`}
+                onClick={() => onUnblock(id)}
+              >
+                <Button.Text>Unblock</Button.Text>
+              </Button>
+            </div>
+          );
+        })
       )}
     </section>
   );

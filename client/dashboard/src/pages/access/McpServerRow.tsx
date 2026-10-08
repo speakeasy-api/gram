@@ -6,10 +6,12 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/HoverCard";
 import { cn } from "@/lib/utils";
+import { Text } from "@/components/ui/Text";
 import { Lock } from "lucide-react";
 import { useId, useState, type JSX } from "react";
 
-import { ServerTile, ToolLimitBadges, ToolLimitMenu } from "./McpAccessParts";
+import { ServerMark, ToolLimitBadges, ToolLimitMenu } from "./McpAccessParts";
+import { LIST_ROW, LIST_ROW_SELECTED } from "./mcpAccessStyles";
 import {
   serverHandle,
   type McpAdminScope,
@@ -17,12 +19,6 @@ import {
   type ToolLimit,
   type ToolLimitKind,
 } from "./mcpAccessModel";
-
-/** A row's frame. A selected row is outlined in ink, two hairlines thick. */
-export const SERVER_ROW_FRAME =
-  "bg-card flex flex-wrap items-center gap-x-3 gap-y-1 border py-1 pr-2 pl-3";
-export const SERVER_ROW_SELECTED =
-  "border-primary ring-primary ring-1 ring-inset";
 
 /** One server in the picker: tick it to grant it, pencil to limit its tools. */
 export function McpServerRow({
@@ -54,11 +50,11 @@ export function McpServerRow({
   const checked = locked || !!limit;
 
   return (
-    <div className={cn(SERVER_ROW_FRAME, checked && SERVER_ROW_SELECTED)}>
+    <div className={cn(LIST_ROW, checked && LIST_ROW_SELECTED)}>
       <label
         htmlFor={inputId}
         className={cn(
-          "flex min-w-0 flex-[1_1_16rem] items-center gap-3 py-1",
+          "flex min-w-0 flex-[1_1_16rem] items-center gap-3",
           locked ? "cursor-default" : "cursor-pointer",
         )}
       >
@@ -70,17 +66,14 @@ export function McpServerRow({
           disabled={locked}
           onCheckedChange={(next) => onToggle(next === true)}
         />
-        <ServerTile />
+        <ServerMark />
         <span className="flex min-w-0 flex-col">
-          <span id={nameId} className="truncate text-sm font-medium">
+          <Text as="span" id={nameId} className="truncate text-sm font-medium">
             {server.name}
-          </span>
-          <span
-            id={handleId}
-            className="text-muted-foreground truncate font-mono text-xs"
-          >
+          </Text>
+          <Text as="span" id={handleId} mono small muted className="truncate">
             {serverHandle(server)}
-          </span>
+          </Text>
         </span>
       </label>
       {limit && !locked && (
@@ -137,13 +130,13 @@ function AlwaysOnCard({
           </Button.LeftIcon>
         </Button>
       </HoverCardTrigger>
-      <HoverCardContent align="end" className="w-72 space-y-2 text-sm">
-        <p className="font-medium">Always on</p>
-        <p className="text-muted-foreground">
+      <HoverCardContent align="end" className="w-72 space-y-2">
+        <Text className="font-medium">Always on</Text>
+        <Text muted small>
           This role has administrative access to {serverName} through{" "}
-          <code className="font-mono text-xs">{scope}</code>, which includes
-          connecting with every tool. It can&rsquo;t be turned off here.
-        </p>
+          <code className="font-mono">{scope}</code>, which includes connecting
+          with every tool. It can&rsquo;t be turned off here.
+        </Text>
         <Button variant="secondary" size="sm" onClick={onShowPlatformAccess}>
           <Button.Text>Manage in Platform access</Button.Text>
         </Button>

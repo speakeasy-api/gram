@@ -9,7 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
-import { cn } from "@/lib/utils";
+import { Text } from "@/components/ui/Text";
 import { Ban, Network, Pencil } from "lucide-react";
 import type { JSX } from "react";
 
@@ -19,18 +19,16 @@ import {
   type ToolLimitKind,
 } from "./mcpAccessModel";
 
-/** The square hairline tile a server's mark sits in. */
-export function ServerTile({ className }: { className?: string }): JSX.Element {
+/**
+ * A server's mark: the network glyph MCP server lists fall back to when a
+ * server has no logo.
+ */
+export function ServerMark(): JSX.Element {
   return (
-    <span
+    <Network
       aria-hidden="true"
-      className={cn(
-        "bg-card text-muted-foreground flex size-8 shrink-0 items-center justify-center border",
-        className,
-      )}
-    >
-      <Network className="size-4" />
-    </span>
+      className="text-muted-foreground size-5 shrink-0"
+    />
   );
 }
 
@@ -52,7 +50,7 @@ export function ToolLimitBadges({
             type="button"
             onClick={onOpen}
             title="Edit tool access"
-            className="hover:border-foreground cursor-pointer"
+            className="cursor-pointer"
           >
             {label}
           </button>
@@ -121,10 +119,12 @@ export function ToolLimitMenu({
             onSelect={() => onPick(option.kind)}
           >
             <span className="flex flex-col">
-              <span>{option.label}</span>
-              <span className="text-muted-foreground text-xs">
+              <Text as="span" className="text-sm">
+                {option.label}
+              </Text>
+              <Text as="span" muted small>
                 {option.hint}
-              </span>
+              </Text>
             </span>
           </DropdownMenuCheckboxItem>
         ))}
