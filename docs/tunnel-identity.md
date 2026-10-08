@@ -35,18 +35,20 @@ Tokens use RS256 and the protected header `typ: speakeasy-identity+jwt`. The `ki
 is the public key's RFC 7638 SHA-256 thumbprint. Their lifetime is at most 60
 seconds, capped by the source credential's expiry where available.
 
-| Claim               | Meaning                                                                                                    |
-| ------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `version`           | Contract version, currently `1`.                                                                           |
-| `iss`               | `https://tunnel.speakeasy.com` (AICP).                                                                     |
-| `aud`               | The destination's saved resource identifier, or `tunneled-mcp-server:<TUNNELED_MCP_SERVER_ID>` when unset. |
-| `sub`               | Typed principal identifier, for example `user:<USER_ID>`. The prefix identifies the principal type.        |
-| `organization_id`   | The destination owner's Speakeasy organization ID.                                                         |
-| `organization_slug` | The organization's current slug, for readability in logs. Slugs can change; never authorize on it.         |
-| `email`             | Human user's email from their Speakeasy profile; absent for agents and API keys.                           |
-| `allowed_methods`   | Present only during consent discovery; methods Speakeasy permits in that context.                          |
-| `iat`, `exp`        | Issuance and expiry, Unix seconds.                                                                         |
-| `jti`               | Unique assertion identifier for correlation.                                                               |
+| Claim                 | Meaning                                                                                                    |
+| --------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `version`             | Contract version, currently `1`.                                                                           |
+| `iss`                 | `https://tunnel.speakeasy.com` (AICP).                                                                     |
+| `aud`                 | The destination's saved resource identifier, or `tunneled-mcp-server:<TUNNELED_MCP_SERVER_ID>` when unset. |
+| `sub`                 | Typed principal identifier, for example `user:<USER_ID>`. The prefix identifies the principal type.        |
+| `organization_id`     | The destination owner's Speakeasy organization ID.                                                         |
+| `organization_slug`   | The organization's current slug, for readability in logs. Slugs can change; never authorize on it.         |
+| `email`               | Human user's email from their Speakeasy profile; absent for agents and API keys.                           |
+| `allowed_methods`     | Present only during consent discovery; methods Speakeasy permits in that context.                          |
+| `mcp_server_id`       | The Speakeasy MCP server the request targets; for a gateway, the selected member.                          |
+| `upstream_credential` | Present only when the forwarded `Authorization` is an upstream credential Speakeasy resolved. See below.   |
+| `iat`, `exp`          | Issuance and expiry, Unix seconds.                                                                         |
+| `jti`                 | Unique assertion identifier for correlation.                                                               |
 
 Set the resource identifier in the tunneled source settings to use your server's
 own audience, such as `https://mcp.internal.example.com/mcp`. Speakeasy copies the
@@ -98,6 +100,30 @@ human's discovery assertion when available.
 Speakeasy rejects a request before forwarding if the caller's authenticated
 organization or bound project differs from the destination. Use an API key
 scoped to the destination project.
+
+## Upstream credential claim
+
+When Speakeasy forwards an upstream OAuth credential it resolved for the
+request, the assertion describes it in `upstream_credential`. The claim is
+derived from the resolved credential, never from a configured header, and
+follows the token actually sent, including on retries that replace it. It is
+absent when the request carries no upstream credential, a configured
+`Authorization` header, or a token obtained by identity chaining.
+
+| Field              | Meaning                                                                                                                                       |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `owner`            | `subject`: the assertion's subject granted it. `self`: the remote session client's own credential, not the subject's.                         |
+| `client_id`        | The Speakeasy remote session client the credential belongs to.                                                                                |
+| `grant_id`         | Subject credentials only: the grant the token came from.                                                                                      |
+| `grant_generation` | Subject credentials only: increases when the subject authorizes the grant again, for example with another upstream account. Refresh keeps it. |
+| `token_sha256`     | Lowercase hex SHA-256 of the bearer token's bytes, without the `Bearer ` scheme.                                                              |
+| `token_expires_at` | The token's expiry in Unix seconds; omitted when the upstream stated none.                                                                    |
+
+To use it, verify the assertion, then require exactly one `Authorization:
+Bearer` value whose SHA-256 equals `token_sha256`. The tunnel agent's
+per-user stdio credentials mode does this on every request and accepts only
+`owner: "subject"`. `mcp_server_id` and `upstream_credential` are additive:
+`version` stays `1`, and verifiers that ignore them keep working.
 
 ## Verification
 
