@@ -77,9 +77,15 @@ const (
 	TimeGrainMonth TimeGrain = "month"
 )
 
-// TimeGrains is every grain a grouped query may bucket by, narrowest first
+// timeGrains is every grain a grouped query may bucket by, narrowest first
 // after none.
-var TimeGrains = []TimeGrain{TimeGrainNone, TimeGrainHour, TimeGrainDay, TimeGrainWeek, TimeGrainMonth}
+var timeGrains = []TimeGrain{TimeGrainNone, TimeGrainHour, TimeGrainDay, TimeGrainWeek, TimeGrainMonth}
+
+// TimeGrains lists the grains a grouped query may bucket by, as a copy the
+// caller may keep.
+func TimeGrains() []TimeGrain {
+	return slices.Clone(timeGrains)
+}
 
 // Guardrails are enforced in the compiler, not the transport, so a direct Go
 // caller is bound by them too.

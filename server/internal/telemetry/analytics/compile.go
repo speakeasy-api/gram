@@ -162,7 +162,7 @@ func Compile(catalog *Catalog, tenant Tenant, lookups LookupMaps, req Request) (
 	if grain == "" {
 		grain = TimeGrainNone
 	}
-	if !slices.Contains(TimeGrains, grain) {
+	if !slices.Contains(timeGrains, grain) {
 		return nil, newError(ErrUnsupportedGrain, name, "grain", string(grain), fmt.Sprintf("grain %q is not one of none, hour, day, week, month", grain))
 	}
 	if req.Ungrouped && grain != TimeGrainNone {

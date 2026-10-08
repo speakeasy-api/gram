@@ -570,7 +570,8 @@ export function queryBodyFromSpec(spec: ExploreSpec): AnalyticsQueryPayload {
 
   if (measures.length === 0) {
     // Rows at the dataset's grain, newest first; the dimensions are the
-    // projection rather than a grouping.
+    // projection rather than a grouping. A limit carried over from a grouped
+    // query is clamped to what rows allow.
     return {
       dataset: spec.dataset,
       from,
@@ -579,7 +580,7 @@ export function queryBodyFromSpec(spec: ExploreSpec): AnalyticsQueryPayload {
       dimensions,
       filters,
       ungrouped: true,
-      limit,
+      limit: limit === undefined ? undefined : Math.min(limit, MAX_ROWS_LIMIT),
     };
   }
 

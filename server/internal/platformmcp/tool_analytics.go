@@ -206,7 +206,7 @@ func runAnalyticsQuerySchema() *jsonschema.Schema {
 		"dataset":    stringSchema("Dataset to query, by name from describe_analytics_catalog.", 1, 64),
 		"from":       dateTimeSchema("Start of the half-open window [from, to), RFC 3339."),
 		"to":         dateTimeSchema("End of the half-open window [from, to), RFC 3339."),
-		"grain":      described(enumSchema(analyticsNames(analytics.TimeGrains)...), "Time bucket width for a grouped query. Omit for none."),
+		"grain":      described(enumSchema(analyticsNames(analytics.TimeGrains())...), "Time bucket width for a grouped query. Omit for none."),
 		"dimensions": described(boundedArraySchema(stringSchema("", 1, 64), 0, analytics.MaxDimensions, true), fmt.Sprintf("Group-by key when grouped; projected columns when ungrouped. At most %d.", analytics.MaxDimensions)),
 		"measures":   described(arraySchema(measure, 0, false), "Composed measures. Required when grouped, forbidden when ungrouped."),
 		"filters":    described(arraySchema(filter, 0, false), fmt.Sprintf("Filters, ANDed. At most %d values per filter.", analytics.MaxFilterValues)),

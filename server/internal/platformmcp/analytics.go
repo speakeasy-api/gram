@@ -150,7 +150,7 @@ func describeAnalyticsCatalog(project ResolvedProject, catalog *analytics.Catalo
 	out := DescribeAnalyticsCatalogOutput{
 		Project:  analyticsProject(project),
 		Datasets: make([]AnalyticsDataset, 0, len(datasets)),
-		Grains:   analyticsNames(analytics.TimeGrains),
+		Grains:   analyticsNames(analytics.TimeGrains()),
 		Limits: AnalyticsLimits{
 			MaxDimensions:      analytics.MaxDimensions,
 			MaxFilterValues:    analytics.MaxFilterValues,

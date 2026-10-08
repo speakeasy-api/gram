@@ -329,6 +329,10 @@ describe("the queries a spec describes", () => {
     expect(body.measures).toBeUndefined();
     expect(body.grain).toBe("none");
     expect(body.dimensions).toEqual(["user"]);
+    expect(
+      queryBodyFromSpec({ ...rows, limit: 500 }).limit,
+      "a limit carried over from a grouped query is clamped to what rows allow",
+    ).toBe(200);
   });
 });
 
