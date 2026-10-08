@@ -39,9 +39,17 @@ type tunneledAccessFixture struct {
 	roles     *AccessRoleMutationService
 	manager   *access.RoleManager
 	servers   *mcpservers.Service
-	// dashboardCtx is a project member's dashboard request context.
-	dashboardCtx context.Context
-	tunnelID     uuid.UUID
+	// orgSlug is the organization's slug, for dashboard request contexts.
+	orgSlug  string
+	tunnelID uuid.UUID
+}
+
+// dashboardContext is a project member's dashboard request context.
+func (f tunneledAccessFixture) dashboardContext(ctx context.Context) context.Context {
+	return contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+		ActiveOrganizationID: f.principal.OrganizationID, OrganizationSlug: f.orgSlug,
+		UserID: f.principal.UserID, ProjectID: &f.project.ID, ProjectSlug: &f.project.Slug,
+	})
 }
 
 func newTunneledAccessFixture(t *testing.T, ctx context.Context, database string) tunneledAccessFixture {
@@ -76,11 +84,6 @@ func newTunneledAccessFixture(t *testing.T, ctx context.Context, database string
 	dispositions := mcpservers.NewToolDispositionCache(logger, conn, cache.NewRedisCacheAdapter(redisClient))
 	servers := mcpservers.NewService(logger, tracerProvider, conn, sessionManager, engine, audit.NewLogger(), nil, dispositions, false, nil, nil, networkaccess.DenyAllChecker{})
 
-	dashboardCtx := contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
-		ActiveOrganizationID: principal.OrganizationID, OrganizationSlug: organization.Slug,
-		UserID: principal.UserID, ProjectID: &project.ID, ProjectSlug: &project.Slug,
-	})
-
 	tunnel, err := tunneledmcprepo.New(conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
 		ID:                 uuid.New(),
 		ProjectID:          project.ID,
@@ -93,7 +96,7 @@ func newTunneledAccessFixture(t *testing.T, ctx context.Context, database string
 
 	return tunneledAccessFixture{
 		principal: principal, project: project, reads: reads, roles: roles, manager: manager,
-		servers: servers, dashboardCtx: dashboardCtx, tunnelID: tunnel.ID,
+		servers: servers, orgSlug: organization.Slug, tunnelID: tunnel.ID,
 	}
 }
 
@@ -102,7 +105,7 @@ func (f tunneledAccessFixture) createServer(t *testing.T, name string) uuid.UUID
 	t.Helper()
 
 	tunnelID := f.tunnelID.String()
-	server, err := f.servers.CreateMcpServer(f.dashboardCtx, &mcpserversgen.CreateMcpServerPayload{
+	server, err := f.servers.CreateMcpServer(f.dashboardContext(t.Context()), &mcpserversgen.CreateMcpServerPayload{
 		Name:                name,
 		TunneledMcpServerID: &tunnelID,
 		Visibility:          types.McpServerVisibility(mcpservers.VisibilityPrivate),
@@ -121,7 +124,7 @@ func TestPlatformAccessRolesUseTunneledMetadataFromTheManagementService(t *testi
 	f := newTunneledAccessFixture(t, ctx, "platform_mcp_access_tunneled")
 	serverID := f.createServer(t, "JAMF")
 
-	_, err := f.servers.AddToolMetadataBatch(f.dashboardCtx, &mcpserversgen.AddToolMetadataBatchPayload{
+	_, err := f.servers.AddToolMetadataBatch(f.dashboardContext(ctx), &mcpserversgen.AddToolMetadataBatchPayload{
 		McpServerID: serverID.String(),
 		Tools: []*mcpserversgen.ToolMetadataForm{
 			{ToolName: "list_devices", ReadOnlyHint: new(true)},
@@ -164,6 +167,33 @@ func TestPlatformAccessRolesUseTunneledMetadataFromTheManagementService(t *testi
 	require.NotEmpty(t, updated.Role.Version)
 	requireRoleToolGrants(t, ctx, f, roleID, serverID, []string{"list_devices", "wipe_device"})
 
+	_, err = f.roles.Update(ctx, f.principal, UpdateMCPAccessRoleInput{
+		ProjectID: f.project.ID.String(), RoleReference: created.Role.Reference, ExpectedVersion: updated.Role.Version,
+		AddRules:       []MCPAccessRoleRule{{MCPID: serverID.String(), Tool: "lock_device"}},
+		IdempotencyKey: "update-unrecorded-tool", Confirmed: true,
+	})
+	require.Error(t, err, "an update cannot name a tool the stored catalog lacks")
+
+	// A replacement through the management service is the new catalog.
+	_, err = f.servers.SetToolMetadataBatch(f.dashboardContext(ctx), &mcpserversgen.SetToolMetadataBatchPayload{
+		McpServerID: serverID.String(),
+		Tools: []*mcpserversgen.ToolMetadataForm{
+			{ToolName: "list_devices", ReadOnlyHint: new(true)},
+			{ToolName: "wipe_device", ReadOnlyHint: new(false), DestructiveHint: new(true)},
+			{ToolName: "lock_device", IdempotentHint: new(true)},
+		},
+	})
+	require.NoError(t, err)
+
+	relocked, err := f.roles.Update(ctx, f.principal, UpdateMCPAccessRoleInput{
+		ProjectID: f.project.ID.String(), RoleReference: created.Role.Reference, ExpectedVersion: updated.Role.Version,
+		AddRules:       []MCPAccessRoleRule{{MCPID: serverID.String(), Tool: "lock_device"}},
+		IdempotencyKey: "update-recorded-tool", Confirmed: true,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, relocked.Role.Version)
+	requireRoleToolGrants(t, ctx, f, roleID, serverID, []string{"list_devices", "lock_device", "wipe_device"})
+
 	coverage, err := f.reads.GetMCPAccess(ctx, f.principal, GetMCPAccessInput{ProjectID: f.project.ID.String(), MCPID: serverID.String()})
 	require.NoError(t, err)
 	var role *MCPRoleCoverage
@@ -173,7 +203,7 @@ func TestPlatformAccessRolesUseTunneledMetadataFromTheManagementService(t *testi
 		}
 	}
 	require.NotNil(t, role)
-	require.ElementsMatch(t, []string{"list_devices", "wipe_device"}, role.AllowedKnownTools)
+	require.ElementsMatch(t, []string{"list_devices", "lock_device", "wipe_device"}, role.AllowedKnownTools)
 }
 
 // A tunneled server with nothing recorded has no catalog to check a tool name
@@ -204,6 +234,13 @@ func TestPlatformAccessRolesRefuseExactToolsWithoutTunneledMetadata(t *testing.T
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, created.Role.Reference)
+
+	_, err = f.roles.Update(ctx, f.principal, UpdateMCPAccessRoleInput{
+		ProjectID: f.project.ID.String(), RoleReference: created.Role.Reference, ExpectedVersion: created.Role.Version,
+		AddRules:       []MCPAccessRoleRule{{MCPID: serverID.String(), Tool: "list_devices"}},
+		IdempotencyKey: "update-unrecorded", Confirmed: true,
+	})
+	require.Error(t, err)
 }
 
 // requireRoleToolGrants asserts the role's mcp:connect selectors name exactly

@@ -2,7 +2,7 @@ import type { ProxiedMcpTool } from "@/hooks/useProxiedMcpTools";
 import type { ToolMetadataByName } from "@/hooks/useToolMetadata";
 import type { ToolMetadata } from "@gram/client/models/components/toolmetadata.js";
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useSyncToolMetadata } from "./useSyncToolMetadata";
 
 type MutationOptions = {
@@ -12,6 +12,9 @@ type MutationOptions = {
 
 const mocks = vi.hoisted(() => ({
   addBatch: vi.fn(),
+  // The automatic pass awaits its write; each call's settlement is chosen by
+  // the test.
+  autoAdd: vi.fn<(vars: unknown) => Promise<unknown>>(),
   setBatch: vi.fn(),
   setOne: vi.fn(),
   deleteOne: vi.fn(),
@@ -31,12 +34,17 @@ vi.mock("@gram/client/react-query/listMcpServerToolMetadata.js", () => ({
   invalidateAllListMcpServerToolMetadata: mocks.refresh,
 }));
 
-// The first add-batch mutation is the automatic pass; the second backs the
-// per-tool Record action.
+// The automatic pass writes with mutateAsync; the per-tool Record action
+// with mutate.
 vi.mock("@gram/client/react-query/addMcpServerToolMetadataBatch.js", () => ({
   useAddMcpServerToolMetadataBatchMutation: (options: MutationOptions) => {
     mocks.addOptions.push(options);
-    return { mutate: mocks.addBatch, isPending: false, variables: undefined };
+    return {
+      mutate: mocks.addBatch,
+      mutateAsync: mocks.autoAdd,
+      isPending: false,
+      variables: undefined,
+    };
   },
 }));
 
@@ -89,14 +97,17 @@ function stored(...names: string[]): ToolMetadataByName {
 type Props = {
   live: Record<string, ProxiedMcpTool> | undefined;
   stored: ToolMetadataByName;
+  listedAt?: number;
+  mcpServerId?: string;
 };
 
 function renderAdditive(initial: Props) {
   return renderHook(
     (props: Props) =>
       useSyncToolMetadata({
-        mcpServerId: "srv-1",
+        mcpServerId: props.mcpServerId ?? "srv-1",
         live: props.live,
+        listedAt: props.listedAt ?? 1,
         stored: props.stored,
         enabled: true,
         mode: "additive",
@@ -117,8 +128,12 @@ function recordedNames(call: unknown[]): string[] {
   return request.setToolMetadataBatchRequestBody.tools.map((t) => t.toolName);
 }
 
+beforeEach(() => {
+  mocks.autoAdd.mockResolvedValue({});
+});
+
 afterEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   mocks.addOptions.length = 0;
 });
 
@@ -141,15 +156,15 @@ describe("useSyncToolMetadata additive mode", () => {
       live: live("list_devices"),
       stored: stored("list_devices"),
     });
-    expect(mocks.addBatch).not.toHaveBeenCalled();
+    expect(mocks.autoAdd).not.toHaveBeenCalled();
 
     rerender({
       live: live("list_devices", "lock_device"),
       stored: stored("list_devices"),
     });
 
-    expect(mocks.addBatch).toHaveBeenCalledOnce();
-    expect(recordedNames(mocks.addBatch.mock.calls[0]!)).toEqual([
+    expect(mocks.autoAdd).toHaveBeenCalledOnce();
+    expect(recordedNames(mocks.autoAdd.mock.calls[0]!)).toEqual([
       "lock_device",
     ]);
   });
@@ -159,15 +174,15 @@ describe("useSyncToolMetadata additive mode", () => {
       live: live("list_devices"),
       stored: stored(),
     });
-    expect(recordedNames(mocks.addBatch.mock.calls[0]!)).toEqual([
+    expect(recordedNames(mocks.autoAdd.mock.calls[0]!)).toEqual([
       "list_devices",
     ]);
 
     // Another session sees a disjoint set once the first has been stored.
     rerender({ live: live("wipe_device"), stored: stored("list_devices") });
 
-    expect(mocks.addBatch).toHaveBeenCalledTimes(2);
-    expect(recordedNames(mocks.addBatch.mock.calls[1]!)).toEqual([
+    expect(mocks.autoAdd).toHaveBeenCalledTimes(2);
+    expect(recordedNames(mocks.autoAdd.mock.calls[1]!)).toEqual([
       "wipe_device",
     ]);
     expect(mocks.setBatch).not.toHaveBeenCalled();
@@ -181,36 +196,143 @@ describe("useSyncToolMetadata additive mode", () => {
     });
     rerender({ live: live("lock_device"), stored: stored() });
 
-    expect(mocks.addBatch).toHaveBeenCalledOnce();
+    expect(mocks.autoAdd).toHaveBeenCalledOnce();
   });
 
-  it("retries the same tools after a conflict refreshes the stored set", async () => {
+  it("retries after a failed write on the next listing, even with identical data", async () => {
+    // React Query shares unchanged listing data, so a successful refetch can
+    // hand back the same objects; only the listing time moves.
+    const sharedLive = live("lock_device");
+    const sharedStored = stored();
+    let reject: (error: unknown) => void = () => {};
+    mocks.autoAdd.mockImplementationOnce(
+      () =>
+        new Promise((_, r) => {
+          reject = r;
+        }),
+    );
+    const { rerender } = renderAdditive({
+      live: sharedLive,
+      stored: sharedStored,
+      listedAt: 1,
+    });
+    expect(mocks.autoAdd).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      reject(new Error("network down"));
+    });
+    // Nothing new was listed yet: no immediate retry loop.
+    rerender({ live: sharedLive, stored: sharedStored, listedAt: 1 });
+    expect(mocks.autoAdd).toHaveBeenCalledOnce();
+
+    mocks.autoAdd.mockResolvedValueOnce({});
+    rerender({ live: sharedLive, stored: sharedStored, listedAt: 2 });
+    expect(mocks.autoAdd).toHaveBeenCalledTimes(2);
+    expect(recordedNames(mocks.autoAdd.mock.calls[1]!)).toEqual([
+      "lock_device",
+    ]);
+  });
+
+  it("refreshes and recomputes after a conflict", async () => {
+    mocks.autoAdd.mockRejectedValueOnce(
+      Object.assign(
+        Object.create(
+          (await import("@gram/client/models/errors/gramerror.js")).GramError
+            .prototype,
+        ) as object,
+        { statusCode: 409 },
+      ),
+    );
+    const { rerender } = renderAdditive({
+      live: live("lock_device", "wipe_device"),
+      stored: stored(),
+    });
+    await act(async () => {});
+    expect(mocks.refresh).toHaveBeenCalled();
+
+    // The refreshed snapshot shows another session recorded one of them.
+    mocks.autoAdd.mockResolvedValueOnce({});
+    rerender({
+      live: live("lock_device", "wipe_device"),
+      stored: stored("wipe_device"),
+    });
+    expect(mocks.autoAdd).toHaveBeenCalledTimes(2);
+    expect(recordedNames(mocks.autoAdd.mock.calls[1]!)).toEqual([
+      "lock_device",
+    ]);
+  });
+
+  it("keeps a newer batch guarded when an older one fails late", async () => {
+    let rejectFirst: (error: unknown) => void = () => {};
+    mocks.autoAdd
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, r) => {
+            rejectFirst = r;
+          }),
+      )
+      .mockImplementation(() => new Promise(() => {}));
     const { rerender } = renderAdditive({
       live: live("lock_device"),
       stored: stored(),
+      listedAt: 1,
     });
-    expect(mocks.addBatch).toHaveBeenCalledOnce();
+    rerender({
+      live: live("lock_device", "wipe_device"),
+      stored: stored(),
+      listedAt: 2,
+    });
+    expect(mocks.autoAdd).toHaveBeenCalledTimes(2);
 
-    const { GramError } =
-      await import("@gram/client/models/errors/gramerror.js");
-    const conflict = Object.create(GramError.prototype) as InstanceType<
-      typeof GramError
-    >;
-    Object.defineProperty(conflict, "statusCode", { value: 409 });
     await act(async () => {
-      await mocks.addOptions[0]!.onError?.(conflict);
+      rejectFirst(new Error("late failure"));
     });
-    expect(mocks.refresh).toHaveBeenCalled();
+    // The newer batch is still in flight: re-rendering it sends nothing new.
+    rerender({
+      live: live("lock_device", "wipe_device"),
+      stored: stored(),
+      listedAt: 2,
+    });
+    expect(mocks.autoAdd).toHaveBeenCalledTimes(2);
+  });
 
-    // The refreshed snapshot arrives as a new object with the same contents.
-    rerender({ live: live("lock_device"), stored: stored() });
-    expect(mocks.addBatch).toHaveBeenCalledTimes(2);
+  it("does not let an earlier server's late failure affect the next one", async () => {
+    let rejectFirst: (error: unknown) => void = () => {};
+    mocks.autoAdd
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, r) => {
+            rejectFirst = r;
+          }),
+      )
+      .mockImplementation(() => new Promise(() => {}));
+    const { rerender } = renderAdditive({
+      live: live("lock_device"),
+      stored: stored(),
+      mcpServerId: "srv-1",
+    });
+    rerender({
+      live: live("lock_device"),
+      stored: stored(),
+      mcpServerId: "srv-2",
+    });
+    expect(mocks.autoAdd).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      rejectFirst(new Error("late failure"));
+    });
+    rerender({
+      live: live("lock_device"),
+      stored: stored(),
+      mcpServerId: "srv-2",
+    });
+    expect(mocks.autoAdd).toHaveBeenCalledTimes(2);
   });
 
   it("does nothing without a listing that succeeded", () => {
     renderAdditive({ live: undefined, stored: stored() });
 
-    expect(mocks.addBatch).not.toHaveBeenCalled();
+    expect(mocks.autoAdd).not.toHaveBeenCalled();
   });
 
   it("removes exactly the tool asked for", () => {
