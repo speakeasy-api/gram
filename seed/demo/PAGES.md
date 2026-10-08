@@ -272,6 +272,15 @@ Enter through `/explore-demo` using an ordinary browser session, then open Amara
 
 Shared Explore Demo is read-only for Slack connections, syncing and mappings. The retargeted local organization remains writable.
 
+### [~] Organization Identity: directory role sets
+
+The seeded directory is marked active. On the SSO tab, Infra grants both Collaborator and Analyst from one group; the attribute mappings remain separate source rows. In the writable local organization:
+
+- Verify both role chips appear on Infra.
+- Remove one chip, verify the other stays, then add it again.
+- Create a role from Infra and verify it is added without replacing either existing role.
+- Check Team, Roles and Check Access include both effective roles. Team currently uses a generic directory-mapping marker, not a named group label.
+
 ### [~] Plugins: initial role audiences
 
 The Default project contains its Everyone Default plugin and an empty role-only plugin for each active organization/global role. Same-name roles share a plugin. These are completed one-time setup results, not continuously managed mappings: later audience/content edits or plugin deletion are not repaired. Database isolation and repeat-seed checks are automated; browser verification remains pending.

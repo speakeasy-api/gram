@@ -362,8 +362,8 @@ BEGIN
   -- surfaces (Logs page and other EnterpriseGate features). Demo identity is
   -- carried by the fixed org id (constants.DemoOrganizationID) — NOT by
   -- account type, which the auth callback overwrites anyway.
-  INSERT INTO organization_metadata (id, name, slug, gram_account_type, whitelisted)
-  VALUES (demo_org, 'Acme Demo Org', 'acme-demo', 'enterprise', TRUE)
+  INSERT INTO organization_metadata (id, name, slug, gram_account_type, whitelisted, scim_enabled)
+  VALUES (demo_org, 'Acme Demo Org', 'acme-demo', 'enterprise', TRUE, TRUE)
   ON CONFLICT (id) DO UPDATE
     -- whitelisted is repaired, not just set on insert: a developer who logged
     -- in before seeding already has this row, created un-whitelisted by the
@@ -371,7 +371,8 @@ BEGIN
     -- gate.
     SET name = EXCLUDED.name, slug = EXCLUDED.slug,
         gram_account_type = EXCLUDED.gram_account_type,
-        whitelisted = EXCLUDED.whitelisted;
+        whitelisted = EXCLUDED.whitelisted,
+        scim_enabled = EXCLUDED.scim_enabled;
 
   INSERT INTO organization_onboarding (organization_id, preset, mdm_vendor, mdm_vendor_name)
   VALUES (demo_org, 'security', 'jamf', NULL)
@@ -864,15 +865,14 @@ BEGIN
       AND dg.organization_id = demo_org AND dg.name = demo_teams[i];
   END LOOP;
 
-  -- Directory role mappings: one of each source kind, so the mapping page
-  -- shows a group row and an attribute row, each granting a custom role on
-  -- top of what its members already hold.
+  -- Directory role mappings: Infra grants two roles from one source, alongside
+  -- attribute mappings, on top of what members already hold directly.
   INSERT INTO directory_role_mappings
     (organization_id, source_kind, directory_group_id, role_urn)
   SELECT demo_org, 'group', dg.id, 'role:organization:' || r.id
   FROM directory_groups dg, organization_roles r
   WHERE dg.organization_id = demo_org AND dg.name = 'Infra'
-    AND r.organization_id = demo_org AND r.workos_slug = 'collaborator';
+    AND r.organization_id = demo_org AND r.workos_slug IN ('collaborator', 'analyst');
 
   INSERT INTO directory_role_mappings
     (organization_id, source_kind, attribute_key, attribute_value, role_urn)
@@ -3880,8 +3880,17 @@ Channel context stays in the Raw view.
 
   SELECT count(*) INTO stray FROM directory_role_mappings
   WHERE organization_id = demo_org AND deleted IS FALSE;
-  IF stray <> 3 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 3 directory role mappings, found %', stray;
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 4 directory role mappings, found %', stray;
+  END IF;
+
+  SELECT count(DISTINCT drm.role_urn) INTO stray FROM directory_role_mappings drm
+  JOIN directory_groups dg ON dg.id = drm.directory_group_id
+    AND dg.organization_id = drm.organization_id
+  WHERE drm.organization_id = demo_org AND drm.deleted IS FALSE
+    AND dg.name = 'Infra';
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 roles for Infra, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM principal_grants
