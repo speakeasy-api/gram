@@ -9,17 +9,21 @@ import {
 } from "@/components/ui/HoverCard";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useCreateRemoteMcpServerHeaderMutation } from "@gram/client/react-query/createRemoteMcpServerHeader.js";
 import { useDeleteRemoteMcpServerHeaderMutation } from "@gram/client/react-query/deleteRemoteMcpServerHeader.js";
 import { useDetachUserSessionIssuerMutation } from "@gram/client/react-query/detachUserSessionIssuer.js";
+import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { invalidateAllGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
+import type { GetServerIdentityImpactRequest } from "@gram/client/models/operations/getserveridentityimpact.js";
 import {
   invalidateAllRemoteMcpServerHeaders,
   useRemoteMcpServerHeaders,
@@ -48,6 +52,8 @@ import { useAgentCredentialDraft } from "@/lib/remote-identity";
 import { AuthRow } from "./AuthRow";
 import { ResourceScopePinField } from "./ResourceScopePinField";
 import { useResourceScopePin } from "./resourceScopePin";
+import { IdentityChainingField } from "./IdentityChainingField";
+import { RepointedServersNotice } from "./RepointedServersNotice";
 import type { AuthTarget } from "./authTarget";
 import {
   deriveIdentityMode,
@@ -60,6 +66,12 @@ import { useAllRemoteSessionClients } from "@/lib/remote-identity";
 import { useUpstreamProbe } from "@/lib/remote-identity";
 import { UserIdentityRow } from "@/lib/remote-identity";
 import { useUserIdentityDraft } from "@/lib/remote-identity";
+import {
+  invalidateSharedIssuerImpact,
+  needsSharedIssuerConfirm,
+  sharedIssuerChangeBlocked,
+  useSharedIssuerImpact,
+} from "@/lib/remote-identity/model/upstreamRepointing";
 
 export function RemoteMcpIdentitySectionBody({
   target,
@@ -103,6 +115,11 @@ export function RemoteMcpIdentitySectionBody({
   const orgSharedClient = organizationIssuer
     ? clients.find((linked) => linked.projectId === "")
     : undefined;
+  const chainingFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
+  const chainingIssuer =
+    chainingFlag.status === "enabled"
+      ? identityChainingIssuer(userSessionIssuer)
+      : undefined;
   const sourceQuery = useGetRemoteMcpServer(
     { id: remoteMcpServerId },
     undefined,
@@ -254,6 +271,35 @@ export function RemoteMcpIdentitySectionBody({
   const replacingClient = selectedMode === "user" && userDraft.replacesClient;
   const destructive = leavingUser || leavingAgent || replacingClient;
 
+  // The upstream authorization server is derived per user session issuer, so
+  // changing this server's clients can re-point every server sharing the
+  // issuer, in any project for an organization issuer.
+  const savingUserIdentity = selectedMode === "user" && userDraft.canSave;
+  const sharedIssuerId = target.userSessionIssuerId;
+  let impactRequest: GetServerIdentityImpactRequest | null = null;
+  if (sharedIssuerId && leavingUser) {
+    impactRequest = {
+      userSessionIssuerId: sharedIssuerId,
+      mcpServerId: target.mcpServerId,
+      change: "detach",
+    };
+  } else if (sharedIssuerId && savingUserIdentity && userDraft.selected) {
+    impactRequest = {
+      userSessionIssuerId: sharedIssuerId,
+      mcpServerId: target.mcpServerId,
+      change: "replace",
+      providerId: userDraft.selected.isNew ? undefined : userDraft.selected.id,
+      clientId:
+        userDraft.choice === "existing"
+          ? (userDraft.existingClientId ?? undefined)
+          : undefined,
+    };
+  }
+  const sharedIssuerImpact = useSharedIssuerImpact(impactRequest);
+  const repointLookupPending = sharedIssuerImpact.pending;
+  const needsConfirm =
+    destructive || needsSharedIssuerConfirm(sharedIssuerImpact);
+
   const detachUserIdentity = async (): Promise<boolean> => {
     const userSessionIssuerId = target.userSessionIssuerId;
     if (!userSessionIssuerId) return false;
@@ -272,6 +318,7 @@ export function RemoteMcpIdentitySectionBody({
     await Promise.all([
       invalidateAllRemoteSessionClients(queryClient),
       invalidateAllGetRemoteMcpServerScopes(queryClient),
+      invalidateSharedIssuerImpact(queryClient),
     ]);
     return true;
   };
@@ -612,6 +659,16 @@ export function RemoteMcpIdentitySectionBody({
             </div>
           ) : null}
 
+          {identityResolved && chainingIssuer && sourceQuery.data?.url ? (
+            <IdentityChainingField
+              userSessionIssuer={chainingIssuer}
+              linkedClients={clients}
+              resource={sourceQuery.data.url}
+              permissionResourceId={target.permissionResourceId}
+              remoteMcpServerId={remoteMcpServerId}
+            />
+          ) : null}
+
           {identityResolved && selectedMode === "agent" ? (
             <AuthRow
               label="Service Account credential"
@@ -672,6 +729,11 @@ export function RemoteMcpIdentitySectionBody({
                 Finish the User Identity change, or cancel it, to save.
               </Text>
             ) : null}
+            {repointLookupPending ? (
+              <Text small muted>
+                Checking other servers on this user session issuer…
+              </Text>
+            ) : null}
             <SettingsSection.FooterActions>
               <RequireScope
                 scope="mcp:write"
@@ -683,10 +745,11 @@ export function RemoteMcpIdentitySectionBody({
                   disabled={
                     !canSave ||
                     savePending ||
-                    (identityReadOnly && !pinOnlyChange)
+                    (identityReadOnly && !pinOnlyChange) ||
+                    repointLookupPending
                   }
                   onClick={() => {
-                    if (destructive) setConfirmOpen(true);
+                    if (needsConfirm) setConfirmOpen(true);
                     else void performSave();
                   }}
                 />
@@ -700,12 +763,31 @@ export function RemoteMcpIdentitySectionBody({
         <Dialog.Content className="max-w-md">
           <Dialog.Header>
             <Dialog.Title>
-              {confirmTitle(leavingUser, replacingClient, upstreamName)}
+              {confirmTitle({
+                leavingUser,
+                replacingClient,
+                destructive,
+                upstreamName,
+              })}
             </Dialog.Title>
-            <Dialog.Description>
-              {removalConsequences(leavingUser, leavingAgent, replacingClient)}
-            </Dialog.Description>
+            {destructive ? (
+              <Dialog.Description>
+                {removalConsequences(
+                  leavingUser,
+                  leavingAgent,
+                  replacingClient,
+                )}
+              </Dialog.Description>
+            ) : (
+              <Dialog.Description className="sr-only">
+                Saving changes the upstream of other servers.
+              </Dialog.Description>
+            )}
           </Dialog.Header>
+          <RepointedServersNotice
+            impact={sharedIssuerImpact}
+            projectId={target.projectId}
+          />
           <Dialog.Footer>
             <Button
               variant="secondary"
@@ -716,7 +798,13 @@ export function RemoteMcpIdentitySectionBody({
             </Button>
             <Button
               variant="destructive-primary"
-              disabled={savePending || !canWrite || rbacLoading}
+              disabled={
+                savePending ||
+                !canWrite ||
+                rbacLoading ||
+                repointLookupPending ||
+                sharedIssuerChangeBlocked(sharedIssuerImpact)
+              }
               onClick={() => void performSave()}
             >
               {savePending ? (
@@ -737,6 +825,16 @@ export function RemoteMcpIdentitySectionBody({
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
+}
+
+/** Identity chaining needs an organization issuer that trusts an identity provider sign-in client. */
+function identityChainingIssuer(
+  issuer: UserSessionIssuer | undefined,
+): UserSessionIssuer | undefined {
+  if (issuer?.projectId !== "") return undefined;
+  if (!issuer.trustedRemoteSessionIssuerId) return undefined;
+  if (!issuer.trustedRemoteSessionClientId) return undefined;
+  return issuer;
 }
 
 const UNLINK_PROVIDER_CONSEQUENCE =
@@ -764,11 +862,18 @@ function removalConsequences(
   return REMOVE_CREDENTIAL_CONSEQUENCE;
 }
 
-function confirmTitle(
-  leavingUser: boolean,
-  replacingClient: boolean,
-  upstreamName: string,
-): string {
+function confirmTitle({
+  leavingUser,
+  replacingClient,
+  destructive,
+  upstreamName,
+}: {
+  leavingUser: boolean;
+  replacingClient: boolean;
+  destructive: boolean;
+  upstreamName: string;
+}): string {
+  if (!destructive) return "Change the upstream of other servers?";
   if (replacingClient) return "Replace the connected client?";
   if (leavingUser) return `Stop signing users in through ${upstreamName}?`;
   return "Remove the shared credential?";

@@ -966,6 +966,258 @@ func DecodeCommitServerIdentityConfigurationResponse(decoder func(*http.Response
 	}
 }
 
+// BuildGetServerIdentityImpactRequest instantiates a HTTP request object with
+// method and path set to call the "remoteSessions" service
+// "getServerIdentityImpact" endpoint
+func (c *Client) BuildGetServerIdentityImpactRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetServerIdentityImpactRemoteSessionsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteSessions", "getServerIdentityImpact", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetServerIdentityImpactRequest returns an encoder for requests sent to
+// the remoteSessions getServerIdentityImpact server.
+func EncodeGetServerIdentityImpactRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotesessions.GetServerIdentityImpactPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteSessions", "getServerIdentityImpact", "*remotesessions.GetServerIdentityImpactPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("user_session_issuer_id", p.UserSessionIssuerID)
+		if p.McpServerID != nil {
+			values.Add("mcp_server_id", *p.McpServerID)
+		}
+		values.Add("change", p.Change)
+		if p.ProviderID != nil {
+			values.Add("provider_id", *p.ProviderID)
+		}
+		if p.ClientID != nil {
+			values.Add("client_id", *p.ClientID)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetServerIdentityImpactResponse returns a decoder for responses
+// returned by the remoteSessions getServerIdentityImpact endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetServerIdentityImpactResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetServerIdentityImpactResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetServerIdentityImpactResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "getServerIdentityImpact", err)
+			}
+			err = ValidateGetServerIdentityImpactResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "getServerIdentityImpact", err)
+			}
+			res := NewGetServerIdentityImpactServerIdentityImpactResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetServerIdentityImpactUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "getServerIdentityImpact", err)
+			}
+			err = ValidateGetServerIdentityImpactUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "getServerIdentityImpact", err)
+			}
+			return nil, NewGetServerIdentityImpactUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetServerIdentityImpactForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "getServerIdentityImpact", err)
+			}
+			err = ValidateGetServerIdentityImpactForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "getServerIdentityImpact", err)
+			}
+			return nil, NewGetServerIdentityImpactForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetServerIdentityImpactBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "getServerIdentityImpact", err)
+			}
+			err = ValidateGetServerIdentityImpactBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "getServerIdentityImpact", err)
+			}
+			return nil, NewGetServerIdentityImpactBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetServerIdentityImpactNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "getServerIdentityImpact", err)
+			}
+			err = ValidateGetServerIdentityImpactNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "getServerIdentityImpact", err)
+			}
+			return nil, NewGetServerIdentityImpactNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetServerIdentityImpactConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "getServerIdentityImpact", err)
+			}
+			err = ValidateGetServerIdentityImpactConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "getServerIdentityImpact", err)
+			}
+			return nil, NewGetServerIdentityImpactConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetServerIdentityImpactUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "getServerIdentityImpact", err)
+			}
+			err = ValidateGetServerIdentityImpactUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "getServerIdentityImpact", err)
+			}
+			return nil, NewGetServerIdentityImpactUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetServerIdentityImpactInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "getServerIdentityImpact", err)
+			}
+			err = ValidateGetServerIdentityImpactInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "getServerIdentityImpact", err)
+			}
+			return nil, NewGetServerIdentityImpactInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetServerIdentityImpactInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessions", "getServerIdentityImpact", err)
+				}
+				err = ValidateGetServerIdentityImpactInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessions", "getServerIdentityImpact", err)
+				}
+				return nil, NewGetServerIdentityImpactInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetServerIdentityImpactUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessions", "getServerIdentityImpact", err)
+				}
+				err = ValidateGetServerIdentityImpactUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessions", "getServerIdentityImpact", err)
+				}
+				return nil, NewGetServerIdentityImpactUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteSessions", "getServerIdentityImpact", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetServerIdentityImpactGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessions", "getServerIdentityImpact", err)
+			}
+			err = ValidateGetServerIdentityImpactGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessions", "getServerIdentityImpact", err)
+			}
+			return nil, NewGetServerIdentityImpactGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteSessions", "getServerIdentityImpact", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListRemoteSessionsRequest instantiates a HTTP request object with
 // method and path set to call the "remoteSessions" service
 // "listRemoteSessions" endpoint
@@ -2145,6 +2397,23 @@ func unmarshalServerIdentityRegistrationFailureResponseBodyToRemotesessionsServe
 		Retryable:       *v.Retryable,
 		ProviderMessage: v.ProviderMessage,
 		HTTPStatus:      v.HTTPStatus,
+	}
+
+	return res
+}
+
+// unmarshalServerIdentityImpactServerResponseBodyToRemotesessionsServerIdentityImpactServer
+// builds a value of type *remotesessions.ServerIdentityImpactServer from a
+// value of type *ServerIdentityImpactServerResponseBody.
+func unmarshalServerIdentityImpactServerResponseBodyToRemotesessionsServerIdentityImpactServer(v *ServerIdentityImpactServerResponseBody) *remotesessions.ServerIdentityImpactServer {
+	res := &remotesessions.ServerIdentityImpactServer{
+		ID:          *v.ID,
+		Kind:        *v.Kind,
+		Name:        v.Name,
+		Slug:        v.Slug,
+		ProjectID:   *v.ProjectID,
+		ProjectName: *v.ProjectName,
+		Impact:      *v.Impact,
 	}
 
 	return res

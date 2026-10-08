@@ -1674,6 +1674,22 @@ UPDATE remote_session_issuers SET client_id_metadata_document_supported = true, 
 -- name: SetPreparationFixtureCIMDURI :exec
 UPDATE remote_session_clients SET client_id_metadata_uri = 'https://gram.example.com/client.json', client_id = 'https://gram.example.com/client.json', client_secret_encrypted = NULL, token_endpoint_auth_method = 'none' WHERE id = @id AND project_id = @project_id;
 
+-- name: SetPreparationFixtureConfidentialClient :execrows
+-- Identity chaining refuses public clients: make a fixture client authenticate
+-- with private_key_jwt against a key set, and its issuer accept that method.
+WITH issuer AS (
+    UPDATE remote_session_issuers
+    SET token_endpoint_auth_methods_supported = array_append(array_remove(token_endpoint_auth_methods_supported, 'private_key_jwt'), 'private_key_jwt')
+    WHERE remote_session_issuers.id = @remote_session_issuer_id AND remote_session_issuers.project_id = @project_id
+    RETURNING remote_session_issuers.id
+)
+UPDATE remote_session_clients
+SET token_endpoint_auth_method = 'private_key_jwt', json_web_key_set_id = @json_web_key_set_id, client_secret_encrypted = NULL,
+    organization_id = @organization_id
+WHERE remote_session_clients.id = @id
+  AND remote_session_clients.project_id = @project_id
+  AND remote_session_clients.remote_session_issuer_id IN (SELECT issuer.id FROM issuer);
+
 -- name: MovePreparationFixtureClientProject :execrows
 UPDATE remote_session_clients SET project_id = @target_project_id
 WHERE id = @id AND project_id = @project_id;

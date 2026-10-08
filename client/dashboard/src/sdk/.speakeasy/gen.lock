@@ -560,6 +560,7 @@ trackedFiles:
   src/funcs/remoteSessionsCommitServerIdentityConfiguration.ts: {}
   src/funcs/remoteSessionsCount.ts: {}
   src/funcs/remoteSessionsDetachBinding.ts: {}
+  src/funcs/remoteSessionsGetServerIdentityImpact.ts: {}
   src/funcs/remoteSessionsList.ts: {}
   src/funcs/remoteSessionsListBindings.ts: {}
   src/funcs/remoteSessionsRevoke.ts: {}
@@ -1669,6 +1670,8 @@ trackedFiles:
   src/models/components/sendmessagerequestbody.ts: {}
   src/models/components/sendmessageresult.ts: {}
   src/models/components/serveridentityclientconfiguration.ts: {}
+  src/models/components/serveridentityimpactresult.ts: {}
+  src/models/components/serveridentityimpactserver.ts: {}
   src/models/components/serveridentityregistrationfailure.ts: {}
   src/models/components/servernameoverride.ts: {}
   src/models/components/servervariable.ts: {}
@@ -2282,6 +2285,7 @@ trackedFiles:
   src/models/operations/getrisksignals.ts: {}
   src/models/operations/getriskuserbreakdown.ts: {}
   src/models/operations/getrole.ts: {}
+  src/models/operations/getserveridentityimpact.ts: {}
   src/models/operations/getshadowmcpinventoryserver.ts: {}
   src/models/operations/getsharedskill.ts: {}
   src/models/operations/getskill.ts: {}
@@ -3622,6 +3626,8 @@ trackedFiles:
   src/react-query/serveImage.ts: {}
   src/react-query/serveOpenAPIv3.core.ts: {}
   src/react-query/serveOpenAPIv3.ts: {}
+  src/react-query/serverIdentityImpact.core.ts: {}
+  src/react-query/serverIdentityImpact.ts: {}
   src/react-query/sessionInfo.core.ts: {}
   src/react-query/sessionInfo.ts: {}
   src/react-query/setAIIntegrationScheduleEnabled.ts: {}
@@ -7656,6 +7662,19 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getServerIdentityImpact:
+    speakeasy-default-get-server-identity-impact:
+      parameters:
+        query:
+          user_session_issuer_id: "d0fab2e7-207a-45ba-85f9-9efca2883735"
+          change: "detach"
+      responses:
+        "200":
+          application/json: {"hidden_server_count": 158626, "servers": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getShadowMCPInventoryServer:
     speakeasy-default-get-shadow-MCP-inventory-server:
       parameters:

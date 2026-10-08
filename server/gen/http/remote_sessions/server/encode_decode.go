@@ -929,6 +929,266 @@ func EncodeCommitServerIdentityConfigurationError(encoder func(context.Context, 
 	}
 }
 
+// EncodeGetServerIdentityImpactResponse returns an encoder for responses
+// returned by the remoteSessions getServerIdentityImpact endpoint.
+func EncodeGetServerIdentityImpactResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*remotesessions.ServerIdentityImpactResult)
+		enc := encoder(ctx, w)
+		body := NewGetServerIdentityImpactResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetServerIdentityImpactRequest returns a decoder for requests sent to
+// the remoteSessions getServerIdentityImpact endpoint.
+func DecodeGetServerIdentityImpactRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*remotesessions.GetServerIdentityImpactPayload, error) {
+	return func(r *http.Request) (*remotesessions.GetServerIdentityImpactPayload, error) {
+		var payload *remotesessions.GetServerIdentityImpactPayload
+		var (
+			userSessionIssuerID string
+			mcpServerID         *string
+			change              string
+			providerID          *string
+			clientID            *string
+			sessionToken        *string
+			apikeyToken         *string
+			projectSlugInput    *string
+			err                 error
+		)
+		qp := r.URL.Query()
+		userSessionIssuerID = qp.Get("user_session_issuer_id")
+		if userSessionIssuerID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("user_session_issuer_id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("user_session_issuer_id", userSessionIssuerID, goa.FormatUUID))
+		mcpServerIDRaw := qp.Get("mcp_server_id")
+		if mcpServerIDRaw != "" {
+			mcpServerID = &mcpServerIDRaw
+		}
+		if mcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", *mcpServerID, goa.FormatUUID))
+		}
+		change = qp.Get("change")
+		if change == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("change", "query string"))
+		}
+		if !(change == "replace" || change == "attach" || change == "detach") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("change", change, []any{"replace", "attach", "detach"}))
+		}
+		providerIDRaw := qp.Get("provider_id")
+		if providerIDRaw != "" {
+			providerID = &providerIDRaw
+		}
+		if providerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("provider_id", *providerID, goa.FormatUUID))
+		}
+		clientIDRaw := qp.Get("client_id")
+		if clientIDRaw != "" {
+			clientID = &clientIDRaw
+		}
+		if clientID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("client_id", *clientID, goa.FormatUUID))
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewGetServerIdentityImpactPayload(userSessionIssuerID, mcpServerID, change, providerID, clientID, sessionToken, apikeyToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetServerIdentityImpactError returns an encoder for errors returned by
+// the getServerIdentityImpact remoteSessions endpoint.
+func EncodeGetServerIdentityImpactError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetServerIdentityImpactUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetServerIdentityImpactForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetServerIdentityImpactBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetServerIdentityImpactNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetServerIdentityImpactConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetServerIdentityImpactUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetServerIdentityImpactInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetServerIdentityImpactInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetServerIdentityImpactUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetServerIdentityImpactGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeListRemoteSessionsResponse returns an encoder for responses returned
 // by the remoteSessions listRemoteSessions endpoint.
 func EncodeListRemoteSessionsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -1986,6 +2246,23 @@ func marshalRemotesessionsServerIdentityRegistrationFailureToServerIdentityRegis
 		Retryable:       v.Retryable,
 		ProviderMessage: v.ProviderMessage,
 		HTTPStatus:      v.HTTPStatus,
+	}
+
+	return res
+}
+
+// marshalRemotesessionsServerIdentityImpactServerToServerIdentityImpactServerResponseBody
+// builds a value of type *ServerIdentityImpactServerResponseBody from a value
+// of type *remotesessions.ServerIdentityImpactServer.
+func marshalRemotesessionsServerIdentityImpactServerToServerIdentityImpactServerResponseBody(v *remotesessions.ServerIdentityImpactServer) *ServerIdentityImpactServerResponseBody {
+	res := &ServerIdentityImpactServerResponseBody{
+		ID:          v.ID,
+		Kind:        v.Kind,
+		Name:        v.Name,
+		Slug:        v.Slug,
+		ProjectID:   v.ProjectID,
+		ProjectName: v.ProjectName,
+		Impact:      v.Impact,
 	}
 
 	return res

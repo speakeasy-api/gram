@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   sessions: vi.fn(),
   clients: vi.fn(),
   siblings: vi.fn(),
+  impact: vi.fn(),
   issuers: vi.fn(),
   issuersByIds: vi.fn(),
   hostIssuers: vi.fn(),
@@ -109,6 +110,15 @@ vi.mock("@gram/client/react-query/remoteMcpServerHeaders.js", () => ({
 
 vi.mock("@gram/client/react-query/mcpServers.js", () => ({
   useMcpServers: () => mocks.siblings(),
+}));
+
+vi.mock("@gram/client/react-query/serverIdentityImpact.js", () => ({
+  invalidateAllServerIdentityImpact: () => Promise.resolve(),
+  useServerIdentityImpact: (
+    request: unknown,
+    _security: unknown,
+    options: { enabled?: boolean },
+  ) => mocks.impact(request, options),
 }));
 
 vi.mock("@gram/client/react-query/getRemoteMcpServer.js", () => ({
@@ -394,6 +404,56 @@ function confirmSave(): void {
   if (confirm) fireEvent.click(confirm);
 }
 
+function swapClientWithImpact(
+  servers: Array<Record<string, unknown>> | null,
+  hiddenServerCount = 0,
+): void {
+  if (servers) {
+    mocks.impact.mockReturnValue({
+      data: { servers, hiddenServerCount },
+      isLoading: false,
+      isError: false,
+    });
+  }
+  mocks.clients.mockReturnValue({
+    items: [
+      {
+        id: "client-1",
+        clientId: "dashboard-client",
+        remoteSessionIssuerId: "provider-1",
+        userSessionIssuerIds: ["user-session-issuer-1"],
+        scope: ["read", "write"],
+      },
+    ],
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
+  mocks.issuers.mockReturnValue({
+    data: {
+      result: {
+        items: [
+          {
+            id: "provider-1",
+            name: "Example provider",
+            issuer: "https://id.example",
+            slug: "example",
+            projectId: "project-1",
+            clientIdMetadataDocumentSupported: true,
+            authorizationEndpoint: "https://id.example/authorize",
+            tokenEndpoint: "https://id.example/token",
+          },
+        ],
+      },
+    },
+  });
+
+  renderIdentity();
+  fireEvent.click(screen.getByRole("button", { name: "Clear connection" }));
+  fireEvent.click(screen.getByRole("radio", { name: /Auto-Configure/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+}
+
 const target: AuthTarget = {
   kind: "remote-mcp",
   slug: "remote-server",
@@ -406,6 +466,11 @@ const target: AuthTarget = {
 };
 
 beforeEach(() => {
+  mocks.impact.mockReturnValue({
+    data: { servers: [], hiddenServerCount: 0 },
+    isLoading: false,
+    isError: false,
+  });
   mocks.userSessionIssuer.mockReturnValue({
     data: { id: "user-session-issuer-1", projectId: "project-1" },
   });
@@ -1169,6 +1234,13 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(screen.getByRole("dialog")).toBeDefined();
     expect(mocks.detach).not.toHaveBeenCalled();
+    expect(mocks.impact).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        userSessionIssuerId: "user-session-issuer-1",
+        change: "detach",
+      }),
+      expect.objectContaining({ enabled: true }),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() =>
@@ -1304,6 +1376,114 @@ describe("RemoteMcpIdentitySectionBody", () => {
         }),
       }),
     );
+  });
+
+  it("names servers sharing the issuer when a client swap keeps the provider", async () => {
+    swapClientWithImpact([
+      {
+        id: "mcp-server-2",
+        name: "Other server",
+        projectId: "project-1",
+        projectName: "Project",
+        impact: "resignin",
+      },
+    ]);
+
+    expect(screen.getByText("Replace the connected client?")).toBeDefined();
+    expect(screen.getByText("Other server")).toBeDefined();
+    expect(screen.getByText(/have to sign in again:/)).toBeDefined();
+    expect(mocks.commit).not.toHaveBeenCalled();
+    expect(mocks.impact).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        userSessionIssuerId: "user-session-issuer-1",
+        change: "replace",
+        providerId: "provider-1",
+      }),
+      expect.objectContaining({ enabled: true }),
+    );
+  });
+
+  it("names servers in other projects and blocks when some cannot be seen", async () => {
+    swapClientWithImpact(
+      [
+        {
+          id: "mcp-server-3",
+          name: "Elsewhere",
+          projectId: "project-2",
+          projectName: "Other project",
+          impact: "repoint",
+        },
+      ],
+      2,
+    );
+
+    expect(screen.getByText("Elsewhere (Other project)")).toBeDefined();
+    expect(
+      screen.getByText(
+        /2 more servers you don't have access to share this user session issuer and may be affected/,
+      ),
+    ).toBeDefined();
+    expect(screen.queryByText(/other\s+projects may share it/)).toBeNull();
+    const confirm = screen.getByRole("button", { name: "Save changes" });
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("blocks the save when the server refuses the change", async () => {
+    mocks.impact.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: Object.assign(
+        new Error(
+          "change it from the organization's identity provider settings",
+        ),
+        { statusCode: 409 },
+      ),
+    });
+    swapClientWithImpact(null);
+
+    expect(
+      screen.getByText(/change it from the organization's identity provider/),
+    ).toBeDefined();
+    expect(
+      screen.queryByText(/Could not check which other servers share/),
+    ).toBeNull();
+    const confirm = screen.getByRole("button", { name: "Save changes" });
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("holds the confirm while a cached preview is refetched", async () => {
+    mocks.impact.mockReturnValue({
+      data: { servers: [], hiddenServerCount: 0 },
+      isLoading: false,
+      isFetching: true,
+      isError: false,
+    });
+    swapClientWithImpact(null);
+
+    expect(mocks.impact).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ refetchOnMount: "always", staleTime: 0 }),
+    );
+    expect(
+      screen.getByText("Checking other servers on this user session issuer…"),
+    ).toBeDefined();
+    const save = screen.getByRole("button", { name: "Save" });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+  });
+
+  it("warns when the affected servers cannot be checked", async () => {
+    mocks.impact.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+    });
+    swapClientWithImpact(null);
+
+    expect(
+      screen.getByText(/Could not check which other servers share/),
+    ).toBeDefined();
   });
 
   it("holds Save while a replacement client is incomplete, even with header edits", async () => {

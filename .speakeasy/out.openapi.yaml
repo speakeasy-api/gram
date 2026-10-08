@@ -51495,6 +51495,150 @@ paths:
       tags:
         - remoteSessions
       x-speakeasy-name-override: detachBinding
+  /rpc/remoteSessions.getServerIdentityImpact:
+    get:
+      description: Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is derived from the clients it can see (its own project's and organization-level ones), so a server is listed when that derivation changes (repoint or clear) or when a client it uses is replaced (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.
+      operationId: getServerIdentityImpact
+      parameters:
+        - allowEmptyValue: true
+          description: The user session issuer whose client bindings change.
+          in: query
+          name: user_session_issuer_id
+          required: true
+          schema:
+            description: The user session issuer whose client bindings change.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The MCP server the change is made from. Excluded from the result.
+          in: query
+          name: mcp_server_id
+          schema:
+            description: The MCP server the change is made from. Excluded from the result.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The kind of binding change.
+          in: query
+          name: change
+          required: true
+          schema:
+            description: The kind of binding change.
+            enum:
+              - replace
+              - attach
+              - detach
+            type: string
+        - allowEmptyValue: true
+          description: The Remote Identity Provider of the client being bound. Omit for a new provider.
+          in: query
+          name: provider_id
+          schema:
+            description: The Remote Identity Provider of the client being bound. Omit for a new provider.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: An existing client being bound. Omit for a new client.
+          in: query
+          name: client_id
+          schema:
+            description: An existing client being bound. Omit for a new client.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerIdentityImpactResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getServerIdentityImpact remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: getServerIdentityImpact
+      x-speakeasy-react-hook:
+        name: ServerIdentityImpact
   /rpc/remoteSessions.list:
     get:
       description: List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
@@ -100171,6 +100315,63 @@ components:
             - client_secret_post
             - none
       description: Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id and client_secret and uses scope, audience, and token_endpoint_auth_method as registration preferences.
+    ServerIdentityImpactResult:
+      type: object
+      properties:
+        hidden_server_count:
+          type: integer
+          description: MCP servers and gateways the caller cannot read; they are not named. When the change touches an organization-level client this counts every such server on the issuer, affected or not.
+          format: int64
+        servers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServerIdentityImpactServer'
+          description: Affected MCP servers the caller can read.
+      description: The MCP servers and gateways, other than the target, that a proposed binding change affects.
+      required:
+        - servers
+        - hidden_server_count
+    ServerIdentityImpactServer:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The MCP server or gateway id.
+          format: uuid
+        impact:
+          type: string
+          description: 'repoint: its upstream authorization server changes to another single provider. clear: it is left with no single provider and loses its upstream. resignin: its upstream is unchanged but its client is replaced, so everyone signs in again. client_removed: a gateway loses a provider client its members sign in through.'
+          enum:
+            - repoint
+            - clear
+            - resignin
+            - client_removed
+        kind:
+          type: string
+          description: Whether this is an MCP server or a gateway.
+          enum:
+            - mcp_server
+            - gateway
+        name:
+          type: string
+          description: The MCP server or gateway name.
+        project_id:
+          type: string
+          description: The owning project.
+          format: uuid
+        project_name:
+          type: string
+          description: The name of the owning project.
+        slug:
+          type: string
+          description: The MCP server slug. Gateways have none.
+      description: An MCP server or gateway a proposed binding change affects.
+      required:
+        - id
+        - kind
+        - project_id
+        - project_name
+        - impact
     ServerIdentityRegistrationFailure:
       type: object
       properties:

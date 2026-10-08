@@ -43,6 +43,36 @@ var _ = Service("remoteSessions", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CommitServerIdentityConfiguration"}`)
 	})
 
+	Method("getServerIdentityImpact", func() {
+		Description("Preview which other MCP servers and gateways a client binding change on a user session issuer would affect, across every project in the organization for an organization-level issuer. Each server's upstream authorization server is derived from the clients it can see (its own project's and organization-level ones), so a server is listed when that derivation changes (repoint or clear) or when a client it uses is replaced (resignin). A gateway is listed when a client it can see is unbound (client_removed). The target server is excluded. A change the commit would refuse, such as one that touches an organization-level client on an organization-level issuer, is refused here too. Requires mcp:write on mcp_server_id when given, otherwise project:write. Servers the caller cannot read are counted in hidden_server_count and never named.")
+
+		Payload(func() {
+			Extend(ServerIdentityImpactForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ServerIdentityImpactResult)
+
+		HTTP(func() {
+			GET("/rpc/remoteSessions.getServerIdentityImpact")
+			Param("user_session_issuer_id")
+			Param("mcp_server_id")
+			Param("change")
+			Param("provider_id")
+			Param("client_id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getServerIdentityImpact")
+		Meta("openapi:extension:x-speakeasy-name-override", "getServerIdentityImpact")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ServerIdentityImpact"}`)
+	})
+
 	Method("listRemoteSessions", func() {
 		Description("List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).")
 
@@ -161,6 +191,55 @@ var CommitServerIdentityConfigurationForm = Type("CommitServerIdentityConfigurat
 	})
 
 	Required("mcp_server_id", "client_mode")
+})
+
+var ServerIdentityImpactForm = Type("ServerIdentityImpactForm", func() {
+	Description("A proposed client binding change on a user session issuer. replace mirrors commitServerIdentityConfiguration: the bound clients of other providers (or of the same provider, for a client swap) are unbound and the chosen client is bound. attach binds one more client and unbinds nothing. detach unbinds every client the caller's project can see. For replace and attach, client_id names an existing client; without it a new project client of provider_id is assumed, and without provider_id a new provider.")
+
+	Attribute("user_session_issuer_id", String, "The user session issuer whose client bindings change.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("mcp_server_id", String, "The MCP server the change is made from. Excluded from the result.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("change", String, "The kind of binding change.", func() {
+		Enum("replace", "attach", "detach")
+	})
+	Attribute("provider_id", String, "The Remote Identity Provider of the client being bound. Omit for a new provider.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("client_id", String, "An existing client being bound. Omit for a new client.", func() {
+		Format(FormatUUID)
+	})
+
+	Required("user_session_issuer_id", "change")
+})
+
+var ServerIdentityImpactServer = Type("ServerIdentityImpactServer", func() {
+	Description("An MCP server or gateway a proposed binding change affects.")
+
+	Attribute("id", String, "The MCP server or gateway id.", func() { Format(FormatUUID) })
+	Attribute("kind", String, "Whether this is an MCP server or a gateway.", func() {
+		Enum("mcp_server", "gateway")
+	})
+	Attribute("name", String, "The MCP server or gateway name.")
+	Attribute("slug", String, "The MCP server slug. Gateways have none.")
+	Attribute("project_id", String, "The owning project.", func() { Format(FormatUUID) })
+	Attribute("project_name", String, "The name of the owning project.")
+	Attribute("impact", String, "repoint: its upstream authorization server changes to another single provider. clear: it is left with no single provider and loses its upstream. resignin: its upstream is unchanged but its client is replaced, so everyone signs in again. client_removed: a gateway loses a provider client its members sign in through.", func() {
+		Enum("repoint", "clear", "resignin", "client_removed")
+	})
+
+	Required("id", "kind", "project_id", "project_name", "impact")
+})
+
+var ServerIdentityImpactResult = Type("ServerIdentityImpactResult", func() {
+	Description("The MCP servers and gateways, other than the target, that a proposed binding change affects.")
+
+	Attribute("servers", ArrayOf(ServerIdentityImpactServer), "Affected MCP servers the caller can read.")
+	Attribute("hidden_server_count", Int, "MCP servers and gateways the caller cannot read; they are not named. When the change touches an organization-level client this counts every such server on the issuer, affected or not.")
+
+	Required("servers", "hidden_server_count")
 })
 
 var ServerIdentityClientConfiguration = Type("ServerIdentityClientConfiguration", func() {

@@ -233,7 +233,7 @@ func TestPreparationPublicClientOmittedAuthMethods(t *testing.T) {
 	}{
 		{"omitted", nil, false},
 		{"empty", []string{}, false},
-		{"explicit public support", []string{"none"}, true},
+		{"explicit public support", []string{"none"}, false},
 		{"confidential only", []string{"client_secret_basic"}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

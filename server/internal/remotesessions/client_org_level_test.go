@@ -8,6 +8,7 @@ import (
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -160,4 +161,46 @@ func TestUpdateRemoteSessionClient_OrgLevelClientNotFoundFromProject(t *testing.
 	})
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+// An organization-level client on an organization-level user session issuer
+// is shared by every project's servers, so a project caller may not change it.
+func TestAttachUserSessionIssuer_RefusesOrgClientOnOrgIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	orgIssuer := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "orgwide-attach-issuer")
+	userIssuer := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "orgwide-attach-usi")
+	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "orgwide-attach-cid")
+
+	_, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{
+		ID:                  orgClient.String(),
+		UserSessionIssuerID: userIssuer.String(),
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
+	requireClientBound(t, ctx, ti, orgClient, userIssuer, false)
+}
+
+func TestDetachUserSessionIssuer_RefusesOrgClientOnOrgIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	orgIssuer := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "orgwide-detach-issuer")
+	userIssuer := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "orgwide-detach-usi")
+	orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, authCtx.ActiveOrganizationID, orgIssuer, "orgwide-detach-cid", userIssuer)
+
+	_, err := ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{
+		ID:                  orgClient.String(),
+		UserSessionIssuerID: userIssuer.String(),
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
+	requireClientBound(t, ctx, ti, orgClient, userIssuer, true)
 }

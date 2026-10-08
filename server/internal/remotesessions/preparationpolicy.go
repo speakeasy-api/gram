@@ -122,6 +122,10 @@ func preparationRegistrationReadiness(ctx context.Context, q *repo.Queries, clie
 // claim. Reads and idempotent DCR lookups must not keep expired credentials ready.
 func preparationClientConfigurationValid(ctx context.Context, q *repo.Queries, client repo.RemoteSessionClient, issuer repo.RemoteSessionIssuer, org string, readOnly ...bool) bool {
 	method := client.TokenEndpointAuthMethod.String
+	// ID-JAG redemption is limited to confidential clients.
+	if method == oauthwire.AuthMethodNone {
+		return false
+	}
 	if client.ClientSecretExpiresAt.Valid && !client.ClientSecretExpiresAt.Time.After(time.Now()) {
 		return false
 	}
