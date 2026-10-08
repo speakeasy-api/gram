@@ -213,6 +213,7 @@ describe("measure and filter drafts", () => {
     expect(parseLimit("2.5")).toBe(0);
     expect(parseLimit("50")).toBe(50);
     expect(parseLimit("5000")).toBe(1000);
+    expect(parseLimit("5000", true)).toBe(200);
   });
 });
 
@@ -328,6 +329,10 @@ describe("the queries a spec describes", () => {
     expect(body.measures).toBeUndefined();
     expect(body.grain).toBe("none");
     expect(body.dimensions).toEqual(["user"]);
+    expect(
+      queryBodyFromSpec({ ...rows, limit: 500 }).limit,
+      "a limit carried over from a grouped query is clamped to what rows allow",
+    ).toBe(200);
   });
 });
 
