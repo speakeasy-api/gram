@@ -10,6 +10,7 @@ import type {
   TunneledMcpServer,
 } from "@gram/client/models/components/tunneledmcpserver.js";
 import { Trash2 } from "lucide-react";
+import { Link } from "react-router";
 
 const CONNECTION_LABEL: Record<ConnectionStatus, string> = {
   connected: "Agent connected",
@@ -25,8 +26,34 @@ function connectionBadgeVariant(
 
 function serverCountLabel(count: number): string {
   if (count === 0) return "No MCP servers you can view";
-  if (count === 1) return "1 MCP server you can view";
-  return `${count} MCP servers you can view`;
+  if (count === 1) return "1 MCP server you can view:";
+  return `${count} MCP servers you can view:`;
+}
+
+// The visible MCP servers on a tunnel, each linking to its settings, so a
+// tunnel that is still in use shows where to go to change or delete them.
+function TunnelServerLinks({
+  servers,
+  serverHref,
+}: {
+  servers: McpServer[];
+  serverHref: (server: McpServer) => string;
+}): JSX.Element {
+  return (
+    <>
+      {servers.map((server, index) => (
+        <Text small key={server.id}>
+          <Link
+            to={serverHref(server)}
+            className="underline underline-offset-2"
+          >
+            {server.name || "MCP Server"}
+          </Link>
+          {index < servers.length - 1 ? "," : null}
+        </Text>
+      ))}
+    </>
+  );
 }
 
 export type ExistingTunnelOption = {
@@ -51,12 +78,15 @@ export function ExistingTunnelPicker({
   disabled,
   onSelect,
   onDeleteUnused,
+  serverHref,
 }: {
   options: ExistingTunnelOption[];
   selectedId: string | null;
   disabled: boolean;
   onSelect: (tunneledMcpServerId: string) => void;
   onDeleteUnused: (tunnel: TunneledMcpServer) => void;
+  /** The settings page of an MCP server on a tunnel. */
+  serverHref: (server: McpServer) => string;
 }): JSX.Element {
   return (
     <RadioCardGroup
@@ -85,6 +115,7 @@ export function ExistingTunnelPicker({
               <Text small muted>
                 {serverCountLabel(servers.length)}
               </Text>
+              <TunnelServerLinks servers={servers} serverHref={serverHref} />
               {unavailableReason ? (
                 <Text small muted>
                   {unavailableReason}

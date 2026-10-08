@@ -255,6 +255,9 @@ export function ExistingTunnelFlow({
                 disabled={locked}
                 onSelect={select}
                 onDeleteUnused={setDeleteTunnel}
+                serverHref={(server) =>
+                  routes.mcp.x.settings.href(mcpServerRouteParam(server))
+                }
               />
             </TunnelChoice>
             {selected?.tunnel.resourceIdentifier ? (
