@@ -159,6 +159,12 @@ func (s *Service) sharedAuthorizationServerHosts() authserver.Hosts {
 	}
 }
 
+// issuerIDJAGConfigured reports whether an issuer accepts the ID-JAG grant:
+// an organization issuer with an explicit trust link to an upstream issuer.
+func issuerIDJAGConfigured(issuer usersessions_repo.UserSessionIssuer) bool {
+	return !issuer.ProjectID.Valid && issuer.OrganizationID.Valid && issuer.TrustedRemoteSessionIssuerID.Valid
+}
+
 // sharedAuthorizationServerFor builds the shared authorization server of an
 // issuer in shared mode, refusing one this deployment does not serve.
 func (s *Service) sharedAuthorizationServerFor(issuer usersessions_repo.UserSessionIssuer) (*sharedAuthorizationServer, error) {
@@ -181,6 +187,12 @@ type sharedIssuer struct {
 	// client_id_metadata_admission_mode, carried verbatim for
 	// admission.ResolveMode.
 	cimdAdmissionModeRaw pgtype.Text
+
+	// organizationID scopes capability queries to the issuer's organization.
+	organizationID string
+
+	// idJAGConfigured reports an organization issuer's explicit trust link.
+	idJAGConfigured bool
 
 	// logger carries the issuer id for every line the request logs.
 	logger *slog.Logger
@@ -231,6 +243,8 @@ func (s *Service) sharedIssuerForRequest(r *http.Request) (*sharedIssuer, error)
 	return &sharedIssuer{
 		authorizationServer:  authorizationServer,
 		cimdAdmissionModeRaw: row.UserSessionIssuer.ClientIDMetadataAdmissionMode,
+		organizationID:       row.ResolvedOrganizationID,
+		idJAGConfigured:      issuerIDJAGConfigured(row.UserSessionIssuer),
 		logger:               logger.With(attr.SlogOrganizationID(row.ResolvedOrganizationID)),
 	}, nil
 }
@@ -483,8 +497,8 @@ func (s *Service) resourceBaseURL(r *http.Request, endpoint *ResolvedMcpEndpoint
 
 // checkSharedResourceSession checks the issuer of a token accepted on the
 // endpoint's exact resource audience, and reports whether the shared
-// authorization server minted it, which makes it the one kind of
-// resource-bound session that carries a refresh token.
+// authorization server minted it. Refreshability is determined separately
+// from the stored session policy.
 //
 // A token naming the endpoint's own per-endpoint authorization server, which
 // mints its ID-JAG and workload sessions for the exact resource, is accepted
@@ -500,10 +514,6 @@ func (s *Service) resourceBaseURL(r *http.Request, endpoint *ResolvedMcpEndpoint
 // this loads it only for a token naming neither the endpoint's own
 // authorization server nor the dashboard, keeping the lookup off every token
 // endpoint-mode issuers mint.
-//
-// TODO(AIM-402): report refreshability from how the session was issued once
-// the shared token endpoint also mints ID-JAG and workload sessions, which
-// will carry its issuer without carrying a refresh token.
 func (s *Service) checkSharedResourceSession(ctx context.Context, session sessiontokens.ValidatedSession, endpoint *ResolvedMcpEndpoint, baseURL string) (bool, error) {
 	if session.ClientID() == sessiontokens.FirstPartyClientID {
 		return false, nil

@@ -14,7 +14,8 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Resolves the identifiers Gram records activity under into a single identity.
+// Resolves the identifiers Speakeasy records activity under into a single
+// identity.
 type Service interface {
 	// Resolve an identity URN into every identifier the subject's activity is
 	// recorded under.
@@ -73,9 +74,9 @@ type IdentityModel struct {
 	// subject returns this one, so links built from different identifiers converge
 	// on a single page.
 	CanonicalUrn string
-	// The Gram user ids this identity resolves to, the first being the directory
-	// owner. Empty when the subject matches no directory row. Audit logs, chats,
-	// user sessions and plugin assignments key on these.
+	// The Speakeasy user ids this identity resolves to, the first being the
+	// directory owner. Empty when the subject matches no directory row. Audit
+	// logs, chats, user sessions and plugin assignments key on these.
 	UserIds []string
 	// Every address the subject is known by — directory email first, then linked
 	// AI account emails. Telemetry and cost aggregate over this set.
@@ -98,9 +99,9 @@ type ResolvePayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// The identity URN to resolve, in the form '<kind>:<id>'. Kind is one of
-	// 'user' (Gram user id), 'email', 'external' (the external user id an agent
-	// reported), 'apikey', or 'agent'. Callers pass whichever identifier they
-	// hold; every URN for the same subject resolves to the same identity.
+	// 'user' (Speakeasy user id), 'email', 'external' (the external user id an
+	// agent reported), 'apikey', or 'agent'. Callers pass whichever identifier
+	// they hold; every URN for the same subject resolves to the same identity.
 	Urn string
 }
 

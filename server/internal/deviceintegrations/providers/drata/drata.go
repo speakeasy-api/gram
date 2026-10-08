@@ -6,7 +6,7 @@
 // Customer-side setup, for the docs: create a Custom Connection (Drata
 // console or POST /public/v2/custom-connections) with providerTypes
 // ["CUSTOM"], displayNameKey "hostname", and this record schema, then paste
-// the connection id into Gram. The connection must be dedicated to Gram —
+// the connection id into Speakeasy. The connection must be dedicated to Speakeasy —
 // pushes replace the connection's records wholesale, and the sink refuses
 // connections carrying more than one resource:
 //
@@ -103,10 +103,10 @@ const (
 	fieldConnectionID = "connection_id"
 	fieldAPIKey       = "api_key"
 
-	// provisionConnectionName is the display-name stem of the connection Gram
+	// provisionConnectionName is the display-name stem of the connection Speakeasy
 	// creates and reuses on the customer's behalf. The effective name appends a
-	// per-Gram-org suffix (see connectionNameForOrg): find-or-create keys on the
-	// full name, so a re-save reuses the same connection, and two Gram orgs that
+	// per-Speakeasy-org suffix (see connectionNameForOrg): find-or-create keys on the
+	// full name, so a re-save reuses the same connection, and two Speakeasy orgs that
 	// happen to share one Drata tenant each own a distinct connection instead of
 	// racing to create — or later clobbering — a single shared one.
 	provisionConnectionName = "Speakeasy Device Agent Coverage"
@@ -149,7 +149,7 @@ func init() {
 		Fields: []providers.CredentialField{
 			{Key: fieldRegion, Label: "Region (us, eu, or apac)", Kind: providers.FieldKindText, Secret: false, Required: true},
 			{Key: fieldWorkspaceID, Label: "Workspace ID (usually 1)", Kind: providers.FieldKindText, Secret: false, Required: false},
-			// Optional: Gram creates and fills this in on connect. A customer
+			// Optional: Speakeasy creates and fills this in on connect. A customer
 			// may still supply an existing connection to reuse instead.
 			{Key: fieldConnectionID, Label: "Custom Connection ID (optional — created automatically)", Kind: providers.FieldKindText, Secret: false, Required: false},
 			{Key: fieldAPIKey, Label: "API Key", Kind: providers.FieldKindText, Secret: true, Required: true},
@@ -298,7 +298,7 @@ func (r *flexID) UnmarshalJSON(data []byte) error {
 // resolveResourceID fetches the connection with its resources expanded and
 // returns the record resource's id. The resource is created by Drata when
 // the customer creates the connection, so discovering it here means the
-// customer pastes exactly one id into Gram and a connection/resource
+// customer pastes exactly one id into Speakeasy and a connection/resource
 // mismatch is impossible. A connection carrying more than one resource is
 // refused outright: pushes wholesale-replace a resource's records, and
 // guessing among resources risks destroying unrelated data.
@@ -320,7 +320,7 @@ func (s *sink) resolveResourceID(ctx context.Context, creds providers.Credential
 		return "", fmt.Errorf("custom connection has no resource; recreate it with a record schema")
 	}
 	if len(connection.CustomResources) > 1 {
-		return "", fmt.Errorf("custom connection has %d resources; use a connection dedicated to Gram with exactly one", len(connection.CustomResources))
+		return "", fmt.Errorf("custom connection has %d resources; use a connection dedicated to Speakeasy with exactly one", len(connection.CustomResources))
 	}
 	id := string(connection.CustomResources[0].ID)
 	if id == "" {
@@ -411,7 +411,7 @@ func (s *sink) cancelStrandedSessions(ctx context.Context, creds providers.Crede
 // API — the setup that is otherwise a raw curl with an exact record schema and
 // the easily-missed `required` list. Idempotent: a no-op when a connection id
 // is already configured, and a fresh provision first looks for an existing
-// Gram-created connection by name before creating one, so a re-save never
+// Speakeasy-created connection by name before creating one, so a re-save never
 // spawns a duplicate.
 func (s *sink) Provision(ctx context.Context, orgID string, creds providers.Credentials, settings providers.Settings) (providers.Settings, error) {
 	if strings.TrimSpace(settings[fieldConnectionID]) != "" {
@@ -444,9 +444,9 @@ func (s *sink) Provision(ctx context.Context, orgID string, creds providers.Cred
 	return out, nil
 }
 
-// connectionNameForOrg is the deterministic connection name for one Gram org.
+// connectionNameForOrg is the deterministic connection name for one Speakeasy org.
 // Encoding the org into the find-or-create key is what makes provisioning
-// correct when two Gram orgs share a single Drata tenant: each owns a distinct
+// correct when two Speakeasy orgs share a single Drata tenant: each owns a distinct
 // connection, so they neither race to create a duplicate nor later resolve to —
 // and overwrite — each other's evidence. A short hash keeps the customer-facing
 // name tidy while staying stable and collision-resistant across orgs.
@@ -472,10 +472,10 @@ func parseWorkspaceID(settings providers.Settings) (int, error) {
 
 // findConnectionByName returns the id of an existing custom connection whose
 // display name matches, or "" when the scan reaches the genuine last page
-// without one. Reusing a prior Gram-created connection is what keeps
+// without one. Reusing a prior Speakeasy-created connection is what keeps
 // provisioning idempotent across re-saves — so the lookup follows the
 // pagination cursor: a customer with more connections than one page could carry
-// the Gram one onto a later page, and missing it there would create a duplicate
+// the Speakeasy one onto a later page, and missing it there would create a duplicate
 // on every save.
 //
 // Only an explicit null cursor (the true end of the list) counts as "not

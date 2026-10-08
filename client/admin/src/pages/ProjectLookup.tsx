@@ -18,7 +18,7 @@ export function ProjectLookup(): JSX.Element {
     <div className="space-y-6">
       <section>
         <span className="text-muted-foreground text-sm">
-          Look up a Gram project by its UUID or slug.
+          Look up a Speakeasy project by its UUID or slug.
         </span>
 
         <form onSubmit={handleSubmit} className="mt-3 flex items-center gap-2">

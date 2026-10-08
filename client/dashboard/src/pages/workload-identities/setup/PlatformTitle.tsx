@@ -1,4 +1,4 @@
-import { isRelativePath } from "./origin";
+import { isRelativePath } from "@/components/setup-steps/origin";
 
 /** A catalog platform's name with its logo, for page titles. */
 export function PlatformTitle({

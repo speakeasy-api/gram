@@ -835,7 +835,7 @@ export function AddServersSheet({
     {
       label: "Hosted remotely",
       description:
-        "Add a server that already runs elsewhere by its URL, proxied through Gram.",
+        "Add a server that already runs elsewhere by its URL, proxied through Speakeasy.",
       Icon: Cloud,
       group: "Recommended",
       href:

@@ -2454,6 +2454,7 @@ type PluginAssignment struct {
 	PluginID       uuid.UUID
 	OrganizationID string
 	PrincipalUrn   string
+	InstallMode    string
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 }

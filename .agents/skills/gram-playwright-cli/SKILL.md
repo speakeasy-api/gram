@@ -1,9 +1,9 @@
 ---
 name: gram-playwright-cli
-description: Use when automating the Gram dashboard in a browser, capturing screenshots, inspecting pages.
+description: Use when automating the Speakeasy dashboard in a browser, capturing screenshots, inspecting pages.
 ---
 
-# Browser Automation with Playwright CLI in Gram
+# Browser Automation with Playwright CLI in Speakeasy
 
 ## Quick start
 
@@ -342,9 +342,9 @@ mise run playwright close-all
 mise run playwright kill-all
 ```
 
-## Gram repository setup
+## Speakeasy repository setup
 
-Run browser automation through `mise run playwright`; the task supplies the repository config and installs Chromium on first use. Use existing `aube` package scripts for repository checks. Gram does not install `@playwright/test`, so do not bootstrap a Playwright test suite unless the user explicitly asks.
+Run browser automation through `mise run playwright`; the task supplies the repository config and installs Chromium on first use. Use existing `aube` package scripts for repository checks. Speakeasy does not install `@playwright/test`, so do not bootstrap a Playwright test suite unless the user explicitly asks.
 
 ```bash
 mise run playwright --help

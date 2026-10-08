@@ -17,13 +17,13 @@ const TenantDimensionInsertChunk = 1000
 // OrganizationMetadataDimension is one organization reporting row sourced from
 // Postgres organization_metadata and its optional enterprise trial lifecycle.
 type OrganizationMetadataDimension struct {
-	// ID is the Gram organization identifier.
+	// ID is the Speakeasy organization identifier.
 	ID string
 
-	// Slug is the organization's current Gram slug.
+	// Slug is the organization's current Speakeasy slug.
 	Slug string
 
-	// AccountType is the Gram billing and entitlement tier.
+	// AccountType is the Speakeasy billing and entitlement tier.
 	AccountType string
 
 	// WorkOSID is the linked WorkOS organization identifier.
@@ -41,7 +41,7 @@ type OrganizationMetadataDimension struct {
 	// SSOEnabled records whether SSO is enabled.
 	SSOEnabled *bool
 
-	// Whitelisted records whether the organization is allowed to use Gram.
+	// Whitelisted records whether the organization is allowed to use Speakeasy.
 	Whitelisted bool
 
 	// FreeTrialStartedAt begins the organization metadata free-trial window.
@@ -68,10 +68,10 @@ type OrganizationMetadataDimension struct {
 	// TrialUpdatedAt records when the enterprise trial lifecycle was updated.
 	TrialUpdatedAt *time.Time
 
-	// CreatedAt records when the organization was created in Gram.
+	// CreatedAt records when the organization was created in Speakeasy.
 	CreatedAt time.Time
 
-	// UpdatedAt records when the organization metadata was updated in Gram.
+	// UpdatedAt records when the organization metadata was updated in Speakeasy.
 	UpdatedAt time.Time
 
 	// DisabledAt records when the organization was disabled.
@@ -80,7 +80,7 @@ type OrganizationMetadataDimension struct {
 
 // ProjectDimension is one project reporting row sourced from Postgres.
 type ProjectDimension struct {
-	// ID is the Gram project identifier.
+	// ID is the Speakeasy project identifier.
 	ID uuid.UUID
 
 	// OrganizationID is the organization that owns the project.

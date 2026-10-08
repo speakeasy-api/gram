@@ -114,8 +114,8 @@ export function PrivateNetworkSetupSheet({
               <code>{TAILSCALE_POLICY_SNIPPET}</code>
             </pre>
             <Text small muted>
-              Keep these tags dedicated to Gram. Your tailnet policy must also
-              allow the intended users to reach the generated service tag.
+              Keep these tags dedicated to Speakeasy. Your tailnet policy must
+              also allow the intended users to reach the generated service tag.
             </Text>
           </div>
 

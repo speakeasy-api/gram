@@ -473,7 +473,7 @@ export function IssuerDetail({
       <InlineEmptyState
         icon="cpu"
         heading="No machines allowed from this platform"
-        description="Trusting a platform allows nothing on its own. Allow access for a machine so it can exchange its identity token for a Gram session."
+        description="Trusting a platform allows nothing on its own. Allow access for a machine so it can exchange its identity token for a Speakeasy session."
       />
     );
   } else {

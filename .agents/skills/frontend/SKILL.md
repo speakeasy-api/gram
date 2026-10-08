@@ -1,6 +1,6 @@
 ---
 name: frontend
-description: Rules and best practices when working on the dashboard React frontend codebase (including the inlined Gram Elements code)
+description: Rules and best practices when working on the dashboard React frontend codebase (including the inlined Speakeasy Elements code)
 metadata:
   relevant_files:
     - "client/dashboard/**"

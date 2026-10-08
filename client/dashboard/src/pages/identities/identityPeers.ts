@@ -12,7 +12,7 @@ import { unwrapAsync } from "@gram/client/types/fp";
 /**
  * Which key telemetry groups the roster by.
  *
- * "internal" groups by the Gram user id, which is what every identity holding
+ * "internal" groups by the Speakeasy user id, which is what every identity holding
  * a directory row or an address is found under. An agent that reports only the
  * id it gave itself has no such row: it exists solely under
  * external_user_id, and an internal read simply does not contain it — the

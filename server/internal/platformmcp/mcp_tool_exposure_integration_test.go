@@ -340,7 +340,7 @@ func TestChangeMCPToolsRefusesAServerItDoesNotOwnTheToolsOf(t *testing.T) {
 	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_tools_unsupported_target")
 
 	// A server that fronts an upstream: its tools come from that upstream, so
-	// there is no Gram toolset behind it to change.
+	// there is no Speakeasy toolset behind it to change.
 	remoteID, upstreamID := uuid.New(), uuid.New()
 	_, err := remotemcprepo.New(fixture.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
 		ID: remoteID, ProjectID: fixture.project.ID, TransportType: "streamable-http", Url: "https://upstream.example.test/mcp",

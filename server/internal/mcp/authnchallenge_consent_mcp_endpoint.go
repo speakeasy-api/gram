@@ -121,7 +121,7 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger)
 	}
 	// Mixed credentials are a confusion smell: the consent transport never
-	// authenticates with Gram bearer tokens.
+	// authenticates with Speakeasy bearer tokens.
 	if r.Header.Get("Authorization") != "" {
 		return oops.E(oops.CodeBadRequest, nil, "consent requests must not carry an Authorization header").LogWarn(ctx, logger)
 	}
@@ -202,7 +202,7 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 }
 
 // serveConsentToolsetMCP answers the consent method surface locally for
-// toolset-backed endpoints: Gram is the MCP server, so there is no upstream
+// toolset-backed endpoints: Speakeasy is the MCP server, so there is no upstream
 // handshake and the whole inventory is one page, snapshotted before the
 // response is written.
 func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, draft consentToolInventory) error {

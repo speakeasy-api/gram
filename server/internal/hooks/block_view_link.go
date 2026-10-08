@@ -32,7 +32,7 @@ type toolCallBlockParams struct {
 	ProjectID      uuid.UUID
 	Reason         string
 	ToolName       string
-	// UserID is the Gram user whose agent was blocked, used to authorize the
+	// UserID is the Speakeasy user whose agent was blocked, used to authorize the
 	// block page. Empty string when the user could not be resolved at deny time.
 	UserID        string
 	RiskPolicyID  uuid.NullUUID

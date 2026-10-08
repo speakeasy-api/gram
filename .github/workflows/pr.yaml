@@ -339,6 +339,10 @@ jobs:
       - name: Check formatting
         run: hk check --all
 
+      # Blocks added lines that use the old product name; see lint:brand.
+      - name: Check product naming
+        run: mise run lint:brand --base "origin/${{ github.base_ref || 'main' }}"
+
       - name: Prune aube store
         if: success()
         run: aube store prune
@@ -1559,9 +1563,13 @@ jobs:
       # the rest of the suite.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5]
     env:
       GOMAXPROCS: 8
+      # Packages that each get the last shards to themselves, so a slow one
+      # cannot stretch a shard that also carries a normal share of the suite.
+      # Keep the matrix one shard larger than this list per entry.
+      SHARD_ISOLATE: github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis
       # The runner VM is destroyed after the job, and the reaper is the one
       # container that would still publish a host port (a recurring source of
       # "address already in use" container-start flakes).
@@ -1599,7 +1607,7 @@ jobs:
       - name: Install discovery wire-test dependencies on its shard
         shell: bash
         run: |
-          packages=$(cd server && go run github.com/speakeasy-api/gram/ci/cmd/shard -i "${{ matrix.shard }}/${{ strategy.job-total }}" -tags=inv.debug ./...)
+          packages=$(cd server && go run github.com/speakeasy-api/gram/ci/cmd/shard -i "${{ matrix.shard }}/${{ strategy.job-total }}" -isolate "$SHARD_ISOLATE" -tags=inv.debug ./...)
           if grep -qx 'github.com/speakeasy-api/gram/server/internal/mcpregistry' <<< "$packages"; then
             aube install --frozen-lockfile --filter . --filter 'dashboard...'
           fi
@@ -1609,7 +1617,7 @@ jobs:
         # Bound package concurrency so eight race-enabled binaries plus their
         # containers do not compete for this runner's eight CPUs during startup.
         # Keep within-package parallelism and race detection; do not retry failures.
-        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }} -p=2 -race -tags=inv.debug ./...
+        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }} --shard-isolate="$SHARD_ISOLATE" -p=2 -race -tags=inv.debug ./...
 
   # Standalone gate for the demo seed: TestDemoSeedSafety proves the seed
   # cannot touch other tenants' data, cleans up stray demo-org rows, and stays
@@ -1740,7 +1748,7 @@ jobs:
           done
           echo "All login attempts failed"
           exit 1
-      # The Gram admin dashboard. It ships as its own image because it is
+      # The Speakeasy admin dashboard. It ships as its own image because it is
       # served from the admin origin (same host as the admin API) rather than
       # the app origin. The `pnpm build` step above already produced its dist,
       # so this only packages it; it needs no CDN asset upload.
@@ -2097,7 +2105,7 @@ jobs:
       - name: Test Go server
         run: mise run test:functions
 
-      - name: Build Gram Functions host
+      - name: Build Speakeasy Functions host
         env:
           MELANGE_PRIVATE_KEY: ${{ secrets.MELANGE_PRIVATE_KEY }}
         run: |

@@ -72,7 +72,7 @@ it("renders a gateway endpoint address and copy action", () => {
   expect(screen.getByRole("button", { name: "Copy MCP URL" })).toBeTruthy();
 });
 
-it("does not invent a Gram address for a custom-domain-only endpoint", () => {
+it("does not invent a Speakeasy address for a custom-domain-only endpoint", () => {
   renderRow([
     {
       id: "custom-endpoint-id",

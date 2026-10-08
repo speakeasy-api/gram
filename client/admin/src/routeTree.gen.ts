@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as CustomerUsageRouteImport } from './routes/customer-usage'
 import { Route as IntegrationCoverageRouteImport } from './routes/integration-coverage'
 import { Route as McpSetupRouteImport } from './routes/mcp-setup'
 import { Route as OnboardingPlaybooksRouteImport } from './routes/onboarding-playbooks'
@@ -45,6 +46,11 @@ import { Route as OrganizationsIdOrSlugProjectsProjectIdOrSlugRouteImport } from
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CustomerUsageRoute = CustomerUsageRouteImport.update({
+  id: '/customer-usage',
+  path: '/customer-usage',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IntegrationCoverageRoute = IntegrationCoverageRouteImport.update({
@@ -221,6 +227,7 @@ const OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/customer-usage': typeof CustomerUsageRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
@@ -255,6 +262,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/customer-usage': typeof CustomerUsageRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
@@ -283,6 +291,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/customer-usage': typeof CustomerUsageRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
@@ -319,6 +328,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/customer-usage'
     | '/integration-coverage'
     | '/mcp-setup'
     | '/onboarding-playbooks'
@@ -353,6 +363,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/customer-usage'
     | '/integration-coverage'
     | '/mcp-setup'
     | '/onboarding-playbooks'
@@ -380,6 +391,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/customer-usage'
     | '/integration-coverage'
     | '/mcp-setup'
     | '/onboarding-playbooks'
@@ -415,6 +427,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CustomerUsageRoute: typeof CustomerUsageRoute
   IntegrationCoverageRoute: typeof IntegrationCoverageRoute
   McpSetupRoute: typeof McpSetupRoute
   OnboardingPlaybooksRoute: typeof OnboardingPlaybooksRoute
@@ -434,6 +447,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/customer-usage': {
+      id: '/customer-usage'
+      path: '/customer-usage'
+      fullPath: '/customer-usage'
+      preLoaderRoute: typeof CustomerUsageRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/integration-coverage': {
@@ -781,6 +801,7 @@ const UsersRouteWithChildren = UsersRoute._addFileChildren(UsersRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CustomerUsageRoute: CustomerUsageRoute,
   IntegrationCoverageRoute: IntegrationCoverageRoute,
   McpSetupRoute: McpSetupRoute,
   OnboardingPlaybooksRoute: OnboardingPlaybooksRoute,

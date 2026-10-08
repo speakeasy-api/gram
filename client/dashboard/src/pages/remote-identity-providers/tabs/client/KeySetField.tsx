@@ -26,7 +26,7 @@ const NONE = "__none__";
 
 // KeySetField picks the JSON Web Key Set this client signs private_key_jwt
 // assertions with. It sits beside the token endpoint authentication method
-// because that is where an administrator is already deciding how Gram
+// because that is where an administrator is already deciding how Speakeasy
 // authenticates at this counterparty.
 //
 // Unlike the other fields on this tab it saves immediately rather than on "Save
@@ -72,7 +72,7 @@ export function KeySetField({
   });
   const sets = setsData?.sets ?? [];
 
-  // AIM-64 establishes that Gram may hold more than one client at the same
+  // AIM-64 establishes that Speakeasy may hold more than one client at the same
   // downstream issuer — an interactive one and a separate chaining one. Same
   // trust relationship, same counterparty, so when a sibling at this issuer
   // already signs with a set, suggest that one rather than making the

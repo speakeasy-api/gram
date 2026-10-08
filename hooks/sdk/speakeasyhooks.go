@@ -47,7 +47,7 @@ func Float64(f float64) *float64 { return &f }
 // Pointer provides a helper function to return a pointer to a type
 func Pointer[T any](v T) *T { return &v }
 
-// SpeakeasyHooks - Gram API Description: Gram is the tools platform for AI agents
+// SpeakeasyHooks - Speakeasy API Description: Speakeasy is the tools platform for AI agents
 type SpeakeasyHooks struct {
 	SDKVersion string
 	// Receives hook events from coding assistants for tool usage observability.

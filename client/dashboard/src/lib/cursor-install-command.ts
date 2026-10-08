@@ -1,5 +1,5 @@
 /**
- * Install a trusted Gram ZIP from ~/Downloads. Requires Bash, unzip and Python 3
+ * Install a trusted Speakeasy ZIP from ~/Downloads. Requires Bash, unzip and Python 3
  * on macOS/Linux (not native PowerShell). Validation does not execute hooks or
  * prove Cursor discovery. Only the setup wizard's known slug template is allowed;
  * it must be resolved before running the command.

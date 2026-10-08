@@ -1,7 +1,7 @@
-# Gram Secure Tunnel
+# Speakeasy Secure Tunnel
 
 Reach an MCP server that has no inbound connectivity. The customer's agent runs
-next to the MCP server, opens one outbound WebSocket to Gram's tunnel gateway,
+next to the MCP server, opens one outbound WebSocket to Speakeasy's tunnel gateway,
 and the gateway forwards MCP traffic back over yamux substreams.
 
 ## Status
@@ -20,7 +20,7 @@ The backend control plane exists:
 The gateway resolves presented tunnel keys against the key hashes stored in
 Postgres. Redis is the live routing table and connection snapshot store.
 
-With an RSA signing key and public-key bundle configured, Gram can send a
+With an RSA signing key and public-key bundle configured, Speakeasy can send a
 signed `X-Speakeasy-Identity` caller assertion through private tunnels. Your server
 verifies it against the public JWKS and applies its own access policy. The
 [signed caller identity guide](../docs/tunnel-identity.md) covers the issuer,
@@ -50,13 +50,13 @@ MCP client
   -> customer MCP server
 ```
 
-The caller never supplies the tunnel ID. Gram derives it from the project-scoped
+The caller never supplies the tunnel ID. Speakeasy derives it from the project-scoped
 MCP server row and overwrites any inbound tunnel header before forwarding.
 
 ## OAuth Back-Channel Requests
 
 An issuer bound to a tunnel uses the same agent for persisted metadata refresh,
-dynamic client registration, token exchange, refresh, and revocation. Gram
+dynamic client registration, token exchange, refresh, and revocation. Speakeasy
 preserves each OAuth request's path and query, but the agent delivers the request
 to the origin pinned by `TUNNEL_LOCAL_MCP_URL`; the original URL's scheme and
 host are not used inside the customer network.

@@ -48,7 +48,7 @@ func agentEventTestArrayKV(key string, values ...string) *otelv1.LogRecord_KeyVa
 }
 
 // agentEventTestLog builds a log record the way it looks on the normalized
-// topic: scope rewritten to Gram's, the producer's scope kept as an
+// topic: scope rewritten to Speakeasy's, the producer's scope kept as an
 // attribute, tenancy stamped in provenance.
 func agentEventTestLog(originalScope, eventName string, attributes ...*otelv1.LogRecord_KeyValue) *otelv1.LogRecord {
 	record := logEventTestRecord("record-1", "org-1", "claude-code")

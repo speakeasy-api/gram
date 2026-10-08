@@ -18,7 +18,7 @@ import (
 const speakeasyTeamOrganizationID = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
 
 // seedSpeakeasyMember creates the Speakeasy org (if needed) and enrolls the
-// given Gram user id as an active member.
+// given Speakeasy user id as an active member.
 func seedSpeakeasyMember(t *testing.T, ctx context.Context, ti *testInstance, userID string) {
 	t.Helper()
 

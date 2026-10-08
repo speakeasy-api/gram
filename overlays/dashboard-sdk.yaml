@@ -89,7 +89,7 @@ actions:
     remove: true
   - target: $.components.securitySchemes["admin_auth_header_Authorization"]
     remove: true
-  # Discovery preview requires ordinary Gram credentials, never anonymous access.
+  # Discovery preview requires ordinary Speakeasy credentials, never anonymous access.
   - target: $.paths["/v0.1/servers"].get.security[?length(@)==0]
     remove: true
   - target: $.paths["/v0.1/servers/{serverName}/versions"].get.security[?length(@)==0]

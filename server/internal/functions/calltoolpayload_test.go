@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestCallToolPayload_CallerIdentityWireShape pins the exact keys Gram sends to
+// TestCallToolPayload_CallerIdentityWireShape pins the exact keys Speakeasy sends to
 // a function runner. The runner decodes this body with its own mirrored type in
 // `functions/internal/runner/handle_tool_call.go`, which cannot import this
 // package — an identical literal there is what keeps the two in step, so a tag
