@@ -9,24 +9,18 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-type logClassification struct {
-	instruments *Instruments
-}
+type logClassification struct{}
 
 func (*logClassification) Name() string {
 	return classificationEnricherName
 }
 
-func (c *logClassification) Enrich(ctx context.Context, record *otelv1.InboundLogRecord) ([]attribute.KeyValue, error) {
+func (*logClassification) Enrich(_ context.Context, record *otelv1.InboundLogRecord) ([]attribute.KeyValue, error) {
 	d := dialect.ForLog(record)
-	eventType := stated(d.EventType(record))
-	if eventType == dialect.EventTypeUnclassified {
-		c.instruments.recordUnclassified(ctx, missingLabel(d.Surface(record)))
-	}
 	return classify(
 		inboundLogSource(record),
 		stated(d.EventName(record)),
-		eventType,
+		stated(d.EventType(record)),
 		inboundLogAttributeString(record, string(attr.ProviderKey)),
 		stated(d.Provider(record)),
 		stated(d.Surface(record)),
