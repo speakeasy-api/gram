@@ -44,7 +44,7 @@ func NewLogTransformHandler(
 		enrich.NewLogTokens(),
 		enrich.NewLogDirectory(logger, replicaDB, cacheImpl),
 	}
-	enrichers = append(enrichers, enrich.LogColumns(in)...)
+	enrichers = append(enrichers, enrich.LogAgentAttributes(in)...)
 
 	return &LogTransformHandler{
 		logger:       logger,

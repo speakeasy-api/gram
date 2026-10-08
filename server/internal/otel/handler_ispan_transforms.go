@@ -43,7 +43,7 @@ func NewSpanTransformHandler(
 		enrich.NewSpanTokens(),
 		enrich.NewSpanDirectory(logger, replicaDB, cacheImpl),
 	}
-	enrichers = append(enrichers, enrich.SpanColumns(in)...)
+	enrichers = append(enrichers, enrich.SpanAgentAttributes(in)...)
 
 	return &SpanTransformHandler{
 		logger:        logger,

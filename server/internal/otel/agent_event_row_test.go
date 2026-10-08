@@ -81,7 +81,7 @@ func agentEventTestTransformed(t *testing.T, record *otelv1.LogRecord) *otelv1.L
 	inbound, err := inboundLogFromRecord(record)
 	require.NoError(t, err)
 	m := enrich.NewInstruments(testenv.NewLogger(t), testenv.NewMeterProvider(t))
-	enrichments, err := enrich.Log(t.Context(), m, inbound, enrich.LogColumns(m))
+	enrichments, err := enrich.Log(t.Context(), m, inbound, enrich.LogAgentAttributes(m))
 	require.NoError(t, err)
 	require.NoError(t, applyLogEnrichments(record, enrichments))
 	return record
@@ -752,7 +752,7 @@ func agentEventTestTransformedSpan(t *testing.T, span *otelv1.Span) *otelv1.Span
 	inbound, err := inboundSpanFromSpan(span)
 	require.NoError(t, err)
 	in := enrich.NewInstruments(testenv.NewLogger(t), testenv.NewMeterProvider(t))
-	enrichments, err := enrich.Span(t.Context(), in, inbound, enrich.SpanColumns(in))
+	enrichments, err := enrich.Span(t.Context(), in, inbound, enrich.SpanAgentAttributes(in))
 	require.NoError(t, err)
 	require.NoError(t, applySpanEnrichments(span, enrichments))
 	return span
