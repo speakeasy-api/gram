@@ -1,5 +1,3 @@
-import { useOrganization } from "@/contexts/Auth";
-import { useRBAC } from "@/hooks/useRBAC";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { Page } from "@/components/page-layout";
@@ -22,9 +20,7 @@ import { useRoutes } from "@/routes";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
 import { AgentIdentityProfile } from "./AgentIdentityProfile";
 import { useIdentitySubject } from "./useIdentitySubject";
-import { registeredAgentHref } from "./identityRoster";
-import { Button } from "@/components/ui/Button";
-import { Link, Navigate, Outlet, useLocation, useParams } from "react-router";
+import { Navigate, Outlet, useLocation, useParams } from "react-router";
 import type { IdentityOutletContext } from "./identityRoute";
 import { useCanReadRisk, useIdentityIsKnown } from "./useIdentityQueries";
 import { withoutFindingsFilter } from "./identityFindingsLink";
@@ -64,25 +60,12 @@ function hasNoLinkedAccount(identity: IdentityModel): boolean {
 
 export default function IdentityDetailRoot(): JSX.Element {
   const { identityUrn: urn = "" } = useParams<{ identityUrn: string }>();
-  const organization = useOrganization();
-  const { hasScope, isLoading } = useRBAC();
-  const routes = useRoutes();
-  // Agent ownership grants management access independently of org:read.
-  if (
-    !isLoading &&
-    urn.startsWith("agent:") &&
-    !hasScope("org:read", organization.id)
-  ) {
-    return (
-      <Navigate
-        to={registeredAgentHref(
-          routes.agents.href(),
-          "",
-          urn.slice("agent:".length),
-        )}
-        replace
-      />
-    );
+  // An agent resolves through its own management API, which authorizes per
+  // agent, so ownership is enough to read one. This used to send such a
+  // caller to a second agent page built for exactly that case; there is one
+  // agent page now, and it serves them.
+  if (urn.startsWith("agent:")) {
+    return <IdentityDetailContent />;
   }
   return (
     // org:read, matching the server gate on identity.resolve — which is what
@@ -198,6 +181,7 @@ function IdentityDetailContent(): JSX.Element {
               withoutFindingsFilter(location.search),
               // Agents render the agent profile, which has no Findings view.
               canReadRisk && !identity.agent,
+              identity.kind,
             )}
             // Narrow, the rail is a scrollable row above the content: hiding
             // it left the other sub-pages reachable only by editing the URL.
@@ -212,6 +196,7 @@ function IdentityDetailContent(): JSX.Element {
                   location.pathname.split("/").filter(Boolean).at(-1) ??
                   "overview"
                 }
+                refresh={() => void identityQuery.refetch()}
               />
             ) : (
               <Outlet context={context} />
@@ -237,8 +222,6 @@ function IdentityHeader({
     clearCustomRange,
   } = useDateRangeFilter();
 
-  const routes = useRoutes();
-  const location = useLocation();
   const primaryEmail = identity.emails[0];
   // Tobias is for names. When the only name we have is the address itself, the
   // display face loses the punctuation that makes it readable, and repeating it
@@ -289,19 +272,6 @@ function IdentityHeader({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {identity.kind === "agent" && (
-            <Button asChild variant="primary">
-              <Link
-                to={registeredAgentHref(
-                  routes.agents.href(),
-                  location.search,
-                  identity.canonicalUrn.slice("agent:".length),
-                )}
-              >
-                Edit Agent Identity
-              </Link>
-            </Button>
-          )}
           <TimeRangePicker
             preset={customRange ? null : dateRange}
             customRange={customRange}

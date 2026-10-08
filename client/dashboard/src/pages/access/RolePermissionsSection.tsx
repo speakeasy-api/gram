@@ -144,6 +144,9 @@ export function RolePermissionsSection({
   );
 
   return (
+    // No heading or rule of its own: every caller already introduces this
+    // block, and a second "Add permissions" above a button of the same name
+    // read as two different controls.
     <div className="border-border border">
       {/* gap-0: the tab strip and the list share one bordered box, so the
             Tabs default gap left the first row sitting lower than the rest. */}

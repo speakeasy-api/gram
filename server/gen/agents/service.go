@@ -21,7 +21,7 @@ type Service interface {
 	// RevokeSession implements revokeSession.
 	RevokeSession(context.Context, *RevokeSessionPayload) (err error)
 	// List implements list.
-	List(context.Context, *ListPayload) (res []*ManagedAgent, err error)
+	List(context.Context, *ListPayload) (res *ListAgentsResult, err error)
 	// Create implements create.
 	Create(context.Context, *CreatePayload) (res *ManagedAgent, err error)
 	// Get implements get.
@@ -196,6 +196,14 @@ type GetPayload struct {
 	ID           string
 }
 
+// ListAgentsResult is the result type of the agents service list method.
+type ListAgentsResult struct {
+	// The agents in this page.
+	Items []*ManagedAgent
+	// Cursor for the next page; absent when exhausted.
+	NextCursor *string
+}
+
 // ListDelegableGrantsPayload is the payload type of the agents service
 // listDelegableGrants method.
 type ListDelegableGrantsPayload struct {
@@ -215,6 +223,22 @@ type ListDelegableGrantsPayload struct {
 // ListPayload is the payload type of the agents service list method.
 type ListPayload struct {
 	SessionToken *string
+	// Cursor for the next page of agents.
+	Cursor *string
+	// The number of agents to return per page.
+	Limit int
+	// Case-insensitive substring match on the agent name.
+	Search *string
+	// Keep only agents in these lifecycle states.
+	Lifecycle []string
+	// Keep only agents owned by these users.
+	OwnerUserIds []string
+	// Keep only agents registered at or after this moment.
+	RegisteredAfter *string
+	// Keep only agents registered before this moment.
+	RegisteredBefore *string
+	// Name order for the page.
+	NameOrder string
 }
 
 // ListPolicyGrantsPayload is the payload type of the agents service

@@ -31,31 +31,36 @@ interface PolicyDraft {
 
 export function AgentPolicySection({
   agent,
+  variant = "section",
 }: {
   agent: ManagedAgent;
+  /** "bare" drops the section chrome for a caller that supplies its own. */
+  variant?: "section" | "bare";
 }): JSX.Element {
   const organization = useOrganization();
   const { user } = useSession();
+  const content = (
+    <AgentPolicyContent
+      // A draft is only valid for the context it was built in, so any of
+      // these changing must discard it.
+      key={`${organization.id}:${user.id}:${agent.id}:${agent.permissions.write}`}
+      agent={agent}
+      organizationId={organization.id}
+      userId={user.id}
+    />
+  );
+  if (variant === "bare")
+    return <div className="border-border border">{content}</div>;
   return (
     <SettingsSection>
       <SettingsSection.Header>
         <SettingsSection.Title>Permissions</SettingsSection.Title>
         <SettingsSection.Description>
-          The most this agent may ever be delegated. Adding a permission here
-          grants nothing on its own — each API key is narrowed again at
-          issuance, against the owner's live permissions and your own.
+          The ceiling for this agent. Each key is narrowed again when it is
+          issued, so adding a permission here grants nothing on its own.
         </SettingsSection.Description>
       </SettingsSection.Header>
-      <SettingsSection.Panel>
-        <AgentPolicyContent
-          // A draft is only valid for the context it was built in, so any of
-          // these changing must discard it.
-          key={`${organization.id}:${user.id}:${agent.id}:${agent.permissions.write}`}
-          agent={agent}
-          organizationId={organization.id}
-          userId={user.id}
-        />
-      </SettingsSection.Panel>
+      <SettingsSection.Panel>{content}</SettingsSection.Panel>
     </SettingsSection>
   );
 }

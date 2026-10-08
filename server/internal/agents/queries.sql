@@ -206,9 +206,58 @@ WHERE organization_id = @organization_id
 RETURNING id, scope, selectors, created_at, updated_at;
 
 -- name: ListManagedAgents :many
+-- Keyset paginated on the same (LOWER(name), id) tuple it orders by, so a page
+-- boundary is a position in that ordering rather than an offset: inserts and
+-- deletes elsewhere in the list cannot shift the rows a later page returns,
+-- which is what an OFFSET would do. A rename is the exception, because it
+-- moves the row itself — one renamed across the boundary can still be seen
+-- twice or not at all. The caller drops rows it may not read, so it asks for
+-- more than one page and walks the cursor until it has filled one.
 SELECT * FROM agents
 WHERE organization_id = @organization_id AND deleted IS FALSE
-ORDER BY LOWER(name), id;
+  AND (
+    sqlc.narg('search')::text IS NULL
+    OR name ILIKE '%' || sqlc.narg('search')::text || '%'
+  )
+  -- Lifecycle is derived from the same two columns the Go side derives it
+  -- from, so a filter cannot disagree with the badge the row shows.
+  AND (
+    cardinality(@lifecycles::text[]) = 0
+    OR (CASE
+          WHEN revoked_at IS NOT NULL THEN 'revoked'
+          WHEN suspended_at IS NOT NULL THEN 'suspended'
+          ELSE 'active'
+        END) = ANY(@lifecycles::text[])
+  )
+  AND (
+    cardinality(@owner_user_ids::text[]) = 0
+    OR owner_user_id = ANY(@owner_user_ids::text[])
+  )
+  AND (
+    sqlc.narg('registered_after')::timestamptz IS NULL
+    OR created_at >= sqlc.narg('registered_after')::timestamptz
+  )
+  AND (
+    sqlc.narg('registered_before')::timestamptz IS NULL
+    OR created_at < sqlc.narg('registered_before')::timestamptz
+  )
+  AND (
+    sqlc.narg('cursor_name')::text IS NULL
+    OR (
+      @sort_descending::boolean IS FALSE
+      AND (LOWER(name), id) > (sqlc.narg('cursor_name')::text, sqlc.narg('cursor_id')::uuid)
+    )
+    OR (
+      @sort_descending::boolean IS TRUE
+      AND (LOWER(name), id) < (sqlc.narg('cursor_name')::text, sqlc.narg('cursor_id')::uuid)
+    )
+  )
+ORDER BY
+  CASE WHEN @sort_descending::boolean THEN LOWER(name) END DESC,
+  CASE WHEN NOT @sort_descending::boolean THEN LOWER(name) END ASC,
+  CASE WHEN @sort_descending::boolean THEN id END DESC,
+  CASE WHEN NOT @sort_descending::boolean THEN id END ASC
+LIMIT @page_limit;
 
 -- name: GetAgentOwnerProfile :one
 SELECT u.display_name, u.photo_url

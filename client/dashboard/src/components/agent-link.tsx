@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { Bot } from "lucide-react";
 import { useRoutes } from "@/routes";
+import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { cn } from "@/lib/utils";
 
 export function AgentIcon(): JSX.Element {
@@ -31,7 +32,9 @@ export function AgentLink({
   if (!agentId) return <span className={className}>{children}</span>;
   return (
     <Link
-      to={`${routes.agents.href()}?id=${encodeURIComponent(agentId)}`}
+      to={routes.identities.detail.overview.href(
+        encodeIdentityUrn(`agent:${agentId}`),
+      )}
       onClick={(event) => event.stopPropagation()}
       className={cn(
         "decoration-foreground/30 hover:decoration-foreground underline decoration-dotted underline-offset-4",

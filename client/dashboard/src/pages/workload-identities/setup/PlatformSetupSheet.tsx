@@ -14,12 +14,14 @@ import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 import { useAdmitWorkloadSubjectMutation } from "@gram/client/react-query/admitWorkloadSubject.js";
 import {
   invalidateAllAgents,
-  useAgents,
+  queryKeyAgents,
 } from "@gram/client/react-query/agents.js";
+import { collectPageItems } from "@/components/sessions/collectPageItems";
+import { useSdkClient } from "@/contexts/Sdk";
 import { useCreateAgentMutation } from "@gram/client/react-query/createAgent.js";
 import { useRegisterWorkloadIssuerMutation } from "@gram/client/react-query/registerWorkloadIssuer.js";
 import { invalidateAllWorkloadIdentities } from "@gram/client/react-query/workloadIdentities.js";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { CatalogEntry, SetupDefinition, SetupStep } from "./definition";
@@ -70,6 +72,7 @@ export function PlatformSetupSheet({
   onClose,
 }: PlatformSetupSheetProps): JSX.Element {
   const queryClient = useQueryClient();
+  const sdk = useSdkClient();
   const [values, setValues] = useState<VariableValues>({});
   const [agentId, setAgentId] = useState("");
   const [tags, setTags] = useState<string[]>([]);
@@ -85,7 +88,14 @@ export function PlatformSetupSheet({
   // a duplicate of itself.
   const [admittedSubject, setAdmittedSubject] = useState<string | null>(null);
 
-  const agentsQuery = useAgents({}, undefined, { throwOnError: false });
+  // Drained rather than read a page at a time: the picker has to offer every
+  // agent this platform could be bound to.
+  const agentsQuery = useQuery({
+    queryKey: [...queryKeyAgents({}), "all-pages"],
+    queryFn: ({ signal }) =>
+      collectPageItems(sdk.agents.list(undefined, undefined, { signal })),
+    throwOnError: false,
+  });
   const agents = useMemo<Option[]>(
     () =>
       (agentsQuery.data ?? [])

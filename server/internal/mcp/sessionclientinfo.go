@@ -47,6 +47,18 @@ func sessionClientInfoScope(payload *mcpInputs) string {
 	return payload.toolset
 }
 
+// sessionClientInfoProject is the project a session's client-info record lives
+// under. The gateway handshakes once under its own project but dispatches to
+// members that may sit in other projects, so it overrides this; keying a member
+// dispatch by the member's project would never find the record the handshake
+// wrote.
+func sessionClientInfoProject(payload *mcpInputs) uuid.UUID {
+	if payload.clientInfoProjectID != uuid.Nil {
+		return payload.clientInfoProjectID
+	}
+	return payload.projectID
+}
+
 // storeSessionClientInfo records what a client reported about itself at
 // initialize. A client that reports neither a name nor a protocol version
 // leaves no record, and a write failure is logged rather than surfaced: losing
@@ -64,7 +76,7 @@ func storeSessionClientInfo(ctx context.Context, logger *slog.Logger, store sess
 		return
 	}
 
-	err := store.Store(ctx, payload.projectID, sessionClientInfoScope(payload), payload.sessionID, sessionclientinfo.Info{
+	err := store.Store(ctx, sessionClientInfoProject(payload), sessionClientInfoScope(payload), payload.sessionID, sessionclientinfo.Info{
 		Name:            name,
 		Version:         mcprequests.SanitizeClientInfoField(version),
 		ProtocolVersion: protocolVersion,
@@ -111,7 +123,7 @@ func resolveClientIdentity(ctx context.Context, logger *slog.Logger, store sessi
 		return identity, ""
 	}
 
-	info, err := store.Load(ctx, payload.projectID, sessionClientInfoScope(payload), payload.sessionID, time.Now().UnixMilli())
+	info, err := store.Load(ctx, sessionClientInfoProject(payload), sessionClientInfoScope(payload), payload.sessionID, time.Now().UnixMilli())
 	switch {
 	case errors.Is(err, sessionclientinfo.ErrNotFound):
 		// An unknown caller is ordinary: no Redis, an evicted record, or a

@@ -34,7 +34,6 @@ import EventFeed from "./pages/data/EventFeed";
 import DataExports from "./pages/data-exports/DataExports";
 import { LegacyDataRedirect } from "./pages/data-exports/LegacyDataRedirect";
 import DeviceAgent, { DeviceAgentRoot } from "./pages/device-agent/DeviceAgent";
-import AgentsPage from "./pages/agents/Agents";
 import MdmIntegrationDetail from "./pages/org/device-integrations/MdmIntegrationDetail";
 import EnvironmentPage from "./pages/environments/Environment";
 import Environments, {
@@ -59,7 +58,10 @@ import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
 import Costs from "./pages/costs/Costs";
 import Explore from "./pages/explore/Explore";
-import IdentitiesIndex, {
+import {
+  AgentsIndex,
+  PeopleIndex,
+  PeopleIndexRedirect,
   IdentityDetailIndexRedirect,
   IdentitiesRoot,
 } from "./pages/identities/IdentitiesIndex";
@@ -73,6 +75,9 @@ import IdentityCost from "./pages/identities/IdentityCost";
 import IdentityDevices from "./pages/identities/IdentityDevices";
 import IdentityConnections from "./pages/identities/IdentityConnections";
 import IdentityActivity from "./pages/identities/IdentityActivity";
+import IdentityAgentSection from "./pages/identities/IdentityAgentSection";
+import NewAgentIdentity from "./pages/agents/NewAgentIdentity";
+import AgentManagementRedirect from "./pages/agents/AgentManagementRedirect";
 import FunctionsOnboarding from "./pages/onboarding/FunctionsOnboarding";
 import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import CreateRemoteMcp from "./pages/sources/remote-mcp/CreateRemoteMcp";
@@ -724,12 +729,14 @@ const ROUTE_STRUCTURE = {
     component: AccessHubRedirect,
   },
 
+  // Kept as a redirect only: agents live under Identities now. Links minted
+  // before that, and anything a reader bookmarked, still resolve.
   agents: {
     title: "Agent Identity",
     url: "agent-management",
     icon: "bot",
-    stage: "preview",
-    component: AgentsPage,
+    legacyRedirect: true,
+    component: AgentManagementRedirect,
   },
   // One page per person, reached from every surface that renders a human. The
   // URL segment is an identity URN (`user:...`, `email:...`, `external:...`),
@@ -746,8 +753,33 @@ const ROUTE_STRUCTURE = {
     url: "identities",
     icon: "users",
     component: IdentitiesRoot,
-    indexComponent: IdentitiesIndex,
+    // The bare URL holds no roster of its own: people and agents are two
+    // rosters, and this sends you to the people.
+    indexComponent: PeopleIndexRedirect,
     subPages: {
+      people: {
+        title: "People",
+        url: "people",
+        icon: "users",
+        component: PeopleIndex,
+      },
+      agents: {
+        title: "Agents",
+        url: "agents",
+        icon: "bot",
+        stage: "preview",
+        // indexComponent, not component: a route with children renders its
+        // component as their layout, and the roster has no outlet, so it
+        // would render in place of every child.
+        indexComponent: AgentsIndex,
+        subPages: {
+          new: {
+            title: "New Agent Identity",
+            url: "new",
+            component: NewAgentIdentity,
+          },
+        },
+      },
       detail: {
         title: "Identity",
         url: ":identityUrn",
@@ -798,6 +830,31 @@ const ROUTE_STRUCTURE = {
             title: "Identity Activity",
             url: "activity",
             component: IdentityActivity,
+          },
+          // An agent is a different subject from a person, and its sections
+          // are named for what an agent holds. They are their own segments so
+          // the address, the breadcrumb and the tab agree: an agent's keys
+          // served at /devices read as "Devices" in the crumb bar whatever
+          // the tab was labelled. The person segments above are unchanged.
+          permissions: {
+            title: "Agent Permissions",
+            url: "permissions",
+            component: IdentityAgentSection,
+          },
+          provisioning: {
+            title: "Agent Provisioning",
+            url: "provisioning",
+            component: IdentityAgentSection,
+          },
+          sessions: {
+            title: "Agent Sessions",
+            url: "sessions",
+            component: IdentityAgentSection,
+          },
+          controls: {
+            title: "Agent Controls",
+            url: "controls",
+            component: IdentityAgentSection,
           },
         },
       },

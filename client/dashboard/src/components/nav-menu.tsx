@@ -474,6 +474,7 @@ export function NavButton({
       target={target}
       onClick={handleClick}
       className={cn(
+        "focus-visible:ring-1 focus-visible:ring-[var(--border-focus)]",
         "relative z-1 flex w-full items-center gap-2 px-2 py-1.5 text-sm transition-colors hover:no-underline",
         "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
         active
@@ -708,6 +709,10 @@ export function CollapsibleNavItem({
           to={item.href()}
           onClick={handleClick}
           className={cn(
+            // A hairline ring rather than the browser's fallback: without a
+            // ring class these rows take the 2px outline in App.css, which
+            // draws a black slab around the whole row and its badge.
+            "focus-visible:ring-1 focus-visible:ring-[var(--border-focus)]",
             "relative z-1 flex items-center gap-2 px-2 py-1 text-sm transition-colors hover:no-underline",
             item.active
               ? ACTIVE_ITEM

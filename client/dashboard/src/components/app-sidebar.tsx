@@ -99,7 +99,7 @@ export function AppSidebar({
   const isExploreEnabled = navAccess.has(routes.explore.url);
   const isRiskWatchdogEnabled = navAccess.has(routes.watchdog.url);
   const isUserSessionsEnabled = navAccess.has(routes.mcpSessions.url);
-  const isAgentManagementEnabled = navAccess.has(routes.agents.url);
+  const isAgentManagementEnabled = navAccess.has(routes.identities.agents.url);
 
   // Shared with the page-title eyebrow (Page.Eyebrow) so the sidebar group
   // highlight and the page header always agree on the area. "Organization"
@@ -219,9 +219,17 @@ export function AppSidebar({
             label="Identity"
             Icon={(p) => <Icon {...p} name="fingerprint" />}
             items={[
-              { item: routes.identities, ...accessFor(routes.identities) },
+              {
+                item: routes.identities.people,
+                ...accessFor(routes.identities.people),
+              },
               ...(isAgentManagementEnabled
-                ? [{ item: routes.agents, ...accessFor(routes.agents) }]
+                ? [
+                    {
+                      item: routes.identities.agents,
+                      ...accessFor(routes.identities.agents),
+                    },
+                  ]
                 : []),
               ...(isUserSessionsEnabled
                 ? [

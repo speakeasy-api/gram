@@ -89,13 +89,17 @@ vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
 vi.mock("@gram/client/react-query/createAgent.js", () => ({
   useCreateAgentMutation: () => ({ mutateAsync: vi.fn() }),
 }));
+// The picker drains every page of agents.list, so the list arrives through
+// the sdk client rather than a generated hook.
 vi.mock("@gram/client/react-query/agents.js", () => ({
   invalidateAllAgents: vi.fn(),
-  useAgents: () => ({
-    data: [{ id: "agent-1", name: "Support bot", lifecycle: "active" }],
-    isPending: false,
-    isError: false,
-  }),
+  queryKeyAgents: () => ["agents"],
+}));
+vi.mock("@/components/sessions/collectPageItems", () => ({
+  collectPageItems: () =>
+    Promise.resolve([
+      { id: "agent-1", name: "Support bot", lifecycle: "active" },
+    ]),
 }));
 vi.mock("@gram/client/react-query/workloadTokenEndpoints.js", () => ({
   useWorkloadTokenEndpoints: () => ({

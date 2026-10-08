@@ -18,7 +18,7 @@ import type { ReactNode } from "react";
 import type { ScopeDefinition } from "@gram/client/models/components/scopedefinition.js";
 import type { Selector } from "@gram/client/models/components/selector.js";
 import type { ScopeRule } from "@/pages/access/types";
-import AgentsPage from "./Agents";
+import { AgentPolicySection } from "./AgentPolicySection";
 
 const mocks = vi.hoisted(() => ({
   params: new URLSearchParams(),
@@ -139,17 +139,35 @@ vi.mock("@/pages/access/GrantRuleDrawerContent", () => ({
   ),
 }));
 
+// The review frame names the servers an agent's ceiling reaches, which means
+// the org inventory loads beside the policy editor under test.
+vi.mock("@gram/client/react-query/listMcpServersForOrg.js", () => ({
+  useListMcpServersForOrg: () => ({
+    data: { mcpServers: [] },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
+vi.mock("@gram/client/react-query/listToolsetsForOrg.js", () => ({
+  useListToolsetsForOrg: () => ({
+    data: { toolsets: [] },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
 vi.mock("@/contexts/Auth", () => ({
+  useProject: () => ({
+    id: "project_one",
+    name: "Project one",
+    slug: "project-one",
+  }),
   useOrganization: () => ({
     id: mocks.organizationId,
     slug: "example",
     name: "Example Org",
     projects: [{ id: "project_one", name: "Project one", slug: "project-one" }],
-  }),
-  useProject: () => ({
-    id: "project_one",
-    name: "Project one",
-    slug: "project-one",
   }),
   useSession: () => ({
     user: {
@@ -250,25 +268,25 @@ function setup() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+  // The editor under test, rendered directly. It used to be reached by
+  // driving the agent-management page to the right query params; that page is
+  // gone, and the editor is the subject of every assertion here anyway.
   const view = render(
     <QueryClientProvider client={client}>
-      <AgentsPage />
+      <AgentPolicySection agent={mocks.agent as never} variant="bare" />
     </QueryClientProvider>,
   );
   return {
     ...view,
     client,
-    rerenderPage: () =>
+    rerenderPage: () => {
       view.rerender(
         <QueryClientProvider client={client}>
-          <AgentsPage />
+          <AgentPolicySection agent={mocks.agent as never} variant="bare" />
         </QueryClientProvider>,
-      ),
+      );
+    },
   };
-}
-
-function createdAgentForm() {
-  return mocks.createAgent.mock.calls[0]?.[0]?.request?.createAgentForm;
 }
 
 afterEach(cleanup);
@@ -292,180 +310,12 @@ beforeEach(() => {
   mocks.createAgent.mockResolvedValue({ ...mocks.agent, id: "agent_new" });
 });
 
-describe("Creating an agent with permissions", () => {
-  it("offers only agent-runtime-safe permissions, named for the agent", () => {
-    setup();
-    expect(screen.getByText("subject:this agent")).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: "Add mcp:connect" }),
-    ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Add org:admin" })).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Add risk_policy:bypass" }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Add mcp:blocked_connect" }),
-    ).toBeNull();
-  });
-
-  it("creates the agent and its MCP permission in one request", async () => {
-    setup();
-    fireEvent.change(screen.getByLabelText("Agent name"), {
-      target: { value: "  Release assistant  " },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Add mcp:connect" }));
-    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
-    await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
-    expect(createdAgentForm()).toEqual({
-      name: "Release assistant",
-      projectId: "project_one",
-      policyGrants: [
-        {
-          effect: "allow",
-          scope: "mcp:connect",
-          selector: { resourceKind: "mcp", resourceId: "*" },
-        },
-      ],
-    });
-    expect(mocks.createPolicyGrant).not.toHaveBeenCalled();
-  });
-
-  it("sends the narrowed selector the picker produced", async () => {
-    setup();
-    fireEvent.change(screen.getByLabelText("Agent name"), {
-      target: { value: "Narrowed" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Add mcp:connect" }));
-    expect(screen.getByText("applies mcp:connect: All servers")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Narrow mcp:connect" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Pick server one" }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
-    await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
-    expect(createdAgentForm().policyGrants).toEqual([
-      {
-        effect: "allow",
-        scope: "mcp:connect",
-        selector: {
-          resourceKind: "mcp",
-          resourceId: "server_one",
-          tool: "search",
-        },
-      },
-    ]);
-  });
-
-  it("never offers an exception, because agent policy is allow-only", () => {
-    setup();
-    fireEvent.click(screen.getByRole("button", { name: "Add mcp:connect" }));
-    expect(screen.getByText("exceptions mcp:connect: off/0")).toBeTruthy();
-  });
-
-  it("gives environment and risk policy permissions no resource choice", () => {
-    setup();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Add environment:read" }),
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Add risk_policy:evaluate" }),
-    );
-    expect(
-      screen.queryByRole("button", { name: "Narrow environment:read" }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Narrow risk_policy:evaluate" }),
-    ).toBeNull();
-  });
-
-  it("creates a permissionless agent without confirmation", async () => {
-    setup();
-    fireEvent.change(screen.getByLabelText("Agent name"), {
-      target: { value: "Bare" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
-    expect(
-      screen.queryByRole("checkbox", { name: /Create without permissions/ }),
-    ).toBeNull();
-    await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
-    expect(createdAgentForm()).toEqual({
-      name: "Bare",
-      projectId: "project_one",
-    });
-  });
-
-  it("keeps the whole draft when the atomic create is rejected", async () => {
-    mocks.createAgent.mockRejectedValue(
-      new Error("scope is not allowed for agent policy"),
-    );
-    setup();
-    fireEvent.change(screen.getByLabelText("Agent name"), {
-      target: { value: "Retryable" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Add mcp:connect" }));
-    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
-    await waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toMatch(
-        /scope is not allowed/,
-      ),
-    );
-    expect(mocks.navigate).not.toHaveBeenCalled();
-    expect(
-      (screen.getByLabelText("Agent name") as HTMLInputElement).value,
-    ).toBe("Retryable");
-    expect(
-      screen.getByRole("button", { name: "Remove mcp:connect" }),
-    ).toBeTruthy();
-
-    mocks.createAgent.mockResolvedValue({ ...mocks.agent, id: "agent_new" });
-    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
-    await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(2));
-    expect(
-      mocks.createAgent.mock.calls[1]?.[0].request.createAgentForm,
-    ).toEqual({
-      name: "Retryable",
-      projectId: "project_one",
-      policyGrants: [
-        {
-          effect: "allow",
-          scope: "mcp:connect",
-          selector: { resourceKind: "mcp", resourceId: "*" },
-        },
-      ],
-    });
-  });
-
-  it("drops the stale delegable candidate set for the new agent", async () => {
-    const { client } = setup();
-    client.setQueryData(
-      ["agent-delegable-grants", "org_example", "user_owner", "agent_new"],
-      [],
-    );
-    fireEvent.change(screen.getByLabelText("Agent name"), {
-      target: { value: "Fresh" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Add mcp:connect" }));
-    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
-    await waitFor(() =>
-      expect(mocks.navigate).toHaveBeenCalledWith({ id: "agent_new" }),
-    );
-    await waitFor(() =>
-      expect(
-        client.getQueryState([
-          "agent-delegable-grants",
-          "org_example",
-          "user_owner",
-          "agent_new",
-        ])?.isInvalidated,
-      ).toBe(true),
-    );
-  });
-});
-
 describe("Editing an existing agent's permissions", () => {
   beforeEach(() => {
-    mocks.params = new URLSearchParams({ id: "agent_example" });
+    mocks.params = new URLSearchParams({
+      id: "agent_example",
+      step: "servers",
+    });
   });
 
   it("says a permissionless agent cannot authorize anything", async () => {
@@ -624,51 +474,12 @@ function deferred<T>() {
 }
 
 describe("Draft ownership across context changes", () => {
-  it("drops an unfinished create draft and its open picker when the organization changes", async () => {
-    const view = setup();
-    fireEvent.change(screen.getByLabelText("Agent name"), {
-      target: { value: "Half-written" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Add mcp:connect" }));
-    fireEvent.click(screen.getByRole("button", { name: "Narrow mcp:connect" }));
-    expect(await screen.findByText("picker mcp:connect (mcp)")).toBeTruthy();
-
-    mocks.organizationId = "org_other";
-    view.rerenderPage();
-
-    expect(screen.queryByText("picker mcp:connect (mcp)")).toBeNull();
-    expect(
-      (screen.getByLabelText("Agent name") as HTMLInputElement).value,
-    ).toBe("");
-    expect(
-      screen.getByRole("button", { name: "Add mcp:connect" }),
-    ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
-    expect(mocks.createAgent).not.toHaveBeenCalled();
-  });
-
-  it("drops an unfinished create draft when the signed-in user changes", () => {
-    const view = setup();
-    fireEvent.change(screen.getByLabelText("Agent name"), {
-      target: { value: "Someone else's draft" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Add mcp:connect" }));
-
-    mocks.userId = "user_other";
-    view.rerenderPage();
-
-    expect(
-      (screen.getByLabelText("Agent name") as HTMLInputElement).value,
-    ).toBe("");
-    expect(
-      screen.getByRole("button", { name: "Add mcp:connect" }),
-    ).toBeTruthy();
-  });
-
   it("drops a dirty policy draft and closes the picker when write access is lost", async () => {
+    mocks.params = new URLSearchParams({
+      id: "agent_example",
+      step: "servers",
+    });
     const view = setup();
-    mocks.params = new URLSearchParams({ id: "agent_example" });
-    view.rerenderPage();
     fireEvent.click(
       await screen.findByRole("button", { name: "Add mcp:connect" }),
     );
@@ -719,7 +530,10 @@ describe("Draft ownership across context changes", () => {
   });
 
   it("refuses to open the picker for a viewer who cannot write", async () => {
-    mocks.params = new URLSearchParams({ id: "agent_example" });
+    mocks.params = new URLSearchParams({
+      id: "agent_example",
+      step: "servers",
+    });
     mocks.agent.permissions = {
       read: true,
       write: false,
@@ -748,7 +562,10 @@ describe("Draft ownership across context changes", () => {
 
 describe("Confirming the stored ceiling after a save", () => {
   beforeEach(() => {
-    mocks.params = new URLSearchParams({ id: "agent_example" });
+    mocks.params = new URLSearchParams({
+      id: "agent_example",
+      step: "servers",
+    });
   });
 
   it("keeps the editor locked until the confirming read resolves", async () => {
@@ -853,7 +670,10 @@ describe("Confirming the stored ceiling after a save", () => {
 
 describe("Stored constraints the editor cannot show", () => {
   beforeEach(() => {
-    mocks.params = new URLSearchParams({ id: "agent_example" });
+    mocks.params = new URLSearchParams({
+      id: "agent_example",
+      step: "servers",
+    });
     mocks.listPolicyGrants.mockResolvedValue([
       {
         id: "grant_risk",
@@ -905,60 +725,6 @@ describe("Stored constraints the editor cannot show", () => {
   });
 });
 
-describe("Choosing the unrestricted option inside the picker", () => {
-  it("keeps Done available and saves an unrestricted grant", async () => {
-    setup();
-    fireEvent.change(screen.getByLabelText("Agent name"), {
-      target: { value: "Unrestricted" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Add mcp:connect" }));
-    fireEvent.click(screen.getByRole("button", { name: "Narrow mcp:connect" }));
-    await screen.findByText("picker mcp:connect (mcp)");
-
-    // An unfinished narrowing blocks Done; the unrestricted choice must not.
-    expect(
-      (screen.getByRole("button", { name: "Done" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Pick all servers" }));
-    const done = screen.getByRole("button", { name: "Done" });
-    expect((done as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(done);
-
-    expect(screen.getByText("applies mcp:connect: All servers")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Create agent" }));
-    await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
-    expect(createdAgentForm().policyGrants).toEqual([
-      {
-        effect: "allow",
-        scope: "mcp:connect",
-        selector: { resourceKind: "mcp", resourceId: "*" },
-      },
-    ]);
-  });
-
-  it("widens a narrowed permission back to unrestricted", async () => {
-    setup();
-    fireEvent.change(screen.getByLabelText("Agent name"), {
-      target: { value: "Rewidened" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Add mcp:connect" }));
-    fireEvent.click(screen.getByRole("button", { name: "Narrow mcp:connect" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Pick server one" }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    expect(screen.getByText("applies mcp:connect: search")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Narrow mcp:connect" }));
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Pick all servers" }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    expect(screen.getByText("applies mcp:connect: All servers")).toBeTruthy();
-  });
-});
-
 describe("A concurrent change by another administrator", () => {
   const otherAdminGrant = {
     id: "grant_other",
@@ -970,7 +736,10 @@ describe("A concurrent change by another administrator", () => {
   };
 
   beforeEach(() => {
-    mocks.params = new URLSearchParams({ id: "agent_example" });
+    mocks.params = new URLSearchParams({
+      id: "agent_example",
+      step: "servers",
+    });
   });
 
   it("blocks and writes nothing when the server has a grant the cache never saw", async () => {
@@ -1104,7 +873,10 @@ describe("Losing the editor part-way through a multi-grant save", () => {
   ];
 
   beforeEach(() => {
-    mocks.params = new URLSearchParams({ id: "agent_example" });
+    mocks.params = new URLSearchParams({
+      id: "agent_example",
+      step: "servers",
+    });
     mocks.listPolicyGrants.mockResolvedValue(storedGrants);
   });
 

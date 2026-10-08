@@ -84,19 +84,22 @@ func (m *McpInputs) toInternal() *mcpInputs {
 	}
 
 	return &mcpInputs{
-		projectID:        m.ProjectID,
-		organizationID:   "",
-		toolset:          m.Toolset,
-		environment:      m.Environment,
-		mcpEnvVariables:  m.McpEnvVariables,
-		oauthTokenInputs: oauthInputs,
-		authenticated:    m.Authenticated,
-		sessionID:        m.SessionID,
-		chatID:           m.ChatID,
-		mode:             m.Mode,
-		userID:           m.UserID,
-		externalUserID:   m.ExternalUserID,
-		apiKeyID:         m.APIKeyID,
+		projectID: m.ProjectID,
+		// Internal callers never handshake, so there is no record to find
+		// under another project.
+		clientInfoProjectID: uuid.Nil,
+		organizationID:      "",
+		toolset:             m.Toolset,
+		environment:         m.Environment,
+		mcpEnvVariables:     m.McpEnvVariables,
+		oauthTokenInputs:    oauthInputs,
+		authenticated:       m.Authenticated,
+		sessionID:           m.SessionID,
+		chatID:              m.ChatID,
+		mode:                m.Mode,
+		userID:              m.UserID,
+		externalUserID:      m.ExternalUserID,
+		apiKeyID:            m.APIKeyID,
 		// Internal clients (agent workflows) always use the project-default
 		// variation group, never filter by tag, have no fronting mcp_servers
 		// row to record, and carry no HTTP request to declare a protocol

@@ -136,7 +136,7 @@ export function useResolvedMcpServerUrl(
 // legacy form requires the default environment — without both there is no
 // routable MCP URL, so return undefined rather than an invalid
 // /mcp/<project>/<toolset> path.
-function mcpUrlSuffix(
+export function mcpUrlSuffix(
   project: { slug: string },
   toolset: Pick<ToolsetEntry, "slug" | "mcpSlug" | "defaultEnvironmentSlug">,
 ): string | undefined {

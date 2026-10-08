@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   success: vi.fn(),
   error: vi.fn(),
   refetchAgents: vi.fn(),
+  listAgents: (): Promise<unknown[]> => Promise.resolve(mocks.agents),
   onError: undefined as undefined | ((error: Error) => void),
   onSuccess: undefined as undefined | ((result: Assistant) => void),
 }));
@@ -61,13 +68,18 @@ vi.mock("@gram/client/react-query/assistantsUpgradeIdentity.js", () => ({
     return { mutate: mocks.mutate, isPending: false };
   },
 }));
+// The picker drains every page of agents.list rather than reading one, so the
+// list arrives through the sdk client and not a generated hook.
 vi.mock("@gram/client/react-query/agents.js", () => ({
-  useAgents: () => ({
-    data: mocks.agents,
-    refetch: mocks.refetchAgents,
-    isPending: false,
-    isError: false,
-  }),
+  queryKeyAgents: () => ["agents"],
+}));
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({ agents: { list: mocks.refetchAgents } }),
+}));
+vi.mock("@/components/sessions/collectPageItems", () => ({
+  // Through a hook so a test can hold the list unresolved and watch what the
+  // form does while it waits.
+  collectPageItems: () => mocks.listAgents(),
 }));
 vi.mock("@gram/client/react-query/agent.js", () => ({
   useAgent: () => ({ data: mocks.agentData }),
@@ -109,9 +121,10 @@ beforeEach(() => {
   mocks.agents = [];
   mocks.flagStatus = "enabled";
   mocks.agentData = { name: "Example agent" };
+  mocks.listAgents = () => Promise.resolve(mocks.agents);
 });
 describe("Assistant identity management", () => {
-  it("warns about a matching name without overriding server uniqueness checks", () => {
+  it("warns about a matching name without overriding server uniqueness checks", async () => {
     mocks.agents = [
       {
         id: "existing-agent",
@@ -124,6 +137,10 @@ describe("Assistant identity management", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Set up agent identity" }),
     );
+    // The list is fetched, so the warning is the signal that it has landed.
+    expect(
+      await screen.findByText(/An agent already uses this name/),
+    ).toBeTruthy();
     expect(
       (
         screen.getByRole("button", {
@@ -131,7 +148,6 @@ describe("Assistant identity management", () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(false);
-    expect(screen.getByText(/An agent already uses this name/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Agent name"), {
       target: { value: "New identity" },
     });
@@ -145,7 +161,7 @@ describe("Assistant identity management", () => {
       },
     });
   });
-  it("submits the selected existing identity without creating another", () => {
+  it("submits the selected existing identity without creating another", async () => {
     mocks.agents = [
       {
         id: "existing-agent",
@@ -173,6 +189,8 @@ describe("Assistant identity management", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Set up agent identity" }),
     );
+    // The option only exists once the fetched list has landed.
+    await screen.findByRole("option", { name: "Shared identity" });
     fireEvent.change(screen.getByLabelText("Agent"), {
       target: { value: "existing-agent" },
     });
@@ -195,7 +213,13 @@ describe("Assistant identity management", () => {
     });
   });
 
-  it("explains who an assistant without an agent identity acts as", () => {
+  it("explains who an assistant without an agent identity acts as", async () => {
+    // Held open so the pending state below is a real one, not a race.
+    let release: (agents: unknown[]) => void = () => undefined;
+    mocks.listAgents = () =>
+      new Promise<unknown[]>((resolve) => {
+        release = resolve;
+      });
     setup();
     expect(
       screen.getByText(
@@ -213,6 +237,25 @@ describe("Assistant identity management", () => {
     expect(mocks.mutate).not.toHaveBeenCalled();
     expect(screen.queryByText(assistant.id)).toBeNull();
     expect(screen.queryByText(assistant.projectId)).toBeNull();
+    // Still pending: submitting now would skip the name check entirely.
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Confirm setup",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    release([]);
+    // Confirm stays disabled until the fetched list says the name is free.
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole("button", {
+            name: "Confirm setup",
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(false),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Confirm setup" }));
     expect(mocks.mutate).toHaveBeenCalledWith({
       request: {

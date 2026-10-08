@@ -10,11 +10,13 @@ import { useOrgRoutes, useRoutes } from "@/routes";
 import type { Assistant } from "@gram/client/models/components/assistant.js";
 import { useAssistantsUpgradeIdentityMutation } from "@gram/client/react-query/assistantsUpgradeIdentity.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
-import { useAgents } from "@gram/client/react-query/agents.js";
+import { queryKeyAgents } from "@gram/client/react-query/agents.js";
+import { collectPageItems } from "@/components/sessions/collectPageItems";
+import { useSdkClient } from "@/contexts/Sdk";
 import { useAgent } from "@gram/client/react-query/agent.js";
 import { useSlackDirectoryMembers } from "@gram/client/react-query/slackDirectoryMembers.js";
 import { Bot } from "lucide-react";
@@ -27,26 +29,34 @@ export function AssistantIdentitySettings({
   assistant: Assistant;
   onUpdated?: () => void;
 }): JSX.Element | null {
+  const sdk = useSdkClient();
   const identityFlag = useFeatureFlag(FEATURE_FLAGS.agentCredentials);
   const { hasScope } = useRBAC();
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
   const [selectedIdentity, setSelectedIdentity] = useState("new");
   const [agentName, setAgentName] = useState(assistant.name);
-  const agentsQuery = useAgents({}, undefined, {
+  // Drained rather than read a page at a time: the picker has to offer every
+  // agent the assistant could take, and the name check below is only sound
+  // against the whole list.
+  const agentsQuery = useQuery({
+    queryKey: [...queryKeyAgents({}), "all-pages"],
+    queryFn: ({ signal }) =>
+      collectPageItems(sdk.agents.list(undefined, undefined, { signal })),
     enabled: confirming,
     throwOnError: false,
   });
+  const allAgents = agentsQuery.data ?? [];
   // Only agents the user can authorize, active in the assistant's project, can
   // back it.
-  const agents = (agentsQuery.data ?? []).filter(
+  const agents = allAgents.filter(
     (agent) =>
       agent.projectId === assistant.projectId &&
       agent.lifecycle === "active" &&
       agent.permissions.authorize,
   );
   const creating = selectedIdentity === "new";
-  const nameTaken = (agentsQuery.data ?? []).some(
+  const nameTaken = allAgents.some(
     (agent) => agent.name.toLowerCase() === agentName.trim().toLowerCase(),
   );
   const attributionName = creating

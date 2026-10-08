@@ -333,3 +333,35 @@ func TestResolveClientIdentity_DerivesDowngradedNegotiatedVersion(t *testing.T) 
 		})
 	}
 }
+
+// A gateway handshakes once under its own project but dispatches to members
+// that may sit in other projects. The record is keyed by (project, scope,
+// session), so a member dispatch must look it up under the gateway's project
+// or every cross-project member call loses the reported client name.
+func TestResolveClientIdentity_CrossProjectMemberFindsGatewayHandshake(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	store, gateway := newClientIdentityFixture(t)
+	scope := metaClientInfoScope(uuid.New())
+	gateway.clientInfoScope = scope
+
+	storeSessionClientInfo(ctx, logger, store, gateway, "gateway-client", "4.5.6", mcpversions.Version20250618)
+
+	member := *gateway
+	// The member's own project: what dispatch needs, and not where the
+	// handshake record lives.
+	member.projectID = uuid.New()
+	member.clientInfoProjectID = gateway.projectID
+
+	identity, _ := resolveClientIdentity(ctx, logger, store, &member, nil)
+	require.Equal(t, "gateway-client", identity.Name)
+	require.Equal(t, "4.5.6", identity.Version)
+
+	// Without the override the lookup follows the member's project and misses.
+	unfixed := member
+	unfixed.clientInfoProjectID = uuid.Nil
+	missed, _ := resolveClientIdentity(ctx, logger, store, &unfixed, nil)
+	require.Empty(t, missed.Name)
+}

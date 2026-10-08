@@ -23,7 +23,9 @@ import {
   useWorkloadIdentities,
 } from "@gram/client/react-query/workloadIdentities.js";
 import { useAdmitWorkloadSubjectMutation } from "@gram/client/react-query/admitWorkloadSubject.js";
-import { useAgents } from "@gram/client/react-query/agents.js";
+import { queryKeyAgents } from "@gram/client/react-query/agents.js";
+import { collectPageItems } from "@/components/sessions/collectPageItems";
+import { useSdkClient } from "@/contexts/Sdk";
 import { useUpdateWorkloadIssuerMutation } from "@gram/client/react-query/updateWorkloadIssuer.js";
 import { useUpdateWorkloadSubjectMutation } from "@gram/client/react-query/updateWorkloadSubject.js";
 import { useWithdrawWorkloadIssuerMutation } from "@gram/client/react-query/withdrawWorkloadIssuer.js";
@@ -42,7 +44,7 @@ import {
   type AdmitSubjectInitialValues,
   type AdmitSubjectValues,
 } from "./AdmitSubjectSheet";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useMemo, useState } from "react";
 import { Navigate, useParams } from "react-router";
 import { toast } from "sonner";
@@ -189,6 +191,7 @@ export function IssuerDetail({
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
+  const sdk = useSdkClient();
   const [admitOpen, setAdmitOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -203,7 +206,14 @@ export function IssuerDetail({
   // throwOnError because the whole agents service 404s where the agent
   // management rollout is off, and the global query policy suppresses only 401
   // and 403 — left to throw it takes this page down with it.
-  const agentsQuery = useAgents({}, undefined, { throwOnError: false });
+  // Every page: this picker assigns a machine to an agent, and an agent
+  // missing from it cannot be chosen, with nothing on screen saying why.
+  const agentsQuery = useQuery({
+    queryKey: [...queryKeyAgents({}), "all-pages"],
+    queryFn: ({ signal }) =>
+      collectPageItems(sdk.agents.list(undefined, undefined, { signal })),
+    throwOnError: false,
+  });
 
   const issuer = useMemo(
     () => data?.issuers?.find((candidate) => candidate.id === issuerId),

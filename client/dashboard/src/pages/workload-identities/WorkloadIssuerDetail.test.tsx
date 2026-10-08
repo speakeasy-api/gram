@@ -133,16 +133,27 @@ vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
   invalidateAllWorkloadIdentities: mocks.invalidate,
 }));
 vi.mock("@gram/client/react-query/agents.js", () => ({
-  useAgents: () => ({
-    data: [
-      {
-        id: "22222222-2222-2222-2222-222222222222",
-        name: "Release assistant",
-        lifecycle: "active",
-      },
-    ],
-    isPending: false,
-    isError: false,
+  queryKeyAgents: () => ["agents"],
+}));
+// agents.list pages, and the page draining happens through the SDK client.
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({
+    agents: {
+      list: () =>
+        Promise.resolve([
+          {
+            result: {
+              items: [
+                {
+                  id: "22222222-2222-2222-2222-222222222222",
+                  name: "Release assistant",
+                  lifecycle: "active",
+                },
+              ],
+            },
+          },
+        ]),
+    },
   }),
 }));
 vi.mock("@gram/client/react-query/admitWorkloadSubject.js", () => ({

@@ -4,16 +4,79 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
+import { Result as SafeParseResult } from "../../types/fp.js";
+import {
+  ListAgentsResult,
+  ListAgentsResult$inboundSchema,
+} from "../components/listagentsresult.js";
+import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ListAgentsSecurity = {
   sessionHeaderGramSession?: string | undefined;
 };
 
+/**
+ * Name order for the page.
+ */
+export const NameOrder = {
+  Asc: "asc",
+  Desc: "desc",
+} as const;
+/**
+ * Name order for the page.
+ */
+export type NameOrder = ClosedEnum<typeof NameOrder>;
+
+export const Lifecycle = {
+  Active: "active",
+  Suspended: "suspended",
+  Revoked: "revoked",
+} as const;
+export type Lifecycle = ClosedEnum<typeof Lifecycle>;
+
 export type ListAgentsRequest = {
+  /**
+   * Cursor for the next page of agents.
+   */
+  cursor?: string | undefined;
+  /**
+   * The number of agents to return per page.
+   */
+  limit?: number | undefined;
+  /**
+   * Case-insensitive substring match on the agent name.
+   */
+  search?: string | undefined;
+  /**
+   * Name order for the page.
+   */
+  nameOrder?: NameOrder | undefined;
+  /**
+   * Keep only agents in these lifecycle states.
+   */
+  lifecycle?: Array<Lifecycle> | undefined;
+  /**
+   * Keep only agents owned by these users.
+   */
+  ownerUserIds?: Array<string> | undefined;
+  /**
+   * Keep only agents registered at or after this moment.
+   */
+  registeredAfter?: Date | undefined;
+  /**
+   * Keep only agents registered before this moment.
+   */
+  registeredBefore?: Date | undefined;
   /**
    * Session header
    */
   gramSession?: string | undefined;
+};
+
+export type ListAgentsResponse = {
+  result: ListAgentsResult;
 };
 
 /** @internal */
@@ -45,7 +108,25 @@ export function listAgentsSecurityToJSON(
 }
 
 /** @internal */
+export const NameOrder$outboundSchema: z.ZodMiniEnum<typeof NameOrder> = z.enum(
+  NameOrder,
+);
+
+/** @internal */
+export const Lifecycle$outboundSchema: z.ZodMiniEnum<typeof Lifecycle> = z.enum(
+  Lifecycle,
+);
+
+/** @internal */
 export type ListAgentsRequest$Outbound = {
+  cursor?: string | undefined;
+  limit: number;
+  search?: string | undefined;
+  name_order: string;
+  lifecycle?: Array<string> | undefined;
+  owner_user_ids?: Array<string> | undefined;
+  registered_after?: string | undefined;
+  registered_before?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
 
@@ -55,10 +136,26 @@ export const ListAgentsRequest$outboundSchema: z.ZodMiniType<
   ListAgentsRequest
 > = z.pipe(
   z.object({
+    cursor: z.optional(z.string()),
+    limit: z._default(z.int(), 50),
+    search: z.optional(z.string()),
+    nameOrder: z._default(NameOrder$outboundSchema, "asc"),
+    lifecycle: z.optional(z.array(Lifecycle$outboundSchema)),
+    ownerUserIds: z.optional(z.array(z.string())),
+    registeredAfter: z.optional(
+      z.pipe(z.date(), z.transform(v => v.toISOString())),
+    ),
+    registeredBefore: z.optional(
+      z.pipe(z.date(), z.transform(v => v.toISOString())),
+    ),
     gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      nameOrder: "name_order",
+      ownerUserIds: "owner_user_ids",
+      registeredAfter: "registered_after",
+      registeredBefore: "registered_before",
       gramSession: "Gram-Session",
     });
   }),
@@ -69,5 +166,30 @@ export function listAgentsRequestToJSON(
 ): string {
   return JSON.stringify(
     ListAgentsRequest$outboundSchema.parse(listAgentsRequest),
+  );
+}
+
+/** @internal */
+export const ListAgentsResponse$inboundSchema: z.ZodMiniType<
+  ListAgentsResponse,
+  unknown
+> = z.pipe(
+  z.object({
+    Result: ListAgentsResult$inboundSchema,
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "Result": "result",
+    });
+  }),
+);
+
+export function listAgentsResponseFromJSON(
+  jsonString: string,
+): SafeParseResult<ListAgentsResponse, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => ListAgentsResponse$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'ListAgentsResponse' from JSON`,
   );
 }

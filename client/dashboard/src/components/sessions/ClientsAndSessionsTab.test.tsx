@@ -72,7 +72,6 @@ vi.mock("@/components/ui/MoreActions", () => ({
 
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
-    agents: { href: () => "/org/projects/project/agent-management" },
     identities: {
       href: () => "/identities",
       detail: {
@@ -218,7 +217,7 @@ function renderTab(ui: React.ReactElement, initialEntries?: string[]) {
 
 describe("ClientsAndSessionsTab", () => {
   beforeEach(() => {
-    listAgents.mockResolvedValue([]);
+    listAgents.mockResolvedValue([{ result: { items: [] } }]);
     useUserSessionsInfinite.mockReturnValue(queryResult([]));
     useUserSessionClientsInfinite.mockReturnValue(queryResult([]));
     batchBadgesMutate.mockResolvedValue({
@@ -420,7 +419,7 @@ describe("ClientsAndSessionsTab", () => {
 
   it("resolves readable managed agents without losing row expansion", async () => {
     listAgents.mockResolvedValue([
-      { id: "agent-1", name: "Release assistant" },
+      { result: { items: [{ id: "agent-1", name: "Release assistant" }] } },
     ]);
     useUserSessionsInfinite.mockReturnValue(
       queryResult([
@@ -431,9 +430,7 @@ describe("ClientsAndSessionsTab", () => {
     renderTab(<ClientsAndSessionsTab issuerId="issuer-1" />);
 
     const link = await screen.findByRole("link", { name: "Release assistant" });
-    expect(link.getAttribute("href")).toBe(
-      "/org/projects/project/agent-management?id=agent-1",
-    );
+    expect(link.getAttribute("href")).toBe("/identities/agent%3Aagent-1");
     expect(listAgents).toHaveBeenCalledTimes(1);
     fireEvent.click(
       screen.getByRole("button", { name: "Expand Release assistant" }),

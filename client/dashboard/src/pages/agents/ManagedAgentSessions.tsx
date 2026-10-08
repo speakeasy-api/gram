@@ -10,8 +10,11 @@ import { AgentSessionsSection } from "./AgentSessions";
 
 export function ManagedAgentSessions({
   agent,
+  variant = "section",
 }: {
   agent: ManagedAgent;
+  /** "bare" drops the section chrome for a caller that supplies its own. */
+  variant?: "section" | "bare";
 }): JSX.Element {
   const sdk = useSdkClient();
   const organization = useOrganization();
@@ -41,6 +44,7 @@ export function ManagedAgentSessions({
   return (
     <AgentSessionsSection
       key={`${organization.id}-${agent.id}`}
+      variant={variant}
       sessions={sessions.data?.pages.flatMap((page) => page.items) ?? []}
       isLoading={sessions.isLoading}
       isError={sessions.isError && !sessions.isFetchNextPageError}

@@ -261,6 +261,13 @@ export function AgentKeyServers({
     return <Text>Loading MCP servers…</Text>;
   return (
     <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold">Choose servers</h2>
+        <Text small muted>
+          The MCP servers this key may reach. The agent's gateway serves exactly
+          these.
+        </Text>
+      </div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex-1 sm:max-w-sm">
           <Input
@@ -430,6 +437,12 @@ function ServerAccounts({
       clients: clientsQueries[index]?.data ?? [],
     })),
   };
+  // A row earns a card when it asks for an account, or when it still holds a
+  // binding whose authorization is gone: that binding blocks `ready`, and
+  // disconnecting it is the only way past, so the row has to stay on screen.
+  const shows = (row: (typeof query.data)[number]) =>
+    row.clients.length > 0 ||
+    row.bindings.some((binding) => binding.remoteSession === undefined);
   const ready =
     query.isSuccess &&
     !query.isFetching &&
@@ -496,26 +509,27 @@ function ServerAccounts({
   }
   return (
     <div className="space-y-4">
-      <Text>
-        Choose a connected account, or connect a new one in a separate tab and
-        refresh this list.
-      </Text>
-      {required.length > 0 && (
+      <div>
+        <h2 className="text-lg font-semibold">Connect accounts</h2>
+        {/* Only the case in front of the user is described: the step says
+            either what to connect, or that there is nothing to connect. */}
         <Text small muted>
-          Accounts are connected to the agent, not just this key. They stay
-          connected if you cancel and can be used by its other keys.
+          {/* An issuer-backed server still needs no account until it asks for
+              one, so the sentence follows what the rows actually show. */}
+          {query.data.every((row) => row.clients.length === 0)
+            ? "None of the servers you chose need one. Continue."
+            : "Choose a connected account, or connect a new one in a separate tab and refresh this list. Accounts belong to the agent, so they stay connected for its other keys."}
         </Text>
-      )}
+      </div>
       {query.isLoading && <Text>Checking required accounts…</Text>}
       {query.isError && (
         <Text role="alert">
           Could not verify account requirements. Refresh before continuing.
         </Text>
       )}
-      {required.length === 0 && (
-        <Text>No account connection needed for these servers.</Text>
-      )}
-      {query.data?.map((row) => (
+      {/* A server that asks for nothing gets no card of its own; the sentence
+          above already covers it, and an empty card reads as unfinished. */}
+      {query.data?.filter(shows).map((row) => (
         <section
           key={`${row.server.projectId}:${row.server.issuerId}`}
           className="border-border space-y-4 border p-5"
@@ -537,11 +551,6 @@ function ServerAccounts({
               Connect an account
               <ExternalLink aria-hidden="true" className="size-3.5" />
             </a>
-          )}
-          {row.clients.length === 0 && (
-            <Text small muted>
-              No account connection needed.
-            </Text>
           )}
           {row.bindings
             .filter((binding) => !binding.remoteSession)
@@ -636,27 +645,33 @@ function ServerAccounts({
           before trying again.
         </Text>
       )}
-      <Button
-        variant="secondary"
-        disabled={pending}
-        onClick={() => {
-          setError(false);
-          void query.refetch();
-        }}
-      >
-        Refresh accounts
-      </Button>
-      {ready && (
-        <div role="status" className="flex items-center gap-2 text-sm">
-          <CheckCircle2 aria-hidden="true" className="size-4" />
-          Accounts ready.
-        </div>
-      )}
-      {required.length > 0 && (
-        <Text small muted>
-          To switch accounts, disconnect the current account from the server’s
-          Sessions page first. You’ll choose this key’s access in the next step.
-        </Text>
+      {/* Nothing to connect means nothing to refresh, confirm or switch: the
+          step keeps only the sentence that says so. A failed read reports no
+          clients at all, so it keeps the refresh the alert above asks for. */}
+      {(query.isError || query.data.some(shows)) && (
+        <>
+          <Button
+            variant="secondary"
+            disabled={pending}
+            onClick={() => {
+              setError(false);
+              void query.refetch();
+            }}
+          >
+            Refresh accounts
+          </Button>
+          {ready && (
+            <div role="status" className="flex items-center gap-2 text-sm">
+              <CheckCircle2 aria-hidden="true" className="size-4" />
+              Accounts ready.
+            </div>
+          )}
+          <Text small muted>
+            To switch accounts, disconnect the current account from the server’s
+            Sessions page first. You’ll choose this key’s access in the next
+            step.
+          </Text>
+        </>
       )}
     </div>
   );

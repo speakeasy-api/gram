@@ -264,7 +264,9 @@ describe("Agent key MCP servers", () => {
     setup(1, [server]);
     await screen.findByRole("button", { name: "Use account" });
     expect(screen.getByText("Identity unavailable")).toBeTruthy();
-    expect(screen.getByText(/They stay connected if you cancel/)).toBeTruthy();
+    expect(
+      screen.getByText(/they stay connected for its other keys/),
+    ).toBeTruthy();
     expect(screen.queryByText(/account_example|client_example/)).toBeNull();
     expect(screen.getByText("Access: read")).toBeTruthy();
   });
@@ -468,7 +470,8 @@ describe("Agent key MCP servers", () => {
   });
   it("does not require account attachments when no issuer is configured", async () => {
     const { ready } = setup(1, [{ ...server, issuerId: undefined }]);
-    await screen.findByText("Accounts ready.");
+    // Nothing to connect, so the step says so instead of confirming accounts.
+    await screen.findByText(/None of the servers you chose need one/);
     expect(ready).toHaveBeenLastCalledWith(true);
     expect(mocks.clients).not.toHaveBeenCalled();
   });

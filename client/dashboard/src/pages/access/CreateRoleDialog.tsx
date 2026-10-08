@@ -17,21 +17,23 @@ import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/contexts/Auth";
-import { useOrgRoutes } from "@/routes";
+import { useSdkClient } from "@/contexts/Sdk";
+import { collectPageItems } from "@/components/sessions/collectPageItems";
 import type { Role } from "@gram/client/models/components/role.js";
 import { useCreateRoleMutation } from "@gram/client/react-query/createRole.js";
 import {
   invalidateAllMembers,
   useMembers,
 } from "@gram/client/react-query/members.js";
-import { useAgents } from "@gram/client/react-query/agents.js";
+import { queryKeyAgents } from "@gram/client/react-query/agents.js";
 import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
 import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useOrgRoutes } from "@/routes";
 import {
   ArrowLeft,
   Bot,
@@ -209,12 +211,19 @@ export function CreateRoleDialog({
   );
   const agentManagementEnabled =
     useFeatureFlag(FEATURE_FLAGS.agentManagement).status === "enabled";
+  const sdk = useSdkClient();
+  // Every page of them: an agent missing from this picker cannot be given the
+  // role, and nothing on screen would say why.
+  //
   // throwOnError is off because the agents service answers 404 (and 403 for
   // callers without agent:read) when the rollout is off for the organization,
   // and the global query policy only suppresses 401 and 403. The agent picker
   // is optional here, so on any error it shows no agents instead of taking the
   // role editor down.
-  const { data: agentsData } = useAgents(undefined, undefined, {
+  const { data: agentsData } = useQuery({
+    queryKey: [...queryKeyAgents({}), "all-pages"],
+    queryFn: ({ signal }) =>
+      collectPageItems(sdk.agents.list(undefined, undefined, { signal })),
     enabled: agentManagementEnabled,
     throwOnError: false,
   });

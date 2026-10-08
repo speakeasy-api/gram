@@ -505,6 +505,28 @@ func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		values := req.URL.Query()
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		if p.Search != nil {
+			values.Add("search", *p.Search)
+		}
+		values.Add("name_order", p.NameOrder)
+		for _, value := range p.Lifecycle {
+			values.Add("lifecycle", value)
+		}
+		for _, value := range p.OwnerUserIds {
+			values.Add("owner_user_ids", value)
+		}
+		if p.RegisteredAfter != nil {
+			values.Add("registered_after", *p.RegisteredAfter)
+		}
+		if p.RegisteredBefore != nil {
+			values.Add("registered_before", *p.RegisteredBefore)
+		}
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
@@ -541,24 +563,18 @@ func DecodeListResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body []*ManagedAgentResponse
+				body ListResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
 				return nil, goahttp.ErrDecodingError("agents", "list", err)
 			}
-			for _, e := range body {
-				if e != nil {
-					if err2 := ValidateManagedAgentResponse(e); err2 != nil {
-						err = goa.MergeErrors(err, err2)
-					}
-				}
-			}
+			err = ValidateListResponseBody(&body)
 			if err != nil {
 				return nil, goahttp.ErrValidationError("agents", "list", err)
 			}
-			res := NewListManagedAgentOK(body)
+			res := NewListAgentsResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -3999,9 +4015,9 @@ func unmarshalAgentSessionResponseBodyToAgentsAgentSession(v *AgentSessionRespon
 	return res
 }
 
-// unmarshalManagedAgentResponseToAgentsManagedAgent builds a value of type
-// *agents.ManagedAgent from a value of type *ManagedAgentResponse.
-func unmarshalManagedAgentResponseToAgentsManagedAgent(v *ManagedAgentResponse) *agents.ManagedAgent {
+// unmarshalManagedAgentResponseBodyToAgentsManagedAgent builds a value of type
+// *agents.ManagedAgent from a value of type *ManagedAgentResponseBody.
+func unmarshalManagedAgentResponseBodyToAgentsManagedAgent(v *ManagedAgentResponseBody) *agents.ManagedAgent {
 	res := &agents.ManagedAgent{
 		ID:                          *v.ID,
 		OwnerUserID:                 *v.OwnerUserID,
@@ -4014,17 +4030,17 @@ func unmarshalManagedAgentResponseToAgentsManagedAgent(v *ManagedAgentResponse) 
 		UpdatedAt:                   *v.UpdatedAt,
 	}
 	if v.OwnerProfile != nil {
-		res.OwnerProfile = unmarshalAgentOwnerProfileResponseToAgentsAgentOwnerProfile(v.OwnerProfile)
+		res.OwnerProfile = unmarshalAgentOwnerProfileResponseBodyToAgentsAgentOwnerProfile(v.OwnerProfile)
 	}
-	res.Permissions = unmarshalAgentPermissionsResponseToAgentsAgentPermissions(v.Permissions)
+	res.Permissions = unmarshalAgentPermissionsResponseBodyToAgentsAgentPermissions(v.Permissions)
 
 	return res
 }
 
-// unmarshalAgentOwnerProfileResponseToAgentsAgentOwnerProfile builds a value
-// of type *agents.AgentOwnerProfile from a value of type
-// *AgentOwnerProfileResponse.
-func unmarshalAgentOwnerProfileResponseToAgentsAgentOwnerProfile(v *AgentOwnerProfileResponse) *agents.AgentOwnerProfile {
+// unmarshalAgentOwnerProfileResponseBodyToAgentsAgentOwnerProfile builds a
+// value of type *agents.AgentOwnerProfile from a value of type
+// *AgentOwnerProfileResponseBody.
+func unmarshalAgentOwnerProfileResponseBodyToAgentsAgentOwnerProfile(v *AgentOwnerProfileResponseBody) *agents.AgentOwnerProfile {
 	if v == nil {
 		return nil
 	}
@@ -4036,9 +4052,10 @@ func unmarshalAgentOwnerProfileResponseToAgentsAgentOwnerProfile(v *AgentOwnerPr
 	return res
 }
 
-// unmarshalAgentPermissionsResponseToAgentsAgentPermissions builds a value of
-// type *agents.AgentPermissions from a value of type *AgentPermissionsResponse.
-func unmarshalAgentPermissionsResponseToAgentsAgentPermissions(v *AgentPermissionsResponse) *agents.AgentPermissions {
+// unmarshalAgentPermissionsResponseBodyToAgentsAgentPermissions builds a value
+// of type *agents.AgentPermissions from a value of type
+// *AgentPermissionsResponseBody.
+func unmarshalAgentPermissionsResponseBodyToAgentsAgentPermissions(v *AgentPermissionsResponseBody) *agents.AgentPermissions {
 	res := &agents.AgentPermissions{
 		Read:      *v.Read,
 		Write:     *v.Write,
@@ -4114,35 +4131,6 @@ func marshalAgentPolicySelectorRequestBodyRequestBodyToAgentsAgentPolicySelector
 		ProjectID:      v.ProjectID,
 		ServerURL:      v.ServerURL,
 		ServerIdentity: v.ServerIdentity,
-	}
-
-	return res
-}
-
-// unmarshalAgentOwnerProfileResponseBodyToAgentsAgentOwnerProfile builds a
-// value of type *agents.AgentOwnerProfile from a value of type
-// *AgentOwnerProfileResponseBody.
-func unmarshalAgentOwnerProfileResponseBodyToAgentsAgentOwnerProfile(v *AgentOwnerProfileResponseBody) *agents.AgentOwnerProfile {
-	if v == nil {
-		return nil
-	}
-	res := &agents.AgentOwnerProfile{
-		DisplayName: *v.DisplayName,
-		PhotoURL:    v.PhotoURL,
-	}
-
-	return res
-}
-
-// unmarshalAgentPermissionsResponseBodyToAgentsAgentPermissions builds a value
-// of type *agents.AgentPermissions from a value of type
-// *AgentPermissionsResponseBody.
-func unmarshalAgentPermissionsResponseBodyToAgentsAgentPermissions(v *AgentPermissionsResponseBody) *agents.AgentPermissions {
-	res := &agents.AgentPermissions{
-		Read:      *v.Read,
-		Write:     *v.Write,
-		Authorize: *v.Authorize,
-		Transfer:  *v.Transfer,
 	}
 
 	return res

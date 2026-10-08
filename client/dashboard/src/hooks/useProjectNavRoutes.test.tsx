@@ -39,7 +39,11 @@ const routes = {
   explore: route("Explore", "explore"),
   deployments: route("Deployments", "deployments"),
   detectionRules: route("Detection Rules", "detection-rules"),
-  identities: route("Identities", "identities"),
+  identities: {
+    ...route("Identities", "identities"),
+    people: route("People", "identities/people"),
+    agents: route("Agents", "identities/agents"),
+  },
   environments: route("Environments", "environments"),
   home: route("Home", ""),
   insights: route("Insights", "insights"),
@@ -102,7 +106,9 @@ describe("useProjectNavRoutes", () => {
       testState.featureFlags[FEATURE_FLAGS.agentManagement] = { status };
       const { result } = renderHook(() => useProjectNavRoutes());
       expect(
-        result.current.some((entry) => entry.route === routes.agents),
+        result.current.some(
+          (entry) => entry.route === routes.identities.agents,
+        ),
       ).toBe(false);
     },
   );
@@ -117,13 +123,19 @@ describe("useProjectNavRoutes", () => {
     );
   });
 
-  it("includes Agent Identity for owners without requiring role grants", () => {
+  it("lists the two rosters and keeps the old agents page out of nav", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
-    const agents = result.current.find(
-      (entry) => entry.route === routes.agents,
-    );
 
-    expect(agents?.scope).toEqual([]);
+    expect(
+      result.current.find((entry) => entry.route === routes.agents),
+    ).toBeUndefined();
+    expect(
+      result.current.find((entry) => entry.route === routes.identities.people)
+        ?.scope,
+    ).toEqual(["project:read"]);
+    expect(
+      result.current.find((entry) => entry.route === routes.identities.agents),
+    ).toBeTruthy();
   });
 
   it("uses the selected project's read grant for MCP Sessions", () => {
@@ -141,8 +153,8 @@ describe("useProjectNavRoutes", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
     const navRoutes = result.current.map((entry) => entry.route);
     expect(navRoutes.slice(2, 6)).toEqual([
-      routes.identities,
-      routes.agents,
+      routes.identities.people,
+      routes.identities.agents,
       routes.mcpSessions,
       routes.remoteIdentityProviders,
     ]);

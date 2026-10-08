@@ -18,6 +18,12 @@ vi.mock("@/lib/dates", () => ({
   HumanizeDateTime: ({ date }: { date: Date }) => (
     <span>{date.toISOString()}</span>
   ),
+  // Absolute columns render through the shared formatters; the tests assert
+  // on the ISO string, so both shapes resolve to it here.
+  dateTimeFormatters: {
+    day: { format: (date: Date) => date.toISOString() },
+    full: { format: (date: Date) => date.toISOString() },
+  },
 }));
 
 const session: AgentSessionRow = {
@@ -62,7 +68,12 @@ describe("Agent sessions", () => {
       ],
     });
     expect(screen.getByText("Active")).toBeTruthy();
-    const expiry = document.querySelector("time");
+    // Created, last used and expiry all render <time>; the expiry is the one
+    // whose datetime is the refresh deadline.
+    const expiry = [...document.querySelectorAll("time")].find(
+      (node) =>
+        node.getAttribute("datetime") === refreshExpiresAt.toISOString(),
+    );
     expect(expiry?.getAttribute("datetime")).toBe(
       refreshExpiresAt.toISOString(),
     );
