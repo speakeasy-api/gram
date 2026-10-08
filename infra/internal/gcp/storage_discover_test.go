@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -145,6 +146,10 @@ func TestStorageSubscription_InvalidExternalConfiguration(t *testing.T) {
 	}{
 		{"missing attribute", "", []string{"region"}, "partition_attribute"},
 		{"reserved attribute", "googPartition", []string{"region"}, "partition_attribute"},
+		{"mixed-case reserved attribute", "GoogPartition", []string{"region"}, "partition_attribute"},
+		{"uppercase reserved attribute", "GOOGPartition", []string{"region"}, "partition_attribute"},
+		{"padded attribute", " partition ", []string{"region"}, "partition_attribute"},
+		{"oversized attribute", strings.Repeat("a", 257), []string{"region"}, "partition_attribute"},
 		{"missing keys", "partition", nil, "requires 1-8"},
 		{"too many keys", "partition", []string{"a", "b", "c", "d", "e", "f", "g", "h", "i"}, "requires 1-8"},
 		{"duplicate", "partition", []string{"region", "region"}, "duplicate partition key"},

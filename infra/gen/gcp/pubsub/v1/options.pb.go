@@ -1068,15 +1068,21 @@ type StorageSubscriptionOptions_builder struct {
 	Topic *string
 	// Optional logical bucket name, defaulting to "lake". Deployment resolves the
 	// globally unique GCS name and supplies the same mapping to Config Connector
-	// and the Go runner.
+	// and the Go runner. Names must match [a-z][a-z0-9-]{1,38}[a-z0-9]: 3-40
+	// lowercase letters, digits or hyphens, starting with a letter and ending with
+	// a letter or digit. An explicitly empty name is invalid.
 	Bucket       *string
 	Codec        *StorageCodec
 	Partitioning *StoragePartitioning
 	// Required only for HIVE_EXTERNAL: Pub/Sub attribute containing a relative
 	// key=value/key=value suffix. Missing or malformed values are acked, discarded
 	// and counted by the runner, rather than retried or dead-lettered.
+	// The attribute key must be nonempty, at most 256 bytes, without surrounding
+	// whitespace or the reserved "goog" prefix (case-insensitive).
 	PartitionAttribute *string
 	// Required only for HIVE_EXTERNAL: exact ordered keys in the attribute value.
+	// Declare 1-8 unique keys matching [a-z][a-z0-9_]{0,62}. Keys must not collide
+	// case-insensitively with top-level payload column names.
 	// Keys are preserved verbatim, without the built-in modes' part__ prefix.
 	// Changing these keys after writing data requires a new marker/storage prefix.
 	PartitionKeys []string

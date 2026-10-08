@@ -83,8 +83,8 @@ func desiredStorageSubscription(message protoreflect.MessageDescriptor, opts *pu
 	}
 	if partitioning == pubsubv1.StoragePartitioning_STORAGE_PARTITIONING_HIVE_EXTERNAL {
 		attribute := opts.GetPartitionAttribute()
-		if attribute == "" || strings.TrimSpace(attribute) != attribute || strings.HasPrefix(attribute, "goog") || len(attribute) > 256 {
-			return DesiredSubscription{}, fmt.Errorf("partition_attribute must be a nonempty Pub/Sub attribute key of at most 256 bytes without surrounding whitespace or the reserved goog prefix")
+		if attribute == "" || strings.TrimSpace(attribute) != attribute || strings.HasPrefix(strings.ToLower(attribute), "goog") || len(attribute) > 256 {
+			return DesiredSubscription{}, fmt.Errorf("partition_attribute must be a nonempty Pub/Sub attribute key of at most 256 bytes without surrounding whitespace or the case-insensitive reserved goog prefix")
 		}
 		keys := opts.GetPartitionKeys()
 		if len(keys) == 0 || len(keys) > maxPartitionKeys {

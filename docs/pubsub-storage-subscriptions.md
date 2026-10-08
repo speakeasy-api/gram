@@ -74,6 +74,9 @@ Keys must match `[a-z][a-z0-9_]{0,62}`; declare between one and eight unique key
 Keys cannot collide case-insensitively with top-level payload columns. External
 configuration fields are rejected for built-in partition modes.
 
+The `partition_attribute` key must be nonempty, at most 256 bytes, and have no
+surrounding whitespace. It must not start with `goog`, case-insensitively.
+
 The runtime layer will enforce the value grammar and size limits and permanently
 ack/drop deliveries with missing or malformed routing metadata, incrementing a
 finite-reason drop counter. Such deliveries do not retry or enter the DLQ.
