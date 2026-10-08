@@ -64,7 +64,7 @@ var (
 )
 
 // stdioBridge serves MCP Streamable HTTP by spawning one stdio MCP server
-// process per MCP session. Messages are relayed verbatim so Gram's proxy sees
+// process per MCP session. Messages are relayed verbatim so the upstream proxy sees
 // the server's own JSON-RPC payloads.
 type stdioBridge struct {
 	command     string
