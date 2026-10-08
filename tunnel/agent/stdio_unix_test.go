@@ -29,3 +29,16 @@ func TestStdioBridgeStopsServerProcessGroup(t *testing.T) {
 		return errors.Is(syscall.Kill(-pgid, 0), syscall.ESRCH)
 	}, 20*time.Second, 100*time.Millisecond, "background children of the server must be stopped too")
 }
+
+func TestStdioBridgeCloseWaitsForTermIgnoringDescendants(t *testing.T) {
+	t.Parallel()
+	// The shell exits as soon as stdin closes, leaving a child that ignores
+	// SIGTERM; only SIGKILL stops it.
+	_, a := newStdioTestServerWithCommand(t, "(trap '' TERM; exec sleep 300) & read ignored", 0)
+	sess, err := a.stdio.start()
+	require.NoError(t, err)
+	pgid := sess.cmd.Process.Pid
+
+	a.stdio.Close()
+	require.ErrorIs(t, syscall.Kill(-pgid, 0), syscall.ESRCH, "Close must not return while the server's process group survives")
+}
