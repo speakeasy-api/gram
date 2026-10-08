@@ -46,6 +46,7 @@ func FixtureOpenArchive() storage.Definition {
 			if err := proto.Unmarshal(data, m); err != nil {
 				return nil, fmt.Errorf("decode storage payload: %w", err)
 			}
+
 			return EncodeFixtureOpenArchive(m, meta), nil
 		}}
 }
@@ -53,6 +54,7 @@ func FixtureOpenArchive() storage.Definition {
 // EncodeFixtureOpenArchive maps typed protobuf accessors to explicit Parquet levels.
 func EncodeFixtureOpenArchive(m *open.Event, meta storage.Metadata) parquet_go.Row {
 	var columns [11][]parquet_go.Value
+
 	var choice1 int32
 	_, has2 := m.GetChoice().(*open.Event_Text)
 	if has2 {
@@ -67,11 +69,16 @@ func EncodeFixtureOpenArchive(m *open.Event, meta storage.Metadata) parquet_go.R
 	} else {
 		columns[0] = append(columns[0], parquet_go.NullValue().Level(0, 0, 0))
 	}
+
 	columns[1] = append(columns[1], parquet_go.ByteArrayValue([]byte(meta.MessageID)).Level(0, 0, 1))
+
 	columns[2] = append(columns[2], parquet_go.Int64Value(meta.ReceivedMicros).Level(0, 0, 2))
+
 	columns[3] = append(columns[3], parquet_go.ByteArrayValue([]byte("fixture-open-event")).Level(0, 0, 3))
+
 	if m != nil && m.Child != nil {
 		columns[4] = append(columns[4], parquet_go.BooleanValue(true).Level(0, 1, 4))
+
 		if m.GetChild() != nil && m.GetChild().Value != nil {
 			columns[5] = append(columns[5], parquet_go.ByteArrayValue([]byte(m.GetChild().GetValue())).Level(0, 2, 5))
 		} else {
@@ -81,9 +88,11 @@ func EncodeFixtureOpenArchive(m *open.Event, meta storage.Metadata) parquet_go.R
 		columns[4] = append(columns[4], parquet_go.NullValue().Level(0, 0, 4))
 		columns[5] = append(columns[5], parquet_go.NullValue().Level(0, 0, 5))
 	}
+
 	_, has4 := m.GetChoice().(*open.Event_ChosenChild)
 	if has4 {
 		columns[6] = append(columns[6], parquet_go.BooleanValue(true).Level(0, 1, 6))
+
 		if m.GetChosenChild() != nil && m.GetChosenChild().Value != nil {
 			columns[7] = append(columns[7], parquet_go.ByteArrayValue([]byte(m.GetChosenChild().GetValue())).Level(0, 2, 7))
 		} else {
@@ -93,18 +102,22 @@ func EncodeFixtureOpenArchive(m *open.Event, meta storage.Metadata) parquet_go.R
 		columns[6] = append(columns[6], parquet_go.NullValue().Level(0, 0, 6))
 		columns[7] = append(columns[7], parquet_go.NullValue().Level(0, 0, 7))
 	}
+
 	columns[8] = append(columns[8], parquet_go.Int32Value(int32(m.GetImplicit())).Level(0, 0, 8))
+
 	if m != nil && m.OptionalValue != nil {
 		columns[9] = append(columns[9], parquet_go.Int64Value(int64(m.GetOptionalValue())).Level(0, 1, 9))
 	} else {
 		columns[9] = append(columns[9], parquet_go.NullValue().Level(0, 0, 9))
 	}
+
 	_, has5 := m.GetChoice().(*open.Event_Text)
 	if has5 {
 		columns[10] = append(columns[10], parquet_go.ByteArrayValue([]byte(m.GetText())).Level(0, 1, 10))
 	} else {
 		columns[10] = append(columns[10], parquet_go.NullValue().Level(0, 0, 10))
 	}
+
 	return parquet_go.MakeRow(columns[:]...)
 }
 
@@ -176,6 +189,7 @@ func FixtureV1Archive() storage.Definition {
 			if err := proto.Unmarshal(data, m); err != nil {
 				return nil, fmt.Errorf("decode storage payload: %w", err)
 			}
+
 			return EncodeFixtureV1Archive(m, meta), nil
 		}}
 }
@@ -183,6 +197,7 @@ func FixtureV1Archive() storage.Definition {
 // EncodeFixtureV1Archive maps typed protobuf accessors to explicit Parquet levels.
 func EncodeFixtureV1Archive(m *v11.Event, meta storage.Metadata) parquet_go.Row {
 	var columns [41][]parquet_go.Value
+
 	var choice1 int32
 	if m.HasText() {
 		choice1 = 16
@@ -201,9 +216,13 @@ func EncodeFixtureV1Archive(m *v11.Event, meta storage.Metadata) parquet_go.Row 
 	} else {
 		columns[0] = append(columns[0], parquet_go.NullValue().Level(0, 0, 0))
 	}
+
 	columns[1] = append(columns[1], parquet_go.ByteArrayValue([]byte(meta.MessageID)).Level(0, 0, 1))
+
 	columns[2] = append(columns[2], parquet_go.Int64Value(meta.ReceivedMicros).Level(0, 0, 2))
+
 	columns[3] = append(columns[3], parquet_go.ByteArrayValue([]byte("fixture-v1-event")).Level(0, 0, 3))
+
 	values2 := m.GetAttributes()
 	if len(values2) == 0 {
 		columns[4] = append(columns[4], parquet_go.NullValue().Level(0, 0, 4))
@@ -220,6 +239,7 @@ func EncodeFixtureV1Archive(m *v11.Event, meta storage.Metadata) parquet_go.Row 
 			}
 			columns[4] = append(columns[4], parquet_go.ByteArrayValue([]byte(key6)).Level(rep4, 1, 4))
 			columns[5] = append(columns[5], parquet_go.BooleanValue(true).Level(rep4, 1, 5))
+
 			values7 := values2[key6].GetNumbers()
 			if len(values7) == 0 {
 				columns[6] = append(columns[6], parquet_go.NullValue().Level(rep4, 1, 6))
@@ -232,6 +252,7 @@ func EncodeFixtureV1Archive(m *v11.Event, meta storage.Metadata) parquet_go.Row 
 					columns[6] = append(columns[6], parquet_go.Int32Value(int32(values7[i8])).Level(rep9, 2, 6))
 				}
 			}
+
 			if values2[key6].HasValue() {
 				columns[7] = append(columns[7], parquet_go.ByteArrayValue([]byte(values2[key6].GetValue())).Level(rep4, 2, 7))
 			} else {
@@ -239,8 +260,10 @@ func EncodeFixtureV1Archive(m *v11.Event, meta storage.Metadata) parquet_go.Row 
 			}
 		}
 	}
+
 	if m.HasChild() {
 		columns[8] = append(columns[8], parquet_go.BooleanValue(true).Level(0, 1, 8))
+
 		values10 := m.GetChild().GetNumbers()
 		if len(values10) == 0 {
 			columns[9] = append(columns[9], parquet_go.NullValue().Level(0, 1, 9))
@@ -253,6 +276,7 @@ func EncodeFixtureV1Archive(m *v11.Event, meta storage.Metadata) parquet_go.Row 
 				columns[9] = append(columns[9], parquet_go.Int32Value(int32(values10[i11])).Level(rep12, 2, 9))
 			}
 		}
+
 		if m.GetChild().HasValue() {
 			columns[10] = append(columns[10], parquet_go.ByteArrayValue([]byte(m.GetChild().GetValue())).Level(0, 2, 10))
 		} else {
@@ -263,6 +287,7 @@ func EncodeFixtureV1Archive(m *v11.Event, meta storage.Metadata) parquet_go.Row 
 		columns[9] = append(columns[9], parquet_go.NullValue().Level(0, 0, 9))
 		columns[10] = append(columns[10], parquet_go.NullValue().Level(0, 0, 10))
 	}
+
 	values13 := m.GetChildren()
 	if len(values13) == 0 {
 		columns[11] = append(columns[11], parquet_go.NullValue().Level(0, 0, 11))
@@ -275,6 +300,7 @@ func EncodeFixtureV1Archive(m *v11.Event, meta storage.Metadata) parquet_go.Row 
 				rep15 = 1
 			}
 			columns[11] = append(columns[11], parquet_go.BooleanValue(true).Level(rep15, 1, 11))
+
 			values16 := values13[i14].GetNumbers()
 			if len(values16) == 0 {
 				columns[12] = append(columns[12], parquet_go.NullValue().Level(rep15, 1, 12))
@@ -287,6 +313,7 @@ func EncodeFixtureV1Archive(m *v11.Event, meta storage.Metadata) parquet_go.Row 
 					columns[12] = append(columns[12], parquet_go.Int32Value(int32(values16[i17])).Level(rep18, 2, 12))
 				}
 			}
+
 			if values13[i14].HasValue() {
 				columns[13] = append(columns[13], parquet_go.ByteArrayValue([]byte(values13[i14].GetValue())).Level(rep15, 2, 13))
 			} else {
@@ -294,8 +321,10 @@ func EncodeFixtureV1Archive(m *v11.Event, meta storage.Metadata) parquet_go.Row 
 			}
 		}
 	}
+
 	if m.HasChosenChild() {
 		columns[14] = append(columns[14], parquet_go.BooleanValue(true).Level(0, 1, 14))
+
 		values19 := m.GetChosenChild().GetNumbers()
 		if len(values19) == 0 {
 			columns[15] = append(columns[15], parquet_go.NullValue().Level(0, 1, 15))
@@ -308,6 +337,7 @@ func EncodeFixtureV1Archive(m *v11.Event, meta storage.Metadata) parquet_go.Row 
 				columns[15] = append(columns[15], parquet_go.Int32Value(int32(values19[i20])).Level(rep21, 2, 15))
 			}
 		}
+
 		if m.GetChosenChild().HasValue() {
 			columns[16] = append(columns[16], parquet_go.ByteArrayValue([]byte(m.GetChosenChild().GetValue())).Level(0, 2, 16))
 		} else {
@@ -318,16 +348,19 @@ func EncodeFixtureV1Archive(m *v11.Event, meta storage.Metadata) parquet_go.Row 
 		columns[15] = append(columns[15], parquet_go.NullValue().Level(0, 0, 15))
 		columns[16] = append(columns[16], parquet_go.NullValue().Level(0, 0, 16))
 	}
+
 	if m.HasChosenData() {
 		columns[17] = append(columns[17], parquet_go.ByteArrayValue(m.GetChosenData()).Level(0, 1, 17))
 	} else {
 		columns[17] = append(columns[17], parquet_go.NullValue().Level(0, 0, 17))
 	}
+
 	if m.HasData() {
 		columns[18] = append(columns[18], parquet_go.ByteArrayValue(m.GetData()).Level(0, 1, 18))
 	} else {
 		columns[18] = append(columns[18], parquet_go.NullValue().Level(0, 0, 18))
 	}
+
 	values22 := m.GetEmpties()
 	if len(values22) == 0 {
 		columns[19] = append(columns[19], parquet_go.NullValue().Level(0, 0, 19))
@@ -340,26 +373,31 @@ func EncodeFixtureV1Archive(m *v11.Event, meta storage.Metadata) parquet_go.Row 
 			columns[19] = append(columns[19], parquet_go.BooleanValue(true).Level(rep24, 1, 19))
 		}
 	}
+
 	if m.HasEmpty() {
 		columns[20] = append(columns[20], parquet_go.BooleanValue(true).Level(0, 1, 20))
 	} else {
 		columns[20] = append(columns[20], parquet_go.NullValue().Level(0, 0, 20))
 	}
+
 	if m.HasFixed32() {
 		columns[21] = append(columns[21], parquet_go.Int32Value(int32(m.GetFixed32())).Level(0, 1, 21))
 	} else {
 		columns[21] = append(columns[21], parquet_go.NullValue().Level(0, 0, 21))
 	}
+
 	if m.HasFixed64() {
 		columns[22] = append(columns[22], parquet_go.Int64Value(int64(m.GetFixed64())).Level(0, 1, 22))
 	} else {
 		columns[22] = append(columns[22], parquet_go.NullValue().Level(0, 0, 22))
 	}
+
 	if m.HasFlag() {
 		columns[23] = append(columns[23], parquet_go.BooleanValue(m.GetFlag()).Level(0, 1, 23))
 	} else {
 		columns[23] = append(columns[23], parquet_go.NullValue().Level(0, 0, 23))
 	}
+
 	values25 := m.GetFlags()
 	if len(values25) == 0 {
 		columns[24] = append(columns[24], parquet_go.NullValue().Level(0, 0, 24))
@@ -384,47 +422,57 @@ func EncodeFixtureV1Archive(m *v11.Event, meta storage.Metadata) parquet_go.Row 
 			columns[25] = append(columns[25], parquet_go.ByteArrayValue([]byte(values25[key29])).Level(rep27, 1, 25))
 		}
 	}
+
 	if m.HasFraction() {
 		columns[26] = append(columns[26], parquet_go.DoubleValue(m.GetFraction()).Level(0, 1, 26))
 	} else {
 		columns[26] = append(columns[26], parquet_go.NullValue().Level(0, 0, 26))
 	}
+
 	if m.HasId() {
 		columns[27] = append(columns[27], parquet_go.ByteArrayValue([]byte(m.GetId())).Level(0, 1, 27))
 	} else {
 		columns[27] = append(columns[27], parquet_go.NullValue().Level(0, 0, 27))
 	}
+
 	columns[28] = append(columns[28], parquet_go.Int32Value(int32(m.GetImplicit())).Level(0, 0, 28))
+
 	if m.HasKind() {
 		columns[29] = append(columns[29], parquet_go.Int32Value(int32(m.GetKind())).Level(0, 1, 29))
 	} else {
 		columns[29] = append(columns[29], parquet_go.NullValue().Level(0, 0, 29))
 	}
+
 	if m.HasNumber() {
 		columns[30] = append(columns[30], parquet_go.Int32Value(int32(m.GetNumber())).Level(0, 1, 30))
 	} else {
 		columns[30] = append(columns[30], parquet_go.NullValue().Level(0, 0, 30))
 	}
+
 	if m.HasSigned() {
 		columns[31] = append(columns[31], parquet_go.Int64Value(int64(m.GetSigned())).Level(0, 1, 31))
 	} else {
 		columns[31] = append(columns[31], parquet_go.NullValue().Level(0, 0, 31))
 	}
+
 	if m.HasSignedFixed32() {
 		columns[32] = append(columns[32], parquet_go.Int32Value(int32(m.GetSignedFixed32())).Level(0, 1, 32))
 	} else {
 		columns[32] = append(columns[32], parquet_go.NullValue().Level(0, 0, 32))
 	}
+
 	if m.HasSignedFixed64() {
 		columns[33] = append(columns[33], parquet_go.Int64Value(int64(m.GetSignedFixed64())).Level(0, 1, 33))
 	} else {
 		columns[33] = append(columns[33], parquet_go.NullValue().Level(0, 0, 33))
 	}
+
 	if m.HasSmallFraction() {
 		columns[34] = append(columns[34], parquet_go.FloatValue(m.GetSmallFraction()).Level(0, 1, 34))
 	} else {
 		columns[34] = append(columns[34], parquet_go.NullValue().Level(0, 0, 34))
 	}
+
 	values30 := m.GetTags()
 	if len(values30) == 0 {
 		columns[35] = append(columns[35], parquet_go.NullValue().Level(0, 0, 35))
@@ -437,31 +485,37 @@ func EncodeFixtureV1Archive(m *v11.Event, meta storage.Metadata) parquet_go.Row 
 			columns[35] = append(columns[35], parquet_go.ByteArrayValue([]byte(values30[i31])).Level(rep32, 1, 35))
 		}
 	}
+
 	if m.HasText() {
 		columns[36] = append(columns[36], parquet_go.ByteArrayValue([]byte(m.GetText())).Level(0, 1, 36))
 	} else {
 		columns[36] = append(columns[36], parquet_go.NullValue().Level(0, 0, 36))
 	}
+
 	if m.HasUnsigned() {
 		columns[37] = append(columns[37], parquet_go.Int64Value(int64(m.GetUnsigned())).Level(0, 1, 37))
 	} else {
 		columns[37] = append(columns[37], parquet_go.NullValue().Level(0, 0, 37))
 	}
+
 	if m.HasUnsigned32() {
 		columns[38] = append(columns[38], parquet_go.Int32Value(int32(m.GetUnsigned32())).Level(0, 1, 38))
 	} else {
 		columns[38] = append(columns[38], parquet_go.NullValue().Level(0, 0, 38))
 	}
+
 	if m.HasZigzag32() {
 		columns[39] = append(columns[39], parquet_go.Int32Value(int32(m.GetZigzag32())).Level(0, 1, 39))
 	} else {
 		columns[39] = append(columns[39], parquet_go.NullValue().Level(0, 0, 39))
 	}
+
 	if m.HasZigzag64() {
 		columns[40] = append(columns[40], parquet_go.Int64Value(int64(m.GetZigzag64())).Level(0, 1, 40))
 	} else {
 		columns[40] = append(columns[40], parquet_go.NullValue().Level(0, 0, 40))
 	}
+
 	return parquet_go.MakeRow(columns[:]...)
 }
 
@@ -541,6 +595,7 @@ func FixtureV2Archive() storage.Definition {
 			if err := proto.Unmarshal(data, m); err != nil {
 				return nil, fmt.Errorf("decode storage payload: %w", err)
 			}
+
 			return EncodeFixtureV2Archive(m, meta), nil
 		}}
 }
@@ -548,6 +603,7 @@ func FixtureV2Archive() storage.Definition {
 // EncodeFixtureV2Archive maps typed protobuf accessors to explicit Parquet levels.
 func EncodeFixtureV2Archive(m *v2.Event, meta storage.Metadata) parquet_go.Row {
 	var columns [49][]parquet_go.Value
+
 	var choice1 int32
 	if m.HasText() {
 		choice1 = 16
@@ -569,9 +625,13 @@ func EncodeFixtureV2Archive(m *v2.Event, meta storage.Metadata) parquet_go.Row {
 	} else {
 		columns[0] = append(columns[0], parquet_go.NullValue().Level(0, 0, 0))
 	}
+
 	columns[1] = append(columns[1], parquet_go.ByteArrayValue([]byte(meta.MessageID)).Level(0, 0, 1))
+
 	columns[2] = append(columns[2], parquet_go.Int64Value(meta.ReceivedMicros).Level(0, 0, 2))
+
 	columns[3] = append(columns[3], parquet_go.ByteArrayValue([]byte("fixture-v2-event")).Level(0, 0, 3))
+
 	values2 := m.GetAttributes()
 	if len(values2) == 0 {
 		columns[4] = append(columns[4], parquet_go.NullValue().Level(0, 0, 4))
@@ -589,11 +649,13 @@ func EncodeFixtureV2Archive(m *v2.Event, meta storage.Metadata) parquet_go.Row {
 			}
 			columns[4] = append(columns[4], parquet_go.ByteArrayValue([]byte(key6)).Level(rep4, 1, 4))
 			columns[5] = append(columns[5], parquet_go.BooleanValue(true).Level(rep4, 1, 5))
+
 			if values2[key6].HasNewValue() {
 				columns[6] = append(columns[6], parquet_go.ByteArrayValue([]byte(values2[key6].GetNewValue())).Level(rep4, 2, 6))
 			} else {
 				columns[6] = append(columns[6], parquet_go.NullValue().Level(rep4, 1, 6))
 			}
+
 			values7 := values2[key6].GetNumbers()
 			if len(values7) == 0 {
 				columns[7] = append(columns[7], parquet_go.NullValue().Level(rep4, 1, 7))
@@ -606,6 +668,7 @@ func EncodeFixtureV2Archive(m *v2.Event, meta storage.Metadata) parquet_go.Row {
 					columns[7] = append(columns[7], parquet_go.Int32Value(int32(values7[i8])).Level(rep9, 2, 7))
 				}
 			}
+
 			if values2[key6].HasValue() {
 				columns[8] = append(columns[8], parquet_go.ByteArrayValue([]byte(values2[key6].GetValue())).Level(rep4, 2, 8))
 			} else {
@@ -613,13 +676,16 @@ func EncodeFixtureV2Archive(m *v2.Event, meta storage.Metadata) parquet_go.Row {
 			}
 		}
 	}
+
 	if m.HasChild() {
 		columns[9] = append(columns[9], parquet_go.BooleanValue(true).Level(0, 1, 9))
+
 		if m.GetChild().HasNewValue() {
 			columns[10] = append(columns[10], parquet_go.ByteArrayValue([]byte(m.GetChild().GetNewValue())).Level(0, 2, 10))
 		} else {
 			columns[10] = append(columns[10], parquet_go.NullValue().Level(0, 1, 10))
 		}
+
 		values10 := m.GetChild().GetNumbers()
 		if len(values10) == 0 {
 			columns[11] = append(columns[11], parquet_go.NullValue().Level(0, 1, 11))
@@ -632,6 +698,7 @@ func EncodeFixtureV2Archive(m *v2.Event, meta storage.Metadata) parquet_go.Row {
 				columns[11] = append(columns[11], parquet_go.Int32Value(int32(values10[i11])).Level(rep12, 2, 11))
 			}
 		}
+
 		if m.GetChild().HasValue() {
 			columns[12] = append(columns[12], parquet_go.ByteArrayValue([]byte(m.GetChild().GetValue())).Level(0, 2, 12))
 		} else {
@@ -643,6 +710,7 @@ func EncodeFixtureV2Archive(m *v2.Event, meta storage.Metadata) parquet_go.Row {
 		columns[11] = append(columns[11], parquet_go.NullValue().Level(0, 0, 11))
 		columns[12] = append(columns[12], parquet_go.NullValue().Level(0, 0, 12))
 	}
+
 	values13 := m.GetChildren()
 	if len(values13) == 0 {
 		columns[13] = append(columns[13], parquet_go.NullValue().Level(0, 0, 13))
@@ -656,11 +724,13 @@ func EncodeFixtureV2Archive(m *v2.Event, meta storage.Metadata) parquet_go.Row {
 				rep15 = 1
 			}
 			columns[13] = append(columns[13], parquet_go.BooleanValue(true).Level(rep15, 1, 13))
+
 			if values13[i14].HasNewValue() {
 				columns[14] = append(columns[14], parquet_go.ByteArrayValue([]byte(values13[i14].GetNewValue())).Level(rep15, 2, 14))
 			} else {
 				columns[14] = append(columns[14], parquet_go.NullValue().Level(rep15, 1, 14))
 			}
+
 			values16 := values13[i14].GetNumbers()
 			if len(values16) == 0 {
 				columns[15] = append(columns[15], parquet_go.NullValue().Level(rep15, 1, 15))
@@ -673,6 +743,7 @@ func EncodeFixtureV2Archive(m *v2.Event, meta storage.Metadata) parquet_go.Row {
 					columns[15] = append(columns[15], parquet_go.Int32Value(int32(values16[i17])).Level(rep18, 2, 15))
 				}
 			}
+
 			if values13[i14].HasValue() {
 				columns[16] = append(columns[16], parquet_go.ByteArrayValue([]byte(values13[i14].GetValue())).Level(rep15, 2, 16))
 			} else {
@@ -680,13 +751,16 @@ func EncodeFixtureV2Archive(m *v2.Event, meta storage.Metadata) parquet_go.Row {
 			}
 		}
 	}
+
 	if m.HasChosenChild() {
 		columns[17] = append(columns[17], parquet_go.BooleanValue(true).Level(0, 1, 17))
+
 		if m.GetChosenChild().HasNewValue() {
 			columns[18] = append(columns[18], parquet_go.ByteArrayValue([]byte(m.GetChosenChild().GetNewValue())).Level(0, 2, 18))
 		} else {
 			columns[18] = append(columns[18], parquet_go.NullValue().Level(0, 1, 18))
 		}
+
 		values19 := m.GetChosenChild().GetNumbers()
 		if len(values19) == 0 {
 			columns[19] = append(columns[19], parquet_go.NullValue().Level(0, 1, 19))
@@ -699,6 +773,7 @@ func EncodeFixtureV2Archive(m *v2.Event, meta storage.Metadata) parquet_go.Row {
 				columns[19] = append(columns[19], parquet_go.Int32Value(int32(values19[i20])).Level(rep21, 2, 19))
 			}
 		}
+
 		if m.GetChosenChild().HasValue() {
 			columns[20] = append(columns[20], parquet_go.ByteArrayValue([]byte(m.GetChosenChild().GetValue())).Level(0, 2, 20))
 		} else {
@@ -710,16 +785,19 @@ func EncodeFixtureV2Archive(m *v2.Event, meta storage.Metadata) parquet_go.Row {
 		columns[19] = append(columns[19], parquet_go.NullValue().Level(0, 0, 19))
 		columns[20] = append(columns[20], parquet_go.NullValue().Level(0, 0, 20))
 	}
+
 	if m.HasChosenData() {
 		columns[21] = append(columns[21], parquet_go.ByteArrayValue(m.GetChosenData()).Level(0, 1, 21))
 	} else {
 		columns[21] = append(columns[21], parquet_go.NullValue().Level(0, 0, 21))
 	}
+
 	if m.HasData() {
 		columns[22] = append(columns[22], parquet_go.ByteArrayValue(m.GetData()).Level(0, 1, 22))
 	} else {
 		columns[22] = append(columns[22], parquet_go.NullValue().Level(0, 0, 22))
 	}
+
 	values22 := m.GetEmpties()
 	if len(values22) == 0 {
 		columns[23] = append(columns[23], parquet_go.NullValue().Level(0, 0, 23))
@@ -731,6 +809,7 @@ func EncodeFixtureV2Archive(m *v2.Event, meta storage.Metadata) parquet_go.Row {
 				rep24 = 1
 			}
 			columns[23] = append(columns[23], parquet_go.BooleanValue(true).Level(rep24, 1, 23))
+
 			if values22[i23].HasNewValue() {
 				columns[24] = append(columns[24], parquet_go.ByteArrayValue([]byte(values22[i23].GetNewValue())).Level(rep24, 2, 24))
 			} else {
@@ -738,8 +817,10 @@ func EncodeFixtureV2Archive(m *v2.Event, meta storage.Metadata) parquet_go.Row {
 			}
 		}
 	}
+
 	if m.HasEmpty() {
 		columns[25] = append(columns[25], parquet_go.BooleanValue(true).Level(0, 1, 25))
+
 		if m.GetEmpty().HasNewValue() {
 			columns[26] = append(columns[26], parquet_go.ByteArrayValue([]byte(m.GetEmpty().GetNewValue())).Level(0, 2, 26))
 		} else {
@@ -749,21 +830,25 @@ func EncodeFixtureV2Archive(m *v2.Event, meta storage.Metadata) parquet_go.Row {
 		columns[25] = append(columns[25], parquet_go.NullValue().Level(0, 0, 25))
 		columns[26] = append(columns[26], parquet_go.NullValue().Level(0, 0, 26))
 	}
+
 	if m.HasFixed32() {
 		columns[27] = append(columns[27], parquet_go.Int32Value(int32(m.GetFixed32())).Level(0, 1, 27))
 	} else {
 		columns[27] = append(columns[27], parquet_go.NullValue().Level(0, 0, 27))
 	}
+
 	if m.HasFixed64() {
 		columns[28] = append(columns[28], parquet_go.Int64Value(int64(m.GetFixed64())).Level(0, 1, 28))
 	} else {
 		columns[28] = append(columns[28], parquet_go.NullValue().Level(0, 0, 28))
 	}
+
 	if m.HasFlag() {
 		columns[29] = append(columns[29], parquet_go.BooleanValue(m.GetFlag()).Level(0, 1, 29))
 	} else {
 		columns[29] = append(columns[29], parquet_go.NullValue().Level(0, 0, 29))
 	}
+
 	values25 := m.GetFlags()
 	if len(values25) == 0 {
 		columns[30] = append(columns[30], parquet_go.NullValue().Level(0, 0, 30))
@@ -788,57 +873,69 @@ func EncodeFixtureV2Archive(m *v2.Event, meta storage.Metadata) parquet_go.Row {
 			columns[31] = append(columns[31], parquet_go.ByteArrayValue([]byte(values25[key29])).Level(rep27, 1, 31))
 		}
 	}
+
 	if m.HasFraction() {
 		columns[32] = append(columns[32], parquet_go.DoubleValue(m.GetFraction()).Level(0, 1, 32))
 	} else {
 		columns[32] = append(columns[32], parquet_go.NullValue().Level(0, 0, 32))
 	}
+
 	if m.HasId() {
 		columns[33] = append(columns[33], parquet_go.ByteArrayValue([]byte(m.GetId())).Level(0, 1, 33))
 	} else {
 		columns[33] = append(columns[33], parquet_go.NullValue().Level(0, 0, 33))
 	}
+
 	columns[34] = append(columns[34], parquet_go.Int32Value(int32(m.GetImplicit())).Level(0, 0, 34))
+
 	if m.HasKind() {
 		columns[35] = append(columns[35], parquet_go.Int32Value(int32(m.GetKind())).Level(0, 1, 35))
 	} else {
 		columns[35] = append(columns[35], parquet_go.NullValue().Level(0, 0, 35))
 	}
+
 	if m.HasNewChoice() {
 		columns[36] = append(columns[36], parquet_go.BooleanValue(m.GetNewChoice()).Level(0, 1, 36))
 	} else {
 		columns[36] = append(columns[36], parquet_go.NullValue().Level(0, 0, 36))
 	}
+
 	if m.HasNewField() {
 		columns[37] = append(columns[37], parquet_go.BooleanValue(m.GetNewField()).Level(0, 1, 37))
 	} else {
 		columns[37] = append(columns[37], parquet_go.NullValue().Level(0, 0, 37))
 	}
+
 	if m.HasNumber() {
 		columns[38] = append(columns[38], parquet_go.Int32Value(int32(m.GetNumber())).Level(0, 1, 38))
 	} else {
 		columns[38] = append(columns[38], parquet_go.NullValue().Level(0, 0, 38))
 	}
+
 	if m.HasSigned() {
 		columns[39] = append(columns[39], parquet_go.Int64Value(int64(m.GetSigned())).Level(0, 1, 39))
 	} else {
 		columns[39] = append(columns[39], parquet_go.NullValue().Level(0, 0, 39))
 	}
+
 	if m.HasSignedFixed32() {
 		columns[40] = append(columns[40], parquet_go.Int32Value(int32(m.GetSignedFixed32())).Level(0, 1, 40))
 	} else {
 		columns[40] = append(columns[40], parquet_go.NullValue().Level(0, 0, 40))
 	}
+
 	if m.HasSignedFixed64() {
 		columns[41] = append(columns[41], parquet_go.Int64Value(int64(m.GetSignedFixed64())).Level(0, 1, 41))
 	} else {
 		columns[41] = append(columns[41], parquet_go.NullValue().Level(0, 0, 41))
 	}
+
 	if m.HasSmallFraction() {
 		columns[42] = append(columns[42], parquet_go.FloatValue(m.GetSmallFraction()).Level(0, 1, 42))
 	} else {
 		columns[42] = append(columns[42], parquet_go.NullValue().Level(0, 0, 42))
 	}
+
 	values30 := m.GetTags()
 	if len(values30) == 0 {
 		columns[43] = append(columns[43], parquet_go.NullValue().Level(0, 0, 43))
@@ -851,30 +948,36 @@ func EncodeFixtureV2Archive(m *v2.Event, meta storage.Metadata) parquet_go.Row {
 			columns[43] = append(columns[43], parquet_go.ByteArrayValue([]byte(values30[i31])).Level(rep32, 1, 43))
 		}
 	}
+
 	if m.HasText() {
 		columns[44] = append(columns[44], parquet_go.ByteArrayValue([]byte(m.GetText())).Level(0, 1, 44))
 	} else {
 		columns[44] = append(columns[44], parquet_go.NullValue().Level(0, 0, 44))
 	}
+
 	if m.HasUnsigned() {
 		columns[45] = append(columns[45], parquet_go.Int64Value(int64(m.GetUnsigned())).Level(0, 1, 45))
 	} else {
 		columns[45] = append(columns[45], parquet_go.NullValue().Level(0, 0, 45))
 	}
+
 	if m.HasUnsigned32() {
 		columns[46] = append(columns[46], parquet_go.Int32Value(int32(m.GetUnsigned32())).Level(0, 1, 46))
 	} else {
 		columns[46] = append(columns[46], parquet_go.NullValue().Level(0, 0, 46))
 	}
+
 	if m.HasZigzag32() {
 		columns[47] = append(columns[47], parquet_go.Int32Value(int32(m.GetZigzag32())).Level(0, 1, 47))
 	} else {
 		columns[47] = append(columns[47], parquet_go.NullValue().Level(0, 0, 47))
 	}
+
 	if m.HasZigzag64() {
 		columns[48] = append(columns[48], parquet_go.Int64Value(int64(m.GetZigzag64())).Level(0, 1, 48))
 	} else {
 		columns[48] = append(columns[48], parquet_go.NullValue().Level(0, 0, 48))
 	}
+
 	return parquet_go.MakeRow(columns[:]...)
 }

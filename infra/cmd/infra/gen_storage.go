@@ -28,6 +28,7 @@ func newGenStorageCommand() *cli.Command {
 			if outDir == "" {
 				return fmt.Errorf("--out must not be empty")
 			}
+
 			raw := gen.Descriptors
 			if source := c.Path("descriptors"); source != "" {
 				var err error
@@ -39,10 +40,12 @@ func newGenStorageCommand() *cli.Command {
 			if len(raw) == 0 {
 				return fmt.Errorf("storage descriptors are empty")
 			}
+
 			topics, subs, err := gcp.DiscoverPubSub(raw)
 			if err != nil {
 				return err
 			}
+
 			schemas, err := gcp.DiscoverSchemas(c.Context, raw, c.Path("proto-root"))
 			if err != nil {
 				return err
@@ -50,10 +53,12 @@ func newGenStorageCommand() *cli.Command {
 			if err := gcp.ValidateStorageSchemas(topics, subs, schemas); err != nil {
 				return err
 			}
+
 			code, manifest, err := gcp.RenderStorage(raw, c.String("package"), c.String("import-path"))
 			if err != nil {
 				return err
 			}
+
 			for _, artifact := range []struct {
 				name string
 				data []byte
@@ -69,6 +74,7 @@ func newGenStorageCommand() *cli.Command {
 					}
 					continue
 				}
+
 				if err := os.MkdirAll(filepath.Dir(out), 0o750); err != nil {
 					return fmt.Errorf("create storage output directory: %w", err)
 				}
@@ -77,10 +83,12 @@ func newGenStorageCommand() *cli.Command {
 					return fmt.Errorf("create storage artifact: %w", err)
 				}
 				defer os.Remove(tmp.Name())
+
 				if err := tmp.Chmod(0o644); err != nil {
 					_ = tmp.Close()
 					return fmt.Errorf("chmod storage artifact: %w", err)
 				}
+
 				_, writeErr := tmp.Write(artifact.data)
 				closeErr := tmp.Close()
 				if writeErr != nil {
@@ -89,10 +97,12 @@ func newGenStorageCommand() *cli.Command {
 				if closeErr != nil {
 					return fmt.Errorf("close storage artifact: %w", closeErr)
 				}
+
 				if err := os.Rename(tmp.Name(), out); err != nil {
 					return fmt.Errorf("replace storage artifact: %w", err)
 				}
 			}
+
 			return nil
 		},
 	}
