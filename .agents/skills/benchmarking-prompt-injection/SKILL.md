@@ -1,6 +1,6 @@
 ---
 name: benchmarking-prompt-injection
-description: Use when changing how gram detects prompt injection, or reviewing such a change. This covers anything under server/internal/scanners/promptinjection/ (the Jev PrefilterQuestions, PrefilterThreshold, the confirmer SystemPrompt or WindowInstructions, ConfirmationModel or RefusalFallbackModel, timeouts), server/cmd/risk-pi-report, the prompt_injection testdata fixtures and labels, and the evidence the scanner reads: server/internal/judgemessage (windows, payloads, truncation), GetJudgeMessageWindow in server/internal/risk/queries.sql, and trajectory building in server/internal/background/activities/risk_analysis. Triggers: "prompt injection", "PI scanner", "PI judge", "Jev", "confirmer", "confirm prompt", "risk-pi-report", "risk:pi-gate", "pi benchmark", "false positive", "recall", "relabel", "merge gate failed".
+description: Use when changing how gram detects prompt injection, or reviewing such a change. This covers anything under server/internal/scanners/promptinjection/ (the Jev PrefilterQuestions, PrefilterThreshold, the confirmer SystemPrompt or WindowInstructions, ConfirmationModel or RefusalFallbackModel, timeouts), server/cmd/risk-pi-report, the prompt_injection testdata fixtures and labels, and the evidence the scanner reads: server/internal/judgemessage (windows, payloads, truncation), GetJudgeMessageWindow in server/internal/risk/queries.sql, trajectory building in server/internal/background/activities/risk_analysis, and skill-upload hook changes in server/internal/hooks/ that affect prompt-injection evidence or verdict handling. Triggers: "prompt injection", "PI scanner", "PI judge", "Jev", "confirmer", "confirm prompt", "risk-pi-report", "risk:pi-gate", "pi benchmark", "false positive", "recall", "relabel", "merge gate failed".
 ---
 
 # Benchmarking prompt-injection changes
@@ -19,11 +19,12 @@ The gate calls paid models (about $2.30 and 15 minutes a run), so it runs locall
 | `SystemPrompt`, `WindowInstructions`, `PrefilterQuestions`, `PrefilterThreshold` | Yes           |
 | `ConfirmationModel`, `RefusalFallbackModel`, reasoning or other model settings   | Yes           |
 | Evidence rendering, truncation budgets, timeouts, retry or fallback logic        | Yes           |
+| Skill-upload hook logic affecting PI evidence or verdict handling                | Yes           |
 | Fixture labels or new fixtures under `testdata/prompt_injection/`                | Yes           |
 | Comments, docs, logging, metrics, or tests only                                  | No            |
 | Pure renames or moves, with no change to strings, constants or logic             | No            |
 
-The gate scores fixture evidence through a stand-in window loader, so it cannot measure how production assembles windows or trajectories (`GetJudgeMessageWindow`, `judgemessage/window.go`, `risk_analysis`). For those changes, add unit tests or windowed fixtures and say in the PR that a passing gate does not cover them.
+The gate scores fixture evidence through a stand-in window loader, so it cannot measure how production assembles windows or trajectories (`GetJudgeMessageWindow`, `judgemessage/window.go`, `risk_analysis`), or skill-upload evidence and verdict handling in `server/internal/hooks/`. For those changes, add focused unit tests or relevant fixtures and say in the PR that a passing gate does not cover them. Unrelated hook changes do not require the gate.
 
 Rerun after any later "Yes" change, including one a rebase brings in from main. For a "No" change, write `PI gate not run: <reason>` in the PR.
 

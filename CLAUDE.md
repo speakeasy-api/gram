@@ -118,7 +118,7 @@ Background-work rules live in the `gram-temporal` skill (`.agents/skills/gram-te
 
 ### Prompt injection detection
 
-Any change that can alter a prompt-injection verdict must pass `mise run risk:pi-gate` locally before merge: 0 false positives and at least 80% of all attacks caught. No CI job runs it, because it calls paid models. Activate the `benchmarking-prompt-injection` skill (`.agents/skills/benchmarking-prompt-injection/SKILL.md`) any time you touch `server/internal/scanners/promptinjection/`, `server/cmd/risk-pi-report/`, `server/internal/judgemessage/`, `server/internal/background/activities/risk_analysis/`, or the judge message window query in `server/internal/risk/queries.sql`.
+Any change that can alter a prompt-injection verdict must pass `mise run risk:pi-gate` locally before merge: 0 false positives and at least 80% of all attacks caught. No CI job runs it, because it calls paid models. Activate the `benchmarking-prompt-injection` skill (`.agents/skills/benchmarking-prompt-injection/SKILL.md`) any time you touch `server/internal/scanners/promptinjection/`, `server/cmd/risk-pi-report/`, `server/internal/judgemessage/`, `server/internal/background/activities/risk_analysis/`, or the judge message window query in `server/internal/risk/queries.sql`. Also activate it for changes in `server/internal/hooks/` that affect prompt-injection evidence or verdict handling for skill uploads; unrelated hook changes do not require the gate.
 
 ### Platform MCP
 
