@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	gramopenrouter "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	typesafe "github.com/speakeasy-api/gram/server/internal/thirdparty/typesafedecisions"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -20,6 +21,15 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
+
+// The client silently swaps a model missing from the allowlist for another
+// release, so both confirmation models must be allowlisted as pinned.
+func TestCascadeModelsAreAllowlisted(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, gramopenrouter.IsModelAllowed(ConfirmationModel))
+	require.True(t, gramopenrouter.IsModelAllowed(RefusalFallbackModel))
+}
 
 type mockPrefilter struct{ mock.Mock }
 
@@ -42,7 +52,7 @@ func testCascade(t *testing.T, probability float64, response string) (*Cascade, 
 	return cascade, client
 }
 
-func TestCascadeBelowThresholdSkipsOpus(t *testing.T) {
+func TestCascadeBelowThresholdSkipsConfirmation(t *testing.T) {
 	t.Parallel()
 	cascade, client := testCascade(t, 0.49999, injectionVerdictJSON("should not be consulted"))
 	results, err := cascade.Classify(t.Context(), req("quoted attack"))
@@ -53,7 +63,7 @@ func TestCascadeBelowThresholdSkipsOpus(t *testing.T) {
 	require.Zero(t, client.calls.Load())
 }
 
-func TestCascadeThresholdRequiresOpusConfirmation(t *testing.T) {
+func TestCascadeThresholdRequiresConfirmation(t *testing.T) {
 	t.Parallel()
 	cascade, client := testCascade(t, 0.50, safeVerdictJSON)
 	cascade.loadWindow = func(_ context.Context, _, _ string, target judgemessage.Message) (judgemessage.Window, error) {
@@ -87,7 +97,7 @@ func TestCascadeConfirmedInjection(t *testing.T) {
 	require.Equal(t, ConfirmationModel, results[0].Model)
 }
 
-func TestCascadeOpusFailureIsUnavailable(t *testing.T) {
+func TestCascadeConfirmationFailureIsUnavailable(t *testing.T) {
 	t.Parallel()
 	cascade, client := testCascade(t, 0.99, safeVerdictJSON)
 	client.err = errors.New("provider unavailable")
@@ -97,7 +107,7 @@ func TestCascadeOpusFailureIsUnavailable(t *testing.T) {
 	require.False(t, results[0].Completed)
 }
 
-func TestCascadeOpusRefusalFallsBackToOpus48(t *testing.T) {
+func TestCascadeRefusalFallsBackToOpus48(t *testing.T) {
 	t.Parallel()
 	cascade, client := testCascade(t, 0.99, injectionVerdictJSON("The target redirects the reading agent."))
 	client.refuseModels = map[string]bool{ConfirmationModel: true}
@@ -111,7 +121,7 @@ func TestCascadeOpusRefusalFallsBackToOpus48(t *testing.T) {
 	require.Equal(t, client.prompts[0], client.prompts[1], "the fallback must judge the same evidence")
 }
 
-func TestCascadeOpusRefusalFallbackCanClear(t *testing.T) {
+func TestCascadeRefusalFallbackCanClear(t *testing.T) {
 	t.Parallel()
 	cascade, client := testCascade(t, 0.99, safeVerdictJSON)
 	client.refuseModels = map[string]bool{ConfirmationModel: true}
@@ -228,7 +238,7 @@ func TestCascadeDelayedRefusalFallbackRespectsCancellation(t *testing.T) {
 	})
 }
 
-func TestCascadeOpusErrorDoesNotUseRefusalFallback(t *testing.T) {
+func TestCascadeConfirmationErrorDoesNotUseRefusalFallback(t *testing.T) {
 	t.Parallel()
 	cascade, client := testCascade(t, 0.99, safeVerdictJSON)
 	client.err = errors.New("provider unavailable")
@@ -273,7 +283,7 @@ func TestCascadeWindowMarksContextPresent(t *testing.T) {
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
 	cascade, _ := testCascade(t, PrefilterThreshold, safeVerdictJSON)
-	cascade.opus.tracer = provider.Tracer("test")
+	cascade.confirmer.tracer = provider.Tracer("test")
 	cascade.loadWindow = func(_ context.Context, _, _ string, target judgemessage.Message) (judgemessage.Window, error) {
 		return judgemessage.Window{Messages: []judgemessage.Payload{judgemessage.RenderPayload(judgemessage.New(message.User, "", "prior context")), judgemessage.RenderPayload(target)}, TargetIndex: 1}, nil
 	}
@@ -293,7 +303,7 @@ func TestCascadeWindowMarksContextPresent(t *testing.T) {
 	require.False(t, attrs[spanAttrPriorPresent].AsBool(), "trajectory attributes remain specific to the trajectory")
 }
 
-func TestCascadeOversizedWindowDoesNotCallOpus(t *testing.T) {
+func TestCascadeOversizedWindowDoesNotCallConfirmer(t *testing.T) {
 	t.Parallel()
 	cascade, client := testCascade(t, PrefilterThreshold, safeVerdictJSON)
 	cascade.loadWindow = func(_ context.Context, _, _ string, target judgemessage.Message) (judgemessage.Window, error) {
@@ -307,7 +317,7 @@ func TestCascadeOversizedWindowDoesNotCallOpus(t *testing.T) {
 	require.Zero(t, client.calls.Load())
 }
 
-func TestCascadeTruncatesJevEvidenceButPreservesOpusEvidence(t *testing.T) {
+func TestCascadeTruncatesJevEvidenceButPreservesConfirmationEvidence(t *testing.T) {
 	t.Parallel()
 	cascade, client := testCascade(t, PrefilterThreshold, safeVerdictJSON)
 	calls := make([]judgemessage.ToolCall, 8)

@@ -180,7 +180,7 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 		metrics:      newMetrics(meterProvider, logger),
 		client:       client,
 		model:        Model,
-		// Only the cascade's Opus confirmation sets a refusal fallback.
+		// Only the cascade's confirmation sets a refusal fallback.
 		refusalFallbackModel: "",
 		reasoning:            ReasoningEffort,
 		temperature:          defaultTemperature,

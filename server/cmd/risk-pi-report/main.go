@@ -350,7 +350,7 @@ func parseFlags() options {
 	flag.StringVar(&opts.extraCorpus, "extra-corpus", "", "absolute path to an additional local JSONL corpus; never loaded by default")
 	flag.IntVar(&opts.repeats, "repeats", 1, "number of complete repeated trials")
 	flag.IntVar(&opts.samples, "samples", piopenrouter.SamplesPerEvent, "physical judge calls per event; production defaults to one")
-	flag.BoolVar(&opts.cascade, "cascade", false, fmt.Sprintf("evaluate the production Jev >= %.2f to Opus cascade", piopenrouter.PrefilterThreshold))
+	flag.BoolVar(&opts.cascade, "cascade", false, fmt.Sprintf("evaluate the production Jev >= %.2f to confirmer cascade", piopenrouter.PrefilterThreshold))
 	flag.Parse()
 	return opts
 }

@@ -16,7 +16,7 @@ const maxPrefilterInputTokens = 28000
 
 // preparePrefilterPayload bounds the complete evidence before calling Jev.
 // Truncation can hide an attack in omitted text; it is marked in the evidence.
-// Opus still receives its independently prepared, fuller confirmation evidence.
+// The confirmer still receives its independently prepared, fuller evidence.
 func preparePrefilterPayload(msg judgemessage.Message, trajectory judgemessage.Trajectory, questions map[string]typesafe.Question, maxInputTokens int) ([]byte, []string, bool, error) {
 	payload := judgePayload{Message: judgemessage.RenderPayload(msg), Trajectory: nil}
 	if trajectory.HasContent() {

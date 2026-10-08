@@ -25,16 +25,17 @@ import (
 // required for contextual confirmation. It is not a confidence statistic.
 const PrefilterThreshold = 0.50
 
-// ConfirmationModel pins the Opus release used to confirm Jev candidates.
-const ConfirmationModel = "anthropic/claude-opus-5.5"
+// ConfirmationModel pins the Sonnet release used to confirm Jev candidates.
+// On the 2,046-case benchmark it kept 0 false positives and caught 169 of the
+// 175 well-known attacks behind Jev, faster and cheaper than Opus 5.5 (see
+// CASCADE.md).
+const ConfirmationModel = "anthropic/claude-sonnet-5.5"
 
 // RefusalFallbackModel confirms candidates that ConfirmationModel refuses.
-// Opus 5.5 runs Anthropic's cyber safety classifier, which refuses many real
-// injection payloads (finish_reason content_filter) instead of judging them;
-// without a fallback those candidates would be unavailable and never become
-// findings. Anthropic's recommended fallback for cyber refusals is Opus 4.8,
-// and on the 1,190-case benchmark it returned a verdict for 131 of the 143
-// cases Opus 5.5 refused, with no false positives (see CASCADE.md).
+// Anthropic's cyber safety classifier can refuse a real injection payload
+// (finish_reason content_filter) instead of judging it; without a fallback the
+// candidate would be unavailable and never become a finding. Anthropic's
+// recommended fallback for cyber refusals is Opus 4.8.
 const RefusalFallbackModel = "anthropic/claude-opus-4.8"
 
 // WindowInstructions isolates the target from its untrusted neighbors.
@@ -43,21 +44,21 @@ const WindowInstructions = `The evidence is a window. Classify only window.messa
 // ConfirmationTimeout bounds the secondary review independently of Jev.
 const ConfirmationTimeout = 45 * time.Second
 
-// Cascade filters candidate injections with Jev, then lets Opus decide whether
-// the target is an injection in its conversation context.
+// Cascade filters candidate injections with Jev, then lets the confirmer decide
+// whether the target is an injection in its conversation context.
 type Cascade struct {
-	opus       *Engine
+	confirmer  *Engine
 	jev        typesafe.Evaluator
 	loadWindow func(context.Context, string, string, judgemessage.Message) (judgemessage.Window, error)
 }
 
 func NewCascade(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, client gramopenrouter.CompletionClient, jev typesafe.Evaluator, loadWindow func(context.Context, string, string, judgemessage.Message) (judgemessage.Window, error)) *Cascade {
-	opus := New(logger, tracerProvider, meterProvider, client)
-	opus.model = ConfirmationModel
-	opus.refusalFallbackModel = RefusalFallbackModel
-	opus.systemPrompt = SystemPrompt + "\n" + WindowInstructions
-	opus.timeout = ConfirmationTimeout
-	return &Cascade{opus: opus, jev: jev, loadWindow: loadWindow}
+	confirmer := New(logger, tracerProvider, meterProvider, client)
+	confirmer.model = ConfirmationModel
+	confirmer.refusalFallbackModel = RefusalFallbackModel
+	confirmer.systemPrompt = SystemPrompt + "\n" + WindowInstructions
+	confirmer.timeout = ConfirmationTimeout
+	return &Cascade{confirmer: confirmer, jev: jev, loadWindow: loadWindow}
 }
 
 func (c *Cascade) Classify(ctx context.Context, req promptinjection.Request) ([]promptinjection.Result, error) {
@@ -98,12 +99,12 @@ func (c *Cascade) Classify(ctx context.Context, req promptinjection.Request) ([]
 func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string) promptinjection.Result {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second+ConfirmationTimeout)
 	defer cancel()
-	ctx, span := c.opus.tracer.Start(ctx, "risk.prompt_injection.cascade")
+	ctx, span := c.confirmer.tracer.Start(ctx, "risk.prompt_injection.cascade")
 	defer span.End()
 	questions := PrefilterQuestions()
 	prepared, content, truncated, err := preparePrefilterPayload(msg, trajectory, questions, maxPrefilterInputTokens)
 	if err != nil {
-		c.opus.logger.WarnContext(ctx, "PI prefilter evidence unavailable", attr.SlogError(err))
+		c.confirmer.logger.WarnContext(ctx, "PI prefilter evidence unavailable", attr.SlogError(err))
 		return unavailableResult
 	}
 	questionJSON, err := json.Marshal(questions)
@@ -123,7 +124,7 @@ func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, 
 		start := time.Now()
 		result, err = c.jev.Evaluate(prefilterCtx, req.OrgID, prepared, questions)
 		outcome := o11y.OutcomeFromErrorWithTimeout(err)
-		c.opus.metrics.RecordPhysicalCall(ctx, req.OrgID, typesafe.Model, "none", outcome, typedFailureReason(err, outcome), time.Since(start))
+		c.confirmer.metrics.RecordPhysicalCall(ctx, req.OrgID, typesafe.Model, "none", outcome, typedFailureReason(err, outcome), time.Since(start))
 		if attempt != 0 || !errors.Is(err, typesafe.ErrContextLengthExceeded) {
 			break
 		}
@@ -137,7 +138,7 @@ func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, 
 	}
 	if err != nil {
 		span.SetAttributes(attribute.String("prefilter.outcome", "unavailable"))
-		c.opus.logger.WarnContext(ctx, "PI prefilter unavailable", attr.SlogError(err))
+		c.confirmer.logger.WarnContext(ctx, "PI prefilter unavailable", attr.SlogError(err))
 		return unavailableResult
 	}
 	probability, err := injectionProbability(result)
@@ -152,17 +153,17 @@ func (c *Cascade) classifyOne(ctx context.Context, req promptinjection.Request, 
 		}
 		cleared := safeResult
 		cleared.Model = result.Model
-		count, countErr := c.opus.stokenCodec.Count(ctx, content...)
+		count, countErr := c.confirmer.stokenCodec.Count(ctx, content...)
 		cleared.STokens = int64(count)
 		cleared.Completed = countErr == nil
 		return cleared
 	}
 	window, err := c.loadWindow(ctx, req.OrgID, req.ProjectID, msg)
 	if err != nil {
-		c.opus.logger.WarnContext(ctx, "PI confirmation context unavailable", attr.SlogError(err))
+		c.confirmer.logger.WarnContext(ctx, "PI confirmation context unavailable", attr.SlogError(err))
 		return unavailableResult
 	}
-	return c.opus.classifyOne(ctx, req, msg, trajectory, userID, &window)
+	return c.confirmer.classifyOne(ctx, req, msg, trajectory, userID, &window)
 }
 
 func injectionProbability(result typesafe.Result) (float64, error) {

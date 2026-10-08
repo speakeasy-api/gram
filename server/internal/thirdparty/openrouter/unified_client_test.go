@@ -1623,6 +1623,7 @@ func TestResolveModel_AllowedModelReturnedAsIs(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "anthropic/claude-opus-5.5", ResolveModel("anthropic/claude-opus-5.5"))
 	require.Equal(t, "anthropic/claude-opus-5", ResolveModel("anthropic/claude-opus-5"))
+	require.Equal(t, "anthropic/claude-sonnet-5.5", ResolveModel("anthropic/claude-sonnet-5.5"))
 }
 
 func TestDefaultChatModel_UsesClaudeOpus5(t *testing.T) {

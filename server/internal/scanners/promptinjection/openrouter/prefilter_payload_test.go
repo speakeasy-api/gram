@@ -51,7 +51,7 @@ func TestPrefilterPayloadBoundsWholeMultiToolEvidence(t *testing.T) {
 		require.Contains(t, call.Arguments, "[truncated]")
 	}
 	require.Equal(t, judgePayloadContent(payload), content)
-	// Preparing Jev evidence must not mutate the target used by Opus.
+	// Preparing Jev evidence must not mutate the target used by the confirmer.
 	require.Equal(t, arguments, msg.ToolCalls[0].Arguments)
 }
 
