@@ -396,6 +396,34 @@ const setupAgentPlatforms = (
     ],
   },
   {
+    id: "copilot",
+    setupSteps: [
+      {
+        title: "Download the Copilot CLI observability plugin",
+        description:
+          "Download a self-contained plugin with a hooks-scoped credential embedded. Downloading requires a Speakeasy org admin and enabled project observability. Distribute the ZIP privately and never commit it or upload it publicly.",
+        download: { platform: "copilot", label: "Download for Copilot CLI" },
+      },
+      {
+        title: "Load the plugin in Copilot CLI",
+        description:
+          "Extract the ZIP and launch GitHub Copilot CLI with the plugin directory. Hooks run in Copilot CLI only, not the VS Code extension or the Copilot app. After publishing changes, download a fresh ZIP and start a new session.",
+        code: "unzip observability-copilot.zip -d speakeasy-hooks && copilot --plugin-dir speakeasy-hooks",
+        language: "bash",
+      },
+      {
+        title: "Verify hook events",
+        description:
+          "Run a tool in the CLI and confirm the session and hook events appear in Speakeasy. Loading a plugin does not by itself prove telemetry or policy enforcement is working.",
+        helpLink: {
+          url: "https://docs.github.com/en/copilot/reference/hooks-reference",
+          linkLabel: "GitHub Copilot hooks",
+          sentence: "See {LINK} for supported events",
+        },
+      },
+    ],
+  },
+  {
     id: "pi",
     setupSteps: [
       {
