@@ -266,7 +266,17 @@ func TestStdioBridgeKeepsSilentStreamsAlive(t *testing.T) {
 	sid := initializeSession(t, srv)
 
 	// No GET stream, so the elicitation goes on the call's own stream, which then waits on the client.
-	call := mcpRequest(t, srv, http.MethodPost, sid, `{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"elicit"}}`)
+	// A deadline turns a missing keepalive into a failure rather than a hung read.
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, srv.URL+"/", strings.NewReader(`{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"elicit"}}`))
+	require.NoError(t, err)
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(headerMCPSessionID, sid)
+	call, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = call.Body.Close() })
 	require.Equal(t, http.StatusOK, call.StatusCode)
 	body := bufio.NewReader(call.Body)
 
