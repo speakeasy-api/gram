@@ -819,21 +819,6 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 		return nil, oops.E(oops.CodeUnexpected, err, "get remote session client").LogError(ctx, logger)
 	}
 
-	// The user_session_issuer must belong to the caller's project. An org-level
-	// client can be bound to user_session_issuers across projects in the same
-	// org, so without this a project admin could detach another project's
-	// binding through the (project-agnostic) join-table delete.
-	if _, err := txRepo.LockProjectUserIssuerForDetach(ctx, repo.LockProjectUserIssuerForDetachParams{
-		ID:             userIssuerID,
-		ProjectID:      *authCtx.ProjectID,
-		OrganizationID: authCtx.ActiveOrganizationID,
-	}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
-	}
-
 	if err := s.refuseOrgWideAttachment(ctx, logger, txRepo, *authCtx, userIssuerID, clientID, false); err != nil {
 		return nil, err
 	}
@@ -885,12 +870,16 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 // organization-level client on an organization-level user session issuer: that
 // binding is shared by every project's servers on the issuer.
 func (s *Service) refuseOrgWideAttachment(ctx context.Context, logger *slog.Logger, q *repo.Queries, authCtx contextvalues.AuthContext, userIssuerID, clientID uuid.UUID, attaching bool) error {
-	// Attach holds the owner advisory lock, while organization detach takes a
-	// row lock. Take the row lock too before reading whether this is a no-op.
+	// Scope and lock the issuer before checking the binding, even for a no-op.
+	// Attach also holds the owner advisory lock; the row lock serializes both
+	// paths against organization detach and preserves issuer-before-client order.
 	if _, err := q.LockProjectUserIssuerForDetach(ctx, repo.LockProjectUserIssuerForDetachParams{
 		ID: userIssuerID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
 	}); err != nil {
-		return lifecycleLockError(err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
+		}
+		return oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
 	}
 	// Re-read after acquiring the lock: the pre-lock snapshot may describe a
 	// no-op that is now an organization-wide change.
