@@ -794,6 +794,7 @@ trackedFiles:
   src/funcs/widgetsList.ts: {}
   src/funcs/widgetsUpdate.ts: {}
   src/funcs/workloadIdentitiesAdmitSubject.ts: {}
+  src/funcs/workloadIdentitiesGetCustomFlows.ts: {}
   src/funcs/workloadIdentitiesList.ts: {}
   src/funcs/workloadIdentitiesListPlatforms.ts: {}
   src/funcs/workloadIdentitiesListTokenEndpoints.ts: {}
@@ -1962,6 +1963,10 @@ trackedFiles:
   src/models/components/widget.ts: {}
   src/models/components/widgetdashboard.ts: {}
   src/models/components/workloadadmission.ts: {}
+  src/models/components/workloadcustomflows.ts: {}
+  src/models/components/workloadform.ts: {}
+  src/models/components/workloadformblock.ts: {}
+  src/models/components/workloadformstep.ts: {}
   src/models/components/workloadidentitypolicy.ts: {}
   src/models/components/workloadissuer.ts: {}
   src/models/components/workloadplatform.ts: {}
@@ -2320,6 +2325,7 @@ trackedFiles:
   src/models/operations/getusersessionissuer.ts: {}
   src/models/operations/getusersessionissuercimdclient.ts: {}
   src/models/operations/getwidget.ts: {}
+  src/models/operations/getworkloadcustomflows.ts: {}
   src/models/operations/getworkunitstrend.ts: {}
   src/models/operations/hooksnumberclaude.ts: {}
   src/models/operations/hooksnumbercodex.ts: {}
@@ -3850,6 +3856,8 @@ trackedFiles:
   src/react-query/withdrawWorkloadSubject.ts: {}
   src/react-query/workUnitsTrend.core.ts: {}
   src/react-query/workUnitsTrend.ts: {}
+  src/react-query/workloadCustomFlows.core.ts: {}
+  src/react-query/workloadCustomFlows.ts: {}
   src/react-query/workloadIdentities.core.ts: {}
   src/react-query/workloadIdentities.ts: {}
   src/react-query/workloadPlatforms.core.ts: {}
@@ -8119,6 +8127,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getWorkloadCustomFlows:
+    speakeasy-default-get-workload-custom-flows:
+      responses:
+        "200":
+          application/json: {"allow_access": {"description": "following glimmer soft", "pending_label": "<value>", "steps": [], "submit_label": "<value>", "title": "<value>"}, "edit_access": {"description": "like glider until even vacantly hubris unbearably yowza duh", "pending_label": "<value>", "steps": [{"blocks": [{"field": "jwks_uri", "format": "jwks_uri", "help": "<value>", "href": "<value>", "label": "<value>", "markdown": "<value>", "multiline": true, "placeholder": "<value>", "read_only": false, "type": "tags"}], "id": "<id>", "title": "<value>"}], "submit_label": "<value>", "title": "<value>"}, "edit_platform": {"description": "ouch beyond shush relieve recklessly fail because since", "pending_label": "<value>", "steps": [{"blocks": [{"field": "jwks_uri", "format": "jwks_uri", "help": "<value>", "href": "<value>", "label": "<value>", "markdown": "<value>", "multiline": true, "placeholder": "<value>", "read_only": false, "type": "tags"}], "id": "<id>", "title": "<value>"}], "submit_label": "<value>", "title": "<value>"}, "register_platform": {"description": "apprehensive lieu poorly lieu", "pending_label": "<value>", "steps": [{"blocks": [{"field": "jwks_uri", "format": "jwks_uri", "help": "<value>", "href": "<value>", "label": "<value>", "markdown": "<value>", "multiline": true, "placeholder": "<value>", "read_only": false, "type": "tags"}], "id": "<id>", "title": "<value>"}], "submit_label": "<value>", "title": "<value>"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   hooks#claude:
     speakeasy-default-hooks#claude:
       requestBody:
