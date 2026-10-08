@@ -4,8 +4,7 @@ package agent
 
 import "os/exec"
 
-// stdioSupported is false here: without process groups the agent cannot
-// guarantee a server's children stop with it, so stdio mode is refused.
+// Without process groups a server's children could outlive it.
 const stdioSupported = false
 
 func shellCommand(command string) *exec.Cmd {
@@ -20,8 +19,6 @@ func terminateProcessGroup(cmd *exec.Cmd) {
 	}
 }
 
-// processGroupAlive falls back to the server process itself, since there is
-// no process group to inspect here.
 func processGroupAlive(_ *exec.Cmd, exited <-chan struct{}) bool {
 	select {
 	case <-exited:

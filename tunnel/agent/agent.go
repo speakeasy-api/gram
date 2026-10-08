@@ -1,6 +1,4 @@
-// Package agent serves a pinned local MCP server over one outbound
-// yamux/WebSocket tunnel: either reverse-proxying a local HTTP MCP URL or
-// bridging Streamable HTTP onto a stdio MCP server command.
+// Package agent serves a pinned local MCP server, over HTTP or stdio, through one outbound yamux/WebSocket tunnel.
 package agent
 
 import (
@@ -51,14 +49,9 @@ type Config struct {
 	GatewayURL string
 	APIKey     string
 	// LocalMCPURL is pinned at startup; the gateway cannot redirect agent traffic.
-	// Exactly one of LocalMCPURL and LocalMCPCommand is set.
-	LocalMCPURL string
-	// LocalMCPCommand is a shell command that starts a stdio MCP server; the
-	// agent runs one process per MCP session.
-	LocalMCPCommand string
-	// StdioMaxSessions caps concurrent stdio server processes.
+	LocalMCPURL      string
+	LocalMCPCommand  string
 	StdioMaxSessions int
-	// StdioIdleTimeout stops a stdio server after this long without traffic.
 	StdioIdleTimeout time.Duration
 	ServiceVersion   string
 	Metadata         map[string]string
@@ -69,8 +62,7 @@ type Config struct {
 type Agent struct {
 	cfg     Config
 	handler http.Handler
-	// stdio is set in stdio mode and outlives individual gateway connections,
-	// so MCP sessions survive a tunnel reconnect.
+	// Outlives gateway connections so MCP sessions survive a reconnect.
 	stdio  *stdioBridge
 	logger *slog.Logger
 }

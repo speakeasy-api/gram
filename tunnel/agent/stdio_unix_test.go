@@ -33,14 +33,12 @@ func TestStdioBridgeStopsServerProcessGroup(t *testing.T) {
 
 func TestStdioBridgeCloseWaitsForTermIgnoringDescendants(t *testing.T) {
 	t.Parallel()
-	// The shell exits as soon as stdin closes, leaving a child that ignores
-	// SIGTERM; only SIGKILL stops it.
 	ready := filepath.Join(t.TempDir(), "ready")
 	_, a := newStdioTestServerWithCommand(t, "(trap '' TERM; touch '"+ready+"'; exec sleep 300) & read ignored", 0)
 	sess, err := a.stdio.start()
 	require.NoError(t, err)
 	pgid := sess.cmd.Process.Pid
-	// Close only once the child ignores SIGTERM, or SIGTERM alone could stop it.
+	// Until the trap is installed, SIGTERM alone would stop the child.
 	require.Eventually(t, func() bool {
 		_, err := os.Stat(ready)
 		return err == nil
