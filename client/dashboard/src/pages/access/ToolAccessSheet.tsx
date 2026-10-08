@@ -43,17 +43,32 @@ export type ToolAccessTarget =
 
 export type ToolSheetTab = "tools" | "annotations";
 
+/** Which radio the sheet shows: none until the server is part of the role. */
+function toolChoice(
+  granted: boolean,
+  specific: boolean,
+): "all" | "specific" | null {
+  if (!granted) return null;
+  return specific ? "specific" : "all";
+}
+
 /** Edit one server's tool access, or the tool access of All servers. */
 export function ToolAccessSheet({
   target,
   limit,
   initialTab,
   applyTab = false,
+  granted = true,
   onChange,
   onClose,
 }: {
   target: ToolAccessTarget | null;
   limit: ToolLimit;
+  /**
+   * False when the server is not part of the role yet: nothing is chosen in
+   * the sheet, and the first choice grants it.
+   */
+  granted?: boolean;
   initialTab: ToolSheetTab;
   /**
    * Limit the server the way `initialTab` says as soon as its tools are known,
@@ -81,6 +96,7 @@ export function ToolAccessSheet({
             limit={limit}
             initialTab={initialTab}
             applyTab={applyTab}
+            granted={granted}
             onChange={onChange}
             onClose={onClose}
           />
@@ -95,6 +111,7 @@ function ToolAccessSheetBody({
   limit,
   initialTab,
   applyTab,
+  granted,
   onChange,
   onClose,
 }: {
@@ -102,6 +119,7 @@ function ToolAccessSheetBody({
   limit: ToolLimit;
   initialTab: ToolSheetTab;
   applyTab: boolean;
+  granted: boolean;
   onChange: (limit: ToolLimit) => void;
   onClose: () => void;
 }): JSX.Element {
@@ -114,7 +132,7 @@ function ToolAccessSheetBody({
   const source = useServerTools(entry);
   const readyTools = source.status === "ready" ? source.tools : undefined;
   const tools = useMemo(() => readyTools ?? [], [readyTools]);
-  const specific = limit.kind !== "all";
+  const specific = granted && limit.kind !== "all";
 
   // A remote server's tools arrive after the sheet opens, and converting
   // before then would carry nothing over.
@@ -154,9 +172,15 @@ function ToolAccessSheetBody({
           <legend className="mb-2 text-sm font-medium">
             Which tools can members call?
           </legend>
+          {!granted && (
+            <Text muted small>
+              This role doesn&rsquo;t reach {entry?.server.name} yet. Choosing
+              its tools adds it.
+            </Text>
+          )}
           <RadioCardGroup
             size="sm"
-            value={specific ? "specific" : "all"}
+            value={toolChoice(granted, specific)}
             onValueChange={(value) =>
               onChange(
                 value === "all"

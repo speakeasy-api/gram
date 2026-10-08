@@ -343,4 +343,23 @@ describe("McpAccessPanel", () => {
     expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
     expect(live.lastOptions?.enabled).toBe(false);
   });
+
+  it("opens the tool sheet from the row, and the first choice grants the server", () => {
+    const { onChange } = renderPanel();
+    fireEvent.click(screen.getByLabelText("Linear"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Linear"));
+
+    fireEvent.click(screen.getByText("slack"));
+    expect(screen.getByRole("dialog", { name: /Slack/ })).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("radio", { name: "All tools" }) as HTMLButtonElement
+      ).getAttribute("data-state"),
+    ).toBe("unchecked");
+    fireEvent.click(screen.getByRole("radio", { name: "Specific tools" }));
+    expect(allowSelectors(onChange.mock.calls.at(-1)?.[0])).toEqual([
+      { resourceKind: "mcp", resourceId: "slack", tool: "search" },
+    ]);
+  });
 });

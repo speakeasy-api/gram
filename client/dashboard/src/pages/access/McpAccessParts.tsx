@@ -1,16 +1,6 @@
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/Dropdown";
-import { Text } from "@/components/ui/Text";
-import { Ban, Network, Pencil } from "lucide-react";
+import { MoreActions, type Action } from "@/components/ui/MoreActions";
+import { Network } from "lucide-react";
 import type { JSX } from "react";
 
 import {
@@ -75,12 +65,11 @@ const TOOL_OPTIONS: {
 ];
 
 /**
- * The pencil on a server row (and on All servers): pick how its tools are
+ * The ellipsis on a server row (and on All servers): pick how its tools are
  * limited, or forbid the server.
  */
 export function ToolLimitMenu({
   label,
-  current,
   offerByTool,
   toolsDisabled = false,
   onPick,
@@ -88,8 +77,6 @@ export function ToolLimitMenu({
 }: {
   /** Names the menu for assistive tech, e.g. "More options for Linear". */
   label: string;
-  /** The limit in force, or null when the server is not granted. */
-  current: ToolLimitKind | null;
   /** All servers has no tool list to pick from. */
   offerByTool: boolean;
   /** Tool access cannot change, e.g. administrative access covers it. */
@@ -97,50 +84,22 @@ export function ToolLimitMenu({
   onPick: (kind: ToolLimitKind) => void;
   onForbid?: () => void;
 }): JSX.Element {
-  const options = TOOL_OPTIONS.filter(
+  const actions: Action[] = TOOL_OPTIONS.filter(
     (option) => offerByTool || option.kind !== "tools",
-  );
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="tertiary" size="sm" aria-label={label} title="Edit">
-          <Button.LeftIcon>
-            <Pencil className="h-4 w-4" />
-          </Button.LeftIcon>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel className="text-eyebrow">Tools</DropdownMenuLabel>
-        {options.map((option) => (
-          <DropdownMenuCheckboxItem
-            key={option.kind}
-            checked={current === option.kind}
-            disabled={toolsDisabled}
-            onSelect={() => onPick(option.kind)}
-          >
-            <span className="flex flex-col">
-              <Text as="span" className="text-sm">
-                {option.label}
-              </Text>
-              <Text as="span" muted small>
-                {option.hint}
-              </Text>
-            </span>
-          </DropdownMenuCheckboxItem>
-        ))}
-        {onForbid && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onSelect={onForbid}
-              className="text-default-destructive"
-            >
-              <Ban />
-              Forbid server
-            </DropdownMenuItem>
-          </>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
+  ).map((option) => ({
+    label: option.label,
+    description: option.hint,
+    disabled: toolsDisabled,
+    onClick: () => onPick(option.kind),
+  }));
+  if (onForbid) {
+    actions.push({
+      label: "Forbid server",
+      icon: "ban",
+      destructive: true,
+      separatorBefore: true,
+      onClick: onForbid,
+    });
+  }
+  return <MoreActions actions={actions} triggerAriaLabel={label} />;
 }

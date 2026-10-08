@@ -231,7 +231,6 @@ export function McpAccessPanel({
               access.allServers && (
                 <ToolLimitMenu
                   label="More options for all servers"
-                  current={access.allServers.kind}
                   offerByTool={false}
                   onPick={pickAllServersLimit}
                 />
@@ -294,6 +293,10 @@ export function McpAccessPanel({
         limit={sheetLimit}
         initialTab={sheet?.tab ?? "tools"}
         applyTab={sheet?.apply}
+        granted={
+          sheet?.target.kind !== "server" ||
+          !!access.servers[sheet.target.entry.server.id]
+        }
         onChange={(limit) => {
           if (!sheet) return;
           if (sheet.target.kind === "all") {

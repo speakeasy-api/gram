@@ -20,6 +20,10 @@ import {
   type ToolLimitKind,
 } from "./mcpAccessModel";
 
+/** Elements inside a row that act on their own rather than open the sheet. */
+const ROW_CONTROLS =
+  "button, a, input, label, [role=checkbox], [role=menuitem], [data-slot=checkbox]";
+
 /** One server in the picker: tick it to grant it, pencil to limit its tools. */
 export function McpServerRow({
   entry,
@@ -50,32 +54,58 @@ export function McpServerRow({
   const checked = locked || !!limit;
 
   return (
-    <div className={cn(LIST_ROW, checked && LIST_ROW_SELECTED)}>
-      <label
-        htmlFor={inputId}
-        className={cn(
-          "flex min-w-0 flex-[1_1_16rem] items-center gap-3",
-          locked ? "cursor-default" : "cursor-pointer",
-        )}
-      >
-        <Checkbox
-          id={inputId}
-          aria-labelledby={nameId}
-          aria-describedby={handleId}
-          checked={checked}
-          disabled={locked}
-          onCheckedChange={(next) => onToggle(next === true)}
-        />
-        <ServerMark />
-        <span className="flex min-w-0 flex-col">
+    // The whole row opens the tool access sheet, except the controls inside
+    // it. The name is the keyboard way in; the row is for the pointer.
+    <div
+      className={cn(
+        LIST_ROW,
+        checked && LIST_ROW_SELECTED,
+        !locked && "cursor-pointer",
+      )}
+      onClick={(event) => {
+        if (locked) return;
+        const target = event.target;
+        // Clicks in a portalled menu or card still bubble here through React.
+        if (
+          !(target instanceof Node) ||
+          !event.currentTarget.contains(target)
+        ) {
+          return;
+        }
+        const control =
+          target instanceof Element ? target.closest(ROW_CONTROLS) : null;
+        if (control && event.currentTarget.contains(control)) return;
+        onOpenSheet();
+      }}
+    >
+      <Checkbox
+        id={inputId}
+        aria-labelledby={nameId}
+        aria-describedby={handleId}
+        checked={checked}
+        disabled={locked}
+        onCheckedChange={(next) => onToggle(next === true)}
+      />
+      <ServerMark />
+      <span className="flex min-w-0 flex-[1_1_16rem] flex-col items-start">
+        {locked ? (
           <Text as="span" id={nameId} className="truncate text-sm font-medium">
             {server.name}
           </Text>
-          <Text as="span" id={handleId} mono small muted className="truncate">
-            {serverHandle(server)}
-          </Text>
-        </span>
-      </label>
+        ) : (
+          <button
+            type="button"
+            onClick={onOpenSheet}
+            className="max-w-full truncate text-left text-sm font-medium hover:underline"
+          >
+            <span id={nameId}>{server.name}</span>
+            <span className="sr-only">, edit tool access</span>
+          </button>
+        )}
+        <Text as="span" id={handleId} mono small muted className="truncate">
+          {serverHandle(server)}
+        </Text>
+      </span>
       {limit && !locked && (
         <span className="mr-auto">
           <ToolLimitBadges limit={limit} onOpen={onOpenSheet} />
@@ -91,7 +121,6 @@ export function McpServerRow({
         )}
         <ToolLimitMenu
           label={`More options for ${server.name}`}
-          current={locked ? "all" : (limit?.kind ?? null)}
           offerByTool
           toolsDisabled={locked}
           onPick={onPickLimit}
