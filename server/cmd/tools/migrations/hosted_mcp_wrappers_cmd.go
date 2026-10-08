@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/cmd/tools/migrations/hostedmcpbackfill"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 type hostedMCPWrappersConfig struct {
@@ -97,6 +98,16 @@ func runHostedMCPWrappers(args []string, stdout io.Writer, getenv func(string) s
 		log.Printf("invalid hosted-mcp-wrappers configuration: %v", err)
 		return 2
 	}
+	// Open the report before any apply, so a bad path cannot strand committed rows without one.
+	var reportFile *os.File
+	if cfg.reportPath != "" {
+		reportFile, err = os.OpenFile(cfg.reportPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) // #nosec G304 -- operator-supplied report path
+		if err != nil {
+			log.Printf("open hosted-mcp-wrappers report: %v", err)
+			return 2
+		}
+		defer o11y.NoLogDefer(reportFile.Close)
+	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	pool, err := pgxpool.New(ctx, cfg.dbURL)
@@ -125,7 +136,7 @@ func runHostedMCPWrappers(args []string, stdout io.Writer, getenv func(string) s
 		}
 	}
 	if cfg.reportPath != "" {
-		if err := writeHostedMCPWrappersReport(cfg.reportPath, report); err != nil {
+		if err := writeHostedMCPWrappersReport(reportFile, report); err != nil {
 			log.Printf("write hosted-mcp-wrappers report: %v", err)
 			code = 1
 		}
@@ -133,19 +144,14 @@ func runHostedMCPWrappers(args []string, stdout io.Writer, getenv func(string) s
 	return code
 }
 
-func writeHostedMCPWrappersReport(path string, report hostedmcpbackfill.Report) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) // #nosec G304 -- operator-supplied report path
-	if err != nil {
-		return fmt.Errorf("open report: %w", err)
-	}
+func writeHostedMCPWrappersReport(f *os.File, report hostedmcpbackfill.Report) error {
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(report); err != nil {
-		_ = f.Close()
 		return fmt.Errorf("encode report: %w", err)
 	}
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("close report: %w", err)
+	if err := f.Sync(); err != nil {
+		return fmt.Errorf("flush report: %w", err)
 	}
 	return nil
 }

@@ -118,14 +118,15 @@ func (q *Queries) ListAuditActorsFixture(ctx context.Context, organizationID str
 }
 
 const listCandidateToolsets = `-- name: ListCandidateToolsets :many
-SELECT id, project_id
-FROM toolsets
-WHERE deleted IS FALSE
-  AND mcp_slug IS NOT NULL
-  AND mcp_slug <> ''
-  AND ($1::uuid IS NULL OR project_id = $1::uuid)
-  AND id > $2::uuid
-ORDER BY id
+SELECT t.id, t.project_id
+FROM toolsets AS t
+JOIN projects AS p ON p.id = t.project_id AND p.organization_id = t.organization_id AND p.deleted IS FALSE
+WHERE t.deleted IS FALSE
+  AND t.mcp_slug IS NOT NULL
+  AND t.mcp_slug <> ''
+  AND ($1::uuid IS NULL OR t.project_id = $1::uuid)
+  AND t.id > $2::uuid
+ORDER BY t.id
 LIMIT $3::int
 `
 
@@ -265,6 +266,26 @@ func (q *Queries) LiveCustomDomainExists(ctx context.Context, arg LiveCustomDoma
 	return exists, err
 }
 
+const liveProjectExists = `-- name: LiveProjectExists :one
+SELECT EXISTS (
+  SELECT 1
+  FROM projects
+  WHERE id = $1 AND organization_id = $2 AND deleted IS FALSE
+)
+`
+
+type LiveProjectExistsParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LiveProjectExists(ctx context.Context, arg LiveProjectExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, liveProjectExists, arg.ID, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const lockToolsetBackfill = `-- name: LockToolsetBackfill :exec
 SELECT pg_advisory_xact_lock(hashtextextended('hosted-mcp-backfill:' || $1::text, 0))
 `
@@ -361,17 +382,19 @@ func (q *Queries) SeedProjectFixture(ctx context.Context, arg SeedProjectFixture
 }
 
 const seedServerFixture = `-- name: SeedServerFixture :exec
-INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id, visibility)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id, visibility, network_access_mode, deleted_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 `
 
 type SeedServerFixtureParams struct {
-	ID         uuid.UUID
-	ProjectID  uuid.UUID
-	Name       pgtype.Text
-	Slug       pgtype.Text
-	ToolsetID  uuid.NullUUID
-	Visibility string
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	Name              pgtype.Text
+	Slug              pgtype.Text
+	ToolsetID         uuid.NullUUID
+	Visibility        string
+	NetworkAccessMode pgtype.Text
+	DeletedAt         pgtype.Timestamptz
 }
 
 func (q *Queries) SeedServerFixture(ctx context.Context, arg SeedServerFixtureParams) error {
@@ -382,6 +405,8 @@ func (q *Queries) SeedServerFixture(ctx context.Context, arg SeedServerFixturePa
 		arg.Slug,
 		arg.ToolsetID,
 		arg.Visibility,
+		arg.NetworkAccessMode,
+		arg.DeletedAt,
 	)
 	return err
 }
@@ -443,4 +468,19 @@ func (q *Queries) ServerSlugHeldElsewhere(ctx context.Context, arg ServerSlugHel
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const softDeleteProjectFixture = `-- name: SoftDeleteProjectFixture :exec
+UPDATE projects SET deleted_at = clock_timestamp()
+WHERE id = $1 AND organization_id = $2
+`
+
+type SoftDeleteProjectFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) SoftDeleteProjectFixture(ctx context.Context, arg SoftDeleteProjectFixtureParams) error {
+	_, err := q.db.Exec(ctx, softDeleteProjectFixture, arg.ID, arg.OrganizationID)
+	return err
 }

@@ -2,10 +2,13 @@ package hostedmcpbackfill
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -215,4 +218,67 @@ func TestProjectFilterCursorAndLimit(t *testing.T) {
 	require.Equal(t, 1, second.Scanned)
 	require.ElementsMatch(t, []uuid.UUID{a, b}, []uuid.UUID{first.Rows[0].ToolsetID, second.Rows[0].ToolsetID})
 	require.Empty(t, other.state(t).servers, "other projects are untouched: %s", elsewhere)
+}
+
+func TestTombstonedCanonicalIDBlocks(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	toolsetID := f.seedToolset(t, toolsetSpec{mcpSlug: "tombstoned", public: true, enabled: true, domainID: uuid.NullUUID{}})
+	require.NoError(t, New(f.pool).SeedServerFixture(t.Context(), SeedServerFixtureParams{
+		ID: toolsetID, ProjectID: f.projectID, Name: conv.ToPGText("old"), Slug: conv.ToPGText("tombstoned-" + uuid.NewString()[:8]),
+		ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, Visibility: "public", NetworkAccessMode: pgtype.Text{},
+		DeletedAt: pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
+	}))
+	before := f.state(t)
+
+	row := rowFor(t, f.run(t, Options{Apply: true}), toolsetID)
+	require.Equal(t, OutcomeBlockedCanonicalConflict, row.Outcome)
+	require.False(t, row.Wrote)
+	require.Equal(t, before, f.state(t))
+}
+
+func TestCanonicalIDOwnedByAnotherToolsetBlocks(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	toolsetID := f.seedToolset(t, toolsetSpec{mcpSlug: "foreign-id", public: true, enabled: true, domainID: uuid.NullUUID{}})
+	otherID := f.seedToolset(t, toolsetSpec{mcpSlug: "foreign-owner", public: true, enabled: true, domainID: uuid.NullUUID{}})
+	f.seedServer(t, toolsetID, otherID, "foreign", "foreign-"+uuid.NewString()[:8], "public")
+	before := f.state(t)
+
+	row := rowFor(t, f.run(t, Options{Apply: true, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}}), toolsetID)
+	require.Equal(t, OutcomeBlockedCanonicalConflict, row.Outcome)
+	require.False(t, row.Wrote)
+	require.Equal(t, before.server(t, toolsetID), f.state(t).server(t, toolsetID))
+}
+
+func TestSyncRejectionBlocksWithoutWriting(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	toolsetID := f.seedToolset(t, toolsetSpec{mcpSlug: "private-only", public: false, enabled: true, domainID: uuid.NullUUID{}})
+	// Re-enabling a private-only wrapper needs an online private ingress, which this org lacks.
+	require.NoError(t, New(f.pool).SeedServerFixture(t.Context(), SeedServerFixtureParams{
+		ID: toolsetID, ProjectID: f.projectID, Name: conv.ToPGText("private"), Slug: conv.ToPGText("private-only"),
+		ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, Visibility: "disabled",
+		NetworkAccessMode: pgtype.Text{String: "private_only", Valid: true}, DeletedAt: pgtype.Timestamptz{},
+	}))
+	f.seedEndpoint(t, toolsetID, uuid.NullUUID{}, "private-only")
+	before := f.state(t)
+
+	row := rowFor(t, f.run(t, Options{Apply: true}), toolsetID)
+	require.Equal(t, OutcomeBlockedSyncRejected, row.Outcome)
+	require.False(t, row.Wrote)
+	require.Equal(t, before, f.state(t))
+}
+
+func TestDeletedProjectIsNotBackfilled(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	toolsetID := f.seedToolset(t, toolsetSpec{mcpSlug: "in-deleted-project", public: true, enabled: true, domainID: uuid.NullUUID{}})
+	require.NoError(t, New(f.pool).SoftDeleteProjectFixture(t.Context(), SoftDeleteProjectFixtureParams{ID: f.projectID, OrganizationID: f.orgID}))
+
+	report := f.run(t, Options{Apply: true})
+	for _, row := range report.Rows {
+		require.NotEqual(t, toolsetID, row.ToolsetID)
+	}
+	require.Empty(t, f.state(t).liveEndpoints(toolsetID))
 }

@@ -228,6 +228,13 @@ func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsets
 	if err != nil {
 		return row, fmt.Errorf("lock toolset: %w", err)
 	}
+	live, err := q.LiveProjectExists(ctx, LiveProjectExistsParams{ID: toolset.ProjectID, OrganizationID: toolset.OrganizationID})
+	if err != nil {
+		return row, fmt.Errorf("check project: %w", err)
+	}
+	if !live {
+		return skipped(row, "project deleted"), nil
+	}
 	row.McpSlug = toolset.McpSlug.String
 	if toolset.CustomDomainID.Valid {
 		row.CustomDomainID = &toolset.CustomDomainID.UUID

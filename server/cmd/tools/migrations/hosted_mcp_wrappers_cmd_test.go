@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"io"
+	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
@@ -66,4 +67,14 @@ func TestParseHostedMCPWrappersFlagsHelpPrintsUsage(t *testing.T) {
 	require.ErrorIs(t, err, flag.ErrHelp)
 	require.Contains(t, out.String(), "-apply")
 	require.Equal(t, 0, runHostedMCPWrappers([]string{"-h"}, io.Discard, hostedMCPWrappersGetenv))
+}
+
+func TestRunHostedMCPWrappersRejectsUnwritableReportBeforeRunning(t *testing.T) {
+	t.Parallel()
+
+	report := filepath.Join(t.TempDir(), "missing", "report.json")
+	var out bytes.Buffer
+	code := runHostedMCPWrappers([]string{"-apply", "-report", report}, &out, hostedMCPWrappersGetenv)
+	require.Equal(t, 2, code, "a bad report path must fail before any apply")
+	require.Empty(t, out.String())
 }

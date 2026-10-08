@@ -1,16 +1,24 @@
 -- name: ListCandidateToolsets :many
-SELECT id, project_id
-FROM toolsets
-WHERE deleted IS FALSE
-  AND mcp_slug IS NOT NULL
-  AND mcp_slug <> ''
-  AND (sqlc.narg('project_id')::uuid IS NULL OR project_id = sqlc.narg('project_id')::uuid)
-  AND id > @after_id::uuid
-ORDER BY id
+SELECT t.id, t.project_id
+FROM toolsets AS t
+JOIN projects AS p ON p.id = t.project_id AND p.organization_id = t.organization_id AND p.deleted IS FALSE
+WHERE t.deleted IS FALSE
+  AND t.mcp_slug IS NOT NULL
+  AND t.mcp_slug <> ''
+  AND (sqlc.narg('project_id')::uuid IS NULL OR t.project_id = sqlc.narg('project_id')::uuid)
+  AND t.id > @after_id::uuid
+ORDER BY t.id
 LIMIT @page_size::int;
 
 -- name: LockToolsetBackfill :exec
 SELECT pg_advisory_xact_lock(hashtextextended('hosted-mcp-backfill:' || @toolset_id::text, 0));
+
+-- name: LiveProjectExists :one
+SELECT EXISTS (
+  SELECT 1
+  FROM projects
+  WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE
+);
 
 -- name: GetServerIdentity :one
 -- Any state: a tombstoned row still owns its id.
@@ -77,8 +85,12 @@ INSERT INTO toolsets (
 );
 
 -- name: SeedServerFixture :exec
-INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id, visibility)
-VALUES (@id, @project_id, @name, @slug, @toolset_id, @visibility);
+INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id, visibility, network_access_mode, deleted_at)
+VALUES (@id, @project_id, @name, @slug, @toolset_id, @visibility, @network_access_mode, @deleted_at);
+
+-- name: SoftDeleteProjectFixture :exec
+UPDATE projects SET deleted_at = clock_timestamp()
+WHERE id = @id AND organization_id = @organization_id;
 
 -- name: SeedEndpointFixture :exec
 INSERT INTO mcp_endpoints (id, project_id, custom_domain_id, mcp_server_id, slug)
