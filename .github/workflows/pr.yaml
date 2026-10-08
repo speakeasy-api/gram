@@ -1613,11 +1613,27 @@ jobs:
           fi
 
       - name: Test
+        id: test
         # Each package can launch Postgres, Redis, and ClickHouse concurrently.
         # Bound package concurrency so eight race-enabled binaries plus their
         # containers do not compete for this runner's eight CPUs during startup.
         # Keep within-package parallelism and race detection; do not retry failures.
+        # A failure here is judged by the flaky-test gate below, which fails
+        # the job unless every failing test is tracked as flaky in Linear.
+        continue-on-error: true
         run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }} --shard-isolate="$SHARD_ISOLATE" -p=2 -race -tags=inv.debug ./...
+
+      - name: Let tracked flaky tests through
+        # Passes only when every failure is an open flaky-test ticket (see
+        # ci/cmd/flaky). A failing candidate is quarantined and handed to the
+        # autopilot queue. Without LINEAR_API_KEY (fork PRs) this always fails.
+        if: steps.test.outcome == 'failure'
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+        run: >-
+          go run github.com/speakeasy-api/gram/ci/cmd/flaky gate
+          -junit server/junit-report.xml
+          -run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
   # Standalone gate for the demo seed: TestDemoSeedSafety proves the seed
   # cannot touch other tenants' data, cleans up stray demo-org rows, and stays
