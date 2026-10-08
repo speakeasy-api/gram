@@ -171,7 +171,7 @@ export function PlaygroundChat({
           initialThreadId,
         },
         mcp: mcpUrl,
-        gramEnvironment:
+        environmentSlug:
           playgroundEnvironmentSlug ?? environmentSlug ?? undefined,
         variant: "standalone",
         model: {

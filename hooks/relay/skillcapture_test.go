@@ -125,8 +125,10 @@ func TestRelayCacheRejectionUsesFinalOrgCredentialsForUploadTask(t *testing.T) {
 	fs.effects = requestedSkillCaptureEffects(true)
 	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
 	require.NoError(t, os.WriteFile(authFile, []byte("server_url="+fs.URL+"\napi_key=rejected-cache-key\nproject=cached-project\norg=org-1\n"), 0o600))
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	t.Setenv("SPEAKEASY_AI_HOOKS_DISABLE_LOCAL_AUTH", "")
 	t.Setenv("GRAM_HOOKS_DISABLE_LOCAL_AUTH", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "org-project", OrgID: "org-1", HooksAPIKey: "org-key", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 

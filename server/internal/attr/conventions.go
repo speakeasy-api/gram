@@ -317,6 +317,8 @@ const (
 	FunctionsRunnerVersionKey      = attribute.Key("gram.functions.runner_version")
 	FunctionsRuntimeKey            = attribute.Key("gram.functions.runtime")
 	HTTPEncodingStyleKey           = attribute.Key("gram.http.encoding.style")
+	HTTPHeaderAliasNameKey         = attribute.Key("gram.http.header_alias.name")
+	HTTPHeaderAliasFormKey         = attribute.Key("gram.http.header_alias.form")
 	HTTPParamNameKey               = attribute.Key("gram.http.param.name")
 	HTTPParamValueKey              = attribute.Key("gram.http.param.value")
 	HTTPResponseExternalKey        = attribute.Key("gram.http.response.external")
@@ -1736,7 +1738,11 @@ func SlogHTTPStatusCodePattern(v string) slog.Attr {
 }
 
 func HTTPParamName(v string) attribute.KeyValue { return HTTPParamNameKey.String(v) }
-func SlogHTTPParamName(v string) slog.Attr      { return slog.String(string(HTTPParamNameKey), v) }
+
+func HTTPHeaderAliasName(v string) attribute.KeyValue { return HTTPHeaderAliasNameKey.String(v) }
+
+func HTTPHeaderAliasForm(v string) attribute.KeyValue { return HTTPHeaderAliasFormKey.String(v) }
+func SlogHTTPParamName(v string) slog.Attr            { return slog.String(string(HTTPParamNameKey), v) }
 
 func HTTPParamValue(v any) attribute.KeyValue { return HTTPParamValueKey.String(fmt.Sprintf("%v", v)) }
 func SlogHTTPParamValue(v any) slog.Attr      { return slog.Any(string(HTTPParamValueKey), v) }

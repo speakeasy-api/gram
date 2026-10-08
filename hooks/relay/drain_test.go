@@ -58,8 +58,8 @@ func seedSpoolEntryWithConfig(t *testing.T, serverURL string, age time.Duration,
 func drainEnv(t *testing.T) {
 	t.Helper()
 	setSpoolStateHome(t)
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
-	t.Setenv("GRAM_HOOKS_API_KEY", "drain-key")
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "drain-key")
 }
 
 // TestDrainReplaysOldestFirstWithStoredKeys pins the replay contract: entries
@@ -92,11 +92,11 @@ func TestDrainReplaysOldestFirstWithStoredKeys(t *testing.T) {
 
 // TestDrainWritesDebugLogFromEnv pins that the drain reports itself: it runs
 // as its own process, so the hook command's --debug-log never reaches it and
-// GRAM_HOOKS_DEBUG_LOG is the only channel a support session can use.
+// SPEAKEASY_AI_HOOKS_DEBUG_LOG is the only channel a support session can use.
 func TestDrainWritesDebugLogFromEnv(t *testing.T) {
 	drainEnv(t)
 	path := filepath.Join(t.TempDir(), "hooks-debug.log")
-	t.Setenv("GRAM_HOOKS_DEBUG_LOG", path)
+	t.Setenv("SPEAKEASY_AI_HOOKS_DEBUG_LOG", path)
 	fs := newFakeServer(t, nil)
 	seedSpoolEntry(t, fs.URL, time.Hour, "sess-debug")
 
@@ -259,7 +259,8 @@ func TestDrainSkipsUnparseableEntries(t *testing.T) {
 // the run was incomplete.
 func TestDrainSkipsWithoutCredentials(t *testing.T) {
 	setSpoolStateHome(t)
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	fs := newFakeServer(t, nil)
 	seedSpoolEntry(t, fs.URL, time.Hour, "sess-1")
@@ -277,7 +278,8 @@ func TestDrainSkipsWithoutCredentials(t *testing.T) {
 // fallback a live send has.
 func TestDrainUsesConfigOrgKeyFallback(t *testing.T) {
 	setSpoolStateHome(t)
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	fs := newFakeServer(t, nil)
 
@@ -373,7 +375,8 @@ func TestDrainAuthRejectionPreservesBacklog(t *testing.T) {
 func TestDrainAuthenticatesFromDiskCache(t *testing.T) {
 	setSpoolStateHome(t)
 	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	fs := newFakeServer(t, nil)
 
@@ -394,9 +397,9 @@ func TestDrainAuthenticatesFromDiskCache(t *testing.T) {
 // deployment's server — the entry resolves from its config org key instead.
 func TestDrainEnvKeyPinnedToItsDeployment(t *testing.T) {
 	setSpoolStateHome(t)
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
-	t.Setenv("GRAM_HOOKS_API_KEY", "env-key-for-dev")
-	t.Setenv("GRAM_HOOKS_SERVER_URL", "http://127.0.0.1:1")
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "env-key-for-dev")
+	t.Setenv("SPEAKEASY_AI_HOOKS_SERVER_URL", "http://127.0.0.1:1")
 	fs := newFakeServer(t, nil)
 
 	cfgPath := filepath.Join(t.TempDir(), "speakeasy.json")
@@ -421,12 +424,12 @@ func TestRunDrainAbortExitsNonZero(t *testing.T) {
 	require.Contains(t, out.String(), "aborted=true")
 }
 
-// TestDrainPinsEntryProject: a GRAM_HOOKS_PROJECT_SLUG inherited from the
+// TestDrainPinsEntryProject: a SPEAKEASY_AI_HOOKS_PROJECT_SLUG inherited from the
 // spawning session must not reroute another project's entries — the stored
 // deployment identity is the routing truth.
 func TestDrainPinsEntryProject(t *testing.T) {
 	drainEnv(t)
-	t.Setenv("GRAM_HOOKS_PROJECT_SLUG", "someone-elses-project")
+	t.Setenv("SPEAKEASY_AI_HOOKS_PROJECT_SLUG", "someone-elses-project")
 	fs := newFakeServer(t, nil)
 	seedSpoolEntry(t, fs.URL, time.Hour, "sess-1")
 

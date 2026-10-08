@@ -189,7 +189,7 @@ func TestEnvKeyRejectionStaysClosedDespiteFailOpen(t *testing.T) {
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
-	require.Contains(t, string(res.Stdout), "GRAM_HOOKS_API_KEY")
+	require.Contains(t, string(res.Stdout), "SPEAKEASY_AI_HOOKS_API_KEY")
 }
 
 // TestCachedKeyRejectionRatchetUnchangedByFailOpen: the 401 credential ratchet
@@ -202,7 +202,8 @@ func TestCachedKeyRejectionRatchetUnchangedByFailOpen(t *testing.T) {
 	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
 	require.NoError(t, os.WriteFile(authFile, []byte("server_url="+fs.URL+"\napi_key=revoked-key\nproject=default\n"), 0o600))
 	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 	writeOrgSettings(cfg, true)
@@ -279,7 +280,7 @@ func TestFutureTimestampedOrgSettingsIgnored(t *testing.T) {
 // TestForgetAuthLeavesOrgSettings: losing a credential must not flip the org's
 // enforcement posture.
 func TestForgetAuthLeavesOrgSettings(t *testing.T) {
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	cfg := Config{ServerURL: "https://gram.test", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 	writeOrgSettings(cfg, true)
 
@@ -361,7 +362,7 @@ func TestFailOpenEnvOverride(t *testing.T) {
 		return http.StatusServiceUnavailable, decision{Decision: "", Reason: "", Message: ""}
 	})
 	cfg := authedConfig(t, fs.URL)
-	t.Setenv("GRAM_HOOKS_FAIL_OPEN", "1")
+	t.Setenv("SPEAKEASY_AI_HOOKS_FAIL_OPEN", "1")
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 

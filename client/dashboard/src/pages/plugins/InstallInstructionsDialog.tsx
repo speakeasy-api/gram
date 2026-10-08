@@ -660,7 +660,7 @@ function OpencodeInstallContent(): JSX.Element {
 
   const installBinary = `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`;
 
-  const installCommand = `GRAM_HOOKS_ORG_KEY="your-hooks-scoped-api-key" \\
+  const installCommand = `SPEAKEASY_AI_HOOKS_ORG_KEY="your-hooks-scoped-api-key" \\
 speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`;
 
   const mcpConfig = `{
@@ -853,7 +853,7 @@ function PiInstallContent(): JSX.Element {
 
   const installBinary = `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`;
 
-  const installCommand = `GRAM_HOOKS_ORG_KEY="your-hooks-scoped-api-key" \\
+  const installCommand = `SPEAKEASY_AI_HOOKS_ORG_KEY="your-hooks-scoped-api-key" \\
 speakeasy-hooks install --provider=pi --dir=. --project=your-project-slug`;
 
   const mcpConfig = `{

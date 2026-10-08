@@ -45,8 +45,9 @@ func loginURLFromOpener(t *testing.T, target string) *url.URL {
 // the flow must cache it and mark the machine established.
 func TestLoginRoundtrip(t *testing.T) {
 	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
-	t.Setenv("GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS", "10")
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_LOGIN_TIMEOUT_SECONDS", "10")
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	forceInteractiveEnv(t)
 
@@ -93,8 +94,9 @@ func TestLoginRoundtrip(t *testing.T) {
 // before callback_method=post, which append credentials to the callback URL.
 func TestLoginLegacyGETRoundtrip(t *testing.T) {
 	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
-	t.Setenv("GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS", "10")
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_LOGIN_TIMEOUT_SECONDS", "10")
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	forceInteractiveEnv(t)
 
@@ -128,19 +130,21 @@ func TestLoginLegacyGETRoundtrip(t *testing.T) {
 }
 
 func TestLoginDisabledPointsToManualKey(t *testing.T) {
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	cfg := Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "org-key", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 	err := NewRelay(cfg).Login(t.Context(), true)
-	require.ErrorContains(t, err, "GRAM_HOOKS_API_KEY")
+	require.ErrorContains(t, err, "SPEAKEASY_AI_HOOKS_API_KEY")
 }
 
 // TestLoginRejectsMismatchedState ensures a callback carrying the wrong state
 // token is refused so a stray localhost request cannot inject a key.
 func TestLoginRejectsMismatchedState(t *testing.T) {
 	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
-	t.Setenv("GRAM_HOOKS_LOGIN_TIMEOUT_SECONDS", "2")
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_LOGIN_TIMEOUT_SECONDS", "2")
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	forceInteractiveEnv(t)
 
@@ -174,7 +178,8 @@ func TestLoginRejectsMismatchedState(t *testing.T) {
 // TestLoginRefusesBrokenConfig: a sign-in under an unreadable plugin config
 // would mint a key against the default server, not this plugin's workspace.
 func TestLoginRefusesBrokenConfig(t *testing.T) {
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_API_KEY", "")
 	t.Setenv("GRAM_HOOKS_API_KEY", "")
 	forceInteractiveEnv(t)
 
@@ -188,7 +193,7 @@ func TestLoginRefusesBrokenConfig(t *testing.T) {
 // attempt must record regardless or every session reopens the browser.
 func TestMarkAttemptCreatesAuthDir(t *testing.T) {
 	authFile := filepath.Join(t.TempDir(), "config", "gram", "hooks-auth.env")
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", authFile)
 
 	l := newLoginFlow(Config{ServerURL: "https://app.example.test", ProjectSlug: "acme", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""})
 	l.markAttempt()

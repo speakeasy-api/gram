@@ -22,19 +22,19 @@ guardrails:
       mode: [pre_call, post_call]
       api_base: https://example.test/rpc/litellm.ingest
       headers:
-        Gram-Key: os.environ/GRAM_LITELLM_INGEST_KEY
-        Gram-Project: os.environ/GRAM_PROJECT_SLUG
+        Speakeasy-AI-Key: os.environ/SPEAKEASY_AI_LITELLM_INGEST_KEY
+        Speakeasy-AI-Project: os.environ/SPEAKEASY_AI_PROJECT
       default_on: true
       streaming_end_of_stream_only: true
       extra_headers:
-        - x-gram-session-id
+        - speakeasy-ai-session-id
         - x-claude-code-session-id
         - session-id
         - thread-id
         - x-session-id
 ```
 
-`extra_headers` is required to forward Speakeasy's explicit session header and native session headers from supported agent clients rather than LiteLLM's `[present]` placeholder.
+`extra_headers` is required to forward the explicit `speakeasy-ai-session-id` header and native session headers from supported agent clients rather than LiteLLM's `[present]` placeholder. The recorded corpus predates that header name and carries the deprecated `x-gram-session-id` alias, which ingest still reads.
 
 ## Coverage
 
