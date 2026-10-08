@@ -298,10 +298,11 @@ func TestMemberMCPConnectionStatusReportsIdentityChaining(t *testing.T) {
 			if test.noIssuer {
 				issuer = uuid.NullUUID{}
 			}
-			_, err := testrepo.New(conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
+			stamped, err := testrepo.New(conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
 				RemoteSessionIssuerID: issuer, ID: mcpID, ProjectID: project.ID,
 			})
 			require.NoError(t, err)
+			require.EqualValues(t, 1, stamped)
 			readerClients := clients
 			if test.noClient {
 				readerClients = nil
