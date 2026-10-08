@@ -489,7 +489,7 @@ export function InsightsAgentsContent(): JSX.Element {
 
     return (
       <>
-        <InsightsConfig hideTrigger />
+        <InsightsConfig />
         <div className="min-h-0 w-full flex-1 overflow-y-auto p-8 pb-24">
           <div className="mx-auto flex max-w-7xl flex-col gap-6">
             <div className="flex min-w-0 flex-col gap-1">

@@ -1329,7 +1329,7 @@ export function CostsExplorer(): JSX.Element {
   if (isLogsDisabled) {
     return (
       <>
-        <InsightsConfig hideTrigger />
+        <InsightsConfig />
         <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
           <div className="flex min-w-0 flex-col gap-1">
             <Page.Eyebrow />

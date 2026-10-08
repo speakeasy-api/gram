@@ -359,7 +359,6 @@ export function InsightsToolsContent(): JSX.Element {
         mcpConfig={mcpConfig}
         title="Explore MCP Servers & Tools"
         subtitle="Ask me about your MCP servers and tools! Powered by Elements + platform MCP"
-        hideTrigger={isLogsDisabled}
       />
       {isLogsDisabled ? (
         <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">

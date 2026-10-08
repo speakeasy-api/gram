@@ -591,7 +591,6 @@ export function LogsAgentsContent(): JSX.Element {
         contextInfo={dateRangeContext}
         // Hide the docked assistant on this page — the agent-sessions list and
         // its detail drawer are the primary surface here.
-        hideTrigger
         suggestions={INSIGHTS_SUGGESTIONS["agent-sessions"]}
       />
       <AgentSessionsPageContent

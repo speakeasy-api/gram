@@ -26,7 +26,10 @@ import {
   useSearchParams,
 } from "react-router";
 import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
-import { AppRouteContentErrorBoundary } from "./components/app-route-content-error-boundary.tsx";
+import {
+  AppRouteContentErrorBoundary,
+  RouteLoadingFallback,
+} from "./components/app-route-content-error-boundary.tsx";
 import { ModeSwitchProvider } from "./components/mode-switch-stage.tsx";
 import { CommandPalette } from "./components/command-palette";
 import { GuideEntryRedirect } from "./components/project-guide/GuideEntryRedirect";
@@ -525,9 +528,7 @@ const routesWithSubroutes = (routes: AppRoute[]) => {
         path={item.url}
         element={
           item.component ? (
-            <AppRouteContentErrorBoundary
-              fallback={<div className="p-8 text-sm">Loading…</div>}
-            >
+            <AppRouteContentErrorBoundary fallback={<RouteLoadingFallback />}>
               <item.component />
             </AppRouteContentErrorBoundary>
           ) : null
@@ -537,8 +538,16 @@ const routesWithSubroutes = (routes: AppRoute[]) => {
           <Route
             index
             element={
+              // Under a shell route the shell already renders the header, so
+              // the index only needs a body fallback.
               <AppRouteContentErrorBoundary
-                fallback={<div className="p-8 text-sm">Loading…</div>}
+                fallback={
+                  item.component ? (
+                    <div className="p-8 text-sm">Loading…</div>
+                  ) : (
+                    <RouteLoadingFallback />
+                  )
+                }
               >
                 <item.indexComponent />
               </AppRouteContentErrorBoundary>

@@ -159,7 +159,8 @@ const AppLayoutContent = ({
   return (
     <div className="relative flex min-h-screen w-full flex-col">
       {isImpersonating && <ImpersonationBanner />}
-      <ModeSwitcher mode="canvas" />
+      {/* Project pages carry the mode switcher inline in the page header
+          (see InsightsProvider's headerChrome); chat pages have none. */}
       <ModeSurface mode="canvas" className="flex w-full flex-1 overflow-x-clip">
         {/* Default (non-inset) variant: flat panes divided by a hairline
             instead of a floating bordered card. */}
@@ -202,6 +203,7 @@ const GlobalInsightsWrapper = ({ children }: { children: React.ReactNode }) => {
       title="How can I help you understand your AI usage?"
       subtitle="Your assistant for exploring the platform — logs, traces, MCP servers, and more."
       suggestions={INSIGHTS_SUGGESTIONS.default}
+      headerChrome
     >
       {children}
     </InsightsProvider>

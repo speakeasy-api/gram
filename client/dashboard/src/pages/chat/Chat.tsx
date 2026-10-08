@@ -48,10 +48,7 @@ import {
 } from "@/components/brand-mesh";
 import { getIdentityTint, useIsDarkTheme } from "@/components/gradient-colors";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
-import {
-  useHideInsightsDock,
-  useInsightsState,
-} from "@/components/insights-context";
+import { useInsightsState } from "@/components/insights-context";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
 import { useSlugs } from "@/contexts/Sdk";
 import {
@@ -78,8 +75,6 @@ const ICON_BUTTON_CLASS =
 /** Layout route for `/chat`; renders the index (home) or a conversation. */
 export function ChatRoot(): ReactElement {
   const project = useProject();
-  // The page IS the chat, so hide the floating dock across the /chat subtree.
-  useHideInsightsDock();
   return (
     <RequireScope scope="assistant:read" projectId={project.id} level="page">
       <Outlet />
@@ -118,8 +113,10 @@ export function ChatHome(): ReactElement {
           <Home className="size-4" />
         </Link>
       </header>
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-3xl flex-col px-6 pt-[clamp(10rem,26vh,16rem)] pb-16">
+      {/* my-auto centers the landing vertically when it fits, and still lets
+          the column scroll from the top when it doesn't. */}
+      <div className="flex flex-1 flex-col overflow-y-auto">
+        <div className="mx-auto my-auto flex w-full max-w-3xl flex-col px-6 py-16">
           <ChatLanding autoFocusInput />
         </div>
       </div>
@@ -1014,8 +1011,11 @@ export function ChatConversation(): ReactElement {
     void navigate(routes.chat.conversation.href("new"));
   };
 
+  // The document scrolls (no fixed-height ancestor), so size to the viewport
+  // explicitly — `h-full` collapses to the content and lifts the composer off
+  // the bottom of the screen on short threads.
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-[calc(100dvh-var(--banner-offset,0px))] flex-col">
       {/* h-(--header-height) + px-8: same row height and content inset as
           Page.Header, so this header's rule lines up with the sidebar's. */}
       <header className="border-border flex h-(--header-height) shrink-0 items-center gap-3 border-b px-8">

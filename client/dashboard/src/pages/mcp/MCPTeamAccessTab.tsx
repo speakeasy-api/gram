@@ -1,5 +1,4 @@
 import { IdentityLink } from "@/components/identity-link";
-import { useHideInsightsDock } from "@/components/insights-context";
 import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Heading } from "@/components/ui/Heading";
@@ -77,9 +76,6 @@ export function MCPTeamAccessTab({
    */
   checkAccess?: boolean;
 }): ReactElement | null {
-  // The dock floats over the bottom of the page, which here is rows with
-  // edit and remove controls and the access check.
-  useHideInsightsDock();
   const {
     data: audienceData,
     isLoading: audienceLoading,

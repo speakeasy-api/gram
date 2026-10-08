@@ -1,7 +1,6 @@
 import { act, cleanup, render } from "@testing-library/react";
 import { type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useHideInsightsDock } from "./insights-context";
 import { InsightsProvider } from "./insights-dock";
 import { GramElementsProvider } from "@/elements";
 
@@ -150,6 +149,7 @@ vi.mock("@/lib/assistantEntityLinks", () => ({
 }));
 vi.mock("@/hooks/useInsightsDockCta", () => ({
   INSIGHTS_DOCK_CONTENT_VT_CLASS: "",
+  INSIGHTS_DOCK_ENABLED: true,
   INSIGHTS_DOCK_VT_CLASS: "",
   useInsightsDockCta: () => ({ dismissed: false, dismiss: vi.fn() }),
 }));
@@ -196,7 +196,6 @@ beforeEach(() => {
 });
 
 function AssistantEditor(): JSX.Element {
-  useHideInsightsDock();
   return (
     <GramElementsProvider config={{} as never}>Editor</GramElementsProvider>
   );

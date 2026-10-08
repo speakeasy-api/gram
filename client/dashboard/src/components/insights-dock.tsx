@@ -27,6 +27,7 @@ import { hasScopeInGrants, useRBAC } from "@/hooks/useRBAC";
 import { emailsMatch, resolveChatOwner } from "@/lib/chat-owner";
 import {
   INSIGHTS_DOCK_CONTENT_VT_CLASS,
+  INSIGHTS_DOCK_ENABLED,
   INSIGHTS_DOCK_VT_CLASS,
   useInsightsDockCta,
 } from "@/hooks/useInsightsDockCta";
@@ -47,6 +48,7 @@ import {
   HistoryIcon,
   Loader2,
   Maximize2,
+  Plus,
   SquarePen,
   Terminal,
   X,
@@ -54,6 +56,7 @@ import {
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -62,7 +65,15 @@ import {
 import type { InsightsConfigOptions } from "./insights-context";
 import { InsightsContext, useInsightsState } from "./insights-context";
 import { InsightsShortcutKeys } from "./insights-dock-shortcut-hint";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/Popover";
 import { useAskAiListener } from "./command-palette/askAiBridge";
+import { ModeSwitcher } from "./mode-switcher";
+import { Button } from "./ui/Button";
+import { CommandPaletteTrigger } from "./command-palette/CommandPaletteTrigger";
 
 // Types-only re-export (erased at compile time, won't break Fast Refresh)
 export type { InsightsConfigOptions } from "./insights-context";
@@ -383,14 +394,107 @@ interface InsightsDockProps {
    *  tool mentions); until then it falls back to a plain input so the dock is
    *  never a dead control. */
   runtimeReady: boolean;
+  /** Mount with the composer already expanded (suggestions showing). Used
+   *  when the dock is summoned on demand rather than always resting. */
+  startExpanded?: boolean;
+  /** Called when the dock settles back to the resting pill (composer
+   *  collapsed, no draft, panel closed). */
+  onIdle?: () => void;
+  /** Anchor the card top-right, under the header's New Chat button, instead
+   *  of floating bottom-center. */
+  anchorEnd?: boolean;
+}
+
+/**
+ * Assistant controls for the right of the project page header while the dock
+ * is turned off (INSIGHTS_DOCK_ENABLED): search, a New Chat button that
+ * summons the expanded dock, and a Recent chats popover.
+ */
+function InsightsHeaderActions({
+  assistantAllowed,
+  onOpen,
+  onPickHistory,
+  showHistory,
+}: {
+  /** New Chat and history need the assistant; search is always shown. */
+  assistantAllowed: boolean;
+  onOpen: () => void;
+  /** Called after a chat is picked from the history popover. */
+  onPickHistory: () => void;
+  /** The history list needs the shared runtime; hide it until mounted. */
+  showHistory: boolean;
+}): ReactElement {
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const isMac = isMacPlatform();
+  return (
+    <div className="flex items-center gap-1">
+      {assistantAllowed && (
+        // The design system's primary button, so it reads like the rest of
+        // the dashboard's actions; the shortcut lives in the tooltip.
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={onOpen}
+          aria-keyshortcuts={isMac ? "Meta+/" : "Control+/"}
+          title={`New chat (${isMac ? "⌘/" : "Ctrl /"})`}
+        >
+          <Button.LeftIcon>
+            <Plus />
+          </Button.LeftIcon>
+          <Button.Text>New chat</Button.Text>
+        </Button>
+      )}
+      {assistantAllowed && showHistory && (
+        <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label="Recent chats"
+              title="Recent chats"
+              className="text-muted-foreground hover:text-foreground hover:bg-muted data-[state=open]:bg-muted data-[state=open]:text-foreground flex size-8 items-center justify-center transition-colors"
+            >
+              <HistoryIcon className="size-4" strokeWidth={1.75} />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            side="bottom"
+            align="end"
+            sideOffset={8}
+            className="flex max-h-96 w-80 flex-col p-0"
+          >
+            <div className="text-eyebrow border-border shrink-0 border-b px-3 py-2">
+              Recent chats
+            </div>
+            {/* Picking a chat switches the shared runtime; then open the
+                panel on it. */}
+            <div
+              className="min-h-0 flex-1 overflow-y-auto"
+              onClick={() => {
+                setHistoryOpen(false);
+                onPickHistory();
+              }}
+            >
+              <ChatHistory showNewThread={false} />
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
+      <CommandPaletteTrigger className="size-8" />
+    </div>
+  );
 }
 
 /** Width of the dock card across its states: chat panel open, composer
  *  focused (or holding draft text), and collapsed bar. The card itself
  *  carries the single floating-overlay shadow. */
-function dockCardShapeClass(open: boolean, composerExpanded: boolean): string {
-  if (open) return "max-w-3xl";
-  if (composerExpanded) return "max-w-2xl";
+function dockCardShapeClass(
+  open: boolean,
+  composerExpanded: boolean,
+  anchorEnd: boolean,
+): string {
+  // Dropped from the header button, the card stays popover-sized.
+  if (open) return anchorEnd ? "max-w-xl" : "max-w-3xl";
+  if (composerExpanded) return anchorEnd ? "max-w-lg" : "max-w-2xl";
   return "max-w-md";
 }
 
@@ -420,13 +524,16 @@ function InsightsDock({
   onOpenHistory,
   panel,
   runtimeReady,
+  startExpanded = false,
+  onIdle,
+  anchorEnd = false,
 }: InsightsDockProps): ReactElement {
   const [value, setValue] = useState("");
   // Expansion is sticky state, not a focus mirror: it must survive the input
   // losing focus to an in-app navigation so the new page's suggestions show
   // without re-opening the dock. Collapses commit through a grace timer that
   // a route change can cancel (or, for slow clicks, undo).
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(startExpanded);
   const inputRef = useRef<HTMLInputElement>(null);
   /** Wraps the shared composer; also the focus target for Cmd+/. */
   const composerHostRef = useRef<HTMLDivElement>(null);
@@ -513,6 +620,11 @@ function InsightsDock({
   const hasDraft = value.trim().length > 0 || sharedDraft;
   const composerExpanded = !open && (expanded || hasDraft);
 
+  // Layout-timed so a summoned dock unmounts before the resting pill paints.
+  useLayoutEffect(() => {
+    if (!open && !composerExpanded) onIdle?.();
+  }, [open, composerExpanded, onIdle]);
+
   const shortcutAria = isMacPlatform() ? "Meta+/" : "Control+/";
 
   const submit = (text: string) => {
@@ -570,7 +682,10 @@ function InsightsDock({
   return (
     <div
       className={cn(
-        "pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pt-14 pb-12",
+        "pointer-events-none absolute inset-x-0 z-30 flex",
+        anchorEnd
+          ? "top-0 justify-end px-5 pt-2"
+          : "bottom-0 justify-center px-4 pt-14 pb-12",
       )}
     >
       {/* Frosted veil under the dock: blurs the page content directly behind
@@ -579,13 +694,14 @@ function InsightsDock({
           remains clickable. */}
       <div
         aria-hidden="true"
+        hidden={anchorEnd}
         className="absolute inset-0 backdrop-blur-[2px] [mask-image:radial-gradient(ellipse_55%_95%_at_50%_100%,black_35%,transparent_78%)]"
       />
       <div
         className={cn(
           "border-border bg-card text-card-foreground pointer-events-auto w-full border shadow-md",
           "transition-all duration-300 ease-out",
-          dockCardShapeClass(open, composerExpanded),
+          dockCardShapeClass(open, composerExpanded, anchorEnd),
           // Pairs with the sidebar resume button for the dismiss/resume genie
           // (see useInsightsDockCta). The inner wrapper carries the content
           // name so text fades at the endpoints instead of warping mid-flight.
@@ -688,38 +804,54 @@ function InsightsDock({
                           ghosts looked like artifacts) and staggers the new
                           chips in. A chip shared between pages keeps its
                           element and doesn't re-animate. */}
-                      <div className="flex flex-wrap items-center gap-1.5 px-2.5 pt-1 pb-2.5">
-                        {suggestions
-                          .slice(0, DOCK_SUGGESTION_LIMIT)
-                          .map((suggestion, index) => {
-                            const SuggestionIcon =
-                              INSIGHTS_SUGGESTION_ICONS[
-                                suggestion.icon ?? "sparkles"
-                              ];
-                            return (
-                              <motion.button
-                                key={suggestion.title}
-                                initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                animate={{
-                                  opacity: 1,
-                                  y: 0,
-                                  scale: 1,
-                                  transition: {
-                                    delay: index * 0.06,
-                                    duration: 0.25,
-                                    ease: "easeOut",
-                                  },
-                                }}
-                                type="button"
-                                tabIndex={composerExpanded ? 0 : -1}
-                                onClick={() => submit(suggestion.prompt)}
-                                className="border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-1.5 border px-2 py-1 text-xs transition-colors"
-                              >
-                                <SuggestionIcon className="size-3 shrink-0" />
-                                {suggestion.title}
-                              </motion.button>
-                            );
-                          })}
+                      <div className="flex items-start gap-1.5 pt-1 pb-2.5">
+                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                          {suggestions
+                            .slice(0, DOCK_SUGGESTION_LIMIT)
+                            .map((suggestion, index) => {
+                              const SuggestionIcon =
+                                INSIGHTS_SUGGESTION_ICONS[
+                                  suggestion.icon ?? "sparkles"
+                                ];
+                              return (
+                                <motion.button
+                                  key={suggestion.title}
+                                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                  animate={{
+                                    opacity: 1,
+                                    y: 0,
+                                    scale: 1,
+                                    transition: {
+                                      delay: index * 0.06,
+                                      duration: 0.25,
+                                      ease: "easeOut",
+                                    },
+                                  }}
+                                  type="button"
+                                  tabIndex={composerExpanded ? 0 : -1}
+                                  onClick={() => submit(suggestion.prompt)}
+                                  className="border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-1.5 border px-2 py-1 text-xs transition-colors"
+                                >
+                                  <SuggestionIcon className="size-3 shrink-0" />
+                                  {suggestion.title}
+                                </motion.button>
+                              );
+                            })}
+                        </div>
+                        {/* Anchored under the header, close sits top
+                            right beside the chips instead of in the input. */}
+                        {anchorEnd && (
+                          <button
+                            type="button"
+                            onClick={onDismiss}
+                            tabIndex={composerExpanded ? 0 : -1}
+                            className={cn(PANEL_ICON_BUTTON_CLASS, "shrink-0")}
+                            aria-label="Close the assistant dock"
+                            title="Close"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -738,7 +870,8 @@ function InsightsDock({
                 >
                   {composerField}
                   {value.trim() && <DockSubmitButton />}
-                  {composerExpanded && (
+                  {/* Anchored under the header, history lives in the header. */}
+                  {composerExpanded && !anchorEnd && (
                     <button
                       type="button"
                       onClick={onOpenHistory}
@@ -757,16 +890,18 @@ function InsightsDock({
                   {!composerExpanded && !continueMode && !runtimeReady && (
                     <InsightsShortcutKeys className="opacity-60" />
                   )}
-                  <button
-                    type="button"
-                    onClick={onDismiss}
-                    tabIndex={open ? -1 : 0}
-                    className={PANEL_ICON_BUTTON_CLASS}
-                    aria-label="Dismiss the assistant dock"
-                    title="Dismiss"
-                  >
-                    <X className="size-3.5" />
-                  </button>
+                  {!(anchorEnd && suggestions.length > 0) && (
+                    <button
+                      type="button"
+                      onClick={onDismiss}
+                      tabIndex={open ? -1 : 0}
+                      className={PANEL_ICON_BUTTON_CLASS}
+                      aria-label="Dismiss the assistant dock"
+                      title="Dismiss"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  )}
                 </form>
               </div>
             </div>
@@ -809,6 +944,9 @@ interface InsightsProviderProps {
   suggestions?: InsightsSuggestion[];
   /** Default expanded state. */
   defaultExpanded?: boolean;
+  /** Supply the page header's mode switcher and assistant controls (search,
+   *  New Chat, history) while the dock is turned off. Project layout only. */
+  headerChrome?: boolean;
   /** Children rendered alongside the dock (page content). */
   children: React.ReactNode;
 }
@@ -819,27 +957,31 @@ export function InsightsProvider({
   subtitle: defaultSubtitle,
   suggestions: defaultSuggestions = [],
   defaultExpanded = false,
+  headerChrome = false,
   children,
 }: InsightsProviderProps): ReactElement {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [override, setOverride] = useState<InsightsConfigOptions | null>(null);
-  // Ref-counted dock hide for pages with their own chat entry (full-page chat,
-  // home widget). Kept separate from `override` so dashboard consumers that
-  // reset the override (ProjectDashboard) can't un-hide the dock.
-  const dockHideCountRef = useRef(0);
-  const [dockHiddenByPage, setDockHiddenByPage] = useState(false);
-  const registerDockHide = useCallback(() => {
-    dockHideCountRef.current += 1;
-    setDockHiddenByPage(dockHideCountRef.current > 0);
-    return () => {
-      dockHideCountRef.current = Math.max(0, dockHideCountRef.current - 1);
-      setDockHiddenByPage(dockHideCountRef.current > 0);
-    };
-  }, []);
   // Bumped whenever the keyboard shortcut fires (with the chat panel closed) so
   // the docked composer grabs focus and expands. Starts at 0; the dock
   // ignores the initial value.
   const [focusComposerKey, setFocusComposerKey] = useState(0);
+  // While the dock is turned off (INSIGHTS_DOCK_ENABLED) it is mounted only
+  // on demand: the header's New Chat button summons it expanded, and it goes
+  // away again once it settles back to the resting pill.
+  const [dockSummoned, setDockSummoned] = useState(false);
+  const summonDock = useCallback(() => {
+    setDockSummoned(true);
+    setFocusComposerKey((k) => k + 1);
+  }, []);
+  const unsummonDock = useCallback(() => setDockSummoned(false), []);
+  // Closing the chat panel puts a summoned dock away too, rather than leaving
+  // its composer expanded behind the closed panel.
+  const wasExpandedRef = useRef(isExpanded);
+  useEffect(() => {
+    if (wasExpandedRef.current && !isExpanded) setDockSummoned(false);
+    wasExpandedRef.current = isExpanded;
+  }, [isExpanded]);
   const [pendingPrompt, setPendingPrompt] = useState<{
     text: string;
     nonce: number;
@@ -878,10 +1020,6 @@ export function InsightsProvider({
   // resolved when the dock is opened OR when on a chat route, so the page has a
   // live runtime without the user touching the dock first.
   const onChatRoute = /\/chat(\/|$)/.test(pathname);
-  // The add flows (/mcp/add and everything under it) are focused tasks with
-  // their own primary action and a deliberately empty sidebar. The docked
-  // composer sits over that work and competes with it, so hide it there.
-  const onAddFlowRoute = /\/mcp\/add(\/|$)/.test(pathname);
   // On a chat route the page owns the chat and the dock is hidden, so collapse
   // the dock (a maximize leaves it expanded). The shared runtime stays mounted
   // via onChatRoute, so this collapse never unmounts it.
@@ -903,8 +1041,6 @@ export function InsightsProvider({
   const suggestions =
     override?.suggestions ?? routeSuggestions ?? defaultSuggestions;
   const contextInfo = override?.contextInfo;
-  const pageHidesTrigger =
-    (override?.hideTrigger ?? false) || dockHiddenByPage || onAddFlowRoute;
   const noToolsetsConfigured = useNoToolsetsConfigured(mcpConfig.projectSlug);
   const organization = useOrganization();
   const targetProjectId = organization.projects.find(
@@ -957,7 +1093,6 @@ export function InsightsProvider({
     getSkillIds: getSelectedSkillIds,
     onSkillIdsSent: handleSkillIdsSent,
   });
-  const hideTrigger = pageHidesTrigger || !assistantAllowed;
 
   const skillsQuery = useSkillsInfinite(
     { limit: 200, gramProject: mcpConfig.projectSlug },
@@ -1070,7 +1205,7 @@ export function InsightsProvider({
   // including on Home where the floating dock is hidden in favor of the
   // landing widget. Routes that mount their own GramElementsProvider are the
   // exception: wrapping them would nest RemoteThreadListRuntimes before their
-  // useHideInsightsDock layout effect can register with this parent.
+  // own providers mount.
   const pageOwnsRuntime =
     routes.playground.active ||
     routes.assistants.newAssistant.active ||
@@ -1292,10 +1427,16 @@ export function InsightsProvider({
   useAskAiListener(
     useCallback(
       (prompt: string) => {
+        // With the dock turned off, an empty request (e.g. the command palette)
+        // summons the expanded dock with its suggestions.
+        if (!INSIGHTS_DOCK_ENABLED && !prompt.trim()) {
+          summonDock();
+          return;
+        }
         setIsExpanded(true);
         if (prompt.trim()) handleSendPrompt(prompt);
       },
-      [handleSendPrompt],
+      [handleSendPrompt, summonDock],
     ),
   );
 
@@ -1317,8 +1458,9 @@ export function InsightsProvider({
     useInsightsDockCta();
   const handleDockDismiss = useCallback(() => {
     setIsExpanded(false);
-    dismissDock();
-  }, [dismissDock]);
+    if (INSIGHTS_DOCK_ENABLED) dismissDock();
+    else unsummonDock();
+  }, [dismissDock, unsummonDock]);
 
   // Start a brand-new Project Assistant conversation. Bumping the runtime key
   // remounts the shared runtime onto a fresh thread; the new thread gets its
@@ -1355,12 +1497,12 @@ export function InsightsProvider({
   // closed it focuses the docked composer; with it open it collapses the
   // panel back into the composer pill.
   //
-  // Skips when the dock is hidden via `hideTrigger`, when a modifier
+  // Skips without assistant access, when a modifier
   // mismatch is detected (extra Alt/Shift), or when the user is typing in a
   // contentEditable region — letting Cmd+/ still work in plain inputs since
   // the Cmd/Ctrl modifier means it never inserts text.
   useEffect(() => {
-    if (hideTrigger) return;
+    if (!assistantAllowed) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!e.metaKey && !e.ctrlKey) return;
       if (e.altKey) return;
@@ -1372,17 +1514,58 @@ export function InsightsProvider({
       e.preventDefault();
       if (isExpanded) {
         setIsExpanded(false);
-      } else {
+      } else if (INSIGHTS_DOCK_ENABLED) {
         setFocusComposerKey((k) => k + 1);
+      } else {
+        // With the dock off, the shortcut starts a fresh full-page chat.
+        handleStartFresh();
+        routes.chat.conversation.goTo("new");
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [hideTrigger, isExpanded]);
+  }, [assistantAllowed, isExpanded, handleStartFresh, routes]);
+
+  // Header New chat: summon the dock onto a fresh conversation.
+  const openNewChatDock = useCallback(() => {
+    handleStartFresh();
+    summonDock();
+  }, [handleStartFresh, summonDock]);
+  const pickHistoryChat = useCallback(() => {
+    setHistoryView(false);
+    setIsExpanded(true);
+  }, []);
+  const headerChromeNodes = useMemo(
+    () =>
+      headerChrome && !INSIGHTS_DOCK_ENABLED
+        ? {
+            start: <ModeSwitcher mode="canvas" inline />,
+            end: (
+              <InsightsHeaderActions
+                // Routes that mount their own runtime (Playground, assistant
+                // onboarding) can't host the shared dock.
+                assistantAllowed={assistantAllowed && !pageOwnsRuntime}
+                onOpen={openNewChatDock}
+                onPickHistory={pickHistoryChat}
+                showHistory={runtimeMounted}
+              />
+            ),
+          }
+        : null,
+    [
+      headerChrome,
+      assistantAllowed,
+      pageOwnsRuntime,
+      openNewChatDock,
+      pickHistoryChat,
+      runtimeMounted,
+    ],
+  );
 
   const contextValue = useMemo(
     () => ({
-      available: !hideTrigger,
+      available: assistantAllowed,
+      headerChrome: headerChromeNodes,
       isExpanded,
       setIsExpanded,
       setOverride: handleSetOverride,
@@ -1393,17 +1576,16 @@ export function InsightsProvider({
       assistantReady: runtimeMounted,
       assistantNeedsAdmin,
       newConversation: handleStartFresh,
-      registerDockHide,
     }),
     [
-      hideTrigger,
+      assistantAllowed,
+      headerChromeNodes,
       isExpanded,
       handleSetOverride,
       handleSendPrompt,
       runtimeMounted,
       assistantNeedsAdmin,
       handleStartFresh,
-      registerDockHide,
     ],
   );
 
@@ -1576,10 +1758,10 @@ export function InsightsProvider({
     <div className="relative flex w-full flex-1 flex-col">
       {children}
 
-      {/* Backdrop overlay - closes the chat panel when clicked. A page that
-          hides the dock hides the panel with it, so the backdrop goes too:
-          left behind, it would swallow clicks on that page. */}
-      {isExpanded && !hideTrigger && (
+      {/* Backdrop overlay - closes the chat panel when clicked. The panel
+          only renders with assistant access, so the backdrop follows it:
+          left behind, it would swallow clicks on the page. */}
+      {isExpanded && assistantAllowed && (
         <div
           className="fixed inset-0 z-20"
           onClick={() => setIsExpanded(false)}
@@ -1589,24 +1771,42 @@ export function InsightsProvider({
 
       {/* Permanently docked "Ask anything" composer — the entry point to
             the Project Assistant. Expands in place into the chat panel.
-            Hidden on pages that opt out via hideTrigger, and while dismissed
-            to the sidebar resume button. */}
-      {!hideTrigger && !dockDismissed && (
-        <div className="pointer-events-none sticky bottom-0 z-30 h-0 shrink-0">
-          <InsightsDock
-            suggestions={suggestions}
-            open={isExpanded}
-            focusKey={focusComposerKey}
-            onSubmitPrompt={handleDockSubmit}
-            onContinue={handleReopenChat}
-            continueMode={continueMode}
-            onDismiss={handleDockDismiss}
-            onOpenHistory={handleOpenHistory}
-            panel={panelContent}
-            runtimeReady={runtimeMounted}
-          />
-        </div>
-      )}
+            Hidden without assistant access, and while dismissed
+            to the sidebar resume button. While the dock is turned off it
+            mounts only when summoned (header New Chat button) or with the
+            panel open, and unmounts once it settles back to the resting pill,
+            so the resting composer never shows. */}
+      {assistantAllowed &&
+        (INSIGHTS_DOCK_ENABLED
+          ? !dockDismissed
+          : dockSummoned || isExpanded) && (
+          // Summoned from the header's New Chat button, the dock drops down
+          // from just under the header instead of resting at the bottom.
+          <div
+            className={cn(
+              "pointer-events-none z-30 h-0 shrink-0",
+              INSIGHTS_DOCK_ENABLED
+                ? "sticky bottom-0"
+                : "fixed inset-x-0 top-[calc(var(--banner-offset,0px)+var(--header-height))]",
+            )}
+          >
+            <InsightsDock
+              suggestions={suggestions}
+              open={isExpanded}
+              focusKey={focusComposerKey}
+              onSubmitPrompt={handleDockSubmit}
+              onContinue={handleReopenChat}
+              continueMode={continueMode}
+              onDismiss={handleDockDismiss}
+              onOpenHistory={handleOpenHistory}
+              panel={panelContent}
+              runtimeReady={runtimeMounted}
+              startExpanded={!INSIGHTS_DOCK_ENABLED}
+              onIdle={INSIGHTS_DOCK_ENABLED ? undefined : unsummonDock}
+              anchorEnd={!INSIGHTS_DOCK_ENABLED}
+            />
+          </div>
+        )}
     </div>
   );
 
@@ -1629,7 +1829,7 @@ export function InsightsProvider({
           />
           <StopDictationOnNavigate />
           <OpenPanelOnSend
-            enabled={!isExpanded && !onChatRoute && !hideTrigger}
+            enabled={!isExpanded && !onChatRoute && assistantAllowed}
             onSend={() => setIsExpanded(true)}
           />
           {dockSurface}

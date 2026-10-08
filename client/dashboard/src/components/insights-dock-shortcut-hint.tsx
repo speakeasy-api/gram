@@ -1,4 +1,7 @@
-import { useInsightsDockCta } from "@/hooks/useInsightsDockCta";
+import {
+  INSIGHTS_DOCK_ENABLED,
+  useInsightsDockCta,
+} from "@/hooks/useInsightsDockCta";
 import { cn, isMacPlatform } from "@/lib/utils";
 import { ReactElement } from "react";
 import { useInsightsState } from "./insights-context";
@@ -57,7 +60,8 @@ export function InsightsDockShortcutHint({
 }): ReactElement | null {
   const { available } = useInsightsState();
   const { dismissed } = useInsightsDockCta();
-  if (!available || dismissed) return null;
+  // While the dock is off the bottom bar carries the shortcut hint.
+  if (!INSIGHTS_DOCK_ENABLED || !available || dismissed) return null;
 
   return (
     <span

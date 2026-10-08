@@ -2,6 +2,10 @@ import { useSlugs } from "@/contexts/Sdk";
 import { createDismissedCtaStore } from "@/hooks/useDismissedCtaStore";
 import { withViewTransition } from "@/lib/view-transition";
 
+// Temporarily turns off the docked Project Assistant composer on every page
+// (and its sidebar resume button and shortcut). Flip back to re-enable.
+export const INSIGHTS_DOCK_ENABLED = false;
+
 // Shared Tailwind classes that tag BOTH the docked Project Assistant composer
 // and the sidebar resume button with the same view-transition-name — only one
 // of the two is rendered at a time (the dismissed flag decides which), so the

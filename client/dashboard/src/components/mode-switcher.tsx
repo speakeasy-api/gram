@@ -106,7 +106,15 @@ function ModeSegment({
  * Mode switcher overlaid on the app's top navigation row. Swaps between the
  * normal dashboard and headless mode (Platform MCP setup, no sidebar).
  */
-export function ModeSwitcher({ mode }: { mode: Mode }): JSX.Element | null {
+export function ModeSwitcher({
+  mode,
+  inline = false,
+}: {
+  mode: Mode;
+  /** Render the pill in place (in the project page header) instead of
+   *  overlaid on the top navigation row. */
+  inline?: boolean;
+}): JSX.Element | null {
   const orgRoutes = useOrgRoutes();
   const { orgSlug } = useSlugs();
   const location = useLocation();
@@ -150,15 +158,22 @@ export function ModeSwitcher({ mode }: { mode: Mode }): JSX.Element | null {
     // absolute: the document scrolls, and the pill rides the sticky header.
     <nav
       aria-label="Interface mode"
-      className={cn(
-        "pointer-events-none fixed inset-x-0 z-30 hidden sm:flex h-(--header-height) items-center justify-center",
-        mode === "canvas" ? "top-(--header-offset)" : "top-0",
-      )}
+      className={
+        inline
+          ? "hidden sm:flex"
+          : cn(
+              "pointer-events-none fixed inset-x-0 z-30 hidden sm:flex h-(--header-height) items-center justify-center",
+              mode === "canvas" ? "top-(--header-offset)" : "top-0",
+            )
+      }
     >
       <div
         className={cn(
           "pointer-events-auto relative flex items-center rounded-full border p-0.5 transition-colors duration-500",
           onInk ? "border-neutral-softest" : "border-border",
+          // Inline it sits on the grey project top bar, so give the track a
+          // white surface for the inactive segment.
+          inline && !onInk && "bg-card",
         )}
       >
         {/* Solid ink pill that slides between segments — the one moving part,
