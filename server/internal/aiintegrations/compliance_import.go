@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"time"
 
@@ -201,6 +202,7 @@ func (s *ComplianceImportService) SyncAnthropicCompliance(ctx context.Context, c
 		ChatActivities:      0,
 		ChatListPages:       0,
 		ChatsListed:         0,
+		ChatsUnavailable:    0,
 		ChatsImported:       0,
 		MessagePagesFetched: 0,
 		MessagePagesWritten: 0,
@@ -629,6 +631,9 @@ func (s *ComplianceImportService) fetchChatMessages(ctx context.Context, client 
 			Limit:        anthropicCompliancePageLimit,
 		})
 		if err != nil {
+			if httpErr, ok := errors.AsType[*anthropicapi.HTTPError](err); ok && httpErr.StatusCode == http.StatusNotFound {
+				return s.skipUnretrievableChat(ctx, cfg, chatID, externalChatID, chatsCursor, out, progress)
+			}
 			return fmt.Errorf("get anthropic compliance chat messages: %w", err)
 		}
 		progress.MessagePagesFetched++
@@ -663,6 +668,34 @@ func (s *ComplianceImportService) fetchChatMessages(ctx context.Context, client 
 			break
 		}
 		afterID = page.LastID
+	}
+	return nil
+}
+
+// skipUnretrievableChat records a chat whose messages Anthropic no longer
+// serves and lets the run continue. The chats endpoint answers 404 for a chat
+// hard-deleted through the Compliance API or by the organization's retention
+// policy, while the activity feed and the chat list can still name it.
+// Failing the run on it would stall the whole integration on one chat, and
+// the poller counts a 404 as a provider rejection toward auto-pause. The chat
+// row already upserted for it stays, with no messages. When the chat closed
+// out a chat-list page, the page's cursor is still forwarded to the writer.
+func (s *ComplianceImportService) skipUnretrievableChat(ctx context.Context, cfg Config, chatID uuid.UUID, externalChatID string, chatsCursor string, out chan<- messagePageBatch, progress *ComplianceSyncProgress) error {
+	s.logger.WarnContext(ctx, "anthropic compliance chat content is not retrievable; skipping chat",
+		attr.SlogChatID(chatID.String()),
+		attr.SlogChatExternalID(externalChatID),
+		attr.SlogAIIntegrationConfigID(cfg.ID.String()),
+		attr.SlogHTTPResponseStatusCode(http.StatusNotFound),
+	)
+	progress.ChatsUnavailable++
+
+	if chatsCursor == "" {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err() //nolint:wrapcheck // Preserve context cancellation sentinel errors for callers.
+	case out <- messagePageBatch{chatID: uuid.Nil, rows: nil, lastID: "", chatsCursor: chatsCursor, cursorOnly: true}:
 	}
 	return nil
 }
