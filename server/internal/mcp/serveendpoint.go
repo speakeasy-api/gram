@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -898,7 +899,23 @@ func (s *Service) prepareProxyBackendContext(
 	}
 
 	ctx, err = s.authorizeProxyBackendAccess(ctx, logger, endpoint.ProjectID, mcpServer)
-	return ctx, project.OrganizationID, err
+	if err != nil {
+		return nil, "", err
+	}
+
+	organization, err := organizationsrepo.New(s.db).GetOrganizationMetadata(ctx, project.OrganizationID)
+	if err != nil {
+		return nil, "", oops.E(oops.CodeUnexpected, err, "load mcp server organization").LogError(ctx, logger)
+	}
+
+	ctx = remotemcp.WithServerContext(ctx, remotemcp.ServerContext{
+		OrganizationID:   project.OrganizationID,
+		OrganizationSlug: organization.Slug,
+		ProjectID:        project.ID,
+		ProjectSlug:      project.Slug,
+		AccountType:      organization.GramAccountType,
+	})
+	return ctx, project.OrganizationID, nil
 }
 
 // authorizeProxyBackendAccess runs the visibility-scoped RBAC gate for a

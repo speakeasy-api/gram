@@ -4,11 +4,11 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
@@ -22,7 +22,7 @@ import (
 //
 // Tracking is fire-and-forget: events are emitted in a goroutine bound to a
 // context derived via [context.WithoutCancel] so the call completes even if
-// the inbound request context cancels mid-relay. Missing auth context is
+// the inbound request context cancels mid-relay. Missing server context is
 // treated as a no-op and logged so operators can spot misconfiguration
 // without taking down tool invocation.
 type ToolsCallUsageTrackingInterceptor struct {
@@ -62,9 +62,9 @@ func (i *ToolsCallUsageTrackingInterceptor) Name() string {
 // Always returns nil: tracking is best-effort and must not block the response
 // from reaching the user.
 func (i *ToolsCallUsageTrackingInterceptor) InterceptToolsCallResponse(ctx context.Context, call *proxy.ToolsCallResponse) error {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		i.logger.WarnContext(ctx, "skipping tool call usage tracking: missing auth context",
+	serverCtx, ok := getServerContext(ctx)
+	if !ok || serverCtx.OrganizationID == "" || serverCtx.ProjectID == uuid.Nil {
+		i.logger.WarnContext(ctx, "skipping tool call usage tracking: missing server context",
 			attr.SlogComponent("xmcp"))
 		return nil
 	}
@@ -87,17 +87,17 @@ func (i *ToolsCallUsageTrackingInterceptor) InterceptToolsCallResponse(ctx conte
 		sessionID = conv.PtrEmpty(call.RemoteMessage.UserHTTPRequest.Header.Get("Mcp-Session-Id"))
 	}
 
-	projectID := authCtx.ProjectID.String()
+	projectID := serverCtx.ProjectID.String()
 	event := billing.ToolCallUsageEvent{
-		OrganizationID:        authCtx.ActiveOrganizationID,
+		OrganizationID:        serverCtx.OrganizationID,
 		RequestBytes:          requestBytes,
 		OutputBytes:           outputBytes,
 		ToolURN:               "",
 		ToolName:              toolName,
 		ResourceURI:           "",
 		ProjectID:             projectID,
-		ProjectSlug:           authCtx.ProjectSlug,
-		OrganizationSlug:      conv.PtrEmpty(authCtx.OrganizationSlug),
+		ProjectSlug:           conv.PtrEmpty(serverCtx.ProjectSlug),
+		OrganizationSlug:      conv.PtrEmpty(serverCtx.OrganizationSlug),
 		ToolsetSlug:           nil,
 		ChatID:                nil,
 		MCPURL:                nil,
