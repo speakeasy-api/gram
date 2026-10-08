@@ -35,6 +35,7 @@ import {
 import type { SourceBackedDeleteTarget } from "./sections/sourceDelete";
 import { RemoteMcpSessionsSection } from "./sections/RemoteMcpSessionsSection";
 import { ToolFilteringSection } from "./sections/ToolFilteringSection";
+import { TunneledHeadersSection } from "./sections/TunneledHeadersSection";
 import {
   MCP_TUNNEL_KEY_SECTION_ID,
   TunnelKeySection,
@@ -186,6 +187,10 @@ export function SettingsTab({
       {tunneledMcpServer ? (
         <Fragment key={tunneledMcpServer.id}>
           <ResourceIdentifierSection tunneledMcpServer={tunneledMcpServer} />
+          <TunneledHeadersSection
+            tunneledMcpServer={tunneledMcpServer}
+            mcpServerId={mcpServer.id}
+          />
           <CallerIdentitySection />
           <PublicAccessSection tunneledMcpServer={tunneledMcpServer} />
           <PublicRateLimitsSection

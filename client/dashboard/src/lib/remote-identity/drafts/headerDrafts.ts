@@ -1,6 +1,13 @@
 import type { ExternalMCPRemoteHeader } from "@gram/client/models/components/externalmcpremoteheader.js";
 import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader.js";
+import type { TunneledMcpServerHeader } from "@gram/client/models/components/tunneledmcpserverheader.js";
 import { authorizationHeaderGuard } from "../model/headers";
+import {
+  isProtectedInboundHeader,
+  isReservedTunneledHeaderName,
+  isValidHeaderName,
+  isValidHeaderValue,
+} from "../model/tunneledHeaderPolicy";
 import type { IdentityMode } from "../model/identity";
 import { REDACTED_SECRET } from "../model/secret";
 
@@ -13,6 +20,16 @@ import { REDACTED_SECRET } from "../model/secret";
  * can see rather than inside whichever component happened to need them first.
  */
 export type HeaderSource = "static" | "request";
+
+/** A saved header row, from either kind of source. */
+export type ServerHeader = RemoteMcpServerHeader | TunneledMcpServerHeader;
+
+/**
+ * Which rules the rows are checked against. A tunneled source refuses
+ * Speakeasy credentials, tunnel fields and protocol headers outright; a remote
+ * source keeps its long-standing, looser rules.
+ */
+export type HeaderPolicy = "remote" | "tunneled";
 
 export type HeaderDraft = {
   key: string;
@@ -29,16 +46,14 @@ export type HeaderDraft = {
   fromCatalog?: boolean;
 };
 
-function headerSourceFromServer(header: RemoteMcpServerHeader): HeaderSource {
+function headerSourceFromServer(header: ServerHeader): HeaderSource {
   if (header.valueFromRequestHeader) {
     return "request";
   }
   return "static";
 }
 
-export function headerDraftFromServer(
-  header: RemoteMcpServerHeader,
-): HeaderDraft {
+export function headerDraftFromServer(header: ServerHeader): HeaderDraft {
   const source = headerSourceFromServer(header);
   const isRedactedSecret = header.isSecret && header.value === REDACTED_SECRET;
 
@@ -115,6 +130,7 @@ export function headerDraftErrors(
   drafts: HeaderDraft[],
   identityMode?: IdentityMode,
   managedAuthorizationHeaderId?: string,
+  policy: HeaderPolicy = "remote",
 ): ReadonlyMap<string, HeaderDraftError> {
   const errors = new Map<string, HeaderDraftError>();
   const names = new Set<string>();
@@ -138,6 +154,14 @@ export function headerDraftErrors(
       continue;
     }
     names.add(normalized);
+
+    if (policy === "tunneled") {
+      const tunneledError = tunneledHeaderError(draft, name);
+      if (tunneledError) {
+        errors.set(draft.key, tunneledError);
+        continue;
+      }
+    }
 
     if (identityMode) {
       const authorizationError = authorizationHeaderGuard(
@@ -196,16 +220,59 @@ export function headerDraftErrors(
   return errors;
 }
 
+/** What a tunneled source would refuse about this row, if anything. */
+function tunneledHeaderError(
+  draft: HeaderDraft,
+  name: string,
+): HeaderDraftError | null {
+  if (!isValidHeaderName(name)) {
+    return {
+      field: "name",
+      message: `"${name}" is not a valid header name.`,
+    };
+  }
+  if (isReservedTunneledHeaderName(name)) {
+    return {
+      field: "name",
+      message: `"${name}" is reserved and cannot be configured on a tunnel.`,
+    };
+  }
+  if (draft.source === "request") {
+    const source = draft.valueFromRequestHeader.trim();
+    if (source && !isValidHeaderName(source)) {
+      return {
+        field: "value",
+        message: `"${source}" is not a valid header name.`,
+      };
+    }
+    if (source && isProtectedInboundHeader(source)) {
+      return {
+        field: "value",
+        message: `"${source}" carries Speakeasy credentials and cannot be passed through.`,
+      };
+    }
+  }
+  if (draft.source === "static" && !isValidHeaderValue(draft.staticValue)) {
+    return {
+      field: "value",
+      message: `The value of "${name}" contains a line break or control character.`,
+    };
+  }
+  return null;
+}
+
 /** The one message to show for the list: the topmost row's problem. */
 export function validateDrafts(
   drafts: HeaderDraft[],
   identityMode?: IdentityMode,
   managedAuthorizationHeaderId?: string,
+  policy: HeaderPolicy = "remote",
 ): string | null {
   const errors = headerDraftErrors(
     drafts,
     identityMode,
     managedAuthorizationHeaderId,
+    policy,
   );
   for (const draft of drafts) {
     const error = errors.get(draft.key);

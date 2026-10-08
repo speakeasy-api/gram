@@ -40,6 +40,10 @@ vi.mock("./sections/ResourceIdentifierSection", () => ({
   MCP_RESOURCE_IDENTIFIER_SECTION_ID: "resource-identifier",
   ResourceIdentifierSection: () => <h2>Resource Identifier</h2>,
 }));
+vi.mock("./sections/TunneledHeadersSection", () => ({
+  MCP_TUNNELED_HEADERS_SECTION_ID: "tunnel-headers",
+  TunneledHeadersSection: () => <h2>Upstream Headers</h2>,
+}));
 vi.mock("./sections/CallerIdentitySection", () => ({
   CallerIdentitySection: () => <h2>Caller Identity</h2>,
 }));
@@ -139,6 +143,7 @@ describe("SettingsTab", () => {
       "Network Access",
       "Authentication",
       "Resource Identifier",
+      "Upstream Headers",
       "Caller Identity",
       "Public Access",
       "Public Rate Limits",
