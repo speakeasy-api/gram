@@ -54,6 +54,12 @@ func (t *GetMCP) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.
 
 	output, err := t.reader.GetMCP(ctx, principal, input)
 	if err != nil {
+		// A stale or conflicting tool_cursor is the caller's to correct by
+		// re-reading, so its code and message reach the caller as a result
+		// rather than disappearing into a generic tool failure.
+		if refusal, ok := platformmcp.ToolExposureRefusalPayload(err); ok {
+			return core.EncodeResult(wr, refusal)
+		}
 		return fmt.Errorf("get configured mcp: %w", err)
 	}
 

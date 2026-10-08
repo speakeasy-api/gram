@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -13,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 // seedExposedTools commits a toolset version that exposes every fixture tool,
@@ -103,6 +105,26 @@ func TestToolExposureChangeConfirmedAgainstAPartialReadCannotSucceed(t *testing.
 	require.Equal(t, 3, after.ToolCount, "nothing was removed on the strength of a partial read")
 }
 
+// A cursor is signed, not encrypted, so anything it carries is readable by the
+// caller. It must not carry the version a change is confirmed against, or a
+// caller could decode the first page's cursor and skip the rest of the read.
+func TestToolExposureCursorDoesNotRevealTheExposureVersion(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_tool_exposure_cursor_opaque")
+	seedExposedTools(t, ctx, fixture)
+	fixture.service.exposurePageSize = 2
+
+	first, err := fixture.service.Exposure(ctx, fixture.principal, fixture.project.ID, fixture.toolsetID)
+	require.NoError(t, err)
+	last, err := fixture.service.ExposurePage(ctx, fixture.principal, fixture.project.ID, fixture.toolsetID, first.NextToolCursor)
+	require.NoError(t, err)
+	require.NotEmpty(t, last.ExposureVersion)
+
+	token, err := base64.RawURLEncoding.DecodeString(first.NextToolCursor)
+	require.NoError(t, err)
+	require.NotContains(t, string(token), last.ExposureVersion, "the first page's cursor must not hand out the version")
+}
+
 // A caller with no cursor binding (for example a connection-less assistant
 // with no user) still gets the first page, but nothing it could confirm a
 // change against and no cursor it could never present back.
@@ -140,6 +162,30 @@ func TestToolExposurePageAfterTheListChangedIsRefused(t *testing.T) {
 	var refusal *MCPToolExposureError
 	require.ErrorAs(t, err, &refusal)
 	require.Equal(t, "conflict", refusal.Code, "pages of two different lists are never stitched together")
+}
+
+// A server that stops being toolset-backed mid-read must not look like one
+// whose tools are its upstream's: get_mcp would drop tool_exposure and the
+// pages already served would pass for the whole list.
+func TestToolExposurePageAfterTheServerLostItsToolsetIsRefused(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_tool_exposure_page_unbound")
+	seedExposedTools(t, ctx, fixture)
+	fixture.service.exposurePageSize = 2
+
+	first, err := fixture.service.Exposure(ctx, fixture.principal, fixture.project.ID, fixture.toolsetID)
+	require.NoError(t, err)
+
+	_, err = toolsetsrepo.New(fixture.conn).DeleteToolset(ctx, toolsetsrepo.DeleteToolsetParams{Slug: first.ToolsetSlug, ProjectID: fixture.project.ID})
+	require.NoError(t, err)
+
+	_, err = fixture.service.ExposurePage(ctx, fixture.principal, fixture.project.ID, fixture.toolsetID, first.NextToolCursor)
+	var refusal *MCPToolExposureError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, "conflict", refusal.Code)
+
+	_, err = fixture.service.Exposure(ctx, fixture.principal, fixture.project.ID, fixture.toolsetID)
+	require.ErrorIs(t, err, ErrMCPToolExposureMissing, "a fresh read reports the server as not toolset-backed")
 }
 
 func TestToolExposureCursorIsBoundToItsServerAndCaller(t *testing.T) {

@@ -11,7 +11,7 @@ import (
 
 // GetMCPToolPagingNote is shared by every surface that serves get_mcp, so the
 // paging contract reads the same wherever an agent meets it.
-const GetMCPToolPagingNote = "When tool_exposure.next_tool_cursor is present, tool_exposure lists only part of the server's tools and carries no exposure_version: call again with tool_cursor set to it until it is absent."
+const GetMCPToolPagingNote = "When tool_exposure.next_tool_cursor is present, tool_exposure lists only part of the server's tools and carries no exposure_version: call again with tool_cursor set to it until it is absent. When tool_exposure.truncated is true without a next_tool_cursor, the rest of the list cannot be read on this connection and no change can be confirmed against it."
 
 func registerGetMCPTool(reg *Registrar, reader Reader) {
 	addTool(reg, &mcp.Tool{

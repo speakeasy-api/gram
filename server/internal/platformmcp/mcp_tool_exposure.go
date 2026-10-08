@@ -338,15 +338,25 @@ func (s *MCPToolExposureService) Exposure(ctx context.Context, principal Princip
 }
 
 // toolExposureCursor resumes a paged read of one server's tool list. It pins
-// the version of the complete list the first page described, so a later page
-// is served only while the committed list is still that one.
+// a digest of the complete list's version, so a later page is served only
+// while the committed list is still that one. The cursor is signed, not
+// encrypted, so it carries the digest rather than the version itself: the
+// version is what a change is confirmed against, and handing it out before the
+// last page would let a caller confirm a change against a list it never read.
 type toolExposureCursor struct {
-	OrganizationID  string `json:"organization_id"`
-	Binding         string `json:"binding"`
-	ProjectID       string `json:"project_id"`
-	MCPID           string `json:"mcp_id"`
-	ExposureVersion string `json:"exposure_version"`
-	Position        int    `json:"position"`
+	OrganizationID string `json:"organization_id"`
+	Binding        string `json:"binding"`
+	ProjectID      string `json:"project_id"`
+	MCPID          string `json:"mcp_id"`
+	ListDigest     string `json:"list_digest"`
+	Position       int    `json:"position"`
+}
+
+// toolExposureListDigest is a one-way digest of an exposure version, so a
+// cursor can pin the list without revealing the version.
+func toolExposureListDigest(version string) string {
+	digest := sha256.Sum256([]byte("platform-mcp-tool-exposure-cursor-list-v1\x00" + version))
+	return hex.EncodeToString(digest[:])
 }
 
 func toolExposureCursorInvalid() error {
@@ -361,21 +371,27 @@ func (s *MCPToolExposureService) ExposurePage(ctx context.Context, principal Pri
 		return MCPToolExposure{}, ErrUnavailable
 	}
 	binding := principalCursorBinding(principal)
-	position, pinnedVersion := 0, ""
+	position, pinnedDigest := 0, ""
 	if cursor != "" {
 		decoded, ok := openCursor[toolExposureCursor](s.exposureCursors, cursor)
 		if !ok || binding == "" || decoded.OrganizationID != principal.OrganizationID || decoded.Binding != binding ||
-			decoded.ProjectID != projectID.String() || decoded.MCPID != mcpID.String() || decoded.ExposureVersion == "" || decoded.Position <= 0 {
+			decoded.ProjectID != projectID.String() || decoded.MCPID != mcpID.String() || decoded.ListDigest == "" || decoded.Position <= 0 {
 			return MCPToolExposure{}, toolExposureCursorInvalid()
 		}
-		position, pinnedVersion = decoded.Position, decoded.ExposureVersion
+		position, pinnedDigest = decoded.Position, decoded.ListDigest
 	}
 	row, err := s.exposureRow(ctx, s.queries, principal, projectID, mcpID)
+	if errors.Is(err, ErrMCPToolExposureMissing) && pinnedDigest != "" {
+		// The server stopped being toolset-backed mid-read. Reporting it as an
+		// upstream-backed server would let the pages already served pass for
+		// the whole list.
+		return MCPToolExposure{}, toolExposurePageConflict()
+	}
 	if err != nil {
 		return MCPToolExposure{}, err
 	}
 	version := toolExposureVersion(projectID, mcpID, row.ToolsetID, row.ToolsetVersion, row.ToolUrns)
-	if pinnedVersion != "" && !hmac.Equal([]byte(pinnedVersion), []byte(version)) {
+	if pinnedDigest != "" && !hmac.Equal([]byte(pinnedDigest), []byte(toolExposureListDigest(version))) {
 		return MCPToolExposure{}, toolExposurePageConflict()
 	}
 	// The row is this call's own copy, so it is sorted in place for paging.
@@ -405,7 +421,7 @@ func (s *MCPToolExposureService) ExposurePage(ctx context.Context, principal Pri
 	}
 	next, err := sealCursor(s.exposureCursors, toolExposureCursor{
 		OrganizationID: principal.OrganizationID, Binding: binding,
-		ProjectID: projectID.String(), MCPID: mcpID.String(), ExposureVersion: version, Position: end,
+		ProjectID: projectID.String(), MCPID: mcpID.String(), ListDigest: toolExposureListDigest(version), Position: end,
 	})
 	if err != nil {
 		return MCPToolExposure{}, fmt.Errorf("encode platform MCP tool exposure cursor: %w", err)

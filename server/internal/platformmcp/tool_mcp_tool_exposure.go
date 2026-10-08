@@ -112,6 +112,21 @@ func unavailableToolExposureHandler[In, Out any](message string) mcp.ToolHandler
 	}
 }
 
+// ToolExposureRefusalPayload renders a caller-correctable tool-exposure error,
+// such as a stale tool_cursor, as the same refusal JSON the MCP surface
+// returns, for a surface with no refusal channel of its own.
+func ToolExposureRefusalPayload(err error) (json.RawMessage, bool) {
+	exposure, ok := errors.AsType[*MCPToolExposureError](err)
+	if !ok {
+		return nil, false
+	}
+	payload, marshalErr := json.Marshal(toolExposureRefusal{Code: exposure.Code, Feature: toolExposureFeature, Message: exposure.Message})
+	if marshalErr != nil {
+		return nil, false
+	}
+	return payload, true
+}
+
 type toolExposureRefusal struct {
 	Code    string `json:"code"`
 	Feature string `json:"feature"`

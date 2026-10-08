@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -22,6 +23,7 @@ type stubReader struct {
 	projectsOutput platformmcp.ListProjectsOutput
 	findOutput     platformmcp.FindMCPOutput
 	getOutput      platformmcp.MCP
+	getErr         error
 }
 
 func (s *stubReader) ListProjects(_ context.Context, principal platformmcp.Principal, input platformmcp.ListProjectsInput) (platformmcp.ListProjectsOutput, error) {
@@ -39,7 +41,7 @@ func (s *stubReader) FindMCP(_ context.Context, principal platformmcp.Principal,
 func (s *stubReader) GetMCP(_ context.Context, principal platformmcp.Principal, input platformmcp.GetMCPInput) (platformmcp.MCP, error) {
 	s.principal = principal
 	s.getInput = input
-	return s.getOutput, nil
+	return s.getOutput, s.getErr
 }
 
 func testToolCallEnv() toolconfig.ToolCallEnv {
@@ -114,6 +116,33 @@ func TestGetMCPToolReturnsReaderOutput(t *testing.T) {
 	var out bytes.Buffer
 	require.NoError(t, NewGetMCPTool(reader).Call(ctx, testToolCallEnv(), bytes.NewBufferString(`{"project_id":"p1","mcp_id":"m1"}`), &out))
 	require.Equal(t, platformmcp.GetMCPInput{ProjectID: "p1", MCPID: "m1"}, reader.getInput)
+}
+
+// A stale tool_cursor reaches the caller as a readable refusal with its code,
+// the same contract the Platform MCP get_mcp keeps, so a paging agent knows
+// to start the read again.
+func TestGetMCPToolReturnsAToolCursorRefusalAsAResult(t *testing.T) {
+	t.Parallel()
+	reader := &stubReader{getErr: fmt.Errorf("read platform MCP tool exposure: %w", &platformmcp.MCPToolExposureError{
+		Code: "conflict", Message: "the list changed", Cause: platformmcp.ErrMCPToolExposureConflict,
+	})}
+	ctx := orgAuthContext(t, "org_123", nil)
+	var out bytes.Buffer
+	require.NoError(t, NewGetMCPTool(reader).Call(ctx, testToolCallEnv(), bytes.NewBufferString(`{"project_id":"p1","mcp_id":"m1","tool_cursor":"stale"}`), &out))
+	require.Equal(t, "stale", reader.getInput.ToolCursor)
+	var refusal map[string]any
+	require.NoError(t, json.Unmarshal(out.Bytes(), &refusal))
+	require.Equal(t, "conflict", refusal["code"])
+	require.Equal(t, "the list changed", refusal["message"])
+}
+
+func TestGetMCPToolKeepsOtherReadFailuresAsErrors(t *testing.T) {
+	t.Parallel()
+	reader := &stubReader{getErr: platformmcp.ErrUnavailable}
+	ctx := orgAuthContext(t, "org_123", nil)
+	var out bytes.Buffer
+	require.ErrorIs(t, NewGetMCPTool(reader).Call(ctx, testToolCallEnv(), bytes.NewBufferString(`{"project_id":"p1","mcp_id":"m1"}`), &out), platformmcp.ErrUnavailable)
+	require.Zero(t, out.Len())
 }
 
 func TestGetPlatformContextToolReportsOrgProjectAndReadOnly(t *testing.T) {
