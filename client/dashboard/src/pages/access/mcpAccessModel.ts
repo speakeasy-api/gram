@@ -267,6 +267,23 @@ export function serializeMcpConnectAccess(
   return { scope: MCP_CONNECT_SCOPE, rules };
 }
 
+/**
+ * Take a server out of the role entirely: its limit and every stored row that
+ * names it, so unticking a server never leaves a row still granting it.
+ */
+export function withoutServer(
+  access: McpConnectAccess,
+  id: string,
+): McpConnectAccess {
+  const servers = { ...access.servers };
+  delete servers[id];
+  return {
+    ...access,
+    servers,
+    preservedAllow: access.preservedAllow.filter((s) => s.resourceId !== id),
+  };
+}
+
 /** Whether a role holding this limit can call at least one tool. */
 export function limitGrantsAnything(limit: ToolLimit): boolean {
   switch (limit.kind) {

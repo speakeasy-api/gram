@@ -777,7 +777,9 @@ export function CreateRoleDialog({
               disabled={false}
               markAgentIneligible={selectedAgents.size > 0}
               onToggleScope={toggleScope}
-              mcpAccessCount={mcpAccessCount}
+              // No number until an existing role's grants are in: an empty
+              // form would count as zero servers.
+              mcpAccessCount={isEditing && !initialized ? null : mcpAccessCount}
               renderMcpAccess={({ showPlatformAccess }) =>
                 // An existing role's grants replace the form once they load,
                 // so the panel waits for them rather than take edits that

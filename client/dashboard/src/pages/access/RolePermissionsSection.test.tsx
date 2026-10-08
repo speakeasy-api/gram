@@ -75,4 +75,29 @@ describe("RolePermissionsSection tabs", () => {
       screen.getAllByText(/Also allows connecting to these servers/),
     ).toHaveLength(2);
   });
+
+  it("labels the MCP tab with servers once counted, and no number before", () => {
+    const { rerender } = render(
+      <RolePermissionsSection
+        groups={groups}
+        selectedScopes={new Set(["mcp:connect"])}
+        onToggleScope={() => {}}
+        renderScopeRule={() => null}
+        renderMcpAccess={() => null}
+        mcpAccessCount={null}
+      />,
+    );
+    expect(screen.getByRole("tab", { name: "MCP access" })).toBeTruthy();
+    rerender(
+      <RolePermissionsSection
+        groups={groups}
+        selectedScopes={new Set(["mcp:connect"])}
+        onToggleScope={() => {}}
+        renderScopeRule={() => null}
+        renderMcpAccess={() => null}
+        mcpAccessCount={4}
+      />,
+    );
+    expect(screen.getByRole("tab", { name: "MCP access (4)" })).toBeTruthy();
+  });
 });

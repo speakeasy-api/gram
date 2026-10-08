@@ -138,17 +138,38 @@ function ToolAccessSheetBody({
 
   // A remote server's tools arrive after the sheet opens, and converting
   // before then would carry nothing over.
+  const toolsKnown = source.status === "ready" || isAllServers;
   const [pendingApply, setPendingApply] = useState(applyTab);
   useEffect(() => {
     if (!pendingApply || source.status === "loading") return;
     // A conversion that reads the tool list waits until the list is known;
     // converting before then would narrow the server to no tools. A remote
     // server that needs connecting converts once it lists.
-    const toolsKnown = source.status === "ready" || isAllServers;
     if (!toolsKnown && (tab === "tools" || limit.kind === "tools")) return;
     setPendingApply(false);
     onChange(convertToolLimit(limit, tab, tools));
-  }, [pendingApply, source.status, isAllServers, limit, tab, tools, onChange]);
+  }, [pendingApply, source.status, toolsKnown, limit, tab, tools, onChange]);
+
+  // Choosing Specific tools before a remote server's tools have loaded grants
+  // an empty list at once, and fills it with every tool when they arrive, so
+  // the choice carries access over as it would for a known list.
+  const [pendingFill, setPendingFill] = useState(false);
+  useEffect(() => {
+    if (!pendingFill || source.status !== "ready") return;
+    setPendingFill(false);
+    if (limit.kind === "tools" && limit.tools.length === 0) {
+      onChange({ kind: "tools", tools: tools.map((tool) => tool.name) });
+    }
+  }, [pendingFill, source.status, limit, tools, onChange]);
+
+  const chooseSpecific = () => {
+    if (tab === "tools" && !toolsKnown) {
+      onChange({ kind: "tools", tools: [] });
+      setPendingFill(true);
+      return;
+    }
+    onChange(convertToolLimit(limit, tab, tools));
+  };
 
   const chooseTab = (next: ToolSheetTab) => {
     setTab(next);
@@ -188,13 +209,10 @@ function ToolAccessSheetBody({
           <RadioCardGroup
             size="sm"
             value={toolChoice(granted, specific)}
-            onValueChange={(value) =>
-              onChange(
-                value === "all"
-                  ? { kind: "all" }
-                  : convertToolLimit(limit, tab, tools),
-              )
-            }
+            onValueChange={(value) => {
+              if (value === "all") onChange({ kind: "all" });
+              else chooseSpecific();
+            }}
           >
             <RadioCard value="all" title="All tools">
               Every tool, including ones added later.

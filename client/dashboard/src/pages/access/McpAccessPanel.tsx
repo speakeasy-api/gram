@@ -16,6 +16,7 @@ import {
   MCP_CONNECT_SCOPE,
   parseMcpConnectGrant,
   serializeMcpConnectAccess,
+  withoutServer,
   serverHandle,
   type McpConnectAccess,
   type ServerWithProject,
@@ -83,12 +84,11 @@ export function McpAccessPanel({
   };
 
   const setServerLimit = (id: string, limit: ToolLimit | undefined) =>
-    update((prev) => {
-      const servers = { ...prev.servers };
-      if (limit) servers[id] = limit;
-      else delete servers[id];
-      return { ...prev, servers };
-    });
+    update((prev) =>
+      limit
+        ? { ...prev, servers: { ...prev.servers, [id]: limit } }
+        : withoutServer(prev, id),
+    );
 
   const coverage = useMemo(
     () => adminCoverage(grants, inventory.groups),
@@ -125,11 +125,9 @@ export function McpAccessPanel({
       setServerLimit(entry.server.id, checked ? { kind: "all" } : undefined),
     onSetServers: (ids, checked) =>
       update((prev) => {
+        if (!checked) return ids.reduce(withoutServer, prev);
         const servers = { ...prev.servers };
-        for (const id of ids) {
-          if (!checked) delete servers[id];
-          else servers[id] ??= { kind: "all" };
-        }
+        for (const id of ids) servers[id] ??= { kind: "all" };
         return { ...prev, servers };
       }),
     onPickLimit: (entry, kind) => {
@@ -153,14 +151,12 @@ export function McpAccessPanel({
     },
     onForbid: (id) =>
       update((prev) => {
-        const servers = { ...prev.servers };
-        delete servers[id];
+        const rest = withoutServer(prev, id);
         return {
-          ...prev,
-          servers,
-          forbidden: prev.forbidden.includes(id)
-            ? prev.forbidden
-            : [...prev.forbidden, id],
+          ...rest,
+          forbidden: rest.forbidden.includes(id)
+            ? rest.forbidden
+            : [...rest.forbidden, id],
         };
       }),
     onShowPlatformAccess,

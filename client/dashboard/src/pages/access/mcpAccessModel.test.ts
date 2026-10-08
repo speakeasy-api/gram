@@ -10,6 +10,7 @@ import {
   parseMcpConnectGrant,
   serializeMcpConnectAccess,
   toolLimitBadges,
+  withoutServer,
 } from "./mcpAccessModel";
 import { grantKeysString } from "./roleDialogState";
 import { sdkGrantsFromForm } from "./roleGrantTransform";
@@ -175,6 +176,22 @@ describe("serializeMcpConnectAccess", () => {
     };
     expect(stored(serializeMcpConnectAccess(access))).toEqual([
       { scope: "mcp:connect", selectors: undefined },
+    ]);
+  });
+});
+
+describe("withoutServer", () => {
+  it("drops the server's stored rows along with its limit", () => {
+    const access = parseMcpConnectGrant(
+      grant([
+        server("c"),
+        server("c", { disposition: "read_only" }),
+        server("d"),
+      ]),
+    );
+    const after = serializeMcpConnectAccess(withoutServer(access, "c"));
+    expect(stored(after)).toEqual([
+      { scope: "mcp:connect", selectors: [server("d")] },
     ]);
   });
 });
