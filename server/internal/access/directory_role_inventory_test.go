@@ -37,7 +37,7 @@ func directoryInventoryFixture(t *testing.T, ctx context.Context, ti *testInstan
 	org, err := orgrepo.New(ti.conn).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 	require.NoError(t, err)
 	return DirectoryRoleInventory{
-		OrganizationID: ac.ActiveOrganizationID, WorkOSOrganizationID: org.WorkosID.String, DefaultRoleSlug: "member",
+		OrganizationID: ac.ActiveOrganizationID, WorkOSOrganizationID: org.WorkosID.String, DefaultRoleSlug: "member", TargetDefaultRoleSlug: "",
 		Assignments: []DirectoryRoleInventoryAssignment{{WorkOSGroupID: groupID, RoleSlug: slug}},
 	}
 }
@@ -222,7 +222,10 @@ func TestDirectoryRoleInventoryShadowReportsLossAndRetainsOtherSources(t *testin
 	require.NoError(t, err)
 	require.False(t, report.Committed)
 	require.GreaterOrEqual(t, report.MembersChecked, 2)
-	require.Equal(t, []DirectoryRoleInventoryDifference{{UserID: "unmapped-member", LostRoleURNs: []string{builder}, GainedRoleURNs: []string{}}}, report.Differences)
+	require.ElementsMatch(t, []DirectoryRoleInventoryDifference{
+		{UserID: "mapped-member", LostRoleURNs: []string{}, GainedRoleURNs: []string{}, CoveredRoleURNs: []string{builder}, DefaultRoleChange: nil},
+		{UserID: "unmapped-member", LostRoleURNs: []string{builder}, GainedRoleURNs: []string{}, CoveredRoleURNs: []string{}, DefaultRoleChange: nil},
+	}, report.Differences)
 	principals, err := repo.New(ti.conn).ListUserRolePrincipals(ctx, repo.ListUserRolePrincipalsParams{OrganizationID: orgID, UserID: "unmapped-member"})
 	require.NoError(t, err)
 	require.Len(t, principals, 1)
@@ -230,6 +233,41 @@ func TestDirectoryRoleInventoryShadowReportsLossAndRetainsOtherSources(t *testin
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingSet)
 	require.NoError(t, err)
 	require.Equal(t, baseline, after)
+}
+
+func TestDirectoryRoleInventoryShadowFlagsDefaultRoleChange(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	ctx = directoryInventorySupportContext(t, ctx, ti)
+	orgID := testAccessAuthContext(t, ctx).ActiveOrganizationID
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_legacy_default", "Legacy default", "legacy-default", ""))
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_least_privilege", "Least privilege", "least-privilege", ""))
+	legacyDefault := seededRolePrincipal(t, ctx, ti.conn, orgID, "legacy-default").String()
+	leastPrivilege := seededRolePrincipal(t, ctx, ti.conn, orgID, "least-privilege").String()
+	_, group := seedMappingDirectoryGroupWithWorkOSID(t, ctx, ti.conn, orgID, "Engineering")
+	seedConnectedUser(t, ctx, ti.conn, orgID, "default-member", "default-member@example.com", "default-member", "workos-default-member", "membership-default-member")
+	seedRoleAssignment(t, ctx, ti.conn, orgID, "default-member", mockMember("", "membership-default-member", "workos-default-member", "legacy-default"))
+	inventory := directoryInventoryFixture(t, ctx, ti, group, "builder")
+	inventory.DefaultRoleSlug = "legacy-default"
+
+	report, err := RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.audit, inventory, true, false)
+	require.NoError(t, err)
+	require.Empty(t, report.Differences, "without a target default nothing changes")
+
+	inventory.TargetDefaultRoleSlug = "least-privilege"
+	report, err = RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.audit, inventory, true, false)
+	require.NoError(t, err)
+	require.Equal(t, []DirectoryRoleInventoryDifference{{
+		UserID: "default-member", LostRoleURNs: []string{}, GainedRoleURNs: []string{}, CoveredRoleURNs: []string{},
+		DefaultRoleChange: &DirectoryRoleInventoryDefaultRoleChange{FromRoleURN: legacyDefault, ToRoleURN: leastPrivilege},
+	}}, report.Differences)
+
+	inventory.TargetDefaultRoleSlug = "missing-default"
+	report, err = RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.audit, inventory, true, false)
+	require.Error(t, err)
+	require.Equal(t, []string{"missing-default"}, report.MissingRoleSlugs)
+	require.Empty(t, report.Differences)
 }
 
 func TestDirectoryRoleInventoryDecode(t *testing.T) {
@@ -240,6 +278,7 @@ func TestDirectoryRoleInventoryDecode(t *testing.T) {
 		valid       bool
 	}{
 		{"valid", valid, true}, {"unknown field", strings.Replace(valid, `"assignments"`, `"rules"`, 1), false},
+		{"target default", strings.Replace(valid, `"assignments"`, `"target_default_role_slug":"viewer","assignments"`, 1), true},
 		{"two objects", valid + valid, false}, {"incomplete", `{}`, false},
 		{"oversized", valid + strings.Repeat(" ", maxDirectoryRoleInventoryBytes), false},
 	} {
