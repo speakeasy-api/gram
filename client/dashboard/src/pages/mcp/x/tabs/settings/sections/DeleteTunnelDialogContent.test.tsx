@@ -257,7 +257,7 @@ describe("DeleteTunnelDialogContent", () => {
     );
   });
 
-  it("falls back to the tunnel list when what is left cannot be read", async () => {
+  it("reports what is left as unknown when it cannot be read", async () => {
     state.mutateAsync.mockRejectedValue(
       new TunnelDeleteIncompleteError("Deleted 1 of 2 MCP servers.", true),
     );
@@ -265,7 +265,11 @@ describe("DeleteTunnelDialogContent", () => {
     const { onLeave } = renderDialog();
     typeName();
     await clickDelete();
+    // The tunnel list reads the servers again and links each survivor.
     expect(onLeave).toHaveBeenCalledWith("/mcp/add/tunneled?tunnel=tunnel-1");
+    const message = state.toastError.mock.calls[0]?.[0] as string;
+    expect(message).toContain("Could not check which MCP servers still use");
+    expect(message).not.toContain("No MCP server you can view");
   });
 
   it("stays open for a retry when nothing was deleted", async () => {

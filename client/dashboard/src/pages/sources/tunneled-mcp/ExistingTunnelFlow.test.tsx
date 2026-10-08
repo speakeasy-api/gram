@@ -42,7 +42,10 @@ vi.mock("@/routes", () => ({
   useRoutes: () => ({
     mcp: {
       add: { goTo: vi.fn() },
-      x: { overview: { href: (id: string) => `/mcp/x/${id}` } },
+      x: {
+        overview: { href: (id: string) => `/mcp/x/${id}` },
+        settings: { href: (id: string) => `/mcp/x/${id}/settings` },
+      },
     },
   }),
 }));
@@ -188,7 +191,7 @@ describe("ExistingTunnelFlow", () => {
     renderFlow("t1");
 
     expect(screen.getByText("gram_tun_t1")).toBeTruthy();
-    expect(screen.getByText("1 MCP server you can view")).toBeTruthy();
+    expect(screen.getByText("1 MCP server you can view:")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Display name"), {
       target: { value: "JAMF sandbox" },
     });
@@ -202,6 +205,12 @@ describe("ExistingTunnelFlow", () => {
       userSessionIssuerId: undefined,
     });
     expect(screen.getByText("Created on JAMF")).toBeTruthy();
+  });
+
+  it("links each tunnel's visible servers so a tunnel in use can be finished", () => {
+    renderFlow();
+    const link = screen.getByRole("link", { name: "JAMF prod" });
+    expect(link.getAttribute("href")).toBe("/mcp/x/s1/settings");
   });
 
   it("refuses a requested tunnel that is not in the project", () => {
@@ -250,7 +259,8 @@ describe("ExistingTunnelFlow", () => {
     });
 
     expect(screen.getByText(/may have succeeded/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: "JAMF prod" })).toBeTruthy();
+    // Once in the picker, once in the outcome notice.
+    expect(screen.getAllByRole("link", { name: "JAMF prod" })).toHaveLength(2);
     expect(submitButton("Create anyway")).toBeTruthy();
   });
 });

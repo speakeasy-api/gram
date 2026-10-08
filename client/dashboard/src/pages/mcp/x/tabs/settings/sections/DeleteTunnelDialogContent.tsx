@@ -73,17 +73,26 @@ export function DeleteTunnelDialogContent({
   // Works out what is left after a delete that stopped partway and sends the
   // user to wherever it can be finished.
   const recover = async (error: TunnelDeleteIncompleteError) => {
-    let remaining: McpServer[] | null = null;
+    const tunnelListHref = addMcpServerOnTunnelHref(
+      routes.mcp.add.tunneled.href(),
+      tunnel.id,
+    );
+    let remaining: McpServer[];
     try {
       remaining = await fetchLinkedMcpServers(client, queryClient, {
         tunneledMcpServerId: tunnel.id,
       });
     } catch {
-      // Unknown: the tunnel list is the one place that shows what is left.
+      // What is left is unknown, and this server may be gone. The tunnel list
+      // reads it again and links every server still on the tunnel.
+      toast.error(
+        `${error.message} Could not check which MCP servers still use the tunnel. The tunnel list shows them; delete them from their settings, then delete the tunnel.`,
+        { duration: INCOMPLETE_DELETE_TOAST_MS },
+      );
+      onLeave(tunnelListHref);
+      return;
     }
-    const recovery = remaining
-      ? tunnelDeleteRecovery(remaining, mcpServerId)
-      : ({ kind: "tunnel" } as const);
+    const recovery = tunnelDeleteRecovery(remaining, mcpServerId);
     switch (recovery.kind) {
       case "stay":
         // This server survived, so the dialog can show what is left.
@@ -104,9 +113,7 @@ export function DeleteTunnelDialogContent({
           `${error.message} No MCP server you can view still uses the tunnel. Delete it from the tunnel list; if it is still in use by servers you cannot view, ask a project admin.`,
           { duration: INCOMPLETE_DELETE_TOAST_MS },
         );
-        onLeave(
-          addMcpServerOnTunnelHref(routes.mcp.add.tunneled.href(), tunnel.id),
-        );
+        onLeave(tunnelListHref);
     }
   };
 
