@@ -28,19 +28,19 @@ func (e *logUsage) Enrich(ctx context.Context, record *otelv1.InboundLogRecord) 
 
 	var out []attribute.KeyValue
 	if key, v, err := d.InputTokens(record); known(key, err) {
-		out = append(out, InputTokensColumnKey.Int64(v))
+		out = append(out, AgentInputTokensKey.Int64(v))
 	}
 	if key, v, err := d.OutputTokens(record); known(key, err) {
-		out = append(out, OutputTokensColumnKey.Int64(v))
+		out = append(out, AgentOutputTokensKey.Int64(v))
 	}
 	if key, v, err := d.CacheReadTokens(record); known(key, err) {
-		out = append(out, CacheReadTokensColumnKey.Int64(v))
+		out = append(out, AgentCacheReadTokensKey.Int64(v))
 	}
 	if key, v, err := d.CacheWriteTokens(record); known(key, err) {
-		out = append(out, CacheWriteTokensColumnKey.Int64(v))
+		out = append(out, AgentCacheWriteTokensKey.Int64(v))
 	}
 	if key, v, err := d.CostUSD(record); known(key, err) {
-		out = append(out, CostUSDColumnKey.Float64(v))
+		out = append(out, AgentCostUSDKey.Float64(v))
 	}
 
 	countMissing(ctx, e.instruments, func() string { return missingLabel(d.Surface(record)) }, eventType, usageExpectations, out)

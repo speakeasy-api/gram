@@ -386,11 +386,11 @@ func TestLogRelayExportRedactsSensitiveContentWithoutMutatingSource(t *testing.T
 		// The column enrichers' copies of the words and the person are
 		// redacted with their sources, so an exclude destination gets
 		// neither spelling.
-		relayTestLogAttribute(string(enrich.TextColumnKey), "prompt"),
-		relayTestLogAttribute(string(enrich.UserEmailColumnKey), "person@example.com"),
-		relayTestLogAttribute(string(enrich.ExternalUserIDColumnKey), "user-1"),
+		relayTestLogAttribute(string(enrich.AgentTextKey), "prompt"),
+		relayTestLogAttribute(string(enrich.AgentUserEmailKey), "person@example.com"),
+		relayTestLogAttribute(string(enrich.AgentExternalUserIDKey), "user-1"),
 		relayTestLogAttribute("model", "preserved"),
-		relayTestLogAttribute(string(enrich.ModelColumnKey), "preserved"),
+		relayTestLogAttribute(string(enrich.AgentModelKey), "preserved"),
 	})
 	before := proto.Clone(record)
 

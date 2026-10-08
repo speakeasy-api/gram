@@ -20,11 +20,11 @@ func TestLogClassificationNamesWhatARecordIs(t *testing.T) {
 
 		attrs := enriched(t, enricher, record)
 		require.Len(t, attrs, 5)
-		require.Equal(t, dialect.EventTypeAPIRequest, attrs[EventTypeColumnKey].AsString())
-		require.Equal(t, "api_request", attrs[RawEventNameColumnKey].AsString())
-		require.Equal(t, "claude-code", attrs[SourceColumnKey].AsString())
-		require.Equal(t, "anthropic", attrs[ProviderColumnKey].AsString())
-		require.Equal(t, "claude-code", attrs[SurfaceColumnKey].AsString())
+		require.Equal(t, dialect.EventTypeAPIRequest, attrs[AgentEventTypeKey].AsString())
+		require.Equal(t, "api_request", attrs[AgentRawEventNameKey].AsString())
+		require.Equal(t, "claude-code", attrs[AgentSourceKey].AsString())
+		require.Equal(t, "anthropic", attrs[AgentProviderKey].AsString())
+		require.Equal(t, "claude-code", attrs[AgentSurfaceKey].AsString())
 	})
 
 	t.Run("a Codex response.completed is an api_request from openai on codex", func(t *testing.T) {
@@ -32,11 +32,11 @@ func TestLogClassificationNamesWhatARecordIs(t *testing.T) {
 		record := inboundTestLog(codexScopeName, "codex", "codex.sse_event", logStringAttribute("event.kind", "response.completed"))
 
 		attrs := enriched(t, enricher, record)
-		require.Equal(t, dialect.EventTypeAPIRequest, attrs[EventTypeColumnKey].AsString())
-		require.Equal(t, "codex.sse_event", attrs[RawEventNameColumnKey].AsString())
-		require.Equal(t, "codex", attrs[SourceColumnKey].AsString())
-		require.Equal(t, "openai", attrs[ProviderColumnKey].AsString())
-		require.Equal(t, "codex", attrs[SurfaceColumnKey].AsString())
+		require.Equal(t, dialect.EventTypeAPIRequest, attrs[AgentEventTypeKey].AsString())
+		require.Equal(t, "codex.sse_event", attrs[AgentRawEventNameKey].AsString())
+		require.Equal(t, "codex", attrs[AgentSourceKey].AsString())
+		require.Equal(t, "openai", attrs[AgentProviderKey].AsString())
+		require.Equal(t, "codex", attrs[AgentSurfaceKey].AsString())
 	})
 
 	t.Run("a semconv chat record names its provider and no surface", func(t *testing.T) {
@@ -47,11 +47,11 @@ func TestLogClassificationNamesWhatARecordIs(t *testing.T) {
 		)
 
 		attrs := enriched(t, enricher, record)
-		require.Equal(t, dialect.EventTypeAPIRequest, attrs[EventTypeColumnKey].AsString())
-		require.Equal(t, "gen_ai.client.inference.operation.details", attrs[RawEventNameColumnKey].AsString())
-		require.Equal(t, "litellm", attrs[SourceColumnKey].AsString())
-		require.Equal(t, "openai", attrs[ProviderColumnKey].AsString())
-		require.NotContains(t, attrs, SurfaceColumnKey, "the semantic conventions do not say which agent was behind a request")
+		require.Equal(t, dialect.EventTypeAPIRequest, attrs[AgentEventTypeKey].AsString())
+		require.Equal(t, "gen_ai.client.inference.operation.details", attrs[AgentRawEventNameKey].AsString())
+		require.Equal(t, "litellm", attrs[AgentSourceKey].AsString())
+		require.Equal(t, "openai", attrs[AgentProviderKey].AsString())
+		require.NotContains(t, attrs, AgentSurfaceKey, "the semantic conventions do not say which agent was behind a request")
 	})
 
 	t.Run("an unclassified Claude Code record keeps its name and producer and gets no type", func(t *testing.T) {
@@ -59,11 +59,11 @@ func TestLogClassificationNamesWhatARecordIs(t *testing.T) {
 		record := inboundTestLog(claudeCodeScopeName, "claude-code", "hook_registered")
 
 		attrs := enriched(t, enricher, record)
-		require.NotContains(t, attrs, EventTypeColumnKey)
-		require.Equal(t, "hook_registered", attrs[RawEventNameColumnKey].AsString())
-		require.Equal(t, "claude-code", attrs[SourceColumnKey].AsString())
-		require.Equal(t, "anthropic", attrs[ProviderColumnKey].AsString())
-		require.Equal(t, "claude-code", attrs[SurfaceColumnKey].AsString())
+		require.NotContains(t, attrs, AgentEventTypeKey)
+		require.Equal(t, "hook_registered", attrs[AgentRawEventNameKey].AsString())
+		require.Equal(t, "claude-code", attrs[AgentSourceKey].AsString())
+		require.Equal(t, "anthropic", attrs[AgentProviderKey].AsString())
+		require.Equal(t, "claude-code", attrs[AgentSurfaceKey].AsString())
 	})
 
 	t.Run("a record no dialect recognises gets only its source", func(t *testing.T) {
@@ -72,7 +72,7 @@ func TestLogClassificationNamesWhatARecordIs(t *testing.T) {
 
 		attrs := enriched(t, enricher, record)
 		require.Len(t, attrs, 1)
-		require.Equal(t, SourceUnknown, attrs[SourceColumnKey].AsString())
+		require.Equal(t, SourceUnknown, attrs[AgentSourceKey].AsString())
 	})
 
 	t.Run("pipeline attribution wins over what the dialect infers for the provider", func(t *testing.T) {
@@ -80,15 +80,15 @@ func TestLogClassificationNamesWhatARecordIs(t *testing.T) {
 		record := inboundTestLog(claudeCodeScopeName, "claude-code", "api_request", logStringAttribute("gram.provider", "bedrock"))
 
 		attrs := enriched(t, enricher, record)
-		require.Equal(t, "bedrock", attrs[ProviderColumnKey].AsString())
-		require.Equal(t, "claude-code", attrs[SurfaceColumnKey].AsString(), "the surface is still the dialect's")
+		require.Equal(t, "bedrock", attrs[AgentProviderKey].AsString())
+		require.Equal(t, "claude-code", attrs[AgentSurfaceKey].AsString(), "the surface is still the dialect's")
 	})
 
 	t.Run("the source is canonicalised the way the event feed stores it", func(t *testing.T) {
 		t.Parallel()
 		record := inboundTestLog(claudeCodeScopeName, "ClaudeCode", "api_request")
 
-		require.Equal(t, "claude-code", enriched(t, enricher, record)[SourceColumnKey].AsString())
+		require.Equal(t, "claude-code", enriched(t, enricher, record)[AgentSourceKey].AsString())
 	})
 }
 
@@ -106,11 +106,11 @@ func TestSpanClassificationNamesWhatASpanIs(t *testing.T) {
 		)
 
 		attrs := enrichedSpan(t, enricher, span)
-		require.Equal(t, dialect.EventTypeAPIRequest, attrs[EventTypeColumnKey].AsString())
-		require.Equal(t, "chat gpt-4o", attrs[RawEventNameColumnKey].AsString(), "a span's raw name is the span name")
-		require.Equal(t, "litellm", attrs[SourceColumnKey].AsString())
-		require.Equal(t, "openai", attrs[ProviderColumnKey].AsString())
-		require.NotContains(t, attrs, SurfaceColumnKey, "a proxy span does not say which agent was behind it")
+		require.Equal(t, dialect.EventTypeAPIRequest, attrs[AgentEventTypeKey].AsString())
+		require.Equal(t, "chat gpt-4o", attrs[AgentRawEventNameKey].AsString(), "a span's raw name is the span name")
+		require.Equal(t, "litellm", attrs[AgentSourceKey].AsString())
+		require.Equal(t, "openai", attrs[AgentProviderKey].AsString())
+		require.NotContains(t, attrs, AgentSurfaceKey, "a proxy span does not say which agent was behind it")
 	})
 
 	t.Run("a Claude Code span names its producer", func(t *testing.T) {
@@ -120,9 +120,9 @@ func TestSpanClassificationNamesWhatASpanIs(t *testing.T) {
 		)
 
 		attrs := enrichedSpan(t, enricher, span)
-		require.Equal(t, dialect.EventTypeAPIRequest, attrs[EventTypeColumnKey].AsString())
-		require.Equal(t, "anthropic", attrs[ProviderColumnKey].AsString())
-		require.Equal(t, "claude-code", attrs[SurfaceColumnKey].AsString())
+		require.Equal(t, dialect.EventTypeAPIRequest, attrs[AgentEventTypeKey].AsString())
+		require.Equal(t, "anthropic", attrs[AgentProviderKey].AsString())
+		require.Equal(t, "claude-code", attrs[AgentSurfaceKey].AsString())
 	})
 
 	t.Run("pipeline attribution wins over what the dialect infers for the provider", func(t *testing.T) {
@@ -131,7 +131,7 @@ func TestSpanClassificationNamesWhatASpanIs(t *testing.T) {
 			spanStringAttribute("gen_ai.operation.name", "chat"),
 			spanStringAttribute("gram.provider", "bedrock"),
 		)
-		require.Equal(t, "bedrock", enrichedSpan(t, enricher, span)[ProviderColumnKey].AsString())
+		require.Equal(t, "bedrock", enrichedSpan(t, enricher, span)[AgentProviderKey].AsString())
 	})
 
 	t.Run("an unrecognised span keeps its name and source and gets no type", func(t *testing.T) {
@@ -140,9 +140,9 @@ func TestSpanClassificationNamesWhatASpanIs(t *testing.T) {
 
 		attrs := enrichedSpan(t, enricher, span)
 		require.Len(t, attrs, 2)
-		require.NotContains(t, attrs, EventTypeColumnKey)
-		require.Equal(t, "GET /health", attrs[RawEventNameColumnKey].AsString())
-		require.Equal(t, SourceUnknown, attrs[SourceColumnKey].AsString())
+		require.NotContains(t, attrs, AgentEventTypeKey)
+		require.Equal(t, "GET /health", attrs[AgentRawEventNameKey].AsString())
+		require.Equal(t, SourceUnknown, attrs[AgentSourceKey].AsString())
 	})
 }
 

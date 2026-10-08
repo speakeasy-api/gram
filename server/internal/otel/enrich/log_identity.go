@@ -27,26 +27,26 @@ func (e *logIdentity) Enrich(ctx context.Context, record *otelv1.InboundLogRecor
 
 	var out []attribute.KeyValue
 	if key, v, err := d.SessionID(record); known(key, err) {
-		out = append(out, SessionIDColumnKey.String(v))
+		out = append(out, AgentSessionIDKey.String(v))
 	}
 	if key, v, err := d.TurnID(record); known(key, err) {
-		out = append(out, TurnIDColumnKey.String(v))
+		out = append(out, AgentTurnIDKey.String(v))
 	}
 	// An api_request_body and a compaction have no subject of their own; the
 	// writer keeps the record id for them.
 	if eventType != dialect.EventTypeAPIRequestBody && eventType != dialect.EventTypeCompaction {
 		if key, v, err := d.SubjectID(record); known(key, err) {
-			out = append(out, EventIDColumnKey.String(v))
+			out = append(out, AgentEventIDKey.String(v))
 		}
 	}
 	if key, v, err := d.ExternalUserEmail(record); known(key, err) {
-		out = append(out, UserEmailColumnKey.String(v))
+		out = append(out, AgentUserEmailKey.String(v))
 	}
 	if key, v, err := d.ExternalUserID(record); known(key, err) {
-		out = append(out, ExternalUserIDColumnKey.String(v))
+		out = append(out, AgentExternalUserIDKey.String(v))
 	}
 	if key, v, err := d.ExternalOrgID(record); known(key, err) {
-		out = append(out, ExternalOrgIDColumnKey.String(v))
+		out = append(out, AgentExternalOrgIDKey.String(v))
 	}
 
 	countMissing(ctx, e.instruments, func() string { return missingLabel(d.Surface(record)) }, eventType, identityExpectations, out)

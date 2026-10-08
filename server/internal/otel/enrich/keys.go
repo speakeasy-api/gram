@@ -59,57 +59,58 @@ func DirectoryGroupNames(v []string) attribute.KeyValue {
 
 func GramUserRoles(v []string) attribute.KeyValue { return GramUserRolesKey.StringSlice(v) }
 
-const agentColumnKeyPrefix = "speakeasy.agent."
+const agentKeyPrefix = "speakeasy.agent."
 
-// AgentColumnKey is the attribute that carries one agent_events column on a
-// normalized record: speakeasy.agent.<column>. Only the transform writes
-// these keys; the writer copies them into the row without asking a dialect.
-func AgentColumnKey(column string) attribute.Key {
-	return attribute.Key(agentColumnKeyPrefix + column)
+// AgentKey is one agent attribute on a normalized record:
+// speakeasy.agent.<name>. Only the transform writes these keys; the
+// agent_events writer copies each into the column of the same name without
+// asking a dialect.
+func AgentKey(name string) attribute.Key {
+	return attribute.Key(agentKeyPrefix + name)
 }
 
 const (
 	// What the record is.
-	EventTypeColumnKey    = attribute.Key(agentColumnKeyPrefix + "event_type")
-	RawEventNameColumnKey = attribute.Key(agentColumnKeyPrefix + "raw_event_name")
-	SourceColumnKey       = attribute.Key(agentColumnKeyPrefix + "source")
-	ProviderColumnKey     = attribute.Key(agentColumnKeyPrefix + "provider")
-	SurfaceColumnKey      = attribute.Key(agentColumnKeyPrefix + "surface")
+	AgentEventTypeKey    = attribute.Key(agentKeyPrefix + "event_type")
+	AgentRawEventNameKey = attribute.Key(agentKeyPrefix + "raw_event_name")
+	AgentSourceKey       = attribute.Key(agentKeyPrefix + "source")
+	AgentProviderKey     = attribute.Key(agentKeyPrefix + "provider")
+	AgentSurfaceKey      = attribute.Key(agentKeyPrefix + "surface")
 
 	// Who and where.
-	SessionIDColumnKey      = attribute.Key(agentColumnKeyPrefix + "session_id")
-	TurnIDColumnKey         = attribute.Key(agentColumnKeyPrefix + "turn_id")
-	EventIDColumnKey        = attribute.Key(agentColumnKeyPrefix + "event_id")
-	UserEmailColumnKey      = attribute.Key(agentColumnKeyPrefix + "user_email")
-	ExternalUserIDColumnKey = attribute.Key(agentColumnKeyPrefix + "external_user_id")
-	ExternalOrgIDColumnKey  = attribute.Key(agentColumnKeyPrefix + "external_org_id")
+	AgentSessionIDKey      = attribute.Key(agentKeyPrefix + "session_id")
+	AgentTurnIDKey         = attribute.Key(agentKeyPrefix + "turn_id")
+	AgentEventIDKey        = attribute.Key(agentKeyPrefix + "event_id")
+	AgentUserEmailKey      = attribute.Key(agentKeyPrefix + "user_email")
+	AgentExternalUserIDKey = attribute.Key(agentKeyPrefix + "external_user_id")
+	AgentExternalOrgIDKey  = attribute.Key(agentKeyPrefix + "external_org_id")
 
 	// What happened.
-	ModelColumnKey          = attribute.Key(agentColumnKeyPrefix + "model")
-	QuerySourceColumnKey    = attribute.Key(agentColumnKeyPrefix + "query_source")
-	SkillNameColumnKey      = attribute.Key(agentColumnKeyPrefix + "skill_name")
-	AgentNameColumnKey      = attribute.Key(agentColumnKeyPrefix + "agent_name")
-	MCPServerNameColumnKey  = attribute.Key(agentColumnKeyPrefix + "mcp_server_name")
-	MCPToolNameColumnKey    = attribute.Key(agentColumnKeyPrefix + "mcp_tool_name")
-	NameColumnKey           = attribute.Key(agentColumnKeyPrefix + "name")
-	ToolNameColumnKey       = attribute.Key(agentColumnKeyPrefix + "tool_name")
-	TextColumnKey           = attribute.Key(agentColumnKeyPrefix + "text")
-	OutcomeColumnKey        = attribute.Key(agentColumnKeyPrefix + "outcome")
-	OutcomeMessageColumnKey = attribute.Key(agentColumnKeyPrefix + "outcome_message")
-	DurationNanoColumnKey   = attribute.Key(agentColumnKeyPrefix + "duration_nano")
+	AgentModelKey          = attribute.Key(agentKeyPrefix + "model")
+	AgentQuerySourceKey    = attribute.Key(agentKeyPrefix + "query_source")
+	AgentSkillNameKey      = attribute.Key(agentKeyPrefix + "skill_name")
+	AgentAgentNameKey      = attribute.Key(agentKeyPrefix + "agent_name")
+	AgentMCPServerNameKey  = attribute.Key(agentKeyPrefix + "mcp_server_name")
+	AgentMCPToolNameKey    = attribute.Key(agentKeyPrefix + "mcp_tool_name")
+	AgentNameKey           = attribute.Key(agentKeyPrefix + "name")
+	AgentToolNameKey       = attribute.Key(agentKeyPrefix + "tool_name")
+	AgentTextKey           = attribute.Key(agentKeyPrefix + "text")
+	AgentOutcomeKey        = attribute.Key(agentKeyPrefix + "outcome")
+	AgentOutcomeMessageKey = attribute.Key(agentKeyPrefix + "outcome_message")
+	AgentDurationNanoKey   = attribute.Key(agentKeyPrefix + "duration_nano")
 
 	// Usage, carried by api_request only.
-	InputTokensColumnKey      = attribute.Key(agentColumnKeyPrefix + "input_tokens")
-	OutputTokensColumnKey     = attribute.Key(agentColumnKeyPrefix + "output_tokens")
-	CacheReadTokensColumnKey  = attribute.Key(agentColumnKeyPrefix + "cache_read_tokens")
-	CacheWriteTokensColumnKey = attribute.Key(agentColumnKeyPrefix + "cache_write_tokens")
-	CostUSDColumnKey          = attribute.Key(agentColumnKeyPrefix + "cost_usd")
+	AgentInputTokensKey      = attribute.Key(agentKeyPrefix + "input_tokens")
+	AgentOutputTokensKey     = attribute.Key(agentKeyPrefix + "output_tokens")
+	AgentCacheReadTokensKey  = attribute.Key(agentKeyPrefix + "cache_read_tokens")
+	AgentCacheWriteTokensKey = attribute.Key(agentKeyPrefix + "cache_write_tokens")
+	AgentCostUSDKey          = attribute.Key(agentKeyPrefix + "cost_usd")
 )
 
-// IsAgentColumnKey reports whether a key is in the reserved speakeasy.agent
+// IsAgentKey reports whether a key is in the reserved speakeasy.agent
 // namespace, which only the transform writes.
-func IsAgentColumnKey(key string) bool {
-	return strings.HasPrefix(key, agentColumnKeyPrefix)
+func IsAgentKey(key string) bool {
+	return strings.HasPrefix(key, agentKeyPrefix)
 }
 
 const (

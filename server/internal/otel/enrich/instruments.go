@@ -9,20 +9,19 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-// meterColumnEnricherMissing counts the records where a column enricher's
-// table named the event type but the producer stated no value for the
-// column, or one the dialect could not read, by surface, event type and
-// column. A producer renaming an attribute shows up here as one column
-// going quiet on one type for one surface, the same day. The label is the
-// surface the dialect recognised rather than the producer's service name,
-// so the series stay bounded.
-const meterColumnEnricherMissing = "gram.otel_column_enricher.missing"
+// meterAgentAttributeMissing counts the records whose event type is expected
+// to carry an agent attribute the producer did not state, or the dialect
+// could not read, by surface, event type and attribute. A producer renaming
+// a field shows up here as one attribute going quiet on one type for one
+// surface, the same day. The label is the surface the dialect recognised
+// rather than the producer's service name, so the series stay bounded.
+const meterAgentAttributeMissing = "gram.otel_column_enricher.missing"
 
-// meterColumnEnricherTruncated counts the records where a column enricher
-// cut a value's canonical copy to the column's cap, by surface, event type
-// and column. The producer's own attribute is untouched; only the copy is
-// shortened, and this says how often.
-const meterColumnEnricherTruncated = "gram.otel_column_enricher.truncated"
+// meterAgentAttributeTruncated counts the records where an agent attribute's
+// canonical copy was cut to its cap, by surface, event type and attribute.
+// The producer's own attribute is untouched; only the copy is shortened,
+// and this says how often.
+const meterAgentAttributeTruncated = "gram.otel_column_enricher.truncated"
 
 // MeterReservedAttributesDropped counts the attributes a transform dropped
 // because a producer sent them under Speakeasy's reserved speakeasy namespace,
@@ -43,8 +42,8 @@ type Instruments struct {
 	logEnricherDuration       metric.Float64Histogram
 	metricEnricherDuration    metric.Float64Histogram
 	spanEnricherDuration      metric.Float64Histogram
-	columnValueMissing        metric.Int64Counter
-	columnValueTruncated      metric.Int64Counter
+	agentAttributeMissing     metric.Int64Counter
+	agentAttributeTruncated   metric.Int64Counter
 	reservedAttributesDropped metric.Int64Counter
 }
 
@@ -82,20 +81,20 @@ func NewInstruments(logger *slog.Logger, meterProvider metric.MeterProvider) *In
 		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterSpanEnricherDuration), attr.SlogError(err))
 	}
 
-	columnValueMissing, err := meter.Int64Counter(
-		meterColumnEnricherMissing,
-		metric.WithDescription("Records where a column enricher's table named the event type but the producer stated no value for the column, or one that could not be read"),
+	agentAttributeMissing, err := meter.Int64Counter(
+		meterAgentAttributeMissing,
+		metric.WithDescription("Records whose event type is expected to carry an agent attribute the producer did not state, or that could not be read"),
 	)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterColumnEnricherMissing), attr.SlogError(err))
+		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterAgentAttributeMissing), attr.SlogError(err))
 	}
 
-	columnValueTruncated, err := meter.Int64Counter(
-		meterColumnEnricherTruncated,
-		metric.WithDescription("Records where a column enricher cut a value's canonical copy to the column's cap"),
+	agentAttributeTruncated, err := meter.Int64Counter(
+		meterAgentAttributeTruncated,
+		metric.WithDescription("Records where an agent attribute's canonical copy was cut to its cap"),
 	)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterColumnEnricherTruncated), attr.SlogError(err))
+		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterAgentAttributeTruncated), attr.SlogError(err))
 	}
 
 	reservedAttributesDropped, err := meter.Int64Counter(
@@ -110,24 +109,24 @@ func NewInstruments(logger *slog.Logger, meterProvider metric.MeterProvider) *In
 		logEnricherDuration:       logEnricherDuration,
 		metricEnricherDuration:    metricEnricherDuration,
 		spanEnricherDuration:      spanEnricherDuration,
-		columnValueMissing:        columnValueMissing,
-		columnValueTruncated:      columnValueTruncated,
+		agentAttributeMissing:     agentAttributeMissing,
+		agentAttributeTruncated:   agentAttributeTruncated,
 		reservedAttributesDropped: reservedAttributesDropped,
 	}
 }
 
-func (m *Instruments) recordColumnValueTruncated(ctx context.Context, surface, eventType, column string) {
-	if m.columnValueTruncated == nil {
+func (m *Instruments) recordAgentAttributeTruncated(ctx context.Context, surface, eventType, name string) {
+	if m.agentAttributeTruncated == nil {
 		return
 	}
 
-	m.columnValueTruncated.Add(
+	m.agentAttributeTruncated.Add(
 		ctx,
 		1,
 		metric.WithAttributes(
 			attr.AgentEventSurface(surface),
 			attr.AgentEventType(eventType),
-			attr.AgentEventColumn(column),
+			attr.AgentEventColumn(name),
 		),
 	)
 }
@@ -146,18 +145,18 @@ func (m *Instruments) RecordReservedAttributesDropped(ctx context.Context, signa
 	)
 }
 
-func (m *Instruments) recordColumnValueMissing(ctx context.Context, surface, eventType, column string) {
-	if m.columnValueMissing == nil {
+func (m *Instruments) recordAgentAttributeMissing(ctx context.Context, surface, eventType, name string) {
+	if m.agentAttributeMissing == nil {
 		return
 	}
 
-	m.columnValueMissing.Add(
+	m.agentAttributeMissing.Add(
 		ctx,
 		1,
 		metric.WithAttributes(
 			attr.AgentEventSurface(surface),
 			attr.AgentEventType(eventType),
-			attr.AgentEventColumn(column),
+			attr.AgentEventColumn(name),
 		),
 	)
 }

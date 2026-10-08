@@ -32,55 +32,55 @@ func (e *logOperation) Enrich(ctx context.Context, record *otelv1.InboundLogReco
 	var out []attribute.KeyValue
 	if carriesModel(eventType) {
 		if key, v, err := d.Model(record); known(key, err) {
-			out = append(out, ModelColumnKey.String(v))
+			out = append(out, AgentModelKey.String(v))
 		}
 	}
 	if isRequest {
 		if key, v, err := d.QuerySource(record); known(key, err) {
-			out = append(out, QuerySourceColumnKey.String(v))
+			out = append(out, AgentQuerySourceKey.String(v))
 		}
 	}
 	if isRequest || isTool {
 		if key, v, err := d.SkillName(record); known(key, err) {
-			out = append(out, SkillNameColumnKey.String(v))
+			out = append(out, AgentSkillNameKey.String(v))
 		}
 		if key, v, err := d.AgentName(record); known(key, err) {
-			out = append(out, AgentNameColumnKey.String(v))
+			out = append(out, AgentAgentNameKey.String(v))
 		}
 		if key, v, err := d.MCPServerName(record); known(key, err) {
-			out = append(out, MCPServerNameColumnKey.String(v))
+			out = append(out, AgentMCPServerNameKey.String(v))
 		}
 		if key, v, err := d.MCPToolName(record); known(key, err) {
-			out = append(out, MCPToolNameColumnKey.String(v))
+			out = append(out, AgentMCPToolNameKey.String(v))
 		}
 	}
 	// name is the subject's name, the generic pair to event_id: the tool on
 	// tool events. tool_name says the same until a contract migration drops it.
 	if isTool {
 		if key, v, err := d.ToolName(record); known(key, err) {
-			out = append(out, NameColumnKey.String(v), ToolNameColumnKey.String(v))
+			out = append(out, AgentNameKey.String(v), AgentToolNameKey.String(v))
 		}
 	}
 	if carriesText(eventType) {
 		if key, v, err := d.Text(record); known(key, err) {
-			out = append(out, TextColumnKey.String(capText(ctx, e.instruments, surface, eventType, v, maxTextBytes)))
+			out = append(out, AgentTextKey.String(capText(ctx, e.instruments, surface, eventType, v, maxTextBytes)))
 		}
 	}
 	if implied := impliedOutcome(eventType); implied != "" {
-		out = append(out, OutcomeColumnKey.String(implied))
+		out = append(out, AgentOutcomeKey.String(implied))
 	} else if statesOutcome(eventType) {
 		if key, v, err := d.Outcome(record); known(key, err) {
-			out = append(out, OutcomeColumnKey.String(v))
+			out = append(out, AgentOutcomeKey.String(v))
 		}
 	}
 	if carriesOutcomeMessage(eventType) {
 		if key, v, err := d.OutcomeMessage(record); known(key, err) {
-			out = append(out, OutcomeMessageColumnKey.String(v))
+			out = append(out, AgentOutcomeMessageKey.String(v))
 		}
 	}
 	if carriesDuration(eventType) {
 		if key, v, err := d.DurationNano(record); known(key, err) {
-			out = append(out, DurationNanoColumnKey.Int64(v))
+			out = append(out, AgentDurationNanoKey.Int64(v))
 		}
 	}
 

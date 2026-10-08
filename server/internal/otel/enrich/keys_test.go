@@ -16,7 +16,7 @@ func TestIsPipelineKeyCoversWhatThePipelineWrites(t *testing.T) {
 	t.Parallel()
 
 	for _, key := range []string{
-		string(EventTypeColumnKey),
+		string(AgentEventTypeKey),
 		string(OriginalInstrumentationScopeNameKey),
 		string(OrganizationIDKey),
 		string(TokensCountKey),
@@ -49,9 +49,9 @@ func TestCanonicalCopiesOfSensitiveValuesAreSensitive(t *testing.T) {
 	t.Parallel()
 
 	for _, key := range []string{
-		string(TextColumnKey),
-		string(UserEmailColumnKey),
-		string(ExternalUserIDColumnKey),
+		string(AgentTextKey),
+		string(AgentUserEmailKey),
+		string(AgentExternalUserIDKey),
 	} {
 		require.True(t, dialect.IsSensitiveDataKey(key), "%s must be redacted for an exclude destination", key)
 	}
@@ -59,11 +59,11 @@ func TestCanonicalCopiesOfSensitiveValuesAreSensitive(t *testing.T) {
 	// The keys that carry no words and no person stay visible, so a
 	// destination that excludes sensitive data still gets the event's shape.
 	for _, key := range []string{
-		string(EventTypeColumnKey),
-		string(SessionIDColumnKey),
-		string(ModelColumnKey),
-		string(ToolNameColumnKey),
-		string(OutcomeColumnKey),
+		string(AgentEventTypeKey),
+		string(AgentSessionIDKey),
+		string(AgentModelKey),
+		string(AgentToolNameKey),
+		string(AgentOutcomeKey),
 	} {
 		require.False(t, dialect.IsSensitiveDataKey(key), "%s is not sensitive", key)
 	}

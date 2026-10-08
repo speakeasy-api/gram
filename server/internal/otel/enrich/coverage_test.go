@@ -20,9 +20,9 @@ func TestCountMissingCountsOnlyWhatTheTypeIsExpectedToCarry(t *testing.T) {
 		reader, meterProvider := readableMeter(t)
 		in := NewInstruments(testenv.NewLogger(t), meterProvider)
 		countMissing(t.Context(), in, surface, eventType, expectations, written)
-		total := counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventSurface("claude_code"))
+		total := counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventSurface("claude_code"))
 		return total, func(name string) int64 {
-			return counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn(name))
+			return counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn(name))
 		}
 	}
 
@@ -30,9 +30,9 @@ func TestCountMissingCountsOnlyWhatTheTypeIsExpectedToCarry(t *testing.T) {
 		t.Parallel()
 		reader, meterProvider := readableMeter(t)
 		in := NewInstruments(testenv.NewLogger(t), meterProvider)
-		countMissing(t.Context(), in, surface, dialect.EventTypeAPIRequest, usageExpectations, []attribute.KeyValue{InputTokensColumnKey.Int64(1)})
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("input_tokens")))
-		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing,
+		countMissing(t.Context(), in, surface, dialect.EventTypeAPIRequest, usageExpectations, []attribute.KeyValue{AgentInputTokensKey.Int64(1)})
+		require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("input_tokens")))
+		require.Equal(t, int64(1), counterValue(t, reader, meterAgentAttributeMissing,
 			attr.AgentEventSurface("claude_code"),
 			attr.AgentEventType(dialect.EventTypeAPIRequest),
 			attr.AgentEventColumn("cost_usd"),
@@ -48,21 +48,21 @@ func TestCountMissingCountsOnlyWhatTheTypeIsExpectedToCarry(t *testing.T) {
 	t.Run("a conditional expectation counts only when its condition holds", func(t *testing.T) {
 		t.Parallel()
 		_, missing := count(t, dialect.EventTypeToolCallResult, operationExpectations,
-			NameColumnKey.String("Bash"), ToolNameColumnKey.String("Bash"), OutcomeColumnKey.String(dialect.OutcomeOK), DurationNanoColumnKey.Int64(1))
+			AgentNameKey.String("Bash"), AgentToolNameKey.String("Bash"), AgentOutcomeKey.String(dialect.OutcomeOK), AgentDurationNanoKey.Int64(1))
 		require.Zero(t, missing("outcome_message"), "a result that succeeded has no message to carry")
 
 		_, missing = count(t, dialect.EventTypeToolCallResult, operationExpectations,
-			NameColumnKey.String("Bash"), ToolNameColumnKey.String("Bash"), OutcomeColumnKey.String(dialect.OutcomeError), DurationNanoColumnKey.Int64(1))
+			AgentNameKey.String("Bash"), AgentToolNameKey.String("Bash"), AgentOutcomeKey.String(dialect.OutcomeError), AgentDurationNanoKey.Int64(1))
 		require.Equal(t, int64(1), missing("outcome_message"), "a result that failed owes its message")
 	})
 
 	t.Run("the MCP pair: each half is required once the other is stated", func(t *testing.T) {
 		t.Parallel()
-		_, missing := count(t, dialect.EventTypeToolCall, operationExpectations, NameColumnKey.String("mcp_tool"), ToolNameColumnKey.String("mcp_tool"))
+		_, missing := count(t, dialect.EventTypeToolCall, operationExpectations, AgentNameKey.String("mcp_tool"), AgentToolNameKey.String("mcp_tool"))
 		require.Zero(t, missing("mcp_server_name"), "a built-in tool states neither")
 		require.Zero(t, missing("mcp_tool_name"))
 
-		_, missing = count(t, dialect.EventTypeToolCall, operationExpectations, NameColumnKey.String("mcp_tool"), ToolNameColumnKey.String("mcp_tool"), MCPToolNameColumnKey.String("whoami"))
+		_, missing = count(t, dialect.EventTypeToolCall, operationExpectations, AgentNameKey.String("mcp_tool"), AgentToolNameKey.String("mcp_tool"), AgentMCPToolNameKey.String("whoami"))
 		require.Equal(t, int64(1), missing("mcp_server_name"))
 		require.Zero(t, missing("mcp_tool_name"))
 	})
@@ -70,7 +70,7 @@ func TestCountMissingCountsOnlyWhatTheTypeIsExpectedToCarry(t *testing.T) {
 	t.Run("recommended and opt-in attributes have no expectation", func(t *testing.T) {
 		t.Parallel()
 		for _, e := range operationExpectations {
-			require.NotContains(t, []attribute.Key{SkillNameColumnKey, AgentNameColumnKey, TextColumnKey}, e.key)
+			require.NotContains(t, []attribute.Key{AgentSkillNameKey, AgentAgentNameKey, AgentTextKey}, e.key)
 		}
 		_, missing := count(t, dialect.EventTypePrompt, operationExpectations)
 		require.Zero(t, missing("text"), "words not logged are a choice, not a gap")
@@ -82,7 +82,7 @@ func TestCountMissingCountsOnlyWhatTheTypeIsExpectedToCarry(t *testing.T) {
 		in := NewInstruments(testenv.NewLogger(t), meterProvider)
 		countMissing(t.Context(), in, func() string { return missingLabelOther }, dialect.EventTypeAPIRequest, usageExpectations, nil)
 		for _, name := range []string{"input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens", "cost_usd"} {
-			require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventSurface(missingLabelOther), attr.AgentEventColumn(name)), name)
+			require.Equal(t, int64(1), counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventSurface(missingLabelOther), attr.AgentEventColumn(name)), name)
 		}
 	})
 }
@@ -98,7 +98,7 @@ func TestExpectationsNameOnlyClassifiedTypesAndTheRightSubjects(t *testing.T) {
 
 	for _, list := range [][]expectation{identityExpectations, operationExpectations, usageExpectations} {
 		for _, e := range list {
-			require.True(t, IsAgentColumnKey(string(e.key)), "%s is not an agent attribute", e.key)
+			require.True(t, IsAgentKey(string(e.key)), "%s is not an agent attribute", e.key)
 			for _, eventType := range e.on {
 				require.Contains(t, classifiedEventTypes, eventType, "%s expected on an unknown type %q", e.key, eventType)
 			}
@@ -119,13 +119,13 @@ func TestMissingValuesAreLabelledByTheDialectsSurface(t *testing.T) {
 		// The service name is outside the surface vocabulary on purpose.
 		record := inboundTestLog(codexScopeName, "codex-prod-1", "codex.sse_event", logStringAttribute("event.kind", "response.completed"))
 
-		require.NotContains(t, identity(t, in, record), TurnIDColumnKey)
-		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing,
+		require.NotContains(t, identity(t, in, record), AgentTurnIDKey)
+		require.Equal(t, int64(1), counterValue(t, reader, meterAgentAttributeMissing,
 			attr.AgentEventSurface("codex"),
 			attr.AgentEventType(dialect.EventTypeAPIRequest),
 			attr.AgentEventColumn("turn_id"),
 		))
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventSurface(missingLabelOther)))
+		require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventSurface(missingLabelOther)))
 	})
 
 	t.Run("a producer recognised as no surface is labelled other", func(t *testing.T) {
@@ -134,8 +134,8 @@ func TestMissingValuesAreLabelledByTheDialectsSurface(t *testing.T) {
 		in := NewInstruments(testenv.NewLogger(t), meterProvider)
 		record := inboundTestLog("litellm", "some-proxy-42", "gen_ai.client.inference.operation.details", logStringAttribute("gen_ai.operation.name", "chat"))
 
-		require.NotContains(t, identity(t, in, record), TurnIDColumnKey)
-		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing,
+		require.NotContains(t, identity(t, in, record), AgentTurnIDKey)
+		require.Equal(t, int64(1), counterValue(t, reader, meterAgentAttributeMissing,
 			attr.AgentEventSurface(missingLabelOther),
 			attr.AgentEventColumn("turn_id"),
 		))

@@ -125,11 +125,11 @@ func TestAgentEventRowFromLogCopiesTheCanonicalColumns(t *testing.T) {
 	record.SetEventName("")
 	record.SetAttributes([]*otelv1.LogRecord_KeyValue{
 		logEventTestKV(string(enrich.OriginalInstrumentationScopeNameKey), "com.example.app"),
-		logEventTestKV(string(enrich.EventTypeColumnKey), dialect.EventTypePrompt),
-		logEventTestKV(string(enrich.RawEventNameColumnKey), "custom.prompt"),
-		logEventTestKV(string(enrich.SourceColumnKey), "example-app"),
-		logEventTestKV(string(enrich.ProviderColumnKey), "openai"),
-		logEventTestKV(string(enrich.SurfaceColumnKey), "example"),
+		logEventTestKV(string(enrich.AgentEventTypeKey), dialect.EventTypePrompt),
+		logEventTestKV(string(enrich.AgentRawEventNameKey), "custom.prompt"),
+		logEventTestKV(string(enrich.AgentSourceKey), "example-app"),
+		logEventTestKV(string(enrich.AgentProviderKey), "openai"),
+		logEventTestKV(string(enrich.AgentSurfaceKey), "example"),
 	})
 
 	row, skip := agentEventRowFromLog(record, testObservedAt)

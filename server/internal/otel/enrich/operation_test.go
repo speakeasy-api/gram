@@ -31,18 +31,18 @@ func TestOperationForClaudeCode(t *testing.T) {
 		)
 
 		attrs := operation(t, in, record)
-		require.Equal(t, "claude-sonnet-4", attrs[ModelColumnKey].AsString())
-		require.Equal(t, "user_prompt", attrs[QuerySourceColumnKey].AsString())
-		require.Equal(t, "deploy", attrs[SkillNameColumnKey].AsString())
-		require.Equal(t, "reviewer", attrs[AgentNameColumnKey].AsString())
-		require.Equal(t, "github", attrs[MCPServerNameColumnKey].AsString())
-		require.Equal(t, "get_pr", attrs[MCPToolNameColumnKey].AsString())
-		require.Equal(t, int64(1_500_000_000), attrs[DurationNanoColumnKey].AsInt64())
-		require.NotContains(t, attrs, OutcomeColumnKey, "a request records that a call was made, not how it went")
-		require.NotContains(t, attrs, NameColumnKey, "a request has no subject with a name")
-		require.NotContains(t, attrs, ToolNameColumnKey)
-		require.NotContains(t, attrs, TextColumnKey)
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("outcome")))
+		require.Equal(t, "claude-sonnet-4", attrs[AgentModelKey].AsString())
+		require.Equal(t, "user_prompt", attrs[AgentQuerySourceKey].AsString())
+		require.Equal(t, "deploy", attrs[AgentSkillNameKey].AsString())
+		require.Equal(t, "reviewer", attrs[AgentAgentNameKey].AsString())
+		require.Equal(t, "github", attrs[AgentMCPServerNameKey].AsString())
+		require.Equal(t, "get_pr", attrs[AgentMCPToolNameKey].AsString())
+		require.Equal(t, int64(1_500_000_000), attrs[AgentDurationNanoKey].AsInt64())
+		require.NotContains(t, attrs, AgentOutcomeKey, "a request records that a call was made, not how it went")
+		require.NotContains(t, attrs, AgentNameKey, "a request has no subject with a name")
+		require.NotContains(t, attrs, AgentToolNameKey)
+		require.NotContains(t, attrs, AgentTextKey)
+		require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("outcome")))
 	})
 
 	t.Run("a plain api_request is not counted missing on what most requests do not carry", func(t *testing.T) {
@@ -56,11 +56,11 @@ func TestOperationForClaudeCode(t *testing.T) {
 		)
 
 		attrs := operation(t, in, record)
-		require.NotContains(t, attrs, SkillNameColumnKey)
-		require.NotContains(t, attrs, AgentNameColumnKey)
-		require.NotContains(t, attrs, MCPServerNameColumnKey)
+		require.NotContains(t, attrs, AgentSkillNameKey)
+		require.NotContains(t, attrs, AgentAgentNameKey)
+		require.NotContains(t, attrs, AgentMCPServerNameKey)
 		for _, name := range []string{"skill_name", "agent_name", "mcp_server_name", "mcp_tool_name"} {
-			require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn(name)), name)
+			require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn(name)), name)
 		}
 	})
 
@@ -75,12 +75,12 @@ func TestOperationForClaudeCode(t *testing.T) {
 		)
 
 		attrs := operation(t, in, record)
-		require.Equal(t, "Bash", attrs[NameColumnKey].AsString(), "the tool is the subject")
-		require.Equal(t, "Bash", attrs[ToolNameColumnKey].AsString(), "and the deprecated column says the same")
-		require.Equal(t, dialect.OutcomeError, attrs[OutcomeColumnKey].AsString())
-		require.Equal(t, "ShellError", attrs[OutcomeMessageColumnKey].AsString())
-		require.Equal(t, int64(12_000_000), attrs[DurationNanoColumnKey].AsInt64())
-		require.NotContains(t, attrs, ModelColumnKey)
+		require.Equal(t, "Bash", attrs[AgentNameKey].AsString(), "the tool is the subject")
+		require.Equal(t, "Bash", attrs[AgentToolNameKey].AsString(), "and the deprecated key says the same")
+		require.Equal(t, dialect.OutcomeError, attrs[AgentOutcomeKey].AsString())
+		require.Equal(t, "ShellError", attrs[AgentOutcomeMessageKey].AsString())
+		require.Equal(t, int64(12_000_000), attrs[AgentDurationNanoKey].AsInt64())
+		require.NotContains(t, attrs, AgentModelKey)
 	})
 
 	t.Run("a successful tool_result has no message to carry and is not counted", func(t *testing.T) {
@@ -94,12 +94,12 @@ func TestOperationForClaudeCode(t *testing.T) {
 		)
 
 		attrs := operation(t, in, record)
-		require.Equal(t, dialect.OutcomeOK, attrs[OutcomeColumnKey].AsString())
-		require.NotContains(t, attrs, OutcomeMessageColumnKey)
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("outcome_message")))
-		require.NotContains(t, attrs, MCPServerNameColumnKey, "a built-in tool has no MCP server")
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("mcp_server_name")))
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("mcp_tool_name")))
+		require.Equal(t, dialect.OutcomeOK, attrs[AgentOutcomeKey].AsString())
+		require.NotContains(t, attrs, AgentOutcomeMessageKey)
+		require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("outcome_message")))
+		require.NotContains(t, attrs, AgentMCPServerNameKey, "a built-in tool has no MCP server")
+		require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("mcp_server_name")))
+		require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("mcp_tool_name")))
 	})
 
 	t.Run("an MCP tool_result that names the tool but not the server is counted on the server", func(t *testing.T) {
@@ -113,10 +113,10 @@ func TestOperationForClaudeCode(t *testing.T) {
 		)
 
 		attrs := operation(t, in, record)
-		require.Equal(t, "whoami", attrs[MCPToolNameColumnKey].AsString())
-		require.NotContains(t, attrs, MCPServerNameColumnKey)
-		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("mcp_server_name")))
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("mcp_tool_name")))
+		require.Equal(t, "whoami", attrs[AgentMCPToolNameKey].AsString())
+		require.NotContains(t, attrs, AgentMCPServerNameKey)
+		require.Equal(t, int64(1), counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("mcp_server_name")))
+		require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("mcp_tool_name")))
 	})
 
 	t.Run("a rejected tool_decision is rejected and an accepted one has no outcome and is not counted", func(t *testing.T) {
@@ -131,19 +131,19 @@ func TestOperationForClaudeCode(t *testing.T) {
 			logStringAttribute("mcp_tool_name", "create_issue"),
 		)
 		attrs := operation(t, in, rejected)
-		require.Equal(t, dialect.OutcomeRejected, attrs[OutcomeColumnKey].AsString())
-		require.Equal(t, "reject", attrs[TextColumnKey].AsString())
-		require.Equal(t, "Bash", attrs[NameColumnKey].AsString())
-		require.Equal(t, "github", attrs[MCPServerNameColumnKey].AsString())
-		require.Equal(t, "create_issue", attrs[MCPToolNameColumnKey].AsString())
+		require.Equal(t, dialect.OutcomeRejected, attrs[AgentOutcomeKey].AsString())
+		require.Equal(t, "reject", attrs[AgentTextKey].AsString())
+		require.Equal(t, "Bash", attrs[AgentNameKey].AsString())
+		require.Equal(t, "github", attrs[AgentMCPServerNameKey].AsString())
+		require.Equal(t, "create_issue", attrs[AgentMCPToolNameKey].AsString())
 
 		accepted := inboundTestLog(claudeCodeScopeName, "claude-code", "tool_decision",
 			logStringAttribute("tool_name", "Bash"),
 			logStringAttribute("decision_type", "accept"),
 		)
 		attrs = operation(t, in, accepted)
-		require.NotContains(t, attrs, OutcomeColumnKey, "the result row carries how an accepted call went")
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("outcome")))
+		require.NotContains(t, attrs, AgentOutcomeKey, "the result row carries how an accepted call went")
+		require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("outcome")))
 	})
 
 	t.Run("the api event types imply their outcome", func(t *testing.T) {
@@ -155,24 +155,24 @@ func TestOperationForClaudeCode(t *testing.T) {
 			logStringAttribute("response", "Done."),
 		)
 		attrs := operation(t, in, response)
-		require.Equal(t, dialect.OutcomeOK, attrs[OutcomeColumnKey].AsString())
-		require.Equal(t, "Done.", attrs[TextColumnKey].AsString())
-		require.Equal(t, "claude-sonnet-4", attrs[ModelColumnKey].AsString())
-		require.NotContains(t, attrs, OutcomeMessageColumnKey)
+		require.Equal(t, dialect.OutcomeOK, attrs[AgentOutcomeKey].AsString())
+		require.Equal(t, "Done.", attrs[AgentTextKey].AsString())
+		require.Equal(t, "claude-sonnet-4", attrs[AgentModelKey].AsString())
+		require.NotContains(t, attrs, AgentOutcomeMessageKey)
 
 		apiError := inboundTestLog(claudeCodeScopeName, "claude-code", "api_error",
 			logStringAttribute("model", "claude-sonnet-4"),
 			logStringAttribute("error", "overloaded"),
 		)
 		attrs = operation(t, in, apiError)
-		require.Equal(t, dialect.OutcomeError, attrs[OutcomeColumnKey].AsString())
-		require.Equal(t, "overloaded", attrs[OutcomeMessageColumnKey].AsString())
-		require.Equal(t, "overloaded", attrs[TextColumnKey].AsString())
+		require.Equal(t, dialect.OutcomeError, attrs[AgentOutcomeKey].AsString())
+		require.Equal(t, "overloaded", attrs[AgentOutcomeMessageKey].AsString())
+		require.Equal(t, "overloaded", attrs[AgentTextKey].AsString())
 
 		refusal := inboundTestLog(claudeCodeScopeName, "claude-code", "api_refusal", logStringAttribute("model", "claude-sonnet-4"))
 		attrs = operation(t, in, refusal)
-		require.Equal(t, dialect.OutcomeRefused, attrs[OutcomeColumnKey].AsString())
-		require.Equal(t, "claude-sonnet-4", attrs[ModelColumnKey].AsString())
+		require.Equal(t, dialect.OutcomeRefused, attrs[AgentOutcomeKey].AsString())
+		require.Equal(t, "claude-sonnet-4", attrs[AgentModelKey].AsString())
 	})
 
 	t.Run("a payload capture carries its model and nothing about how it went", func(t *testing.T) {
@@ -185,13 +185,13 @@ func TestOperationForClaudeCode(t *testing.T) {
 			logStringAttribute("body", `{"messages":[]}`),
 		)
 		attrs := operation(t, in, withModel)
-		require.Equal(t, "claude-sonnet-4", attrs[ModelColumnKey].AsString())
-		require.NotContains(t, attrs, OutcomeColumnKey)
-		require.NotContains(t, attrs, TextColumnKey, "the body stays whole in the attributes")
+		require.Equal(t, "claude-sonnet-4", attrs[AgentModelKey].AsString())
+		require.NotContains(t, attrs, AgentOutcomeKey)
+		require.NotContains(t, attrs, AgentTextKey, "the body stays whole in the attributes")
 
 		withoutModel := inboundTestLog(claudeCodeScopeName, "claude-code", "api_response_body", logStringAttribute("body", `{}`))
-		require.NotContains(t, operation(t, in, withoutModel), ModelColumnKey)
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("model")), "a capture states the model only sometimes")
+		require.NotContains(t, operation(t, in, withoutModel), AgentModelKey)
+		require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("model")), "a capture states the model only sometimes")
 	})
 
 	t.Run("a compaction states its outcome and, when it failed, why", func(t *testing.T) {
@@ -204,18 +204,18 @@ func TestOperationForClaudeCode(t *testing.T) {
 			inboundTestDoubleAttribute("duration_ms", 2500),
 		)
 		attrs := operation(t, in, ok)
-		require.Equal(t, dialect.OutcomeOK, attrs[OutcomeColumnKey].AsString())
-		require.NotContains(t, attrs, OutcomeMessageColumnKey)
-		require.NotContains(t, attrs, DurationNanoColumnKey, "a compaction's duration is housekeeping, not a request or a tool")
+		require.Equal(t, dialect.OutcomeOK, attrs[AgentOutcomeKey].AsString())
+		require.NotContains(t, attrs, AgentOutcomeMessageKey)
+		require.NotContains(t, attrs, AgentDurationNanoKey, "a compaction's duration is housekeeping, not a request or a tool")
 
 		failed := inboundTestLog(claudeCodeScopeName, "claude-code", "compaction",
 			inboundTestBoolAttribute("success", false),
 			logStringAttribute("error", "context too large"),
 		)
 		attrs = operation(t, in, failed)
-		require.Equal(t, dialect.OutcomeError, attrs[OutcomeColumnKey].AsString())
-		require.Equal(t, "context too large", attrs[OutcomeMessageColumnKey].AsString())
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("outcome_message")))
+		require.Equal(t, dialect.OutcomeError, attrs[AgentOutcomeKey].AsString())
+		require.Equal(t, "context too large", attrs[AgentOutcomeMessageKey].AsString())
+		require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("outcome_message")))
 	})
 
 	t.Run("a prompt whose words were not logged is a choice, not a gap", func(t *testing.T) {
@@ -224,8 +224,8 @@ func TestOperationForClaudeCode(t *testing.T) {
 		in := NewInstruments(testenv.NewLogger(t), meterProvider)
 		record := inboundTestLog(claudeCodeScopeName, "claude-code", "user_prompt", inboundTestIntAttribute("prompt_length", 13))
 
-		require.NotContains(t, operation(t, in, record), TextColumnKey)
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("text")))
+		require.NotContains(t, operation(t, in, record), AgentTextKey)
+		require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("text")))
 	})
 
 	t.Run("an unclassified record gets nothing", func(t *testing.T) {
@@ -249,9 +249,9 @@ func TestOperationForCodex(t *testing.T) {
 		)
 
 		attrs := operation(t, in, record)
-		require.Equal(t, "gpt-5", attrs[ModelColumnKey].AsString())
-		require.Equal(t, int64(800_000_000), attrs[DurationNanoColumnKey].AsInt64())
-		require.NotContains(t, attrs, OutcomeColumnKey, "a completed request is a request; the type carries that it completed")
+		require.Equal(t, "gpt-5", attrs[AgentModelKey].AsString())
+		require.Equal(t, int64(800_000_000), attrs[AgentDurationNanoKey].AsInt64())
+		require.NotContains(t, attrs, AgentOutcomeKey, "a completed request is a request; the type carries that it completed")
 	})
 
 	t.Run("a tool result names the tool in both attributes and states how it went", func(t *testing.T) {
@@ -265,10 +265,10 @@ func TestOperationForCodex(t *testing.T) {
 		)
 
 		attrs := operation(t, in, record)
-		require.Equal(t, "shell", attrs[NameColumnKey].AsString())
-		require.Equal(t, "shell", attrs[ToolNameColumnKey].AsString())
-		require.Equal(t, dialect.OutcomeError, attrs[OutcomeColumnKey].AsString())
-		require.Equal(t, "exit 1", attrs[OutcomeMessageColumnKey].AsString())
+		require.Equal(t, "shell", attrs[AgentNameKey].AsString())
+		require.Equal(t, "shell", attrs[AgentToolNameKey].AsString())
+		require.Equal(t, dialect.OutcomeError, attrs[AgentOutcomeKey].AsString())
+		require.Equal(t, "exit 1", attrs[AgentOutcomeMessageKey].AsString())
 	})
 }
 
@@ -285,11 +285,11 @@ func TestOperationForSemconv(t *testing.T) {
 		)
 
 		attrs := operation(t, in, record)
-		require.Equal(t, "search", attrs[NameColumnKey].AsString())
-		require.Equal(t, "search", attrs[ToolNameColumnKey].AsString())
-		require.NotContains(t, attrs, OutcomeColumnKey, "a tool call records that a call was made, not how it went")
-		require.NotContains(t, attrs, DurationNanoColumnKey)
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("duration_nano")))
+		require.Equal(t, "search", attrs[AgentNameKey].AsString())
+		require.Equal(t, "search", attrs[AgentToolNameKey].AsString())
+		require.NotContains(t, attrs, AgentOutcomeKey, "a tool call records that a call was made, not how it went")
+		require.NotContains(t, attrs, AgentDurationNanoKey)
+		require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("duration_nano")))
 	})
 
 	t.Run("a chat record names its model", func(t *testing.T) {
@@ -302,8 +302,8 @@ func TestOperationForSemconv(t *testing.T) {
 		)
 
 		attrs := operation(t, in, record)
-		require.Equal(t, "gpt-4o-2024-08-06", attrs[ModelColumnKey].AsString())
-		require.Equal(t, "planner", attrs[AgentNameColumnKey].AsString())
+		require.Equal(t, "gpt-4o-2024-08-06", attrs[AgentModelKey].AsString())
+		require.Equal(t, "planner", attrs[AgentAgentNameKey].AsString())
 	})
 }
 
@@ -322,11 +322,11 @@ func TestSpanOperationReadsTheSpansOwnTiming(t *testing.T) {
 		)
 
 		attrs := enrichedSpan(t, &spanOperation{instruments: in}, span)
-		require.Equal(t, "search", attrs[NameColumnKey].AsString())
-		require.Equal(t, "search", attrs[ToolNameColumnKey].AsString())
-		require.Equal(t, int64(500), attrs[DurationNanoColumnKey].AsInt64())
-		require.NotContains(t, attrs, OutcomeColumnKey, "a tool_call records that a call was made")
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("duration_nano")))
+		require.Equal(t, "search", attrs[AgentNameKey].AsString())
+		require.Equal(t, "search", attrs[AgentToolNameKey].AsString())
+		require.Equal(t, int64(500), attrs[AgentDurationNanoKey].AsInt64())
+		require.NotContains(t, attrs, AgentOutcomeKey, "a tool_call records that a call was made")
+		require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("duration_nano")))
 	})
 
 	t.Run("a chat span's error status lands nowhere, since a request carries no outcome", func(t *testing.T) {
@@ -339,11 +339,11 @@ func TestSpanOperationReadsTheSpansOwnTiming(t *testing.T) {
 		)
 
 		attrs := enrichedSpan(t, &spanOperation{instruments: in}, span)
-		require.Equal(t, "gpt-4o-2024-08-06", attrs[ModelColumnKey].AsString())
-		require.Equal(t, int64(500), attrs[DurationNanoColumnKey].AsInt64())
-		require.NotContains(t, attrs, OutcomeColumnKey)
-		require.NotContains(t, attrs, OutcomeMessageColumnKey)
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("outcome")))
+		require.Equal(t, "gpt-4o-2024-08-06", attrs[AgentModelKey].AsString())
+		require.Equal(t, int64(500), attrs[AgentDurationNanoKey].AsInt64())
+		require.NotContains(t, attrs, AgentOutcomeKey)
+		require.NotContains(t, attrs, AgentOutcomeMessageKey)
+		require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("outcome")))
 	})
 }
 
@@ -360,17 +360,17 @@ func TestTextIsCappedAtACharacterBoundaryAndCounted(t *testing.T) {
 	// Seven ASCII bytes then a three-byte character: a byte-wise cut at 8
 	// would split it, so the copy ends after the seventh byte.
 	require.Equal(t, "abcdefg", capText(t.Context(), in, surface, dialect.EventTypePrompt, "abcdefg€hij", 8))
-	require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherTruncated,
+	require.Equal(t, int64(1), counterValue(t, reader, meterAgentAttributeTruncated,
 		attr.AgentEventSurface("claude_code"),
 		attr.AgentEventType(dialect.EventTypePrompt),
 		attr.AgentEventColumn("text"),
 	))
 
 	require.Equal(t, "fix it", capText(t.Context(), in, surface, dialect.EventTypePrompt, "fix it", 8))
-	require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherTruncated, attr.AgentEventColumn("text")), "a value within the cap is not counted")
+	require.Equal(t, int64(1), counterValue(t, reader, meterAgentAttributeTruncated, attr.AgentEventColumn("text")), "a value within the cap is not counted")
 
 	// The operation enricher applies the real cap to a prompt's words.
 	long := inboundTestLog(claudeCodeScopeName, "claude-code", "user_prompt", logStringAttribute("prompt", string(make([]byte, maxTextBytes+1))))
-	require.Len(t, operation(t, in, long)[TextColumnKey].AsString(), maxTextBytes)
-	require.Equal(t, int64(2), counterValue(t, reader, meterColumnEnricherTruncated, attr.AgentEventColumn("text")))
+	require.Len(t, operation(t, in, long)[AgentTextKey].AsString(), maxTextBytes)
+	require.Equal(t, int64(2), counterValue(t, reader, meterAgentAttributeTruncated, attr.AgentEventColumn("text")))
 }

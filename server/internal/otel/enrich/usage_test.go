@@ -28,11 +28,11 @@ func TestUsageForClaudeCode(t *testing.T) {
 
 		attrs := usage(t, in, record)
 		require.Len(t, attrs, 5)
-		require.Equal(t, int64(120), attrs[InputTokensColumnKey].AsInt64())
-		require.Equal(t, int64(30), attrs[OutputTokensColumnKey].AsInt64())
-		require.Equal(t, int64(5), attrs[CacheReadTokensColumnKey].AsInt64(), "stringified numbers still count")
-		require.Equal(t, int64(7), attrs[CacheWriteTokensColumnKey].AsInt64())
-		require.InDelta(t, 0.0125, attrs[CostUSDColumnKey].AsFloat64(), 1e-9)
+		require.Equal(t, int64(120), attrs[AgentInputTokensKey].AsInt64())
+		require.Equal(t, int64(30), attrs[AgentOutputTokensKey].AsInt64())
+		require.Equal(t, int64(5), attrs[AgentCacheReadTokensKey].AsInt64(), "stringified numbers still count")
+		require.Equal(t, int64(7), attrs[AgentCacheWriteTokensKey].AsInt64())
+		require.InDelta(t, 0.0125, attrs[AgentCostUSDKey].AsFloat64(), 1e-9)
 	})
 
 	t.Run("a cost stated in micros lands in dollars", func(t *testing.T) {
@@ -43,7 +43,7 @@ func TestUsageForClaudeCode(t *testing.T) {
 			inboundTestIntAttribute("cost_usd_micros", 12_500),
 		)
 
-		require.InDelta(t, 0.0125, usage(t, in, record)[CostUSDColumnKey].AsFloat64(), 1e-9)
+		require.InDelta(t, 0.0125, usage(t, in, record)[AgentCostUSDKey].AsFloat64(), 1e-9)
 	})
 
 	t.Run("a stated zero is written as a typed zero, not dropped", func(t *testing.T) {
@@ -56,10 +56,10 @@ func TestUsageForClaudeCode(t *testing.T) {
 		)
 
 		attrs := usage(t, in, record)
-		require.Equal(t, attribute.INT64, attrs[CacheReadTokensColumnKey].Type(), "a request that read nothing from the cache says so")
-		require.Zero(t, attrs[CacheReadTokensColumnKey].AsInt64())
-		require.Equal(t, attribute.FLOAT64, attrs[CostUSDColumnKey].Type(), "a stated zero cost is still stated")
-		require.InDelta(t, 0, attrs[CostUSDColumnKey].AsFloat64(), 1e-12)
+		require.Equal(t, attribute.INT64, attrs[AgentCacheReadTokensKey].Type(), "a request that read nothing from the cache says so")
+		require.Zero(t, attrs[AgentCacheReadTokensKey].AsInt64())
+		require.Equal(t, attribute.FLOAT64, attrs[AgentCostUSDKey].Type(), "a stated zero cost is still stated")
+		require.InDelta(t, 0, attrs[AgentCostUSDKey].AsFloat64(), 1e-12)
 	})
 
 	t.Run("a compaction and a tool_result carry no usage, whatever their attributes say", func(t *testing.T) {
@@ -82,7 +82,7 @@ func TestUsageForClaudeCode(t *testing.T) {
 		require.Empty(t, usage(t, in, result))
 
 		for _, name := range []string{"input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens", "cost_usd"} {
-			require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn(name)), name)
+			require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn(name)), name)
 		}
 	})
 }
@@ -102,14 +102,14 @@ func TestUsageForCodex(t *testing.T) {
 		)
 
 		attrs := usage(t, in, record)
-		require.Equal(t, int64(70), attrs[InputTokensColumnKey].AsInt64(), "input excludes cache reads")
-		require.Equal(t, int64(30), attrs[CacheReadTokensColumnKey].AsInt64())
-		require.Equal(t, int64(7), attrs[OutputTokensColumnKey].AsInt64())
-		require.NotContains(t, attrs, CacheWriteTokensColumnKey, "Codex reports no cache writes")
-		require.NotContains(t, attrs, CostUSDColumnKey, "Codex reports no cost")
-		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("cache_write_tokens")))
-		require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("cost_usd")))
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("input_tokens")))
+		require.Equal(t, int64(70), attrs[AgentInputTokensKey].AsInt64(), "input excludes cache reads")
+		require.Equal(t, int64(30), attrs[AgentCacheReadTokensKey].AsInt64())
+		require.Equal(t, int64(7), attrs[AgentOutputTokensKey].AsInt64())
+		require.NotContains(t, attrs, AgentCacheWriteTokensKey, "Codex reports no cache writes")
+		require.NotContains(t, attrs, AgentCostUSDKey, "Codex reports no cost")
+		require.Equal(t, int64(1), counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("cache_write_tokens")))
+		require.Equal(t, int64(1), counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("cost_usd")))
+		require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("input_tokens")))
 	})
 
 	t.Run("a cached count larger than the input is clamped so bad data never increases usage", func(t *testing.T) {
@@ -122,8 +122,8 @@ func TestUsageForCodex(t *testing.T) {
 		)
 
 		attrs := usage(t, in, record)
-		require.Zero(t, attrs[InputTokensColumnKey].AsInt64())
-		require.Equal(t, int64(10), attrs[CacheReadTokensColumnKey].AsInt64())
+		require.Zero(t, attrs[AgentInputTokensKey].AsInt64())
+		require.Equal(t, int64(10), attrs[AgentCacheReadTokensKey].AsInt64())
 	})
 }
 
@@ -139,9 +139,9 @@ func TestUsageForSemconv(t *testing.T) {
 	)
 
 	attrs := usage(t, in, record)
-	require.Equal(t, int64(200), attrs[InputTokensColumnKey].AsInt64())
-	require.Equal(t, int64(50), attrs[OutputTokensColumnKey].AsInt64())
-	require.InDelta(t, 0.002, attrs[CostUSDColumnKey].AsFloat64(), 1e-9)
+	require.Equal(t, int64(200), attrs[AgentInputTokensKey].AsInt64())
+	require.Equal(t, int64(50), attrs[AgentOutputTokensKey].AsInt64())
+	require.InDelta(t, 0.002, attrs[AgentCostUSDKey].AsFloat64(), 1e-9)
 }
 
 func TestSpanUsageReadsAChatSpan(t *testing.T) {
@@ -157,9 +157,9 @@ func TestSpanUsageReadsAChatSpan(t *testing.T) {
 		spanStringAttribute("gen_ai.usage.cost", "0.002"),
 	)
 	attrs := enrichedSpan(t, &spanUsage{instruments: in}, chat)
-	require.Equal(t, int64(200), attrs[InputTokensColumnKey].AsInt64())
-	require.Equal(t, int64(50), attrs[OutputTokensColumnKey].AsInt64())
-	require.InDelta(t, 0.002, attrs[CostUSDColumnKey].AsFloat64(), 1e-9)
+	require.Equal(t, int64(200), attrs[AgentInputTokensKey].AsInt64())
+	require.Equal(t, int64(50), attrs[AgentOutputTokensKey].AsInt64())
+	require.InDelta(t, 0.002, attrs[AgentCostUSDKey].AsFloat64(), 1e-9)
 
 	tool := inboundTestSpan("my-agent", "my-agent", "execute_tool search", otelv1.InboundSpan_STATUS_CODE_OK,
 		spanStringAttribute("gen_ai.operation.name", "execute_tool"),

@@ -284,12 +284,12 @@ func TestSpanTransformHandlerClassifiesAndPublishes(t *testing.T) {
 
 	// The column enrichers classified the span on the way through and
 	// filled the columns its tables name.
-	require.Equal(t, "api_request", attributes[string(enrich.EventTypeColumnKey)].GetStringValue())
-	require.Equal(t, "chat gpt-4o", attributes[string(enrich.RawEventNameColumnKey)].GetStringValue())
-	require.Equal(t, "litellm", attributes[string(enrich.SourceColumnKey)].GetStringValue())
-	require.Equal(t, "openai", attributes[string(enrich.ProviderColumnKey)].GetStringValue())
-	require.Equal(t, "session-9", attributes[string(enrich.SessionIDColumnKey)].GetStringValue())
-	require.Equal(t, int64(500), attributes[string(enrich.DurationNanoColumnKey)].GetIntValue())
+	require.Equal(t, "api_request", attributes[string(enrich.AgentEventTypeKey)].GetStringValue())
+	require.Equal(t, "chat gpt-4o", attributes[string(enrich.AgentRawEventNameKey)].GetStringValue())
+	require.Equal(t, "litellm", attributes[string(enrich.AgentSourceKey)].GetStringValue())
+	require.Equal(t, "openai", attributes[string(enrich.AgentProviderKey)].GetStringValue())
+	require.Equal(t, "session-9", attributes[string(enrich.AgentSessionIDKey)].GetStringValue())
+	require.Equal(t, int64(500), attributes[string(enrich.AgentDurationNanoKey)].GetIntValue())
 }
 
 func spanTestStringAttribute(key, value string) *otelv1.InboundSpan_KeyValue {
@@ -351,23 +351,23 @@ func TestSpanTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 		attributes, dropped := publish(t, span("chat gpt-4o",
 			spanTestStringAttribute("gen_ai.operation.name", "chat"),
 			spanTestStringAttribute("gen_ai.provider.name", "openai"),
-			spanTestStringAttribute(string(enrich.EventTypeColumnKey), "tool_call"),
-			spanTestStringAttribute(string(enrich.ProviderColumnKey), "forged"),
-			spanTestStringAttribute(string(enrich.CostUSDColumnKey), "999"),
+			spanTestStringAttribute(string(enrich.AgentEventTypeKey), "tool_call"),
+			spanTestStringAttribute(string(enrich.AgentProviderKey), "forged"),
+			spanTestStringAttribute(string(enrich.AgentCostUSDKey), "999"),
 		))
-		require.Equal(t, "api_request", attributes[string(enrich.EventTypeColumnKey)].GetStringValue())
-		require.Equal(t, "openai", attributes[string(enrich.ProviderColumnKey)].GetStringValue())
-		require.NotContains(t, attributes, string(enrich.CostUSDColumnKey), "a key no enricher writes is gone, not kept")
+		require.Equal(t, "api_request", attributes[string(enrich.AgentEventTypeKey)].GetStringValue())
+		require.Equal(t, "openai", attributes[string(enrich.AgentProviderKey)].GetStringValue())
+		require.NotContains(t, attributes, string(enrich.AgentCostUSDKey), "a key no enricher writes is gone, not kept")
 		require.Equal(t, int64(3), dropped)
 	})
 
 	t.Run("an unclassified span gets no type key however hard the producer tries", func(t *testing.T) {
 		t.Parallel()
 		attributes, dropped := publish(t, span("GET /health",
-			spanTestStringAttribute(string(enrich.EventTypeColumnKey), "api_request"),
+			spanTestStringAttribute(string(enrich.AgentEventTypeKey), "api_request"),
 			spanTestStringAttribute("http.request.method", "GET"),
 		))
-		require.NotContains(t, attributes, string(enrich.EventTypeColumnKey))
+		require.NotContains(t, attributes, string(enrich.AgentEventTypeKey))
 		require.Contains(t, attributes, "http.request.method", "the producer's own attributes stay")
 		require.Equal(t, int64(1), dropped)
 	})

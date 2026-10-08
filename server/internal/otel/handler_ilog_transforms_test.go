@@ -68,9 +68,9 @@ func TestLogTransformHandlerNormalizesEnrichesAndPublishes(t *testing.T) {
 	// The column enrichers classified the record on the way through: a
 	// resource without a service name is the unknown source, and a record
 	// no dialect classifies carries no type key at all.
-	require.Equal(t, enrich.SourceUnknown, attributes[string(enrich.SourceColumnKey)].GetStringValue())
-	require.NotContains(t, attributes, string(enrich.EventTypeColumnKey))
-	require.NotContains(t, attributes, string(enrich.RawEventNameColumnKey))
+	require.Equal(t, enrich.SourceUnknown, attributes[string(enrich.AgentSourceKey)].GetStringValue())
+	require.NotContains(t, attributes, string(enrich.AgentEventTypeKey))
+	require.NotContains(t, attributes, string(enrich.AgentRawEventNameKey))
 }
 
 func TestLogAnyValueConvertsHeterogeneousSlice(t *testing.T) {
@@ -166,7 +166,7 @@ func TestMaxSizeLogRecordFitsRelayExportAfterFullEnrichment(t *testing.T) {
 	require.Equal(t, testLogProjectID, attributes[string(enrich.ProjectIDKey)].GetStringValue())
 	require.Positive(t, attributes[string(enrich.TokensCountKey)].GetIntValue())
 	require.NotEmpty(t, attributes[string(enrich.TokensCodecKey)].GetStringValue())
-	require.Equal(t, "pathological-size-test", attributes[string(enrich.SourceColumnKey)].GetStringValue())
+	require.Equal(t, "pathological-size-test", attributes[string(enrich.AgentSourceKey)].GetStringValue())
 
 	request, err := newLogRelayExportRequest([]*otelv1.LogRecord{published}, true)
 	require.NoError(t, err)
@@ -240,16 +240,16 @@ func TestLogTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 				ProjectId:      new(testLogProjectID),
 			}).Build(),
 			Attributes: []*otelv1.InboundLogRecord_KeyValue{
-				logStringAttribute(string(enrich.EventTypeColumnKey), "tool_call"),
-				logStringAttribute(string(enrich.ProviderColumnKey), "forged"),
-				logStringAttribute(string(enrich.TextColumnKey), "forged words"),
+				logStringAttribute(string(enrich.AgentEventTypeKey), "tool_call"),
+				logStringAttribute(string(enrich.AgentProviderKey), "forged"),
+				logStringAttribute(string(enrich.AgentTextKey), "forged words"),
 			},
 		}).Build()
 
 		attributes, dropped := publish(t, inbound)
-		require.Equal(t, "api_request", attributes[string(enrich.EventTypeColumnKey)].GetStringValue())
-		require.Equal(t, "anthropic", attributes[string(enrich.ProviderColumnKey)].GetStringValue())
-		require.NotContains(t, attributes, string(enrich.TextColumnKey), "a key no enricher writes is gone, not kept")
+		require.Equal(t, "api_request", attributes[string(enrich.AgentEventTypeKey)].GetStringValue())
+		require.Equal(t, "anthropic", attributes[string(enrich.AgentProviderKey)].GetStringValue())
+		require.NotContains(t, attributes, string(enrich.AgentTextKey), "a key no enricher writes is gone, not kept")
 		require.Equal(t, int64(3), dropped, "every forged key is counted, so a producer writing the namespace is visible")
 	})
 
@@ -264,14 +264,14 @@ func TestLogTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
 				ProjectId:      new(testLogProjectID),
 			}).Build(),
 			Attributes: []*otelv1.InboundLogRecord_KeyValue{
-				logStringAttribute(string(enrich.EventTypeColumnKey), "api_request"),
+				logStringAttribute(string(enrich.AgentEventTypeKey), "api_request"),
 				logStringAttribute("gen_ai.input.messages", `[{"role":"user","parts":[{"type":"text","content":"hello"}]}]`),
 			},
 		}).Build()
 
 		attributes, dropped := publish(t, inbound)
-		require.NotContains(t, attributes, string(enrich.EventTypeColumnKey))
-		require.Equal(t, enrich.SourceUnknown, attributes[string(enrich.SourceColumnKey)].GetStringValue())
+		require.NotContains(t, attributes, string(enrich.AgentEventTypeKey))
+		require.Equal(t, enrich.SourceUnknown, attributes[string(enrich.AgentSourceKey)].GetStringValue())
 		require.Contains(t, attributes, "gen_ai.input.messages", "the producer's own attributes stay")
 		require.Equal(t, int64(1), dropped)
 	})
@@ -397,9 +397,9 @@ func TestNearLimitPromptStillFitsRelayExportAfterEnrichment(t *testing.T) {
 	for _, item := range published.GetAttributes() {
 		attributes[item.GetKey()] = item.GetValue()
 	}
-	require.Equal(t, "prompt", attributes[string(enrich.EventTypeColumnKey)].GetStringValue())
+	require.Equal(t, "prompt", attributes[string(enrich.AgentEventTypeKey)].GetStringValue())
 	require.Len(t, attributes["prompt"].GetStringValue(), len(prompt), "the producer's own words are untouched")
-	require.Len(t, attributes[string(enrich.TextColumnKey)].GetStringValue(), 64*constants.KiB, "the copy is cut to the cap")
+	require.Len(t, attributes[string(enrich.AgentTextKey)].GetStringValue(), 64*constants.KiB, "the copy is cut to the cap")
 	require.Equal(t, int64(1), agentEventCount(t, reader, "gram.otel_column_enricher.truncated", attr.AgentEventColumnKey, "text"))
 
 	request, err := newLogRelayExportRequest([]*otelv1.LogRecord{published}, true)

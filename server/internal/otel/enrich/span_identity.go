@@ -26,24 +26,24 @@ func (e *spanIdentity) Enrich(ctx context.Context, span *otelv1.InboundSpan) ([]
 
 	var out []attribute.KeyValue
 	if key, v, err := d.SessionID(span); known(key, err) {
-		out = append(out, SessionIDColumnKey.String(v))
+		out = append(out, AgentSessionIDKey.String(v))
 	}
 	if key, v, err := d.TurnID(span); known(key, err) {
-		out = append(out, TurnIDColumnKey.String(v))
+		out = append(out, AgentTurnIDKey.String(v))
 	}
 	if eventType != dialect.EventTypeAPIRequestBody && eventType != dialect.EventTypeCompaction {
 		if key, v, err := d.SubjectID(span); known(key, err) {
-			out = append(out, EventIDColumnKey.String(v))
+			out = append(out, AgentEventIDKey.String(v))
 		}
 	}
 	if key, v, err := d.ExternalUserEmail(span); known(key, err) {
-		out = append(out, UserEmailColumnKey.String(v))
+		out = append(out, AgentUserEmailKey.String(v))
 	}
 	if key, v, err := d.ExternalUserID(span); known(key, err) {
-		out = append(out, ExternalUserIDColumnKey.String(v))
+		out = append(out, AgentExternalUserIDKey.String(v))
 	}
 	if key, v, err := d.ExternalOrgID(span); known(key, err) {
-		out = append(out, ExternalOrgIDColumnKey.String(v))
+		out = append(out, AgentExternalOrgIDKey.String(v))
 	}
 
 	countMissing(ctx, e.instruments, func() string { return missingLabel(d.Surface(span)) }, eventType, identityExpectations, out)

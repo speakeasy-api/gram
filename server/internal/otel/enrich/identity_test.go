@@ -28,30 +28,30 @@ func TestIdentityForClaudeCode(t *testing.T) {
 
 		attrs := identity(t, in, record)
 		require.Len(t, attrs, 6)
-		require.Equal(t, "session-1", attrs[SessionIDColumnKey].AsString())
-		require.Equal(t, "turn-1", attrs[TurnIDColumnKey].AsString())
-		require.Equal(t, "message-1", attrs[EventIDColumnKey].AsString())
-		require.Equal(t, "dev@example.com", attrs[UserEmailColumnKey].AsString())
-		require.Equal(t, "acct-1", attrs[ExternalUserIDColumnKey].AsString())
-		require.Equal(t, "anthropic-org-1", attrs[ExternalOrgIDColumnKey].AsString())
+		require.Equal(t, "session-1", attrs[AgentSessionIDKey].AsString())
+		require.Equal(t, "turn-1", attrs[AgentTurnIDKey].AsString())
+		require.Equal(t, "message-1", attrs[AgentEventIDKey].AsString())
+		require.Equal(t, "dev@example.com", attrs[AgentUserEmailKey].AsString())
+		require.Equal(t, "acct-1", attrs[AgentExternalUserIDKey].AsString())
+		require.Equal(t, "anthropic-org-1", attrs[AgentExternalOrgIDKey].AsString())
 	})
 
 	t.Run("an api_request names the request", func(t *testing.T) {
 		t.Parallel()
 		record := inboundTestLog(claudeCodeScopeName, "claude-code", "api_request", append(who, logStringAttribute("request_id", "req_011"))...)
-		require.Equal(t, "req_011", identity(t, in, record)[EventIDColumnKey].AsString())
+		require.Equal(t, "req_011", identity(t, in, record)[AgentEventIDKey].AsString())
 	})
 
 	t.Run("a tool_result names the tool invocation", func(t *testing.T) {
 		t.Parallel()
 		record := inboundTestLog(claudeCodeScopeName, "claude-code", "tool_result", append(who, logStringAttribute("tool_use_id", "toolu_1"))...)
-		require.Equal(t, "toolu_1", identity(t, in, record)[EventIDColumnKey].AsString())
+		require.Equal(t, "toolu_1", identity(t, in, record)[AgentEventIDKey].AsString())
 	})
 
 	t.Run("a response body lands beside the request it answers", func(t *testing.T) {
 		t.Parallel()
 		record := inboundTestLog(claudeCodeScopeName, "claude-code", "api_response_body", append(who, logStringAttribute("request_id", "req_011"))...)
-		require.Equal(t, "req_011", identity(t, in, record)[EventIDColumnKey].AsString())
+		require.Equal(t, "req_011", identity(t, in, record)[AgentEventIDKey].AsString())
 	})
 
 	t.Run("a request body and a compaction get no event id, so the writer keeps the record id", func(t *testing.T) {
@@ -61,13 +61,13 @@ func TestIdentityForClaudeCode(t *testing.T) {
 
 		body := inboundTestLog(claudeCodeScopeName, "claude-code", "api_request_body", append(who, logStringAttribute("request_id", "req_011"))...)
 		attrs := identity(t, counted, body)
-		require.NotContains(t, attrs, EventIDColumnKey, "a request id is present, but the type has no subject of its own")
-		require.Equal(t, "session-1", attrs[SessionIDColumnKey].AsString(), "the session attributes still apply")
+		require.NotContains(t, attrs, AgentEventIDKey, "a request id is present, but the type has no subject of its own")
+		require.Equal(t, "session-1", attrs[AgentSessionIDKey].AsString(), "the session attributes still apply")
 
 		compaction := inboundTestLog(claudeCodeScopeName, "claude-code", "compaction", who...)
-		require.NotContains(t, identity(t, counted, compaction), EventIDColumnKey)
+		require.NotContains(t, identity(t, counted, compaction), AgentEventIDKey)
 
-		require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("event_id")), "not expected is never, not missing")
+		require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("event_id")), "not expected is never, not missing")
 	})
 
 	t.Run("an unclassified record gets none of them", func(t *testing.T) {
@@ -94,15 +94,15 @@ func TestIdentityCountsWhatAProviderNeverStates(t *testing.T) {
 	)
 
 	attrs := identity(t, in, record)
-	require.Equal(t, "conv-1", attrs[SessionIDColumnKey].AsString())
-	require.Equal(t, "resp-1", attrs[EventIDColumnKey].AsString())
-	require.Equal(t, "dev@example.com", attrs[UserEmailColumnKey].AsString())
-	require.Equal(t, "acct-1", attrs[ExternalUserIDColumnKey].AsString())
-	require.NotContains(t, attrs, TurnIDColumnKey)
-	require.NotContains(t, attrs, ExternalOrgIDColumnKey)
-	require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("turn_id")))
-	require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("external_org_id")))
-	require.Zero(t, counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventColumn("session_id")))
+	require.Equal(t, "conv-1", attrs[AgentSessionIDKey].AsString())
+	require.Equal(t, "resp-1", attrs[AgentEventIDKey].AsString())
+	require.Equal(t, "dev@example.com", attrs[AgentUserEmailKey].AsString())
+	require.Equal(t, "acct-1", attrs[AgentExternalUserIDKey].AsString())
+	require.NotContains(t, attrs, AgentTurnIDKey)
+	require.NotContains(t, attrs, AgentExternalOrgIDKey)
+	require.Equal(t, int64(1), counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("turn_id")))
+	require.Equal(t, int64(1), counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("external_org_id")))
+	require.Zero(t, counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventColumn("session_id")))
 }
 
 func TestIdentityForSemconv(t *testing.T) {
@@ -120,10 +120,10 @@ func TestIdentityForSemconv(t *testing.T) {
 		)
 
 		attrs := identity(t, in, record)
-		require.Equal(t, "session-9", attrs[SessionIDColumnKey].AsString())
-		require.Equal(t, "resp-1", attrs[EventIDColumnKey].AsString())
-		require.Equal(t, "dev@example.com", attrs[UserEmailColumnKey].AsString())
-		require.NotContains(t, attrs, TurnIDColumnKey)
+		require.Equal(t, "session-9", attrs[AgentSessionIDKey].AsString())
+		require.Equal(t, "resp-1", attrs[AgentEventIDKey].AsString())
+		require.Equal(t, "dev@example.com", attrs[AgentUserEmailKey].AsString())
+		require.NotContains(t, attrs, AgentTurnIDKey)
 	})
 
 	t.Run("a tool call names the call", func(t *testing.T) {
@@ -132,7 +132,7 @@ func TestIdentityForSemconv(t *testing.T) {
 			logStringAttribute("gen_ai.operation.name", "execute_tool"),
 			logStringAttribute("gen_ai.tool.call.id", "call-1"),
 		)
-		require.Equal(t, "call-1", identity(t, in, record)[EventIDColumnKey].AsString())
+		require.Equal(t, "call-1", identity(t, in, record)[AgentEventIDKey].AsString())
 	})
 }
 
@@ -150,12 +150,12 @@ func TestSpanIdentityNamesTheConversationAndCountsItsAbsence(t *testing.T) {
 		spanStringAttribute("gen_ai.conversation.id", "session-9"),
 	)
 	attrs := enrichedSpan(t, enricher, named)
-	require.Equal(t, "resp-1", attrs[EventIDColumnKey].AsString())
-	require.Equal(t, "session-9", attrs[SessionIDColumnKey].AsString())
+	require.Equal(t, "resp-1", attrs[AgentEventIDKey].AsString())
+	require.Equal(t, "session-9", attrs[AgentSessionIDKey].AsString())
 
 	unnamed := inboundTestSpan("litellm", "litellm", "chat gpt-4o", otelv1.InboundSpan_STATUS_CODE_OK,
 		spanStringAttribute("gen_ai.operation.name", "chat"),
 	)
-	require.NotContains(t, enrichedSpan(t, enricher, unnamed), SessionIDColumnKey)
-	require.Equal(t, int64(1), counterValue(t, reader, meterColumnEnricherMissing, attr.AgentEventSurface(missingLabelOther), attr.AgentEventColumn("session_id")))
+	require.NotContains(t, enrichedSpan(t, enricher, unnamed), AgentSessionIDKey)
+	require.Equal(t, int64(1), counterValue(t, reader, meterAgentAttributeMissing, attr.AgentEventSurface(missingLabelOther), attr.AgentEventColumn("session_id")))
 }

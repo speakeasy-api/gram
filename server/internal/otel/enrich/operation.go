@@ -19,7 +19,7 @@ func capText(ctx context.Context, in *Instruments, surface func() string, eventT
 	if len(text) <= capBytes {
 		return text
 	}
-	in.recordColumnValueTruncated(ctx, surface(), eventType, attributeName(TextColumnKey))
+	in.recordAgentAttributeTruncated(ctx, surface(), eventType, attributeName(AgentTextKey))
 	return truncateUTF8(text, capBytes)
 }
 

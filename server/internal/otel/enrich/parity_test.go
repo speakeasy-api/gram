@@ -76,17 +76,17 @@ func TestALogAndASpanThatSayTheSameThingGetTheSameAttributes(t *testing.T) {
 			fromLog := agentAttributes(t, in, inboundTestLog("litellm", "litellm", tc.event, logAttrs...))
 			fromSpan := spanAgentAttributes(t, in, inboundTestSpan("litellm", "litellm", tc.span, otelv1.InboundSpan_STATUS_CODE_OK, spanAttrs...))
 
-			require.NotContains(t, fromLog, DurationNanoColumnKey)
-			require.Equal(t, int64(500), fromSpan[DurationNanoColumnKey].AsInt64())
-			delete(fromSpan, DurationNanoColumnKey)
+			require.NotContains(t, fromLog, AgentDurationNanoKey)
+			require.Equal(t, int64(500), fromSpan[AgentDurationNanoKey].AsInt64())
+			delete(fromSpan, AgentDurationNanoKey)
 			// A span's raw name is the span name; a log record's is its event name.
-			delete(fromLog, RawEventNameColumnKey)
-			delete(fromSpan, RawEventNameColumnKey)
+			delete(fromLog, AgentRawEventNameKey)
+			delete(fromSpan, AgentRawEventNameKey)
 
 			require.Equal(t, fromLog, fromSpan)
-			require.Contains(t, fromLog, EventTypeColumnKey)
-			require.Contains(t, fromLog, SessionIDColumnKey)
-			require.Contains(t, fromLog, EventIDColumnKey)
+			require.Contains(t, fromLog, AgentEventTypeKey)
+			require.Contains(t, fromLog, AgentSessionIDKey)
+			require.Contains(t, fromLog, AgentEventIDKey)
 		})
 	}
 }
@@ -108,17 +108,17 @@ func TestSpanAgentAttributesForAChatSpan(t *testing.T) {
 
 	attrs := spanAgentAttributes(t, in, span)
 	want := map[attribute.Key]string{
-		EventIDColumnKey:   "resp-1",
-		SessionIDColumnKey: "session-9",
-		ModelColumnKey:     "gpt-4o-2024-08-06",
-		ProviderColumnKey:  "openai",
+		AgentEventIDKey:   "resp-1",
+		AgentSessionIDKey: "session-9",
+		AgentModelKey:     "gpt-4o-2024-08-06",
+		AgentProviderKey:  "openai",
 	}
 	for key, value := range want {
 		require.Equal(t, value, attrs[key].AsString(), string(key))
 	}
-	require.Equal(t, int64(200), attrs[InputTokensColumnKey].AsInt64())
-	require.Equal(t, int64(50), attrs[OutputTokensColumnKey].AsInt64())
-	require.InDelta(t, 0.002, attrs[CostUSDColumnKey].AsFloat64(), 1e-9)
-	require.Equal(t, int64(500), attrs[DurationNanoColumnKey].AsInt64())
-	require.NotContains(t, attrs, OutcomeColumnKey, "a request carries no outcome, so the span's error status lands nowhere")
+	require.Equal(t, int64(200), attrs[AgentInputTokensKey].AsInt64())
+	require.Equal(t, int64(50), attrs[AgentOutputTokensKey].AsInt64())
+	require.InDelta(t, 0.002, attrs[AgentCostUSDKey].AsFloat64(), 1e-9)
+	require.Equal(t, int64(500), attrs[AgentDurationNanoKey].AsInt64())
+	require.NotContains(t, attrs, AgentOutcomeKey, "a request carries no outcome, so the span's error status lands nowhere")
 }

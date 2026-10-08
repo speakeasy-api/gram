@@ -60,36 +60,36 @@ var toolEventTypes = []string{
 }
 
 var identityExpectations = []expectation{
-	{key: SessionIDColumnKey, on: classifiedEventTypes, when: nil},
-	{key: TurnIDColumnKey, on: classifiedEventTypes, when: nil},
-	{key: EventIDColumnKey, on: typesWithASubject, when: nil},
-	{key: UserEmailColumnKey, on: classifiedEventTypes, when: nil},
-	{key: ExternalUserIDColumnKey, on: classifiedEventTypes, when: nil},
-	{key: ExternalOrgIDColumnKey, on: classifiedEventTypes, when: nil},
+	{key: AgentSessionIDKey, on: classifiedEventTypes, when: nil},
+	{key: AgentTurnIDKey, on: classifiedEventTypes, when: nil},
+	{key: AgentEventIDKey, on: typesWithASubject, when: nil},
+	{key: AgentUserEmailKey, on: classifiedEventTypes, when: nil},
+	{key: AgentExternalUserIDKey, on: classifiedEventTypes, when: nil},
+	{key: AgentExternalOrgIDKey, on: classifiedEventTypes, when: nil},
 }
 
 // Skill, agent, text and a decision's outcome are Recommended or Opt-In.
 // The MCP server and tool are a pair: each half is required once the other
 // is stated.
 var operationExpectations = []expectation{
-	{key: ModelColumnKey, on: []string{dialect.EventTypeAPIRequest, dialect.EventTypeAPIResponse, dialect.EventTypeAPIError, dialect.EventTypeAPIRefusal}, when: nil},
-	{key: QuerySourceColumnKey, on: []string{dialect.EventTypeAPIRequest}, when: nil},
-	{key: MCPServerNameColumnKey, on: toolEventTypes, when: present(MCPToolNameColumnKey)},
-	{key: MCPToolNameColumnKey, on: toolEventTypes, when: present(MCPServerNameColumnKey)},
-	{key: NameColumnKey, on: toolEventTypes, when: nil},
-	{key: ToolNameColumnKey, on: toolEventTypes, when: nil},
-	{key: OutcomeColumnKey, on: []string{dialect.EventTypeToolCallResult, dialect.EventTypeCompaction}, when: nil},
-	{key: OutcomeMessageColumnKey, on: []string{dialect.EventTypeAPIError}, when: nil},
-	{key: OutcomeMessageColumnKey, on: []string{dialect.EventTypeToolCallResult, dialect.EventTypeCompaction}, when: equals(OutcomeColumnKey, dialect.OutcomeError)},
-	{key: DurationNanoColumnKey, on: []string{dialect.EventTypeAPIRequest, dialect.EventTypeToolCallResult}, when: nil},
+	{key: AgentModelKey, on: []string{dialect.EventTypeAPIRequest, dialect.EventTypeAPIResponse, dialect.EventTypeAPIError, dialect.EventTypeAPIRefusal}, when: nil},
+	{key: AgentQuerySourceKey, on: []string{dialect.EventTypeAPIRequest}, when: nil},
+	{key: AgentMCPServerNameKey, on: toolEventTypes, when: present(AgentMCPToolNameKey)},
+	{key: AgentMCPToolNameKey, on: toolEventTypes, when: present(AgentMCPServerNameKey)},
+	{key: AgentNameKey, on: toolEventTypes, when: nil},
+	{key: AgentToolNameKey, on: toolEventTypes, when: nil},
+	{key: AgentOutcomeKey, on: []string{dialect.EventTypeToolCallResult, dialect.EventTypeCompaction}, when: nil},
+	{key: AgentOutcomeMessageKey, on: []string{dialect.EventTypeAPIError}, when: nil},
+	{key: AgentOutcomeMessageKey, on: []string{dialect.EventTypeToolCallResult, dialect.EventTypeCompaction}, when: equals(AgentOutcomeKey, dialect.OutcomeError)},
+	{key: AgentDurationNanoKey, on: []string{dialect.EventTypeAPIRequest, dialect.EventTypeToolCallResult}, when: nil},
 }
 
 var usageExpectations = []expectation{
-	{key: InputTokensColumnKey, on: []string{dialect.EventTypeAPIRequest}, when: nil},
-	{key: OutputTokensColumnKey, on: []string{dialect.EventTypeAPIRequest}, when: nil},
-	{key: CacheReadTokensColumnKey, on: []string{dialect.EventTypeAPIRequest}, when: nil},
-	{key: CacheWriteTokensColumnKey, on: []string{dialect.EventTypeAPIRequest}, when: nil},
-	{key: CostUSDColumnKey, on: []string{dialect.EventTypeAPIRequest}, when: nil},
+	{key: AgentInputTokensKey, on: []string{dialect.EventTypeAPIRequest}, when: nil},
+	{key: AgentOutputTokensKey, on: []string{dialect.EventTypeAPIRequest}, when: nil},
+	{key: AgentCacheReadTokensKey, on: []string{dialect.EventTypeAPIRequest}, when: nil},
+	{key: AgentCacheWriteTokensKey, on: []string{dialect.EventTypeAPIRequest}, when: nil},
+	{key: AgentCostUSDKey, on: []string{dialect.EventTypeAPIRequest}, when: nil},
 }
 
 // countMissing counts every expectation on the event type that the enricher
@@ -115,14 +115,14 @@ func countMissing(ctx context.Context, in *Instruments, surface func() string, e
 		if label == "" {
 			label = surface()
 		}
-		in.recordColumnValueMissing(ctx, label, eventType, attributeName(e.key))
+		in.recordAgentAttributeMissing(ctx, label, eventType, attributeName(e.key))
 	}
 }
 
 // attributeName is the key without its namespace, which is the counter's
 // label.
 func attributeName(key attribute.Key) string {
-	return strings.TrimPrefix(string(key), agentColumnKeyPrefix)
+	return strings.TrimPrefix(string(key), agentKeyPrefix)
 }
 
 const missingLabelOther = string(agentsurface.SurfaceOther)

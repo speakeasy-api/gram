@@ -33,17 +33,17 @@ func TestRecordLogEnricherDurationIgnoresUnavailableInstrument(t *testing.T) {
 	})
 }
 
-func TestRecordColumnValueMissingIgnoresUnavailableInstrument(t *testing.T) {
+func TestRecordAgentAttributeMissingIgnoresUnavailableInstrument(t *testing.T) {
 	t.Parallel()
 
 	m := &Instruments{
 		logEnricherDuration:    nil,
 		metricEnricherDuration: nil,
 		spanEnricherDuration:   nil,
-		columnValueMissing:     nil,
+		agentAttributeMissing:  nil,
 	}
 	require.NotPanics(t, func() {
-		m.recordColumnValueMissing(t.Context(), "claude-code", "api_request", "turn_id")
+		m.recordAgentAttributeMissing(t.Context(), "claude-code", "api_request", "turn_id")
 	})
 }
 
@@ -67,7 +67,7 @@ func TestRecordReservedAttributesDroppedIgnoresUnavailableInstrument(t *testing.
 		logEnricherDuration:       nil,
 		metricEnricherDuration:    nil,
 		spanEnricherDuration:      nil,
-		columnValueMissing:        nil,
+		agentAttributeMissing:     nil,
 		reservedAttributesDropped: nil,
 	}
 	require.NotPanics(t, func() {

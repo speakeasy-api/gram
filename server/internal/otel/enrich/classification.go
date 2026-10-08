@@ -10,22 +10,22 @@ import (
 // its raw name and source and gets no type. A provider the pipeline already
 // attributed (gram.provider) wins over the dialect's.
 func classify(source, rawEventName, eventType, attributedProvider, dialectProvider, surface string) []attribute.KeyValue {
-	out := []attribute.KeyValue{SourceColumnKey.String(source)}
+	out := []attribute.KeyValue{AgentSourceKey.String(source)}
 	if rawEventName != "" {
-		out = append(out, RawEventNameColumnKey.String(rawEventName))
+		out = append(out, AgentRawEventNameKey.String(rawEventName))
 	}
 	if eventType != dialect.EventTypeUnclassified {
-		out = append(out, EventTypeColumnKey.String(eventType))
+		out = append(out, AgentEventTypeKey.String(eventType))
 	}
 	provider := attributedProvider
 	if provider == "" {
 		provider = dialectProvider
 	}
 	if provider != "" {
-		out = append(out, ProviderColumnKey.String(provider))
+		out = append(out, AgentProviderKey.String(provider))
 	}
 	if surface != "" {
-		out = append(out, SurfaceColumnKey.String(surface))
+		out = append(out, AgentSurfaceKey.String(surface))
 	}
 	return out
 }

@@ -30,53 +30,53 @@ func (e *spanOperation) Enrich(ctx context.Context, span *otelv1.InboundSpan) ([
 	var out []attribute.KeyValue
 	if carriesModel(eventType) {
 		if key, v, err := d.Model(span); known(key, err) {
-			out = append(out, ModelColumnKey.String(v))
+			out = append(out, AgentModelKey.String(v))
 		}
 	}
 	if isRequest {
 		if key, v, err := d.QuerySource(span); known(key, err) {
-			out = append(out, QuerySourceColumnKey.String(v))
+			out = append(out, AgentQuerySourceKey.String(v))
 		}
 	}
 	if isRequest || isTool {
 		if key, v, err := d.SkillName(span); known(key, err) {
-			out = append(out, SkillNameColumnKey.String(v))
+			out = append(out, AgentSkillNameKey.String(v))
 		}
 		if key, v, err := d.AgentName(span); known(key, err) {
-			out = append(out, AgentNameColumnKey.String(v))
+			out = append(out, AgentAgentNameKey.String(v))
 		}
 		if key, v, err := d.MCPServerName(span); known(key, err) {
-			out = append(out, MCPServerNameColumnKey.String(v))
+			out = append(out, AgentMCPServerNameKey.String(v))
 		}
 		if key, v, err := d.MCPToolName(span); known(key, err) {
-			out = append(out, MCPToolNameColumnKey.String(v))
+			out = append(out, AgentMCPToolNameKey.String(v))
 		}
 	}
 	if isTool {
 		if key, v, err := d.ToolName(span); known(key, err) {
-			out = append(out, NameColumnKey.String(v), ToolNameColumnKey.String(v))
+			out = append(out, AgentNameKey.String(v), AgentToolNameKey.String(v))
 		}
 	}
 	if carriesText(eventType) {
 		if key, v, err := d.Text(span); known(key, err) {
-			out = append(out, TextColumnKey.String(capText(ctx, e.instruments, surface, eventType, v, maxTextBytes)))
+			out = append(out, AgentTextKey.String(capText(ctx, e.instruments, surface, eventType, v, maxTextBytes)))
 		}
 	}
 	if implied := impliedOutcome(eventType); implied != "" {
-		out = append(out, OutcomeColumnKey.String(implied))
+		out = append(out, AgentOutcomeKey.String(implied))
 	} else if statesOutcome(eventType) {
 		if key, v, err := d.Outcome(span); known(key, err) {
-			out = append(out, OutcomeColumnKey.String(v))
+			out = append(out, AgentOutcomeKey.String(v))
 		}
 	}
 	if carriesOutcomeMessage(eventType) {
 		if key, v, err := d.OutcomeMessage(span); known(key, err) {
-			out = append(out, OutcomeMessageColumnKey.String(v))
+			out = append(out, AgentOutcomeMessageKey.String(v))
 		}
 	}
 	if carriesDuration(eventType) {
 		if key, v, err := d.DurationNano(span); known(key, err) {
-			out = append(out, DurationNanoColumnKey.Int64(v))
+			out = append(out, AgentDurationNanoKey.Int64(v))
 		}
 	}
 
