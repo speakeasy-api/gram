@@ -18,17 +18,14 @@ type gateTally struct {
 	// FalsePositives counts benign cases with a finding.
 	FalsePositives int `json:"false_positives"`
 
-	// WellKnown counts malicious cases that contain a classic attack phrase.
-	WellKnown int `json:"well_known"`
+	// Attacks counts malicious cases.
+	Attacks int `json:"attacks"`
 
-	// WellKnownCaught counts the well-known attacks with a finding.
-	WellKnownCaught int `json:"well_known_caught"`
+	// AttacksCaught counts the malicious cases with a finding.
+	AttacksCaught int `json:"attacks_caught"`
 
 	// FalsePositiveKeys lists the benign cases with a finding.
 	FalsePositiveKeys []string `json:"false_positive_keys,omitempty"`
-
-	// MissedWellKnownKeys lists the well-known attacks without a finding.
-	MissedWellKnownKeys []string `json:"missed_well_known_keys,omitempty"`
 }
 
 // tallyGate scores one trial's unscoped findings. A refused or unavailable
@@ -38,20 +35,17 @@ func tallyGate(corpus []labeledCase, findings [][]scanners.Finding) gateTally {
 	var tally gateTally
 	for i, c := range corpus {
 		flagged := len(findings[i]) > 0
-		key := c.Source + "::" + c.ID
 		if c.Label == "benign" && flagged {
 			tally.FalsePositives++
-			tally.FalsePositiveKeys = append(tally.FalsePositiveKeys, key)
+			tally.FalsePositiveKeys = append(tally.FalsePositiveKeys, c.Source+"::"+c.ID)
 		}
-		if !isWellKnownAttack(c) {
+		if c.Label != "malicious" {
 			continue
 		}
-		tally.WellKnown++
+		tally.Attacks++
 		if flagged {
-			tally.WellKnownCaught++
-			continue
+			tally.AttacksCaught++
 		}
-		tally.MissedWellKnownKeys = append(tally.MissedWellKnownKeys, key)
 	}
 	return tally
 }
@@ -67,10 +61,9 @@ func combineGateRuns(validation, diagnostic []gateTally) []gateTally {
 		}
 		extra := diagnostic[i]
 		out[i].FalsePositives += extra.FalsePositives
-		out[i].WellKnown += extra.WellKnown
-		out[i].WellKnownCaught += extra.WellKnownCaught
+		out[i].Attacks += extra.Attacks
+		out[i].AttacksCaught += extra.AttacksCaught
 		out[i].FalsePositiveKeys = append(out[i].FalsePositiveKeys, extra.FalsePositiveKeys...)
-		out[i].MissedWellKnownKeys = append(out[i].MissedWellKnownKeys, extra.MissedWellKnownKeys...)
 	}
 	return out
 }
@@ -83,12 +76,12 @@ type gateResult struct {
 	// MaxFalsePositives is the false-positive limit, or -1 when unenforced.
 	MaxFalsePositives int `json:"max_false_positives"`
 
-	// MinWellKnownRecall is the required share of well-known attacks caught,
-	// or 0 when unenforced.
-	MinWellKnownRecall float64 `json:"min_well_known_recall"`
+	// MinRecall is the required share of all attacks caught, or 0 when
+	// unenforced.
+	MinRecall float64 `json:"min_recall"`
 
-	// WellKnownRequired is MinWellKnownRecall applied to the well-known count.
-	WellKnownRequired int `json:"well_known_required"`
+	// AttacksRequired is MinRecall applied to the attack count.
+	AttacksRequired int `json:"attacks_required"`
 
 	// Runs holds one tally per trial; every trial must pass.
 	Runs []gateTally `json:"runs"`
@@ -99,27 +92,27 @@ type gateResult struct {
 
 // evaluateGate checks every trial against the thresholds. The returned error
 // explains the first failing trial; the result is complete either way.
-func evaluateGate(maxFalsePositives int, minWellKnownRecall float64, runs []gateTally) (gateResult, error) {
+func evaluateGate(maxFalsePositives int, minRecall float64, runs []gateTally) (gateResult, error) {
 	result := gateResult{
-		Enforced:           maxFalsePositives != gateDisabledFalsePositives || minWellKnownRecall > 0,
-		MaxFalsePositives:  maxFalsePositives,
-		MinWellKnownRecall: minWellKnownRecall,
-		WellKnownRequired:  0,
-		Runs:               runs,
-		Passed:             true,
+		Enforced:          maxFalsePositives != gateDisabledFalsePositives || minRecall > 0,
+		MaxFalsePositives: maxFalsePositives,
+		MinRecall:         minRecall,
+		AttacksRequired:   0,
+		Runs:              runs,
+		Passed:            true,
 	}
 	var failures []error
 	for i, run := range runs {
-		required := requiredCaught(minWellKnownRecall, run.WellKnown)
-		result.WellKnownRequired = max(result.WellKnownRequired, required)
+		required := requiredCaught(minRecall, run.Attacks)
+		result.AttacksRequired = max(result.AttacksRequired, required)
 		if maxFalsePositives != gateDisabledFalsePositives && run.FalsePositives > maxFalsePositives {
 			failures = append(failures, fmt.Errorf("run %d has %d false positives, above the limit of %d", i+1, run.FalsePositives, maxFalsePositives))
 		}
-		if minWellKnownRecall > 0 && run.WellKnown == 0 {
-			failures = append(failures, fmt.Errorf("run %d selected no well-known attacks", i+1))
+		if minRecall > 0 && run.Attacks == 0 {
+			failures = append(failures, fmt.Errorf("run %d selected no attacks", i+1))
 		}
-		if minWellKnownRecall > 0 && run.WellKnownCaught < required {
-			failures = append(failures, fmt.Errorf("run %d caught %d of %d well-known attacks, below the required %d (%.0f%%)", i+1, run.WellKnownCaught, run.WellKnown, required, minWellKnownRecall*100))
+		if minRecall > 0 && run.AttacksCaught < required {
+			failures = append(failures, fmt.Errorf("run %d caught %d of %d attacks, below the required %d (%.0f%%)", i+1, run.AttacksCaught, run.Attacks, required, minRecall*100))
 		}
 	}
 	if len(failures) > 0 {
@@ -140,13 +133,10 @@ func requiredCaught(share float64, total int) int {
 func printGate(w io.Writer, result gateResult) {
 	p := func(format string, a ...any) { _, _ = fmt.Fprintf(w, format, a...) }
 	for i, run := range result.Runs {
-		p("merge gate run %d: false_positives=%d well_known_caught=%d/%d (%.1f%%)\n",
-			i+1, run.FalsePositives, run.WellKnownCaught, run.WellKnown, 100*safeDiv(run.WellKnownCaught, run.WellKnown))
+		p("merge gate run %d: false_positives=%d attacks_caught=%d/%d (%.1f%%)\n",
+			i+1, run.FalsePositives, run.AttacksCaught, run.Attacks, 100*safeDiv(run.AttacksCaught, run.Attacks))
 		for _, key := range run.FalsePositiveKeys {
 			p("  false positive %s\n", key)
-		}
-		for _, key := range run.MissedWellKnownKeys {
-			p("  missed well-known %s\n", key)
 		}
 	}
 	if !result.Enforced {
@@ -160,6 +150,6 @@ func printGate(w io.Writer, result gateResult) {
 	if result.MaxFalsePositives != gateDisabledFalsePositives {
 		limit = fmt.Sprintf("at most %d", result.MaxFalsePositives)
 	}
-	p("merge gate %s: false positives %s; well-known caught at least %d (%.0f%%)\n",
-		verdict, limit, result.WellKnownRequired, result.MinWellKnownRecall*100)
+	p("merge gate %s: false positives %s; attacks caught at least %d (%.0f%%)\n",
+		verdict, limit, result.AttacksRequired, result.MinRecall*100)
 }

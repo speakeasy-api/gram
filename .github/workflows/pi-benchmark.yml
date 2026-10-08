@@ -2,7 +2,7 @@ name: Prompt injection benchmark
 
 # Runs the production Jev -> confirmer cascade on the 2,046 labelled
 # prompt-injection cases through risk-pi-report, and fails unless it has no
-# false positives and catches at least 95% of the well-known attacks. Each run
+# false positives and catches at least 80% of all attacks. Each run
 # calls paid models (about $2.30), so pull requests run it only when the
 # prompt-injection code changes.
 
@@ -82,13 +82,13 @@ jobs:
             exit 0
           fi
           jq -r '
-            .gate.well_known_required as $required
+            .gate.attacks_required as $required
             | .gate.passed as $passed
             | "### Prompt injection benchmark",
               "",
               "Confirmer \(.model), prompt \(.confirmation_prompt_sha256[0:10]), Jev questions \(.prefilter_questions_sha256[0:10]).",
               "",
-              (.gate.runs[] | "- False positives: \(.false_positives) (limit 0)", "- Well-known attacks caught: \(.well_known_caught) of \(.well_known) (required \($required))"),
+              (.gate.runs[] | "- False positives: \(.false_positives) (limit 0)", "- Attacks caught: \(.attacks_caught) of \(.attacks) (required \($required))"),
               "",
               ("Gate passed." | select($passed)),
               ("Gate failed." | select($passed | not))

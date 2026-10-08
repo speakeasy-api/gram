@@ -329,10 +329,10 @@ type options struct {
 	repeats          int
 	samples          int
 
-	// maxFalsePositives and minWellKnownRecall are the merge gate's
+	// maxFalsePositives and minRecall are the merge gate's
 	// thresholds; gateDisabledFalsePositives and 0 leave them unenforced.
-	maxFalsePositives  int
-	minWellKnownRecall float64
+	maxFalsePositives int
+	minRecall         float64
 }
 
 const (
@@ -370,10 +370,10 @@ func parseFlags() options {
 		repeats:          0,
 		samples:          0,
 
-		refusalFallback:    false,
-		excludeSources:     "",
-		maxFalsePositives:  0,
-		minWellKnownRecall: 0,
+		refusalFallback:   false,
+		excludeSources:    "",
+		maxFalsePositives: 0,
+		minRecall:         0,
 	}
 	flag.StringVar(&opts.corpusDir, "corpus-dir", defaultCorpusDir, "directory containing prompt-injection JSONL corpus files")
 	flag.StringVar(&opts.outFile, "out", defaultOutFile, "path to write metrics JSON")
@@ -389,7 +389,7 @@ func parseFlags() options {
 	flag.BoolVar(&opts.refusalFallback, "refusal-fallback", true, "with -cascade, re-judge refused confirmations with the refusal fallback model; false scores them as refusals")
 	flag.StringVar(&opts.excludeSources, "exclude-sources", "", "comma-separated source substrings to drop after -sources (empty = none)")
 	flag.IntVar(&opts.maxFalsePositives, "max-false-positives", gateDisabledFalsePositives, "fail when any trial flags more benign cases than this, deepset included (-1 = unenforced)")
-	flag.Float64Var(&opts.minWellKnownRecall, "min-well-known-recall", 0, "fail when any trial catches a smaller share of the well-known attacks, deepset included (0 = unenforced)")
+	flag.Float64Var(&opts.minRecall, "min-recall", 0, "fail when any trial catches a smaller share of all attacks, deepset included (0 = unenforced)")
 	flag.Parse()
 	return opts
 }
@@ -444,8 +444,8 @@ func run(ctx context.Context, opts options) error {
 	if len(corpus) == 0 {
 		return fmt.Errorf("no cases after --sources filter %q and --exclude-sources filter %q", opts.sources, opts.excludeSources)
 	}
-	if opts.minWellKnownRecall < 0 || opts.minWellKnownRecall > 1 {
-		return fmt.Errorf("--min-well-known-recall must be between 0 and 1")
+	if opts.minRecall < 0 || opts.minRecall > 1 {
+		return fmt.Errorf("--min-recall must be between 0 and 1")
 	}
 	if opts.maxFalsePositives < gateDisabledFalsePositives {
 		return fmt.Errorf("--max-false-positives must be -1 or more")
@@ -516,7 +516,7 @@ func run(ctx context.Context, opts options) error {
 		printSummary(os.Stderr, summary.Diagnostics.Modes)
 		gateRuns = combineGateRuns(gateRuns, summary.Diagnostics.GateRuns)
 	}
-	gate, gateErr := evaluateGate(opts.maxFalsePositives, opts.minWellKnownRecall, gateRuns)
+	gate, gateErr := evaluateGate(opts.maxFalsePositives, opts.minRecall, gateRuns)
 	printGate(os.Stderr, gate)
 
 	// Write the artifact before failing so a failed gate keeps its evidence.
