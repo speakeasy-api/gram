@@ -406,7 +406,8 @@ FROM node:22-alpine
 # tini as PID 1 stops every server process when the container stops.
 RUN apk add --no-cache tini
 COPY --from=${TUNNEL_AGENT_IMAGE} /usr/local/bin/tunnel-agent /usr/local/bin/tunnel-agent
-USER node
+# The image's node user, by number so Kubernetes can verify runAsNonRoot.
+USER 1000:1000
 ENV TUNNEL_LOCAL_MCP_COMMAND="${MCP_COMMAND_SENTINEL}"
 ENV TUNNEL_STDIO_CREDENTIALS=user
 ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/tunnel-agent"]
@@ -442,6 +443,8 @@ DOCKERFILE`;
               mountPath: /dev/shm
           securityContext:
             runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
             allowPrivilegeEscalation: false
       volumes:
         - name: credentials

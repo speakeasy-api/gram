@@ -67,6 +67,8 @@ describe("TunneledMcpSetupTabs per-user credentials", () => {
     expect(kubernetes).toContain('value: "org_example"');
     expect(kubernetes).toContain("medium: Memory");
     expect(kubernetes).toContain("mountPath: /dev/shm");
+    // runAsNonRoot needs a numeric user, matching the image's USER.
+    expect(kubernetes).toContain("runAsUser: 1000");
 
     choose("Docker");
     const docker = snippet();
@@ -76,6 +78,7 @@ describe("TunneledMcpSetupTabs per-user credentials", () => {
     expect(docker).toContain("exec /opt/mcp/bin/your-mcp-server");
     expect(docker).toContain("ENV TUNNEL_STDIO_CREDENTIALS=user");
     expect(docker).toContain('"/sbin/tini", "--"');
+    expect(docker).toContain("USER 1000:1000");
     expect(docker).toContain(
       "-e TUNNEL_IDENTITY_ISSUER='https://tunnel.speakeasy.com'",
     );
