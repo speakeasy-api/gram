@@ -236,6 +236,61 @@ jobs:
           [[ "$PYSTREAMS" == "true" ]] || add gram-pystreams pystreams
           echo "components=$components" >> "$GITHUB_OUTPUT"
 
+  # The only job that saves the Go module cache (see the go-mod-cache composite
+  # action). Nothing depends on it: Go jobs that start before it finishes fall
+  # back to the newest partial entry, and when the exact entry already exists
+  # it exits after the lookup.
+  go-module-cache:
+    name: Populate Go module cache
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Check for existing Go module cache
+        id: lookup
+        uses: ./.github/workflows/composite/go-mod-cache
+        with:
+          lookup-only: true
+
+      # Starts from an empty module cache so the entry holds only what the
+      # current go.sum files need. `go mod tidy` also loads the tests of
+      # dependencies, which `go mod download` skips but the go:tidy check in
+      # the lint jobs needs. `golangci-lint custom` has no download-only mode,
+      # so building the linter is how its modules get fetched.
+      - name: Download Go modules
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: |
+          retry() {
+            for attempt in 1 2 3; do
+              "$@" && return 0
+              echo "::warning::'$*' failed (attempt $attempt/3)"
+              sleep $((attempt * 10))
+            done
+            return 1
+          }
+          retry go mod download
+          retry go -C glint mod download
+          retry mise run go:tidy
+          (cd server && retry golangci-lint custom)
+
+      - name: Save Go module cache
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ steps.lookup.outputs.key }}
+          path: ${{ steps.lookup.outputs.path }}
+
   preview-image-tags:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     needs: changes
@@ -1142,19 +1197,8 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache Go
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
+      - name: Restore Go module cache
+        uses: ./.github/workflows/composite/go-mod-cache
 
       - name: Compute runtime image content hash
         id: assistant-runtime-hash
@@ -1246,16 +1290,8 @@ jobs:
       - name: Prepare GitHub Actions environment
         run: mise run github
 
-      - name: Cache Go
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
+      - name: Restore Go module cache
+        uses: ./.github/workflows/composite/go-mod-cache
 
       - name: Cache uv
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -1370,19 +1406,8 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache Go
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
+      - name: Restore Go module cache
+        uses: ./.github/workflows/composite/go-mod-cache
 
       - name: Build
         run: mise run build:cli --readonly
@@ -1428,19 +1453,8 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache Go
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
+      - name: Restore Go module cache
+        uses: ./.github/workflows/composite/go-mod-cache
 
       - name: Build
         run: mise run build:hooks --readonly
@@ -1473,19 +1487,8 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache Go
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
+      - name: Restore Go module cache
+        uses: ./.github/workflows/composite/go-mod-cache
 
       - name: Test
         run: mise run test:glint
@@ -1515,19 +1518,8 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache Go
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
+      - name: Restore Go module cache
+        uses: ./.github/workflows/composite/go-mod-cache
 
       - name: Install Go tools
         run: go install tool
@@ -1587,19 +1579,8 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache Go
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
+      - name: Restore Go module cache
+        uses: ./.github/workflows/composite/go-mod-cache
 
       - name: Install Go deps
         run: mise run install:go
@@ -1644,19 +1625,8 @@ jobs:
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache Go
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
+      - name: Restore Go module cache
+        uses: ./.github/workflows/composite/go-mod-cache
 
       - name: Install Go deps
         run: mise run install:go
@@ -2055,16 +2025,8 @@ jobs:
       - name: Prepare GitHub Actions environment
         run: mise run github
 
-      - name: Cache Go
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_GO_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_GO_KEY }}
-            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
+      - name: Restore Go module cache
+        uses: ./.github/workflows/composite/go-mod-cache
 
       - name: Cache aube store
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
