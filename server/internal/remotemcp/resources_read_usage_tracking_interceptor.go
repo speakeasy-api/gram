@@ -60,7 +60,7 @@ func (i *ResourcesReadUsageTrackingInterceptor) Name() string {
 // available after a prior resources/list response is correlated through a
 // per-session cache, which lives outside the proxy today.
 func (i *ResourcesReadUsageTrackingInterceptor) InterceptResourcesReadResponse(ctx context.Context, read *proxy.ResourcesReadResponse) error {
-	serverCtx, ok := getServerContext(ctx)
+	serverCtx, ok := GetServerContext(ctx)
 	if !ok || serverCtx.OrganizationID == "" || serverCtx.ProjectID == uuid.Nil {
 		i.logger.WarnContext(ctx, "skipping resource read usage tracking: missing server context",
 			attr.SlogComponent("xmcp"))

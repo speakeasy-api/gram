@@ -35,7 +35,8 @@ func WithServerContext(ctx context.Context, serverCtx ServerContext) context.Con
 	return context.WithValue(ctx, serverContextKey{}, serverCtx)
 }
 
-func getServerContext(ctx context.Context) (ServerContext, bool) {
+// GetServerContext resolves server ownership, falling back to caller auth for gateway dispatches.
+func GetServerContext(ctx context.Context) (ServerContext, bool) {
 	if serverCtx, ok := ctx.Value(serverContextKey{}).(ServerContext); ok {
 		return serverCtx, true
 	}

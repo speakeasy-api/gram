@@ -52,7 +52,7 @@ func (i *ToolsCallUsageLimitsInterceptor) Name() string {
 // context, consults cached billing usage, and returns a forbidden error when
 // the org has exceeded its hard cap.
 func (i *ToolsCallUsageLimitsInterceptor) InterceptToolsCallRequest(ctx context.Context, _ *proxy.ToolsCallRequest) error {
-	serverCtx, ok := getServerContext(ctx)
+	serverCtx, ok := GetServerContext(ctx)
 	if !ok || serverCtx.OrganizationID == "" {
 		// No server context means the runtime handler did not install one —
 		// fail open rather than guess at an organization to rate-limit against.

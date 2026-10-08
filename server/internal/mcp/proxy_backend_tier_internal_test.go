@@ -57,10 +57,12 @@ func TestPrepareProxyBackendContextUsesCurrentBillingTier(t *testing.T) {
 		got, orgID, err := s.prepareProxyBackendContext(ctx, httptest.NewRecorder(), request, testenv.NewLogger(t), endpoint, server)
 		require.NoError(t, err)
 		require.Equal(t, org.ID, orgID)
-		require.Equal(t, remotemcp.WithServerContext(ctx, remotemcp.ServerContext{
+		serverCtx, ok := remotemcp.GetServerContext(got)
+		require.True(t, ok)
+		require.Equal(t, remotemcp.ServerContext{
 			OrganizationID: org.ID, OrganizationSlug: org.Slug,
 			ProjectID: project.ID, ProjectSlug: project.Slug, AccountType: string(tier),
-		}), got)
+		}, serverCtx)
 	}
 
 	persisted, err := orgs.GetOrganizationMetadata(ctx, org.ID)

@@ -53,7 +53,7 @@ func (i *ResourcesReadUsageLimitsInterceptor) Name() string {
 // counter — so a free-tier org that has exhausted its quota on tool calls
 // is also blocked from resource reads, and vice versa.
 func (i *ResourcesReadUsageLimitsInterceptor) InterceptResourcesReadRequest(ctx context.Context, _ *proxy.ResourcesReadRequest) error {
-	serverCtx, ok := getServerContext(ctx)
+	serverCtx, ok := GetServerContext(ctx)
 	if !ok || serverCtx.OrganizationID == "" {
 		// No server context means the runtime handler did not install one —
 		// fail open rather than guess at an organization to rate-limit against.

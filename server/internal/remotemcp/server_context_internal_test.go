@@ -46,7 +46,7 @@ func TestGetServerContext(t *testing.T) {
 			if tc.server != nil {
 				ctx = WithServerContext(ctx, *tc.server)
 			}
-			got, ok := getServerContext(ctx)
+			got, ok := GetServerContext(ctx)
 			require.Equal(t, tc.ok, ok)
 			require.Equal(t, tc.want, got)
 		})
@@ -60,7 +60,7 @@ func TestGetServerContext_NilAuthContext(t *testing.T) {
 	require.True(t, authenticated, "a typed nil auth context is present")
 	require.Nil(t, auth)
 
-	got, ok := getServerContext(ctx)
+	got, ok := GetServerContext(ctx)
 	require.False(t, ok)
 	require.Equal(t, ServerContext{}, got)
 }

@@ -62,7 +62,7 @@ func (i *ToolsCallUsageTrackingInterceptor) Name() string {
 // Always returns nil: tracking is best-effort and must not block the response
 // from reaching the user.
 func (i *ToolsCallUsageTrackingInterceptor) InterceptToolsCallResponse(ctx context.Context, call *proxy.ToolsCallResponse) error {
-	serverCtx, ok := getServerContext(ctx)
+	serverCtx, ok := GetServerContext(ctx)
 	if !ok || serverCtx.OrganizationID == "" || serverCtx.ProjectID == uuid.Nil {
 		i.logger.WarnContext(ctx, "skipping tool call usage tracking: missing server context",
 			attr.SlogComponent("xmcp"))

@@ -93,7 +93,7 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 		return nil
 	}
 
-	serverCtx, ok := getServerContext(ctx)
+	serverCtx, ok := GetServerContext(ctx)
 	if !ok || serverCtx.OrganizationID == "" || serverCtx.ProjectID == uuid.Nil {
 		i.logger.WarnContext(ctx, "skipping tools/call clickhouse log: missing server context",
 			attr.SlogComponent("xmcp"))
