@@ -182,7 +182,7 @@ func mcpResultIsError(body []byte) bool {
 	return json.Unmarshal(body, &result) == nil && result.IsError
 }
 
-// toolCallCaller names the Gram user behind a call only when the caller
+// toolCallCaller names the Speakeasy user behind a call only when the caller
 // belongs to the tool's organization, whose data the records join, which
 // is also as far as the telemetry row's hydration resolves a user. An
 // outside caller on a public MCP is identified by its external user id

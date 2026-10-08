@@ -651,7 +651,7 @@ const (
 	SlackEventTypeKey            = attribute.Key("gram.slack.event.type")
 	SlackTeamIDKey               = attribute.Key("gram.slack.team.id")
 	ToolCallDurationKey          = attribute.Key("gram.tool_call.duration")
-	// ToolCallIDKey is the id Gram gives one tool call it runs. The started
+	// ToolCallIDKey is the id Speakeasy gives one tool call it runs. The started
 	// and completed records of a call share it.
 	ToolCallIDKey                  = attribute.Key("gram.tool_call.id")
 	ToolCallKindKey                = attribute.Key("gram.tool_call.kind")
