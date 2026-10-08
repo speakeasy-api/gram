@@ -400,23 +400,28 @@ interface InsightsDockProps {
 }
 
 /**
- * Compact floating launcher shown at the dock's resting spot while the dock is
- * turned off (INSIGHTS_DOCK_ENABLED). Clicking it summons the expanded dock.
+ * Thin bottom bar (Linear-style) that replaces the resting dock while the dock
+ * is turned off (INSIGHTS_DOCK_ENABLED). Sticks to the viewport bottom and
+ * reserves its own height, so it never covers page content.
  */
-function InsightsDockLauncher({
+function InsightsBottomBar({
   onOpen,
+  onOpenHistory,
 }: {
   onOpen: () => void;
+  onOpenHistory: () => void;
 }): ReactElement {
+  const buttonClass =
+    "text-muted-foreground hover:text-foreground hover:bg-muted flex h-7 items-center gap-1.5 px-2 text-sm transition-colors";
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center pb-12">
+    <div className="border-border bg-background sticky bottom-0 z-20 flex h-10 shrink-0 items-center justify-end gap-1 border-t px-4">
       <Tooltip>
         <TooltipTrigger asChild>
           <button
             type="button"
             onClick={onOpen}
             aria-keyshortcuts={isMacPlatform() ? "Meta+/" : "Control+/"}
-            className="border-border bg-card text-card-foreground hover:bg-muted pointer-events-auto flex items-center gap-2 border px-4 py-2 text-sm font-medium shadow-md transition-colors"
+            className={buttonClass}
           >
             <Sparkles className="size-4" />
             Project Assistant
@@ -426,6 +431,19 @@ function InsightsDockLauncher({
           New chat
           <InsightsShortcutKeys />
         </TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={onOpenHistory}
+            aria-label="Chat history"
+            className={buttonClass}
+          >
+            <HistoryIcon className="size-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="top">Chat history</TooltipContent>
       </Tooltip>
     </div>
   );
@@ -894,7 +912,7 @@ export function InsightsProvider({
   // ignores the initial value.
   const [focusComposerKey, setFocusComposerKey] = useState(0);
   // While the dock is turned off (INSIGHTS_DOCK_ENABLED) it is mounted only
-  // on demand: the floating launcher or Cmd+/ summons it expanded, and it goes
+  // on demand: the bottom bar or Cmd+/ summons it expanded, and it goes
   // away again once it settles back to the resting pill.
   const [dockSummoned, setDockSummoned] = useState(false);
   const summonDock = useCallback(() => {
@@ -1662,7 +1680,7 @@ export function InsightsProvider({
             the Project Assistant. Expands in place into the chat panel.
             Hidden on pages that opt out via hideTrigger, and while dismissed
             to the sidebar resume button. While the dock is turned off it
-            mounts only when summoned (launcher or Cmd+/) or with the
+            mounts only when summoned (bottom bar or Cmd+/) or with the
             panel open, and unmounts once it settles back to the resting pill,
             so the resting composer never shows. */}
       {!hideTrigger &&
@@ -1687,16 +1705,14 @@ export function InsightsProvider({
           </div>
         )}
 
-      {/* While the dock is turned off, a compact launcher holds its resting
-          spot and summons it on click. */}
-      {!INSIGHTS_DOCK_ENABLED &&
-        !hideTrigger &&
-        !dockSummoned &&
-        !isExpanded && (
-          <div className="pointer-events-none sticky bottom-0 z-30 h-0 shrink-0">
-            <InsightsDockLauncher onOpen={summonDock} />
-          </div>
-        )}
+      {/* While the dock is turned off, a thin bottom bar is the entry point:
+          it summons the expanded dock or opens chat history. */}
+      {!INSIGHTS_DOCK_ENABLED && !hideTrigger && (
+        <InsightsBottomBar
+          onOpen={summonDock}
+          onOpenHistory={handleOpenHistory}
+        />
+      )}
     </div>
   );
 

@@ -18,7 +18,7 @@ import { SidebarFooterAction } from "./sidebar-footer-action";
 export function InsightsDockResumeButton(): JSX.Element | null {
   const { dismissed, resume } = useInsightsDockCta();
 
-  // While the dock is off, the floating launcher pill is the entry point.
+  // While the dock is off, the bottom bar is the entry point.
   if (!INSIGHTS_DOCK_ENABLED || !dismissed) return null;
 
   return (
