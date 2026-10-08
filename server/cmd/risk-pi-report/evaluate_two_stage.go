@@ -3,8 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -20,8 +23,31 @@ import (
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 )
 
+const (
+	// finishReasonContentFilter is the finish_reason of a completion the
+	// provider's safety classifier refused.
+	finishReasonContentFilter = "content_filter"
+
+	// maxVerdictAttempts bounds confirmer calls per request while the model
+	// refuses or returns no valid verdict. Three matches the evaluation
+	// harness, so refusals score as they did in the report.
+	maxVerdictAttempts = 3
+
+	// maxCaseAttempts bounds how often a case that failed open on a
+	// transient provider error (throttling, server error, timeout) runs
+	// again before it is scored.
+	maxCaseAttempts = 4
+
+	// caseRetryBaseDelay is the wait before the second case attempt; it
+	// doubles for each later one (5s, 10s, 20s), outside the production
+	// deadlines, so a throttled key can recover.
+	caseRetryBaseDelay = 5 * time.Second
+)
+
 // scanCascade exercises the production orchestration and payloads. The worker
-// pool bounds the number of in-flight cases.
+// pool bounds the number of in-flight cases. Refused or malformed
+// confirmations are asked again, and a case that failed open on a transient
+// provider error runs again, before it is scored.
 func scanCascade(ctx context.Context, opts options, key string, corpus []labeledCase) ([][]scanners.Finding, evaluationStats, error) {
 	tracer, meter := tracenoop.NewTracerProvider(), meternoop.NewMeterProvider()
 	logger := slog.New(slog.DiscardHandler)
@@ -34,6 +60,7 @@ func scanCascade(ctx context.Context, opts options, key string, corpus []labeled
 	confirmations := make([]int, len(corpus))
 	refusals := make([]int, len(corpus))
 	fallbacks := make([]int, len(corpus))
+	refused := make([]bool, len(corpus))
 	failed := make([]bool, len(corpus))
 	sem := make(chan struct{}, opts.judgeConcurrency)
 	var wg sync.WaitGroup
@@ -41,9 +68,11 @@ func scanCascade(ctx context.Context, opts options, key string, corpus []labeled
 		sem <- struct{}{}
 		wg.Go(func() {
 			defer func() { <-sem }()
-			start := time.Now()
 			observation := &observations[i]
-			completion := &observedCompletion{CompletionClient: client, observation: observation, calls: &confirmations[i], refusals: &refusals[i], fallbacks: &fallbacks[i]}
+			completion := &observedCompletion{
+				CompletionClient: client, observation: observation, calls: &confirmations[i], refusals: &refusals[i],
+				fallbacks: &fallbacks[i], refused: &refused[i], refusalFallback: opts.refusalFallback,
+			}
 			prefilter := &observedPrefilter{Evaluator: jev, observation: observation}
 			load := func(_ context.Context, _, _ string, target judgemessage.Message) (judgemessage.Window, error) {
 				if row.Window == nil {
@@ -59,10 +88,21 @@ func scanCascade(ctx context.Context, opts options, key string, corpus []labeled
 			}
 			cascade := piopenrouter.NewCascade(logger, tracer, meter, completion, prefilter, load)
 			scanner := promptinjection.NewScanner(logger, cascade.Classify)
-			result, verdict, err := scanner.ScanStrictWithVerdict(ctx, row.Text, benchOrgID, benchProjectID, "", row.judgeMessage(), row.trajectory())
-			results[i] = result.Findings
-			missed[i] = row.Label == "malicious" && (verdict.Model == typesafe.Model || strings.HasPrefix(verdict.Model, typesafe.Model+"-")) && verdict.Completed && verdict.Label == promptinjection.LabelSafe
-			if err != nil || verdict.Label == promptinjection.LabelUnavailable {
+			for attempt := 1; ; attempt++ {
+				start := time.Now()
+				firstCall := len(observation.Calls)
+				refused[i] = false
+				result, verdict, err := scanner.ScanStrictWithVerdict(ctx, row.Text, benchOrgID, benchProjectID, "", row.judgeMessage(), row.trajectory())
+				observation.Latency = time.Since(start)
+				unavailable := err != nil || verdict.Label == promptinjection.LabelUnavailable
+				if unavailable && attempt < maxCaseAttempts && slices.ContainsFunc(observation.Calls[firstCall:], transientCallFailure) && waitToRetry(ctx, attempt) {
+					continue
+				}
+				results[i] = result.Findings
+				missed[i] = row.Label == "malicious" && (verdict.Model == typesafe.Model || strings.HasPrefix(verdict.Model, typesafe.Model+"-")) && verdict.Completed && verdict.Label == promptinjection.LabelSafe
+				if !unavailable {
+					return
+				}
 				failed[i] = true
 				if err == nil {
 					err = promptinjection.ErrNoVerdict
@@ -72,8 +112,8 @@ func scanCascade(ctx context.Context, opts options, key string, corpus []labeled
 				if len(observation.Calls) > 0 && observation.Calls[len(observation.Calls)-1].Err == nil {
 					observation.Calls[len(observation.Calls)-1].Err = err
 				}
+				return
 			}
-			observation.Latency = time.Since(start)
 		})
 	}
 	wg.Wait()
@@ -84,6 +124,9 @@ func scanCascade(ctx context.Context, opts options, key string, corpus []labeled
 		stats.ConfirmationCalls += confirmations[i]
 		stats.ConfirmationRefusals += refusals[i]
 		stats.RefusalFallbackCalls += fallbacks[i]
+		if refused[i] {
+			stats.ConfirmationRefusedEvents++
+		}
 		if failed[i] {
 			stats.FailOpenEvents++
 		}
@@ -109,6 +152,33 @@ func (c *observedPrefilter) Evaluate(ctx context.Context, orgID string, state js
 	return result, nil
 }
 
+// transientCallFailure reports whether a failed physical call may succeed
+// later: throttling, a server error, a timeout or a transport failure, not a
+// rejected request or an exhausted credit balance.
+func transientCallFailure(call callObservation) bool {
+	err := call.Err
+	if err == nil || errors.Is(err, typesafe.ErrContextLengthExceeded) || errors.Is(err, typesafe.ErrUnavailable) || openrouter.IsPermanentError(err) {
+		return false
+	}
+	if status, ok := errors.AsType[*typesafe.StatusError](err); ok {
+		return status.StatusCode == http.StatusRequestTimeout || status.StatusCode == http.StatusTooManyRequests || status.StatusCode >= http.StatusInternalServerError
+	}
+	return true
+}
+
+// waitToRetry waits before case attempt attempt+1 and reports whether the
+// run can continue.
+func waitToRetry(ctx context.Context, attempt int) bool {
+	timer := time.NewTimer(caseRetryBaseDelay << (attempt - 1))
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
 type observedCompletion struct {
 	openrouter.CompletionClient
 	observation *decisionObservation
@@ -117,16 +187,72 @@ type observedCompletion struct {
 	// content_filter); fallbacks counts calls to the refusal fallback model.
 	refusals  *int
 	fallbacks *int
+
+	// refused records whether the confirmation model's last request ended
+	// refused after every attempt.
+	refused *bool
+
+	// refusalFallback is false to skip the refusal fallback model, scoring
+	// a refused confirmation as a refusal without another call.
+	refusalFallback bool
 }
 
+// GetCompletion asks again while the model refuses or returns no valid
+// verdict, up to maxVerdictAttempts calls, as the evaluation harness does.
 func (c *observedCompletion) GetCompletion(ctx context.Context, req openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
+	if req.Model == piopenrouter.RefusalFallbackModel && !c.refusalFallback {
+		var skipped openrouter.CompletionResponse
+		skipped.Model = req.Model
+		skipped.FinishReason = new(finishReasonContentFilter)
+		return &skipped, nil
+	}
+	for attempt := 1; ; attempt++ {
+		result, err := c.complete(ctx, req)
+		if err != nil || hasVerdict(result) || attempt == maxVerdictAttempts || ctx.Err() != nil {
+			if req.Model != piopenrouter.RefusalFallbackModel {
+				*c.refused = err == nil && isRefusal(result)
+			}
+			return result, err
+		}
+	}
+}
+
+func isRefusal(result *openrouter.CompletionResponse) bool {
+	return result != nil && result.FinishReason != nil && *result.FinishReason == finishReasonContentFilter
+}
+
+// hasVerdict reports whether a completion carries a verdict the production
+// judge accepts: not refused or truncated, with every field present and valid.
+func hasVerdict(result *openrouter.CompletionResponse) bool {
+	if result == nil || result.Message == nil || isRefusal(result) || (result.FinishReason != nil && *result.FinishReason == openrouter.FinishReasonLength) {
+		return false
+	}
+	var verdict struct {
+		DirectiveKind *string `json:"directive_kind"`
+		Target        *string `json:"target"`
+		Operational   *bool   `json:"operational"`
+		Rationale     *string `json:"rationale"`
+	}
+	raw := strings.TrimSpace(openrouter.GetText(*result.Message))
+	if err := json.Unmarshal([]byte(raw), &verdict); err != nil || verdict.DirectiveKind == nil || verdict.Target == nil || verdict.Operational == nil || verdict.Rationale == nil {
+		return false
+	}
+	return piopenrouter.ValidVerdict(piopenrouter.Verdict{
+		DirectiveKind: *verdict.DirectiveKind,
+		Target:        *verdict.Target,
+		Operational:   *verdict.Operational,
+		Rationale:     *verdict.Rationale,
+	})
+}
+
+func (c *observedCompletion) complete(ctx context.Context, req openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
 	*c.calls++
 	if req.Model == piopenrouter.RefusalFallbackModel {
 		*c.fallbacks++
 	}
 	start := time.Now()
 	result, err := c.CompletionClient.GetCompletion(ctx, req)
-	if result != nil && result.FinishReason != nil && *result.FinishReason == "content_filter" {
+	if isRefusal(result) {
 		*c.refusals++
 	}
 	call := callObservation{Latency: time.Since(start), PromptTokens: 0, CompletionTokens: 0, CostUSD: 0, Err: err}
