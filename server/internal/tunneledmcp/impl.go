@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelsessions"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -48,6 +49,7 @@ type Service struct {
 	auth          *auth.Auth
 	authz         *authz.Engine
 	audit         *audit.Logger
+	enc           *encryption.Client
 	tunnelManager *tunnelManager
 	// redisClient revokes live anonymous MCP sessions when public consent is
 	// withdrawn. Nil disables that best-effort cleanup (the serve path's
@@ -65,6 +67,7 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	enc *encryption.Client,
 	runtime route.RuntimeStore,
 	redisClient *redis.Client,
 ) *Service {
@@ -77,6 +80,7 @@ func NewService(
 		auth:          auth.New(logger, db, sessions, authzEngine),
 		authz:         authzEngine,
 		audit:         auditLogger,
+		enc:           enc,
 		tunnelManager: newTunnelManager(runtime),
 		redisClient:   redisClient,
 	}
@@ -528,6 +532,26 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+
+	// Lock first so no header write can land between the cascade below and
+	// the tombstone.
+	if _, err := txRepo.GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{ID: serverID, ProjectID: *authCtx.ProjectID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return oops.E(oops.CodeUnexpected, err, "lock tunneled mcp server").LogError(ctx, logger)
+	}
+
+	// ON DELETE CASCADE only fires on hard deletes, so the tunnel's headers
+	// are soft-deleted explicitly, and each is audited, before the tunnel.
+	deletedHeaders, err := txRepo.DeleteHeadersByServerID(ctx, repo.DeleteHeadersByServerIDParams{
+		TunneledMcpServerID: serverID,
+		ProjectID:           *authCtx.ProjectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete tunneled mcp server headers").LogError(ctx, logger)
+	}
+
 	deleted, err := txRepo.DeleteServer(ctx, repo.DeleteServerParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
@@ -537,6 +561,22 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 			return nil
 		}
 		return oops.E(oops.CodeUnexpected, err, "delete tunneled mcp server").LogError(ctx, logger)
+	}
+
+	for _, header := range deletedHeaders {
+		if err := s.audit.LogTunneledMcpServerHeaderDelete(ctx, dbtx, audit.LogTunneledMcpServerHeaderDeleteEvent{
+			OrganizationID:              authCtx.ActiveOrganizationID,
+			ProjectID:                   *authCtx.ProjectID,
+			Actor:                       urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName:            authCtx.Email,
+			ActorSlug:                   nil,
+			TunneledMcpServerHeaderURN:  urn.NewTunneledMcpServerHeader(header.ID),
+			TunneledMcpServerHeaderName: header.Name,
+			TunneledMcpServerURN:        urn.NewTunneledMcpServer(deleted.ID),
+			TunneledMcpServerName:       deleted.Name,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "log tunneled mcp server header deletion").LogError(ctx, logger)
+		}
 	}
 
 	if err := s.audit.LogTunneledMcpServerDelete(ctx, dbtx, audit.LogTunneledMcpServerDeleteEvent{

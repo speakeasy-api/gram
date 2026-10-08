@@ -1727,6 +1727,36 @@ BEGIN
      'Inert demo Service Account credential', TRUE, FALSE,
      'Bearer DEMO-NONFUNCTIONAL-TOKEN');
 
+  -- A private MCP server behind the tunnel agent, with the headers the tunnel
+  -- adds to every forwarded request: a fixed tenant selector and a value
+  -- copied from the caller's request. The tunnel has never connected, so its
+  -- settings render from stored rows alone. No secret header is seeded:
+  -- reads decrypt secret values, and a fake ciphertext would fail them.
+  INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix, status)
+  VALUES
+    (demo.det_uuid('gram-demo-tunhdr-tunnel'), proj_a, 'JAMF (on-prem)',
+     'demo-nonfunctional-' || demo.det_uuid('gram-demo-tunhdr-tunnel')::text,
+     'gram_tunnel_demo', 'created');
+
+  INSERT INTO tunneled_mcp_server_headers
+    (id, tunneled_mcp_server_id, name, description, is_required, is_secret,
+     value, value_from_request_header)
+  VALUES
+    (demo.det_uuid('gram-demo-tunhdr-header-tenant'),
+     demo.det_uuid('gram-demo-tunhdr-tunnel'), 'X-Jamf-Tenant',
+     'Inert demo tenant selector', TRUE, FALSE, 'demo-tenant', NULL),
+    (demo.det_uuid('gram-demo-tunhdr-header-region'),
+     demo.det_uuid('gram-demo-tunhdr-tunnel'), 'X-Jamf-Region',
+     'Copied from the caller''s X-Region header. A request-derived header keeps plugins backed by this tunnel from being distributed.',
+     FALSE, FALSE, NULL, 'X-Region');
+
+  INSERT INTO mcp_servers (id, project_id, name, slug, tunneled_mcp_server_id,
+                           user_session_issuer_id, visibility)
+  VALUES
+    (demo.det_uuid('gram-demo-tunhdr-mcpserver'), proj_a, 'JAMF', 'jamf',
+     demo.det_uuid('gram-demo-tunhdr-tunnel'),
+     demo.det_uuid('gram-demo-issuer-workforce'), 'private');
+
   INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
                                 user_session_issuer_id) VALUES
     (demo.det_uuid('gram-demo-metamcp-1'), demo_org, proj_a, 'Acme Agent Gateway',
@@ -1761,7 +1791,9 @@ BEGIN
     (demo.det_uuid('gram-demo-endpoint-linear'), proj_a, NULL,
      demo.det_uuid('gram-demo-mcpserver-linear'), 'acme-demo-linear'),
     (demo.det_uuid('gram-demo-endpoint-slack'), proj_a, NULL,
-     demo.det_uuid('gram-demo-mcpserver-slack'), 'acme-demo-slack');
+     demo.det_uuid('gram-demo-mcpserver-slack'), 'acme-demo-slack'),
+    (demo.det_uuid('gram-demo-tunhdr-endpoint'), proj_a, NULL,
+     demo.det_uuid('gram-demo-tunhdr-mcpserver'), 'acme-demo-jamf');
 
   -- Live connections spread across the MCP servers, not pooled on one issuer.
   -- The identity page's connections tab groups by MCP server, and every
@@ -3740,6 +3772,15 @@ Channel context stays in the Raw view.
     AND lower(header.name) = 'authorization' AND header.value IS NOT NULL;
   IF stray <> 1 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 1 Remote MCP Service Account header, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM tunneled_mcp_server_headers header
+  JOIN tunneled_mcp_servers tunnel ON tunnel.id = header.tunneled_mcp_server_id
+  WHERE tunnel.project_id = proj_a AND tunnel.deleted IS FALSE
+    AND header.deleted IS FALSE AND header.is_secret IS FALSE;
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 non-secret tunneled MCP headers, found %', stray;
   END IF;
 
   -- Managed-agent credentials are a separate surface from ordinary MCP

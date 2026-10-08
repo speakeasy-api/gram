@@ -144,8 +144,11 @@ type UpstreamResponseRetry struct {
 	// RemoteURL replaces the upstream URL; empty keeps it.
 	RemoteURL string
 
-	// Headers replaces the configured headers; nil keeps them.
-	Headers []ConfiguredHeader
+	// RoutingHeaders replaces the routing headers; nil keeps them and a
+	// non-nil empty slice clears them. Configured headers are never replaced:
+	// a retry changes where the request goes, not what the operator
+	// configured it to carry.
+	RoutingHeaders []ConfiguredHeader
 
 	// AuthorizationOverride replaces the bearer token presented upstream;
 	// empty keeps it.
@@ -240,9 +243,19 @@ type Proxy struct {
 	// RemoteURL is the upstream endpoint all requests are forwarded to.
 	RemoteURL string
 
-	// Headers are applied on top of any forwarded client headers when
-	// constructing the upstream request.
+	// Headers are the operator-configured headers, applied on top of any
+	// forwarded client headers when constructing the upstream request and
+	// checked against HeaderPolicy.
 	Headers []ConfiguredHeader
+
+	// RoutingHeaders are Speakeasy's own transport headers, such as the
+	// tunnel forwarding fields. They are applied after Headers, bypass
+	// HeaderPolicy and so always win. Upstream retries replace them.
+	RoutingHeaders []ConfiguredHeader
+
+	// HeaderPolicy selects how configured and copied client headers are
+	// filtered. The zero value is [HeaderPolicyRemote].
+	HeaderPolicy HeaderPolicy
 
 	// AuthorizationOverride is the Bearer token to set on the outgoing
 	// Authorization header. The caller's incoming Authorization is
@@ -1084,8 +1097,8 @@ func (p *Proxy) forwardRequestWithRetry(
 	if retry.RemoteURL != "" {
 		p.RemoteURL = retry.RemoteURL
 	}
-	if retry.Headers != nil {
-		p.Headers = retry.Headers
+	if retry.RoutingHeaders != nil {
+		p.RoutingHeaders = retry.RoutingHeaders
 	}
 	if retry.AuthorizationOverride != "" {
 		p.AuthorizationOverride = retry.AuthorizationOverride

@@ -46,6 +46,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/publiclimits"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -664,15 +665,16 @@ func (s *Service) serveTunneledPublicSession(
 		return oops.E(oops.CodeNotFound, nil, "session not found").LogWarn(ctx, logger.With(attr.SlogErrorMessage("recorded tunnel gateway is no longer live")))
 	}
 
-	headers := tunnelrouting.Headers(tunnelID, m.forwardToken, tunnelrouting.HashedClientAffinityKey(anonymousAffinityPrefix, sid))
-	headers = append(headers,
+	routing := tunnelrouting.Headers(tunnelID, m.forwardToken, tunnelrouting.HashedClientAffinityKey(anonymousAffinityPrefix, sid))
+	routing = append(routing,
 		proxy.ConfiguredHeader{
 			IsRequired:             true,
 			Name:                   wire.HeaderTunnelAgentSession,
 			StaticValue:            session.AgentSessionID,
 			ValueFromRequestHeader: "",
 		},
-		// Configured headers win over copied request headers.
+		// Routing headers win over copied request headers, so the backend
+		// session replaces the Speakeasy-minted one the client sent.
 		proxy.ConfiguredHeader{
 			IsRequired:             true,
 			Name:                   proxy.McpSessionIDHeader,
@@ -680,6 +682,11 @@ func (s *Service) serveTunneledPublicSession(
 			ValueFromRequestHeader: "",
 		},
 	)
+
+	configured, err := m.configuredHeaders(ctx, mcpServer.TunneledMcpServerID.UUID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "load tunneled mcp server headers").LogError(ctx, logger)
+	}
 
 	p := m.proxyManager.BuildTarget(
 		logger,
@@ -690,13 +697,15 @@ func (s *Service) serveTunneledPublicSession(
 			MetaMCPServerID:     "",
 		},
 		session.GatewayAddr,
-		headers,
+		configured,
 		mcpServer.Visibility,
 		organizationID,
 		endpoint.ProjectID.String(),
 		"",
 		"",
 		nil,
+		remotemcp.WithRoutingHeaders(routing),
+		remotemcp.WithHeaderPolicy(proxy.HeaderPolicyTunneled),
 	)
 	// Redirects won't work across a tunnel boundary; disable.
 	p.DisableRedirects = true

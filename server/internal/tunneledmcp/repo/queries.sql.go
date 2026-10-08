@@ -28,6 +28,21 @@ func (q *Queries) CountActiveServersByOrganizationID(ctx context.Context, organi
 	return count, err
 }
 
+const countLiveServerHeaders = `-- name: CountLiveServerHeaders :one
+SELECT COUNT(*)
+FROM tunneled_mcp_server_headers
+WHERE tunneled_mcp_server_id = $1 AND deleted IS FALSE
+`
+
+// Counts a tunnel's live headers regardless of the tunnel's own state, so a
+// caller can detect a header that outlived a deleted tunnel.
+func (q *Queries) CountLiveServerHeaders(ctx context.Context, tunneledMcpServerID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countLiveServerHeaders, tunneledMcpServerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createServer = `-- name: CreateServer :one
 INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix, resource_identifier)
 VALUES ($1, $2, $3, $4, $5, $6)
@@ -74,6 +89,126 @@ func (q *Queries) CreateServer(ctx context.Context, arg CreateServerParams) (Tun
 	return i, err
 }
 
+const createServerHeader = `-- name: CreateServerHeader :one
+INSERT INTO tunneled_mcp_server_headers (
+    tunneled_mcp_server_id,
+    name,
+    description,
+    is_required,
+    is_secret,
+    value,
+    value_from_request_header
+)
+SELECT
+    tunneled_mcp_servers.id,
+    $1::text,
+    $2::text,
+    $3::boolean,
+    $4::boolean,
+    $5::text,
+    $6::text
+FROM tunneled_mcp_servers
+WHERE tunneled_mcp_servers.id = $7
+    AND tunneled_mcp_servers.project_id = $8
+    AND tunneled_mcp_servers.deleted IS FALSE
+RETURNING id, tunneled_mcp_server_id, name, description, is_required, is_secret, value, value_from_request_header, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateServerHeaderParams struct {
+	Name                   string
+	Description            pgtype.Text
+	IsRequired             bool
+	IsSecret               bool
+	Value                  pgtype.Text
+	ValueFromRequestHeader pgtype.Text
+	TunneledMcpServerID    uuid.UUID
+	ProjectID              uuid.UUID
+}
+
+// Plain INSERT (never an upsert) so a live name collision raises a unique
+// violation rather than overwriting the existing header. The INSERT ... SELECT
+// yields zero rows when the parent is missing or belongs to another project.
+func (q *Queries) CreateServerHeader(ctx context.Context, arg CreateServerHeaderParams) (TunneledMcpServerHeader, error) {
+	row := q.db.QueryRow(ctx, createServerHeader,
+		arg.Name,
+		arg.Description,
+		arg.IsRequired,
+		arg.IsSecret,
+		arg.Value,
+		arg.ValueFromRequestHeader,
+		arg.TunneledMcpServerID,
+		arg.ProjectID,
+	)
+	var i TunneledMcpServerHeader
+	err := row.Scan(
+		&i.ID,
+		&i.TunneledMcpServerID,
+		&i.Name,
+		&i.Description,
+		&i.IsRequired,
+		&i.IsSecret,
+		&i.Value,
+		&i.ValueFromRequestHeader,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const deleteHeadersByServerID = `-- name: DeleteHeadersByServerID :many
+UPDATE tunneled_mcp_server_headers
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+FROM tunneled_mcp_servers
+WHERE tunneled_mcp_server_headers.tunneled_mcp_server_id = $1
+    AND tunneled_mcp_server_headers.deleted IS FALSE
+    AND tunneled_mcp_servers.id = tunneled_mcp_server_headers.tunneled_mcp_server_id
+    AND tunneled_mcp_servers.project_id = $2
+RETURNING tunneled_mcp_server_headers.id, tunneled_mcp_server_headers.tunneled_mcp_server_id, tunneled_mcp_server_headers.name, tunneled_mcp_server_headers.description, tunneled_mcp_server_headers.is_required, tunneled_mcp_server_headers.is_secret, tunneled_mcp_server_headers.value, tunneled_mcp_server_headers.value_from_request_header, tunneled_mcp_server_headers.created_at, tunneled_mcp_server_headers.updated_at, tunneled_mcp_server_headers.deleted_at, tunneled_mcp_server_headers.deleted
+`
+
+type DeleteHeadersByServerIDParams struct {
+	TunneledMcpServerID uuid.UUID
+	ProjectID           uuid.UUID
+}
+
+// Soft-deletes every live header of a tunnel. ON DELETE CASCADE only fires on
+// hard deletes, so deleteServer calls this explicitly, with the parent row
+// locked and before tombstoning it, and audits each returned row.
+func (q *Queries) DeleteHeadersByServerID(ctx context.Context, arg DeleteHeadersByServerIDParams) ([]TunneledMcpServerHeader, error) {
+	rows, err := q.db.Query(ctx, deleteHeadersByServerID, arg.TunneledMcpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TunneledMcpServerHeader
+	for rows.Next() {
+		var i TunneledMcpServerHeader
+		if err := rows.Scan(
+			&i.ID,
+			&i.TunneledMcpServerID,
+			&i.Name,
+			&i.Description,
+			&i.IsRequired,
+			&i.IsSecret,
+			&i.Value,
+			&i.ValueFromRequestHeader,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteServer = `-- name: DeleteServer :one
 UPDATE tunneled_mcp_servers
 SET
@@ -111,6 +246,71 @@ func (q *Queries) DeleteServer(ctx context.Context, arg DeleteServerParams) (Tun
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const deleteServerHeader = `-- name: DeleteServerHeader :one
+UPDATE tunneled_mcp_server_headers
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+FROM tunneled_mcp_servers
+WHERE tunneled_mcp_server_headers.id = $1
+    AND tunneled_mcp_server_headers.deleted IS FALSE
+    AND tunneled_mcp_servers.id = tunneled_mcp_server_headers.tunneled_mcp_server_id
+    AND tunneled_mcp_servers.project_id = $2
+    AND tunneled_mcp_servers.deleted IS FALSE
+RETURNING tunneled_mcp_server_headers.id, tunneled_mcp_server_headers.tunneled_mcp_server_id, tunneled_mcp_server_headers.name, tunneled_mcp_server_headers.description, tunneled_mcp_server_headers.is_required, tunneled_mcp_server_headers.is_secret, tunneled_mcp_server_headers.value, tunneled_mcp_server_headers.value_from_request_header, tunneled_mcp_server_headers.created_at, tunneled_mcp_server_headers.updated_at, tunneled_mcp_server_headers.deleted_at, tunneled_mcp_server_headers.deleted
+`
+
+type DeleteServerHeaderParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Returns the soft-deleted row so the caller can audit it.
+func (q *Queries) DeleteServerHeader(ctx context.Context, arg DeleteServerHeaderParams) (TunneledMcpServerHeader, error) {
+	row := q.db.QueryRow(ctx, deleteServerHeader, arg.ID, arg.ProjectID)
+	var i TunneledMcpServerHeader
+	err := row.Scan(
+		&i.ID,
+		&i.TunneledMcpServerID,
+		&i.Name,
+		&i.Description,
+		&i.IsRequired,
+		&i.IsSecret,
+		&i.Value,
+		&i.ValueFromRequestHeader,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const findLiveServerHeaderByName = `-- name: FindLiveServerHeaderByName :one
+SELECT id
+FROM tunneled_mcp_server_headers
+WHERE tunneled_mcp_server_id = $1
+    AND deleted IS FALSE
+    AND lower(name) = lower($2::text)
+    AND id <> $3::uuid
+LIMIT 1
+`
+
+type FindLiveServerHeaderByNameParams struct {
+	TunneledMcpServerID uuid.UUID
+	Name                string
+	ExcludeID           uuid.UUID
+}
+
+// Case-insensitive lookup of a live header with the given name on a tunnel,
+// other than the header being updated. Runs with the parent row locked, so a
+// concurrent writer to the same tunnel cannot slip in between the check and
+// the write.
+func (q *Queries) FindLiveServerHeaderByName(ctx context.Context, arg FindLiveServerHeaderByNameParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, findLiveServerHeaderByName, arg.TunneledMcpServerID, arg.Name, arg.ExcludeID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getServerByID = `-- name: GetServerByID :one
@@ -187,6 +387,41 @@ func (q *Queries) GetServerByIDForUpdate(ctx context.Context, arg GetServerByIDF
 	return i, err
 }
 
+const getServerHeader = `-- name: GetServerHeader :one
+SELECT tunneled_mcp_server_headers.id, tunneled_mcp_server_headers.tunneled_mcp_server_id, tunneled_mcp_server_headers.name, tunneled_mcp_server_headers.description, tunneled_mcp_server_headers.is_required, tunneled_mcp_server_headers.is_secret, tunneled_mcp_server_headers.value, tunneled_mcp_server_headers.value_from_request_header, tunneled_mcp_server_headers.created_at, tunneled_mcp_server_headers.updated_at, tunneled_mcp_server_headers.deleted_at, tunneled_mcp_server_headers.deleted
+FROM tunneled_mcp_server_headers
+JOIN tunneled_mcp_servers ON tunneled_mcp_servers.id = tunneled_mcp_server_headers.tunneled_mcp_server_id
+WHERE tunneled_mcp_server_headers.id = $1
+    AND tunneled_mcp_server_headers.deleted IS FALSE
+    AND tunneled_mcp_servers.project_id = $2
+    AND tunneled_mcp_servers.deleted IS FALSE
+`
+
+type GetServerHeaderParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetServerHeader(ctx context.Context, arg GetServerHeaderParams) (TunneledMcpServerHeader, error) {
+	row := q.db.QueryRow(ctx, getServerHeader, arg.ID, arg.ProjectID)
+	var i TunneledMcpServerHeader
+	err := row.Scan(
+		&i.ID,
+		&i.TunneledMcpServerID,
+		&i.Name,
+		&i.Description,
+		&i.IsRequired,
+		&i.IsSecret,
+		&i.Value,
+		&i.ValueFromRequestHeader,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getTunneledMcpServerLimitByOrganizationID = `-- name: GetTunneledMcpServerLimitByOrganizationID :one
 SELECT billing_metadata.tunneled_mcp_server_limit AS tunneled_mcp_server_limit
 FROM organization_metadata
@@ -199,6 +434,107 @@ func (q *Queries) GetTunneledMcpServerLimitByOrganizationID(ctx context.Context,
 	var tunneled_mcp_server_limit pgtype.Int4
 	err := row.Scan(&tunneled_mcp_server_limit)
 	return tunneled_mcp_server_limit, err
+}
+
+const listHeadersByServerID = `-- name: ListHeadersByServerID :many
+
+SELECT tunneled_mcp_server_headers.id, tunneled_mcp_server_headers.tunneled_mcp_server_id, tunneled_mcp_server_headers.name, tunneled_mcp_server_headers.description, tunneled_mcp_server_headers.is_required, tunneled_mcp_server_headers.is_secret, tunneled_mcp_server_headers.value, tunneled_mcp_server_headers.value_from_request_header, tunneled_mcp_server_headers.created_at, tunneled_mcp_server_headers.updated_at, tunneled_mcp_server_headers.deleted_at, tunneled_mcp_server_headers.deleted
+FROM tunneled_mcp_server_headers
+JOIN tunneled_mcp_servers ON tunneled_mcp_servers.id = tunneled_mcp_server_headers.tunneled_mcp_server_id
+WHERE tunneled_mcp_server_headers.tunneled_mcp_server_id = $1
+    AND tunneled_mcp_server_headers.deleted IS FALSE
+    AND tunneled_mcp_servers.deleted IS FALSE
+ORDER BY tunneled_mcp_server_headers.name
+`
+
+// Tunneled MCP Server Headers
+//
+// tunneled_mcp_server_headers has no project_id column. Every management
+// query pins the project through the parent tunneled_mcp_servers row so a
+// caller cannot address another project's header by guessing its id.
+// Not project-scoped. Serves the MCP proxy, which has already resolved the
+// tunnel through a project-scoped mcp_servers row and needs the stored values
+// to inject into outbound requests. Management reads use ListServerHeaders.
+func (q *Queries) ListHeadersByServerID(ctx context.Context, tunneledMcpServerID uuid.UUID) ([]TunneledMcpServerHeader, error) {
+	rows, err := q.db.Query(ctx, listHeadersByServerID, tunneledMcpServerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TunneledMcpServerHeader
+	for rows.Next() {
+		var i TunneledMcpServerHeader
+		if err := rows.Scan(
+			&i.ID,
+			&i.TunneledMcpServerID,
+			&i.Name,
+			&i.Description,
+			&i.IsRequired,
+			&i.IsSecret,
+			&i.Value,
+			&i.ValueFromRequestHeader,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listServerHeaders = `-- name: ListServerHeaders :many
+SELECT tunneled_mcp_server_headers.id, tunneled_mcp_server_headers.tunneled_mcp_server_id, tunneled_mcp_server_headers.name, tunneled_mcp_server_headers.description, tunneled_mcp_server_headers.is_required, tunneled_mcp_server_headers.is_secret, tunneled_mcp_server_headers.value, tunneled_mcp_server_headers.value_from_request_header, tunneled_mcp_server_headers.created_at, tunneled_mcp_server_headers.updated_at, tunneled_mcp_server_headers.deleted_at, tunneled_mcp_server_headers.deleted
+FROM tunneled_mcp_server_headers
+JOIN tunneled_mcp_servers ON tunneled_mcp_servers.id = tunneled_mcp_server_headers.tunneled_mcp_server_id
+WHERE tunneled_mcp_server_headers.tunneled_mcp_server_id = $1
+    AND tunneled_mcp_server_headers.deleted IS FALSE
+    AND tunneled_mcp_servers.project_id = $2
+    AND tunneled_mcp_servers.deleted IS FALSE
+ORDER BY tunneled_mcp_server_headers.name
+`
+
+type ListServerHeadersParams struct {
+	TunneledMcpServerID uuid.UUID
+	ProjectID           uuid.UUID
+}
+
+func (q *Queries) ListServerHeaders(ctx context.Context, arg ListServerHeadersParams) ([]TunneledMcpServerHeader, error) {
+	rows, err := q.db.Query(ctx, listServerHeaders, arg.TunneledMcpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TunneledMcpServerHeader
+	for rows.Next() {
+		var i TunneledMcpServerHeader
+		if err := rows.Scan(
+			&i.ID,
+			&i.TunneledMcpServerID,
+			&i.Name,
+			&i.Description,
+			&i.IsRequired,
+			&i.IsSecret,
+			&i.Value,
+			&i.ValueFromRequestHeader,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listServersByProjectID = `-- name: ListServersByProjectID :many
@@ -366,6 +702,70 @@ func (q *Queries) UpdateServer(ctx context.Context, arg UpdateServerParams) (Tun
 		&i.PublicRequestRatePerSecond,
 		&i.PublicRequestBurst,
 		&i.LastSeenAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateServerHeader = `-- name: UpdateServerHeader :one
+UPDATE tunneled_mcp_server_headers
+SET
+    name = $1::text,
+    description = $2::text,
+    is_required = $3::boolean,
+    is_secret = $4::boolean,
+    value = CASE WHEN $5::boolean THEN $6::text ELSE value END,
+    value_from_request_header = $7::text,
+    updated_at = clock_timestamp()
+FROM tunneled_mcp_servers
+WHERE tunneled_mcp_server_headers.id = $8
+    AND tunneled_mcp_server_headers.deleted IS FALSE
+    AND tunneled_mcp_servers.id = tunneled_mcp_server_headers.tunneled_mcp_server_id
+    AND tunneled_mcp_servers.project_id = $9
+    AND tunneled_mcp_servers.deleted IS FALSE
+RETURNING tunneled_mcp_server_headers.id, tunneled_mcp_server_headers.tunneled_mcp_server_id, tunneled_mcp_server_headers.name, tunneled_mcp_server_headers.description, tunneled_mcp_server_headers.is_required, tunneled_mcp_server_headers.is_secret, tunneled_mcp_server_headers.value, tunneled_mcp_server_headers.value_from_request_header, tunneled_mcp_server_headers.created_at, tunneled_mcp_server_headers.updated_at, tunneled_mcp_server_headers.deleted_at, tunneled_mcp_server_headers.deleted
+`
+
+type UpdateServerHeaderParams struct {
+	Name                   string
+	Description            pgtype.Text
+	IsRequired             bool
+	IsSecret               bool
+	SetValue               bool
+	Value                  pgtype.Text
+	ValueFromRequestHeader pgtype.Text
+	ID                     uuid.UUID
+	ProjectID              uuid.UUID
+}
+
+// Full replace of the mutable fields, except that when set_value is false the
+// stored value is left in place. That is how omitting the value of an existing
+// secret preserves it without its ciphertext leaving the database.
+func (q *Queries) UpdateServerHeader(ctx context.Context, arg UpdateServerHeaderParams) (TunneledMcpServerHeader, error) {
+	row := q.db.QueryRow(ctx, updateServerHeader,
+		arg.Name,
+		arg.Description,
+		arg.IsRequired,
+		arg.IsSecret,
+		arg.SetValue,
+		arg.Value,
+		arg.ValueFromRequestHeader,
+		arg.ID,
+		arg.ProjectID,
+	)
+	var i TunneledMcpServerHeader
+	err := row.Scan(
+		&i.ID,
+		&i.TunneledMcpServerID,
+		&i.Name,
+		&i.Description,
+		&i.IsRequired,
+		&i.IsSecret,
+		&i.Value,
+		&i.ValueFromRequestHeader,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

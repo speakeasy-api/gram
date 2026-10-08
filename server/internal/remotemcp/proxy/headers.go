@@ -2,9 +2,11 @@ package proxy
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
@@ -170,6 +172,11 @@ func (p *Proxy) stripConfiguredCredentials(header http.Header) {
 	header.Del("Cookie")
 	mcpauthz.Strip(header)
 
+	for _, h := range p.RoutingHeaders {
+		if h.Name != "" {
+			header.Del(h.Name)
+		}
+	}
 	for _, h := range p.Headers {
 		if h.Name != "" {
 			header.Del(h.Name)
@@ -193,8 +200,12 @@ func (p *Proxy) stripConfiguredCredentials(header http.Header) {
 // upstream after configured headers are resolved so per-user identity wins a
 // legacy conflict with a static Authorization credential.
 func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, remoteReq *http.Request) error {
+	tunneled := p.HeaderPolicy == HeaderPolicyTunneled
 	for name, values := range userReq.Header {
 		if isSkippedRequestHeader(name) {
+			continue
+		}
+		if tunneled && IsProtectedInboundHeader(name) {
 			continue
 		}
 		for _, v := range values {
@@ -202,16 +213,17 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 		}
 	}
 
-	for _, h := range p.Headers {
-		if mcpauthz.ReservedHeader(h.Name) || mcpauthz.ReservedHeader(h.ValueFromRequestHeader) {
-			continue
+	if tunneled {
+		if err := p.applyTunneledConfiguredHeaders(ctx, userReq, remoteReq); err != nil {
+			return err
 		}
-		// A configured header must not set or delete a standard MCP request
-		// header: the client's value is forwarded untouched, as the
-		// specification requires of an intermediary.
-		if httpheaders.IsStandardMCPRequestHeader(h.Name) {
-			continue
-		}
+	} else if err := p.applyRemoteConfiguredHeaders(ctx, userReq, remoteReq); err != nil {
+		return err
+	}
+
+	// Routing headers are Speakeasy's own transport state. They are applied
+	// after configured headers so no configuration can displace them.
+	for _, h := range p.RoutingHeaders {
 		value, err := h.Resolve(userReq)
 		if err != nil {
 			return oops.E(oops.CodeBadRequest, err, "missing required header for remote mcp server").LogError(ctx, p.Logger)
@@ -243,5 +255,81 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 		}
 	}
 
+	return nil
+}
+
+// applyRemoteConfiguredHeaders overlays configured headers under
+// [HeaderPolicyRemote].
+func (p *Proxy) applyRemoteConfiguredHeaders(ctx context.Context, userReq *http.Request, remoteReq *http.Request) error {
+	for _, h := range p.Headers {
+		if mcpauthz.ReservedHeader(h.Name) || mcpauthz.ReservedHeader(h.ValueFromRequestHeader) {
+			continue
+		}
+		// A configured header must not set or delete a standard MCP request
+		// header: the client's value is forwarded untouched, as the
+		// specification requires of an intermediary.
+		if httpheaders.IsStandardMCPRequestHeader(h.Name) {
+			continue
+		}
+		value, err := h.Resolve(userReq)
+		if err != nil {
+			return oops.E(oops.CodeBadRequest, err, "missing required header for remote mcp server").LogError(ctx, p.Logger)
+		}
+		if value == "" {
+			remoteReq.Header.Del(h.Name)
+			continue
+		}
+		remoteReq.Header.Set(h.Name, value)
+	}
+	return nil
+}
+
+// applyTunneledConfiguredHeaders overlays configured headers under
+// [HeaderPolicyTunneled]. Every stored row is re-validated here, so a row that
+// predates the policy or came from another writer cannot claim a reserved
+// name or read a protected inbound header.
+//
+// An optional row that fails is suppressed: its destination is cleared, so a
+// value the client sent under that name does not stand in for it, unless the
+// destination itself is protected, which leaves the client's protocol field or
+// Speakeasy's routing field alone. A required row that fails rejects the
+// request. Errors and logs name the header, never its value.
+func (p *Proxy) applyTunneledConfiguredHeaders(ctx context.Context, userReq *http.Request, remoteReq *http.Request) error {
+	for _, h := range p.Headers {
+		// A resolved upstream token owns Authorization. The configured row it
+		// shadows is not sent, so it cannot impose a requirement of its own.
+		if p.AuthorizationOverride != "" && headerKey(h.Name) == "authorization" {
+			continue
+		}
+
+		if err := checkStoredTunneledHeader(h); err != nil {
+			if h.IsRequired {
+				return oops.E(oops.CodeBadRequest, err, "invalid required header for tunneled mcp server").LogWarn(ctx, p.Logger)
+			}
+			p.Logger.WarnContext(ctx, "skip invalid configured header for tunneled mcp server", attr.SlogError(err))
+			if name, nerr := NormalizeHeaderName(h.Name); nerr == nil && !isReservedTunneledDestination(name) {
+				remoteReq.Header.Del(name)
+			}
+			continue
+		}
+
+		value, err := h.Resolve(userReq)
+		if err == nil && value != "" {
+			if verr := ValidateHeaderValue(value); verr != nil {
+				if h.IsRequired {
+					err = fmt.Errorf("header %q: %w", h.Name, verr)
+				}
+				value = ""
+			}
+		}
+		if err != nil {
+			return oops.E(oops.CodeBadRequest, err, "missing required header for tunneled mcp server").LogWarn(ctx, p.Logger)
+		}
+		if value == "" {
+			remoteReq.Header.Del(h.Name)
+			continue
+		}
+		remoteReq.Header.Set(h.Name, value)
+	}
 	return nil
 }

@@ -951,6 +951,7 @@ func TestServeConsentAction_ValidateStandaloneTunneledBackend(t *testing.T) {
 	gatewayServer := httptest.NewServer(gateway)
 	t.Cleanup(gatewayServer.Close)
 	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunneledServer.ID.String(), gatewayServer.URL, time.Hour))
+	seedTunnelHeaders(t, ctx, ti, projectID, tunneledServer.ID, false)
 
 	fx := validationFixture{ti: ti, reader: reader, endpoint: endpoint, stateID: stateID, subject: subject, member: nil, clientID: clientID, name: "aim204-tunnel"}
 	require.Contains(t, renderConsent(t, fx), `data-validate-link > Verify`)
@@ -958,6 +959,12 @@ func TestServeConsentAction_ValidateStandaloneTunneledBackend(t *testing.T) {
 
 	headers, bodies := tunnelForwards(gateway)
 	requireTunnelProbe(t, headers, bodies, "token-aim204-tunnel")
+	// The validation probe builds the same tunnel proxy, so it carries the
+	// tunnel's configured headers.
+	for _, forwarded := range headers {
+		require.Equal(t, "tenant-1", forwarded.Get("X-Jamf-Tenant"))
+		require.Equal(t, headerTestSecret, forwarded.Get("X-Api-Key"))
+	}
 
 	sess := storedSession(t, ctx, fx)
 	require.Equal(t, "valid", sess.ValidationStatus.String)

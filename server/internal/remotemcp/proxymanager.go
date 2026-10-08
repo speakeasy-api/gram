@@ -41,6 +41,8 @@ import (
 type proxyBuildOptions struct {
 	recordIdentityCoverage bool
 	metaMCPServerID        string
+	routingHeaders         []proxy.ConfiguredHeader
+	headerPolicy           proxy.HeaderPolicy
 }
 
 // BuildOption customizes one proxy without changing the defaults used by
@@ -62,6 +64,23 @@ func WithoutToolsCallIdentityCoverage() BuildOption {
 func WithMetaMCPServerID(metaMCPServerID string) BuildOption {
 	return BuildOption{apply: func(options *proxyBuildOptions) {
 		options.metaMCPServerID = metaMCPServerID
+	}}
+}
+
+// WithRoutingHeaders sets the transport headers Speakeasy itself attaches,
+// such as tunnel forwarding fields. They bypass the header policy and are
+// applied after configured headers.
+func WithRoutingHeaders(headers []proxy.ConfiguredHeader) BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) {
+		options.routingHeaders = headers
+	}}
+}
+
+// WithHeaderPolicy selects how configured and copied client headers are
+// filtered. Without it the proxy uses [proxy.HeaderPolicyRemote].
+func WithHeaderPolicy(policy proxy.HeaderPolicy) BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) {
+		options.headerPolicy = policy
 	}}
 }
 
@@ -245,7 +264,7 @@ func (f *ProxyManager) BuildTarget(
 	selection *toolfilter.SessionSelection,
 	buildOptions ...BuildOption,
 ) *proxy.Proxy {
-	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: ""}
+	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", routingHeaders: nil, headerPolicy: proxy.HeaderPolicyRemote}
 	for _, option := range buildOptions {
 		if option.apply != nil {
 			option.apply(&options)
@@ -379,6 +398,8 @@ func (f *ProxyManager) BuildTarget(
 		Identity:                    identity,
 		RemoteURL:                   upstreamURL,
 		Headers:                     headers,
+		RoutingHeaders:              options.routingHeaders,
+		HeaderPolicy:                options.headerPolicy,
 		AuthorizationOverride:       upstreamAuth,
 		CallerAssertion:             nil,
 		UpstreamResponseRetryer:     nil,

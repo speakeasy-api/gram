@@ -88,7 +88,7 @@ func TestCallerAssertionRetryMintsFreshTokenAndPreservesOAuth(t *testing.T) {
 	p, ctx, key := assertionProxy(t, upstream.URL)
 	p.AuthorizationOverride = "upstream-oauth"
 	p.UpstreamResponseRetryer = func(context.Context, *http.Response) (*UpstreamResponseRetry, error) {
-		return &UpstreamResponseRetry{RemoteURL: upstream.URL, Headers: []ConfiguredHeader{{Name: "X-Retry", StaticValue: "yes"}}}, nil
+		return &UpstreamResponseRetry{RemoteURL: upstream.URL, RoutingHeaders: []ConfiguredHeader{{Name: "X-Retry", StaticValue: "yes"}}}, nil
 	}
 	req := httptest.NewRequest(http.MethodPost, "https://gram.example/mcp", nil)
 	_, resp, err := p.forwardRequestWithRetry(ctx, req, func() io.Reader { return nil }, nil)

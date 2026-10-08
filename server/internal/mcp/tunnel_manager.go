@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -20,8 +21,16 @@ import (
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
+// tunnelHeaderSource loads the operator-configured headers of a tunnel,
+// decrypted, for the proxy to apply.
+type tunnelHeaderSource interface {
+	ConfiguredHeaders(ctx context.Context, tunneledMcpServerID uuid.UUID) ([]proxy.ConfiguredHeader, error)
+}
+
 type tunnelManager struct {
-	routes           route.Store
+	routes route.Store
+	// headers loads a tunnel's configured headers. Nil configures none.
+	headers          tunnelHeaderSource
 	forwardToken     string
 	proxyManager     *remotemcp.ProxyManager
 	callerAssertions *mcpauthz.Issuer
@@ -34,9 +43,10 @@ type tunnelManager struct {
 	gatewayCIDRs []string
 }
 
-func newTunnelManager(routes route.Store, forwardToken string, proxyManager *remotemcp.ProxyManager, gatewayCIDRs []string, callerAssertions *mcpauthz.Issuer) *tunnelManager {
+func newTunnelManager(routes route.Store, forwardToken string, proxyManager *remotemcp.ProxyManager, gatewayCIDRs []string, callerAssertions *mcpauthz.Issuer, headers tunnelHeaderSource) *tunnelManager {
 	return &tunnelManager{
 		routes:           routes,
+		headers:          headers,
 		forwardToken:     forwardToken,
 		proxyManager:     proxyManager,
 		gatewayCIDRs:     gatewayCIDRs,
@@ -114,6 +124,15 @@ func (m *tunnelManager) buildProxy(
 		return nil, oops.E(oops.CodeGatewayError, err, "tunnel route is invalid").LogError(ctx, logger)
 	}
 
+	configured, err := m.configuredHeaders(ctx, mcpServer.TunneledMcpServerID.UUID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load tunneled mcp server headers").LogError(ctx, logger)
+	}
+
+	options = append(options,
+		remotemcp.WithRoutingHeaders(tunnelrouting.Headers(tunnelID, m.forwardToken, params.ClientAffinityKey)),
+		remotemcp.WithHeaderPolicy(proxy.HeaderPolicyTunneled),
+	)
 	p := m.proxyManager.BuildTarget(
 		logger,
 		proxy.ServerIdentity{
@@ -123,7 +142,7 @@ func (m *tunnelManager) buildProxy(
 			MetaMCPServerID:     "",
 		},
 		gatewayURL,
-		tunnelrouting.Headers(tunnelID, m.forwardToken, params.ClientAffinityKey),
+		configured,
 		mcpServer.Visibility,
 		params.OrganizationID,
 		params.ProjectID.String(),
@@ -154,6 +173,18 @@ func (m *tunnelManager) buildProxy(
 	p.DisableRedirects = true
 	p.GuardianClientOptions = m.guardianClientOptions()
 	return p, nil
+}
+
+// configuredHeaders loads the tunnel's operator-configured headers.
+func (m *tunnelManager) configuredHeaders(ctx context.Context, tunneledMcpServerID uuid.UUID) ([]proxy.ConfiguredHeader, error) {
+	if m.headers == nil {
+		return nil, nil
+	}
+	headers, err := m.headers.ConfiguredHeaders(ctx, tunneledMcpServerID)
+	if err != nil {
+		return nil, fmt.Errorf("load tunnel headers: %w", err)
+	}
+	return headers, nil
 }
 
 // guardianClientOptions builds the shared client options for dialing tunnel

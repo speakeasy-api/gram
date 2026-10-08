@@ -73,6 +73,7 @@ const (
 	subjectTypeToolset                     subjectType = "toolset"
 	subjectTypeTriggerInstance             subjectType = "trigger_instance"
 	subjectTypeTunneledMcpServer           subjectType = "tunneled_mcp_server"
+	subjectTypeTunneledMcpServerHeader     subjectType = "tunneled_mcp_server_header"
 	subjectTypeUserSession                 subjectType = "user_session"
 	subjectTypeUserSessionClient           subjectType = "user_session_client"
 	subjectTypeUserSessionConsent          subjectType = "user_session_consent"

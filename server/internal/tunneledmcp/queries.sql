@@ -88,3 +88,133 @@ SET
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
+
+-- Tunneled MCP Server Headers
+--
+-- tunneled_mcp_server_headers has no project_id column. Every management
+-- query pins the project through the parent tunneled_mcp_servers row so a
+-- caller cannot address another project's header by guessing its id.
+
+-- name: ListHeadersByServerID :many
+-- Not project-scoped. Serves the MCP proxy, which has already resolved the
+-- tunnel through a project-scoped mcp_servers row and needs the stored values
+-- to inject into outbound requests. Management reads use ListServerHeaders.
+SELECT tunneled_mcp_server_headers.*
+FROM tunneled_mcp_server_headers
+JOIN tunneled_mcp_servers ON tunneled_mcp_servers.id = tunneled_mcp_server_headers.tunneled_mcp_server_id
+WHERE tunneled_mcp_server_headers.tunneled_mcp_server_id = @tunneled_mcp_server_id
+    AND tunneled_mcp_server_headers.deleted IS FALSE
+    AND tunneled_mcp_servers.deleted IS FALSE
+ORDER BY tunneled_mcp_server_headers.name;
+
+-- name: ListServerHeaders :many
+SELECT tunneled_mcp_server_headers.*
+FROM tunneled_mcp_server_headers
+JOIN tunneled_mcp_servers ON tunneled_mcp_servers.id = tunneled_mcp_server_headers.tunneled_mcp_server_id
+WHERE tunneled_mcp_server_headers.tunneled_mcp_server_id = @tunneled_mcp_server_id
+    AND tunneled_mcp_server_headers.deleted IS FALSE
+    AND tunneled_mcp_servers.project_id = @project_id
+    AND tunneled_mcp_servers.deleted IS FALSE
+ORDER BY tunneled_mcp_server_headers.name;
+
+-- name: GetServerHeader :one
+SELECT tunneled_mcp_server_headers.*
+FROM tunneled_mcp_server_headers
+JOIN tunneled_mcp_servers ON tunneled_mcp_servers.id = tunneled_mcp_server_headers.tunneled_mcp_server_id
+WHERE tunneled_mcp_server_headers.id = @id
+    AND tunneled_mcp_server_headers.deleted IS FALSE
+    AND tunneled_mcp_servers.project_id = @project_id
+    AND tunneled_mcp_servers.deleted IS FALSE;
+
+-- name: FindLiveServerHeaderByName :one
+-- Case-insensitive lookup of a live header with the given name on a tunnel,
+-- other than the header being updated. Runs with the parent row locked, so a
+-- concurrent writer to the same tunnel cannot slip in between the check and
+-- the write.
+SELECT id
+FROM tunneled_mcp_server_headers
+WHERE tunneled_mcp_server_id = @tunneled_mcp_server_id
+    AND deleted IS FALSE
+    AND lower(name) = lower(@name::text)
+    AND id <> @exclude_id::uuid
+LIMIT 1;
+
+-- name: CreateServerHeader :one
+-- Plain INSERT (never an upsert) so a live name collision raises a unique
+-- violation rather than overwriting the existing header. The INSERT ... SELECT
+-- yields zero rows when the parent is missing or belongs to another project.
+INSERT INTO tunneled_mcp_server_headers (
+    tunneled_mcp_server_id,
+    name,
+    description,
+    is_required,
+    is_secret,
+    value,
+    value_from_request_header
+)
+SELECT
+    tunneled_mcp_servers.id,
+    @name::text,
+    sqlc.narg(description)::text,
+    @is_required::boolean,
+    @is_secret::boolean,
+    sqlc.narg(value)::text,
+    sqlc.narg(value_from_request_header)::text
+FROM tunneled_mcp_servers
+WHERE tunneled_mcp_servers.id = @tunneled_mcp_server_id
+    AND tunneled_mcp_servers.project_id = @project_id
+    AND tunneled_mcp_servers.deleted IS FALSE
+RETURNING *;
+
+-- name: UpdateServerHeader :one
+-- Full replace of the mutable fields, except that when set_value is false the
+-- stored value is left in place. That is how omitting the value of an existing
+-- secret preserves it without its ciphertext leaving the database.
+UPDATE tunneled_mcp_server_headers
+SET
+    name = @name::text,
+    description = sqlc.narg(description)::text,
+    is_required = @is_required::boolean,
+    is_secret = @is_secret::boolean,
+    value = CASE WHEN @set_value::boolean THEN sqlc.narg(value)::text ELSE value END,
+    value_from_request_header = sqlc.narg(value_from_request_header)::text,
+    updated_at = clock_timestamp()
+FROM tunneled_mcp_servers
+WHERE tunneled_mcp_server_headers.id = @id
+    AND tunneled_mcp_server_headers.deleted IS FALSE
+    AND tunneled_mcp_servers.id = tunneled_mcp_server_headers.tunneled_mcp_server_id
+    AND tunneled_mcp_servers.project_id = @project_id
+    AND tunneled_mcp_servers.deleted IS FALSE
+RETURNING tunneled_mcp_server_headers.*;
+
+-- name: DeleteServerHeader :one
+-- Returns the soft-deleted row so the caller can audit it.
+UPDATE tunneled_mcp_server_headers
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+FROM tunneled_mcp_servers
+WHERE tunneled_mcp_server_headers.id = @id
+    AND tunneled_mcp_server_headers.deleted IS FALSE
+    AND tunneled_mcp_servers.id = tunneled_mcp_server_headers.tunneled_mcp_server_id
+    AND tunneled_mcp_servers.project_id = @project_id
+    AND tunneled_mcp_servers.deleted IS FALSE
+RETURNING tunneled_mcp_server_headers.*;
+
+-- name: DeleteHeadersByServerID :many
+-- Soft-deletes every live header of a tunnel. ON DELETE CASCADE only fires on
+-- hard deletes, so deleteServer calls this explicitly, with the parent row
+-- locked and before tombstoning it, and audits each returned row.
+UPDATE tunneled_mcp_server_headers
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+FROM tunneled_mcp_servers
+WHERE tunneled_mcp_server_headers.tunneled_mcp_server_id = @tunneled_mcp_server_id
+    AND tunneled_mcp_server_headers.deleted IS FALSE
+    AND tunneled_mcp_servers.id = tunneled_mcp_server_headers.tunneled_mcp_server_id
+    AND tunneled_mcp_servers.project_id = @project_id
+RETURNING tunneled_mcp_server_headers.*;
+
+-- name: CountLiveServerHeaders :one
+-- Counts a tunnel's live headers regardless of the tunnel's own state, so a
+-- caller can detect a header that outlived a deleted tunnel.
+SELECT COUNT(*)
+FROM tunneled_mcp_server_headers
+WHERE tunneled_mcp_server_id = @tunneled_mcp_server_id AND deleted IS FALSE;
