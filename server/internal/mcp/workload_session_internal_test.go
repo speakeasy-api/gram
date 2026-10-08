@@ -92,7 +92,11 @@ func TestEncodeIssuerWorkloadSessionPolicy_WildcardWithinIssuerScope(t *testing.
 			grants := decoded.RuntimeGrants()
 			require.NotEmpty(t, grants)
 			require.True(t, authz.GrantsContainSelector(grants, authz.ScopeMCPConnect, tc.want))
+			// Only mcp:connect and the scopes it implies, so the ceiling never
+			// carries authority beyond connecting to MCP servers.
+			connectClosure := authz.ScopeImplicationClosure(authz.ScopeMCPConnect)
 			for _, grant := range grants {
+				require.Contains(t, connectClosure, grant.Scope)
 				require.Equal(t, tc.want, grant.Selector)
 			}
 		})
