@@ -125,7 +125,7 @@ func TestRiskScan_ProxiedMetaMember(t *testing.T) {
 	text, isError := metaToolResultText(t, rpc)
 	require.False(t, isError)
 	require.Equal(t, "pong from ping", text)
-	require.Empty(t, upstream.capturedAuth())
+	upstream.requireToolCallAuth(t, "")
 
 	scanCount := 0
 	for _, span := range recorder.Ended() {
