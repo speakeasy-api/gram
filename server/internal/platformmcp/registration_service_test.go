@@ -851,7 +851,7 @@ func TestRegistrationServiceRefusesWithoutAFilerWhenThePolicyBlocks(t *testing.T
 	_, err := service.RegisterRemoteMCP(t.Context(), registrationServicePrincipal(), RegisterRemoteMCPInput{ProjectSlug: project.Slug, RemoteURL: "https://remote.example.test/mcp", IdempotencyKey: "request-key"})
 	require.ErrorIs(t, err, ErrShadowMCPReviewRequired)
 	var review *ShadowMCPReviewRequiredError
-	require.False(t, errors.As(err, &review))
+	require.NotErrorAs(t, err, &review)
 	require.Zero(t, store.beginCalls)
 
 	policy.err = errors.New("policy read failed")

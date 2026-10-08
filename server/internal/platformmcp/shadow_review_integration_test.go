@@ -2,7 +2,6 @@ package platformmcp
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -142,7 +141,7 @@ func TestDistributionFilesShadowMCPReviewWhenTheProjectPolicyRefusesTheURL(t *te
 	_, err = NewDistributionService(conn, nil, testExistingPluginAttacher(), nil, testPluginTargets(conn)).WithDistributionAdmission(admission.NewGuard()).
 		Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: plugin.Slug, ExpectedVersion: 0})
 	require.ErrorIs(t, err, ErrDistributionBlockedPendingApproval)
-	require.False(t, errors.As(err, &review))
+	require.NotErrorAs(t, err, &review)
 
 	// Once the audience is approved the same call attaches the server.
 	seedApprovedShadowMCPDecision(t, ctx, conn, principal, project, canonical.CanonicalURL, []string{"role:developers"})

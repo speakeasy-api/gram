@@ -178,5 +178,9 @@ func (p *PostgresDirectRemotePolicy) CheckDirectRemotePolicy(ctx context.Context
 	if p == nil || p.db == nil || p.approvals == nil {
 		return DirectRemoteApprovalState{}, ErrRegistrationUnavailable
 	}
-	return p.approvals.CheckDirectRemoteApprovalTx(ctx, p.db, principal.OrganizationID, principal.UserID, project.ID, canonicalURL)
+	state, err := p.approvals.CheckDirectRemoteApprovalTx(ctx, p.db, principal.OrganizationID, principal.UserID, project.ID, canonicalURL)
+	if err != nil {
+		return DirectRemoteApprovalState{}, fmt.Errorf("check direct remote Shadow MCP policy: %w", err)
+	}
+	return state, nil
 }

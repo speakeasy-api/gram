@@ -1,7 +1,6 @@
 package admission
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,7 +13,7 @@ func TestApprovalRequiredErrorCarriesTheRefusedTarget(t *testing.T) {
 	require.ErrorIs(t, err, ErrApprovalRequired)
 
 	var typed *ApprovalRequiredError
-	require.True(t, errors.As(err, &typed))
+	require.ErrorAs(t, err, &typed)
 	require.Equal(t, "https://mcp.example.test/server", typed.CanonicalURL)
 }
 

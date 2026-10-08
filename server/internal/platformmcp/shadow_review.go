@@ -103,7 +103,7 @@ type ShadowMCPReviewService struct {
 }
 
 func NewShadowMCPReviewService(db *pgxpool.Pool, requests MCPReviewRequestService, dashboardURL *url.URL, organizations OrganizationSlugResolver) *ShadowMCPReviewService {
-	service := &ShadowMCPReviewService{requests: requests, policyNames: nil, dashboardURL: nil, organizations: organizations, budget: OperationBudget{}}
+	service := &ShadowMCPReviewService{requests: requests, policyNames: nil, dashboardURL: nil, organizations: organizations, budget: OperationBudget{Connection: nil, Organization: nil}}
 	if db != nil {
 		service.policyNames = postgresShadowMCPPolicyNames(db)
 	}
@@ -255,7 +255,7 @@ func (r ShadowMCPReviewRequest) toolOutput() ShadowMCPReviewToolOutput {
 func shadowMCPReviewToolOutput(err error) (ShadowMCPReviewToolOutput, bool) {
 	var review *ShadowMCPReviewRequiredError
 	if !errors.As(err, &review) || review.Review.RequestID == "" {
-		return ShadowMCPReviewToolOutput{}, false
+		return ShadowMCPReviewToolOutput{RequestID: "", Status: "", Target: "", ReviewURL: "", PolicyNames: nil, Explanation: ""}, false
 	}
 	return review.Review.toolOutput(), true
 }
