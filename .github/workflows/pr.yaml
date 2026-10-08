@@ -2723,10 +2723,15 @@ jobs:
           env: false
 
       - name: Restore Go module cache
-        uses: $/.github/workflows/composite/go-mod-cache
+        uses: ./.github/workflows/composite/go-mod-cache
 
+      # The stdio credential tests are Linux-only and need /dev/shm on tmpfs;
+      # they fail rather than skip when it is missing.
       - name: Test
-        run: mise run test:tunnel
+        run: mise exec -- go test -race -count=1 ./tunnel/...
+
+      - name: Vet for Windows
+        run: GOOS=windows mise exec -- go vet ./tunnel/...
 
   tunnel-agent:
     name: Tunnel agent
