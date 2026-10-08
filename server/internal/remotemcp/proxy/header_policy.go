@@ -84,6 +84,11 @@ func headerKey(name string) string {
 // dashboard and chat sessions, project selection and consent transport state.
 const speakeasyHeaderPrefix = "gram-"
 
+// speakeasyAIHeaderPrefix covers the documented Speakeasy-AI-* names for the
+// same headers. Middleware rewrites them to their older aliases before the
+// proxy runs, but the policy must not depend on that ordering.
+const speakeasyAIHeaderPrefix = "speakeasy-ai-"
+
 // tunnelHeaderPrefix covers the tunnel transport family exchanged between
 // Speakeasy, the tunnel gateway and the tunnel agent.
 const tunnelHeaderPrefix = "x-gram-tunnel-"
@@ -97,7 +102,7 @@ func IsProtectedInboundHeader(name string) bool {
 		return true
 	}
 	key := headerKey(name)
-	if strings.HasPrefix(key, speakeasyHeaderPrefix) || strings.HasPrefix(key, tunnelHeaderPrefix) {
+	if strings.HasPrefix(key, speakeasyHeaderPrefix) || strings.HasPrefix(key, speakeasyAIHeaderPrefix) || strings.HasPrefix(key, tunnelHeaderPrefix) {
 		return true
 	}
 	switch key {

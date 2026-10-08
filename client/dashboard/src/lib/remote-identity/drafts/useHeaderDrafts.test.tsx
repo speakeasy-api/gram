@@ -564,6 +564,50 @@ describe("useHeaderDrafts for a tunneled source", () => {
     expect(result.current.validationError).toContain("line break");
   });
 
+  it("treats an underscore name as a duplicate of its dashed form", () => {
+    mocks.tunneledHeaders.mockReturnValue(
+      headersResult([serverHeader({ id: "h1", name: "X-Tenant", value: "a" })]),
+    );
+    const { result } = renderTunneledDrafts();
+    act(() => result.current.addHeader());
+    act(() =>
+      result.current.replaceHeader(1, {
+        ...result.current.drafts[1]!,
+        name: "X_Tenant",
+        staticValue: "b",
+      }),
+    );
+    expect(result.current.validationError).toContain("Duplicate");
+  });
+
+  it.each(["Speakeasy-AI-Key", "Speakeasy-AI-Chat-Session"])(
+    "refuses %s as a name and as a pass-through source",
+    (name) => {
+      const { result } = renderTunneledDrafts();
+      act(() => result.current.addHeader());
+      act(() =>
+        result.current.replaceHeader(0, {
+          ...result.current.drafts[0]!,
+          name,
+          staticValue: "x",
+        }),
+      );
+      expect(result.current.validationError).toContain("reserved");
+      act(() =>
+        result.current.replaceHeader(0, {
+          ...result.current.drafts[0]!,
+          name: "X-Upstream-Token",
+          source: "request",
+          isSecret: false,
+          valueFromRequestHeader: name,
+        }),
+      );
+      expect(result.current.validationError).toContain(
+        "cannot be passed through",
+      );
+    },
+  );
+
   it("allows a static Authorization header", () => {
     const { result } = renderTunneledDrafts();
     act(() => result.current.addHeader());

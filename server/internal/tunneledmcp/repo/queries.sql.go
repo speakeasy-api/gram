@@ -291,7 +291,7 @@ SELECT id
 FROM tunneled_mcp_server_headers
 WHERE tunneled_mcp_server_id = $1
     AND deleted IS FALSE
-    AND lower(name) = lower($2::text)
+    AND replace(lower(name), '_', '-') = replace(lower($2::text), '_', '-')
     AND id <> $3::uuid
 LIMIT 1
 `
@@ -302,10 +302,11 @@ type FindLiveServerHeaderByNameParams struct {
 	ExcludeID           uuid.UUID
 }
 
-// Case-insensitive lookup of a live header with the given name on a tunnel,
-// other than the header being updated. Runs with the parent row locked, so a
-// concurrent writer to the same tunnel cannot slip in between the check and
-// the write.
+// Looks up a live header on a tunnel whose name collides with the given one,
+// other than the header being updated. Names collide case-insensitively and
+// with underscores read as dashes, since some upstream servers fold X_Foo into
+// X-Foo. Runs with the parent row locked, so a concurrent writer to the same
+// tunnel cannot slip in between the check and the write.
 func (q *Queries) FindLiveServerHeaderByName(ctx context.Context, arg FindLiveServerHeaderByNameParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, findLiveServerHeaderByName, arg.TunneledMcpServerID, arg.Name, arg.ExcludeID)
 	var id uuid.UUID

@@ -252,6 +252,9 @@ func TestServerHeaderCaseInsensitiveConflicts(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeConflict)
 	_, err = ti.service.CreateServerHeader(ctx, createHeaderPayload(server.ID, " X-TENANT "))
 	requireOopsCode(t, err, oops.CodeConflict)
+	// Upstreams that fold underscores into dashes would see these as one.
+	_, err = ti.service.CreateServerHeader(ctx, createHeaderPayload(server.ID, "X_Tenant"))
+	requireOopsCode(t, err, oops.CodeConflict)
 
 	second, err := ti.service.CreateServerHeader(ctx, createHeaderPayload(server.ID, "X-Region"))
 	require.NoError(t, err)

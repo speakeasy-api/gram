@@ -7,6 +7,7 @@ import {
   isReservedTunneledHeaderName,
   isValidHeaderName,
   isValidHeaderValue,
+  tunneledHeaderNameKey,
 } from "../model/tunneledHeaderPolicy";
 import type { IdentityMode } from "../model/identity";
 import { REDACTED_SECRET } from "../model/secret";
@@ -145,7 +146,9 @@ export function headerDraftErrors(
       continue;
     }
 
-    const normalized = name.toLowerCase();
+    // A tunneled source also treats underscores as dashes, as the server does.
+    const normalized =
+      policy === "tunneled" ? tunneledHeaderNameKey(name) : name.toLowerCase();
     if (names.has(normalized)) {
       errors.set(draft.key, {
         field: "name",

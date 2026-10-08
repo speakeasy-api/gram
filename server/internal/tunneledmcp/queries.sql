@@ -127,15 +127,16 @@ WHERE tunneled_mcp_server_headers.id = @id
     AND tunneled_mcp_servers.deleted IS FALSE;
 
 -- name: FindLiveServerHeaderByName :one
--- Case-insensitive lookup of a live header with the given name on a tunnel,
--- other than the header being updated. Runs with the parent row locked, so a
--- concurrent writer to the same tunnel cannot slip in between the check and
--- the write.
+-- Looks up a live header on a tunnel whose name collides with the given one,
+-- other than the header being updated. Names collide case-insensitively and
+-- with underscores read as dashes, since some upstream servers fold X_Foo into
+-- X-Foo. Runs with the parent row locked, so a concurrent writer to the same
+-- tunnel cannot slip in between the check and the write.
 SELECT id
 FROM tunneled_mcp_server_headers
 WHERE tunneled_mcp_server_id = @tunneled_mcp_server_id
     AND deleted IS FALSE
-    AND lower(name) = lower(@name::text)
+    AND replace(lower(name), '_', '-') = replace(lower(@name::text), '_', '-')
     AND id <> @exclude_id::uuid
 LIMIT 1;
 

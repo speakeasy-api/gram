@@ -102,6 +102,7 @@ func TestCheckTunneledHeaderReservedDestinations(t *testing.T) {
 		"X-Gram-Tunnel-Agent-Session", "X-Gram-Tunnel-Require-Active", "X_gram_tunnel_id",
 		"X-Gram-Agent-Version",
 		"Gram-Key", "Gram-Session", "Gram-Chat-Session", "Gram-Project", "Gram-Consent-State", "Gram_key",
+		"Speakeasy-AI-Key", "Speakeasy-AI-Session", "Speakeasy-AI-Chat-Session", "Speakeasy_AI_Project",
 		"Cookie", "Set-Cookie", "Proxy-Authorization",
 		"Connection", "Keep-Alive", "Proxy-Authenticate", "Te", "Trailer", "Transfer-Encoding",
 		"Upgrade", "Content-Length", "Host", "Accept-Encoding",
@@ -130,6 +131,7 @@ func TestCheckTunneledHeaderProtectedSources(t *testing.T) {
 	protected := []string{
 		"Authorization", "Proxy-Authorization", "Cookie", "Set-Cookie",
 		"Gram-Key", "Gram-Session", "Gram-Chat-Session", "Gram-Project", "Gram-Consent-Csrf", "Gram_chat_session",
+		"Speakeasy-AI-Key", "Speakeasy-AI-Session", "Speakeasy-AI-Chat-Session", "speakeasy_ai_key",
 		"X-Speakeasy-Identity", "X_speakeasy_identity", "X-Gram-Tunnel-Forward-Token", "X-Gram-Agent-Version",
 	}
 	for _, source := range protected {
@@ -166,6 +168,8 @@ func credentialBearingRequest(t *testing.T) *http.Request {
 	req.Header.Set("X-Gram-Tunnel-Forward-Token", "client-supplied")
 	req.Header["X_speakeasy_identity"] = []string{"client-supplied"}
 	req.Header["gram_key"] = []string{syntheticAPIKey}
+	req.Header.Set("Speakeasy-AI-Key", syntheticAPIKey)
+	req.Header.Set("Speakeasy-AI-Chat-Session", syntheticChatSession)
 	req.Header.Set("Mcp-Method", "tools/call")
 	req.Header.Set("X-Client-Region", "eu")
 	req.Header.Set("X-Client-Ok", "kept")
@@ -183,7 +187,7 @@ func policyProxy(t *testing.T, policy HeaderPolicy, headers []ConfiguredHeader) 
 
 // exfiltrationRows try to copy each inbound credential into a harmless name.
 func exfiltrationRows() []ConfiguredHeader {
-	sources := []string{"Authorization", "Gram-Key", "Gram-Session", "Gram-Chat-Session", "Cookie", "X_speakeasy_identity", "gram_key"}
+	sources := []string{"Authorization", "Gram-Key", "Gram-Session", "Gram-Chat-Session", "Cookie", "X_speakeasy_identity", "gram_key", "Speakeasy-AI-Key"}
 	rows := make([]ConfiguredHeader, 0, len(sources))
 	for i, source := range sources {
 		rows = append(rows, ConfiguredHeader{
@@ -215,7 +219,7 @@ func TestApplyRequestHeadersTunneledStripsSpeakeasyCredentials(t *testing.T) {
 			}
 		}
 	}
-	for _, name := range []string{"Authorization", "Gram-Key", "Gram-Session", "Gram-Chat-Session", "Gram-Project", "Cookie", "X-Gram-Tunnel-Require-Active", "X-Gram-Tunnel-Forward-Token", "X_speakeasy_identity", "gram_key"} {
+	for _, name := range []string{"Authorization", "Gram-Key", "Gram-Session", "Gram-Chat-Session", "Gram-Project", "Speakeasy-AI-Key", "Speakeasy-AI-Chat-Session", "Cookie", "X-Gram-Tunnel-Require-Active", "X-Gram-Tunnel-Forward-Token", "X_speakeasy_identity", "gram_key"} {
 		require.Empty(t, remoteReq.Header.Values(name), name)
 	}
 	require.Equal(t, "tools/call", remoteReq.Header.Get("Mcp-Method"))

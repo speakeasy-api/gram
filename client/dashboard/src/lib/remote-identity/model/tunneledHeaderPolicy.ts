@@ -14,6 +14,9 @@ function headerKey(name: string): string {
 /** Speakeasy's own request headers: API keys, sessions, project, consent. */
 const SPEAKEASY_PREFIX = "gram-";
 
+/** The documented Speakeasy-AI-* names for the same headers. */
+const SPEAKEASY_AI_PREFIX = "speakeasy-ai-";
+
 /** The tunnel transport fields exchanged with the gateway and agent. */
 const TUNNEL_PREFIX = "x-gram-tunnel-";
 
@@ -55,6 +58,7 @@ export function isProtectedInboundHeader(name: string): boolean {
   return (
     PROTECTED_INBOUND.has(key) ||
     key.startsWith(SPEAKEASY_PREFIX) ||
+    key.startsWith(SPEAKEASY_AI_PREFIX) ||
     key.startsWith(TUNNEL_PREFIX)
   );
 }
@@ -88,4 +92,12 @@ const INVALID_VALUE = /[\u0000-\u0008\u000a-\u001f\u007f]/;
 /** Whether `value` can be sent as an HTTP header value. */
 export function isValidHeaderValue(value: string): boolean {
   return !INVALID_VALUE.test(value);
+}
+
+/**
+ * The key two header names collide on for a tunneled source: case-insensitive,
+ * with underscores read as dashes, matching how the server checks duplicates.
+ */
+export function tunneledHeaderNameKey(name: string): string {
+  return headerKey(name);
 }
