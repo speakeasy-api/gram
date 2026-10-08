@@ -465,7 +465,7 @@ func (r *runner) writePartition(ctx context.Context, route string, messages []*d
 		return nil
 	}
 
-	id, err := uuid.NewRandom()
+	id, err := uuid.NewV7()
 	if err != nil {
 		return fmt.Errorf("allocate object identity: %w", err)
 	}
