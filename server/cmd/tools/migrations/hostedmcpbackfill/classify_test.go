@@ -27,6 +27,7 @@ func TestClassifySyncError(t *testing.T) {
 		{"identity conflict", oops.E(oops.CodeConflict, nil, "hosted MCP identity belongs to another server"), OutcomeBlockedSyncRejected, true},
 		{"invalid", oops.E(oops.CodeInvalid, nil, "online private network ingress is required"), OutcomeBlockedSyncRejected, true},
 		{"unexpected", oops.E(oops.CodeUnexpected, errors.New("db down"), "load hosted MCP server"), "", false},
+		{"unauthorized", oops.E(oops.CodeUnauthorized, nil, "missing hosted MCP actor"), "", false},
 		{"plain error", errors.New("boom"), "", false},
 	}
 	for _, tc := range cases {
@@ -37,4 +38,12 @@ func TestClassifySyncError(t *testing.T) {
 			require.Equal(t, tc.outcome, outcome)
 		})
 	}
+}
+
+func TestSyncErrorReasonNamesTheViolatedConstraint(t *testing.T) {
+	t.Parallel()
+
+	err := oops.E(oops.CodeConflict, &pgconn.PgError{Code: pgerrcode.UniqueViolation, ConstraintName: "mcp_endpoints_slug_key"}, "create hosted MCP endpoint")
+	require.Equal(t, "create hosted MCP endpoint (constraint mcp_endpoints_slug_key)", syncErrorReason(err))
+	require.Equal(t, "hosted MCP address is already in use", syncErrorReason(oops.E(oops.CodeConflict, hostedmcp.ErrAddressInUse, "hosted MCP address is already in use")))
 }

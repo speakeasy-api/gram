@@ -302,7 +302,7 @@ func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsets
 		if !ok {
 			return row, fmt.Errorf("sync hosted wrapper: %w", err)
 		}
-		return blocked(row, outcome, err.Error()), nil
+		return blocked(row, outcome, syncErrorReason(err)), nil
 	}
 
 	after, err := loadCanonical(ctx, tx, toolset)
@@ -355,4 +355,13 @@ func classifySyncError(err error) (Outcome, bool) {
 		return OutcomeBlockedSlugCollision, true
 	}
 	return OutcomeBlockedSyncRejected, true
+}
+
+// syncErrorReason keeps the violated constraint, which the public message hides, so blocked rows name the colliding address.
+func syncErrorReason(err error) string {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.ConstraintName != "" {
+		return fmt.Sprintf("%s (constraint %s)", err.Error(), pgErr.ConstraintName)
+	}
+	return err.Error()
 }
