@@ -11,6 +11,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
@@ -31,7 +32,7 @@ import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router";
+import { toast } from "sonner";
 import { useOrgRoutes } from "@/routes";
 import {
   ArrowLeft,
@@ -41,13 +42,17 @@ import {
   Loader2,
   Lock,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { Link } from "react-router";
 import {
   getSelectableMembers,
   isMemberLockedToRole,
   membersWithRole,
 } from "./changeRoleState";
 import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
+import { MCP_CONNECT_SCOPE } from "./mcpAccessModel";
+import { McpAccessPanel } from "./McpAccessPanel";
+import { useMcpAccessCount } from "./useMcpAccessCount";
 import { PermissionScopeControl } from "./PermissionScopeControl";
 import { RolePermissionsSection } from "./RolePermissionsSection";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
@@ -240,6 +245,8 @@ export function CreateRoleDialog({
     [scopeDefinitions],
   );
 
+  const mcpAccessCount = useMcpAccessCount(grants, open);
+
   const projectList = useMemo(
     () => organization.projects.map((p) => ({ id: p.id, name: p.name })),
     [organization.projects],
@@ -339,12 +346,35 @@ export function CreateRoleDialog({
     },
   });
 
+  const submitted = useRef<{
+    name: string;
+    description: string;
+    grantKeys: string;
+    members: Set<string>;
+    agents: Set<string>;
+  } | null>(null);
+
   const updateRole = useUpdateRoleMutation({
     onSuccess: async () => {
       await Promise.all([
         invalidateAllRoles(queryClient),
         invalidateAllMembers(queryClient),
       ]);
+      // On its own page the editor stays open after a save: what was saved
+      // becomes the starting point, so Save waits for the next change. The
+      // sheet over the roles list closes as before.
+      // The baseline is what the click sent, not the form now: an edit made
+      // while the save was in flight stays unsaved and keeps Save enabled.
+      const saved = submitted.current;
+      if (presentation === "page" && saved) {
+        setInitialName(saved.name);
+        setInitialDescription(saved.description);
+        setInitialGrantKeys(saved.grantKeys);
+        setInitialMembers(saved.members);
+        setInitialAgents(saved.agents);
+        toast.success("Role saved");
+        return;
+      }
       handleClose();
     },
   });
@@ -394,6 +424,15 @@ export function CreateRoleDialog({
           ],
         };
       }
+      return next;
+    });
+  };
+
+  const setConnectGrant = (grant: RoleGrant | undefined) => {
+    updateGrants((prev) => {
+      const next = { ...prev };
+      if (grant) next[MCP_CONNECT_SCOPE] = grant;
+      else delete next[MCP_CONNECT_SCOPE];
       return next;
     });
   };
@@ -573,6 +612,13 @@ export function CreateRoleDialog({
         scopeDefinitions,
       );
       const { addGrants, removeGrants } = diffGrants(initialGrants, sdkGrants);
+      submitted.current = {
+        name,
+        description,
+        grantKeys: grantKeysStringFn(grants),
+        members: new Set(selectedMembers),
+        agents: new Set(selectedAgents),
+      };
 
       updateRole.mutate({
         request: {
@@ -771,6 +817,26 @@ export function CreateRoleDialog({
               disabled={false}
               markAgentIneligible={selectedAgents.size > 0}
               onToggleScope={toggleScope}
+              // No number until an existing role's grants are in: an empty
+              // form would count as zero servers.
+              mcpAccessCount={isEditing && !initialized ? null : mcpAccessCount}
+              renderMcpAccess={({ showPlatformAccess }) =>
+                // An existing role's grants replace the form once they load,
+                // so the panel waits for them rather than take edits that
+                // would be overwritten.
+                isEditing && !initialized ? (
+                  <Skeleton className="m-4">
+                    <div className="h-24 w-full" />
+                    <div className="h-40 w-full" />
+                  </Skeleton>
+                ) : (
+                  <McpAccessPanel
+                    grants={grants}
+                    onChangeConnectGrant={setConnectGrant}
+                    onShowPlatformAccess={showPlatformAccess}
+                  />
+                )
+              }
               renderScopeRule={(scopeDef) => {
                 const grant = grants[scopeDef.slug];
                 if (!grant) return null;

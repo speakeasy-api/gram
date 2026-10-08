@@ -1125,6 +1125,14 @@ RETURNING id;
 INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject)
 VALUES (@organization_id, sqlc.narg(project_id), @workload_issuer_id, @subject);
 
+-- name: CreateWorkloadIdentityRuleFixture :exec
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind)
+VALUES (@organization_id, sqlc.narg(project_id), @workload_issuer_id, @subject, @match_kind);
+
+-- name: CreateWorkloadAgentAssignmentFixture :exec
+INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, match_kind, agent_id)
+VALUES (@organization_id, @workload_issuer_id, @subject, @match_kind, @agent_id);
+
 -- name: SoftDeleteWorkloadIssuerFixture :execrows
 UPDATE workload_issuers
 SET deleted_at = clock_timestamp()
@@ -1868,3 +1876,11 @@ DELETE FROM mcp_registries;
 
 -- name: InsertRetainedLegacyCatalogSourceFixture :exec
 INSERT INTO mcp_registries (id,name,url,source_type,auth_profile,enabled,certification_state,source_key) VALUES ($1,'Legacy catalog','https://legacy.example.test','pulse_v0_1','pulse_server_credentials',true,'certified','pulse');
+
+-- name: SetRemoteSessionIssuerOmitScopeFallbackFixture :execrows
+-- Scoped to the issuer's own tier: NULL project and organization name a global issuer.
+UPDATE remote_session_issuers
+SET omit_scope_fallback = @omit_scope_fallback
+WHERE id = @id
+  AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid
+  AND organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text;

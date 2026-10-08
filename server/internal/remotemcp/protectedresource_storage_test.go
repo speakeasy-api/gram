@@ -57,17 +57,17 @@ func TestProxyManager_UnrepresentableProtectedResourceRecordsErrorAndBacksOff(t 
 			// A fresh manager resets the per-replica checks. The persisted
 			// error, not the in-memory debounce, prevents another fetch.
 			fresh, freshProbed := newProbingManager(t, ti)
-			fresh.SetProtectedResourceProbeClock(func() time.Time { return time.Now().Add(23 * time.Hour) })
+			fresh.SetProtectedResourceProbeClock(func() time.Time { return time.Now().Add(10 * time.Minute) })
 			postInitialize(t, ctx, fresh, server)
 			<-freshProbed
 			require.EqualValues(t, 1, hits.Load())
 			require.Equal(t, failed.MetadataLastErrorAt, loadProtectedResource(t, ctx, ti, upstream.URL).MetadataLastErrorAt)
 
 			later, laterProbed := newProbingManager(t, ti)
-			later.SetProtectedResourceProbeClock(func() time.Time { return time.Now().Add(25 * time.Hour) })
+			later.SetProtectedResourceProbeClock(func() time.Time { return time.Now().Add(20 * time.Minute) })
 			postInitialize(t, ctx, later, server)
 			<-laterProbed
-			require.EqualValues(t, 2, hits.Load(), "the persisted failure becomes eligible again after 24 hours")
+			require.EqualValues(t, 2, hits.Load(), "a row whose only visit failed becomes eligible again after the error back-off")
 			retried := loadProtectedResource(t, ctx, ti, upstream.URL)
 			require.Equal(t, failed.ID, retried.ID)
 			require.Equal(t, failed.MetadataLastError, retried.MetadataLastError)

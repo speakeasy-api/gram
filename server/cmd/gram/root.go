@@ -53,6 +53,7 @@ func newApp() *cli.App {
 			newAppSeedCommand(),
 			newReplaySessionObservationsCommand(),
 			newAdminSeedCommand(),
+			newCustomerUsageSeedCommand(),
 			newAccountStateCommand(),
 			newVersionCommand(),
 		},

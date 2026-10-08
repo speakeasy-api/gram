@@ -1,9 +1,6 @@
 import type { CreateRemoteSessionIssuerForm } from "@gram/client/models/components/createremotesessionissuerform.js";
 import type { UpdateRemoteSessionIssuerForm } from "@gram/client/models/components/updateremotesessionissuerform.js";
-import {
-  parseScopes,
-  type DiscoveredEndpoints,
-} from "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
+import type { DiscoveredEndpoints } from "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
 
 // The editable state both issuer Settings tabs collect. The tenant tab and the
 // platform catalog tab hold it in their own useState, but they submit exactly
@@ -25,9 +22,12 @@ export type IssuerSettingsFormState = {
   // Undefined omits the admin-only field; an empty string explicitly clears
   // an existing issuer binding.
   tunneledMcpServerId?: string;
-  // Comma-separated scope override. Undefined omits the field so the server
-  // keeps what it has; an empty string clears the override.
-  scopeOverride?: string;
+  // Scope override. Undefined omits the field so the server keeps what it
+  // has; an empty list clears the override.
+  scopeOverride?: string[];
+  // Send no scope parameter when the issuer's whole scopes_supported would otherwise be
+  // requested. Undefined omits the field so the server keeps what it has.
+  omitScopeFallback?: boolean;
 };
 
 // buildUpdateIssuerForm turns the Settings tab state into the update payload.
@@ -85,11 +85,18 @@ export function buildUpdateIssuerForm(
     ...(state.tunneledMcpServerId === undefined
       ? {}
       : { tunneledMcpServerId: state.tunneledMcpServerId.trim() }),
-    // An empty array is the server's "clear the override" sentinel, so a
-    // blanked field clears it rather than being omitted.
+    // An empty array is the server's "clear the override" sentinel, so an
+    // emptied picker clears it rather than being omitted.
     ...(state.scopeOverride === undefined
       ? {}
-      : { scopeOverride: parseScopes(state.scopeOverride) }),
+      : {
+          scopeOverride: state.scopeOverride
+            .map((s) => s.trim())
+            .filter(Boolean),
+        }),
+    ...(state.omitScopeFallback === undefined
+      ? {}
+      : { omitScopeFallback: state.omitScopeFallback }),
     // Endpoints verbatim ("" clears a dropped URL); null seeded = keep stored.
     userinfoEndpoint: fromDiscovery?.userinfoEndpoint,
     introspectionEndpoint: fromDiscovery?.introspectionEndpoint,
@@ -172,6 +179,7 @@ export function buildCreateIssuerForm(
     opPolicyUri: fromDiscovery?.opPolicyUri || undefined,
     opTosUri: fromDiscovery?.opTosUri || undefined,
     tunneledMcpServerId: state.tunneledMcpServerId?.trim() || undefined,
+    omitScopeFallback: state.omitScopeFallback,
     // Discovery-only capabilities; omitted (NULL) unless discovery ran.
     userinfoEndpoint: fromDiscovery?.userinfoEndpoint || undefined,
     introspectionEndpoint: fromDiscovery?.introspectionEndpoint || undefined,

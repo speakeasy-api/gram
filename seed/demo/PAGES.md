@@ -56,6 +56,7 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 | Explore (analytics.query over agent_events)                    | CH `agent_events`: 144 sessions over the trailing 12 days for the six users, dealt across claude-code and codex, 2-5 turns each with prompt/api_request/api_response rows and 0-3 tool calls (tool_decision + tool_call_result on Claude, results alone on Codex); Codex rows state tokens but no cost                                                                                                                                                                                                                                                                                                                                                                                         | `[x]`  |
 | Explore widgets (Widgets tab)                                  | PG `widgets` ×5 in the demo project, saved by five demo users across `sessions` and `tool_calls` with bar, table, line, ranked and area charts; two share the name "Sessions by surface" to show names repeat with the creator beside each, two carry descriptions; every widget plans against the catalog and its chart fits its question, so none shows the broken-widget warning                                                                                                                                                                                                                                                                                                            | `[~]`  |
 | Check access (MCP Team Access tab)                             | PG custom role Contractors (no scopes of its own) with a `mcp:blocked_connect` grant on GitHub, reached by Mateo through the `employee_type = contractor` directory role mapping and assigned to Priya directly; Priya holds a direct `mcp:connect` grant naming GitHub (overrides the block) and Mateo one covering every server (does not)                                                                                                                                                                                                                                                                                                                                                   | `[x]`  |
+| Role editor MCP access tab                                     | PG custom roles: Support Desk (`mcp:connect` naming Acme Support Tools' toolset, and Slack with `disposition: read_only`), Contractors (`mcp:blocked_connect` on GitHub), Engineer (`mcp:read` + `mcp:write` on every server), Read-only Tools (every server, read-only)                                                                                                                                                                                                                                                                                                                                                                                                                       | `[x]`  |
 
 Onboarding selection: the seed persists 11 explicit task rows, 9 visible, with a customized Security preset. The wizard shows 9 tasks; domain verification, single sign-on, and directory sync are nested steps of Set up identity provider. Distribute servers is included and Anthropic admin controls is deferred. In Admin organization Features, verify "security - customized", apply a preset to a draft, then discard it; saved task status and assignment must remain unchanged.
 
@@ -150,11 +151,22 @@ Browser verification: `[~]` (not yet verified); see check 18 in `verify.md`.
 
 That upstream client sits under the **Example Workspace Identity** provider,
 which carries a scope override (`read`), shown on its Overview and editable on its
-Settings tab. Its client sets its own scopes and is flagged as a legacy callback
-client. Platform admins see the legacy callback warning with its Migrate button
-on the client's pages and the compatibility-mode switch on its Settings tab;
-everyone else sees neither. The Settings tab also warns that the client's scopes
-have no effect. Browser verification: `[~]`.
+Settings tab; the Scope fallback row reads Every advertised scope. Its client
+has no scopes of its own and is flagged as a legacy callback client. Platform admins see the legacy callback warning with its
+Migrate button on the client's pages and the compatibility-mode switch on its
+Settings tab; everyone else sees neither. Browser verification: `[~]`.
+
+Linear's protected resource (`https://mcp.linear.app/mcp`) has a PG
+`remote_protected_resources` row read two hours before the seed ran,
+advertising `read` and `write`, with a scope pin of `read`. What the server's
+Identity panel (`remoteMcp.getServerScopes`) shows depends on the
+`remote-session-live-resource-scopes` rollout flag. Off, the pin picker is
+read-only and says pins are not enabled for the organization; because a pin is
+seeded, a "Clear pinned scopes" button is shown (clearing is allowed, adding is
+not), and logins request the issuer override. On (the demo org is enrolled),
+Linear's seeded client has no scopes of its own, so the pin decides and the
+panel reads "Sign-ins request these scopes." The advertised `read` and `write`
+are offered as picker options. Browser verification: `[~]`.
 
 ### Upstream session validation outcomes
 

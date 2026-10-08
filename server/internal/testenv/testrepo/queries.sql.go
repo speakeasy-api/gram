@@ -891,6 +891,30 @@ func (q *Queries) CreateToolsetFixture(ctx context.Context, arg CreateToolsetFix
 	return id, err
 }
 
+const createWorkloadAgentAssignmentFixture = `-- name: CreateWorkloadAgentAssignmentFixture :exec
+INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, match_kind, agent_id)
+VALUES ($1, $2, $3, $4, $5)
+`
+
+type CreateWorkloadAgentAssignmentFixtureParams struct {
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	MatchKind        string
+	AgentID          uuid.UUID
+}
+
+func (q *Queries) CreateWorkloadAgentAssignmentFixture(ctx context.Context, arg CreateWorkloadAgentAssignmentFixtureParams) error {
+	_, err := q.db.Exec(ctx, createWorkloadAgentAssignmentFixture,
+		arg.OrganizationID,
+		arg.WorkloadIssuerID,
+		arg.Subject,
+		arg.MatchKind,
+		arg.AgentID,
+	)
+	return err
+}
+
 const createWorkloadIdentityAdmissionFixture = `-- name: CreateWorkloadIdentityAdmissionFixture :exec
 INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject)
 VALUES ($1, $2, $3, $4)
@@ -909,6 +933,30 @@ func (q *Queries) CreateWorkloadIdentityAdmissionFixture(ctx context.Context, ar
 		arg.ProjectID,
 		arg.WorkloadIssuerID,
 		arg.Subject,
+	)
+	return err
+}
+
+const createWorkloadIdentityRuleFixture = `-- name: CreateWorkloadIdentityRuleFixture :exec
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind)
+VALUES ($1, $2, $3, $4, $5)
+`
+
+type CreateWorkloadIdentityRuleFixtureParams struct {
+	OrganizationID   string
+	ProjectID        uuid.NullUUID
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	MatchKind        string
+}
+
+func (q *Queries) CreateWorkloadIdentityRuleFixture(ctx context.Context, arg CreateWorkloadIdentityRuleFixtureParams) error {
+	_, err := q.db.Exec(ctx, createWorkloadIdentityRuleFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.WorkloadIssuerID,
+		arg.Subject,
+		arg.MatchKind,
 	)
 	return err
 }
@@ -5460,6 +5508,35 @@ type SetProjectSlugFixtureParams struct {
 func (q *Queries) SetProjectSlugFixture(ctx context.Context, arg SetProjectSlugFixtureParams) error {
 	_, err := q.db.Exec(ctx, setProjectSlugFixture, arg.Slug, arg.ID)
 	return err
+}
+
+const setRemoteSessionIssuerOmitScopeFallbackFixture = `-- name: SetRemoteSessionIssuerOmitScopeFallbackFixture :execrows
+UPDATE remote_session_issuers
+SET omit_scope_fallback = $1
+WHERE id = $2
+  AND project_id IS NOT DISTINCT FROM $3::uuid
+  AND organization_id IS NOT DISTINCT FROM $4::text
+`
+
+type SetRemoteSessionIssuerOmitScopeFallbackFixtureParams struct {
+	OmitScopeFallback pgtype.Bool
+	ID                uuid.UUID
+	ProjectID         uuid.NullUUID
+	OrganizationID    pgtype.Text
+}
+
+// Scoped to the issuer's own tier: NULL project and organization name a global issuer.
+func (q *Queries) SetRemoteSessionIssuerOmitScopeFallbackFixture(ctx context.Context, arg SetRemoteSessionIssuerOmitScopeFallbackFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setRemoteSessionIssuerOmitScopeFallbackFixture,
+		arg.OmitScopeFallback,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setRemoteSessionResourceFixture = `-- name: SetRemoteSessionResourceFixture :exec

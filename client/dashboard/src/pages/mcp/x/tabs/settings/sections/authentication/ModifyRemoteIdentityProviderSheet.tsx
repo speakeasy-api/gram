@@ -20,6 +20,7 @@ import {
   type UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat as AuthAudienceFormat,
 } from "@gram/client/models/components/updateremotesessionclientform.js";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { invalidateAllGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import {
   invalidateAllMcpServers,
   useMcpServers,
@@ -391,6 +392,8 @@ function ModifyRemoteIdentityProviderSheetBody({
         // refreshes (AGE-3279).
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        // Issuer overrides feed the scopes a sign-in would request.
+        invalidateAllGetRemoteMcpServerScopes(queryClient),
       ]);
       toast.success("Identity provider updated");
       onClose();

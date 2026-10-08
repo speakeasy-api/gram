@@ -346,6 +346,39 @@ var AdminSpendBreakdownResponse = Type("AdminSpendBreakdownResponse", func() {
 	Required("window", "billing_cycles", "currency", "pricing_basis", "queried_at", "total_cost_usd", "products")
 })
 
+var AdminCustomerUsageProductCost = Type("AdminCustomerUsageProductCost", func() {
+	Attribute("product_id", String, func() { Enum("agent_session_storage", "risk_content_scans", "mcp_egress") })
+	Attribute("cost_usd", String, "Exact estimated cost at current PAYG list prices")
+	Required("product_id", "cost_usd")
+})
+
+var AdminCustomerUsage = Type("AdminCustomerUsage", func() {
+	Description("One paying organization's estimated usage at current PAYG list prices.")
+	Attribute("organization_id", String)
+	Attribute("name", String)
+	Attribute("slug", String)
+	Attribute("account_type", String, func() { Enum("enterprise", "pro", "payg") })
+	Attribute("trial_state", String, func() {
+		Enum("none", "running", "ending_soon", "expired", "demoted", "converted")
+	})
+	Attribute("current_cycle", usage.MeterUsageWindow, "The billing cycle containing queried_at")
+	Attribute("window", usage.MeterUsageWindow, "From the first chart bucket's start to the last bucket's end")
+	Attribute("products", ArrayOf(usage.SpendProduct), "The three metered products in stable display order. quantity and cost_usd cover the current cycle to date. buckets are the chart buckets for the requested interval: billing cycles for monthly, days or Monday-start weeks of the current cycle otherwise.")
+	Attribute("previous_period", usage.MeterUsageWindow, "The start of the previous billing cycle, cut to the same number of elapsed days as the current one. Absent when the organization did not exist before the current cycle.")
+	Attribute("previous_period_costs", ArrayOf(AdminCustomerUsageProductCost), "Per-product costs over previous_period. Empty when previous_period is absent.")
+	Attribute("error", String, "Why this organization's usage could not be read. products is empty when set.")
+	Required("organization_id", "name", "slug", "account_type", "trial_state", "current_cycle", "window", "products", "previous_period_costs")
+})
+
+var AdminCustomerUsageResponse = Type("AdminCustomerUsageResponse", func() {
+	Attribute("interval", String, func() { Enum("daily", "weekly", "monthly") })
+	Attribute("currency", String, func() { Enum("USD") })
+	Attribute("pricing_basis", String, func() { Enum("current_payg_list_price") })
+	Attribute("queried_at", String, "Retrieval timestamp used to distinguish current and future buckets", func() { Format(FormatDateTime) })
+	Attribute("customers", ArrayOf(AdminCustomerUsage), "Every qualifying organization, ordered by name")
+	Required("interval", "currency", "pricing_basis", "queried_at", "customers")
+})
+
 var AdminSession = Type("AdminSession", func() {
 	Attribute("email", String)
 	Attribute("name", String)
@@ -1320,6 +1353,28 @@ var _ = Service("admin", func() {
 			declareUnavailableResponse()
 		})
 		Meta("openapi:operationId", "adminSetStripeSubscription")
+	})
+
+	// Appended, not inserted: see the note above extendTrial. New methods go last.
+	Method("listCustomerUsage", func() {
+		Description("Returns estimated usage at current PAYG list prices for every active paying organization: enterprise organizations not on a running or ending trial, and pro or payg organizations that never trialled.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("interval", String, "Chart bucketing. monthly gives one bucket per billing cycle over the last six cycles. daily and weekly bucket the current cycle.", func() {
+				Enum("daily", "weekly", "monthly")
+				Default("monthly")
+			})
+		})
+		Result(AdminCustomerUsageResponse)
+		declareUnavailable()
+		HTTP(func() {
+			GET("/admin/organizations.customerUsage")
+			Param("interval")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
+		Meta("openapi:operationId", "adminListCustomerUsage")
+		Meta("openapi:extension:x-speakeasy-name-override", "listCustomerUsage")
 	})
 
 })

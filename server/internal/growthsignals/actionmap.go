@@ -65,6 +65,7 @@ var curatedActivities = map[audit.Action]Activity{
 	audit.ActionMcpServerUpdate:             ActivityMcpServerUpdated,
 	audit.ActionMCPMetadataUpdate:           ActivityMcpServerUpdated,
 	audit.ActionMcpServerToolMetadataUpdate: ActivityMcpServerUpdated,
+	audit.ActionMcpServerScopePinUpdate:     ActivityMcpServerUpdated,
 
 	audit.ActionOrganizationInviteCreate: ActivityMemberInvited,
 }

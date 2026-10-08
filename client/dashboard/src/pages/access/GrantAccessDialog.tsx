@@ -1,4 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { RoleLink } from "@/components/role-link";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
@@ -254,7 +255,7 @@ function RoleSuggestionList({
             >
               <div className="min-w-0">
                 <Text variant="body" className="text-sm font-medium">
-                  {role.name}
+                  <RoleLink roleId={role.id}>{role.name}</RoleLink>
                 </Text>
                 {role.description && (
                   <Text muted small className="truncate">

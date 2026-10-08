@@ -74,6 +74,9 @@ vi.mock("@gram/client/react-query/createRole.js", () => ({
 vi.mock("@gram/client/react-query/updateRole.js", () => ({
   useUpdateRoleMutation: () => ({ mutate: mocks.update, isPending: false }),
 }));
+// The MCP access tab reads the organization's servers; the section that
+// would show it is mocked below.
+vi.mock("./useMcpAccessCount", () => ({ useMcpAccessCount: () => 0 }));
 vi.mock("./RolePermissionsSection", () => ({
   RolePermissionsSection: ({
     onToggleScope,

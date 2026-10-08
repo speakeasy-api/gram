@@ -64,7 +64,7 @@ func newFakeTokenEndpoint(t *testing.T, status int, body map[string]any) (*httpt
 func basicTokenEndpoint(srv *httptest.Server) *TokenEndpoint {
 	return &TokenEndpoint{
 		endpoint: srv.URL + "/token", issuer: "https://idp.example.test", issuerID: uuid.New(), doer: srv.Client(),
-		auth: tokenEndpointClientAuth{Method: TokenEndpointAuthMethodBasic, RemoteSessionClientID: uuid.New(), OrganizationID: "org", JSONWebKeySetID: uuid.Nil, ClientID: "idp-client", ClientSecret: "idp-secret", AssertionAudience: "", AssertionSigner: nil},
+		auth: TokenEndpointClientAuth{Method: TokenEndpointAuthMethodBasic, RemoteSessionClientID: uuid.New(), OrganizationID: "org", JSONWebKeySetID: uuid.Nil, ClientID: "idp-client", ClientSecret: "idp-secret", AssertionAudience: "", AssertionSigner: nil},
 	}
 }
 

@@ -118,6 +118,7 @@ import {
   WorkloadIssuersRoot,
 } from "./pages/workload-identities/WorkloadIssuers";
 import { WorkloadIssuerDetailPage } from "./pages/workload-identities/WorkloadIssuerDetail";
+import { CatalogPlatformPage } from "./pages/workload-identities/setup/CatalogPlatformPage";
 import AccessHubRedirect from "./pages/workload-identities/AccessHubRedirect";
 import RemoteIdentityProviderDetail from "./pages/remote-identity-providers/RemoteIdentityProviderDetail";
 import RemoteSessionClientDetail from "./pages/remote-identity-providers/RemoteSessionClientDetail";
@@ -1519,6 +1520,11 @@ const ORG_ROUTE_STRUCTURE = {
         title: "Trusted Platform",
         url: ":issuerId",
         component: WorkloadIssuerDetailPage,
+      },
+      catalogPlatform: {
+        title: "Catalog Platform",
+        url: "catalog/:platformKey",
+        component: CatalogPlatformPage,
       },
     },
   },

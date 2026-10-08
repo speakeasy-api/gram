@@ -3755,6 +3755,94 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: bulkUpdateAccountType
+  /admin/organizations.customerUsage:
+    get:
+      description: 'Returns estimated usage at current PAYG list prices for every active paying organization: enterprise organizations not on a running or ending trial, and pro or payg organizations that never trialled.'
+      operationId: adminListCustomerUsage
+      parameters:
+        - allowEmptyValue: true
+          description: Chart bucketing. monthly gives one bucket per billing cycle over the last six cycles. daily and weekly bucket the current cycle.
+          in: query
+          name: interval
+          schema:
+            default: monthly
+            description: Chart bucketing. monthly gives one bucket per billing cycle over the last six cycles. daily and weekly bucket the current cycle.
+            enum:
+              - daily
+              - weekly
+              - monthly
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCustomerUsageResponse'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: listCustomerUsage admin
+      tags:
+        - admin
+      x-speakeasy-name-override: listCustomerUsage
   /admin/organizations.getMeterUsage:
     get:
       tags:
@@ -6937,6 +7025,107 @@ components:
           format: int64
       required:
         - projects_signaled
+    AdminCustomerUsage:
+      type: object
+      properties:
+        account_type:
+          type: string
+          enum:
+            - enterprise
+            - pro
+            - payg
+        current_cycle:
+          $ref: '#/components/schemas/MeterUsageWindow'
+        error:
+          type: string
+          description: Why this organization's usage could not be read. products is empty when set.
+        name:
+          type: string
+        organization_id:
+          type: string
+        previous_period:
+          $ref: '#/components/schemas/MeterUsageWindow'
+        previous_period_costs:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminCustomerUsageProductCost'
+          description: Per-product costs over previous_period. Empty when previous_period is absent.
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/SpendProduct'
+          description: 'The three metered products in stable display order. quantity and cost_usd cover the current cycle to date. buckets are the chart buckets for the requested interval: billing cycles for monthly, days or Monday-start weeks of the current cycle otherwise.'
+        slug:
+          type: string
+        trial_state:
+          type: string
+          enum:
+            - none
+            - running
+            - ending_soon
+            - expired
+            - demoted
+            - converted
+        window:
+          $ref: '#/components/schemas/MeterUsageWindow'
+      description: One paying organization's estimated usage at current PAYG list prices.
+      required:
+        - organization_id
+        - name
+        - slug
+        - account_type
+        - trial_state
+        - current_cycle
+        - window
+        - products
+        - previous_period_costs
+    AdminCustomerUsageProductCost:
+      type: object
+      properties:
+        cost_usd:
+          type: string
+          description: Exact estimated cost at current PAYG list prices
+        product_id:
+          type: string
+          enum:
+            - agent_session_storage
+            - risk_content_scans
+            - mcp_egress
+      required:
+        - product_id
+        - cost_usd
+    AdminCustomerUsageResponse:
+      type: object
+      properties:
+        currency:
+          type: string
+          enum:
+            - USD
+        customers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminCustomerUsage'
+          description: Every qualifying organization, ordered by name
+        interval:
+          type: string
+          enum:
+            - daily
+            - weekly
+            - monthly
+        pricing_basis:
+          type: string
+          enum:
+            - current_payg_list_price
+        queried_at:
+          type: string
+          description: Retrieval timestamp used to distinguish current and future buckets
+          format: date-time
+      required:
+        - interval
+        - currency
+        - pricing_basis
+        - queried_at
+        - customers
     AdminInferenceKey:
       type: object
       properties:
@@ -7270,6 +7459,9 @@ components:
         oidc:
           type: boolean
           description: Whether the issuer is treated as an OpenID Connect provider.
+        omit_scope_fallback:
+          type: boolean
+          description: Whether a login with no other scope source sends no scope instead of the issuer's whole scopes_supported. Absent when unset, which behaves as false.
         passthrough:
           type: boolean
           description: Whether upstream tokens are passed through to the server.
@@ -8778,6 +8970,9 @@ components:
         oidc:
           type: boolean
           description: When true, may unlock OIDC-aware behaviour. Default false.
+        omit_scope_fallback:
+          type: boolean
+          description: 'When true, a login that would otherwise request the authorization server''s whole scopes_supported omits the scope parameter so the server applies its default. Omit to leave it unset: such a login requests the provider''s whole scopes_supported.'
         op_policy_uri:
           type: string
           description: RFC 8414 op_policy_uri; the issuer's client data-usage policy. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
@@ -9342,6 +9537,9 @@ components:
         oidc:
           type: boolean
           description: When true, may unlock OIDC-aware behaviour.
+        omit_scope_fallback:
+          type: boolean
+          description: When true, a login that would otherwise request the authorization server's whole scopes_supported omits the scope parameter so the server applies its default. Null when unset.
         op_policy_uri:
           type: string
           description: RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not advertised.
@@ -10190,6 +10388,9 @@ components:
           description: Set or clear the display name. An empty string clears it to NULL.
         oidc:
           type: boolean
+        omit_scope_fallback:
+          type: boolean
+          description: When true, a login that would otherwise request the authorization server's whole scopes_supported omits the scope parameter so the server applies its default. Omit or send null to keep the stored value; false restores the default.
         op_policy_uri:
           type: string
           description: Set or clear RFC 8414 op_policy_uri. An empty string clears it to NULL; any other value must be an absolute http(s) URL.

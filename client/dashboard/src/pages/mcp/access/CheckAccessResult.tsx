@@ -27,7 +27,7 @@ import {
   type ServerVisibility,
 } from "./explainAccess";
 import { PrincipalBadge } from "./PrincipalBadge";
-import { RoleLink } from "./RoleLink";
+import { RoleLink } from "@/components/role-link";
 
 const LEVELS: ExplainedLevel[] = ["use", "view", "manage"];
 

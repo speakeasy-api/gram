@@ -8,6 +8,8 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	remotemcp "github.com/speakeasy-api/gram/server/gen/remote_mcp"
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
@@ -66,6 +68,18 @@ type UpdateServerRequestBody struct {
 type DiscoverProtectedResourceMetadataRequestBody struct {
 	// The ID of the remote MCP server to probe.
 	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
+}
+
+// SetServerScopePinRequestBody is the type of the "remoteMcp" service
+// "setServerScopePin" endpoint HTTP request body.
+type SetServerScopePinRequestBody struct {
+	// The ID of the remote-backed MCP server.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// Scopes to pin on the server's protected resource, shared by servers with the
+	// same upstream URL, in request order. Whitespace is trimmed, blanks and
+	// duplicates are dropped, and at most 100 scopes may remain; an empty list
+	// clears the pin.
+	Scopes []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
 }
 
 // ProbeURLRequestBody is the type of the "remoteMcp" service "probeURL"
@@ -217,6 +231,60 @@ type DiscoverProtectedResourceMetadataResponseBody struct {
 	// missing resource field, mismatched resource value). Empty when available is
 	// false.
 	DiscoveryWarnings []string `form:"discovery_warnings" json:"discovery_warnings" xml:"discovery_warnings"`
+}
+
+// GetServerScopesResponseBody is the type of the "remoteMcp" service
+// "getServerScopes" endpoint HTTP response body.
+type GetServerScopesResponseBody struct {
+	// The protected resource: the server's upstream URL.
+	ResourceURL string `form:"resource_url" json:"resource_url" xml:"resource_url"`
+	// The operator's scope pin on the protected resource, shared by servers with
+	// the same upstream URL; empty when unset.
+	PinnedScopes []string `form:"pinned_scopes" json:"pinned_scopes" xml:"pinned_scopes"`
+	// Whether a read of the resource's metadata within the last good window
+	// captured an advertised list.
+	AdvertisedScopesKnown bool `form:"advertised_scopes_known" json:"advertised_scopes_known" xml:"advertised_scopes_known"`
+	// The resource's advertised scopes_supported from that read. Absent when
+	// unknown or empty; see advertised_scopes_known.
+	AdvertisedScopes []string `form:"advertised_scopes,omitempty" json:"advertised_scopes,omitempty" xml:"advertised_scopes,omitempty"`
+	// The scope parameter of the resource's last WWW-Authenticate challenge; empty
+	// when none was seen.
+	ChallengeScopes []string `form:"challenge_scopes" json:"challenge_scopes" xml:"challenge_scopes"`
+	// Whether the organization's logins consult the protected resource (challenge
+	// scopes, pin, advertised list). Off, the pin is stored but not applied.
+	DiscoveryEnabled bool `form:"discovery_enabled" json:"discovery_enabled" xml:"discovery_enabled"`
+	// One entry per client bound to the server's user session issuer.
+	Clients []*RemoteMcpServerClientScopesResponseBody `form:"clients" json:"clients" xml:"clients"`
+	// How many other live MCP servers in the project share this upstream URL, and
+	// so this pin.
+	SharedServerCount int `form:"shared_server_count" json:"shared_server_count" xml:"shared_server_count"`
+}
+
+// SetServerScopePinResponseBody is the type of the "remoteMcp" service
+// "setServerScopePin" endpoint HTTP response body.
+type SetServerScopePinResponseBody struct {
+	// The protected resource: the server's upstream URL.
+	ResourceURL string `form:"resource_url" json:"resource_url" xml:"resource_url"`
+	// The operator's scope pin on the protected resource, shared by servers with
+	// the same upstream URL; empty when unset.
+	PinnedScopes []string `form:"pinned_scopes" json:"pinned_scopes" xml:"pinned_scopes"`
+	// Whether a read of the resource's metadata within the last good window
+	// captured an advertised list.
+	AdvertisedScopesKnown bool `form:"advertised_scopes_known" json:"advertised_scopes_known" xml:"advertised_scopes_known"`
+	// The resource's advertised scopes_supported from that read. Absent when
+	// unknown or empty; see advertised_scopes_known.
+	AdvertisedScopes []string `form:"advertised_scopes,omitempty" json:"advertised_scopes,omitempty" xml:"advertised_scopes,omitempty"`
+	// The scope parameter of the resource's last WWW-Authenticate challenge; empty
+	// when none was seen.
+	ChallengeScopes []string `form:"challenge_scopes" json:"challenge_scopes" xml:"challenge_scopes"`
+	// Whether the organization's logins consult the protected resource (challenge
+	// scopes, pin, advertised list). Off, the pin is stored but not applied.
+	DiscoveryEnabled bool `form:"discovery_enabled" json:"discovery_enabled" xml:"discovery_enabled"`
+	// One entry per client bound to the server's user session issuer.
+	Clients []*RemoteMcpServerClientScopesResponseBody `form:"clients" json:"clients" xml:"clients"`
+	// How many other live MCP servers in the project share this upstream URL, and
+	// so this pin.
+	SharedServerCount int `form:"shared_server_count" json:"shared_server_count" xml:"shared_server_count"`
 }
 
 // ProbeURLResponseBody is the type of the "remoteMcp" service "probeURL"
@@ -1415,6 +1483,377 @@ type DiscoverProtectedResourceMetadataUnexpectedResponseBody struct {
 // "remoteMcp" service "discoverProtectedResourceMetadata" endpoint HTTP
 // response body for the "gateway_error" error.
 type DiscoverProtectedResourceMetadataGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerScopesUnauthorizedResponseBody is the type of the "remoteMcp"
+// service "getServerScopes" endpoint HTTP response body for the "unauthorized"
+// error.
+type GetServerScopesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerScopesForbiddenResponseBody is the type of the "remoteMcp" service
+// "getServerScopes" endpoint HTTP response body for the "forbidden" error.
+type GetServerScopesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerScopesBadRequestResponseBody is the type of the "remoteMcp" service
+// "getServerScopes" endpoint HTTP response body for the "bad_request" error.
+type GetServerScopesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerScopesNotFoundResponseBody is the type of the "remoteMcp" service
+// "getServerScopes" endpoint HTTP response body for the "not_found" error.
+type GetServerScopesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerScopesConflictResponseBody is the type of the "remoteMcp" service
+// "getServerScopes" endpoint HTTP response body for the "conflict" error.
+type GetServerScopesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerScopesUnsupportedMediaResponseBody is the type of the "remoteMcp"
+// service "getServerScopes" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetServerScopesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerScopesInvalidResponseBody is the type of the "remoteMcp" service
+// "getServerScopes" endpoint HTTP response body for the "invalid" error.
+type GetServerScopesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerScopesInvariantViolationResponseBody is the type of the "remoteMcp"
+// service "getServerScopes" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetServerScopesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerScopesUnexpectedResponseBody is the type of the "remoteMcp" service
+// "getServerScopes" endpoint HTTP response body for the "unexpected" error.
+type GetServerScopesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetServerScopesGatewayErrorResponseBody is the type of the "remoteMcp"
+// service "getServerScopes" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetServerScopesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetServerScopePinUnauthorizedResponseBody is the type of the "remoteMcp"
+// service "setServerScopePin" endpoint HTTP response body for the
+// "unauthorized" error.
+type SetServerScopePinUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetServerScopePinForbiddenResponseBody is the type of the "remoteMcp"
+// service "setServerScopePin" endpoint HTTP response body for the "forbidden"
+// error.
+type SetServerScopePinForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetServerScopePinBadRequestResponseBody is the type of the "remoteMcp"
+// service "setServerScopePin" endpoint HTTP response body for the
+// "bad_request" error.
+type SetServerScopePinBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetServerScopePinNotFoundResponseBody is the type of the "remoteMcp" service
+// "setServerScopePin" endpoint HTTP response body for the "not_found" error.
+type SetServerScopePinNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetServerScopePinConflictResponseBody is the type of the "remoteMcp" service
+// "setServerScopePin" endpoint HTTP response body for the "conflict" error.
+type SetServerScopePinConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetServerScopePinUnsupportedMediaResponseBody is the type of the "remoteMcp"
+// service "setServerScopePin" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SetServerScopePinUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetServerScopePinInvalidResponseBody is the type of the "remoteMcp" service
+// "setServerScopePin" endpoint HTTP response body for the "invalid" error.
+type SetServerScopePinInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetServerScopePinInvariantViolationResponseBody is the type of the
+// "remoteMcp" service "setServerScopePin" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SetServerScopePinInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetServerScopePinUnexpectedResponseBody is the type of the "remoteMcp"
+// service "setServerScopePin" endpoint HTTP response body for the "unexpected"
+// error.
+type SetServerScopePinUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetServerScopePinGatewayErrorResponseBody is the type of the "remoteMcp"
+// service "setServerScopePin" endpoint HTTP response body for the
+// "gateway_error" error.
+type SetServerScopePinGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3002,6 +3441,24 @@ type ProtectedResourceMetadataUnavailableResponseBody struct {
 	Message string `form:"message" json:"message" xml:"message"`
 }
 
+// RemoteMcpServerClientScopesResponseBody is used to define fields on response
+// body types.
+type RemoteMcpServerClientScopesResponseBody struct {
+	// The remote session client's ID.
+	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
+	// The precedence step that decided the request.
+	ScopeSource string `form:"scope_source" json:"scope_source" xml:"scope_source"`
+	// The scope parameter the login would send; empty sends none.
+	RequestedScopes []string `form:"requested_scopes" json:"requested_scopes" xml:"requested_scopes"`
+	// Pinned scopes the resource does not advertise; sent regardless. Empty when
+	// the pin does not decide or the resource's list is unknown.
+	UnadvertisedPinnedScopes []string `form:"unadvertised_pinned_scopes" json:"unadvertised_pinned_scopes" xml:"unadvertised_pinned_scopes"`
+	// Whether a pin, if set, decides this client's request: discovery is on, the
+	// client owns the resource, and neither its own scope nor a challenge outranks
+	// the pin.
+	PinWouldDecide bool `form:"pin_would_decide" json:"pin_would_decide" xml:"pin_would_decide"`
+}
+
 // RemoteMcpServerHeaderResponseBody is used to define fields on response body
 // types.
 type RemoteMcpServerHeaderResponseBody struct {
@@ -3126,6 +3583,98 @@ func NewDiscoverProtectedResourceMetadataResponseBody(res *remotemcp.ProtectedRe
 		}
 	} else {
 		body.DiscoveryWarnings = []string{}
+	}
+	return body
+}
+
+// NewGetServerScopesResponseBody builds the HTTP response body from the result
+// of the "getServerScopes" endpoint of the "remoteMcp" service.
+func NewGetServerScopesResponseBody(res *remotemcp.RemoteMcpServerScopes) *GetServerScopesResponseBody {
+	body := &GetServerScopesResponseBody{
+		ResourceURL:           res.ResourceURL,
+		AdvertisedScopesKnown: res.AdvertisedScopesKnown,
+		DiscoveryEnabled:      res.DiscoveryEnabled,
+		SharedServerCount:     res.SharedServerCount,
+	}
+	if res.PinnedScopes != nil {
+		body.PinnedScopes = make([]string, len(res.PinnedScopes))
+		for i, val := range res.PinnedScopes {
+			body.PinnedScopes[i] = val
+		}
+	} else {
+		body.PinnedScopes = []string{}
+	}
+	if res.AdvertisedScopes != nil {
+		body.AdvertisedScopes = make([]string, len(res.AdvertisedScopes))
+		for i, val := range res.AdvertisedScopes {
+			body.AdvertisedScopes[i] = val
+		}
+	}
+	if res.ChallengeScopes != nil {
+		body.ChallengeScopes = make([]string, len(res.ChallengeScopes))
+		for i, val := range res.ChallengeScopes {
+			body.ChallengeScopes[i] = val
+		}
+	} else {
+		body.ChallengeScopes = []string{}
+	}
+	if res.Clients != nil {
+		body.Clients = make([]*RemoteMcpServerClientScopesResponseBody, len(res.Clients))
+		for i, val := range res.Clients {
+			if val == nil {
+				body.Clients[i] = nil
+				continue
+			}
+			body.Clients[i] = marshalRemotemcpRemoteMcpServerClientScopesToRemoteMcpServerClientScopesResponseBody(val)
+		}
+	} else {
+		body.Clients = []*RemoteMcpServerClientScopesResponseBody{}
+	}
+	return body
+}
+
+// NewSetServerScopePinResponseBody builds the HTTP response body from the
+// result of the "setServerScopePin" endpoint of the "remoteMcp" service.
+func NewSetServerScopePinResponseBody(res *remotemcp.RemoteMcpServerScopes) *SetServerScopePinResponseBody {
+	body := &SetServerScopePinResponseBody{
+		ResourceURL:           res.ResourceURL,
+		AdvertisedScopesKnown: res.AdvertisedScopesKnown,
+		DiscoveryEnabled:      res.DiscoveryEnabled,
+		SharedServerCount:     res.SharedServerCount,
+	}
+	if res.PinnedScopes != nil {
+		body.PinnedScopes = make([]string, len(res.PinnedScopes))
+		for i, val := range res.PinnedScopes {
+			body.PinnedScopes[i] = val
+		}
+	} else {
+		body.PinnedScopes = []string{}
+	}
+	if res.AdvertisedScopes != nil {
+		body.AdvertisedScopes = make([]string, len(res.AdvertisedScopes))
+		for i, val := range res.AdvertisedScopes {
+			body.AdvertisedScopes[i] = val
+		}
+	}
+	if res.ChallengeScopes != nil {
+		body.ChallengeScopes = make([]string, len(res.ChallengeScopes))
+		for i, val := range res.ChallengeScopes {
+			body.ChallengeScopes[i] = val
+		}
+	} else {
+		body.ChallengeScopes = []string{}
+	}
+	if res.Clients != nil {
+		body.Clients = make([]*RemoteMcpServerClientScopesResponseBody, len(res.Clients))
+		for i, val := range res.Clients {
+			if val == nil {
+				body.Clients[i] = nil
+				continue
+			}
+			body.Clients[i] = marshalRemotemcpRemoteMcpServerClientScopesToRemoteMcpServerClientScopesResponseBody(val)
+		}
+	} else {
+		body.Clients = []*RemoteMcpServerClientScopesResponseBody{}
 	}
 	return body
 }
@@ -4073,6 +4622,293 @@ func NewDiscoverProtectedResourceMetadataUnexpectedResponseBody(res *goa.Service
 // endpoint of the "remoteMcp" service.
 func NewDiscoverProtectedResourceMetadataGatewayErrorResponseBody(res *goa.ServiceError) *DiscoverProtectedResourceMetadataGatewayErrorResponseBody {
 	body := &DiscoverProtectedResourceMetadataGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerScopesUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getServerScopes" endpoint of the "remoteMcp" service.
+func NewGetServerScopesUnauthorizedResponseBody(res *goa.ServiceError) *GetServerScopesUnauthorizedResponseBody {
+	body := &GetServerScopesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerScopesForbiddenResponseBody builds the HTTP response body from
+// the result of the "getServerScopes" endpoint of the "remoteMcp" service.
+func NewGetServerScopesForbiddenResponseBody(res *goa.ServiceError) *GetServerScopesForbiddenResponseBody {
+	body := &GetServerScopesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerScopesBadRequestResponseBody builds the HTTP response body from
+// the result of the "getServerScopes" endpoint of the "remoteMcp" service.
+func NewGetServerScopesBadRequestResponseBody(res *goa.ServiceError) *GetServerScopesBadRequestResponseBody {
+	body := &GetServerScopesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerScopesNotFoundResponseBody builds the HTTP response body from
+// the result of the "getServerScopes" endpoint of the "remoteMcp" service.
+func NewGetServerScopesNotFoundResponseBody(res *goa.ServiceError) *GetServerScopesNotFoundResponseBody {
+	body := &GetServerScopesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerScopesConflictResponseBody builds the HTTP response body from
+// the result of the "getServerScopes" endpoint of the "remoteMcp" service.
+func NewGetServerScopesConflictResponseBody(res *goa.ServiceError) *GetServerScopesConflictResponseBody {
+	body := &GetServerScopesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerScopesUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getServerScopes" endpoint of the "remoteMcp" service.
+func NewGetServerScopesUnsupportedMediaResponseBody(res *goa.ServiceError) *GetServerScopesUnsupportedMediaResponseBody {
+	body := &GetServerScopesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerScopesInvalidResponseBody builds the HTTP response body from the
+// result of the "getServerScopes" endpoint of the "remoteMcp" service.
+func NewGetServerScopesInvalidResponseBody(res *goa.ServiceError) *GetServerScopesInvalidResponseBody {
+	body := &GetServerScopesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerScopesInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getServerScopes" endpoint of the "remoteMcp"
+// service.
+func NewGetServerScopesInvariantViolationResponseBody(res *goa.ServiceError) *GetServerScopesInvariantViolationResponseBody {
+	body := &GetServerScopesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerScopesUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getServerScopes" endpoint of the "remoteMcp" service.
+func NewGetServerScopesUnexpectedResponseBody(res *goa.ServiceError) *GetServerScopesUnexpectedResponseBody {
+	body := &GetServerScopesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetServerScopesGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getServerScopes" endpoint of the "remoteMcp" service.
+func NewGetServerScopesGatewayErrorResponseBody(res *goa.ServiceError) *GetServerScopesGatewayErrorResponseBody {
+	body := &GetServerScopesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetServerScopePinUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "setServerScopePin" endpoint of the "remoteMcp"
+// service.
+func NewSetServerScopePinUnauthorizedResponseBody(res *goa.ServiceError) *SetServerScopePinUnauthorizedResponseBody {
+	body := &SetServerScopePinUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetServerScopePinForbiddenResponseBody builds the HTTP response body from
+// the result of the "setServerScopePin" endpoint of the "remoteMcp" service.
+func NewSetServerScopePinForbiddenResponseBody(res *goa.ServiceError) *SetServerScopePinForbiddenResponseBody {
+	body := &SetServerScopePinForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetServerScopePinBadRequestResponseBody builds the HTTP response body
+// from the result of the "setServerScopePin" endpoint of the "remoteMcp"
+// service.
+func NewSetServerScopePinBadRequestResponseBody(res *goa.ServiceError) *SetServerScopePinBadRequestResponseBody {
+	body := &SetServerScopePinBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetServerScopePinNotFoundResponseBody builds the HTTP response body from
+// the result of the "setServerScopePin" endpoint of the "remoteMcp" service.
+func NewSetServerScopePinNotFoundResponseBody(res *goa.ServiceError) *SetServerScopePinNotFoundResponseBody {
+	body := &SetServerScopePinNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetServerScopePinConflictResponseBody builds the HTTP response body from
+// the result of the "setServerScopePin" endpoint of the "remoteMcp" service.
+func NewSetServerScopePinConflictResponseBody(res *goa.ServiceError) *SetServerScopePinConflictResponseBody {
+	body := &SetServerScopePinConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetServerScopePinUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "setServerScopePin" endpoint of the "remoteMcp"
+// service.
+func NewSetServerScopePinUnsupportedMediaResponseBody(res *goa.ServiceError) *SetServerScopePinUnsupportedMediaResponseBody {
+	body := &SetServerScopePinUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetServerScopePinInvalidResponseBody builds the HTTP response body from
+// the result of the "setServerScopePin" endpoint of the "remoteMcp" service.
+func NewSetServerScopePinInvalidResponseBody(res *goa.ServiceError) *SetServerScopePinInvalidResponseBody {
+	body := &SetServerScopePinInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetServerScopePinInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "setServerScopePin" endpoint of the "remoteMcp"
+// service.
+func NewSetServerScopePinInvariantViolationResponseBody(res *goa.ServiceError) *SetServerScopePinInvariantViolationResponseBody {
+	body := &SetServerScopePinInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetServerScopePinUnexpectedResponseBody builds the HTTP response body
+// from the result of the "setServerScopePin" endpoint of the "remoteMcp"
+// service.
+func NewSetServerScopePinUnexpectedResponseBody(res *goa.ServiceError) *SetServerScopePinUnexpectedResponseBody {
+	body := &SetServerScopePinUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetServerScopePinGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "setServerScopePin" endpoint of the "remoteMcp"
+// service.
+func NewSetServerScopePinGatewayErrorResponseBody(res *goa.ServiceError) *SetServerScopePinGatewayErrorResponseBody {
+	body := &SetServerScopePinGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -5315,6 +6151,35 @@ func NewDiscoverProtectedResourceMetadataPayload(body *DiscoverProtectedResource
 	return v
 }
 
+// NewGetServerScopesPayload builds a remoteMcp service getServerScopes
+// endpoint payload.
+func NewGetServerScopesPayload(mcpServerID string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotemcp.GetServerScopesPayload {
+	v := &remotemcp.GetServerScopesPayload{}
+	v.McpServerID = mcpServerID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewSetServerScopePinPayload builds a remoteMcp service setServerScopePin
+// endpoint payload.
+func NewSetServerScopePinPayload(body *SetServerScopePinRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotemcp.SetServerScopePinPayload {
+	v := &remotemcp.SetServerScopePinPayload{
+		McpServerID: *body.McpServerID,
+	}
+	v.Scopes = make([]string, len(body.Scopes))
+	for i, val := range body.Scopes {
+		v.Scopes[i] = val
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewProbeURLPayload builds a remoteMcp service probeURL endpoint payload.
 func NewProbeURLPayload(body *ProbeURLRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotemcp.ProbeURLPayload {
 	v := &remotemcp.ProbeURLPayload{
@@ -5482,6 +6347,29 @@ func ValidateDiscoverProtectedResourceMetadataRequestBody(body *DiscoverProtecte
 	}
 	if body.RemoteMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSetServerScopePinRequestBody runs the validations defined on
+// SetServerScopePinRequestBody
+func ValidateSetServerScopePinRequestBody(body *SetServerScopePinRequestBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.Scopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if len(body.Scopes) > 1000 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.scopes", body.Scopes, len(body.Scopes), 1000, false))
+	}
+	for _, e := range body.Scopes {
+		if utf8.RuneCountInString(e) > 256 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scopes[*]", e, utf8.RuneCountInString(e), 256, false))
+		}
 	}
 	return
 }

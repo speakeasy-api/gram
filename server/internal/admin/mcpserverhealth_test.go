@@ -168,6 +168,7 @@ func (f healthFixture) seedGlobalRemoteSessionIssuer(t *testing.T, slug string) 
 		TokenEndpointAuthMethodsSupported:   []string{},
 		CodeChallengeMethodsSupported:       []string{"S256"},
 		ClientIDMetadataDocumentSupported:   true,
+		OmitScopeFallback:                   pgtype.Bool{Bool: true, Valid: true},
 		Oidc:                                true,
 		MetadataFetchedAt:                   conv.ToPGTimestamptz(time.Now()),
 		MetadataLastError:                   "upstream said no",
@@ -389,6 +390,8 @@ func TestDescribeMcpServerHealth_IssuerWithTwoClients(t *testing.T) {
 	require.Equal(t, "public", dcr.Issuer.Networking)
 	require.Equal(t, "supported", dcr.Issuer.Pkce)
 	require.True(t, dcr.Issuer.CimdSupported)
+	require.NotNil(t, dcr.Issuer.OmitScopeFallback)
+	require.True(t, *dcr.Issuer.OmitScopeFallback)
 	require.True(t, dcr.Issuer.Oidc)
 	require.NotNil(t, dcr.Issuer.MetadataFetchedAt)
 	require.NotNil(t, dcr.Issuer.MetadataLastErrorAt)
