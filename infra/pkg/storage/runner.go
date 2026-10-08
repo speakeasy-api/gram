@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"regexp"
 	"slices"
 	"sync"
@@ -54,10 +55,11 @@ const (
 	// defaultOutstandingBytes retains at most 128 MiB of admitted raw payloads.
 	defaultOutstandingBytes = 128 << 20
 
-	// parquetRowGroupRows bounds rows held by the writer independently of input batches.
+	// parquetRowGroupRows bounds row-group work independently of input batches.
 	parquetRowGroupRows = 256
 
-	// parquetBufferBytes keeps page and output buffers at 64 KiB for wide schemas.
+	// parquetBufferBytes targets 64 KiB for in-memory page construction and output
+	// buffers; encoded column pages are spooled to temporary files.
 	parquetBufferBytes = 64 << 10
 )
 
@@ -111,6 +113,12 @@ type Config struct {
 
 	// Settings selects bounded batching and lease budgets.
 	Settings Settings
+
+	// TempDir is an existing directory for disk-backed Parquet column pages.
+	// Empty uses os.TempDir(). Each object gets an isolated subdirectory removed
+	// after encoding, including failures and cancellation. Use disk-backed
+	// ephemeral storage; abrupt process termination can leave temporary files.
+	TempDir string
 
 	// MeterProvider defaults to the process's global OpenTelemetry provider.
 	MeterProvider metric.MeterProvider
@@ -408,10 +416,24 @@ func (r *runner) writePartition(ctx context.Context, route string, messages []*d
 	object := Object{Bucket: r.bucket, Name: r.def.ProtoName + "/" + route + "/" + id.String() + ".parquet", Metadata: map[string]string{"schema_fingerprint": r.def.Fingerprint, "mapping_version": MappingVersion, "subscription": r.def.ProtoName}}
 	var written []*delivery
 	err = r.config.Store.Write(ctx, object, func(out io.Writer) error {
-		// Bound row-group buffering and per-column pages independently of raw
-		// input. Decoded rows are short-lived; no whole-file byte buffer is kept.
+		tempDir, err := os.MkdirTemp(r.config.TempDir, "gram-parquet-*")
+		if err != nil {
+			return fmt.Errorf("create parquet page directory: %w", err)
+		}
+		defer func() {
+			if err := os.RemoveAll(tempDir); err != nil {
+				r.config.Logger.ErrorContext(ctx, "remove parquet page directory", attr.SlogError(err), attr.SlogSubscriptionProtoName(r.def.ProtoName))
+			}
+		}()
+		// Encoded column pages spill to disk while each row group is assembled.
+		// Decoding, page construction, compression and output still use memory;
+		// completed row groups stream directly to the object store.
 		w := parquet.NewWriter(out, r.def.Schema, parquet.Compression(&zstd.Codec{}), parquet.MaxRowsPerRowGroup(parquetRowGroupRows), parquet.PageBufferSize(parquetBufferBytes), parquet.WriteBufferSize(parquetBufferBytes),
+			parquet.ColumnPageBuffers(parquet.NewFileBufferPool(tempDir, "column-*")),
 			parquet.KeyValueMetadata("gram.mapping_version", MappingVersion), parquet.KeyValueMetadata("gram.schema_fingerprint", r.def.Fingerprint))
+		// Reset releases open page files without flushing or completing a failed
+		// object. It runs before directory removal, even on cancellation/panic.
+		defer w.Reset(nil)
 		for i := start; i < len(messages); i++ {
 			if err := ctx.Err(); err != nil {
 				return err
