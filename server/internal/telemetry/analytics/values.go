@@ -4,9 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
-
-	"github.com/Masterminds/squirrel"
 
 	gen "github.com/speakeasy-api/gram/server/gen/analytics"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -37,7 +36,9 @@ type DimensionValue struct {
 // CompileValues turns a values request into SQL. Values are resolved after
 // the dataset collapses its observations, so a caller never sees a value no
 // row would actually match, and the empty value is never offered.
-func CompileValues(catalog *Catalog, tenant Tenant, req ValuesRequest) (*Plan, error) {
+// CompileValues turns a values request into SQL, reading the dimension the
+// way a query does, so the picker offers the values a filter will match.
+func CompileValues(catalog *Catalog, tenant Tenant, lookups LookupMaps, req ValuesRequest) (*Plan, error) {
 	ds, ok := catalog.Dataset(req.Dataset)
 	if !ok {
 		return nil, newError(ErrUnknownDataset, req.Dataset, "dataset", req.Dataset, fmt.Sprintf("dataset %q does not exist", req.Dataset))
@@ -60,10 +61,13 @@ func CompileValues(catalog *Catalog, tenant Tenant, req ValuesRequest) (*Plan, e
 		return nil, newError(ErrLimitExceeded, ds.Name, "limit", fmt.Sprint(req.Limit), fmt.Sprintf("limit must be between 1 and %d", MaxValuesLimit))
 	}
 
-	qc := QueryContext{Tenant: tenant, Window: Window{FromUnixNano: req.FromUnixNano, ToUnixNano: req.ToUnixNano}}
-	builder := sq.Select(field.Expr+" AS value", "count() AS n").
+	qc := QueryContext{Tenant: tenant, Window: Window{FromUnixNano: req.FromUnixNano, ToUnixNano: req.ToUnixNano}, Lookups: lookups}
+	expr, args := readExpr(qc, field)
+	builder := sq.Select().
+		Column(expr+" AS value", args...).
+		Column("count() AS n").
 		FromSelect(ds.Source(qc), "src").
-		Where(squirrel.NotEq{field.Expr: ""}).
+		Where(expr+" <> ?", append(slices.Clone(args), "")...).
 		GroupBy("value").
 		OrderBy("n DESC", "value ASC").
 		Limit(uint64(limit))
@@ -131,7 +135,12 @@ func (s *Service) DimensionValues(ctx context.Context, payload *gen.DimensionVal
 		Limit:        payload.Limit,
 	}
 
-	plan, err := CompileValues(s.catalog, Tenant{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: authCtx.ProjectID.String()}, req)
+	tenant := Tenant{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: authCtx.ProjectID.String()}
+	lookups, err := s.loadLookups(ctx, tenant, req.Dataset)
+	if err != nil {
+		return nil, err
+	}
+	plan, err := CompileValues(s.catalog, tenant, lookups, req)
 	if err != nil {
 		if invalid, ok := errors.AsType[*Error](err); ok {
 			return nil, oops.E(oops.CodeBadRequest, err, "%s", invalid.Error())

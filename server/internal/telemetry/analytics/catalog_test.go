@@ -124,7 +124,7 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 			t.Parallel()
 			ds := base()
 			tc.mutate(ds)
-			_, err := NewCatalog(ds)
+			_, err := NewCatalog(nil, ds)
 			require.ErrorContains(t, err, tc.want)
 		})
 	}
@@ -133,20 +133,50 @@ func TestNewCatalogRejectsHalfDeclaredDatasets(t *testing.T) {
 		t.Parallel()
 		ds := base()
 		ds.Fields[0].Aggregations = countDistinct
-		_, err := NewCatalog(ds)
+		_, err := NewCatalog(nil, ds)
 		require.NoError(t, err)
 	})
 
 	t.Run("it rejects a nil dataset instead of panicking", func(t *testing.T) {
 		t.Parallel()
-		_, err := NewCatalog(nil)
+		_, err := NewCatalog(nil, nil)
 		require.ErrorContains(t, err, "nil dataset")
 	})
 
 	t.Run("it rejects two datasets with one name", func(t *testing.T) {
 		t.Parallel()
-		_, err := NewCatalog(base(), base())
+		_, err := NewCatalog(nil, base(), base())
 		require.ErrorContains(t, err, "declared twice")
+	})
+
+	// A dimension may read through a lookup only when the catalog declares
+	// it, so describe never names a map nothing can load, and a measure
+	// never reads through one, since a lookup maps dimension values.
+	t.Run("it rejects a dimension reading through an undeclared lookup", func(t *testing.T) {
+		t.Parallel()
+		ds := base()
+		ds.Fields[0].Lookup = "display_names"
+		_, err := NewCatalog(nil, ds)
+		require.ErrorContains(t, err, `undeclared lookup "display_names"`)
+
+		_, err = NewCatalog([]*Lookup{{Name: "display_names", Description: "names", Load: nil}}, ds)
+		require.NoError(t, err)
+	})
+
+	t.Run("it rejects a measure reading through a lookup", func(t *testing.T) {
+		t.Parallel()
+		ds := base()
+		ds.Fields[0] = Field{Name: "n", Type: TypeInt64, Role: RoleMeasure, Default: false, Unit: "", Operators: nil, Aggregations: []Aggregation{AggregationSum}, Expr: "n", Description: "", Lookup: "display_names"}
+		_, err := NewCatalog([]*Lookup{{Name: "display_names", Description: "names", Load: nil}}, ds)
+		require.ErrorContains(t, err, "cannot read through a lookup")
+	})
+
+	t.Run("it rejects a lookup with no name or declared twice", func(t *testing.T) {
+		t.Parallel()
+		_, err := NewCatalog([]*Lookup{{Name: "", Description: "", Load: nil}}, base())
+		require.ErrorContains(t, err, "lookup with no name")
+		_, err = NewCatalog([]*Lookup{{Name: "a", Description: "", Load: nil}, {Name: "a", Description: "", Load: nil}}, base())
+		require.ErrorContains(t, err, `lookup "a" declared twice`)
 	})
 }
 

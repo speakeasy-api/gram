@@ -123,6 +123,11 @@ type Field struct {
 	// do not needs to say so, or a sparse breakdown reads as "none". It is
 	// shown by describe and the builder's pickers; most fields need none.
 	Description string
+	// Lookup names the catalog lookup this dimension reads through, when it
+	// reads through one: every read of the field, grouping, filtering, a
+	// distinct count and the values picker, sees Expr folded through the
+	// tenant's map. Empty for a field read as reported.
+	Lookup string
 }
 
 // Dataset is a logical entity at a declared grain. It owns a source query,
@@ -190,18 +195,29 @@ func (f *Field) AdmitsAggregation(agg string) bool {
 // change.
 type Catalog struct {
 	datasets []*Dataset
+	lookups  []*Lookup
 }
 
-// NewCatalog validates the datasets and returns a catalog over them. A
-// declaration that could not be queried is a programming error, so this
-// fails loudly rather than serving a half-declared contract.
-func NewCatalog(datasets ...*Dataset) (*Catalog, error) {
+// NewCatalog validates the lookups and datasets and returns a catalog over
+// them. A declaration that could not be queried is a programming error, so
+// this fails loudly rather than serving a half-declared contract.
+func NewCatalog(lookups []*Lookup, datasets ...*Dataset) (*Catalog, error) {
+	lookupNames := make(map[string]struct{}, len(lookups))
+	for _, l := range lookups {
+		if l == nil || l.Name == "" {
+			return nil, fmt.Errorf("catalog: lookup with no name")
+		}
+		if _, dup := lookupNames[l.Name]; dup {
+			return nil, fmt.Errorf("catalog: lookup %q declared twice", l.Name)
+		}
+		lookupNames[l.Name] = struct{}{}
+	}
 	seen := make(map[string]struct{}, len(datasets))
 	for _, ds := range datasets {
 		if ds == nil {
 			return nil, fmt.Errorf("catalog: nil dataset")
 		}
-		if err := ds.validate(); err != nil {
+		if err := ds.validate(lookupNames); err != nil {
 			return nil, err
 		}
 		if _, dup := seen[ds.Name]; dup {
@@ -209,12 +225,12 @@ func NewCatalog(datasets ...*Dataset) (*Catalog, error) {
 		}
 		seen[ds.Name] = struct{}{}
 	}
-	return &Catalog{datasets: datasets}, nil
+	return &Catalog{datasets: datasets, lookups: lookups}, nil
 }
 
 // MustCatalog is NewCatalog for the package's own declarations.
-func MustCatalog(datasets ...*Dataset) *Catalog {
-	catalog, err := NewCatalog(datasets...)
+func MustCatalog(lookups []*Lookup, datasets ...*Dataset) *Catalog {
+	catalog, err := NewCatalog(lookups, datasets...)
 	if err != nil {
 		panic(err)
 	}
@@ -236,7 +252,7 @@ func (c *Catalog) Datasets() []*Dataset {
 	return slices.Clone(c.datasets)
 }
 
-func (d *Dataset) validate() error {
+func (d *Dataset) validate(lookups map[string]struct{}) error {
 	if d.Name == "" {
 		return fmt.Errorf("catalog: dataset with empty name")
 	}
@@ -299,6 +315,11 @@ func (d *Dataset) validate() error {
 			if f.Type != TypeString {
 				return fmt.Errorf("catalog: dataset %q dimension %q must be a string", d.Name, f.Name)
 			}
+			if f.Lookup != "" {
+				if _, declared := lookups[f.Lookup]; !declared {
+					return fmt.Errorf("catalog: dataset %q dimension %q reads through undeclared lookup %q", d.Name, f.Name, f.Lookup)
+				}
+			}
 			for _, op := range f.Operators {
 				switch op {
 				case OperatorEquals, OperatorIn:
@@ -309,6 +330,9 @@ func (d *Dataset) validate() error {
 		case RoleMeasure:
 			if len(f.Aggregations) == 0 || len(f.Operators) != 0 {
 				return fmt.Errorf("catalog: dataset %q measure %q must declare aggregations and no operators", d.Name, f.Name)
+			}
+			if f.Lookup != "" {
+				return fmt.Errorf("catalog: dataset %q measure %q cannot read through a lookup, which maps dimension values", d.Name, f.Name)
 			}
 			if f.Type == TypeString {
 				return fmt.Errorf("catalog: dataset %q measure %q cannot be a string", d.Name, f.Name)

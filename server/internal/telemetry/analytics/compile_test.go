@@ -20,7 +20,7 @@ func compileTest(t *testing.T, req Request) (*Plan, error) {
 	if req.ToUnixNano == 0 {
 		req.ToUnixNano = testTo
 	}
-	return Compile(Default, Tenant{OrganizationID: "org-1", ProjectID: "project-1"}, req)
+	return Compile(Default, Tenant{OrganizationID: "org-1", ProjectID: "project-1"}, nil, req)
 }
 
 func TestCompileGrouped(t *testing.T) {
@@ -231,4 +231,79 @@ func TestCompileAcceptsAWindowUpToTheDatasetRetention(t *testing.T) {
 		ToUnixNano:   testFrom + Sessions.MaxTimeRangeNanos(),
 	})
 	require.NoError(t, err)
+}
+
+// TestReadExprFoldsThroughALookup: a field with a lookup reads as a transform
+// over its expression with the map's two arrays bound, in raw-value order
+// and never with an empty side, so one map renders one SQL string; a field
+// with no lookup, or no loaded map, reads as its expression alone.
+func TestReadExprFoldsThroughALookup(t *testing.T) {
+	t.Parallel()
+
+	plain := Field{Name: "tool_name", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "tool_name", Description: "", Lookup: ""}
+	folded := Field{Name: "mcp_server", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "mcp_server_name", Description: "", Lookup: "names"}
+	maps := LookupMaps{"names": {"github-mcp": "GitHub", "gh": "GitHub", "": "Nothing", "blank": ""}}
+
+	expr, args := readExpr(QueryContext{Tenant: Tenant{OrganizationID: "", ProjectID: ""}, Window: Window{FromUnixNano: 0, ToUnixNano: 0}, Lookups: maps}, &plain)
+	require.Equal(t, "tool_name", expr)
+	require.Nil(t, args)
+
+	expr, args = readExpr(QueryContext{Tenant: Tenant{OrganizationID: "", ProjectID: ""}, Window: Window{FromUnixNano: 0, ToUnixNano: 0}, Lookups: nil}, &folded)
+	require.Equal(t, "mcp_server_name", expr, "no loaded map, no fold")
+	require.Nil(t, args)
+
+	expr, args = readExpr(QueryContext{Tenant: Tenant{OrganizationID: "", ProjectID: ""}, Window: Window{FromUnixNano: 0, ToUnixNano: 0}, Lookups: maps}, &folded)
+	require.Equal(t, "transform(mcp_server_name, ?, ?, mcp_server_name)", expr)
+	require.Equal(t, []any{[]string{"gh", "github-mcp"}, []string{"GitHub", "GitHub"}}, args, "raw values sorted, and never an empty side")
+}
+
+// TestCompileFoldsADimensionThroughItsLookup: the compiler applies the fold at
+// every place the dimension is read, so a group, a filter and a distinct
+// count all speak the mapped values, with the arrays bound ahead of the
+// tenant and the filter value last.
+func TestCompileFoldsADimensionThroughItsLookup(t *testing.T) {
+	t.Parallel()
+
+	req := Request{
+		Dataset:    "tool_calls",
+		Grain:      "",
+		Dimensions: []string{"mcp_server"},
+		Measures: []Measure{
+			{Op: "count", Field: "", Alias: ""},
+			{Op: "count_distinct", Field: "mcp_server", Alias: "servers"},
+		},
+		Filters:   []Filter{{Field: "mcp_server", Operator: "equals", Values: []string{"GitHub"}}},
+		OrderBy:   nil,
+		Limit:     0,
+		Ungrouped: false,
+	}
+	maps := LookupMaps{MCPServerDisplayNamesLookup: {"gh": "GitHub", "github-mcp": "GitHub"}}
+	plan, err := Compile(Default, Tenant{OrganizationID: "org-1", ProjectID: "project-1"}, maps, Request{
+		Dataset: req.Dataset, FromUnixNano: testFrom, ToUnixNano: testTo, Grain: req.Grain, Dimensions: req.Dimensions,
+		Measures: req.Measures, Filters: req.Filters, OrderBy: req.OrderBy, Limit: req.Limit, Ungrouped: req.Ungrouped,
+	})
+	require.NoError(t, err)
+	const fold = "transform(mcp_server_name, ?, ?, mcp_server_name)"
+	require.Contains(t, plan.SQL, fold+" AS mcp_server")
+	require.Contains(t, plan.SQL, "uniqExactIf("+fold+", "+fold+" != '') AS servers")
+	require.Contains(t, plan.SQL, "WHERE "+fold+" = ?", "the filter compares the folded value")
+	require.Equal(t, []string{"gh", "github-mcp"}, plan.Args[0], "the select list's arrays come first")
+	require.Equal(t, []string{"GitHub", "GitHub"}, plan.Args[1])
+	require.Equal(t, "GitHub", plan.Args[len(plan.Args)-1])
+	require.NotContains(t, plan.SQL, "GROUP BY "+fold, "the group names the alias, not the expression")
+
+	plain, err := compileTest(t, req)
+	require.NoError(t, err)
+	require.NotContains(t, plain.SQL, "transform(", "no loaded map, no fold")
+	require.Contains(t, plain.SQL, "WHERE mcp_server_name = ?")
+
+	in := req
+	in.Filters = []Filter{{Field: "mcp_server", Operator: "in", Values: []string{"GitHub", "linear"}}}
+	plan, err = Compile(Default, Tenant{OrganizationID: "org-1", ProjectID: "project-1"}, maps, Request{
+		Dataset: in.Dataset, FromUnixNano: testFrom, ToUnixNano: testTo, Grain: in.Grain, Dimensions: in.Dimensions,
+		Measures: in.Measures, Filters: in.Filters, OrderBy: in.OrderBy, Limit: in.Limit, Ungrouped: in.Ungrouped,
+	})
+	require.NoError(t, err)
+	require.Contains(t, plan.SQL, "WHERE "+fold+" IN (?,?)")
+	require.Equal(t, []any{"GitHub", "linear"}, plan.Args[len(plan.Args)-2:])
 }

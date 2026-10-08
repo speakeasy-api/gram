@@ -8,17 +8,17 @@ var Sessions = &Dataset{
 	Description: "One row per agent session, collapsed from observed events. count counts sessions.",
 	TimeExpr:    "started_at",
 	Fields: []Field{
-		{Name: "session", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "session_id", Description: ""},
+		{Name: "session", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "session_id", Description: "", Lookup: ""},
 		// A session opens broken down by who was in it: text lives on events,
 		// not on the collapsed session row.
-		{Name: "user", Type: TypeString, Role: RoleDimension, Default: true, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "user_email", Description: ""},
-		{Name: "model", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "model", Description: ""},
-		{Name: "surface", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "surface", Description: ""},
-		{Name: "provider", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "provider", Description: ""},
-		{Name: "turn_count", Type: TypeInt64, Role: RoleMeasure, Default: false, Unit: "", Operators: nil, Aggregations: []Aggregation{AggregationSum, AggregationAvg}, Expr: "turn_count", Description: ""},
-		{Name: "tool_call_count", Type: TypeInt64, Role: RoleMeasure, Default: false, Unit: "", Operators: nil, Aggregations: []Aggregation{AggregationSum, AggregationAvg}, Expr: "tool_call_count", Description: ""},
+		{Name: "user", Type: TypeString, Role: RoleDimension, Default: true, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "user_email", Description: "", Lookup: ""},
+		{Name: "model", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "model", Description: "", Lookup: ""},
+		{Name: "surface", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "surface", Description: "", Lookup: ""},
+		{Name: "provider", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "provider", Description: "", Lookup: ""},
+		{Name: "turn_count", Type: TypeInt64, Role: RoleMeasure, Default: false, Unit: "", Operators: nil, Aggregations: []Aggregation{AggregationSum, AggregationAvg}, Expr: "turn_count", Description: "", Lookup: ""},
+		{Name: "tool_call_count", Type: TypeInt64, Role: RoleMeasure, Default: false, Unit: "", Operators: nil, Aggregations: []Aggregation{AggregationSum, AggregationAvg}, Expr: "tool_call_count", Description: "", Lookup: ""},
 		// The time columns are Int64 nanoseconds, hence the division.
-		{Name: "duration_seconds", Type: TypeFloat64, Role: RoleMeasure, Default: false, Unit: "s", Operators: nil, Aggregations: []Aggregation{AggregationSum, AggregationAvg, AggregationP95}, Expr: "(ended_at - started_at) / 1e9", Description: ""},
+		{Name: "duration_seconds", Type: TypeFloat64, Role: RoleMeasure, Default: false, Unit: "s", Operators: nil, Aggregations: []Aggregation{AggregationSum, AggregationAvg, AggregationP95}, Expr: "(ended_at - started_at) / 1e9", Description: "", Lookup: ""},
 	},
 	Source: sessionsSource,
 }
@@ -31,21 +31,21 @@ var ToolCalls = &Dataset{
 	Description: "One row per tool call, resolved to its latest observation. count counts tool calls; failed calls are count with a status filter. Tools used is count_distinct over tool_name, people over user.",
 	TimeExpr:    "started_at",
 	Fields: []Field{
-		{Name: "tool_call", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "tool_call_id", Description: ""},
-		{Name: "tool_name", Type: TypeString, Role: RoleDimension, Default: true, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "tool_name", Description: ""},
+		{Name: "tool_call", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "tool_call_id", Description: "", Lookup: ""},
+		{Name: "tool_name", Type: TypeString, Role: RoleDimension, Default: true, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "tool_name", Description: "", Lookup: ""},
 		// Every MCP call carries the tool name mcp_tool; the server and tool the
 		// producer named are what tell them apart.
-		{Name: "mcp_server", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "mcp_server_name", Description: ""},
-		{Name: "mcp_tool", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "mcp_tool_name", Description: ""},
-		{Name: "session", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "session_id", Description: ""},
-		{Name: "user", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "user_email", Description: ""},
-		{Name: "surface", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "surface", Description: ""},
+		{Name: "mcp_server", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "mcp_server_name", Description: mcpServerDescription, Lookup: MCPServerDisplayNamesLookup},
+		{Name: "mcp_tool", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "mcp_tool_name", Description: "", Lookup: ""},
+		{Name: "session", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "session_id", Description: "", Lookup: ""},
+		{Name: "user", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "user_email", Description: "", Lookup: ""},
+		{Name: "surface", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "surface", Description: "", Lookup: ""},
 		// status reads outcome in agent vocabulary, not a protocol status
 		// code: ok, error, rejected (a call a decision blocked) or refused (a
 		// model declining). describe does not enumerate values, so this is the
 		// spec of what a status filter may name.
-		{Name: "status", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "status", Description: ""},
-		{Name: "duration_ms", Type: TypeFloat64, Role: RoleMeasure, Default: false, Unit: "ms", Operators: nil, Aggregations: []Aggregation{AggregationSum, AggregationAvg, AggregationP95}, Expr: "duration_nano / 1e6", Description: ""},
+		{Name: "status", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "status", Description: "", Lookup: ""},
+		{Name: "duration_ms", Type: TypeFloat64, Role: RoleMeasure, Default: false, Unit: "ms", Operators: nil, Aggregations: []Aggregation{AggregationSum, AggregationAvg, AggregationP95}, Expr: "duration_nano / 1e6", Description: "", Lookup: ""},
 	},
 	Source: toolCallsSource,
 }
@@ -63,18 +63,39 @@ var Skills = &Dataset{
 	Fields: []Field{
 		// An invocation is one tool call, so its id tells two invocations of
 		// the same skill apart in rows mode.
-		{Name: "tool_call", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "tool_call_id", Description: ""},
-		{Name: "skill", Type: TypeString, Role: RoleDimension, Default: true, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "skill_name", Description: ""},
-		{Name: "session", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "session_id", Description: ""},
-		{Name: "user", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "user_email", Description: ""},
-		{Name: "surface", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "surface", Description: ""},
+		{Name: "tool_call", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "tool_call_id", Description: "", Lookup: ""},
+		{Name: "skill", Type: TypeString, Role: RoleDimension, Default: true, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "skill_name", Description: "", Lookup: ""},
+		{Name: "session", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "session_id", Description: "", Lookup: ""},
+		{Name: "user", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: countDistinct, Expr: "user_email", Description: "", Lookup: ""},
+		{Name: "surface", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "surface", Description: "", Lookup: ""},
 		// status is the invocation's outcome in the same vocabulary as a tool
 		// call's: ok, error, rejected or refused.
-		{Name: "status", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "status", Description: ""},
-		{Name: "duration_ms", Type: TypeFloat64, Role: RoleMeasure, Default: false, Unit: "ms", Operators: nil, Aggregations: []Aggregation{AggregationSum, AggregationAvg, AggregationP95}, Expr: "duration_nano / 1e6", Description: ""},
+		{Name: "status", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "status", Description: "", Lookup: ""},
+		{Name: "duration_ms", Type: TypeFloat64, Role: RoleMeasure, Default: false, Unit: "ms", Operators: nil, Aggregations: []Aggregation{AggregationSum, AggregationAvg, AggregationP95}, Expr: "duration_nano / 1e6", Description: "", Lookup: ""},
 	},
 	Source: skillsSource,
 }
 
-// Default is the v1 catalog: every dataset reads agent_events.
-var Default = MustCatalog(Sessions, ToolCalls, Skills)
+// mcpServerDescription says that mcp_server speaks the display names set
+// in Hooks settings, because a filter on a raw name that is overridden
+// matches nothing: the picker only offers display names.
+const mcpServerDescription = "MCP server the call went to, under the display name set in Hooks settings. A raw name with no override shows as reported."
+
+// MCPServerDisplayNamesLookup names the lookup mcp_server reads through:
+// the project's hook server-name overrides, raw name to display name, so
+// two reported names with one display name are one server wherever the
+// dimension is read. The service attaches its loader.
+const MCPServerDisplayNamesLookup = "mcp_server_display_names"
+
+// Lookups is every map a dimension of the v1 catalog reads through.
+var Lookups = []*Lookup{
+	{
+		Name:        MCPServerDisplayNamesLookup,
+		Description: "The project's hook server-name overrides, set in Hooks settings: a reported MCP server name with an override shows as its display name, the rest as reported.",
+		Load:        nil,
+	},
+}
+
+// Default is the v1 catalog: every dataset reads agent_events. Its lookups
+// carry no loaders; the service attaches them with WithLoaders.
+var Default = MustCatalog(Lookups, Sessions, ToolCalls, Skills)

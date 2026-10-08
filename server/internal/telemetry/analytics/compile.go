@@ -126,8 +126,9 @@ var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
 // Compile validates a request against the catalog and turns it into SQL.
 // Guardrails are enforced here, not in the transport, so a direct Go caller
-// is bound by them too.
-func Compile(catalog *Catalog, tenant Tenant, req Request) (*Plan, error) {
+// is bound by them too. lookups are the tenant's maps for the dataset's
+// lookups, as LoadLookups returns them; nil folds nothing.
+func Compile(catalog *Catalog, tenant Tenant, lookups LookupMaps, req Request) (*Plan, error) {
 	ds, ok := catalog.Dataset(req.Dataset)
 	if !ok {
 		return nil, newError(ErrUnknownDataset, req.Dataset, "dataset", req.Dataset, fmt.Sprintf("dataset %q does not exist", req.Dataset))
@@ -177,7 +178,7 @@ func Compile(catalog *Catalog, tenant Tenant, req Request) (*Plan, error) {
 		return nil, newError(ErrLimitExceeded, name, "limit", fmt.Sprint(req.Limit), fmt.Sprintf("limit must be between 1 and %d", MaxLimit))
 	}
 
-	qc := QueryContext{Tenant: tenant, Window: Window{FromUnixNano: req.FromUnixNano, ToUnixNano: req.ToUnixNano}}
+	qc := QueryContext{Tenant: tenant, Window: Window{FromUnixNano: req.FromUnixNano, ToUnixNano: req.ToUnixNano}, Lookups: lookups}
 	builder := sq.Select().FromSelect(ds.Source(qc), "src")
 
 	// Filters apply to the collapsed rows, after the source query, so a
@@ -198,14 +199,15 @@ func Compile(catalog *Catalog, tenant Tenant, req Request) (*Plan, error) {
 		if len(filter.Values) > MaxFilterValues {
 			return nil, newError(ErrLimitExceeded, name, position+".values", "", fmt.Sprintf("at most %d values per filter", MaxFilterValues))
 		}
+		expr, args := readExpr(qc, field)
 		switch Operator(filter.Operator) {
 		case OperatorEquals:
 			if len(filter.Values) != 1 {
 				return nil, newError(ErrUnsatisfiable, name, position+".values", "", "equals takes exactly one value")
 			}
-			builder = builder.Where(squirrel.Eq{field.Expr: filter.Values[0]})
+			builder = builder.Where(expr+" = ?", append(args, filter.Values[0])...)
 		case OperatorIn:
-			builder = builder.Where(squirrel.Eq{field.Expr: filter.Values})
+			builder = builder.Where(expr+" IN ("+placeholders(len(filter.Values))+")", append(args, anyValues(filter.Values)...)...)
 		}
 	}
 
@@ -227,7 +229,8 @@ func Compile(catalog *Catalog, tenant Tenant, req Request) (*Plan, error) {
 		builder = builder.Column(fmt.Sprintf("fromUnixTimestamp64Nano(%s, 'UTC') AS %s", ds.TimeExpr, timeColumn))
 		plan.Columns = append(plan.Columns, Column{Name: timeColumn, Kind: ColumnTime})
 		for _, field := range dimensions {
-			builder = builder.Column(fmt.Sprintf("%s AS %s", field.Expr, field.Name))
+			expr, args := readExpr(qc, field)
+			builder = builder.Column(expr+" AS "+field.Name, args...)
 			plan.Columns = append(plan.Columns, Column{Name: field.Name, Kind: ColumnDimension})
 		}
 		builder = builder.OrderBy(ds.TimeExpr + " DESC").Limit(uint64(limit))
@@ -245,7 +248,8 @@ func Compile(catalog *Catalog, tenant Tenant, req Request) (*Plan, error) {
 		plan.Columns = append(plan.Columns, Column{Name: timeBucketColumn, Kind: ColumnTime})
 	}
 	for _, field := range dimensions {
-		builder = builder.Column(fmt.Sprintf("%s AS %s", field.Expr, field.Name))
+		expr, args := readExpr(qc, field)
+		builder = builder.Column(expr+" AS "+field.Name, args...)
 		groupBy = append(groupBy, field.Name)
 		plan.Columns = append(plan.Columns, Column{Name: field.Name, Kind: ColumnDimension})
 	}
@@ -253,7 +257,7 @@ func Compile(catalog *Catalog, tenant Tenant, req Request) (*Plan, error) {
 	aliases := make([]string, 0, len(req.Measures))
 	for i, measure := range req.Measures {
 		position := fmt.Sprintf("measures[%d]", i)
-		expr, alias, err := measureExpr(ds, measure, position)
+		expr, args, alias, err := measureExpr(ds, qc, measure, position)
 		if err != nil {
 			return nil, err
 		}
@@ -261,7 +265,7 @@ func Compile(catalog *Catalog, tenant Tenant, req Request) (*Plan, error) {
 			return nil, newError(ErrUnsatisfiable, name, position+".alias", alias, fmt.Sprintf("result column %s is taken", alias))
 		}
 		aliases = append(aliases, alias)
-		builder = builder.Column(fmt.Sprintf("%s AS %s", expr, alias))
+		builder = builder.Column(expr+" AS "+alias, args...)
 		plan.Columns = append(plan.Columns, Column{Name: alias, Kind: ColumnMeasure})
 	}
 
@@ -311,26 +315,27 @@ func finish(plan *Plan, builder squirrel.SelectBuilder) (*Plan, error) {
 	return plan, nil
 }
 
-// measureExpr resolves a requested measure to its SQL and result alias.
-func measureExpr(ds *Dataset, measure Measure, position string) (string, string, error) {
+// measureExpr resolves a requested measure to its SQL, the arguments that
+// SQL binds, and its result alias.
+func measureExpr(ds *Dataset, qc QueryContext, measure Measure, position string) (string, []any, string, error) {
 	op := strings.ToLower(measure.Op)
 	alias := measure.Alias
 
 	if op == AggregationCount {
 		if measure.Field != "" {
-			return "", "", newError(ErrUnsatisfiable, ds.Name, position+".field", measure.Field, "count takes no field")
+			return "", nil, "", newError(ErrUnsatisfiable, ds.Name, position+".field", measure.Field, "count takes no field")
 		}
 		if alias == "" {
 			alias = AggregationCount
 		}
 		if err := checkAlias(ds, alias, position); err != nil {
-			return "", "", err
+			return "", nil, "", err
 		}
-		return "count()", alias, nil
+		return "count()", nil, alias, nil
 	}
 
 	if measure.Field == "" {
-		return "", "", newError(ErrUnsatisfiable, ds.Name, position+".field", "", fmt.Sprintf("%s needs a field", op))
+		return "", nil, "", newError(ErrUnsatisfiable, ds.Name, position+".field", "", fmt.Sprintf("%s needs a field", op))
 	}
 	field, ok := ds.Field(measure.Field)
 
@@ -344,34 +349,36 @@ func measureExpr(ds *Dataset, measure Measure, position string) (string, string,
 	// yields UInt64, which the runner narrows on the wire.
 	if op == string(AggregationCountDistinct) {
 		if ok && field.Role == RoleMeasure {
-			return "", "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s counts a dimension, and %s is a measure", op, field.Name))
+			return "", nil, "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s counts a dimension, and %s is a measure", op, field.Name))
 		}
 		if !ok || field.Role != RoleDimension {
-			return "", "", newError(ErrUnknownField, ds.Name, position+".field", measure.Field, fmt.Sprintf("dataset %s has no dimension %s", ds.Name, measure.Field))
+			return "", nil, "", newError(ErrUnknownField, ds.Name, position+".field", measure.Field, fmt.Sprintf("dataset %s has no dimension %s", ds.Name, measure.Field))
 		}
 		if !field.AdmitsAggregation(op) {
-			return "", "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s does not admit %s", field.Name, op))
+			return "", nil, "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s does not admit %s", field.Name, op))
 		}
 		if alias == "" {
 			alias = op + "_" + field.Name
 		}
 		if err := checkAlias(ds, alias, position); err != nil {
-			return "", "", err
+			return "", nil, "", err
 		}
-		return fmt.Sprintf("uniqExactIf(%s, %s != '')", field.Expr, field.Expr), alias, nil
+		// The dimension is read twice, so its binds are too.
+		expr, args := readExpr(qc, field)
+		return fmt.Sprintf("uniqExactIf(%s, %s != '')", expr, expr), append(slices.Clone(args), args...), alias, nil
 	}
 
 	if !ok || field.Role != RoleMeasure {
-		return "", "", newError(ErrUnknownField, ds.Name, position+".field", measure.Field, fmt.Sprintf("dataset %s has no measure %s", ds.Name, measure.Field))
+		return "", nil, "", newError(ErrUnknownField, ds.Name, position+".field", measure.Field, fmt.Sprintf("dataset %s has no measure %s", ds.Name, measure.Field))
 	}
 	if !field.AdmitsAggregation(op) {
-		return "", "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s does not admit %s", field.Name, op))
+		return "", nil, "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s does not admit %s", field.Name, op))
 	}
 	if alias == "" {
 		alias = op + "_" + field.Name
 	}
 	if err := checkAlias(ds, alias, position); err != nil {
-		return "", "", err
+		return "", nil, "", err
 	}
 
 	var expr string
@@ -387,11 +394,41 @@ func measureExpr(ds *Dataset, measure Measure, position string) (string, string,
 	case AggregationCountDistinct:
 		// Handled above: a measure never admits it, so this is unreachable
 		// through Admits, and the switch stays exhaustive.
-		return "", "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s counts a dimension, and %s is a measure", op, field.Name))
+		return "", nil, "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s counts a dimension, and %s is a measure", op, field.Name))
 	default:
-		return "", "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s is not an aggregation", op))
+		return "", nil, "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s is not an aggregation", op))
 	}
-	return expr, alias, nil
+	return expr, nil, alias, nil
+}
+
+// readExpr is how a field is read anywhere in a query: its expression, folded
+// through its lookup when the field declares one and the tenant's map was
+// loaded. ClickHouse transform maps each value with an entry to its target
+// and leaves the rest as they are. The arrays are bound as arguments, so one
+// map renders one SQL string, and a field with no lookup, or an empty map,
+// is the expression itself with nothing bound.
+func readExpr(qc QueryContext, field *Field) (string, []any) {
+	if field.Lookup == "" {
+		return field.Expr, nil
+	}
+	raws, targets := lookupPairs(qc.Lookups[field.Lookup])
+	if len(raws) == 0 {
+		return field.Expr, nil
+	}
+	return "transform(" + field.Expr + ", ?, ?, " + field.Expr + ")", []any{raws, targets}
+}
+
+// placeholders renders n bound slots for an IN list.
+func placeholders(n int) string {
+	return strings.TrimSuffix(strings.Repeat("?,", n), ",")
+}
+
+func anyValues(values []string) []any {
+	out := make([]any, len(values))
+	for i, v := range values {
+		out[i] = v
+	}
+	return out
 }
 
 // checkAlias keeps a caller-chosen result column name a plain identifier

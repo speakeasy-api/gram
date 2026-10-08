@@ -233,7 +233,7 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 
 	t.Run("skills keeps one row per call that named a skill", func(t *testing.T) {
 		t.Parallel()
-		query, args, err := skillsSource(scope).ToSql()
+		query, args, err := skillsSource(qc).ToSql()
 		require.NoError(t, err)
 		result, err := conn.Query(t.Context(), query+" ORDER BY tool_call_id", args...)
 		require.NoError(t, err)
@@ -288,4 +288,66 @@ func TestSourceQueriesAgainstClickHouse(t *testing.T) {
 		require.NoError(t, result.Err())
 		require.Equal(t, []string{"re-emitted"}, copies, "one copy survives, and it is the one observed last")
 	})
+}
+
+// TestLookupFoldsADimensionInClickHouse: with a loaded map, two raw server
+// names with one target are one value to the collapsed rows and the picker,
+// a raw name with no entry shows as reported, and an entry nothing reported
+// changes nothing. Without a map, every raw name is its own value.
+func TestLookupFoldsADimensionInClickHouse(t *testing.T) {
+	t.Parallel()
+
+	conn := newTestClickhouse(t)
+	orgID := "org-" + uuid.NewString()
+	base := time.Now().Add(-time.Hour).UnixNano()
+	tenant := Tenant{OrganizationID: orgID, ProjectID: "project-1"}
+
+	call := func(id, server string, at int64) chrepo.AgentEventRow {
+		r := agentEventFixture(orgID, id, "s1", "t1", id, "tool_call_result", at)
+		r.ToolName = "mcp_tool"
+		r.MCPServerName = server
+		return r
+	}
+	require.NoError(t, chrepo.New(conn).InsertAgentEvents(t.Context(), []chrepo.AgentEventRow{
+		call("c1", "github-mcp", base+1),
+		call("c2", "gh", base+2),
+		call("c3", "linear", base+3),
+	}))
+
+	servers := func(t *testing.T, maps LookupMaps) map[string]int64 {
+		t.Helper()
+		plan, err := Compile(Default, tenant, maps, Request{
+			Dataset: "tool_calls", FromUnixNano: base - 1, ToUnixNano: base + int64(time.Hour), Grain: TimeGrainNone,
+			Dimensions: []string{"mcp_server"}, Measures: []Measure{{Op: "count", Field: "", Alias: ""}},
+			Filters: nil, OrderBy: nil, Limit: 0, Ungrouped: false,
+		})
+		require.NoError(t, err)
+		rows, err := plan.Run(t.Context(), conn)
+		require.NoError(t, err)
+		out := map[string]int64{}
+		for _, row := range rows {
+			name, _ := row["mcp_server"].(string)
+			n, _ := row["count"].(int64)
+			out[name] = n
+		}
+		return out
+	}
+	picker := func(t *testing.T, maps LookupMaps) map[string]int64 {
+		t.Helper()
+		plan, err := CompileValues(Default, tenant, maps, ValuesRequest{Dataset: "tool_calls", Dimension: "mcp_server", FromUnixNano: base - 1, ToUnixNano: base + int64(time.Hour), Limit: 0})
+		require.NoError(t, err)
+		values, err := plan.RunValues(t.Context(), conn)
+		require.NoError(t, err)
+		out := map[string]int64{}
+		for _, v := range values {
+			out[v.Value] = v.Count
+		}
+		return out
+	}
+
+	maps := LookupMaps{MCPServerDisplayNamesLookup: {"github-mcp": "GitHub", "gh": "GitHub", "unused": "Nothing"}}
+	require.Equal(t, map[string]int64{"github-mcp": 1, "gh": 1, "linear": 1}, servers(t, nil))
+	require.Equal(t, map[string]int64{"GitHub": 2, "linear": 1}, servers(t, maps))
+	require.Equal(t, map[string]int64{"github-mcp": 1, "gh": 1, "linear": 1}, picker(t, nil))
+	require.Equal(t, map[string]int64{"GitHub": 2, "linear": 1}, picker(t, maps), "the picker offers what a filter will match")
 }
