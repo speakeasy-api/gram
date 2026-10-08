@@ -51,7 +51,7 @@ import type { AccessMember } from "@gram/client/models/components/accessmember.j
 import type { DirectoryRoleMapping } from "@gram/client/models/components/directoryrolemapping.js";
 import type { ListDirectoryRoleMappingsResult } from "@gram/client/models/components/listdirectoryrolemappingsresult.js";
 import type { Role } from "@gram/client/models/components/role.js";
-import type { SetDirectoryRoleMappingForm } from "@gram/client/models/components/setdirectoryrolemappingform.js";
+import type { SetDirectoryRoleMappingsForm } from "@gram/client/models/components/setdirectoryrolemappingsform.js";
 import {
   mutationKeyDeleteDirectoryRoleMapping,
   useDeleteDirectoryRoleMappingMutation,
@@ -65,7 +65,7 @@ import {
   invalidateAllRoles,
   useRoles,
 } from "@gram/client/react-query/roles.js";
-import { useSetDirectoryRoleMappingMutation } from "@gram/client/react-query/setDirectoryRoleMapping.js";
+import { useSetDirectoryRoleMappingsMutation } from "@gram/client/react-query/setDirectoryRoleMappings.js";
 import { useSyncDirectoryGroupsMutation } from "@gram/client/react-query/syncDirectoryGroups.js";
 
 import {
@@ -84,7 +84,7 @@ type SourceRow = {
   detail: string;
   /** Gram members in the source, shown as faces in place of the detail. */
   members?: FacepileMember[];
-  form: Omit<SetDirectoryRoleMappingForm, "roleUrn">;
+  form: Omit<SetDirectoryRoleMappingsForm, "roleUrns">;
   mapping: DirectoryRoleMapping | undefined;
 };
 
@@ -195,7 +195,7 @@ export function DirectoryRoleMappings({
   const [params, setParams] = useSearchParams();
   const pending = pendingMappingFromParams(params);
   const queryClient = useQueryClient();
-  const savePending = useSetDirectoryRoleMappingMutation({
+  const savePending = useSetDirectoryRoleMappingsMutation({
     onError: (error) => {
       toast.error(errorMessage(error, "Failed to map the new role"));
     },
@@ -205,7 +205,7 @@ export function DirectoryRoleMappings({
     if (!pending || savedPending.current === pending.key) return;
     savedPending.current = pending.key;
     savePending.mutate(
-      { request: { setDirectoryRoleMappingForm: pending.form } },
+      { request: { setDirectoryRoleMappingsForm: pending.form } },
       {
         onSuccess: () => {
           setParams((previous) => finishCreateRoleFlow(previous, pending.key), {
@@ -553,7 +553,7 @@ function RolePicker({
       invalidateAllRoles(queryClient),
     ]);
   // Returning the refresh keeps the mutation pending until the row reloads.
-  const save = useSetDirectoryRoleMappingMutation({
+  const save = useSetDirectoryRoleMappingsMutation({
     onSuccess: async () => {
       await refresh();
       onSaved?.();
@@ -623,7 +623,9 @@ function RolePicker({
       return;
     }
     save.mutate({
-      request: { setDirectoryRoleMappingForm: { ...row.form, roleUrn: value } },
+      request: {
+        setDirectoryRoleMappingsForm: { ...row.form, roleUrns: [value] },
+      },
     });
   };
 

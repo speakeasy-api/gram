@@ -9989,8 +9989,100 @@ paths:
                 type: mutation
     /rpc/access.setDirectoryRoleMapping:
         post:
-            description: Map a directory group or attribute value to a role, replacing any role it was mapped to before.
+            tags:
+                - access
+            summary: setDirectoryRoleMapping access
+            description: Deprecated compatibility endpoint for older dashboard clients. Use setDirectoryRoleMappings. Rejects replacement when the source already grants multiple roles.
             operationId: setDirectoryRoleMapping
+            parameters:
+                - name: Gram-Key
+                  in: header
+                  description: API Key header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: API Key header
+                - name: Gram-Session
+                  in: header
+                  description: Session header
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Session header
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetDirectoryRoleMappingForm'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DirectoryRoleMapping'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+    /rpc/access.setDirectoryRoleMappings:
+        post:
+            description: Replace the full set of roles granted by a directory group or attribute value. An empty role list removes all mappings for the source.
+            operationId: setDirectoryRoleMappings
             parameters:
                 - allowEmptyValue: true
                   description: API Key header
@@ -10010,14 +10102,16 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/SetDirectoryRoleMappingForm'
+                            $ref: '#/components/schemas/SetDirectoryRoleMappingsForm'
                 required: true
             responses:
                 "200":
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/DirectoryRoleMapping'
+                                items:
+                                    $ref: '#/components/schemas/DirectoryRoleMapping'
+                                type: array
                     description: OK response.
                 "400":
                     content:
@@ -10076,12 +10170,12 @@ paths:
             security:
                 - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
-            summary: setDirectoryRoleMapping access
+            summary: setDirectoryRoleMappings access
             tags:
                 - access
-            x-speakeasy-name-override: setDirectoryRoleMapping
+            x-speakeasy-name-override: setDirectoryRoleMappings
             x-speakeasy-react-hook:
-                name: SetDirectoryRoleMapping
+                name: SetDirectoryRoleMappings
                 type: mutation
     /rpc/access.setResourceAudience:
         post:
@@ -109524,7 +109618,7 @@ components:
                     format: uuid
                 role_urn:
                     type: string
-                    description: Principal URN of the role to grant, from Role.principal_urn.
+                    description: Role principal URN to grant.
                 source_kind:
                     type: string
                     description: What the mapping matches.
@@ -109534,6 +109628,35 @@ components:
             required:
                 - source_kind
                 - role_urn
+        SetDirectoryRoleMappingsForm:
+            type: object
+            properties:
+                attribute_key:
+                    type: string
+                    description: Attribute key to match. Required when source_kind is attribute.
+                    minLength: 1
+                attribute_value:
+                    type: string
+                    description: Attribute value to match. Required when source_kind is attribute.
+                    minLength: 1
+                directory_group_id:
+                    type: string
+                    description: Directory group to map. Required when source_kind is group.
+                    format: uuid
+                role_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: The complete set of role principal URNs to grant, from Role.principal_urn. Empty removes every mapping for the source.
+                source_kind:
+                    type: string
+                    description: What the mapping matches.
+                    enum:
+                        - group
+                        - attribute
+            required:
+                - source_kind
+                - role_urns
         SetIdentityProviderConnectionSetupMethodRequestBody:
             type: object
             properties:

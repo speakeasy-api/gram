@@ -3,9 +3,12 @@ package access
 import (
 	"context"
 	"errors"
+	"slices"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"go.opentelemetry.io/otel/trace"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
@@ -28,7 +31,7 @@ const (
 	// maxDirectoryAttributeOptionsPerKey keeps the option list usable: a key
 	// with more distinct values than this (emails, employee ids) is no use as
 	// a mapping source, so it is left out. It is not a privacy boundary; the
-	// admin-only scope on ListDirectoryRoleMappings is. SetDirectoryRoleMapping
+	// admin-only scope on ListDirectoryRoleMappings is. SetDirectoryRoleMappings
 	// still accepts any existing key and value.
 	maxDirectoryAttributeOptionsPerKey = 100
 )
@@ -157,9 +160,25 @@ func (s *Service) SyncDirectoryGroups(ctx context.Context, _ *gen.SyncDirectoryG
 	return &gen.SyncDirectoryGroupsResult{GroupCount: groupCount}, nil
 }
 
-// SetDirectoryRoleMapping maps a directory group or attribute value to a role,
-// replacing the role it was mapped to before.
+// SetDirectoryRoleMapping keeps already-open dashboard tabs working during rollout.
 func (s *Service) SetDirectoryRoleMapping(ctx context.Context, payload *gen.SetDirectoryRoleMappingPayload) (*gen.DirectoryRoleMapping, error) {
+	mappings, err := s.setDirectoryRoleMappings(ctx, &gen.SetDirectoryRoleMappingsPayload{
+		SourceKind: payload.SourceKind, DirectoryGroupID: payload.DirectoryGroupID,
+		AttributeKey: payload.AttributeKey, AttributeValue: payload.AttributeValue,
+		RoleUrns: []string{payload.RoleUrn}, SessionToken: payload.SessionToken, ApikeyToken: payload.ApikeyToken,
+	}, true)
+	if err != nil {
+		return nil, err
+	}
+	return mappings[0], nil
+}
+
+// SetDirectoryRoleMappings replaces the roles granted by one directory source.
+func (s *Service) SetDirectoryRoleMappings(ctx context.Context, payload *gen.SetDirectoryRoleMappingsPayload) ([]*gen.DirectoryRoleMapping, error) {
+	return s.setDirectoryRoleMappings(ctx, payload, false)
+}
+
+func (s *Service) setDirectoryRoleMappings(ctx context.Context, payload *gen.SetDirectoryRoleMappingsPayload, legacy bool) ([]*gen.DirectoryRoleMapping, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
@@ -199,26 +218,36 @@ func (s *Service) SetDirectoryRoleMapping(ctx context.Context, payload *gen.SetD
 
 	queries := repo.New(dbtx)
 
-	roles, err := queries.ListActiveOrganizationRoles(ctx, ac.ActiveOrganizationID)
+	lockKey := ac.ActiveOrganizationID + ":attr:" + conv.PtrValOr(payload.AttributeKey, "") + "=" + conv.PtrValOr(payload.AttributeValue, "")
+	if groupID.Valid {
+		lockKey = ac.ActiveOrganizationID + ":group:" + groupID.UUID.String()
+	}
+	if err := queries.LockDirectoryRoleMappingSource(ctx, lockKey); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock directory role mapping source").LogError(ctx, s.logger)
+	}
+	if err := s.requireLiveOrgAdmin(ctx, ac); err != nil {
+		return nil, err
+	}
+
+	roleURNs := slices.Clone(payload.RoleUrns)
+	slices.Sort(roleURNs)
+	roleURNs = slices.Compact(roleURNs)
+	roles, err := queries.ListLiveDirectoryMappingRoles(ctx, repo.ListLiveDirectoryMappingRolesParams{
+		OrganizationID: ac.ActiveOrganizationID, RoleUrns: roleURNs,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list roles").LogError(ctx, s.logger)
 	}
-	roleFound := false
-	for _, role := range roles {
-		if role.RoleUrn == payload.RoleUrn {
-			roleFound = true
-			break
+	for _, roleURN := range roleURNs {
+		if !slices.Contains(roles, roleURN) {
+			return nil, oops.E(oops.CodeNotFound, ErrRoleNotFound, "role not found").LogWarn(ctx, s.logger)
 		}
 	}
-	if !roleFound {
-		return nil, oops.E(oops.CodeNotFound, ErrRoleNotFound, "role not found").LogError(ctx, s.logger)
-	}
 
-	// lockKey serializes writes for this group or attribute value.
-	var sourceLabel, lockKey string
+	var sourceLabel string
 	var groupName *string
 	if groupID.Valid {
-		name, err := queries.GetActiveDirectoryGroupName(ctx, repo.GetActiveDirectoryGroupNameParams{
+		group, err := queries.GetDirectoryRoleMappingGroupSource(ctx, repo.GetDirectoryRoleMappingGroupSourceParams{
 			ID:             groupID.UUID,
 			OrganizationID: ac.ActiveOrganizationID,
 		})
@@ -228,9 +257,11 @@ func (s *Service) SetDirectoryRoleMapping(ctx context.Context, payload *gen.SetD
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "get directory group").LogError(ctx, s.logger)
 		}
-		sourceLabel = name
-		groupName = &name
-		lockKey = ac.ActiveOrganizationID + ":group:" + groupID.UUID.String()
+		if len(roleURNs) > 0 && (group.Deleted || group.WorkosDeleted) {
+			return nil, oops.E(oops.CodeNotFound, nil, "directory group not found").LogWarn(ctx, s.logger)
+		}
+		sourceLabel = group.Name
+		groupName = &group.Name
 	} else {
 		exists, err := directoryrepo.New(dbtx).DirectoryAttributeValueExists(ctx, directoryrepo.DirectoryAttributeValueExistsParams{
 			OrganizationID: ac.ActiveOrganizationID,
@@ -240,88 +271,104 @@ func (s *Service) SetDirectoryRoleMapping(ctx context.Context, payload *gen.SetD
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "check directory attribute value").LogError(ctx, s.logger)
 		}
-		if !exists {
-			return nil, oops.E(oops.CodeNotFound, nil, "no directory user has this attribute value").LogError(ctx, s.logger)
+		if len(roleURNs) > 0 && !exists {
+			return nil, oops.E(oops.CodeNotFound, nil, "no directory user has this attribute value").LogWarn(ctx, s.logger)
 		}
 		sourceLabel = *payload.AttributeKey + "=" + *payload.AttributeValue
-		lockKey = ac.ActiveOrganizationID + ":attr:" + sourceLabel
 	}
 
-	if err := queries.LockDirectoryRoleMappingSource(ctx, lockKey); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock directory role mapping source").LogError(ctx, s.logger)
-	}
-
-	var previousRoleURN *string
-	previous, err := queries.GetLiveDirectoryRoleMappingRoleForSource(ctx, repo.GetLiveDirectoryRoleMappingRoleForSourceParams{
+	current, err := queries.ListLiveDirectoryRoleMappingsForSource(ctx, repo.ListLiveDirectoryRoleMappingsForSourceParams{
 		OrganizationID:   ac.ActiveOrganizationID,
 		DirectoryGroupID: groupID,
 		AttributeKey:     conv.PtrToPGText(payload.AttributeKey),
 		AttributeValue:   conv.PtrToPGText(payload.AttributeValue),
 	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "get current directory role mapping").LogError(ctx, s.logger)
-	default:
-		previousRoleURN = &previous
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list current directory role mappings").LogError(ctx, s.logger)
 	}
 
-	var (
-		mappingID uuid.UUID
-		createdAt string
-		updatedAt string
-	)
-	if groupID.Valid {
-		row, err := queries.UpsertDirectoryGroupRoleMapping(ctx, repo.UpsertDirectoryGroupRoleMappingParams{
-			OrganizationID:   ac.ActiveOrganizationID,
-			DirectoryGroupID: groupID,
-			RoleUrn:          payload.RoleUrn,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "save directory group role mapping").LogError(ctx, s.logger)
+	if legacy && len(current) > 1 {
+		return nil, oops.E(oops.CodeConflict, nil, "this source grants multiple roles; refresh the dashboard to edit its role set").LogWarn(ctx, s.logger)
+	}
+
+	// Remove first so singleton replacements work while the source-only indexes
+	// are retained during rollout. Unchanged rows keep their identity and timestamps.
+	for _, row := range current {
+		if slices.Contains(roleURNs, row.RoleUrn) {
+			continue
 		}
-		mappingID, createdAt, updatedAt = row.ID, conv.FromPGTimestamptz(row.CreatedAt), conv.FromPGTimestamptz(row.UpdatedAt)
-	} else {
-		row, err := queries.UpsertDirectoryAttributeRoleMapping(ctx, repo.UpsertDirectoryAttributeRoleMappingParams{
+		if _, err := queries.DeleteDirectoryRoleMapping(ctx, repo.DeleteDirectoryRoleMappingParams{
+			ID: row.ID, OrganizationID: ac.ActiveOrganizationID,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "remove directory role mapping").LogError(ctx, s.logger)
+		}
+		if err := s.audit.LogDirectoryRoleMappingDelete(ctx, dbtx, audit.LogDirectoryRoleMappingDeleteEvent{
 			OrganizationID: ac.ActiveOrganizationID,
-			AttributeKey:   conv.PtrToPGText(payload.AttributeKey),
-			AttributeValue: conv.PtrToPGText(payload.AttributeValue),
-			RoleUrn:        payload.RoleUrn,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "save directory attribute role mapping").LogError(ctx, s.logger)
+			Actor:          urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), ActorDisplayName: ac.Email, ActorSlug: nil,
+			MappingURN: urn.NewDirectoryRoleMapping(row.ID), SourceLabel: sourceLabel, RoleURN: row.RoleUrn,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "log directory role mapping removal").LogError(ctx, s.logger)
 		}
-		mappingID, createdAt, updatedAt = row.ID, conv.FromPGTimestamptz(row.CreatedAt), conv.FromPGTimestamptz(row.UpdatedAt)
 	}
 
-	if err := s.audit.LogDirectoryRoleMappingSet(ctx, dbtx, audit.LogDirectoryRoleMappingSetEvent{
-		OrganizationID:   ac.ActiveOrganizationID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
-		ActorDisplayName: ac.Email,
-		ActorSlug:        nil,
-		MappingURN:       urn.NewDirectoryRoleMapping(mappingID),
-		SourceLabel:      sourceLabel,
-		RoleURN:          payload.RoleUrn,
-		PreviousRoleURN:  previousRoleURN,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "log directory role mapping set").LogError(ctx, s.logger)
+	mappings := make([]*gen.DirectoryRoleMapping, 0, len(roleURNs))
+	for _, roleURN := range roleURNs {
+		var mappingID uuid.UUID
+		var createdAt, updatedAt string
+		index := slices.IndexFunc(current, func(row repo.ListLiveDirectoryRoleMappingsForSourceRow) bool { return row.RoleUrn == roleURN })
+		if index >= 0 {
+			row := current[index]
+			mappingID, createdAt, updatedAt = row.ID, conv.FromPGTimestamptz(row.CreatedAt), conv.FromPGTimestamptz(row.UpdatedAt)
+		} else {
+			if groupID.Valid {
+				row, err := queries.InsertDirectoryGroupRoleMapping(ctx, repo.InsertDirectoryGroupRoleMappingParams{
+					OrganizationID: ac.ActiveOrganizationID, DirectoryGroupID: groupID, RoleUrn: roleURN,
+				})
+				if err != nil {
+					if isLegacyDirectoryMappingConflict(err) {
+						return nil, oops.E(oops.CodeConflict, err, "directory role sets require the remaining schema rollout").LogWarn(ctx, s.logger)
+					}
+					return nil, oops.E(oops.CodeUnexpected, err, "add directory group role mapping").LogError(ctx, s.logger)
+				}
+				mappingID, createdAt, updatedAt = row.ID, conv.FromPGTimestamptz(row.CreatedAt), conv.FromPGTimestamptz(row.UpdatedAt)
+			} else {
+				row, err := queries.InsertDirectoryAttributeRoleMapping(ctx, repo.InsertDirectoryAttributeRoleMappingParams{
+					OrganizationID: ac.ActiveOrganizationID, AttributeKey: conv.PtrToPGText(payload.AttributeKey),
+					AttributeValue: conv.PtrToPGText(payload.AttributeValue), RoleUrn: roleURN,
+				})
+				if err != nil {
+					if isLegacyDirectoryMappingConflict(err) {
+						return nil, oops.E(oops.CodeConflict, err, "directory role sets require the remaining schema rollout").LogWarn(ctx, s.logger)
+					}
+					return nil, oops.E(oops.CodeUnexpected, err, "add directory attribute role mapping").LogError(ctx, s.logger)
+				}
+				mappingID, createdAt, updatedAt = row.ID, conv.FromPGTimestamptz(row.CreatedAt), conv.FromPGTimestamptz(row.UpdatedAt)
+			}
+			if err := s.audit.LogDirectoryRoleMappingSet(ctx, dbtx, audit.LogDirectoryRoleMappingSetEvent{
+				OrganizationID: ac.ActiveOrganizationID,
+				Actor:          urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), ActorDisplayName: ac.Email, ActorSlug: nil,
+				MappingURN: urn.NewDirectoryRoleMapping(mappingID), SourceLabel: sourceLabel, RoleURN: roleURN, PreviousRoleURN: nil,
+			}); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "log directory role mapping addition").LogError(ctx, s.logger)
+			}
+		}
+		mappings = append(mappings, &gen.DirectoryRoleMapping{
+			ID: mappingID.String(), SourceKind: payload.SourceKind, DirectoryGroupID: conv.FromNullableUUID(groupID),
+			DirectoryGroupName: groupName, AttributeKey: payload.AttributeKey, AttributeValue: payload.AttributeValue,
+			RoleUrn: roleURN, CreatedAt: createdAt, UpdatedAt: updatedAt,
+		})
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit directory role mapping").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "commit directory role mappings").LogError(ctx, s.logger)
 	}
+	return mappings, nil
+}
 
-	return &gen.DirectoryRoleMapping{
-		ID:                 mappingID.String(),
-		SourceKind:         payload.SourceKind,
-		DirectoryGroupID:   conv.FromNullableUUID(groupID),
-		DirectoryGroupName: groupName,
-		AttributeKey:       payload.AttributeKey,
-		AttributeValue:     payload.AttributeValue,
-		RoleUrn:            payload.RoleUrn,
-		CreatedAt:          createdAt,
-		UpdatedAt:          updatedAt,
-	}, nil
+func isLegacyDirectoryMappingConflict(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation &&
+		(pgErr.ConstraintName == "directory_role_mappings_org_group_key" || pgErr.ConstraintName == "directory_role_mappings_org_attribute_key")
 }
 
 // DeleteDirectoryRoleMapping removes a mapping. Members keep any role they
@@ -361,6 +408,26 @@ func (s *Service) DeleteDirectoryRoleMapping(ctx context.Context, payload *gen.D
 		return oops.E(oops.CodeNotFound, err, "directory role mapping not found").LogError(ctx, s.logger)
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "get directory role mapping").LogError(ctx, s.logger)
+	}
+
+	lockKey := ac.ActiveOrganizationID + ":attr:" + mapping.AttributeKey.String + "=" + mapping.AttributeValue.String
+	if mapping.DirectoryGroupID.Valid {
+		lockKey = ac.ActiveOrganizationID + ":group:" + mapping.DirectoryGroupID.UUID.String()
+	}
+	if err := queries.LockDirectoryRoleMappingSource(ctx, lockKey); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock directory role mapping source").LogError(ctx, s.logger)
+	}
+	if err := s.requireLiveOrgAdmin(ctx, ac); err != nil {
+		return err
+	}
+	mapping, err = queries.GetDirectoryRoleMapping(ctx, repo.GetDirectoryRoleMappingParams{
+		ID: mappingID, OrganizationID: ac.ActiveOrganizationID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.E(oops.CodeNotFound, err, "directory role mapping not found").LogWarn(ctx, s.logger)
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "get locked directory role mapping").LogError(ctx, s.logger)
 	}
 
 	sourceLabel := mapping.AttributeKey.String + "=" + mapping.AttributeValue.String

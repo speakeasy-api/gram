@@ -9,18 +9,18 @@ import { ClosedEnum } from "../../types/enums.js";
 /**
  * What the mapping matches.
  */
-export const SetDirectoryRoleMappingFormSourceKind = {
+export const SetDirectoryRoleMappingsFormSourceKind = {
   Group: "group",
   Attribute: "attribute",
 } as const;
 /**
  * What the mapping matches.
  */
-export type SetDirectoryRoleMappingFormSourceKind = ClosedEnum<
-  typeof SetDirectoryRoleMappingFormSourceKind
+export type SetDirectoryRoleMappingsFormSourceKind = ClosedEnum<
+  typeof SetDirectoryRoleMappingsFormSourceKind
 >;
 
-export type SetDirectoryRoleMappingForm = {
+export type SetDirectoryRoleMappingsForm = {
   /**
    * Attribute key to match. Required when source_kind is attribute.
    */
@@ -34,59 +34,59 @@ export type SetDirectoryRoleMappingForm = {
    */
   directoryGroupId?: string | undefined;
   /**
-   * Principal URN of the role to grant, from Role.principal_urn.
+   * The complete set of role principal URNs to grant, from Role.principal_urn. Empty removes every mapping for the source.
    */
-  roleUrn: string;
+  roleUrns: Array<string>;
   /**
    * What the mapping matches.
    */
-  sourceKind: SetDirectoryRoleMappingFormSourceKind;
+  sourceKind: SetDirectoryRoleMappingsFormSourceKind;
 };
 
 /** @internal */
-export const SetDirectoryRoleMappingFormSourceKind$outboundSchema:
-  z.ZodMiniEnum<typeof SetDirectoryRoleMappingFormSourceKind> = z.enum(
-    SetDirectoryRoleMappingFormSourceKind,
+export const SetDirectoryRoleMappingsFormSourceKind$outboundSchema:
+  z.ZodMiniEnum<typeof SetDirectoryRoleMappingsFormSourceKind> = z.enum(
+    SetDirectoryRoleMappingsFormSourceKind,
   );
 
 /** @internal */
-export type SetDirectoryRoleMappingForm$Outbound = {
+export type SetDirectoryRoleMappingsForm$Outbound = {
   attribute_key?: string | undefined;
   attribute_value?: string | undefined;
   directory_group_id?: string | undefined;
-  role_urn: string;
+  role_urns: Array<string>;
   source_kind: string;
 };
 
 /** @internal */
-export const SetDirectoryRoleMappingForm$outboundSchema: z.ZodMiniType<
-  SetDirectoryRoleMappingForm$Outbound,
-  SetDirectoryRoleMappingForm
+export const SetDirectoryRoleMappingsForm$outboundSchema: z.ZodMiniType<
+  SetDirectoryRoleMappingsForm$Outbound,
+  SetDirectoryRoleMappingsForm
 > = z.pipe(
   z.object({
     attributeKey: z.optional(z.string()),
     attributeValue: z.optional(z.string()),
     directoryGroupId: z.optional(z.string()),
-    roleUrn: z.string(),
-    sourceKind: SetDirectoryRoleMappingFormSourceKind$outboundSchema,
+    roleUrns: z.array(z.string()),
+    sourceKind: SetDirectoryRoleMappingsFormSourceKind$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       attributeKey: "attribute_key",
       attributeValue: "attribute_value",
       directoryGroupId: "directory_group_id",
-      roleUrn: "role_urn",
+      roleUrns: "role_urns",
       sourceKind: "source_kind",
     });
   }),
 );
 
-export function setDirectoryRoleMappingFormToJSON(
-  setDirectoryRoleMappingForm: SetDirectoryRoleMappingForm,
+export function setDirectoryRoleMappingsFormToJSON(
+  setDirectoryRoleMappingsForm: SetDirectoryRoleMappingsForm,
 ): string {
   return JSON.stringify(
-    SetDirectoryRoleMappingForm$outboundSchema.parse(
-      setDirectoryRoleMappingForm,
+    SetDirectoryRoleMappingsForm$outboundSchema.parse(
+      setDirectoryRoleMappingsForm,
     ),
   );
 }
