@@ -14,7 +14,7 @@ import { useResourceAudience } from "@gram/client/react-query/resourceAudience.j
 import { useMemo, type ReactElement } from "react";
 import { CheckAccess } from "./access/CheckAccess";
 import { ManageAccess } from "./access/ManageAccess";
-import { RoleLink } from "./access/RoleLink";
+import { RoleLink } from "@/components/role-link";
 import { blockingRules } from "./access/serverAudience";
 
 /** The annotations a tool carries, in the vocabulary selectors store. */

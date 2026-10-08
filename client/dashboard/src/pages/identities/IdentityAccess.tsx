@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/Badge";
+import { RoleLink } from "@/components/role-link";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useLocation } from "react-router";
 import { useOrgRoutes, useRoutes } from "@/routes";
@@ -206,7 +207,12 @@ export default function IdentityAccess(): JSX.Element {
               >
                 <span className="w-28 shrink-0">
                   <Badge variant="neutral" title={role.slug}>
-                    {role.name}
+                    {/* A role the roles list did not return has no page to open. */}
+                    <RoleLink
+                      roleId={rolesById.has(role.id) ? role.id : undefined}
+                    >
+                      {role.name}
+                    </RoleLink>
                   </Badge>
                 </span>
                 <span className="text-muted-foreground min-w-0 flex-1 text-xs">
