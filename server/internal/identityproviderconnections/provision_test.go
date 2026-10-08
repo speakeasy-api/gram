@@ -15,6 +15,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	extcredrepo "github.com/speakeasy-api/gram/server/internal/externalcredentials/repo"
 	extkeysrepo "github.com/speakeasy-api/gram/server/internal/externalkeys/repo"
@@ -139,6 +140,13 @@ func TestProvisionClient_AuditsAsSystem(t *testing.T) {
 		{"system:identity-provider-connections", "json_web_key:publish"},
 		{"system:identity-provider-connections", "remote-session-client:create"},
 	}, auditActions(t, ctx, ti.conn, ti.orgID))
+
+	entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionRemoteSessionClientCreate)
+	require.NoError(t, err)
+	snapshot, err := audittest.DecodeAuditData(entry.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, entry.SubjectID, snapshot["ID"])
+	require.Equal(t, "subject", snapshot["CredentialOwner"])
 }
 
 // A second run for the same connection adopts the first run's rows rather than

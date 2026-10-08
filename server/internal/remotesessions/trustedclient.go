@@ -18,6 +18,10 @@ var errTrustedIdentityProviderClientIneligible = errors.New("trusted identity-pr
 // validates the client's explicit upstream scope allowlist, not the downstream
 // scopes requested by an MCP server.
 func ValidateTrustedIdentityProviderClient(client repo.RemoteSessionClient, issuer repo.RemoteSessionIssuer) error {
+	if CredentialOwner(client.CredentialOwner) == CredentialOwnerSelf {
+		return fmt.Errorf("credential_owner self is not eligible for trusted identity-provider login; use a subject client")
+	}
+
 	effectiveScopes := client.Scope
 	if len(issuer.ScopeOverride) > 0 {
 		effectiveScopes = issuer.ScopeOverride
