@@ -282,6 +282,21 @@ func TestBackstopDoesNotForwardAJSONRPCErrorsText(t *testing.T) {
 	require.Equal(t, unavailableCode, refusal.Code)
 	requireNoDatabaseText(t, "fails", refusal.Payload)
 	require.Contains(t, logs.String(), "does not exist")
+
+	// The SDK would otherwise send a handler's JSON-RPC error to the external
+	// client as a protocol error carrying its message and data.
+	var externalLogs bytes.Buffer
+	registrar := backstopRegistrar(slog.New(slog.NewTextHandler(&externalLogs, nil)), remote)
+	bindExternalTestPrincipal(registrar.server)
+	result, err := connectTestClient(t, registrar.server).CallTool(t.Context(), &mcp.CallToolParams{Name: "fails", Arguments: map[string]any{}})
+	require.NoError(t, err, "the external client gets a tool result, not the JSON-RPC error")
+	require.True(t, result.IsError)
+	require.Len(t, result.Content, 1)
+	text, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.Contains(t, text.Text, unavailableCode)
+	requireNoDatabaseText(t, "fails", text.Text)
+	require.Contains(t, externalLogs.String(), "does not exist")
 }
 
 // A recognised error keeps its meaning: a tool's own refusal and an
