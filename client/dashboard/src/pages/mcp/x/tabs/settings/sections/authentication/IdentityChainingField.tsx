@@ -88,13 +88,15 @@ function ClientPicker({
   clients,
   value,
   onChange,
+  disabled,
 }: {
   clients: RemoteSessionClient[];
   value: string;
   onChange: (value: string) => void;
+  disabled: boolean;
 }): JSX.Element {
   return (
-    <Select value={value} onValueChange={onChange}>
+    <Select value={value} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger>
         <SelectValue />
       </SelectTrigger>
@@ -315,6 +317,7 @@ export function IdentityChainingField({
                 clients={candidates}
                 value={selected?.id ?? ""}
                 onChange={setSelectedId}
+                disabled={prepare.isPending || unlink.isPending}
               />
             )}
             {selected && (

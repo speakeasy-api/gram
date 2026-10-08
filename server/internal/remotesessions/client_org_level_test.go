@@ -2,6 +2,7 @@ package remotesessions_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -9,7 +10,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // TestListClients_OrgLevelClientResolvedForProject proves the load-bearing
@@ -203,4 +206,57 @@ func TestDetachUserSessionIssuer_RefusesOrgClientOnOrgIssuer(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeConflict)
 	require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
 	requireClientBound(t, ctx, ti, orgClient, userIssuer, true)
+}
+
+// The pre-lock binding snapshot must not turn a concurrent org-wide change
+// into an authorized project-scoped mutation.
+func TestClientAttachment_OrgWideGuardUsesLockedBinding(t *testing.T) {
+	for _, attach := range []bool{true, false} {
+		name := "detach"
+		if attach {
+			name = "attach"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			orgIssuer := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, activeOrganizationID(t, ctx), "concurrent-org-provider")
+			userIssuer := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "concurrent-org-issuer")
+			orgClient := seedOrgLevelRemoteClient(t, ctx, ti.conn, activeOrganizationID(t, ctx), orgIssuer, "concurrent-org-client")
+			if attach {
+				require.NoError(t, repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: orgClient, UserSessionIssuerID: userIssuer}))
+			}
+			tx := testenv.BeginTx(t, ctx, ti.conn)
+			require.NoError(t, usersessionsrepo.New(tx).LockUserSessionIssuerForOwnerBinding(ctx, userIssuer))
+			_, err := repo.New(tx).LockProjectUserIssuerForDetach(ctx, repo.LockProjectUserIssuerForDetachParams{ID: userIssuer, ProjectID: projectIDFromContext(t, ctx), OrganizationID: activeOrganizationID(t, ctx)})
+			require.NoError(t, err)
+			done := make(chan error, 1)
+			go func() {
+				if attach {
+					_, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{ID: orgClient.String(), UserSessionIssuerID: userIssuer.String()})
+					done <- err
+				} else {
+					_, err := ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{ID: orgClient.String(), UserSessionIssuerID: userIssuer.String()})
+					done <- err
+				}
+			}()
+			testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), 1)
+			// Simulate an organization-authorized mutation while the project request
+			// waits for the issuer lock, after it has read the old binding state.
+			if attach {
+				_, err := tx.Exec(ctx, "DELETE FROM remote_session_client_user_session_issuers WHERE remote_session_client_id = $1 AND user_session_issuer_id = $2", orgClient, userIssuer)
+				require.NoError(t, err)
+			} else {
+				require.NoError(t, repo.New(tx).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: orgClient, UserSessionIssuerID: userIssuer}))
+			}
+			require.NoError(t, tx.Commit(ctx))
+			select {
+			case err := <-done:
+				requireOopsCode(t, err, oops.CodeConflict)
+				require.ErrorContains(t, err, remotesessions.OrgWideBindingMessage)
+			case <-time.After(30 * time.Second):
+				t.Fatal("binding change did not complete after releasing issuer lock")
+			}
+			requireClientBound(t, ctx, ti, orgClient, userIssuer, !attach)
+		})
+	}
 }

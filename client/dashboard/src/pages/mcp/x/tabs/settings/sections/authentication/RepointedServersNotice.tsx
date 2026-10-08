@@ -11,7 +11,7 @@ const IMPACT_COPY: Record<SharedIssuerImpact, string> = {
   repoint:
     "These servers share this user session issuer, and this change moves them to a different upstream authorization server:",
   clear:
-    "These servers share this user session issuer, and this change leaves it with more than one provider, so they lose their upstream authorization server until a single provider remains linked:",
+    "These servers share this user session issuer, and this change leaves either no providers or multiple providers linked, so they lose their upstream authorization server until exactly one provider is linked:",
   resignin:
     "These servers share this user session issuer, and the client is replaced for all of them. Everyone signed in to them will have to sign in again:",
   client_removed:

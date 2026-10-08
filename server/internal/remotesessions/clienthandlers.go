@@ -740,10 +740,8 @@ func (s *Service) AttachUserSessionIssuer(ctx context.Context, payload *gen.Atta
 	if err := lockUserSessionIssuersForClientBinding(ctx, logger, dbtx, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, []uuid.UUID{userIssuerID}); err != nil {
 		return nil, err
 	}
-	if !slices.Contains(existing.UserSessionIssuerIds, userIssuerID) {
-		if err := s.refuseOrgWideAttachment(ctx, logger, txRepo, *authCtx, userIssuerID, existing.RemoteSessionClient.ProjectID); err != nil {
-			return nil, err
-		}
+	if err := s.refuseOrgWideAttachment(ctx, logger, txRepo, *authCtx, userIssuerID, clientID, true); err != nil {
+		return nil, err
 	}
 
 	// Exclude this client so re-attaching an existing binding is a no-op.
@@ -836,10 +834,8 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
 	}
 
-	if slices.Contains(existing.UserSessionIssuerIds, userIssuerID) {
-		if err := s.refuseOrgWideAttachment(ctx, logger, txRepo, *authCtx, userIssuerID, existing.RemoteSessionClient.ProjectID); err != nil {
-			return nil, err
-		}
+	if err := s.refuseOrgWideAttachment(ctx, logger, txRepo, *authCtx, userIssuerID, clientID, false); err != nil {
+		return nil, err
 	}
 
 	// Lock in preparation's user-issuer -> client order. The scoped lock
@@ -888,7 +884,28 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 // refuseOrgWideAttachment refuses a project-scoped attach or detach of an
 // organization-level client on an organization-level user session issuer: that
 // binding is shared by every project's servers on the issuer.
-func (s *Service) refuseOrgWideAttachment(ctx context.Context, logger *slog.Logger, q *repo.Queries, authCtx contextvalues.AuthContext, userIssuerID uuid.UUID, clientProjectID uuid.NullUUID) error {
+func (s *Service) refuseOrgWideAttachment(ctx context.Context, logger *slog.Logger, q *repo.Queries, authCtx contextvalues.AuthContext, userIssuerID, clientID uuid.UUID, attaching bool) error {
+	// Attach holds the owner advisory lock, while organization detach takes a
+	// row lock. Take the row lock too before reading whether this is a no-op.
+	if _, err := q.LockProjectUserIssuerForDetach(ctx, repo.LockProjectUserIssuerForDetachParams{
+		ID: userIssuerID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
+	}); err != nil {
+		return lifecycleLockError(err)
+	}
+	// Re-read after acquiring the lock: the pre-lock snapshot may describe a
+	// no-op that is now an organization-wide change.
+	client, err := q.GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
+		ID: clientID, ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return oops.E(oops.CodeNotFound, err, "remote session client not found").LogError(ctx, logger)
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "get remote session client").LogError(ctx, logger)
+	}
+	if slices.Contains(client.UserSessionIssuerIds, userIssuerID) == attaching {
+		return nil // Re-attaching or detaching a missing binding is a no-op.
+	}
 	issuer, err := q.GetUserSessionIssuerForProject(ctx, repo.GetUserSessionIssuerForProjectParams{
 		ID:             userIssuerID,
 		ProjectID:      *authCtx.ProjectID,
@@ -900,7 +917,7 @@ func (s *Service) refuseOrgWideAttachment(ctx context.Context, logger *slog.Logg
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
 	}
-	if err := refuseOrgWideBinding(!issuer.ProjectID.Valid, clientProjectID); err != nil {
+	if err := refuseOrgWideBinding(!issuer.ProjectID.Valid, client.RemoteSessionClient.ProjectID); err != nil {
 		return identityOopsError(err, "attach remote session client").LogError(ctx, logger)
 	}
 	return nil
