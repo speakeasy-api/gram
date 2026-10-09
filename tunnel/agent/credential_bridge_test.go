@@ -532,8 +532,8 @@ func TestCredentialsExpiryWhileQueuedIsRefusedWithoutTeardown(t *testing.T) {
 			sess := c.bridge.session(call.sid)
 			_, writes, _ := c.store.counts()
 
+			before := sessionCredentialState(t, sess)
 			require.True(t, sess.enterGate(t.Context()))
-			generation := sess.cred.generation
 			status := make(chan int, 1)
 			go func() {
 				queued := call
@@ -556,9 +556,7 @@ func TestCredentialsExpiryWhileQueuedIsRefusedWithoutTeardown(t *testing.T) {
 			require.Equal(t, http.StatusUnauthorized, <-status)
 			_, writesAfter, _ := c.store.counts()
 			require.Equal(t, writes, writesAfter, "nothing is published")
-			require.True(t, sess.enterGate(t.Context()))
-			require.Equal(t, generation, sess.cred.generation, "the deadline is not renewed")
-			sess.leaveGate()
+			require.Equal(t, before, sessionCredentialState(t, sess), "the deadline is not renewed")
 			require.False(t, sess.closing.Load(), "a stale request does not end the session")
 			require.Equal(t, identity.TokenSHA256(testTokenA), c.toolText(t, call, "token-sha"))
 		})
@@ -574,11 +572,34 @@ func TestCredentialsDelayedExpiredTokenKeepsNewerToken(t *testing.T) {
 	call.token = testTokenB
 	require.Equal(t, identity.TokenSHA256(testTokenB), c.toolText(t, call, "token-sha"))
 
+	sess := c.bridge.session(call.sid)
+	before := sessionCredentialState(t, sess)
+	_, writes, _ := c.store.counts()
+
 	delayed := call
 	delayed.token, delayed.expiresAt = testTokenA, time.Unix(1, 0)
 	delayed.body = `{"jsonrpc":"2.0","id":8,"method":"tools/list"}`
 	require.Equal(t, http.StatusUnauthorized, c.do(t, delayed).StatusCode)
-	require.Equal(t, identity.TokenSHA256(testTokenB), c.toolText(t, call, "token-sha"), "the newer token stays")
+
+	content, err := os.ReadFile(sess.cred.dir.tokenPath())
+	require.NoError(t, err)
+	require.Equal(t, identity.TokenSHA256(testTokenB), identity.TokenSHA256(string(content)), "the newer token stays")
+	_, writesAfter, _ := c.store.counts()
+	require.Equal(t, writes, writesAfter)
+	require.Equal(t, before, sessionCredentialState(t, sess), "the deadline is untouched")
+}
+
+// credentialState is what a publication changes: its generation and timer.
+type credentialState struct {
+	generation uint64
+	timer      *time.Timer
+}
+
+func sessionCredentialState(t *testing.T, sess *stdioSession) credentialState {
+	t.Helper()
+	require.True(t, sess.enterGate(t.Context()))
+	defer sess.leaveGate()
+	return credentialState{generation: sess.cred.generation, timer: sess.cred.timer}
 }
 
 func TestCredentialsExpiredRequestsDoNotPostponeTheDeadline(t *testing.T) {
@@ -587,13 +608,21 @@ func TestCredentialsExpiredRequestsDoNotPostponeTheDeadline(t *testing.T) {
 	call := credentialCall{token: testTokenA}
 	call.sid = c.initialize(t, call)
 
+	sess := c.bridge.session(call.sid)
+	initial := sessionCredentialState(t, sess)
 	expired := call
 	expired.expiresAt = time.Unix(1, 0)
 	expired.body = `{"jsonrpc":"2.0","method":"notifications/initialized"}`
-	deadline := time.Now().Add(20 * time.Second)
-	for c.bridge.session(call.sid) != nil && time.Now().Before(deadline) {
+	// The one-second deadline must fire while refusals keep arriving; the
+	// bound leaves room for the shutdown sequence but not for renewals.
+	ended := time.Now().Add(10 * time.Second)
+	for !sess.closing.Load() {
+		require.True(t, time.Now().Before(ended), "refusals must not postpone the deadline")
 		require.Contains(t, []int{http.StatusUnauthorized, http.StatusNotFound}, c.do(t, expired).StatusCode)
-		time.Sleep(100 * time.Millisecond)
+		if !sess.closing.Load() {
+			require.Equal(t, initial, sessionCredentialState(t, sess))
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 	c.requireSessionEnds(t, call.sid)
 }
