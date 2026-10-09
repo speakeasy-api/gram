@@ -329,6 +329,45 @@ describe("HeadersSection remote header policy warnings", () => {
     expect(screen.queryByText(/Speakeasy does not/)).toBeNull();
   });
 
+  it("does not offer upstream OAuth for a custom header", () => {
+    renderSection(
+      headerState({
+        drafts: [
+          savedDraft({
+            key: "row-forwarded",
+            name: "X-Upstream-Token",
+            source: "request",
+            staticValue: "",
+            valueFromRequestHeader: "Authorization",
+            isRequired: true,
+          }),
+        ],
+      }),
+    );
+
+    screen.getByText(/does not replace this header/);
+    expect(
+      screen.queryByText(/connect the server's upstream OAuth/),
+    ).toBeNull();
+  });
+
+  it("says a padded saved name fails requests", () => {
+    renderSection(
+      headerState({
+        drafts: [
+          savedDraft({
+            key: "row-padded",
+            name: " X-Api-Key ",
+            isRequired: true,
+          }),
+        ],
+      }),
+    );
+
+    screen.getByText(/Every request to this server fails/);
+    screen.getByText(/not a valid HTTP header name/);
+  });
+
   it("calls a row naming an MCP protocol header ignored", () => {
     renderSection(
       headerState({

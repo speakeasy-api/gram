@@ -122,10 +122,10 @@ const MCP_PARAM_PREFIX = "mcp-param-";
 
 /**
  * Standard MCP request headers, which an intermediary forwards untouched, so
- * configuration never sets them.
+ * configuration never sets them. key is lowercase with underscores read as
+ * dashes, and untrimmed, as the proxy compares it.
  */
-function isStandardMcpRequestHeader(name: string): boolean {
-  const key = headerKey(name);
+function isStandardMcpRequestHeader(key: string): boolean {
   return (
     key === "mcp-protocol-version" ||
     key === "mcp-method" ||
@@ -133,6 +133,12 @@ function isStandardMcpRequestHeader(name: string): boolean {
     (key.startsWith(MCP_PARAM_PREFIX) && key.length > MCP_PARAM_PREFIX.length)
   );
 }
+
+/**
+ * An HTTP field name (RFC 9110 token). Stored names must match exactly, with
+ * no surrounding whitespace; any casing is fine.
+ */
+const FIELD_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 
 /**
  * What the proxy does with a saved header row that its policy refuses.
@@ -152,7 +158,9 @@ export type RemoteHeaderPolicyEffect =
   | "blocks-unless-upstream-token";
 
 export type RemoteHeaderPolicyIssue = {
-  readonly reason: "protected-source" | "reserved-name";
+  readonly reason: "protected-source" | "reserved-name" | "invalid-name";
+  /** The field at fault: the header's own name or the header it reads. */
+  readonly field: "name" | "source";
   readonly effect: RemoteHeaderPolicyEffect;
 };
 
@@ -162,37 +170,56 @@ export type RemoteHeaderPolicyIssue = {
  * from Authorization or Gram-Key is refused just as Set-Cookie is, while
  * Authorization populated from a separately supplied header is allowed.
  *
+ * `stored` judges a saved row the way the proxy does at request time: names
+ * exactly as stored, so a padded or malformed one fails. `write` judges a row
+ * about to be written, whose names the server trims and canonicalizes first.
+ *
  * Returns null when the row is allowed.
  */
-export function remoteHeaderPolicyIssue(header: {
-  readonly name: string;
-  readonly valueFromRequestHeader?: string;
-  readonly isRequired: boolean;
-}): RemoteHeaderPolicyIssue | null {
-  const name = headerKey(header.name);
-  const source = header.valueFromRequestHeader?.trim() ?? "";
+export function remoteHeaderPolicyIssue(
+  header: {
+    readonly name: string;
+    readonly valueFromRequestHeader?: string;
+    readonly isRequired: boolean;
+  },
+  mode: "stored" | "write" = "stored",
+): RemoteHeaderPolicyIssue | null {
+  const name = mode === "write" ? header.name.trim() : header.name;
+  const rawSource = header.valueFromRequestHeader ?? "";
+  const source = mode === "write" ? rawSource.trim() : rawSource;
+  // The proxy checks unowned names before anything else, without trimming.
+  const nameKey = name.toLowerCase().replaceAll("_", "-");
 
-  if (name === CALLER_ASSERTION_HEADER || isStandardMcpRequestHeader(name)) {
-    return { reason: "reserved-name", effect: "ignored" };
-  }
-
-  let reason: RemoteHeaderPolicyIssue["reason"] | null = null;
-  if (source && isProtectedInboundHeader(source)) {
-    reason = "protected-source";
-  } else if (
-    name === "set-cookie" ||
-    name === "proxy-authorization" ||
-    (name === "cookie" && !!source)
+  if (
+    nameKey === CALLER_ASSERTION_HEADER ||
+    isStandardMcpRequestHeader(nameKey)
   ) {
-    reason = "reserved-name";
+    return { reason: "reserved-name", field: "name", effect: "ignored" };
   }
-  if (!reason) return null;
 
-  if (!header.isRequired) return { reason, effect: "suppressed" };
-  if (name === "authorization") {
-    return { reason, effect: "blocks-unless-upstream-token" };
+  let fault: Pick<RemoteHeaderPolicyIssue, "reason" | "field"> | null = null;
+  if (!FIELD_NAME.test(name)) {
+    fault = { reason: "invalid-name", field: "name" };
+  } else if (source && !FIELD_NAME.test(source)) {
+    fault = { reason: "invalid-name", field: "source" };
+  } else if (source && isProtectedInboundHeader(source)) {
+    fault = { reason: "protected-source", field: "source" };
+  } else if (
+    nameKey === "set-cookie" ||
+    nameKey === "proxy-authorization" ||
+    (nameKey === "cookie" && !!source)
+  ) {
+    fault = { reason: "reserved-name", field: "name" };
   }
-  return { reason, effect: "blocks-requests" };
+  if (!fault) return null;
+
+  if (!header.isRequired) return { ...fault, effect: "suppressed" };
+  // A resolved upstream token owns Authorization, so the proxy skips the row
+  // before judging it whenever there is one.
+  if (headerKey(name) === "authorization") {
+    return { ...fault, effect: "blocks-unless-upstream-token" };
+  }
+  return { ...fault, effect: "blocks-requests" };
 }
 
 /** What the row's warning says the proxy does with it. */
@@ -211,15 +238,26 @@ export function remoteHeaderPolicyEffectMessage(
   }
 }
 
-/** Why the policy refuses the row, and what to do instead. */
+/**
+ * Why the policy refuses the row, and what to do instead. Upstream OAuth is
+ * offered only for Authorization: the token it resolves supplies that header
+ * and no other.
+ */
 export function remoteHeaderPolicyReasonMessage(
   reason: RemoteHeaderPolicyIssue["reason"],
-  source: string,
+  header: { readonly name: string; readonly valueFromRequestHeader?: string },
 ): string {
   switch (reason) {
-    case "protected-source":
-      return `Speakeasy does not forward "${source.trim()}" or other Speakeasy credentials to remote MCP servers. Have clients send the upstream credential in a separate request header, store a static credential, or configure upstream OAuth where the server supports it.`;
+    case "protected-source": {
+      const forwarded = `Speakeasy does not forward "${(header.valueFromRequestHeader ?? "").trim()}" or other Speakeasy credentials to remote MCP servers. Have clients send the upstream credential in a separate request header and read it from there`;
+      if (headerKey(header.name) === "authorization") {
+        return `${forwarded}, store a static credential, or connect the server's upstream OAuth, which supplies Authorization itself.`;
+      }
+      return `${forwarded}, or store a static credential. Upstream OAuth supplies only Authorization, so it does not replace this header.`;
+    }
     case "reserved-name":
       return "This header name cannot be configured on a remote MCP server. Change the name or remove this row.";
+    case "invalid-name":
+      return "This row's header name or request header is not a valid HTTP header name, for example because of a space. Change it or remove this row.";
   }
 }

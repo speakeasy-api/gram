@@ -110,12 +110,15 @@ export function savedHeaderPolicyIssue(
 ): RemoteHeaderPolicyIssue | null {
   const saved = draft.saved;
   if (!draft.id || !saved) return null;
-  return remoteHeaderPolicyIssue({
-    name: saved.name,
-    valueFromRequestHeader:
-      saved.source === "request" ? saved.valueFromRequestHeader : undefined,
-    isRequired: saved.isRequired,
-  });
+  return remoteHeaderPolicyIssue(
+    {
+      name: saved.name,
+      valueFromRequestHeader:
+        saved.source === "request" ? saved.valueFromRequestHeader : undefined,
+      isRequired: saved.isRequired,
+    },
+    "stored",
+  );
 }
 
 /**
@@ -125,12 +128,15 @@ export function savedHeaderPolicyIssue(
 export function draftPolicyIssue(
   draft: HeaderDraft,
 ): RemoteHeaderPolicyIssue | null {
-  return remoteHeaderPolicyIssue({
-    name: draft.name,
-    valueFromRequestHeader:
-      draft.source === "request" ? draft.valueFromRequestHeader : undefined,
-    isRequired: draft.isRequired,
-  });
+  return remoteHeaderPolicyIssue(
+    {
+      name: draft.name,
+      valueFromRequestHeader:
+        draft.source === "request" ? draft.valueFromRequestHeader : undefined,
+      isRequired: draft.isRequired,
+    },
+    "write",
+  );
 }
 
 // A saved secret shows its redacted placeholder (`***`) in the value field. As
@@ -203,12 +209,12 @@ export function headerDraftErrors(
     }
     names.add(normalized);
 
-    // An identity that owns Authorization still needs a saved row claiming
-    // that name removed. With no identity, an untouched saved row is left to
-    // the policy check below.
+    // A Service Account writes its own static Authorization row, so a saved
+    // row claiming that name has to go first. Otherwise an untouched saved
+    // row is left to the policy check below rather than blocking every edit.
     if (
       identityMode &&
-      !(identityMode === "none" && isUnchangedSavedDraft(draft))
+      !(identityMode !== "agent" && isUnchangedSavedDraft(draft))
     ) {
       const authorizationError = authorizationHeaderGuard(
         identityMode,
@@ -229,13 +235,10 @@ export function headerDraftErrors(
     const policyIssue = draftPolicyIssue(draft);
     if (policyIssue) {
       errors.set(draft.key, {
-        field: policyIssue.reason === "protected-source" ? "value" : "name",
+        field: policyIssue.field === "source" ? "value" : "name",
         message: draft.id
           ? `Change the source or name of "${name}", or remove this header.`
-          : remoteHeaderPolicyReasonMessage(
-              policyIssue.reason,
-              draft.valueFromRequestHeader,
-            ),
+          : remoteHeaderPolicyReasonMessage(policyIssue.reason, draft),
       });
       continue;
     }

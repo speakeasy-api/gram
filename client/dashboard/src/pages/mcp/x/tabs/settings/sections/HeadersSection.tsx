@@ -296,7 +296,7 @@ function HeaderDraftRow({
             {remoteHeaderPolicyEffectMessage(policyIssue.effect)}{" "}
             {remoteHeaderPolicyReasonMessage(
               policyIssue.reason,
-              draft.saved?.valueFromRequestHeader ?? "",
+              draft.saved ?? draft,
             )}
           </Alert>
         ) : null}

@@ -553,3 +553,72 @@ describe("useHeaderDrafts with rows the remote header policy refuses", () => {
     expect(result.current.validationError).not.toBeNull();
   });
 });
+
+describe("useHeaderDrafts under User Identity with a refused Authorization row", () => {
+  it("saves an unrelated row and deletes another refused row without touching it", async () => {
+    mocks.headers.mockReturnValue(
+      headersResult([
+        refusedPassThrough({
+          id: "header-authorization",
+          name: "Authorization",
+        }),
+        refusedPassThrough({
+          id: "header-key",
+          name: "X-Key",
+          valueFromRequestHeader: "Gram-Key",
+        }),
+      ]),
+    );
+    const { result } = renderHook(
+      () =>
+        useHeaderDrafts({
+          remoteMcpServerId: "remote-source-1",
+          identity: {
+            mode: "user",
+            managed: { ownedBy: "user", headerId: null },
+            isError: false,
+          },
+        }),
+      { wrapper },
+    );
+
+    act(() => result.current.removeHeader(1));
+    act(() => result.current.addHeader());
+    act(() =>
+      result.current.replaceHeader(1, {
+        ...result.current.drafts[1]!,
+        name: "X-Trace",
+        staticValue: "on",
+      }),
+    );
+    expect(result.current.validationError).toBeNull();
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    expect(mocks.remove).toHaveBeenCalledWith({
+      request: { id: "header-key" },
+    });
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses a new row whose name is not an HTTP field name", () => {
+    const { result } = renderDraftsWithoutIdentity();
+
+    act(() => result.current.addHeader());
+    act(() =>
+      result.current.replaceHeader(0, {
+        ...result.current.drafts[0]!,
+        name: "X Bad",
+        staticValue: "on",
+      }),
+    );
+    expect(
+      result.current.fieldErrors.get(result.current.drafts[0]!.key),
+    ).toMatchObject({
+      field: "name",
+    });
+  });
+});
