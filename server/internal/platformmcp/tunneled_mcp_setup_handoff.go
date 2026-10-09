@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"slices"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -85,6 +87,7 @@ type GetTunneledMCPSetupHandoffOutput struct {
 // servers reachable through a tunnel. It never creates, rotates, or reveals a
 // tunnel or its key: the dashboard does that under its own session.
 type TunneledMCPSetupHandoffService struct {
+	logger   *slog.Logger
 	db       *pgxpool.Pool
 	authz    *authz.Engine
 	projects interface {
@@ -109,7 +112,7 @@ func (r *PostgresReader) WithTunneledMCPSetupHandoff(dashboardURL *url.URL, budg
 		origin.RawQuery = ""
 		origin.Fragment = ""
 		origin.RawFragment = ""
-		r.tunneledSetup = &TunneledMCPSetupHandoffService{db: r.db, authz: r.authz, projects: r, dashboardURL: &origin, budget: budget, flags: flags}
+		r.tunneledSetup = &TunneledMCPSetupHandoffService{logger: r.logger, db: r.db, authz: r.authz, projects: r, dashboardURL: &origin, budget: budget, flags: flags}
 	}
 	return r
 }
@@ -175,6 +178,7 @@ func (s *TunneledMCPSetupHandoffService) Handoff(ctx context.Context, principal 
 		evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagTunneledMCP, principal.OrganizationID, feature.OrgProjectGroups(organization.Slug, project.Slug))
 		switch {
 		case err != nil:
+			s.logger.WarnContext(ctx, "evaluate tunneled MCP availability", attr.SlogError(err))
 			return GetTunneledMCPSetupHandoffOutput{}, fmt.Errorf("%w: evaluate tunneled MCP availability: %w", ErrUnavailable, err)
 		case evaluation == feature.EvaluationDisabled:
 			return GetTunneledMCPSetupHandoffOutput{}, ErrTunneledMCPSetupNotEnabled

@@ -3549,6 +3549,8 @@ func TestGeneratePlatformMCPExistingServersClientsLocalServersAndPrivacy(t *test
 			"`local server left unchanged; tunnel setup handed off`",
 			"A `not_enabled` refusal means adding tunneled MCP servers is not available for this organization yet",
 			"do not send the user to the dashboard to look for it",
+			"A `feature_unavailable` refusal means tunnel setup could not be checked right now",
+			"stop this step without retrying in a loop",
 		}},
 		{"a verified tunneled server can take the private network step", []string{
 			"plus any tunneled MCP server step 8 verified with a fresh `get_mcp` read and an exact MCP ID",
