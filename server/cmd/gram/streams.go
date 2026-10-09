@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sigint/evaluation"
 
 	"cloud.google.com/go/pubsub/v2"
+	cloudstorage "cloud.google.com/go/storage"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -45,6 +46,8 @@ import (
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/infra/pkg/storage"
+	"github.com/speakeasy-api/gram/infra/pkg/storagebindings"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -276,6 +279,11 @@ func newStreamsCommand() *cli.Command {
 			Name:    "sigint-openrouter-api-key",
 			Usage:   "Platform OpenRouter inference key for sensor evaluation; unset leaves the receiver stopped unless sigint-ack-only is enabled",
 			EnvVars: []string{"GRAM_SIGINT_OPENROUTER_API_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "storage-buckets",
+			Usage:   "Logical-to-physical GCS bucket mapping as JSON; unset leaves the sensor readings storage consumer stopped",
+			EnvVars: []string{"GRAM_STORAGE_BUCKETS"},
 		},
 		&cli.BoolFlag{
 			Name:    "sigint-ack-only",
@@ -513,6 +521,21 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("create sensor evaluator: %w", err)
 			}
 
+			var lakeClient *cloudstorage.Client
+			var lakeBuckets map[string]string
+			if raw := c.String("storage-buckets"); raw != "" {
+				lakeBuckets, err = storage.ParseBucketMapping(raw)
+				if err != nil {
+					return fmt.Errorf("parse storage bucket mapping: %w", err)
+				}
+
+				lakeClient, err = cloudstorage.NewClient(ctx)
+				if err != nil {
+					return fmt.Errorf("create sensor readings storage client: %w", err)
+				}
+				shutdownFuncs = append(shutdownFuncs, func(context.Context) error { return lakeClient.Close() })
+			}
+
 			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub, riskRecorder)
 			replyWriter := enforcereply.NewWriter(redisClient)
 			gitleaksEnforceHandler, err := gitleaks.NewEnforceHandler(
@@ -714,6 +737,30 @@ func newStreamsCommand() *cli.Command {
 
 			// Start subscription receivers in this block
 			{
+				if lakeClient != nil {
+					group.Go(func() error {
+						return storage.Run(gctx, storagebindings.GramSigintV1LakePrimary(), storage.Config{
+							Broker:  psbroker,
+							Store:   &storage.GCSStore{Client: lakeClient},
+							Buckets: lakeBuckets,
+							Settings: storage.Settings{
+								MaxMessages:         0,
+								MaxBytes:            0,
+								MaxLatency:          0,
+								MaxPartitions:       0,
+								Concurrency:         0,
+								ProcessTimeout:      0,
+								MaxExtension:        0,
+								OutstandingMessages: 0,
+								OutstandingBytes:    0,
+							},
+							TempDir:       "",
+							MeterProvider: meterProvider,
+							Logger:        logger,
+						})
+					})
+				}
+
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
 				roleDistributionGuard := admission.NewGuard(featureFlags, admission.NewReportMetrics(meterProvider, logger))
 				roleDistributionHandler := roledistribution.NewHandler(logger, roledistribution.Processors{

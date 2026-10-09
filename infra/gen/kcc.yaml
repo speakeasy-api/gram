@@ -1933,6 +1933,20 @@ pubsub:
         name: gram-conversation-v1-message-event
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-sigint-v1-lake-primary
+      topic_proto_message: gram-sigint-v1-reading
+    name: gram-sigint-v1-lake-primary
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 345600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-sigint-v1-reading
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-telemetry-v1-noop
       topic_proto_message: gram-telemetry-v1-log-record
     name: gram-telemetry-v1-noop
@@ -2266,3 +2280,16 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-webhooks-v1-event
+storage:
+  apis:
+  - storage.googleapis.com
+  buckets:
+  - annotations:
+      cnrm.cloud.google.com/deletion-policy: abandon
+      cnrm.cloud.google.com/force-destroy: "false"
+    labels:
+      managed_by: proto-pubsub-orchestrator
+    name: lake
+    spec:
+      publicAccessPrevention: enforced
+      uniformBucketLevelAccess: true

@@ -202,6 +202,22 @@ It uses the real Go Pub/Sub client against an in-process test broker, the genera
 fixture binding, and a local create-only file store. The GCS path is exercised
 by the runner's HTTP protocol tests; this demo needs no cloud credentials.
 
+## Signals readings
+
+`gram.sigint.v1.LakePrimary` stores `gram.sigint.v1.Reading` in the logical `lake`
+bucket as Parquet, partitioned daily by UTC ingestion time. The `gram streams`
+process starts this consumer when `GRAM_STORAGE_BUCKETS` is configured, for example
+`{"lake":"<PHYSICAL_BUCKET_NAME>"}`. Without the mapping, the storage consumer stays
+stopped. Its lifecycle is independent of the evaluator's inference key and ack-only
+rollout flag, so it can drain already-published readings while evaluation is paused.
+
+Deploy the generated subscription, bucket, and object-creator permissions before
+enabling the mapping. Objects use the prefix
+`gram.sigint.v1.LakePrimary/part__year=YYYY/part__month=MM/part__day=DD/`.
+The subscription retries for four days without retaining acknowledgments; this
+does not expire GCS objects. Queries must deduplicate logical reading `id` and
+choose an `evaluation_attempt_id`, since evaluation and storage are at least once.
+
 ## Mapping v1
 
 `infra/pkg/storagebindings/storage_gen.go` contains explicit schemas and typed
