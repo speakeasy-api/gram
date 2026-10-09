@@ -49,14 +49,17 @@ export default function Explore(): JSX.Element {
   const routes = useRoutes();
   // Dashboards were once a tab of Explore, so links shared from then still
   // say ?tab=dashboards: they go on to the page dashboards have now.
+  // The rest of the query, the dashboard's filter bar, comes along.
   if (params.get(TAB_PARAM) === "dashboards") {
     const id = params.get("dashboard");
-    return (
-      <Navigate
-        replace
-        to={id ? routes.dashboards.detail.href(id) : routes.dashboards.href()}
-      />
-    );
+    const rest = new URLSearchParams(params);
+    rest.delete(TAB_PARAM);
+    rest.delete("dashboard");
+    const search = rest.toString();
+    const path = id
+      ? routes.dashboards.detail.href(id)
+      : routes.dashboards.href();
+    return <Navigate replace to={search ? `${path}?${search}` : path} />;
   }
   return (
     <WorkbenchPage scope="project:read">

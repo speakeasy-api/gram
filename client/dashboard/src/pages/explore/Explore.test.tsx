@@ -875,9 +875,10 @@ describe("Explore", () => {
     expect(screen.getByRole("button", { name: "Add filter" })).toBeTruthy();
   });
 
-  it("sends links to the old Dashboards tab on to the Dashboards page", () => {
-    renderExplore("/explore?tab=dashboards&dashboard=d-1");
+  it("sends links to the old Dashboards tab on to the Dashboards page, keeping their filters", () => {
+    renderExplore("/explore?tab=dashboards&dashboard=d-1&range=30d&user=alice");
     expect(nav.pathname).toBe("/dashboards/d-1");
+    expect(nav.search).toBe("?range=30d&user=alice");
 
     cleanup();
     renderExplore("/explore?tab=dashboards");
