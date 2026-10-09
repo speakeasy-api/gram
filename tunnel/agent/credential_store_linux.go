@@ -154,6 +154,9 @@ func openTrustedRoot(root string) (int, error) {
 		}
 		next, err := unix.Openat(fd, name, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 		_ = unix.Close(fd)
+		if errors.Is(err, unix.ELOOP) || errors.Is(err, unix.ENOTDIR) {
+			return -1, fmt.Errorf("%s is a symlink or not a directory; the path must not pass through symlinks, so use the resolved path: %w", name, err)
+		}
 		if err != nil {
 			return -1, fmt.Errorf("open %s: %w", name, err)
 		}
@@ -328,6 +331,18 @@ func (s *linuxCredentialStore) publishInstance() error {
 		return fmt.Errorf("instance directory: %w", err)
 	}
 	lockFD, err := unix.Openat(fd, instanceLockName, unix.O_RDWR|unix.O_CREAT|unix.O_EXCL|unix.O_NOFOLLOW|unix.O_CLOEXEC, privateFileMode)
+	if err == nil {
+		// The umask may have narrowed the mode, and a scavenger can only
+		// recover a crashed instance whose lock it can open read-write.
+		err = unix.Fchmod(lockFD, privateFileMode)
+		if err == nil {
+			_, err = requirePrivate(lockFD, unix.S_IFREG, privateFileMode)
+		}
+		if err != nil {
+			_ = unix.Close(lockFD)
+			err = fmt.Errorf("instance lock: %w", err)
+		}
+	}
 	if err == nil && !tryLock(lockFD) {
 		_ = unix.Close(lockFD)
 		err = errors.New("lock instance directory")
