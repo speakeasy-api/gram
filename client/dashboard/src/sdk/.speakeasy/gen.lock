@@ -11755,7 +11755,7 @@ examples:
         application/json: {"plugin_id": "aebf3b89-325e-4bde-9e57-f05ac58d29d8", "principal_urns": []}
       responses:
         "200":
-          application/json: {"assignments": [{"created_at": "2025-04-08T01:39:17.317Z", "id": "95bdb139-cce2-4186-97dd-8123f899c313", "principal_urn": "<value>"}]}
+          application/json: {"assignments": [{"created_at": "2025-04-08T01:39:17.317Z", "id": "95bdb139-cce2-4186-97dd-8123f899c313", "install_mode": "available", "principal_urn": "<value>"}]}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

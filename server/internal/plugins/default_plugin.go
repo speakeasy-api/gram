@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -129,6 +130,7 @@ func EnsureDefaultPlugin(ctx context.Context, tx pgx.Tx, organizationID string, 
 			PluginID:       created.ID,
 			OrganizationID: organizationID,
 			PrincipalUrn:   urn.PrincipalWildcard,
+			InstallMode:    string(installmode.Default),
 		}); err != nil {
 			return nil, fmt.Errorf("assign default plugin to org: %w", err)
 		}

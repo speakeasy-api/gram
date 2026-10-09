@@ -182,10 +182,12 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 			return SetPluginAssignmentsReceiptResult{}, err
 		}
 		result, err := pluginassignments.Replace(ctx, tx, s.audit, locked, pluginassignments.Input{
-			OrganizationID:   principal.OrganizationID,
-			ProjectID:        project.ID,
-			PluginID:         target.ID,
-			PrincipalURNs:    principalURNs,
+			OrganizationID: principal.OrganizationID,
+			ProjectID:      project.ID,
+			PluginID:       target.ID,
+			PrincipalURNs:  principalURNs,
+			// Keeps each principal's current install mode.
+			InstallModes:     nil,
 			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
 			ActorDisplayName: nil,
 			ActorSlug:        nil,
