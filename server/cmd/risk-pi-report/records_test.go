@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
@@ -251,21 +250,25 @@ func TestLockRunDirMakesASecondRunWait(t *testing.T) {
 	unlock, err := lockRunDir(dir)
 	require.NoError(t, err)
 
-	locked := make(chan func(), 1)
+	type lockResult struct {
+		unlock func()
+		err    error
+	}
+	locked := make(chan lockResult, 1)
 	go func() {
 		second, err := lockRunDir(dir)
-		assert.NoError(t, err)
-		locked <- second
+		locked <- lockResult{unlock: second, err: err}
 	}()
 	select {
-	case <-locked:
-		t.Fatal("a second run locked the run dir while the first held it")
+	case got := <-locked:
+		t.Fatalf("a second run got past the lock while the first held it (err: %v)", got.err)
 	case <-time.After(200 * time.Millisecond):
 	}
 	unlock()
 	select {
-	case second := <-locked:
-		second()
+	case got := <-locked:
+		require.NoError(t, got.err)
+		got.unlock()
 	case <-time.After(5 * time.Second):
 		t.Fatal("the second run never locked the run dir after the first released it")
 	}

@@ -168,9 +168,15 @@ var repeatedTextFiles = []string{"trajectory_twins.jsonl", "agentdojo.jsonl"}
 
 // corpusFiles lists dir's fixture files in load order.
 func corpusFiles(dir string) ([]string, error) {
-	paths, err := filepath.Glob(filepath.Join(dir, "*.jsonl"))
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("list corpus files: %w", err)
+	}
+	var paths []string
+	for _, entry := range entries {
+		if entry.Type().IsRegular() && strings.HasSuffix(entry.Name(), ".jsonl") {
+			paths = append(paths, filepath.Join(dir, entry.Name()))
+		}
 	}
 	rank := func(path string) int {
 		if i := slices.Index(corpusOrder, filepath.Base(path)); i >= 0 {
