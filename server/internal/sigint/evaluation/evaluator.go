@@ -62,9 +62,10 @@ func NewEvaluator(logger *slog.Logger, meters metric.MeterProvider, source Sourc
 	return &Evaluator{logger: logger, source: source, features: features, publisher: publisher, classifier: c, failures: failures, skipped: skipped, slots: make(chan struct{}, 4)}, nil
 }
 
-func (h *Evaluator) terminal(ctx context.Context, event Event, reason string) {
+func (h *Evaluator) terminal(ctx context.Context, event Event, reason string, details ...slog.Attr) {
 	h.failures.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", reason)))
-	h.logger.ErrorContext(ctx, "sensor evaluation permanently failed", attr.SlogSigintEventID(event.Subject.GetId()), attr.SlogSigintEventKind(event.Subject.GetKind()), attr.SlogProjectID(event.ProjectID), attr.SlogError(permanent(reason)))
+	attrs := []slog.Attr{attr.SlogSigintEventID(event.Subject.GetId()), attr.SlogSigintEventKind(event.Subject.GetKind()), attr.SlogProjectID(event.ProjectID), attr.SlogError(permanent(reason))}
+	h.logger.LogAttrs(ctx, slog.LevelError, "sensor evaluation permanently failed", append(attrs, details...)...)
 }
 
 // Evaluate applies the source's eligible sensors to one normalized event.
@@ -195,23 +196,30 @@ func (h *Evaluator) Evaluate(ctx context.Context, in Input) error {
 	var pending []gcp.PublishResult
 	for _, sensor := range compiled {
 		failed, transient := false, false
+		var failures []error
 		for _, q := range sensor.questions {
 			outcome, exists := outcomes[q.Key]
 			if !exists {
 				failed = true
 				transient = transient || !permanentOperation
+				failures = append(failures, fmt.Errorf("question %s: missing outcome", q.Key))
 				continue
 			}
 			if outcome.Failure != nil {
 				failed = true
 				transient = transient || outcome.Failure.Retryable
+				failures = append(failures, fmt.Errorf("question %s: %s: %s", q.Key, outcome.Failure.Code, outcome.Failure.Message))
 			}
 		}
 		if failed {
 			if transient {
 				retry = errors.Join(retry, fmt.Errorf("retry incomplete sensor evaluation"))
 			} else {
-				h.terminal(ctx, event, "classifier_rejected")
+				h.terminal(ctx, event, "classifier_rejected",
+					attr.SlogSigintSensorID(sensor.id),
+					attr.SlogSigintSensorMode(sensor.mode),
+					attr.SlogClassifierError(errors.Join(append(failures, operationErr)...)),
+				)
 			}
 			continue
 		}

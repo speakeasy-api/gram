@@ -15,6 +15,12 @@ const (
 	// SigintSensorIDKey identifies the sensor configuration responsible for an evaluation.
 	SigintSensorIDKey = attribute.Key("gram.sigint.sensor.id")
 
+	// SigintSensorModeKey identifies the sensor's classification mode.
+	SigintSensorModeKey = attribute.Key("gram.sigint.sensor.mode")
+
+	// ClassifierErrorKey preserves classifier failure details without input or provider bodies.
+	ClassifierErrorKey = attribute.Key("gram.classifier.error")
+
 	// SigintEventIDKey identifies the logical event independently of transport delivery.
 	SigintEventIDKey = attribute.Key("gram.sigint.event.id")
 
@@ -962,6 +968,14 @@ func WideEvent() attribute.KeyValue { return WideEventKey.Bool(true) }
 
 // SlogSigintSensorID identifies the sensor configuration responsible for an evaluation.
 func SlogSigintSensorID(v string) slog.Attr { return slog.String(string(SigintSensorIDKey), v) }
+
+// SlogSigintSensorMode identifies the sensor's classification mode.
+func SlogSigintSensorMode(v string) slog.Attr { return slog.String(string(SigintSensorModeKey), v) }
+
+// SlogClassifierError records the classifier's safe operation and question failures.
+func SlogClassifierError(err error) slog.Attr {
+	return slog.String(string(ClassifierErrorKey), err.Error())
+}
 
 // SlogSigintEventID identifies the logical event independently of transport delivery.
 func SlogSigintEventID(v string) slog.Attr { return slog.String(string(SigintEventIDKey), v) }

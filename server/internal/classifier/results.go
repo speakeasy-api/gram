@@ -38,8 +38,10 @@ type ChoiceAnswer struct {
 
 // ScoreAnswer describes a probability-weighted position on an ordered rubric.
 type ScoreAnswer struct {
-	// ExpectedIndex is finite and within [0, number of levels - 1]. It is the
-	// expected zero-based level index, not a selected level or rounded score.
+	// ExpectedIndex is the provider-reported expected zero-based level index,
+	// finite and within [0, number of levels - 1], not a selected level. It may
+	// differ from the mean reconstructed from the returned distribution due to
+	// differences in precision.
 	ExpectedIndex float64
 
 	// Distribution contains every level exactly once in low-to-high order and
