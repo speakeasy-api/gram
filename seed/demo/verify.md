@@ -515,6 +515,15 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     saving a reserved name such as
     `Gram-Key` is refused. Plugin compatibility for a plugin using JAMF Headers is
     false because of the request-derived row.
+30. **Per-server environment headers** — open **JAMF Prod** and then
+    **JAMF Sandbox** settings; both sit on the tunnel **JAMF (multi-instance)**.
+    Environment Headers sits after Upstream Headers. On JAMF Prod the picker
+    shows **JAMF Prod** and the table lists `MCP_HEADER_X-Instance-Url` as
+    Overrides source header and `MCP_HEADER_X-Jamf-Site` as Mapped. On JAMF
+    Sandbox the picker shows **JAMF Sandbox**, with the same two entries plus
+    `HEADER_X-Jamf-Region` as Not used. No value is shown anywhere. Picking
+    another environment without saving previews it and offers Save; picking
+    None previews no headers.
 
 ## On failure
 

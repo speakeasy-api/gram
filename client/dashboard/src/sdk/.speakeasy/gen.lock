@@ -365,6 +365,7 @@ trackedFiles:
   src/funcs/mcpServersDelete.ts: {}
   src/funcs/mcpServersDeleteToolMetadata.ts: {}
   src/funcs/mcpServersGet.ts: {}
+  src/funcs/mcpServersGetEnvironmentHeaders.ts: {}
   src/funcs/mcpServersList.ts: {}
   src/funcs/mcpServersListForOrg.ts: {}
   src/funcs/mcpServersListToolFilters.ts: {}
@@ -1426,6 +1427,9 @@ trackedFiles:
   src/models/components/mcpregistry.ts: {}
   src/models/components/mcpserver.ts: {}
   src/models/components/mcpserveractivity.ts: {}
+  src/models/components/mcpserverenvironmentheader.ts: {}
+  src/models/components/mcpserverenvironmentheaders.ts: {}
+  src/models/components/mcpserverenvironmentsummary.ts: {}
   src/models/components/mcpsetupguide.ts: {}
   src/models/components/mcpsetupguideremote.ts: {}
   src/models/components/metamcpdiscoveryfunnel.ts: {}
@@ -2253,6 +2257,7 @@ trackedFiles:
   src/models/operations/getmcpserver.ts: {}
   src/models/operations/getmcpserveractivity.ts: {}
   src/models/operations/getmcpserverdetails.ts: {}
+  src/models/operations/getmcpserverenvironmentheaders.ts: {}
   src/models/operations/getmcpsetupdocs.ts: {}
   src/models/operations/getmetamcpserver.ts: {}
   src/models/operations/getmetamcpserverusage.ts: {}
@@ -3096,6 +3101,8 @@ trackedFiles:
   src/react-query/getMcpServer.ts: {}
   src/react-query/getMcpServerActivity.core.ts: {}
   src/react-query/getMcpServerActivity.ts: {}
+  src/react-query/getMcpServerEnvironmentHeaders.core.ts: {}
+  src/react-query/getMcpServerEnvironmentHeaders.ts: {}
   src/react-query/getMetaMcpServer.core.ts: {}
   src/react-query/getMetaMcpServer.ts: {}
   src/react-query/getMetaMcpServerUsage.core.ts: {}
@@ -7158,6 +7165,19 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getMcpServerEnvironmentHeaders:
+    speakeasy-default-get-mcp-server-environment-headers:
+      parameters:
+        query:
+          id: "626a9995-dcbd-44e6-b918-232b024335a5"
+          selection: "environment"
+      responses:
+        "200":
+          application/json: {"entries": [], "environment_configuration_invalid": true, "environment_status": "none", "environments": [{"id": "8f92d28c-a07f-4ae4-b61b-ec018e0a2cce", "name": "<value>", "slug": "<value>"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getMetaMcpServer:
     speakeasy-default-get-meta-mcp-server:
       parameters:

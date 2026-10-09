@@ -62,6 +62,9 @@ type recordedRequest struct {
 
 	// authorization is the Authorization header as it arrived, empty when absent.
 	authorization string
+
+	// header is every request header as it arrived.
+	header http.Header
 }
 
 // recordingUpstream is one member's live upstream plus every request that
@@ -191,6 +194,7 @@ func (u *recordingUpstream) record(r *http.Request) (string, error) {
 		path:          r.URL.Path,
 		rpcMethod:     rpcMethod,
 		authorization: r.Header.Get("Authorization"),
+		header:        r.Header.Clone(),
 	})
 	return rpcMethod, nil
 }

@@ -157,7 +157,7 @@ func UsageCommands() []string {
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"registry-discovery (discover-servers|discover-versions|discover-version)",
-		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server)",
+		"mcp-servers (create-mcp-server|get-mcp-server|get-environment-headers|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server)",
 		"meta-mcp (create-meta-mcp-server|get-meta-mcp-server|list-meta-mcp-servers|update-meta-mcp-server|delete-meta-mcp-server|list-meta-mcp-members|add-meta-mcp-member|update-meta-mcp-member|remove-meta-mcp-member)",
 		"model-keys (list-keys|upsert-key|set-key-enabled|delete-key)",
 		"network-ingress (get-ingress|create-ingress|update-ingress|rotate-credentials|get-delete-impact|delete-ingress|check-health)",
@@ -1864,6 +1864,14 @@ func ParseEndpoint(
 		mcpServersGetMcpServerSessionTokenFlag     = mcpServersGetMcpServerFlags.String("session-token", "", "")
 		mcpServersGetMcpServerApikeyTokenFlag      = mcpServersGetMcpServerFlags.String("apikey-token", "", "")
 		mcpServersGetMcpServerProjectSlugInputFlag = mcpServersGetMcpServerFlags.String("project-slug-input", "", "")
+
+		mcpServersGetEnvironmentHeadersFlags                = flag.NewFlagSet("get-environment-headers", flag.ExitOnError)
+		mcpServersGetEnvironmentHeadersIDFlag               = mcpServersGetEnvironmentHeadersFlags.String("id", "REQUIRED", "")
+		mcpServersGetEnvironmentHeadersSelectionFlag        = mcpServersGetEnvironmentHeadersFlags.String("selection", "REQUIRED", "")
+		mcpServersGetEnvironmentHeadersEnvironmentIDFlag    = mcpServersGetEnvironmentHeadersFlags.String("environment-id", "", "")
+		mcpServersGetEnvironmentHeadersSessionTokenFlag     = mcpServersGetEnvironmentHeadersFlags.String("session-token", "", "")
+		mcpServersGetEnvironmentHeadersApikeyTokenFlag      = mcpServersGetEnvironmentHeadersFlags.String("apikey-token", "", "")
+		mcpServersGetEnvironmentHeadersProjectSlugInputFlag = mcpServersGetEnvironmentHeadersFlags.String("project-slug-input", "", "")
 
 		mcpServersListMcpServersFlags                    = flag.NewFlagSet("list-mcp-servers", flag.ExitOnError)
 		mcpServersListMcpServersRemoteMcpServerIDFlag    = mcpServersListMcpServersFlags.String("remote-mcp-server-id", "", "")
@@ -5314,6 +5322,7 @@ func ParseEndpoint(
 	mcpServersFlags.Usage = mcpServersUsage
 	mcpServersCreateMcpServerFlags.Usage = mcpServersCreateMcpServerUsage
 	mcpServersGetMcpServerFlags.Usage = mcpServersGetMcpServerUsage
+	mcpServersGetEnvironmentHeadersFlags.Usage = mcpServersGetEnvironmentHeadersUsage
 	mcpServersListMcpServersFlags.Usage = mcpServersListMcpServersUsage
 	mcpServersListMcpServersForOrgFlags.Usage = mcpServersListMcpServersForOrgUsage
 	mcpServersUpdateMcpServerFlags.Usage = mcpServersUpdateMcpServerUsage
@@ -7263,6 +7272,9 @@ func ParseEndpoint(
 
 			case "get-mcp-server":
 				epf = mcpServersGetMcpServerFlags
+
+			case "get-environment-headers":
+				epf = mcpServersGetEnvironmentHeadersFlags
 
 			case "list-mcp-servers":
 				epf = mcpServersListMcpServersFlags
@@ -10257,6 +10269,9 @@ func ParseEndpoint(
 			case "get-mcp-server":
 				endpoint = c.GetMcpServer()
 				data, err = mcpserversc.BuildGetMcpServerPayload(*mcpServersGetMcpServerIDFlag, *mcpServersGetMcpServerSlugFlag, *mcpServersGetMcpServerSessionTokenFlag, *mcpServersGetMcpServerApikeyTokenFlag, *mcpServersGetMcpServerProjectSlugInputFlag)
+			case "get-environment-headers":
+				endpoint = c.GetEnvironmentHeaders()
+				data, err = mcpserversc.BuildGetEnvironmentHeadersPayload(*mcpServersGetEnvironmentHeadersIDFlag, *mcpServersGetEnvironmentHeadersSelectionFlag, *mcpServersGetEnvironmentHeadersEnvironmentIDFlag, *mcpServersGetEnvironmentHeadersSessionTokenFlag, *mcpServersGetEnvironmentHeadersApikeyTokenFlag, *mcpServersGetEnvironmentHeadersProjectSlugInputFlag)
 			case "list-mcp-servers":
 				endpoint = c.ListMcpServers()
 				data, err = mcpserversc.BuildListMcpServersPayload(*mcpServersListMcpServersRemoteMcpServerIDFlag, *mcpServersListMcpServersTunneledMcpServerIDFlag, *mcpServersListMcpServersToolsetIDFlag, *mcpServersListMcpServersUnproxiedMcpServerIDFlag, *mcpServersListMcpServersSessionTokenFlag, *mcpServersListMcpServersApikeyTokenFlag, *mcpServersListMcpServersProjectSlugInputFlag)
@@ -19531,6 +19546,7 @@ func mcpServersUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-mcp-server: Create a new MCP server`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server: Get an MCP server by ID or slug. Exactly one of id or slug must be provided.`)
+	fmt.Fprintln(os.Stderr, `    get-environment-headers: Preview the upstream headers an MCP server sends from an environment. Only entries named MCP_HEADER_<Header-Name> are sent; the header name is the rest of the entry name with each underscore read as a dash, in canonical casing, so MCP_HEADER_X_INSTANCE_URL is sent as X-Instance-Url. The result lists entry and header names with a status for each, never values. Requires read access to the MCP server, project-wide environment read access, and environment read access that is not excluded for the previewed environment (linked or candidate): the authority needed to link that environment.`)
 	fmt.Fprintln(os.Stderr, `    list-mcp-servers: List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.`)
 	fmt.Fprintln(os.Stderr, `    list-mcp-servers-for-org: List all MCP servers across the organization`)
 	fmt.Fprintln(os.Stderr, `    update-mcp-server: Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.`)
@@ -19593,6 +19609,34 @@ func mcpServersGetMcpServerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers get-mcp-server --id \"550e8400-e29b-41d4-a716-446655440000\" --slug \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpServersGetEnvironmentHeadersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-servers get-environment-headers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -selection STRING")
+	fmt.Fprint(os.Stderr, " -environment-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Preview the upstream headers an MCP server sends from an environment. Only entries named MCP_HEADER_<Header-Name> are sent; the header name is the rest of the entry name with each underscore read as a dash, in canonical casing, so MCP_HEADER_X_INSTANCE_URL is sent as X-Instance-Url. The result lists entry and header names with a status for each, never values. Requires read access to the MCP server, project-wide environment read access, and environment read access that is not excluded for the previewed environment (linked or candidate): the authority needed to link that environment.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -selection STRING: `)
+	fmt.Fprintln(os.Stderr, `    -environment-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers get-environment-headers --id \"550e8400-e29b-41d4-a716-446655440000\" --selection \"environment\" --environment-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpServersListMcpServersUsage() {

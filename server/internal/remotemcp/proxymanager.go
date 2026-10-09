@@ -42,6 +42,7 @@ type proxyBuildOptions struct {
 	recordIdentityCoverage bool
 	metaMCPServerID        string
 	routingHeaders         []proxy.ConfiguredHeader
+	environmentHeaders     []proxy.ConfiguredHeader
 	headerPolicy           proxy.HeaderPolicy
 }
 
@@ -73,6 +74,15 @@ func WithMetaMCPServerID(metaMCPServerID string) BuildOption {
 func WithRoutingHeaders(headers []proxy.ConfiguredHeader) BuildOption {
 	return BuildOption{apply: func(options *proxyBuildOptions) {
 		options.routingHeaders = headers
+	}}
+}
+
+// WithEnvironmentHeaders sets the headers mapped from the environment linked
+// to the MCP server. They must come from [proxy.EnvironmentHeaderRows]; the
+// proxy merges them over the configured headers when it builds each request.
+func WithEnvironmentHeaders(headers []proxy.ConfiguredHeader) BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) {
+		options.environmentHeaders = headers
 	}}
 }
 
@@ -264,7 +274,7 @@ func (f *ProxyManager) BuildTarget(
 	selection *toolfilter.SessionSelection,
 	buildOptions ...BuildOption,
 ) *proxy.Proxy {
-	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", routingHeaders: nil, headerPolicy: proxy.HeaderPolicyRemote}
+	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", routingHeaders: nil, environmentHeaders: nil, headerPolicy: proxy.HeaderPolicyRemote}
 	for _, option := range buildOptions {
 		if option.apply != nil {
 			option.apply(&options)
@@ -398,6 +408,7 @@ func (f *ProxyManager) BuildTarget(
 		Identity:                    identity,
 		RemoteURL:                   upstreamURL,
 		Headers:                     headers,
+		EnvironmentHeaders:          options.environmentHeaders,
 		RoutingHeaders:              options.routingHeaders,
 		HeaderPolicy:                options.headerPolicy,
 		AuthorizationOverride:       upstreamAuth,

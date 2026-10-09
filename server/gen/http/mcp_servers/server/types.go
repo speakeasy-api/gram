@@ -188,6 +188,28 @@ type GetMcpServerResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// GetEnvironmentHeadersResponseBody is the type of the "mcpServers" service
+// "getEnvironmentHeaders" endpoint HTTP response body.
+type GetEnvironmentHeadersResponseBody struct {
+	// The previewed environment. Absent when the selection is none or the
+	// environment is unavailable.
+	Environment *McpServerEnvironmentSummaryResponseBody `form:"environment,omitempty" json:"environment,omitempty" xml:"environment,omitempty"`
+	// none: no environment is previewed. ok: the environment is live. unavailable:
+	// the environment is deleted, missing or in another project; requests to a
+	// server linked to it are refused.
+	EnvironmentStatus string `form:"environment_status" json:"environment_status" xml:"environment_status"`
+	// Whether a server linked to the previewed environment refuses requests
+	// because of it. For an unsaved selection this is what would happen after
+	// saving. It reports only on the environment, not on the server's overall
+	// readiness.
+	EnvironmentConfigurationInvalid bool `form:"environment_configuration_invalid" json:"environment_configuration_invalid" xml:"environment_configuration_invalid"`
+	// Entries named with the MCP_HEADER_ prefix, plus near-miss names that are
+	// ignored.
+	Entries []*McpServerEnvironmentHeaderResponseBody `form:"entries" json:"entries" xml:"entries"`
+	// The live environments in the project that can be linked.
+	Environments []*McpServerEnvironmentSummaryResponseBody `form:"environments" json:"environments" xml:"environments"`
+}
+
 // ListMcpServersResponseBody is the type of the "mcpServers" service
 // "listMcpServers" endpoint HTTP response body.
 type ListMcpServersResponseBody struct {
@@ -699,6 +721,215 @@ type GetMcpServerGatewayErrorResponseBody struct {
 // GetMcpServerUnavailableResponseBody is the type of the "mcpServers" service
 // "getMcpServer" endpoint HTTP response body for the "unavailable" error.
 type GetMcpServerUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetEnvironmentHeadersUnauthorizedResponseBody is the type of the
+// "mcpServers" service "getEnvironmentHeaders" endpoint HTTP response body for
+// the "unauthorized" error.
+type GetEnvironmentHeadersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetEnvironmentHeadersForbiddenResponseBody is the type of the "mcpServers"
+// service "getEnvironmentHeaders" endpoint HTTP response body for the
+// "forbidden" error.
+type GetEnvironmentHeadersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetEnvironmentHeadersBadRequestResponseBody is the type of the "mcpServers"
+// service "getEnvironmentHeaders" endpoint HTTP response body for the
+// "bad_request" error.
+type GetEnvironmentHeadersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetEnvironmentHeadersNotFoundResponseBody is the type of the "mcpServers"
+// service "getEnvironmentHeaders" endpoint HTTP response body for the
+// "not_found" error.
+type GetEnvironmentHeadersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetEnvironmentHeadersConflictResponseBody is the type of the "mcpServers"
+// service "getEnvironmentHeaders" endpoint HTTP response body for the
+// "conflict" error.
+type GetEnvironmentHeadersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetEnvironmentHeadersUnsupportedMediaResponseBody is the type of the
+// "mcpServers" service "getEnvironmentHeaders" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetEnvironmentHeadersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetEnvironmentHeadersInvalidResponseBody is the type of the "mcpServers"
+// service "getEnvironmentHeaders" endpoint HTTP response body for the
+// "invalid" error.
+type GetEnvironmentHeadersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetEnvironmentHeadersInvariantViolationResponseBody is the type of the
+// "mcpServers" service "getEnvironmentHeaders" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetEnvironmentHeadersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetEnvironmentHeadersUnexpectedResponseBody is the type of the "mcpServers"
+// service "getEnvironmentHeaders" endpoint HTTP response body for the
+// "unexpected" error.
+type GetEnvironmentHeadersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetEnvironmentHeadersGatewayErrorResponseBody is the type of the
+// "mcpServers" service "getEnvironmentHeaders" endpoint HTTP response body for
+// the "gateway_error" error.
+type GetEnvironmentHeadersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetEnvironmentHeadersUnavailableResponseBody is the type of the "mcpServers"
+// service "getEnvironmentHeaders" endpoint HTTP response body for the
+// "unavailable" error.
+type GetEnvironmentHeadersUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2779,6 +3010,36 @@ type DeleteMcpServerUnavailableResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// McpServerEnvironmentSummaryResponseBody is used to define fields on response
+// body types.
+type McpServerEnvironmentSummaryResponseBody struct {
+	// The ID of the environment
+	ID string `form:"id" json:"id" xml:"id"`
+	// The name of the environment
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the environment
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+}
+
+// McpServerEnvironmentHeaderResponseBody is used to define fields on response
+// body types.
+type McpServerEnvironmentHeaderResponseBody struct {
+	// The environment entry name
+	EntryName string `form:"entry_name" json:"entry_name" xml:"entry_name"`
+	// The canonical header the entry targets. Absent when the entry is not mapped
+	// or its name is not a valid header name.
+	HeaderName *string `form:"header_name,omitempty" json:"header_name,omitempty" xml:"header_name,omitempty"`
+	// mapped: maps to a header that is sent upstream while every entry is valid.
+	// overrides_source: maps to a header that replaces the source header of the
+	// same name while every entry is valid. A resolved upstream token still
+	// replaces an Authorization entry. invalid_name, reserved, empty_value,
+	// invalid_value, duplicate, undecryptable: the entry cannot be sent, and a
+	// server linked to this environment refuses requests until it is fixed or
+	// removed. not_mapped: the name resembles the MCP_HEADER_ prefix without
+	// matching it exactly, so the entry is ignored.
+	Status string `form:"status" json:"status" xml:"status"`
+}
+
 // McpServerResponseBody is used to define fields on response body types.
 type McpServerResponseBody struct {
 	// The ID of the MCP server
@@ -2920,6 +3181,43 @@ func NewGetMcpServerResponseBody(res *types.McpServer) *GetMcpServerResponseBody
 		NetworkAccessMode:     string(res.NetworkAccessMode),
 		CreatedAt:             res.CreatedAt,
 		UpdatedAt:             res.UpdatedAt,
+	}
+	return body
+}
+
+// NewGetEnvironmentHeadersResponseBody builds the HTTP response body from the
+// result of the "getEnvironmentHeaders" endpoint of the "mcpServers" service.
+func NewGetEnvironmentHeadersResponseBody(res *mcpservers.McpServerEnvironmentHeaders) *GetEnvironmentHeadersResponseBody {
+	body := &GetEnvironmentHeadersResponseBody{
+		EnvironmentStatus:               res.EnvironmentStatus,
+		EnvironmentConfigurationInvalid: res.EnvironmentConfigurationInvalid,
+	}
+	if res.Environment != nil {
+		body.Environment = marshalMcpserversMcpServerEnvironmentSummaryToMcpServerEnvironmentSummaryResponseBody(res.Environment)
+	}
+	if res.Entries != nil {
+		body.Entries = make([]*McpServerEnvironmentHeaderResponseBody, len(res.Entries))
+		for i, val := range res.Entries {
+			if val == nil {
+				body.Entries[i] = nil
+				continue
+			}
+			body.Entries[i] = marshalMcpserversMcpServerEnvironmentHeaderToMcpServerEnvironmentHeaderResponseBody(val)
+		}
+	} else {
+		body.Entries = []*McpServerEnvironmentHeaderResponseBody{}
+	}
+	if res.Environments != nil {
+		body.Environments = make([]*McpServerEnvironmentSummaryResponseBody, len(res.Environments))
+		for i, val := range res.Environments {
+			if val == nil {
+				body.Environments[i] = nil
+				continue
+			}
+			body.Environments[i] = marshalMcpserversMcpServerEnvironmentSummaryToMcpServerEnvironmentSummaryResponseBody(val)
+		}
+	} else {
+		body.Environments = []*McpServerEnvironmentSummaryResponseBody{}
 	}
 	return body
 }
@@ -3399,6 +3697,171 @@ func NewGetMcpServerGatewayErrorResponseBody(res *goa.ServiceError) *GetMcpServe
 // the result of the "getMcpServer" endpoint of the "mcpServers" service.
 func NewGetMcpServerUnavailableResponseBody(res *goa.ServiceError) *GetMcpServerUnavailableResponseBody {
 	body := &GetMcpServerUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetEnvironmentHeadersUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getEnvironmentHeaders" endpoint of the
+// "mcpServers" service.
+func NewGetEnvironmentHeadersUnauthorizedResponseBody(res *goa.ServiceError) *GetEnvironmentHeadersUnauthorizedResponseBody {
+	body := &GetEnvironmentHeadersUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetEnvironmentHeadersForbiddenResponseBody builds the HTTP response body
+// from the result of the "getEnvironmentHeaders" endpoint of the "mcpServers"
+// service.
+func NewGetEnvironmentHeadersForbiddenResponseBody(res *goa.ServiceError) *GetEnvironmentHeadersForbiddenResponseBody {
+	body := &GetEnvironmentHeadersForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetEnvironmentHeadersBadRequestResponseBody builds the HTTP response body
+// from the result of the "getEnvironmentHeaders" endpoint of the "mcpServers"
+// service.
+func NewGetEnvironmentHeadersBadRequestResponseBody(res *goa.ServiceError) *GetEnvironmentHeadersBadRequestResponseBody {
+	body := &GetEnvironmentHeadersBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetEnvironmentHeadersNotFoundResponseBody builds the HTTP response body
+// from the result of the "getEnvironmentHeaders" endpoint of the "mcpServers"
+// service.
+func NewGetEnvironmentHeadersNotFoundResponseBody(res *goa.ServiceError) *GetEnvironmentHeadersNotFoundResponseBody {
+	body := &GetEnvironmentHeadersNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetEnvironmentHeadersConflictResponseBody builds the HTTP response body
+// from the result of the "getEnvironmentHeaders" endpoint of the "mcpServers"
+// service.
+func NewGetEnvironmentHeadersConflictResponseBody(res *goa.ServiceError) *GetEnvironmentHeadersConflictResponseBody {
+	body := &GetEnvironmentHeadersConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetEnvironmentHeadersUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getEnvironmentHeaders" endpoint of the
+// "mcpServers" service.
+func NewGetEnvironmentHeadersUnsupportedMediaResponseBody(res *goa.ServiceError) *GetEnvironmentHeadersUnsupportedMediaResponseBody {
+	body := &GetEnvironmentHeadersUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetEnvironmentHeadersInvalidResponseBody builds the HTTP response body
+// from the result of the "getEnvironmentHeaders" endpoint of the "mcpServers"
+// service.
+func NewGetEnvironmentHeadersInvalidResponseBody(res *goa.ServiceError) *GetEnvironmentHeadersInvalidResponseBody {
+	body := &GetEnvironmentHeadersInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetEnvironmentHeadersInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getEnvironmentHeaders" endpoint of the
+// "mcpServers" service.
+func NewGetEnvironmentHeadersInvariantViolationResponseBody(res *goa.ServiceError) *GetEnvironmentHeadersInvariantViolationResponseBody {
+	body := &GetEnvironmentHeadersInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetEnvironmentHeadersUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getEnvironmentHeaders" endpoint of the "mcpServers"
+// service.
+func NewGetEnvironmentHeadersUnexpectedResponseBody(res *goa.ServiceError) *GetEnvironmentHeadersUnexpectedResponseBody {
+	body := &GetEnvironmentHeadersUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetEnvironmentHeadersGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getEnvironmentHeaders" endpoint of the
+// "mcpServers" service.
+func NewGetEnvironmentHeadersGatewayErrorResponseBody(res *goa.ServiceError) *GetEnvironmentHeadersGatewayErrorResponseBody {
+	body := &GetEnvironmentHeadersGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetEnvironmentHeadersUnavailableResponseBody builds the HTTP response
+// body from the result of the "getEnvironmentHeaders" endpoint of the
+// "mcpServers" service.
+func NewGetEnvironmentHeadersUnavailableResponseBody(res *goa.ServiceError) *GetEnvironmentHeadersUnavailableResponseBody {
+	body := &GetEnvironmentHeadersUnavailableResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -5043,6 +5506,20 @@ func NewGetMcpServerPayload(id *string, slug *string, sessionToken *string, apik
 	v := &mcpservers.GetMcpServerPayload{}
 	v.ID = id
 	v.Slug = slug
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetEnvironmentHeadersPayload builds a mcpServers service
+// getEnvironmentHeaders endpoint payload.
+func NewGetEnvironmentHeadersPayload(id string, selection string, environmentID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.GetEnvironmentHeadersPayload {
+	v := &mcpservers.GetEnvironmentHeadersPayload{}
+	v.ID = id
+	v.Selection = selection
+	v.EnvironmentID = environmentID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

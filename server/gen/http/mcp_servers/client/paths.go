@@ -17,6 +17,11 @@ func GetMcpServerMcpServersPath() string {
 	return "/rpc/mcpServers.get"
 }
 
+// GetEnvironmentHeadersMcpServersPath returns the URL path to the mcpServers service getEnvironmentHeaders HTTP endpoint.
+func GetEnvironmentHeadersMcpServersPath() string {
+	return "/rpc/mcpServers.getEnvironmentHeaders"
+}
+
 // ListMcpServersMcpServersPath returns the URL path to the mcpServers service listMcpServers HTTP endpoint.
 func ListMcpServersMcpServersPath() string {
 	return "/rpc/mcpServers.list"

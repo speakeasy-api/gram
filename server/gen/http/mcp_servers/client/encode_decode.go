@@ -538,6 +538,267 @@ func DecodeGetMcpServerResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildGetEnvironmentHeadersRequest instantiates a HTTP request object with
+// method and path set to call the "mcpServers" service "getEnvironmentHeaders"
+// endpoint
+func (c *Client) BuildGetEnvironmentHeadersRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetEnvironmentHeadersMcpServersPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("mcpServers", "getEnvironmentHeaders", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetEnvironmentHeadersRequest returns an encoder for requests sent to
+// the mcpServers getEnvironmentHeaders server.
+func EncodeGetEnvironmentHeadersRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*mcpservers.GetEnvironmentHeadersPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("mcpServers", "getEnvironmentHeaders", "*mcpservers.GetEnvironmentHeadersPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		values.Add("selection", p.Selection)
+		if p.EnvironmentID != nil {
+			values.Add("environment_id", *p.EnvironmentID)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetEnvironmentHeadersResponse returns a decoder for responses returned
+// by the mcpServers getEnvironmentHeaders endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeGetEnvironmentHeadersResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - error: internal error
+func DecodeGetEnvironmentHeadersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetEnvironmentHeadersResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "getEnvironmentHeaders", err)
+			}
+			err = ValidateGetEnvironmentHeadersResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "getEnvironmentHeaders", err)
+			}
+			res := NewGetEnvironmentHeadersMcpServerEnvironmentHeadersOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetEnvironmentHeadersUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "getEnvironmentHeaders", err)
+			}
+			err = ValidateGetEnvironmentHeadersUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "getEnvironmentHeaders", err)
+			}
+			return nil, NewGetEnvironmentHeadersUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetEnvironmentHeadersForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "getEnvironmentHeaders", err)
+			}
+			err = ValidateGetEnvironmentHeadersForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "getEnvironmentHeaders", err)
+			}
+			return nil, NewGetEnvironmentHeadersForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetEnvironmentHeadersBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "getEnvironmentHeaders", err)
+			}
+			err = ValidateGetEnvironmentHeadersBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "getEnvironmentHeaders", err)
+			}
+			return nil, NewGetEnvironmentHeadersBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetEnvironmentHeadersNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "getEnvironmentHeaders", err)
+			}
+			err = ValidateGetEnvironmentHeadersNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "getEnvironmentHeaders", err)
+			}
+			return nil, NewGetEnvironmentHeadersNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetEnvironmentHeadersConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "getEnvironmentHeaders", err)
+			}
+			err = ValidateGetEnvironmentHeadersConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "getEnvironmentHeaders", err)
+			}
+			return nil, NewGetEnvironmentHeadersConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetEnvironmentHeadersUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "getEnvironmentHeaders", err)
+			}
+			err = ValidateGetEnvironmentHeadersUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "getEnvironmentHeaders", err)
+			}
+			return nil, NewGetEnvironmentHeadersUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetEnvironmentHeadersInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "getEnvironmentHeaders", err)
+			}
+			err = ValidateGetEnvironmentHeadersInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "getEnvironmentHeaders", err)
+			}
+			return nil, NewGetEnvironmentHeadersInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetEnvironmentHeadersInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpServers", "getEnvironmentHeaders", err)
+				}
+				err = ValidateGetEnvironmentHeadersInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpServers", "getEnvironmentHeaders", err)
+				}
+				return nil, NewGetEnvironmentHeadersInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetEnvironmentHeadersUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("mcpServers", "getEnvironmentHeaders", err)
+				}
+				err = ValidateGetEnvironmentHeadersUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("mcpServers", "getEnvironmentHeaders", err)
+				}
+				return nil, NewGetEnvironmentHeadersUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("mcpServers", "getEnvironmentHeaders", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetEnvironmentHeadersGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "getEnvironmentHeaders", err)
+			}
+			err = ValidateGetEnvironmentHeadersGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "getEnvironmentHeaders", err)
+			}
+			return nil, NewGetEnvironmentHeadersGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body GetEnvironmentHeadersUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("mcpServers", "getEnvironmentHeaders", err)
+			}
+			err = ValidateGetEnvironmentHeadersUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("mcpServers", "getEnvironmentHeaders", err)
+			}
+			return nil, NewGetEnvironmentHeadersUnavailable(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("mcpServers", "getEnvironmentHeaders", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListMcpServersRequest instantiates a HTTP request object with method
 // and path set to call the "mcpServers" service "listMcpServers" endpoint
 func (c *Client) BuildListMcpServersRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -3087,6 +3348,35 @@ func DecodeDeleteMcpServerResponse(decoder func(*http.Response) goahttp.Decoder,
 			return nil, goahttp.ErrInvalidResponse("mcpServers", "deleteMcpServer", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// unmarshalMcpServerEnvironmentSummaryResponseBodyToMcpserversMcpServerEnvironmentSummary
+// builds a value of type *mcpservers.McpServerEnvironmentSummary from a value
+// of type *McpServerEnvironmentSummaryResponseBody.
+func unmarshalMcpServerEnvironmentSummaryResponseBodyToMcpserversMcpServerEnvironmentSummary(v *McpServerEnvironmentSummaryResponseBody) *mcpservers.McpServerEnvironmentSummary {
+	if v == nil {
+		return nil
+	}
+	res := &mcpservers.McpServerEnvironmentSummary{
+		ID:   *v.ID,
+		Name: *v.Name,
+		Slug: *v.Slug,
+	}
+
+	return res
+}
+
+// unmarshalMcpServerEnvironmentHeaderResponseBodyToMcpserversMcpServerEnvironmentHeader
+// builds a value of type *mcpservers.McpServerEnvironmentHeader from a value
+// of type *McpServerEnvironmentHeaderResponseBody.
+func unmarshalMcpServerEnvironmentHeaderResponseBodyToMcpserversMcpServerEnvironmentHeader(v *McpServerEnvironmentHeaderResponseBody) *mcpservers.McpServerEnvironmentHeader {
+	res := &mcpservers.McpServerEnvironmentHeader{
+		EntryName:  *v.EntryName,
+		HeaderName: v.HeaderName,
+		Status:     *v.Status,
+	}
+
+	return res
 }
 
 // unmarshalMcpServerResponseBodyToTypesMcpServer builds a value of type

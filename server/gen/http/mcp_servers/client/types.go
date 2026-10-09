@@ -188,6 +188,28 @@ type GetMcpServerResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// GetEnvironmentHeadersResponseBody is the type of the "mcpServers" service
+// "getEnvironmentHeaders" endpoint HTTP response body.
+type GetEnvironmentHeadersResponseBody struct {
+	// The previewed environment. Absent when the selection is none or the
+	// environment is unavailable.
+	Environment *McpServerEnvironmentSummaryResponseBody `form:"environment,omitempty" json:"environment,omitempty" xml:"environment,omitempty"`
+	// none: no environment is previewed. ok: the environment is live. unavailable:
+	// the environment is deleted, missing or in another project; requests to a
+	// server linked to it are refused.
+	EnvironmentStatus *string `form:"environment_status,omitempty" json:"environment_status,omitempty" xml:"environment_status,omitempty"`
+	// Whether a server linked to the previewed environment refuses requests
+	// because of it. For an unsaved selection this is what would happen after
+	// saving. It reports only on the environment, not on the server's overall
+	// readiness.
+	EnvironmentConfigurationInvalid *bool `form:"environment_configuration_invalid,omitempty" json:"environment_configuration_invalid,omitempty" xml:"environment_configuration_invalid,omitempty"`
+	// Entries named with the MCP_HEADER_ prefix, plus near-miss names that are
+	// ignored.
+	Entries []*McpServerEnvironmentHeaderResponseBody `form:"entries,omitempty" json:"entries,omitempty" xml:"entries,omitempty"`
+	// The live environments in the project that can be linked.
+	Environments []*McpServerEnvironmentSummaryResponseBody `form:"environments,omitempty" json:"environments,omitempty" xml:"environments,omitempty"`
+}
+
 // ListMcpServersResponseBody is the type of the "mcpServers" service
 // "listMcpServers" endpoint HTTP response body.
 type ListMcpServersResponseBody struct {
@@ -699,6 +721,215 @@ type GetMcpServerGatewayErrorResponseBody struct {
 // GetMcpServerUnavailableResponseBody is the type of the "mcpServers" service
 // "getMcpServer" endpoint HTTP response body for the "unavailable" error.
 type GetMcpServerUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetEnvironmentHeadersUnauthorizedResponseBody is the type of the
+// "mcpServers" service "getEnvironmentHeaders" endpoint HTTP response body for
+// the "unauthorized" error.
+type GetEnvironmentHeadersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetEnvironmentHeadersForbiddenResponseBody is the type of the "mcpServers"
+// service "getEnvironmentHeaders" endpoint HTTP response body for the
+// "forbidden" error.
+type GetEnvironmentHeadersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetEnvironmentHeadersBadRequestResponseBody is the type of the "mcpServers"
+// service "getEnvironmentHeaders" endpoint HTTP response body for the
+// "bad_request" error.
+type GetEnvironmentHeadersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetEnvironmentHeadersNotFoundResponseBody is the type of the "mcpServers"
+// service "getEnvironmentHeaders" endpoint HTTP response body for the
+// "not_found" error.
+type GetEnvironmentHeadersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetEnvironmentHeadersConflictResponseBody is the type of the "mcpServers"
+// service "getEnvironmentHeaders" endpoint HTTP response body for the
+// "conflict" error.
+type GetEnvironmentHeadersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetEnvironmentHeadersUnsupportedMediaResponseBody is the type of the
+// "mcpServers" service "getEnvironmentHeaders" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetEnvironmentHeadersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetEnvironmentHeadersInvalidResponseBody is the type of the "mcpServers"
+// service "getEnvironmentHeaders" endpoint HTTP response body for the
+// "invalid" error.
+type GetEnvironmentHeadersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetEnvironmentHeadersInvariantViolationResponseBody is the type of the
+// "mcpServers" service "getEnvironmentHeaders" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetEnvironmentHeadersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetEnvironmentHeadersUnexpectedResponseBody is the type of the "mcpServers"
+// service "getEnvironmentHeaders" endpoint HTTP response body for the
+// "unexpected" error.
+type GetEnvironmentHeadersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetEnvironmentHeadersGatewayErrorResponseBody is the type of the
+// "mcpServers" service "getEnvironmentHeaders" endpoint HTTP response body for
+// the "gateway_error" error.
+type GetEnvironmentHeadersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetEnvironmentHeadersUnavailableResponseBody is the type of the "mcpServers"
+// service "getEnvironmentHeaders" endpoint HTTP response body for the
+// "unavailable" error.
+type GetEnvironmentHeadersUnavailableResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2779,6 +3010,36 @@ type DeleteMcpServerUnavailableResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// McpServerEnvironmentSummaryResponseBody is used to define fields on response
+// body types.
+type McpServerEnvironmentSummaryResponseBody struct {
+	// The ID of the environment
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The name of the environment
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The slug of the environment
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+}
+
+// McpServerEnvironmentHeaderResponseBody is used to define fields on response
+// body types.
+type McpServerEnvironmentHeaderResponseBody struct {
+	// The environment entry name
+	EntryName *string `form:"entry_name,omitempty" json:"entry_name,omitempty" xml:"entry_name,omitempty"`
+	// The canonical header the entry targets. Absent when the entry is not mapped
+	// or its name is not a valid header name.
+	HeaderName *string `form:"header_name,omitempty" json:"header_name,omitempty" xml:"header_name,omitempty"`
+	// mapped: maps to a header that is sent upstream while every entry is valid.
+	// overrides_source: maps to a header that replaces the source header of the
+	// same name while every entry is valid. A resolved upstream token still
+	// replaces an Authorization entry. invalid_name, reserved, empty_value,
+	// invalid_value, duplicate, undecryptable: the entry cannot be sent, and a
+	// server linked to this environment refuses requests until it is fixed or
+	// removed. not_mapped: the name resembles the MCP_HEADER_ prefix without
+	// matching it exactly, so the entry is ignored.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+}
+
 // McpServerResponseBody is used to define fields on response body types.
 type McpServerResponseBody struct {
 	// The ID of the MCP server
@@ -3344,6 +3605,201 @@ func NewGetMcpServerGatewayError(body *GetMcpServerGatewayErrorResponseBody) *go
 // NewGetMcpServerUnavailable builds a mcpServers service getMcpServer endpoint
 // unavailable error.
 func NewGetMcpServerUnavailable(body *GetMcpServerUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetEnvironmentHeadersMcpServerEnvironmentHeadersOK builds a "mcpServers"
+// service "getEnvironmentHeaders" endpoint result from a HTTP "OK" response.
+func NewGetEnvironmentHeadersMcpServerEnvironmentHeadersOK(body *GetEnvironmentHeadersResponseBody) *mcpservers.McpServerEnvironmentHeaders {
+	v := &mcpservers.McpServerEnvironmentHeaders{
+		EnvironmentStatus:               *body.EnvironmentStatus,
+		EnvironmentConfigurationInvalid: *body.EnvironmentConfigurationInvalid,
+	}
+	if body.Environment != nil {
+		v.Environment = unmarshalMcpServerEnvironmentSummaryResponseBodyToMcpserversMcpServerEnvironmentSummary(body.Environment)
+	}
+	v.Entries = make([]*mcpservers.McpServerEnvironmentHeader, len(body.Entries))
+	for i, val := range body.Entries {
+		if val == nil {
+			v.Entries[i] = nil
+			continue
+		}
+		v.Entries[i] = unmarshalMcpServerEnvironmentHeaderResponseBodyToMcpserversMcpServerEnvironmentHeader(val)
+	}
+	v.Environments = make([]*mcpservers.McpServerEnvironmentSummary, len(body.Environments))
+	for i, val := range body.Environments {
+		if val == nil {
+			v.Environments[i] = nil
+			continue
+		}
+		v.Environments[i] = unmarshalMcpServerEnvironmentSummaryResponseBodyToMcpserversMcpServerEnvironmentSummary(val)
+	}
+
+	return v
+}
+
+// NewGetEnvironmentHeadersUnauthorized builds a mcpServers service
+// getEnvironmentHeaders endpoint unauthorized error.
+func NewGetEnvironmentHeadersUnauthorized(body *GetEnvironmentHeadersUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetEnvironmentHeadersForbidden builds a mcpServers service
+// getEnvironmentHeaders endpoint forbidden error.
+func NewGetEnvironmentHeadersForbidden(body *GetEnvironmentHeadersForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetEnvironmentHeadersBadRequest builds a mcpServers service
+// getEnvironmentHeaders endpoint bad_request error.
+func NewGetEnvironmentHeadersBadRequest(body *GetEnvironmentHeadersBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetEnvironmentHeadersNotFound builds a mcpServers service
+// getEnvironmentHeaders endpoint not_found error.
+func NewGetEnvironmentHeadersNotFound(body *GetEnvironmentHeadersNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetEnvironmentHeadersConflict builds a mcpServers service
+// getEnvironmentHeaders endpoint conflict error.
+func NewGetEnvironmentHeadersConflict(body *GetEnvironmentHeadersConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetEnvironmentHeadersUnsupportedMedia builds a mcpServers service
+// getEnvironmentHeaders endpoint unsupported_media error.
+func NewGetEnvironmentHeadersUnsupportedMedia(body *GetEnvironmentHeadersUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetEnvironmentHeadersInvalid builds a mcpServers service
+// getEnvironmentHeaders endpoint invalid error.
+func NewGetEnvironmentHeadersInvalid(body *GetEnvironmentHeadersInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetEnvironmentHeadersInvariantViolation builds a mcpServers service
+// getEnvironmentHeaders endpoint invariant_violation error.
+func NewGetEnvironmentHeadersInvariantViolation(body *GetEnvironmentHeadersInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetEnvironmentHeadersUnexpected builds a mcpServers service
+// getEnvironmentHeaders endpoint unexpected error.
+func NewGetEnvironmentHeadersUnexpected(body *GetEnvironmentHeadersUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetEnvironmentHeadersGatewayError builds a mcpServers service
+// getEnvironmentHeaders endpoint gateway_error error.
+func NewGetEnvironmentHeadersGatewayError(body *GetEnvironmentHeadersGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetEnvironmentHeadersUnavailable builds a mcpServers service
+// getEnvironmentHeaders endpoint unavailable error.
+func NewGetEnvironmentHeadersUnavailable(body *GetEnvironmentHeadersUnavailableResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5293,6 +5749,48 @@ func ValidateGetMcpServerResponseBody(body *GetMcpServerResponseBody) (err error
 	return
 }
 
+// ValidateGetEnvironmentHeadersResponseBody runs the validations defined on
+// GetEnvironmentHeadersResponseBody
+func ValidateGetEnvironmentHeadersResponseBody(body *GetEnvironmentHeadersResponseBody) (err error) {
+	if body.EnvironmentStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("environment_status", "body"))
+	}
+	if body.EnvironmentConfigurationInvalid == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("environment_configuration_invalid", "body"))
+	}
+	if body.Entries == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("entries", "body"))
+	}
+	if body.Environments == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("environments", "body"))
+	}
+	if body.Environment != nil {
+		if err2 := ValidateMcpServerEnvironmentSummaryResponseBody(body.Environment); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.EnvironmentStatus != nil {
+		if !(*body.EnvironmentStatus == "none" || *body.EnvironmentStatus == "ok" || *body.EnvironmentStatus == "unavailable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.environment_status", *body.EnvironmentStatus, []any{"none", "ok", "unavailable"}))
+		}
+	}
+	for _, e := range body.Entries {
+		if e != nil {
+			if err2 := ValidateMcpServerEnvironmentHeaderResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Environments {
+		if e != nil {
+			if err2 := ValidateMcpServerEnvironmentSummaryResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateListMcpServersResponseBody runs the validations defined on
 // ListMcpServersResponseBody
 func ValidateListMcpServersResponseBody(body *ListMcpServersResponseBody) (err error) {
@@ -6012,6 +6510,271 @@ func ValidateGetMcpServerGatewayErrorResponseBody(body *GetMcpServerGatewayError
 // ValidateGetMcpServerUnavailableResponseBody runs the validations defined on
 // getMcpServer_unavailable_response_body
 func ValidateGetMcpServerUnavailableResponseBody(body *GetMcpServerUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetEnvironmentHeadersUnauthorizedResponseBody runs the validations
+// defined on getEnvironmentHeaders_unauthorized_response_body
+func ValidateGetEnvironmentHeadersUnauthorizedResponseBody(body *GetEnvironmentHeadersUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetEnvironmentHeadersForbiddenResponseBody runs the validations
+// defined on getEnvironmentHeaders_forbidden_response_body
+func ValidateGetEnvironmentHeadersForbiddenResponseBody(body *GetEnvironmentHeadersForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetEnvironmentHeadersBadRequestResponseBody runs the validations
+// defined on getEnvironmentHeaders_bad_request_response_body
+func ValidateGetEnvironmentHeadersBadRequestResponseBody(body *GetEnvironmentHeadersBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetEnvironmentHeadersNotFoundResponseBody runs the validations
+// defined on getEnvironmentHeaders_not_found_response_body
+func ValidateGetEnvironmentHeadersNotFoundResponseBody(body *GetEnvironmentHeadersNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetEnvironmentHeadersConflictResponseBody runs the validations
+// defined on getEnvironmentHeaders_conflict_response_body
+func ValidateGetEnvironmentHeadersConflictResponseBody(body *GetEnvironmentHeadersConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetEnvironmentHeadersUnsupportedMediaResponseBody runs the
+// validations defined on getEnvironmentHeaders_unsupported_media_response_body
+func ValidateGetEnvironmentHeadersUnsupportedMediaResponseBody(body *GetEnvironmentHeadersUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetEnvironmentHeadersInvalidResponseBody runs the validations
+// defined on getEnvironmentHeaders_invalid_response_body
+func ValidateGetEnvironmentHeadersInvalidResponseBody(body *GetEnvironmentHeadersInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetEnvironmentHeadersInvariantViolationResponseBody runs the
+// validations defined on
+// getEnvironmentHeaders_invariant_violation_response_body
+func ValidateGetEnvironmentHeadersInvariantViolationResponseBody(body *GetEnvironmentHeadersInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetEnvironmentHeadersUnexpectedResponseBody runs the validations
+// defined on getEnvironmentHeaders_unexpected_response_body
+func ValidateGetEnvironmentHeadersUnexpectedResponseBody(body *GetEnvironmentHeadersUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetEnvironmentHeadersGatewayErrorResponseBody runs the validations
+// defined on getEnvironmentHeaders_gateway_error_response_body
+func ValidateGetEnvironmentHeadersGatewayErrorResponseBody(body *GetEnvironmentHeadersGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetEnvironmentHeadersUnavailableResponseBody runs the validations
+// defined on getEnvironmentHeaders_unavailable_response_body
+func ValidateGetEnvironmentHeadersUnavailableResponseBody(body *GetEnvironmentHeadersUnavailableResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8669,6 +9432,41 @@ func ValidateDeleteMcpServerUnavailableResponseBody(body *DeleteMcpServerUnavail
 	}
 	if body.Fault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMcpServerEnvironmentSummaryResponseBody runs the validations defined
+// on McpServerEnvironmentSummaryResponseBody
+func ValidateMcpServerEnvironmentSummaryResponseBody(body *McpServerEnvironmentSummaryResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateMcpServerEnvironmentHeaderResponseBody runs the validations defined
+// on McpServerEnvironmentHeaderResponseBody
+func ValidateMcpServerEnvironmentHeaderResponseBody(body *McpServerEnvironmentHeaderResponseBody) (err error) {
+	if body.EntryName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("entry_name", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "mapped" || *body.Status == "overrides_source" || *body.Status == "invalid_name" || *body.Status == "reserved" || *body.Status == "empty_value" || *body.Status == "invalid_value" || *body.Status == "duplicate" || *body.Status == "undecryptable" || *body.Status == "not_mapped") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"mapped", "overrides_source", "invalid_name", "reserved", "empty_value", "invalid_value", "duplicate", "undecryptable", "not_mapped"}))
+		}
 	}
 	return
 }

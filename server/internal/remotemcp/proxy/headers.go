@@ -187,6 +187,11 @@ func (p *Proxy) stripConfiguredCredentials(header http.Header) {
 			header.Del(h.ValueFromRequestHeader)
 		}
 	}
+	for _, h := range p.EnvironmentHeaders {
+		if h.Name != "" {
+			deleteFoldedHeader(header, h.Name)
+		}
+	}
 }
 
 // applyRequestHeaders populates the upstream request headers by copying forward-safe
@@ -218,6 +223,9 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 			return err
 		}
 	} else if err := p.applyRemoteConfiguredHeaders(ctx, userReq, remoteReq); err != nil {
+		return err
+	}
+	if err := p.applyEnvironmentHeaders(ctx, remoteReq); err != nil {
 		return err
 	}
 
@@ -265,6 +273,9 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 // [HeaderPolicyRemote].
 func (p *Proxy) applyRemoteConfiguredHeaders(ctx context.Context, userReq *http.Request, remoteReq *http.Request) error {
 	for _, h := range p.Headers {
+		if p.shadowedByEnvironment(h.Name) {
+			continue
+		}
 		if mcpauthz.ReservedHeader(h.Name) || mcpauthz.ReservedHeader(h.ValueFromRequestHeader) {
 			continue
 		}
@@ -299,6 +310,9 @@ func (p *Proxy) applyRemoteConfiguredHeaders(ctx context.Context, userReq *http.
 // request. Errors and logs name the header, never its value.
 func (p *Proxy) applyTunneledConfiguredHeaders(ctx context.Context, userReq *http.Request, remoteReq *http.Request) error {
 	for _, h := range p.Headers {
+		if p.shadowedByEnvironment(h.Name) {
+			continue
+		}
 		// A resolved upstream token owns Authorization. The configured row it
 		// shadows is not sent, so it cannot impose a requirement of its own.
 		if p.AuthorizationOverride != "" && headerKey(h.Name) == "authorization" {
@@ -335,6 +349,44 @@ func (p *Proxy) applyTunneledConfiguredHeaders(ctx context.Context, userReq *htt
 			continue
 		}
 		remoteReq.Header.Set(h.Name, value)
+	}
+	return nil
+}
+
+// shadowedByEnvironment reports whether an environment header replaces the
+// configured row named name. A replaced row is not resolved at all, so a
+// requirement it would impose, such as a required pass-through, is met by the
+// environment's value instead.
+func (p *Proxy) shadowedByEnvironment(name string) bool {
+	for _, h := range p.EnvironmentHeaders {
+		if headerKey(h.Name) == headerKey(name) {
+			return true
+		}
+	}
+	return false
+}
+
+// applyEnvironmentHeaders overlays the headers mapped from the MCP server's
+// linked environment under either policy. Each one owns every spelling of its
+// name, so neither a client field nor a source row folding to the same key
+// can stand beside it. The rows were validated when the environment was
+// loaded; they are checked again here so a row from any other writer still
+// meets the strict policy, and a failure refuses the request rather than
+// falling back to another value for the header.
+func (p *Proxy) applyEnvironmentHeaders(ctx context.Context, remoteReq *http.Request) error {
+	for _, h := range p.EnvironmentHeaders {
+		// A resolved upstream token owns Authorization.
+		if p.AuthorizationOverride != "" && headerKey(h.Name) == "authorization" {
+			continue
+		}
+		if err := checkStoredTunneledHeader(h); err != nil {
+			return oops.E(oops.CodeBadRequest, err, "invalid environment header for mcp server").LogWarn(ctx, p.Logger)
+		}
+		if h.ValueFromRequestHeader != "" || strings.Trim(h.StaticValue, " \t") == "" {
+			return oops.E(oops.CodeBadRequest, fmt.Errorf("%w: header %q has no static value", ErrInvalidEnvironmentHeader, h.Name), "invalid environment header for mcp server").LogWarn(ctx, p.Logger)
+		}
+		deleteFoldedHeader(remoteReq.Header, h.Name)
+		remoteReq.Header.Set(h.Name, h.StaticValue)
 	}
 	return nil
 }

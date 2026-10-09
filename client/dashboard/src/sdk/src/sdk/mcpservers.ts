@@ -7,6 +7,7 @@ import { mcpServersCreate } from "../funcs/mcpServersCreate.js";
 import { mcpServersDelete } from "../funcs/mcpServersDelete.js";
 import { mcpServersDeleteToolMetadata } from "../funcs/mcpServersDeleteToolMetadata.js";
 import { mcpServersGet } from "../funcs/mcpServersGet.js";
+import { mcpServersGetEnvironmentHeaders } from "../funcs/mcpServersGetEnvironmentHeaders.js";
 import { mcpServersList } from "../funcs/mcpServersList.js";
 import { mcpServersListForOrg } from "../funcs/mcpServersListForOrg.js";
 import { mcpServersListToolFilters } from "../funcs/mcpServersListToolFilters.js";
@@ -20,6 +21,7 @@ import { ListMcpServersResult } from "../models/components/listmcpserversresult.
 import { ListToolFiltersResult } from "../models/components/listtoolfiltersresult.js";
 import { ListToolMetadataResult } from "../models/components/listtoolmetadataresult.js";
 import { McpServer } from "../models/components/mcpserver.js";
+import { McpServerEnvironmentHeaders } from "../models/components/mcpserverenvironmentheaders.js";
 import { SetToolMetadataBatchResult } from "../models/components/settoolmetadatabatchresult.js";
 import { ToolMetadata } from "../models/components/toolmetadata.js";
 import {
@@ -42,6 +44,10 @@ import {
   GetMcpServerRequest,
   GetMcpServerSecurity,
 } from "../models/operations/getmcpserver.js";
+import {
+  GetMcpServerEnvironmentHeadersRequest,
+  GetMcpServerEnvironmentHeadersSecurity,
+} from "../models/operations/getmcpserverenvironmentheaders.js";
 import {
   ListMcpServersRequest,
   ListMcpServersSecurity,
@@ -161,6 +167,25 @@ export class McpServers extends ClientSDK {
     options?: RequestOptions,
   ): Promise<McpServer> {
     return unwrapAsync(mcpServersGet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getEnvironmentHeaders mcpServers
+   *
+   * @remarks
+   * Preview the upstream headers an MCP server sends from an environment. Only entries named MCP_HEADER_<Header-Name> are sent; the header name is the rest of the entry name with each underscore read as a dash, in canonical casing, so MCP_HEADER_X_INSTANCE_URL is sent as X-Instance-Url. The result lists entry and header names with a status for each, never values. Requires read access to the MCP server, project-wide environment read access, and environment read access that is not excluded for the previewed environment (linked or candidate): the authority needed to link that environment.
+   */
+  async getEnvironmentHeaders(
+    request: GetMcpServerEnvironmentHeadersRequest,
+    security?: GetMcpServerEnvironmentHeadersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<McpServerEnvironmentHeaders> {
+    return unwrapAsync(mcpServersGetEnvironmentHeaders(
       this,
       request,
       security,

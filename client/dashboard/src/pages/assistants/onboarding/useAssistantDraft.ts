@@ -12,6 +12,8 @@ export type DraftContextValue = {
   assistant: Assistant | undefined;
   refetchAssistant: () => Promise<unknown>;
   invalidateAll: () => void;
+  /** Refreshes queries that depend on environment entries after an entry write. */
+  invalidateEnvironmentEntries: () => void;
   invalidateSkillAttachments: () => void;
   registerPending: (toolCallId: string, resolver: PendingResolver) => void;
   resolvePending: (toolCallId: string, result: unknown) => boolean;

@@ -25,6 +25,10 @@ type Client struct {
 	// getMcpServer endpoint.
 	GetMcpServerDoer goahttp.Doer
 
+	// GetEnvironmentHeaders Doer is the HTTP client used to make requests to the
+	// getEnvironmentHeaders endpoint.
+	GetEnvironmentHeadersDoer goahttp.Doer
+
 	// ListMcpServers Doer is the HTTP client used to make requests to the
 	// listMcpServers endpoint.
 	ListMcpServersDoer goahttp.Doer
@@ -85,23 +89,24 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateMcpServerDoer:      doer,
-		GetMcpServerDoer:         doer,
-		ListMcpServersDoer:       doer,
-		ListMcpServersForOrgDoer: doer,
-		UpdateMcpServerDoer:      doer,
-		ListToolFiltersDoer:      doer,
-		SetToolMetadataBatchDoer: doer,
-		AddToolMetadataBatchDoer: doer,
-		ListToolMetadataDoer:     doer,
-		SetToolMetadataDoer:      doer,
-		DeleteToolMetadataDoer:   doer,
-		DeleteMcpServerDoer:      doer,
-		RestoreResponseBody:      restoreBody,
-		scheme:                   scheme,
-		host:                     host,
-		decoder:                  dec,
-		encoder:                  enc,
+		CreateMcpServerDoer:       doer,
+		GetMcpServerDoer:          doer,
+		GetEnvironmentHeadersDoer: doer,
+		ListMcpServersDoer:        doer,
+		ListMcpServersForOrgDoer:  doer,
+		UpdateMcpServerDoer:       doer,
+		ListToolFiltersDoer:       doer,
+		SetToolMetadataBatchDoer:  doer,
+		AddToolMetadataBatchDoer:  doer,
+		ListToolMetadataDoer:      doer,
+		SetToolMetadataDoer:       doer,
+		DeleteToolMetadataDoer:    doer,
+		DeleteMcpServerDoer:       doer,
+		RestoreResponseBody:       restoreBody,
+		scheme:                    scheme,
+		host:                      host,
+		decoder:                   dec,
+		encoder:                   enc,
 	}
 }
 
@@ -148,6 +153,30 @@ func (c *Client) GetMcpServer() goa.Endpoint {
 		resp, err := c.GetMcpServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("mcpServers", "getMcpServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetEnvironmentHeaders returns an endpoint that makes HTTP requests to the
+// mcpServers service getEnvironmentHeaders server.
+func (c *Client) GetEnvironmentHeaders() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetEnvironmentHeadersRequest(c.encoder)
+		decodeResponse = DecodeGetEnvironmentHeadersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetEnvironmentHeadersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetEnvironmentHeadersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpServers", "getEnvironmentHeaders", err)
 		}
 		return decodeResponse(resp)
 	}

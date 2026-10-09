@@ -41,7 +41,7 @@ func TestTunnelManagerCallerAssertionScopeAndMetaDestination(t *testing.T) {
 	ctx = mcpidentity.NewValidatorBoundary().StampAgent(ctx, uuid.New())
 	routes := route.NewRouteTable()
 	require.NoError(t, routes.Publish(ctx, tunnel.String(), "http://gateway.example", time.Hour))
-	manager := newTunnelManager(routes, "", proxyManager, nil, issuer, nil)
+	manager := newTunnelManager(routes, "", proxyManager, nil, issuer, nil, nil)
 	server := &mcpserversrepo.McpServer{ID: wrapper, TunneledMcpServerID: conv.ToNullUUID(tunnel), Visibility: mcpservers.VisibilityPrivate}
 	p, err := manager.buildProxy(ctx, logger, buildProxyParams{
 		ClientAffinityKey:  "",
