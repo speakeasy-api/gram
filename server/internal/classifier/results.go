@@ -27,8 +27,8 @@ type ChoiceAnswer struct {
 	// Selected identifies a submitted option with the highest probability.
 	Selected OptionKey
 
-	// Distribution contains every option exactly once, in submission order, and
-	// sums to one within the implementation's numerical tolerance.
+	// Distribution contains every option exactly once, in submission order. It
+	// preserves provider probabilities without normalization or a sum-to-one check.
 	Distribution []Probability
 
 	// Confidence is optional provider-reported question-level confidence in
@@ -44,8 +44,8 @@ type ScoreAnswer struct {
 	// differences in precision.
 	ExpectedIndex float64
 
-	// Distribution contains every level exactly once in low-to-high order and
-	// sums to one within the implementation's numerical tolerance.
+	// Distribution contains every level exactly once in low-to-high order. It
+	// preserves provider probabilities without normalization or a sum-to-one check.
 	Distribution []Probability
 
 	// Confidence is optional provider-reported question-level confidence in [0, 1].
