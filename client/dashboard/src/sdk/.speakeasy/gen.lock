@@ -860,6 +860,7 @@ trackedFiles:
   src/models/components/aidetectionuser.ts: {}
   src/models/components/aiintegrationconfig.ts: {}
   src/models/components/aiintegrationschedulestate.ts: {}
+  src/models/components/aiscanaccount.ts: {}
   src/models/components/aiscanmatch.ts: {}
   src/models/components/aiscantarget.ts: {}
   src/models/components/aiscantargetgatewayclient.ts: {}

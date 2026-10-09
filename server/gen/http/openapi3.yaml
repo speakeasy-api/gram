@@ -84215,6 +84215,36 @@ components:
                 - enabled
                 - status
                 - consecutive_failures
+        AIScanAccount:
+            type: object
+            properties:
+                account_uuid:
+                    type: string
+                    description: The provider's stable account id (Claude's account UUID).
+                    format: uuid
+                last_seen_at:
+                    type: string
+                    description: When the account was last used in this organization on the device.
+                    format: date-time
+                org_uuid:
+                    type: string
+                    description: The provider organization the account was used in (Claude's organization UUID).
+                    format: uuid
+                provider:
+                    type: string
+                    description: AI provider the account belongs to. Only anthropic is accepted today.
+                    maxLength: 32
+                surface:
+                    type: string
+                    description: 'App the account was signed in to: claude-code-desktop or cowork.'
+                    maxLength: 64
+            description: One AI provider account and organization pair a device-agent scan found signed in on the device.
+            required:
+                - provider
+                - surface
+                - account_uuid
+                - org_uuid
+                - last_seen_at
         AIScanMatch:
             type: object
             properties:
@@ -106121,6 +106151,12 @@ components:
         ReportAIScanRequestBody:
             type: object
             properties:
+                accounts:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AIScanAccount'
+                    description: Claude Desktop account and organization pairs signed in on the device, read from the names of the directories Claude Desktop keeps its session stores in. Each account is recorded against the enrolled user; an organization no other employee uses marks the account personal. Omitted by agents that predate account discovery.
+                    maxItems: 50
                 matches:
                     type: array
                     items:

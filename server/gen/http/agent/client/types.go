@@ -89,6 +89,12 @@ type ReportAIScanRequestBody struct {
 	// Detection targets the scan matched. Empty when the device came back clean;
 	// the report still lands as a scan receipt.
 	Matches []*AIScanMatchRequestBody `form:"matches" json:"matches" xml:"matches"`
+	// Claude Desktop account and organization pairs signed in on the device, read
+	// from the names of the directories Claude Desktop keeps its session stores
+	// in. Each account is recorded against the enrolled user; an organization no
+	// other employee uses marks the account personal. Omitted by agents that
+	// predate account discovery.
+	Accounts []*AIScanAccountRequestBody `form:"accounts,omitempty" json:"accounts,omitempty" xml:"accounts,omitempty"`
 }
 
 // CreateSessionHandoffRequestBody is the type of the "agent" service
@@ -2423,6 +2429,21 @@ type AIScanMatchRequestBody struct {
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 }
 
+// AIScanAccountRequestBody is used to define fields on request body types.
+type AIScanAccountRequestBody struct {
+	// AI provider the account belongs to. Only anthropic is accepted today.
+	Provider string `form:"provider" json:"provider" xml:"provider"`
+	// App the account was signed in to: claude-code-desktop or cowork.
+	Surface string `form:"surface" json:"surface" xml:"surface"`
+	// The provider's stable account id (Claude's account UUID).
+	AccountUUID string `form:"account_uuid" json:"account_uuid" xml:"account_uuid"`
+	// The provider organization the account was used in (Claude's organization
+	// UUID).
+	OrgUUID string `form:"org_uuid" json:"org_uuid" xml:"org_uuid"`
+	// When the account was last used in this organization on the device.
+	LastSeenAt string `form:"last_seen_at" json:"last_seen_at" xml:"last_seen_at"`
+}
+
 // NewUpdateConfigurationRequestBody builds the HTTP request body from the
 // payload of the "updateConfiguration" endpoint of the "agent" service.
 func NewUpdateConfigurationRequestBody(p *agent.UpdateConfigurationPayload) *UpdateConfigurationRequestBody {
@@ -2497,6 +2518,16 @@ func NewReportAIScanRequestBody(p *agent.ReportAIScanPayload) *ReportAIScanReque
 		}
 	} else {
 		body.Matches = []*AIScanMatchRequestBody{}
+	}
+	if p.Accounts != nil {
+		body.Accounts = make([]*AIScanAccountRequestBody, len(p.Accounts))
+		for i, val := range p.Accounts {
+			if val == nil {
+				body.Accounts[i] = nil
+				continue
+			}
+			body.Accounts[i] = marshalAgentAIScanAccountToAIScanAccountRequestBody(val)
+		}
 	}
 	return body
 }
@@ -7488,5 +7519,20 @@ func ValidateAIScanMatchRequestBody(body *AIScanMatchRequestBody) (err error) {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.version", *body.Version, utf8.RuneCountInString(*body.Version), 64, false))
 		}
 	}
+	return
+}
+
+// ValidateAIScanAccountRequestBody runs the validations defined on
+// AIScanAccountRequestBody
+func ValidateAIScanAccountRequestBody(body *AIScanAccountRequestBody) (err error) {
+	if utf8.RuneCountInString(body.Provider) > 32 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.provider", body.Provider, utf8.RuneCountInString(body.Provider), 32, false))
+	}
+	if utf8.RuneCountInString(body.Surface) > 64 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.surface", body.Surface, utf8.RuneCountInString(body.Surface), 64, false))
+	}
+	err = goa.MergeErrors(err, goa.ValidateFormat("body.account_uuid", body.AccountUUID, goa.FormatUUID))
+	err = goa.MergeErrors(err, goa.ValidateFormat("body.org_uuid", body.OrgUUID, goa.FormatUUID))
+	err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen_at", body.LastSeenAt, goa.FormatDateTime))
 	return
 }

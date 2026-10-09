@@ -126,6 +126,22 @@ const ServiceName = "agent"
 // MethodKey key.
 var MethodNames = [11]string{"getPlugins", "listSyncedUsers", "getConfiguration", "updateConfiguration", "listAiScanTargets", "upsertAiScanTarget", "deleteAiScanTarget", "getSessionMeta", "reportSessionMoved", "reportAIScan", "createSessionHandoff"}
 
+// One AI provider account and organization pair a device-agent scan found
+// signed in on the device.
+type AIScanAccount struct {
+	// AI provider the account belongs to. Only anthropic is accepted today.
+	Provider string
+	// App the account was signed in to: claude-code-desktop or cowork.
+	Surface string
+	// The provider's stable account id (Claude's account UUID).
+	AccountUUID string
+	// The provider organization the account was used in (Claude's organization
+	// UUID).
+	OrgUUID string
+	// When the account was last used in this organization on the device.
+	LastSeenAt string
+}
+
 // One AI detection target a device-agent scan matched.
 type AIScanMatch struct {
 	// Identifier of the matched target from the agent's compiled-in list (e.g.
@@ -445,6 +461,12 @@ type ReportAIScanPayload struct {
 	// Detection targets the scan matched. Empty when the device came back clean;
 	// the report still lands as a scan receipt.
 	Matches []*AIScanMatch
+	// Claude Desktop account and organization pairs signed in on the device, read
+	// from the names of the directories Claude Desktop keeps its session stores
+	// in. Each account is recorded against the enrolled user; an organization no
+	// other employee uses marks the account personal. Omitted by agents that
+	// predate account discovery.
+	Accounts []*AIScanAccount
 	// Email of the enrolled user, sent in the Gram-User-Email header.
 	// Authoritative when authenticating with an org-scoped agent install key (the
 	// MDM zero-touch path); ignored for a per-user key, whose owner is the

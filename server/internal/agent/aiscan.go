@@ -147,6 +147,24 @@ func (s *Service) ReportAIScan(ctx context.Context, payload *gen.ReportAIScanPay
 		return oops.E(oops.CodeUnexpected, err, "error recording ai scan receipt").LogError(ctx, s.logger)
 	}
 
+	// Account attribution is best effort: the detections and receipt above
+	// are what the scan proves, so a failure here is logged, not returned.
+	if len(payload.Accounts) > 0 {
+		userID := ""
+		if !isInstallKey {
+			userID = authCtx.UserID
+		} else if userID, err = s.connectedUserID(ctx, authCtx.ActiveOrganizationID, email); err != nil {
+			s.logger.WarnContext(ctx, "could not resolve the enrolled user for claude desktop accounts", attr.SlogError(err))
+		}
+		if userID == "" {
+			s.logger.InfoContext(ctx, "claude desktop accounts reported for an email with no connected member; not recorded",
+				attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		} else if err := s.recordDesktopAccounts(ctx, authCtx.ActiveOrganizationID, userID, payload.Accounts); err != nil {
+			s.logger.ErrorContext(ctx, "error recording claude desktop accounts", attr.SlogError(err),
+				attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+		}
+	}
+
 	return nil
 }
 

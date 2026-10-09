@@ -945,6 +945,14 @@ BEGIN
     (demo_org, 'user_demo_lucas', 'anthropic', 'demo-ext-org-personal',
      'demo-acct-lucas-personal', 'user_demo_lucas_personal',
      'lucas.meyer@personal.example', 'personal', 'flat_rate');
+  -- A fourth personal account found by the device agent in Claude Desktop
+  -- (DNO-1137): Desktop yields only the account and org ids, so there is no
+  -- email or account id, which is how such accounts read on the identity pages.
+  INSERT INTO user_accounts
+    (organization_id, user_id, provider, external_org_id, external_account_uuid, account_type)
+  VALUES
+    (demo_org, 'user_demo_priya', 'anthropic', 'demo-ext-org-desktop-personal',
+     'demo-acct-priya-desktop', 'personal');
 
   -- Shadow AI access decisions (the AI Tools tab of the Shadow AI section).
   -- Three states, because a column where every row reads the same tells the
@@ -3544,8 +3552,8 @@ Channel context stays in the Raw view.
   -- surviving row would make the pattern look like an edge case.
   SELECT count(*) INTO stray FROM user_accounts
   WHERE organization_id = demo_org AND account_type = 'personal';
-  IF stray <> 3 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 3 personal accounts, found %', stray;
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 4 personal accounts, found %', stray;
   END IF;
 
   -- The seed never creates API keys: any row left here was minted by a demo

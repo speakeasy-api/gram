@@ -79,6 +79,39 @@ func (q *Queries) ConsumeSessionHandoffLink(ctx context.Context, token string) (
 	return blob_url, err
 }
 
+const countOtherEmployeesForExternalOrg = `-- name: CountOtherEmployeesForExternalOrg :one
+SELECT COUNT(DISTINCT user_id)::bigint
+FROM user_accounts
+WHERE organization_id = $1
+  AND provider = $2
+  AND external_org_id = $3
+  AND user_id IS NOT NULL
+  AND user_id <> $4
+  AND deleted_at IS NULL
+`
+
+type CountOtherEmployeesForExternalOrgParams struct {
+	OrganizationID string
+	Provider       string
+	ExternalOrgID  pgtype.Text
+	UserID         pgtype.Text
+}
+
+// Distinct employees other than @user_id seen under a provider org. Any marks
+// the org as the company's: with the reporting employee that makes the two the
+// hooks rule (CountEmployeesForExternalOrg) requires.
+func (q *Queries) CountOtherEmployeesForExternalOrg(ctx context.Context, arg CountOtherEmployeesForExternalOrgParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countOtherEmployeesForExternalOrg,
+		arg.OrganizationID,
+		arg.Provider,
+		arg.ExternalOrgID,
+		arg.UserID,
+	)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const deleteAIScanTarget = `-- name: DeleteAIScanTarget :one
 DELETE FROM ai_scan_targets
 WHERE organization_id = $1
@@ -113,6 +146,49 @@ func (q *Queries) DeleteAIScanTarget(ctx context.Context, arg DeleteAIScanTarget
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const employeeHasSharedExternalOrg = `-- name: EmployeeHasSharedExternalOrg :one
+SELECT EXISTS (
+  SELECT 1
+  FROM user_accounts mine
+  WHERE mine.organization_id = $1
+    AND mine.provider = $2
+    AND mine.user_id = $3
+    AND mine.deleted_at IS NULL
+    AND mine.external_org_id IS NOT NULL
+    AND mine.external_org_id <> $4
+    AND (
+      SELECT COUNT(DISTINCT peers.user_id)
+      FROM user_accounts peers
+      WHERE peers.organization_id = mine.organization_id
+        AND peers.provider = mine.provider
+        AND peers.external_org_id = mine.external_org_id
+        AND peers.user_id IS NOT NULL
+        AND peers.deleted_at IS NULL
+    ) >= 2
+)::boolean
+`
+
+type EmployeeHasSharedExternalOrgParams struct {
+	OrganizationID string
+	Provider       string
+	UserID         pgtype.Text
+	ExternalOrgID  pgtype.Text
+}
+
+// Whether this employee also appears under a different provider org shared by
+// >= 2 employees (the company's org). Mirrors the hooks query of the same name.
+func (q *Queries) EmployeeHasSharedExternalOrg(ctx context.Context, arg EmployeeHasSharedExternalOrgParams) (bool, error) {
+	row := q.db.QueryRow(ctx, employeeHasSharedExternalOrg,
+		arg.OrganizationID,
+		arg.Provider,
+		arg.UserID,
+		arg.ExternalOrgID,
+	)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const getAIScanTargetForUpdate = `-- name: GetAIScanTargetForUpdate :one
@@ -819,6 +895,63 @@ func (q *Queries) UpsertAIScanTarget(ctx context.Context, arg UpsertAIScanTarget
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const upsertDesktopUserAccount = `-- name: UpsertDesktopUserAccount :exec
+INSERT INTO user_accounts (
+    organization_id
+  , provider
+  , external_account_uuid
+  , user_id
+  , external_org_id
+  , account_type
+  , last_seen_at
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+)
+ON CONFLICT (organization_id, provider, external_account_uuid) WHERE deleted_at IS NULL
+DO UPDATE SET
+    user_id         = COALESCE(user_accounts.user_id, EXCLUDED.user_id)
+  , external_org_id = EXCLUDED.external_org_id
+  , account_type    = COALESCE(EXCLUDED.account_type, user_accounts.account_type)
+  , last_seen_at    = GREATEST(user_accounts.last_seen_at, EXCLUDED.last_seen_at)
+  , updated_at      = clock_timestamp()
+`
+
+type UpsertDesktopUserAccountParams struct {
+	OrganizationID      string
+	Provider            string
+	ExternalAccountUuid string
+	UserID              pgtype.Text
+	ExternalOrgID       pgtype.Text
+	AccountType         pgtype.Text
+	LastSeenAt          pgtype.Timestamptz
+}
+
+// Records a Claude Desktop account the device agent found signed in on an
+// enrolled user's device. Desktop reports no email or account id, so those
+// columns are left to other sources. An account holds one provider org, so
+// the org is overwritten by the one the agent says was used most recently.
+// account_type is only written when classification reached a verdict, and
+// last_seen_at never moves backwards: hook ingest may have seen the account
+// more recently than the device's session store did.
+func (q *Queries) UpsertDesktopUserAccount(ctx context.Context, arg UpsertDesktopUserAccountParams) error {
+	_, err := q.db.Exec(ctx, upsertDesktopUserAccount,
+		arg.OrganizationID,
+		arg.Provider,
+		arg.ExternalAccountUuid,
+		arg.UserID,
+		arg.ExternalOrgID,
+		arg.AccountType,
+		arg.LastSeenAt,
+	)
+	return err
 }
 
 const upsertDeviceAgentConfiguration = `-- name: UpsertDeviceAgentConfiguration :one

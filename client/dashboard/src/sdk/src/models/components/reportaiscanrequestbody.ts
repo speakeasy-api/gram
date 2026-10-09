@@ -5,12 +5,21 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
+  AIScanAccount,
+  AIScanAccount$Outbound,
+  AIScanAccount$outboundSchema,
+} from "./aiscanaccount.js";
+import {
   AIScanMatch,
   AIScanMatch$Outbound,
   AIScanMatch$outboundSchema,
 } from "./aiscanmatch.js";
 
 export type ReportAIScanRequestBody = {
+  /**
+   * Claude Desktop account and organization pairs signed in on the device, read from the names of the directories Claude Desktop keeps its session stores in. Each account is recorded against the enrolled user; an organization no other employee uses marks the account personal. Omitted by agents that predate account discovery.
+   */
+  accounts?: Array<AIScanAccount> | undefined;
   /**
    * Detection targets the scan matched. Empty when the device came back clean; the report still lands as a scan receipt.
    */
@@ -31,6 +40,7 @@ export type ReportAIScanRequestBody = {
 
 /** @internal */
 export type ReportAIScanRequestBody$Outbound = {
+  accounts?: Array<AIScanAccount$Outbound> | undefined;
   matches: Array<AIScanMatch$Outbound>;
   scan_completed_at: string;
   scan_started_at: string;
@@ -43,6 +53,7 @@ export const ReportAIScanRequestBody$outboundSchema: z.ZodMiniType<
   ReportAIScanRequestBody
 > = z.pipe(
   z.object({
+    accounts: z.optional(z.array(AIScanAccount$outboundSchema)),
     matches: z.array(AIScanMatch$outboundSchema),
     scanCompletedAt: z.pipe(z.date(), z.transform(v => v.toISOString())),
     scanStartedAt: z.pipe(z.date(), z.transform(v => v.toISOString())),
