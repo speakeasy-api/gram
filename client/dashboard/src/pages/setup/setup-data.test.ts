@@ -13,6 +13,19 @@ describe("getAgentPlatforms", () => {
     expect(AGENT_PLATFORMS.find(({ id }) => id === "openclaw")).toBeUndefined();
   });
 
+  it("offers Copilot CLI with a working plugin download walkthrough", () => {
+    const copilot = AGENT_PLATFORMS.find(({ id }) => id === "copilot");
+    expect(copilot?.name).toBe("GitHub Copilot CLI");
+    expect(copilot?.available).toBe(true);
+    expect(copilot?.setupSteps[0]?.download?.platform).toBe("copilot");
+    expect(copilot?.setupSteps[0]?.description).toContain(
+      "Coordinate rotation and replacement; a new download does not revoke keys in older copies.",
+    );
+    expect(copilot?.setupSteps[1]?.code).toContain(
+      "copilot --plugin-dir speakeasy-hooks",
+    );
+  });
+
   it("follows the shared setup provider order", () => {
     expect(
       AGENT_PLATFORMS.slice(0, ACTIVE_AGENT_PROVIDER_IDS.setup.length).map(
