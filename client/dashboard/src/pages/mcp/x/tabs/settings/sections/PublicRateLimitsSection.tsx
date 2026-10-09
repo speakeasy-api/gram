@@ -120,8 +120,10 @@ function PublicRateLimits({
     toPublicRateDraft(tunneledMcpServer),
   );
   const [error, setError] = useState<string>();
+  const [confirmOpen, setConfirmOpen] = useState(false);
   // The change awaiting confirmation, frozen when Save was pressed, with the
-  // stored values it was computed against.
+  // stored values it was computed against. Kept after the confirmation closes
+  // so its content stays put while the dialog animates out.
   const [pending, setPending] = useState<{
     form: PublicRateLimitForm;
     base: PublicRateDraft;
@@ -184,6 +186,7 @@ function PublicRateLimits({
     }
     if (Object.keys(form).length === 0) return;
     setPending({ form, base: toPublicRateDraft(tunneledMcpServer) });
+    setConfirmOpen(true);
   };
 
   const handleSave = async ({ form, base }: NonNullable<typeof pending>) => {
@@ -192,7 +195,7 @@ function PublicRateLimits({
     // the frozen change was computed against values no longer stored.
     const current = toPublicRateDraft(tunneledMcpServer);
     if (!sameRateDraft(current, base)) {
-      setPending(null);
+      setConfirmOpen(false);
       setError(STORED_VALUE_CHANGED_MESSAGE);
       return;
     }
@@ -208,7 +211,7 @@ function PublicRateLimits({
       });
       await invalidateTunneledMcpSourceViews(queryClient);
       toast.success("Anonymous rate limit updated");
-      setPending(null);
+      setConfirmOpen(false);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to update rate limits";
@@ -320,9 +323,9 @@ function PublicRateLimits({
         </Stack>
       </RequireScope>
       <SharedTunnelConfirmDialog
-        open={pending !== null}
+        open={confirmOpen}
         onOpenChange={(open) => {
-          if (!open) setPending(null);
+          if (!open) setConfirmOpen(false);
         }}
         tunneledMcpServerId={tunneledMcpServer.id}
         tunnelName={formatTunneledMcpDisplay(tunneledMcpServer)}
@@ -334,7 +337,7 @@ function PublicRateLimits({
         confirmLabel="Save limit"
         pendingLabel="Saving"
         isPending={applying}
-        errorMessage={pending ? error : undefined}
+        errorMessage={error}
         onConfirm={() => {
           if (pending) void handleSave(pending);
         }}
