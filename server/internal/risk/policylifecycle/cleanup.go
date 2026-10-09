@@ -10,6 +10,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -21,6 +22,9 @@ const (
 
 	// OrphanRepairSeedVersion changes only when the repair semantics change.
 	OrphanRepairSeedVersion = "2026-10-06-v1"
+
+	// OrphanRepairActorDisplayName is the name the audit feed shows for the repair.
+	OrphanRepairActorDisplayName = "Orphaned policy repair"
 )
 
 // Actor identifies who caused lifecycle cleanup.
@@ -114,7 +118,7 @@ func (c *Cleaner) repairProject(ctx context.Context, db *pgxpool.Pool, projectID
 		policies,
 		Actor{
 			Principal:   urn.NewSystemPrincipal(OrphanRepairSeedName),
-			DisplayName: nil,
+			DisplayName: conv.PtrEmpty(OrphanRepairActorDisplayName),
 			Slug:        nil,
 		},
 	)

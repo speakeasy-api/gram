@@ -197,6 +197,9 @@ func TestRiskPolicyLifecycleRepair_SoftDeletesExistingOrphans(t *testing.T) {
 	afterDeletes, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyDelete)
 	require.NoError(t, err)
 	require.Equal(t, beforeDeletes+1, afterDeletes)
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionRiskPolicyDelete)
+	require.NoError(t, err)
+	require.Equal(t, policylifecycle.OrphanRepairActorDisplayName, record.ActorDisplay)
 
 	deleted, err = cleaner.RepairOrphans(ctx, ti.conn)
 	require.NoError(t, err)
