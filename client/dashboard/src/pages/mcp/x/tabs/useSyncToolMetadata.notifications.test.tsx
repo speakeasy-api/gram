@@ -63,7 +63,7 @@ function gramError(statusCode: number): GramError {
   return error;
 }
 
-function renderWithClient() {
+function renderWithClient({ enabled = true }: { enabled?: boolean } = {}) {
   // Mirrors the dashboard client's default: every failed mutation notifies.
   const client = new QueryClient({
     defaultOptions: { mutations: { onError: mocks.defaultOnError } },
@@ -81,7 +81,7 @@ function renderWithClient() {
         live,
         listedAt: 1,
         stored: {},
-        enabled: true,
+        enabled,
         mode: "additive",
         project: { id: "proj-1", slug: "default" },
       }),
@@ -113,5 +113,36 @@ describe("useSyncToolMetadata automatic recording notifications", () => {
 
     expect(mocks.defaultOnError).not.toHaveBeenCalled();
     expect(mocks.handleAPIError).toHaveBeenCalledOnce();
+  });
+
+  it("refreshes silently when a tool the user records was already recorded", async () => {
+    mocks.apiAdd.mockRejectedValue(gramError(409));
+    mocks.refresh.mockResolvedValue(undefined);
+    const { result } = renderWithClient({ enabled: false });
+
+    await act(async () => {
+      result.current.toolActions?.record("lock_device");
+    });
+
+    expect(mocks.apiAdd).toHaveBeenCalledOnce();
+    expect(mocks.refresh).toHaveBeenCalled();
+    expect(mocks.defaultOnError).not.toHaveBeenCalled();
+    expect(mocks.handleAPIError).not.toHaveBeenCalled();
+  });
+
+  it("reports any other failure of a tool the user records", async () => {
+    mocks.apiAdd.mockRejectedValue(gramError(500));
+    mocks.refresh.mockResolvedValue(undefined);
+    const { result } = renderWithClient({ enabled: false });
+
+    await act(async () => {
+      result.current.toolActions?.record("lock_device");
+    });
+
+    expect(mocks.defaultOnError).not.toHaveBeenCalled();
+    expect(mocks.handleAPIError).toHaveBeenCalledExactlyOnceWith(
+      expect.anything(),
+      "Failed to record tool metadata",
+    );
   });
 });

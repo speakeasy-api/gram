@@ -278,7 +278,7 @@ function ToolChecklist({
   source: ToolSource;
   selected: string[];
   onChange: (tools: string[]) => void;
-}): JSX.Element {
+}): JSX.Element | null {
   const [query, setQuery] = useState("");
   switch (source.status) {
     case "loading":
@@ -300,8 +300,9 @@ function ToolChecklist({
           </span>
         </Alert>
       );
-    case "dynamic":
     case "none":
+      return null;
+    case "dynamic":
       return (
         <Alert variant="default" alignTop className="text-sm">
           Speakeasy doesn&rsquo;t proxy this server&rsquo;s traffic, so it
