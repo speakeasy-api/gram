@@ -78,7 +78,7 @@ const DELETE_SERVER_ON_TUNNEL_DESCRIPTION =
 const DELETE_TUNNEL_DESCRIPTION =
   "Permanently remove the tunnel behind this server and the MCP servers on it that you review and confirm, with their endpoints. Running tunnel agents are disconnected.";
 
-type DeleteDialog = "server" | "tunnel" | null;
+type DeleteDialogKind = "server" | "tunnel";
 
 function deleteRowCopy(
   deleteTarget: CascadeDeleteTarget | undefined,
@@ -138,10 +138,17 @@ export function DangerZoneSection({
 }): JSX.Element {
   const navigate = useNavigate();
   const routes = useRoutes();
-  const [deleteDialog, setDeleteDialog] = useState<DeleteDialog>(null);
-  const closeDeleteDialog = () => setDeleteDialog(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  // The dialog last opened, kept after it closes so its content stays put
+  // while it animates out.
+  const [deleteDialog, setDeleteDialog] = useState<DeleteDialogKind>("server");
+  const openDeleteDialog = (kind: DeleteDialogKind) => {
+    setDeleteDialog(kind);
+    setDeleteDialogOpen(true);
+  };
+  const closeDeleteDialog = () => setDeleteDialogOpen(false);
   const leavePage = (href: string = routes.mcp.href()) => {
-    setDeleteDialog(null);
+    setDeleteDialogOpen(false);
     void navigate(href);
   };
 
@@ -286,7 +293,7 @@ export function DangerZoneSection({
                       <Button
                         variant="destructive-primary"
                         size="md"
-                        onClick={() => setDeleteDialog("server")}
+                        onClick={() => openDeleteDialog("server")}
                       >
                         <Button.LeftIcon>
                           <Trash2 className="h-4 w-4" />
@@ -309,7 +316,7 @@ export function DangerZoneSection({
                         <Button
                           variant="destructive-primary"
                           size="md"
-                          onClick={() => setDeleteDialog("tunnel")}
+                          onClick={() => openDeleteDialog("tunnel")}
                         >
                           <Button.LeftIcon>
                             <Trash2 className="h-4 w-4" />
@@ -334,7 +341,7 @@ export function DangerZoneSection({
                       variant="destructive-primary"
                       size="md"
                       disabled={!deleteReady}
-                      onClick={() => setDeleteDialog("server")}
+                      onClick={() => openDeleteDialog("server")}
                     >
                       <Button.LeftIcon>
                         <Trash2 className="h-4 w-4" />
@@ -377,7 +384,7 @@ export function DangerZoneSection({
         </DangerSettingsSection.Panel>
       </DangerSettingsSection>
       <Dialog
-        open={deleteDialog !== null}
+        open={deleteDialogOpen}
         onOpenChange={(open) => {
           if (!open) closeDeleteDialog();
         }}
@@ -415,7 +422,7 @@ function DeleteDialogBody({
   onClose,
   onLeave,
 }: {
-  dialog: DeleteDialog;
+  dialog: DeleteDialogKind;
   mcpServer: McpServer;
   endpoints: McpEndpoint[];
   tunnelTarget:
@@ -425,8 +432,11 @@ function DeleteDialogBody({
   linkedMcpServers: McpServer[];
   onClose: () => void;
   onLeave: (href?: string) => void;
-}): JSX.Element | null {
-  if (dialog === "tunnel" && tunnelTarget) {
+}): JSX.Element {
+  if (dialog === "tunnel") {
+    // Never fall through to another delete: the user asked to delete the
+    // tunnel, and the server-only delete would keep it.
+    if (!tunnelTarget) return <TunnelUnavailable onClose={onClose} />;
     return (
       <DeleteTunnelDialogContent
         tunnel={tunnelTarget.source}
@@ -436,7 +446,6 @@ function DeleteDialogBody({
       />
     );
   }
-  if (dialog === null) return null;
   if (cascadeTarget) {
     return (
       <DeleteSourceBackedServerDialogContent
@@ -455,6 +464,27 @@ function DeleteDialogBody({
       onClose={onClose}
       onSuccess={() => onLeave()}
     />
+  );
+}
+
+// The tunnel row went away while its delete dialog was open, for example
+// because it was deleted in another tab or could no longer be read.
+function TunnelUnavailable({ onClose }: { onClose: () => void }) {
+  return (
+    <>
+      <Dialog.Header>
+        <Dialog.Title>Tunnel unavailable</Dialog.Title>
+        <Dialog.Description>
+          The tunnel behind this server could not be loaded, so it cannot be
+          deleted from here. Nothing was deleted.
+        </Dialog.Description>
+      </Dialog.Header>
+      <Dialog.Footer>
+        <Button variant="secondary" onClick={onClose}>
+          <Button.Text>Close</Button.Text>
+        </Button>
+      </Dialog.Footer>
+    </>
   );
 }
 
