@@ -17,7 +17,6 @@ export {
   remoteHeaderPolicyEffectMessage,
   remoteHeaderPolicyReasonMessage,
 } from "./model/headers";
-export type { RemoteHeaderPolicyIssue } from "./model/headers";
 
 export { REDACTED_SECRET } from "./model/secret";
 

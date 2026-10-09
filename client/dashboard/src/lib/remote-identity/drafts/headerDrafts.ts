@@ -41,7 +41,7 @@ export type HeaderDraft = {
 };
 
 /** A saved row's editable fields, compared to tell an untouched row apart. */
-export type SavedHeaderFields = Pick<
+type SavedHeaderFields = Pick<
   HeaderDraft,
   | "name"
   | "source"
@@ -88,7 +88,7 @@ export function headerDraftFromServer(
 }
 
 /** Whether a saved row still holds exactly what the server returned. */
-export function isUnchangedSavedDraft(draft: HeaderDraft): boolean {
+function isUnchangedSavedDraft(draft: HeaderDraft): boolean {
   const saved = draft.saved;
   if (!draft.id || !saved) return false;
   return (
@@ -125,9 +125,7 @@ export function savedHeaderPolicyIssue(
  * The header policy's verdict on a draft as it would be written. An unsaved
  * source counts only when the row reads from a request header.
  */
-export function draftPolicyIssue(
-  draft: HeaderDraft,
-): RemoteHeaderPolicyIssue | null {
+function draftPolicyIssue(draft: HeaderDraft): RemoteHeaderPolicyIssue | null {
   return remoteHeaderPolicyIssue(
     {
       name: draft.name,
