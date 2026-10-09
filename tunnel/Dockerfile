@@ -2,6 +2,7 @@ FROM --platform=$BUILDPLATFORM golang:1.27.1-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 COPY tunnel ./tunnel
+COPY internal/jwk ./internal/jwk
 ARG TARGETOS TARGETARCH VERSION=dev
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \

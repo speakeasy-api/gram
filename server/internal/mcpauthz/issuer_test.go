@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"strconv"
 	"testing"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/tunnel/identity"
 	"github.com/stretchr/testify/require"
 )
 
@@ -42,7 +44,7 @@ func issuerForTest(t *testing.T) (*Issuer, string) {
 }
 
 func targetForTest() Target {
-	return Target{OrganizationID: "org_test", ProjectID: uuid.New(), TunnelID: uuid.New(), ResourceIdentifier: ""}
+	return Target{OrganizationID: "org_test", ProjectID: uuid.New(), TunnelID: uuid.New(), MCPServerID: uuid.New(), ResourceIdentifier: ""}
 }
 
 func tenantContext(t *testing.T, target Target) context.Context {
@@ -82,7 +84,7 @@ func TestAssertionVerifiesWithPublicJWKSAndBindsDestination(t *testing.T) {
 	issuer, publicPEM := issuerForTest(t)
 	target := targetForTest()
 	ctx := sessionContext(t, tenantContext(t, target), urn.NewUserSubject("user_test"), time.Hour)
-	raw, err := issuer.Mint(ctx, target)
+	raw, err := issuer.Mint(ctx, target, nil)
 	require.NoError(t, err)
 	standard, claims := verifiedClaims(t, raw, servedKeys(t, publicPEM))
 	expected := josejwt.Expected{Issuer: "https://gram.example", Subject: "user:user_test", AnyAudience: josejwt.Audience{urn.NewTunneledMcpServer(target.TunnelID).String()}, Time: time.Now()}
@@ -91,8 +93,11 @@ func TestAssertionVerifiesWithPublicJWKSAndBindsDestination(t *testing.T) {
 	for key := range claims {
 		keys = append(keys, key)
 	}
-	require.ElementsMatch(t, []string{"iss", "sub", "aud", "organization_id", "organization_slug", "iat", "exp", "jti", "version"}, keys)
+	require.ElementsMatch(t, []string{"iss", "sub", "aud", "organization_id", "organization_slug", "mcp_server_id", "iat", "exp", "jti", "version"}, keys)
 	require.Equal(t, target.OrganizationID, claims["organization_id"])
+	require.Equal(t, target.MCPServerID.String(), claims["mcp_server_id"])
+	require.InDelta(t, 1, claims["version"], 0)
+	require.NotContains(t, claims, "upstream_credential")
 	require.Equal(t, "org-test", claims["organization_slug"])
 	require.IsType(t, "", claims["aud"])
 	require.Equal(t, time.Minute, standard.Expiry.Time().Sub(standard.IssuedAt.Time()))
@@ -105,11 +110,11 @@ func TestAssertionVerifiesWithPublicJWKSAndBindsDestination(t *testing.T) {
 	require.Error(t, standard.ValidateWithLeeway(expected, 0))
 	other := target
 	other.OrganizationID = "another-org"
-	_, err = issuer.Mint(ctx, other)
+	_, err = issuer.Mint(ctx, other, nil)
 	require.Error(t, err)
 	other = target
 	other.ProjectID = uuid.New()
-	_, err = issuer.Mint(ctx, other)
+	_, err = issuer.Mint(ctx, other, nil)
 	require.Error(t, err)
 }
 
@@ -119,7 +124,7 @@ func TestAssertionUsesExactConfiguredResourceAudience(t *testing.T) {
 	target := targetForTest()
 	target.ResourceIdentifier = "https://mcp.internal.example.com/a%2Fb/?tenant=example/"
 	ctx := sessionContext(t, tenantContext(t, target), urn.NewUserSubject("user_test"), time.Hour)
-	raw, err := issuer.Mint(ctx, target)
+	raw, err := issuer.Mint(ctx, target, nil)
 	require.NoError(t, err)
 	standard, claims := verifiedClaims(t, raw, servedKeys(t, publicPEM))
 	expected := josejwt.Expected{Issuer: "https://gram.example", Subject: "user:user_test", AnyAudience: josejwt.Audience{target.ResourceIdentifier}, Time: time.Now()}
@@ -141,7 +146,7 @@ func TestAPIKeyAssertionNeverPromotesCreator(t *testing.T) {
 	target := targetForTest()
 	keyID := uuid.NewString()
 	ctx := mcpidentity.NewValidatorBoundary().StampAPIKey(tenantContext(t, target), keyID)
-	raw, err := issuer.Mint(ctx, target)
+	raw, err := issuer.Mint(ctx, target, nil)
 	require.NoError(t, err)
 	_, claims := verifiedClaims(t, raw, servedKeys(t, publicPEM))
 	require.Equal(t, "api_key:"+keyID, claims["sub"])
@@ -159,7 +164,7 @@ func TestSessionAPIKeyAndAgentRetainVerifiedSubject(t *testing.T) {
 	keys := servedKeys(t, publicPEM)
 	for _, subject := range []urn.SessionSubject{urn.NewAPIKeySubject(uuid.New()), urn.NewAgentSubject(uuid.New())} {
 		ctx := sessionContext(t, tenantContext(t, target), subject, 20*time.Second)
-		raw, err := issuer.Mint(ctx, target)
+		raw, err := issuer.Mint(ctx, target, nil)
 		require.NoError(t, err)
 		standard, claims := verifiedClaims(t, raw, keys)
 		require.Contains(t, claims["sub"], subject.ID)
@@ -176,7 +181,7 @@ func TestUnsupportedProvenanceOmitsAssertion(t *testing.T) {
 	b := mcpidentity.NewValidatorBoundary()
 	contexts := []context.Context{ctx, b.StampAssistant(ctx), b.StampChatSession(ctx), b.StampAPIKey(ctx, ""), sessionContext(t, ctx, urn.NewAnonymousSubject(uuid.NewString()), time.Hour), sessionContext(t, ctx, urn.NewWorkloadSubject(uuid.New(), "synthetic-subject"), time.Hour)}
 	for _, c := range contexts {
-		raw, err := issuer.Mint(c, target)
+		raw, err := issuer.Mint(c, target, nil)
 		require.NoError(t, err)
 		require.Empty(t, raw)
 	}
@@ -199,7 +204,7 @@ func TestHumanAssertionIncludesOnlyMatchingUserEmail(t *testing.T) {
 			} else {
 				ctx = sessionContext(t, ctx, urn.NewUserSubject("user_test"), time.Hour)
 			}
-			raw, err := issuer.Mint(ctx, target)
+			raw, err := issuer.Mint(ctx, target, nil)
 			require.NoError(t, err)
 			_, claims := verifiedClaims(t, raw, keys)
 			require.Equal(t, "user:user_test", claims["sub"])
@@ -219,7 +224,7 @@ func TestDiscoveryAssertionIsScopedAndExpiresWithChallenge(t *testing.T) {
 	target := targetForTest()
 	deadline := time.Now().Add(15 * time.Second)
 	ctx := mcpidentity.NewValidatorBoundary().StampConsentDiscovery(tenantContext(t, target), "user_test", deadline)
-	raw, err := issuer.Mint(ctx, target)
+	raw, err := issuer.Mint(ctx, target, nil)
 	require.NoError(t, err)
 	standard, claims := verifiedClaims(t, raw, servedKeys(t, publicPEM))
 	require.Equal(t, "user:user_test", claims["sub"])
@@ -239,9 +244,9 @@ func TestRotationPrepublishOverlapAndRetirement(t *testing.T) {
 	require.NotEqual(t, a.kid, b.kid)
 	target := targetForTest()
 	ctx := mcpidentity.NewValidatorBoundary().StampAPIKey(tenantContext(t, target), uuid.NewString())
-	old, err := a.Mint(ctx, target)
+	old, err := a.Mint(ctx, target, nil)
 	require.NoError(t, err)
-	fresh, err := b.Mint(ctx, target)
+	fresh, err := b.Mint(ctx, target, nil)
 	require.NoError(t, err)
 	verifiedClaims(t, old, servedKeys(t, publicA+publicB))
 	verifiedClaims(t, fresh, servedKeys(t, publicB+publicA))
@@ -300,4 +305,88 @@ func TestStartupRequiresSigningConfiguration(t *testing.T) {
 		require.ErrorContains(t, err, "are required")
 		require.Nil(t, issuer)
 	}
+}
+
+func TestAssertionRequiresMCPServer(t *testing.T) {
+	t.Parallel()
+	issuer, _ := issuerForTest(t)
+	target := targetForTest()
+	target.MCPServerID = uuid.Nil
+	ctx := sessionContext(t, tenantContext(t, target), urn.NewUserSubject("user_test"), time.Hour)
+	raw, err := issuer.Mint(ctx, target, nil)
+	require.ErrorContains(t, err, "no MCP server")
+	require.Empty(t, raw)
+}
+
+func TestUnsupportedProvenanceOmitsAssertionWithoutMCPServer(t *testing.T) {
+	t.Parallel()
+	issuer, _ := issuerForTest(t)
+	target := targetForTest()
+	target.MCPServerID = uuid.Nil
+	raw, err := issuer.Mint(tenantContext(t, target), target, nil)
+	require.NoError(t, err)
+	require.Empty(t, raw)
+}
+
+// upstreamCredentialClaim mints with cred and returns the decoded claim, the
+// raw JSON of upstream_credential exactly as signed.
+func upstreamCredentialClaim(t *testing.T, cred *identity.UpstreamCredential) map[string]json.RawMessage {
+	t.Helper()
+	issuer, publicPEM := issuerForTest(t)
+	target := targetForTest()
+	ctx := sessionContext(t, tenantContext(t, target), urn.NewUserSubject("user_test"), time.Hour)
+	raw, err := issuer.Mint(ctx, target, cred)
+	require.NoError(t, err)
+	token, err := josejwt.ParseSigned(raw, []jose.SignatureAlgorithm{jose.RS256})
+	require.NoError(t, err)
+	var claims map[string]json.RawMessage
+	require.NoError(t, token.Claims(servedKeys(t, publicPEM), &claims))
+	require.Contains(t, claims, "upstream_credential")
+	var fields map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(claims["upstream_credential"], &fields))
+	return fields
+}
+
+func TestAssertionCarriesSubjectUpstreamCredential(t *testing.T) {
+	t.Parallel()
+	clientID, grantID := uuid.NewString(), uuid.NewString()
+	hash := identity.TokenSHA256("synthetic-upstream-token")
+	expiresAt := time.Now().Add(time.Hour).Unix()
+	fields := upstreamCredentialClaim(t, &identity.UpstreamCredential{
+		Owner:           identity.OwnerSubject,
+		ClientID:        clientID,
+		GrantID:         grantID,
+		GrantGeneration: 7,
+		TokenSHA256:     hash,
+		TokenExpiresAt:  &expiresAt,
+	})
+	require.Len(t, fields, 6)
+	require.JSONEq(t, `"subject"`, string(fields["owner"]))
+	require.JSONEq(t, `"`+clientID+`"`, string(fields["client_id"]))
+	require.JSONEq(t, `"`+grantID+`"`, string(fields["grant_id"]))
+	require.Equal(t, "7", string(fields["grant_generation"]))
+	require.JSONEq(t, `"`+hash+`"`, string(fields["token_sha256"]))
+	// NumericDate: an integer of Unix seconds, never an RFC 3339 string.
+	require.Equal(t, strconv.FormatInt(expiresAt, 10), string(fields["token_expires_at"]))
+}
+
+func TestAssertionCarriesSelfUpstreamCredentialWithoutExpiry(t *testing.T) {
+	t.Parallel()
+	clientID := uuid.NewString()
+	hash := identity.TokenSHA256("synthetic-self-token")
+	fields := upstreamCredentialClaim(t, &identity.UpstreamCredential{
+		Owner:           identity.OwnerSelf,
+		ClientID:        clientID,
+		GrantID:         "",
+		GrantGeneration: 0,
+		TokenSHA256:     hash,
+		TokenExpiresAt:  nil,
+	})
+	require.Len(t, fields, 3)
+	require.JSONEq(t, `"self"`, string(fields["owner"]))
+	require.JSONEq(t, `"`+clientID+`"`, string(fields["client_id"]))
+	require.JSONEq(t, `"`+hash+`"`, string(fields["token_sha256"]))
+	require.NotContains(t, fields, "grant_id")
+	require.NotContains(t, fields, "grant_generation")
+	require.NotContains(t, fields, "token_expires_at")
 }

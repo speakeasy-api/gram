@@ -380,6 +380,7 @@ func (f *ProxyManager) BuildTarget(
 		RemoteURL:                   upstreamURL,
 		Headers:                     headers,
 		AuthorizationOverride:       upstreamAuth,
+		UpstreamCredential:          nil,
 		CallerAssertion:             nil,
 		UpstreamResponseRetryer:     nil,
 		UpstreamResponseInterceptor: nil,

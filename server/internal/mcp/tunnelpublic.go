@@ -437,7 +437,7 @@ func (s *Service) serveTunneledPublicInit(
 		OrganizationID:     organizationID,
 		MCPServer:          mcpServer,
 		ResourceIdentifier: "",
-		UpstreamAuth:       "",
+		Upstream:           upstreamBearer{Token: "", Credential: nil},
 		WWWAuthenticate:    "",
 		Selection:          nil,
 	})

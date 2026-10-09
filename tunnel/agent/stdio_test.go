@@ -6,6 +6,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,7 +23,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const stdioFixtureEnv = "GRAM_TUNNEL_STDIO_FIXTURE"
+const (
+	stdioFixtureEnv = "GRAM_TUNNEL_STDIO_FIXTURE"
+	// stdioFixtureReadTokenAtStart makes the fixture exit unless its token
+	// file is readable before it reads stdin.
+	stdioFixtureReadTokenAtStart = "GRAM_TUNNEL_STDIO_FIXTURE_READ_TOKEN"
+)
 
 func TestMain(m *testing.M) {
 	if os.Getenv(stdioFixtureEnv) == "1" {
@@ -33,6 +40,12 @@ func TestMain(m *testing.M) {
 
 func runStdioFixture() {
 	fmt.Fprintln(os.Stderr, "fixture server starting")
+	if os.Getenv(stdioFixtureReadTokenAtStart) == "1" {
+		// A contract-aware server may read its token while starting up.
+		if token, err := os.ReadFile(os.Getenv(AccessTokenFileEnv)); err != nil || len(token) == 0 {
+			os.Exit(4)
+		}
+	}
 	out := json.NewEncoder(os.Stdout)
 	reader := bufio.NewReader(os.Stdin)
 	pendingElicit := json.RawMessage(nil)
@@ -79,6 +92,35 @@ func runStdioFixture() {
 			switch msg.Params.Name {
 			case "crash":
 				os.Exit(3)
+			case "token-sha":
+				// Only a digest leaves the fixture, never the token.
+				token, err := os.ReadFile(os.Getenv(AccessTokenFileEnv))
+				text := "unreadable"
+				if err == nil {
+					sum := sha256.Sum256(token)
+					text = hex.EncodeToString(sum[:])
+				}
+				reply(map[string]any{"content": []any{map[string]any{"type": "text", "text": text}}})
+			case "env":
+				env := map[string]any{}
+				for _, name := range []string{AccessTokenFileEnv, "OKTA_ACCESS_TOKEN_FILE", "HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "TUNNEL_KEY", "INHERITED_SETTING"} {
+					if value, ok := os.LookupEnv(name); ok {
+						env[name] = value
+					}
+				}
+				encoded, _ := json.Marshal(env)
+				reply(map[string]any{"content": []any{map[string]any{"type": "text", "text": string(encoded)}}})
+			case "close-stdin":
+				// Stops reading requests but keeps running. stdin closes
+				// before the reply, so the next request's write fails.
+				_ = os.Stdin.Close()
+				reply(map[string]any{"content": []any{map[string]any{"type": "text", "text": "closed"}}})
+				time.Sleep(time.Hour)
+			case "leak":
+				// Emulates an SDK error that prints the credential.
+				token, _ := os.ReadFile(os.Getenv(AccessTokenFileEnv))
+				fmt.Fprintf(os.Stderr, "upstream rejected Authorization: Bearer %s\n", token)
+				reply(map[string]any{"content": []any{map[string]any{"type": "text", "text": "leaked"}}})
 			case "elicit":
 				pendingElicit = msg.ID
 				_ = out.Encode(map[string]any{"jsonrpc": "2.0", "id": "srv-1", "method": "elicitation/create", "params": map[string]any{"message": "name?"}})
@@ -630,7 +672,7 @@ func TestStdioBridgeReapsQuietSessionWithOpenGetStream(t *testing.T) {
 
 func TestStdioReapTickerToleratesTinyIdleTimeout(t *testing.T) {
 	t.Parallel()
-	b := newStdioBridge("true", 1, time.Nanosecond, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	b := newStdioBridge("true", 1, time.Nanosecond, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 	require.NotPanics(t, func() { b.reap(ctx) })

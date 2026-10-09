@@ -2419,6 +2419,7 @@ jobs:
       - atlas-push
       - webhooks-catalog-breaking-changes
       - tunnel-agent
+      - tunnel-agent-test
       - svix-sync-webhooks
     steps:
       - name: Check results
@@ -2544,6 +2545,43 @@ jobs:
             -R speakeasy-api/gram-infra \
             -f environment=dev \
             -f commit_hash=${{ github.sha }}
+
+  tunnel-agent-test:
+    name: Tunnel agent tests
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: [changes]
+    if: needs.changes.outputs.tunnel == 'true'
+    env:
+      GOMAXPROCS: 4
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Restore Go module cache
+        uses: ./.github/workflows/composite/go-mod-cache
+
+      # The stdio credential tests are Linux-only and need /dev/shm on tmpfs;
+      # they fail rather than skip when it is missing.
+      - name: Test
+        run: mise exec -- go test -race -count=1 ./tunnel/...
+
+      # Switching to another user needs root; the job itself runs unprivileged.
+      - name: Test credential paths against another user
+        run: |
+          mise exec -- go test -c -race -o "$RUNNER_TEMP/tunnel-agent.test" ./tunnel/agent
+          sudo TUNNEL_TEST_REQUIRE_OTHER_USER=1 "$RUNNER_TEMP/tunnel-agent.test" -test.v -test.run 'TestCredentialTokenPathCannotBeRedirectedByAnotherUser'
+
+      - name: Vet for Windows
+        run: GOOS=windows mise exec -- go vet ./tunnel/...
 
   tunnel-agent:
     name: Tunnel agent

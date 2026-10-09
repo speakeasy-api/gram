@@ -20,14 +20,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/tunnel/identity"
 	"github.com/speakeasy-api/gram/tunnel/jwks"
 )
-
-// Header is reserved for Speakeasy's signed caller assertion, without a Bearer prefix.
-const Header = "X-Speakeasy-Identity"
-
-// Lifetime bounds the bearer assertion's replay window.
-const Lifetime = time.Minute
 
 // Issuer holds an immutable signing key initialized by New.
 type Issuer struct {
@@ -47,6 +42,11 @@ type Target struct {
 
 	// TunnelID is the immutable tunneled server ID, including on meta dispatch.
 	TunnelID uuid.UUID
+
+	// MCPServerID is the mcp_servers row wrapping the tunnel that the caller
+	// reached: on meta dispatch, the selected member's row, never the meta
+	// gateway's. The tunnel agent binds a session to it.
+	MCPServerID uuid.UUID
 
 	// ResourceIdentifier is the destination's saved audience. Empty uses TunnelID.
 	ResourceIdentifier string
@@ -95,16 +95,10 @@ func New(privatePEM, publicPEM, issuerURL string, allowHTTP bool) (*Issuer, erro
 	return &Issuer{key: key, kid: active.KeyID, issuer: strings.TrimRight(issuerURL, "/"), publicKeys: publicKeys}, nil
 }
 
-// ReservedHeader also matches spellings with underscores for any dash: some
-// servers fold underscores into dashes, which would let a forged alias through.
-func ReservedHeader(name string) bool {
-	return strings.EqualFold(strings.ReplaceAll(name, "_", "-"), Header)
-}
-
 // Strip removes all case variants, including noncanonical Header map entries.
 func Strip(header http.Header) {
 	for name := range header {
-		if ReservedHeader(name) {
+		if identity.ReservedHeader(name) {
 			delete(header, name)
 		}
 	}
@@ -113,19 +107,23 @@ func Strip(header http.Header) {
 // Mint returns no assertion for unsupported provenance.
 // The caller must restrict this to private tunnel destinations. A matching
 // owner organization is required even when some other route admitted a caller.
-func (s *Issuer) Mint(ctx context.Context, target Target) (string, error) {
-	identity, ok := mcpidentity.FromContext(ctx)
+//
+// cred describes the bearer forwarded alongside the assertion, and must be
+// derived from the credential Speakeasy resolved for the request, never from
+// a configured header. Nil omits the upstream_credential claim.
+func (s *Issuer) Mint(ctx context.Context, target Target, cred *identity.UpstreamCredential) (string, error) {
+	caller, ok := mcpidentity.FromContext(ctx)
 	if !ok {
 		return "", nil
 	}
 	var subject, principalType string
-	switch identity.Kind() {
+	switch caller.Kind() {
 	case mcpidentity.KindUserSession, mcpidentity.KindConsentDiscovery:
-		principalType, subject = "user", identity.UserID()
+		principalType, subject = "user", caller.UserID()
 	case mcpidentity.KindAPIKey:
-		principalType, subject = "api_key", identity.APIKeyID()
+		principalType, subject = "api_key", caller.APIKeyID()
 	case mcpidentity.KindAgent:
-		principalType, subject = "agent", identity.AgentID()
+		principalType, subject = "agent", caller.AgentID()
 	default:
 		return "", nil
 	}
@@ -138,9 +136,12 @@ func (s *Issuer) Mint(ctx context.Context, target Target) (string, error) {
 		(auth.ProjectID != nil && *auth.ProjectID != target.ProjectID) {
 		return "", errors.New("caller assertion destination does not match authenticated tenant")
 	}
+	if target.MCPServerID == uuid.Nil {
+		return "", errors.New("caller assertion destination has no MCP server")
+	}
 	now := time.Now()
-	expires := now.Add(Lifetime)
-	if deadline := identity.ExpiresAt(); !deadline.IsZero() && deadline.Before(expires) {
+	expires := now.Add(identity.MaxLifetime)
+	if deadline := caller.ExpiresAt(); !deadline.IsZero() && deadline.Before(expires) {
 		expires = deadline
 	}
 	if expires.Unix() <= now.Unix() {
@@ -152,8 +153,12 @@ func (s *Issuer) Mint(ctx context.Context, target Target) (string, error) {
 	}
 	claims := jwt.MapClaims{
 		"iss": s.issuer, "sub": principalType + ":" + subject, "aud": audience,
-		"organization_id": target.OrganizationID,
-		"iat":             now.Unix(), "exp": expires.Unix(), "jti": uuid.NewString(), "version": 1,
+		identity.ClaimOrganizationID: target.OrganizationID,
+		identity.ClaimMCPServerID:    target.MCPServerID.String(),
+		"iat":                        now.Unix(), "exp": expires.Unix(), "jti": uuid.NewString(), identity.ClaimVersion: identity.Version,
+	}
+	if cred != nil {
+		claims[identity.ClaimUpstreamCredential] = cred
 	}
 	if auth.OrganizationSlug != "" {
 		claims["organization_slug"] = auth.OrganizationSlug
@@ -161,12 +166,12 @@ func (s *Issuer) Mint(ctx context.Context, target Target) (string, error) {
 	if principalType == "user" && auth.UserID == subject && auth.Email != nil && *auth.Email != "" {
 		claims["email"] = *auth.Email
 	}
-	if identity.Kind() == mcpidentity.KindConsentDiscovery {
-		claims["allowed_methods"] = []string{"server/discover", "initialize", "notifications/initialized", "ping", "tools/list"}
+	if caller.Kind() == mcpidentity.KindConsentDiscovery {
+		claims[identity.ClaimAllowedMethods] = []string{"server/discover", "initialize", "notifications/initialized", "ping", "tools/list"}
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	token.Header["kid"] = s.kid
-	token.Header["typ"] = "speakeasy-identity+jwt"
+	token.Header["typ"] = identity.TokenType
 	signed, err := token.SignedString(s.key)
 	if err != nil {
 		return "", errors.New("sign caller assertion")

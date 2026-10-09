@@ -14,6 +14,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -53,6 +54,9 @@ type Config struct {
 	LocalMCPCommand  string
 	StdioMaxSessions int
 	StdioIdleTimeout time.Duration
+	// StdioCredentials enables per-user upstream credentials for the stdio
+	// server; nil leaves them off.
+	StdioCredentials *CredentialsConfig
 	ServiceVersion   string
 	Metadata         map[string]string
 	MinBackoff       time.Duration
@@ -84,6 +88,12 @@ func New(cfg Config, logger *slog.Logger) (*Agent, error) {
 	if hasCommand && !stdioSupported {
 		return nil, errors.New("a local MCP command requires a Unix tunnel agent")
 	}
+	if cfg.StdioCredentials != nil && !hasCommand {
+		return nil, errors.New("stdio credentials mode requires a local MCP command")
+	}
+	if cfg.StdioCredentials != nil && !credentialsSupported {
+		return nil, errors.New("stdio credentials mode requires a Linux tunnel agent")
+	}
 	if cfg.MinBackoff <= 0 {
 		cfg.MinBackoff = defaultMinBackoff
 	}
@@ -94,7 +104,11 @@ func New(cfg Config, logger *slog.Logger) (*Agent, error) {
 	a := &Agent{cfg: cfg, handler: nil, stdio: nil, logger: logger}
 	var upstream http.Handler
 	if hasCommand {
-		a.stdio = newStdioBridge(cfg.LocalMCPCommand, cfg.StdioMaxSessions, cfg.StdioIdleTimeout, logger)
+		creds, err := newCredentialBroker(cfg.StdioCredentials, logger)
+		if err != nil {
+			return nil, err
+		}
+		a.stdio = newStdioBridge(cfg.LocalMCPCommand, cfg.StdioMaxSessions, cfg.StdioIdleTimeout, creds, logger)
 		upstream = a.stdio
 	} else {
 		target, err := url.Parse(cfg.LocalMCPURL)
@@ -105,6 +119,30 @@ func New(cfg Config, logger *slog.Logger) (*Agent, error) {
 	}
 	a.handler = a.buildHandler(upstream)
 	return a, nil
+}
+
+// newCredentialBroker validates credentials mode and claims its storage; nil
+// when the mode is off.
+func newCredentialBroker(cfg *CredentialsConfig, logger *slog.Logger) (*credentialBroker, error) {
+	if cfg == nil {
+		return nil, nil
+	}
+	normalized, err := cfg.normalize()
+	if err != nil {
+		return nil, err
+	}
+	store, err := openCredentialStore(context.Background(), normalized.Root, logger)
+	if err != nil {
+		return nil, err
+	}
+	return &credentialBroker{
+		verifier:    newAssertionVerifier(normalized, jwksHTTPClient(), time.Now),
+		store:       store,
+		maxAge:      normalized.MaxAge,
+		expiryGrace: credentialExpiryGrace,
+		now:         time.Now,
+		cleanups:    sync.WaitGroup{},
+	}, nil
 }
 
 func (a *Agent) Run(ctx context.Context) error {
@@ -226,15 +264,20 @@ func normalizeGatewayURL(raw string) (string, error) {
 		if isLocalGatewayHost(u.Hostname()) {
 			return u.String(), nil
 		}
-		return "", errors.New("TUNNEL_GATEWAY_URL must use wss:// unless it targets localhost or host.docker.internal")
+		return "", errors.New("TUNNEL_GATEWAY_URL must use wss:// unless it targets localhost, a .localhost name, a loopback address or host.docker.internal")
 	default:
 		return "", errors.New("TUNNEL_GATEWAY_URL must use wss:// or https://")
 	}
 }
 
 func isLocalGatewayHost(host string) bool {
-	switch strings.ToLower(strings.TrimSpace(host)) {
+	host = strings.ToLower(strings.TrimSpace(host))
+	switch host {
 	case "localhost", "host.docker.internal":
+		return true
+	}
+	// RFC 6761 reserves .localhost names for the loopback interface.
+	if strings.HasSuffix(host, ".localhost") {
 		return true
 	}
 	ip := net.ParseIP(host)

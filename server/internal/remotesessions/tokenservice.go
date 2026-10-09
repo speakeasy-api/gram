@@ -300,6 +300,8 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, sess remo
 		RemoteSessionID:                    sess.ID,
 		RemoteSessionUpdatedAt:             sess.UpdatedAt.Time,
 		RemoteSessionResolvedFromUpdatedAt: resolvedFromUpdatedAt,
+		GrantGeneration:                    sess.GrantGeneration,
+		AccessExpiresAt:                    conv.PtrFromPGTimestamptz(sess.AccessExpiresAt),
 		ClientCredentialErr:                nil,
 		renewal:                            nil,
 	}, nil
@@ -416,6 +418,17 @@ type UpstreamToken struct {
 	// RemoteSessionResolvedFromUpdatedAt identifies the grant snapshot loaded
 	// before token resolution refreshed it.
 	RemoteSessionResolvedFromUpdatedAt time.Time
+
+	// GrantGeneration is the grant row's generation when the token was read
+	// from it. It advances when the subject authorizes the grant again, not on
+	// refresh. Zero for a token that came from no grant row.
+	GrantGeneration int64
+
+	// AccessExpiresAt is when Token stops being usable. For a subject grant
+	// it is the upstream's stated expiry, nil when it stated none. For a self
+	// credential it is Speakeasy's serving cutoff, which its source sets even
+	// when the upstream stated no expiry.
+	AccessExpiresAt *time.Time
 
 	// ClientCredentialErr is why the self client this entry stands for has
 	// no usable credential, classified as ErrClientCredentialMisconfigured or
@@ -662,6 +675,8 @@ func unavailableClientCredential(clientID uuid.UUID, resource string, err error)
 		RemoteSessionID:                    uuid.Nil,
 		RemoteSessionUpdatedAt:             time.Time{},
 		RemoteSessionResolvedFromUpdatedAt: time.Time{},
+		GrantGeneration:                    0,
+		AccessExpiresAt:                    nil,
 		ClientCredentialErr:                err,
 		renewal:                            nil,
 	}

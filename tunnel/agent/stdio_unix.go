@@ -14,8 +14,14 @@ func shellCommand(command string) *exec.Cmd {
 	return exec.Command("/bin/sh", "-c", command)
 }
 
-func configureProcessGroup(cmd *exec.Cmd) {
+// configureProcessGroup gives the server its own process group. With
+// killOnAgentExit the server is also killed if the agent dies, where the
+// platform supports it; that reaches only the direct child.
+func configureProcessGroup(cmd *exec.Cmd, killOnAgentExit bool) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if killOnAgentExit {
+		setParentDeathSignal(cmd.SysProcAttr)
+	}
 }
 
 func terminateProcessGroup(cmd *exec.Cmd) {

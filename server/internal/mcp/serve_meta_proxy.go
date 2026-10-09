@@ -212,9 +212,10 @@ func (s *Service) routeMetaMember(
 
 	case member.tunneledServerID.Valid:
 		routed, terr := routeMetaMemberToken(gate.tokens, member, strings.TrimRight(member.tunneledResourceIdentifier, "/"))
-		upstreamToken := routed.Token
-		if terr == nil && upstreamToken == "" && gate.chainUpstream != nil {
-			upstreamToken, terr = gate.chainUpstream(ctx, member.tunneledResourceIdentifier)
+		upstream := routedUpstreamBearer(routed)
+		if terr == nil && upstream.Token == "" && gate.chainUpstream != nil {
+			// No credential was routed, so the chained token stays unattested.
+			upstream.Token, terr = gate.chainUpstream(ctx, member.tunneledResourceIdentifier)
 		}
 		if terr != nil {
 			return memberDial{}, "tunneled", terr
@@ -222,14 +223,14 @@ func (s *Service) routeMetaMember(
 		// Per-member namespace so one caller's handshake, calls, and DELETE
 		// land on one tunnel gateway.
 		affinity := tunnelrouting.HashedClientAffinityKey("meta:"+member.serverID.String(), callerIdentity)
-		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, build: func(ctx context.Context) (*proxy.Proxy, error) {
+		return memberDial{anonymous: upstream.Token == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, build: func(ctx context.Context) (*proxy.Proxy, error) {
 			p, berr := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
 				ClientAffinityKey:  affinity,
 				ProjectID:          member.projectID,
 				OrganizationID:     gate.organizationID,
 				MCPServer:          &serverRow,
 				ResourceIdentifier: member.tunneledResourceIdentifier,
-				UpstreamAuth:       upstreamToken,
+				Upstream:           upstream,
 				WWWAuthenticate:    "",
 				Selection:          gate.toolSelection,
 			}, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()))

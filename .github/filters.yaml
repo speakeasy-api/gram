@@ -6,6 +6,7 @@ server:
   - "agents/**"
   - "ci/**"
   - "server/**"
+  - "internal/jwk/**"
   - "infra/**"
   - ".mise-tasks/test/ci.sh"
   - ".mise-tasks/test/server.sh"
@@ -164,3 +165,4 @@ tunnel:
   - "go.mod"
   - "go.sum"
   - "tunnel/**"
+  - "internal/jwk/**"

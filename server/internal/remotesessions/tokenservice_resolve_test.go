@@ -110,6 +110,8 @@ func tokenCredential(token remotesessions.UpstreamToken) remotesessions.Upstream
 	token.RemoteSessionID = uuid.Nil
 	token.RemoteSessionUpdatedAt = time.Time{}
 	token.RemoteSessionResolvedFromUpdatedAt = time.Time{}
+	token.GrantGeneration = 0
+	token.AccessExpiresAt = nil
 	return token
 }
 
