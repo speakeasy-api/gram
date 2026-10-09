@@ -167,8 +167,10 @@ func TestDeleteServerRequiresProjectMCPWrite(t *testing.T) {
 		{name: "write in another project", grants: []authz.Grant{projectScopedMCPGrant(authz.ScopeMCPWrite, uuid.New())}},
 	}
 	for _, tc := range cases {
-		err := ti.service.DeleteServer(authztest.WithExactGrants(t, ctx, tc.grants...), deleteServerPayload(tunnel.ID))
-		requireOopsCode(t, err, oops.CodeForbidden)
+		t.Run(tc.name, func(t *testing.T) {
+			err := ti.service.DeleteServer(authztest.WithExactGrants(t, ctx, tc.grants...), deleteServerPayload(tunnel.ID))
+			requireOopsCode(t, err, oops.CodeForbidden)
+		})
 	}
 
 	requireTunnelLive(t, ctx, ti.conn, tunnel)
