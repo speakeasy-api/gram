@@ -956,7 +956,7 @@ func validateHeaderWrite(name string, value *string, valueFromRequestHeader *str
 	case err == nil:
 		return headerName, source, nil
 	case errors.Is(err, proxy.ErrProtectedSource):
-		return "", nil, fmt.Errorf("header %q cannot read request header %q: Speakeasy headers are never forwarded to remote MCP servers", headerName, *source)
+		return "", nil, fmt.Errorf("header %q cannot read request header %q: Speakeasy credentials and cookies are never forwarded to remote MCP servers", headerName, *source)
 	case errors.Is(err, proxy.ErrProtectedDestination):
 		return "", nil, fmt.Errorf("header %q cannot be populated from a request header: it is a Speakeasy header", headerName)
 	case errors.Is(err, proxy.ErrReservedHeader):

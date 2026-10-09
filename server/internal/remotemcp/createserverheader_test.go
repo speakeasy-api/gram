@@ -529,8 +529,9 @@ func TestCreateServerHeader_RefusalsExplainTheFix(t *testing.T) {
 		code oops.Code
 		want []string
 	}{
-		{name: "X-Upstream-Token", opts: func(p *gen.CreateServerHeaderPayload) { p.ValueFromRequestHeader = new("gram-key") }, code: oops.CodeBadRequest, want: []string{`header "X-Upstream-Token" cannot read request header "gram-key": Speakeasy headers are never forwarded to remote MCP servers`}},
+		{name: "X-Upstream-Token", opts: func(p *gen.CreateServerHeaderPayload) { p.ValueFromRequestHeader = new("gram-key") }, code: oops.CodeBadRequest, want: []string{`header "X-Upstream-Token" cannot read request header "gram-key": Speakeasy credentials and cookies are never forwarded to remote MCP servers`}},
 		{name: "set-cookie", opts: func(p *gen.CreateServerHeaderPayload) { p.Value = new("v") }, code: oops.CodeBadRequest, want: []string{`header "set-cookie" cannot be configured on a remote MCP server`, "Cookie can only hold a static value"}},
+		{name: "X-Upstream-Cookie", opts: func(p *gen.CreateServerHeaderPayload) { p.ValueFromRequestHeader = new("Cookie") }, code: oops.CodeBadRequest, want: []string{`header "X-Upstream-Cookie" cannot read request header "Cookie": Speakeasy credentials and cookies are never forwarded to remote MCP servers`}},
 		{name: "Gram-Key", opts: func(p *gen.CreateServerHeaderPayload) { p.ValueFromRequestHeader = new("X-Client-Token") }, code: oops.CodeBadRequest, want: []string{`header "Gram-Key" cannot be populated from a request header: it is a Speakeasy header`}},
 		{name: "X Bad", opts: func(p *gen.CreateServerHeaderPayload) { p.Value = new("v") }, code: oops.CodeBadRequest, want: []string{`header name "X Bad" is not a valid HTTP header name`}},
 		{name: "X-Forwarded", opts: func(p *gen.CreateServerHeaderPayload) { p.ValueFromRequestHeader = new("X Bad") }, code: oops.CodeBadRequest, want: []string{`header "X-Forwarded" reads request header "X Bad", which is not a valid HTTP header name`}},

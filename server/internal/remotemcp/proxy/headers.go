@@ -529,7 +529,7 @@ func resolveRemoteHeader(h ConfiguredHeader, userReq *http.Request) (string, err
 func remoteHeaderFailureMessage(h ConfiguredHeader, err error) string {
 	switch {
 	case errors.Is(err, ErrProtectedSource):
-		return fmt.Sprintf("required header %q cannot read request header %q: Speakeasy headers are never forwarded to remote MCP servers", h.Name, h.ValueFromRequestHeader)
+		return fmt.Sprintf("required header %q cannot read request header %q: Speakeasy credentials and cookies are never forwarded to remote MCP servers", h.Name, h.ValueFromRequestHeader)
 	case errors.Is(err, ErrProtectedDestination):
 		return fmt.Sprintf("required header %q cannot be populated from a request header: it is a Speakeasy header", h.Name)
 	case errors.Is(err, ErrReservedHeader):
