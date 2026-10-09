@@ -189,6 +189,7 @@ export function TunnelKeySection({
                 tunnelName={formatTunneledMcpDisplay(tunneledMcpServer)}
                 currentMcpServerId={mcpServerId}
                 effect="Every one of them stops serving until the agents reconnect with the new key."
+                publicWarning={tunneledMcpServer.allowPublic}
               />
               {rotateError !== undefined && (
                 <Alert variant="error" dismissible={false}>

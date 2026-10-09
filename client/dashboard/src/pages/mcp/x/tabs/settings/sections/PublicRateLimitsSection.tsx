@@ -17,6 +17,7 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
+import { STORED_VALUE_CHANGED_MESSAGE } from "./EditableSourceFieldSection";
 import { MCP_PUBLIC_ACCESS_SECTION_ID } from "./PublicAccessSection";
 import { invalidateTunneledMcpSourceViews } from "./sourceInvalidation";
 
@@ -48,15 +49,19 @@ function formatPublicRate(server: TunneledMcpServer) {
   return `${server.effectivePublicRequestRatePerSecond}/s, burst ${server.effectivePublicRequestBurst}${stored ? "" : " (default)"}`;
 }
 
-function toPublicRateDraft(
-  server: TunneledMcpServer,
-): Record<PublicRateLimitField, string> {
+type PublicRateDraft = Record<PublicRateLimitField, string>;
+
+function sameRateDraft(a: PublicRateDraft, b: PublicRateDraft): boolean {
+  return PUBLIC_RATE_LIMIT_FIELDS.every(({ key }) => a[key] === b[key]);
+}
+
+function toPublicRateDraft(server: TunneledMcpServer): PublicRateDraft {
   return Object.fromEntries(
     PUBLIC_RATE_LIMIT_FIELDS.map(({ key }) => [
       key,
       server[key] === undefined ? "" : String(server[key]),
     ]),
-  ) as Record<PublicRateLimitField, string>;
+  ) as PublicRateDraft;
 }
 
 // Anonymous admission limit for this source. One bucket per tunnel is shared
@@ -115,10 +120,15 @@ function PublicRateLimits({
     toPublicRateDraft(tunneledMcpServer),
   );
   const [error, setError] = useState<string>();
-  // The change awaiting confirmation, frozen when Save was pressed.
-  const [pendingForm, setPendingForm] = useState<PublicRateLimitForm | null>(
-    null,
-  );
+  // The change awaiting confirmation, frozen when Save was pressed, with the
+  // stored values it was computed against.
+  const [pending, setPending] = useState<{
+    form: PublicRateLimitForm;
+    base: PublicRateDraft;
+  } | null>(null);
+  // Spans the request and the refetch after it, which update.isPending does
+  // not, so the confirmation cannot be resubmitted in between.
+  const [applying, setApplying] = useState(false);
   // The stored values the draft was last synced from, so a refetch that
   // changes them only replaces an untouched draft and never clobbers edits.
   const syncedFrom = useRef(toPublicRateDraft(tunneledMcpServer));
@@ -127,9 +137,7 @@ function PublicRateLimits({
   useEffect(() => {
     const next = toPublicRateDraft(tunneledMcpServer);
     setDraft((current) => {
-      const untouched = PUBLIC_RATE_LIMIT_FIELDS.every(
-        ({ key }) => current[key] === syncedFrom.current[key],
-      );
+      const untouched = sameRateDraft(current, syncedFrom.current);
       syncedFrom.current = next;
       return untouched ? next : current;
     });
@@ -175,11 +183,20 @@ function PublicRateLimits({
       return;
     }
     if (Object.keys(form).length === 0) return;
-    setPendingForm(form);
+    setPending({ form, base: toPublicRateDraft(tunneledMcpServer) });
   };
 
-  const handleSave = async (form: PublicRateLimitForm) => {
+  const handleSave = async ({ form, base }: NonNullable<typeof pending>) => {
     setError(undefined);
+    // The limit changed underneath the confirmation, e.g. from another tab:
+    // the frozen change was computed against values no longer stored.
+    const current = toPublicRateDraft(tunneledMcpServer);
+    if (!sameRateDraft(current, base)) {
+      setPending(null);
+      setError(STORED_VALUE_CHANGED_MESSAGE);
+      return;
+    }
+    setApplying(true);
     try {
       await update.mutateAsync({
         request: {
@@ -191,12 +208,14 @@ function PublicRateLimits({
       });
       await invalidateTunneledMcpSourceViews(queryClient);
       toast.success("Anonymous rate limit updated");
-      setPendingForm(null);
+      setPending(null);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to update rate limits";
       setError(message);
       toast.error(message);
+    } finally {
+      setApplying(false);
     }
   };
 
@@ -275,7 +294,7 @@ function PublicRateLimits({
                       ? tunneledMcpServer.effectivePublicRequestRatePerSecond
                       : tunneledMcpServer.effectivePublicRequestBurst,
                   )}
-                  disabled={update.isPending}
+                  disabled={applying}
                 />
                 <Text muted small>
                   {hint}
@@ -287,42 +306,41 @@ function PublicRateLimits({
           <Stack direction="horizontal" gap={2}>
             <Button
               variant="primary"
-              disabled={!dirty || update.isPending}
+              disabled={!dirty || applying}
               onClick={requestSave}
             >
-              {update.isPending ? (
+              {applying ? (
                 <Button.LeftIcon>
                   <Loader2 className="size-4 animate-spin" />
                 </Button.LeftIcon>
               ) : null}
-              <Button.Text>
-                {update.isPending ? "Saving" : "Save limit"}
-              </Button.Text>
+              <Button.Text>{applying ? "Saving" : "Save limit"}</Button.Text>
             </Button>
           </Stack>
         </Stack>
       </RequireScope>
       <SharedTunnelConfirmDialog
-        open={pendingForm !== null}
+        open={pending !== null}
         onOpenChange={(open) => {
-          if (!open) setPendingForm(null);
+          if (!open) setPending(null);
         }}
         tunneledMcpServerId={tunneledMcpServer.id}
         tunnelName={formatTunneledMcpDisplay(tunneledMcpServer)}
         currentMcpServerId={mcpServerId}
+        publicWarning={tunneledMcpServer.allowPublic}
         title="Change the anonymous rate limit?"
         description="The limit is one budget for the whole tunnel, shared by anonymous callers of every public MCP server on it."
         effect="Raising it lets more anonymous load reach the upstream server; lowering it throttles every public server on the tunnel."
         confirmLabel="Save limit"
         pendingLabel="Saving"
-        isPending={update.isPending}
-        errorMessage={pendingForm ? error : undefined}
+        isPending={applying}
+        errorMessage={pending ? error : undefined}
         onConfirm={() => {
-          if (pendingForm) void handleSave(pendingForm);
+          if (pending) void handleSave(pending);
         }}
       >
-        {pendingForm ? (
-          <Text small>New limit: {describeRateLimitForm(pendingForm)}</Text>
+        {pending ? (
+          <Text small>New limit: {describeRateLimitForm(pending.form)}</Text>
         ) : null}
       </SharedTunnelConfirmDialog>
     </div>

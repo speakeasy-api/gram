@@ -3,7 +3,9 @@ import { SharedTunnelImpact } from "@/components/mcp/shared-tunnel-impact";
 import { useSharedTunnelImpact } from "@/components/mcp/use-shared-tunnel-impact";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { formatTunneledMcpDisplay } from "@/lib/sources";
+import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { addMcpServerOnTunnelHref } from "@/pages/sources/tunneled-mcp/existingTunnel";
 import { TunneledMcpSetupTabs } from "@/pages/sources/tunneled-mcp/TunneledMcpSetupTabs";
 import { useRoutes } from "@/routes";
@@ -26,6 +28,9 @@ export function AgentSetupSection({
 }): JSX.Element {
   const routes = useRoutes();
   const impact = useSharedTunnelImpact(tunneledMcpServer.id, { active: true });
+  // The add page redirects away while tunneled MCP is off for the org.
+  const canAddOnTunnel =
+    useTelemetry().isFeatureEnabled(TUNNELED_MCP_FEATURE_FLAG) === true;
 
   return (
     <SettingsSection id={MCP_AGENT_SETUP_SECTION_ID}>
@@ -44,40 +49,43 @@ export function AgentSetupSection({
             tunnelName={formatTunneledMcpDisplay(tunneledMcpServer)}
             currentMcpServerId={mcpServerId}
             effect="One agent serves them all, so restarting or reconfiguring it affects every one."
+            publicWarning={tunneledMcpServer.allowPublic}
           />
           <TunneledMcpSetupTabs
             serverName={tunneledMcpServer.name}
             keyPrefix={tunneledMcpServer.keyPrefix}
           />
         </SettingsSection.Body>
-        <SettingsSection.Footer>
-          <SettingsSection.FooterHint>
-            Add another MCP server on this tunnel, for example with different
-            settings or visibility. No new key or agent is needed.
-          </SettingsSection.FooterHint>
-          <SettingsSection.FooterActions>
-            <RequireScope
-              scope="mcp:write"
-              resourceId={tunneledMcpServer.projectId}
-              projectId={tunneledMcpServer.projectId}
-              level="component"
-            >
-              <Button variant="secondary" size="md" asChild>
-                <Link
-                  to={addMcpServerOnTunnelHref(
-                    routes.mcp.add.tunneled.href(),
-                    tunneledMcpServer.id,
-                  )}
-                >
-                  <Button.LeftIcon>
-                    <Plus className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Add MCP server on this tunnel</Button.Text>
-                </Link>
-              </Button>
-            </RequireScope>
-          </SettingsSection.FooterActions>
-        </SettingsSection.Footer>
+        {canAddOnTunnel ? (
+          <SettingsSection.Footer>
+            <SettingsSection.FooterHint>
+              Add another MCP server on this tunnel, for example with different
+              settings or visibility. No new key or agent is needed.
+            </SettingsSection.FooterHint>
+            <SettingsSection.FooterActions>
+              <RequireScope
+                scope="mcp:write"
+                resourceId={tunneledMcpServer.projectId}
+                projectId={tunneledMcpServer.projectId}
+                level="component"
+              >
+                <Button variant="secondary" size="md" asChild>
+                  <Link
+                    to={addMcpServerOnTunnelHref(
+                      routes.mcp.add.tunneled.href(),
+                      tunneledMcpServer.id,
+                    )}
+                  >
+                    <Button.LeftIcon>
+                      <Plus className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Add MCP server on this tunnel</Button.Text>
+                  </Link>
+                </Button>
+              </RequireScope>
+            </SettingsSection.FooterActions>
+          </SettingsSection.Footer>
+        ) : null}
       </SettingsSection.Panel>
     </SettingsSection>
   );
