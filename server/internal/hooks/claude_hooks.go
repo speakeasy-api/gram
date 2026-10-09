@@ -241,7 +241,7 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
-		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, claudeHookDecision(res), orgSlug, *riskScanned, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, claudeHookDecision(res), orgSlug, riskScanned.Load(), time.Since(start))
 	}()
 
 	if hasPluginAuth {

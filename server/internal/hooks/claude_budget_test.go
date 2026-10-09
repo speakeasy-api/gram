@@ -56,15 +56,17 @@ const (
 // hooksPostureFeatures enables every product feature except hooks_fail_open,
 // which follows failOpen, fails with err when it is set, or panics when panics
 // is set. When read is set, each hooks_fail_open lookup signals it without
-// blocking.
+// blocking. When wait is set, each hooks_fail_open lookup first waits for it to
+// close.
 type hooksPostureFeatures struct {
 	failOpen bool
 	err      error
 	panics   bool
 	read     chan struct{}
+	wait     <-chan struct{}
 }
 
-func (f hooksPostureFeatures) IsFeatureEnabled(_ context.Context, _ string, feature productfeatures.Feature) (bool, error) {
+func (f hooksPostureFeatures) IsFeatureEnabled(ctx context.Context, _ string, feature productfeatures.Feature) (bool, error) {
 	if feature != productfeatures.FeatureHooksFailOpen {
 		return true, nil
 	}
@@ -72,6 +74,13 @@ func (f hooksPostureFeatures) IsFeatureEnabled(_ context.Context, _ string, feat
 		select {
 		case f.read <- struct{}{}:
 		default:
+		}
+	}
+	if f.wait != nil {
+		select {
+		case <-f.wait:
+		case <-ctx.Done():
+			return false, fmt.Errorf("wait to read hooks_fail_open: %w", ctx.Err())
 		}
 	}
 	if f.panics {
@@ -372,8 +381,8 @@ func TestClaude_DecisionBudget_FastAllowUnchanged(t *testing.T) {
 	require.Equal(t, "allow", conv.PtrValOr(output.PermissionDecision, ""))
 }
 
-// A verdict that lands within the budget carries its handler's enforcement
-// scan to the request's tracker, which feeds the risk_scanned metric dimension.
+// A verdict that lands within the budget reports its handler's enforcement scan
+// on the request's tracker, which feeds the risk_scanned metric dimension.
 func TestClaude_DecisionBudget_FastVerdictReportsRiskScan(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
@@ -387,12 +396,37 @@ func TestClaude_DecisionBudget_FastVerdictReportsRiskScan(t *testing.T) {
 	_, postureOutcome, err := ti.service.decideClaudeHookWithinBudget(ctx, testenv.NewLogger(t), time.Now(), hookEvent, payload.HookEventName)
 	require.NoError(t, err)
 	require.Empty(t, postureOutcome, "the handler's verdict answers")
-	require.True(t, *scanned, "the handler's scan must reach the request's tracker")
+	require.True(t, scanned.Load(), "the handler's scan must reach the request's tracker")
+}
+
+// An overrun whose scan started before the fallback answered still counts as
+// scanned in the risk_scanned metric dimension, since a slow scan is what
+// usually overruns the budget.
+func TestClaude_DecisionBudget_OverrunReportsStartedRiskScan(t *testing.T) {
+	t.Parallel()
+	ctx, ti, scanner := newBudgetedClaudeService(t, hooksPostureFeatures{}, nil)
+	// The fallback waits on the posture read, so holding the read until the
+	// scan starts orders the scan before the overrun answer.
+	ti.service.productFeatures = hooksPostureFeatures{failOpen: true, wait: scanner.started}
+	reader := sdkmetric.NewManualReader()
+	ti.service.metrics = newMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), testenv.NewLogger(t))
+
+	_, err := ti.service.Claude(ctx, budgetPayload("PreToolUse"))
+	require.NoError(t, err)
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(ctx, &rm))
+	point := findHookEventDurationPoint(t, rm)
+	outcome, _ := point.Attributes.Value(attr.OutcomeKey)
+	require.Equal(t, hookMetricOutcomeBudgetExceeded, outcome.AsString())
+	scanned, _ := point.Attributes.Value(attr.HookRiskScannedKey)
+	require.True(t, scanned.AsBool(), "the scan started before the overrun answer")
 }
 
 // A handler that panics within the budget is answered from the org's hooks
 // posture, as an overrun is, instead of failing the request or crashing the
-// server, and its metric outcome says it panicked.
+// server, and its metric outcome says it panicked and counts the scan it
+// started.
 func TestClaude_DecisionBudget_HandlerPanicAnswersFromPosture(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -422,6 +456,8 @@ func TestClaude_DecisionBudget_HandlerPanicAnswersFromPosture(t *testing.T) {
 			point := findHookEventDurationPoint(t, rm)
 			outcome, _ := point.Attributes.Value(attr.OutcomeKey)
 			require.Equal(t, hookMetricOutcomeHandlerPanic, outcome.AsString())
+			scanned, _ := point.Attributes.Value(attr.HookRiskScannedKey)
+			require.True(t, scanned.AsBool(), "the scan started before the handler panicked")
 		})
 	}
 }

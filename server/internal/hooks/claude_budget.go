@@ -62,18 +62,6 @@ func isVerdictSuperseded(ctx context.Context) bool {
 type claudeHookVerdict struct {
 	result *gen.ClaudeHookResult
 	err    error
-
-	// riskScanned reports whether the handler ran an enforcement scan.
-	riskScanned bool
-}
-
-// answer returns the verdict as the response and marks the request's risk-scan
-// tracker when the handler scanned.
-func (v claudeHookVerdict) answer(ctx context.Context) (*gen.ClaudeHookResult, string, error) {
-	if v.riskScanned {
-		markRiskScanned(ctx)
-	}
-	return v.result, "", v.err
 }
 
 // decideClaudeHookWithinBudget runs the event's handler and returns its
@@ -105,11 +93,9 @@ func (s *Service) decideClaudeHookWithinBudget(ctx context.Context, logger *slog
 		postures <- true
 	}
 
+	// decisionCtx keeps the request's risk-scan tracker, so a scan that started
+	// before an overrun answer still counts as scanned in the request's metric.
 	decisionCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), legacyClaudeHookDetachedDecisionTimeout)
-	// The handler gets its own risk-scan tracker because it can still be
-	// scanning after an overrun response has recorded its metric. answer copies
-	// the flag to the request's tracker when the verdict lands in time.
-	decisionCtx, riskScanned := withRiskScanTracker(decisionCtx)
 	s.claudeDrains.Go(func() {
 		defer cancel()
 		result, err := s.dispatchClaudeHookEvent(decisionCtx, logger, hookEvent, hookEventName)
@@ -118,7 +104,7 @@ func (s *Service) decideClaudeHookWithinBudget(ctx context.Context, logger *slog
 			return
 		}
 		if answered.CompareAndSwap(false, true) {
-			verdicts <- claudeHookVerdict{result: result, err: err, riskScanned: *riskScanned}
+			verdicts <- claudeHookVerdict{result: result, err: err}
 			return
 		}
 		lateLogger := logger
@@ -134,7 +120,7 @@ func (s *Service) decideClaudeHookWithinBudget(ctx context.Context, logger *slog
 	outcome := hookMetricOutcomeBudgetExceeded
 	select {
 	case verdict := <-verdicts:
-		return verdict.answer(ctx)
+		return verdict.result, "", verdict.err
 	case <-panicked:
 		outcome = hookMetricOutcomeHandlerPanic
 	case <-time.After(s.claudeBudget - time.Since(start)):
@@ -143,7 +129,8 @@ func (s *Service) decideClaudeHookWithinBudget(ctx context.Context, logger *slog
 	failOpen := <-postures
 	if !answered.CompareAndSwap(false, true) {
 		// The verdict landed while the fallback waited on the posture, so it still answers.
-		return (<-verdicts).answer(ctx)
+		verdict := <-verdicts
+		return verdict.result, "", verdict.err
 	}
 	superseded.Store(failOpen)
 
