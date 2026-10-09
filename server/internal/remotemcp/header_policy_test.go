@@ -10,7 +10,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
@@ -287,11 +286,9 @@ func TestCreateServerHeader_DuplicateCheckWaitsForServerLock(t *testing.T) {
 	server := createTestServer(t, ctx, ti)
 	project := projectID(t, ctx)
 
-	holder, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	defer o11y.NoLogDefer(func() error { return holder.Rollback(context.Background()) })
+	holder := testenv.BeginTx(t, ctx, ti.conn)
 
-	_, err = repo.New(holder).GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{ID: uuid.MustParse(server.ID), ProjectID: project})
+	_, err := repo.New(holder).GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{ID: uuid.MustParse(server.ID), ProjectID: project})
 	require.NoError(t, err)
 
 	result := make(chan error, 1)
@@ -330,11 +327,9 @@ func TestDeleteServer_LocksServerBeforeHeaders(t *testing.T) {
 	server := createTestServer(t, ctx, ti)
 	project := projectID(t, ctx)
 
-	holder, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	defer o11y.NoLogDefer(func() error { return holder.Rollback(context.Background()) })
+	holder := testenv.BeginTx(t, ctx, ti.conn)
 
-	_, err = repo.New(holder).GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{ID: uuid.MustParse(server.ID), ProjectID: project})
+	_, err := repo.New(holder).GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{ID: uuid.MustParse(server.ID), ProjectID: project})
 	require.NoError(t, err)
 
 	result := make(chan error, 1)
@@ -377,11 +372,9 @@ func TestCreateServerHeader_ServerDeletedWhileWaiting(t *testing.T) {
 	server := createTestServer(t, ctx, ti)
 	project := projectID(t, ctx)
 
-	holder, err := ti.conn.Begin(ctx)
-	require.NoError(t, err)
-	defer o11y.NoLogDefer(func() error { return holder.Rollback(context.Background()) })
+	holder := testenv.BeginTx(t, ctx, ti.conn)
 
-	_, err = repo.New(holder).GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{ID: uuid.MustParse(server.ID), ProjectID: project})
+	_, err := repo.New(holder).GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{ID: uuid.MustParse(server.ID), ProjectID: project})
 	require.NoError(t, err)
 
 	result := make(chan error, 1)

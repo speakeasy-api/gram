@@ -919,7 +919,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 func validateHeaderWrite(name string, value *string, valueFromRequestHeader *string, isSecret bool, preserveStoredValue bool) (string, *string, error) {
 	canonicalName, err := proxy.NormalizeHeaderName(name)
 	if err != nil {
-		return "", nil, err
+		return "", nil, fmt.Errorf("header name: %w", err)
 	}
 
 	hasValue := value != nil && *value != ""
@@ -929,7 +929,7 @@ func validateHeaderWrite(name string, value *string, valueFromRequestHeader *str
 	if hasValueFromRequestHeader {
 		canonicalSource, err := proxy.NormalizeHeaderName(*valueFromRequestHeader)
 		if err != nil {
-			return "", nil, err
+			return "", nil, fmt.Errorf("header %q source: %w", canonicalName, err)
 		}
 		source = &canonicalSource
 	}
@@ -950,7 +950,7 @@ func validateHeaderWrite(name string, value *string, valueFromRequestHeader *str
 		ValueFromRequestHeader: conv.PtrValOr(source, ""),
 	}
 	if err := proxy.CheckRemoteHeader(check); err != nil {
-		return "", nil, err
+		return "", nil, fmt.Errorf("header %q: %w", canonicalName, err)
 	}
 
 	return canonicalName, source, nil

@@ -38,13 +38,15 @@ func newRemotePolicyRequests(t *testing.T) (*http.Request, *http.Request) {
 	return userReq, remoteReq
 }
 
-func requireBadRequest(t *testing.T, err error) *oops.ShareableError {
+// requireBadRequest asserts err is a client-facing bad request and returns
+// its message.
+func requireBadRequest(t *testing.T, err error) string {
 	t.Helper()
 
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
 	require.Equal(t, oops.CodeBadRequest, shareable.Code)
-	return shareable
+	return shareable.Error()
 }
 
 func TestApplyRequestHeadersRemoteStripsProtectedInboundHeaders(t *testing.T) {
@@ -126,11 +128,11 @@ func TestApplyRequestHeadersRemoteRejectsRequiredProtectedSource(t *testing.T) {
 		},
 	}
 	err := p.applyRequestHeaders(t.Context(), userReq, remoteReq)
-	shareable := requireBadRequest(t, err)
-	require.Contains(t, shareable.Error(), `"X-Upstream-Token"`)
-	require.Contains(t, shareable.Error(), `"gram-key"`)
-	require.Contains(t, shareable.Error(), "separate request header")
-	require.NotContains(t, shareable.Error(), "synthetic-api-key")
+	message := requireBadRequest(t, err)
+	require.Contains(t, message, `"X-Upstream-Token"`)
+	require.Contains(t, message, `"gram-key"`)
+	require.Contains(t, message, "separate request header")
+	require.NotContains(t, message, "synthetic-api-key")
 }
 
 func TestApplyRequestHeadersRemoteAuthorizationOverrideShadowsRequiredPassThrough(t *testing.T) {
@@ -296,8 +298,8 @@ func TestApplyRequestHeadersRemoteInvalidStaticValue(t *testing.T) {
 	required.IsRequired = true
 	userReq, remoteReq = newRemotePolicyRequests(t)
 	p = &Proxy{Logger: testenv.NewLogger(t), Headers: []ConfiguredHeader{required}}
-	shareable := requireBadRequest(t, p.applyRequestHeaders(t.Context(), userReq, remoteReq))
-	require.NotContains(t, shareable.Error(), "line1")
+	message := requireBadRequest(t, p.applyRequestHeaders(t.Context(), userReq, remoteReq))
+	require.NotContains(t, message, "line1")
 
 	tabbed := ConfiguredHeader{Name: "X-Api-Key", StaticValue: "a\tb", ValueFromRequestHeader: "", IsRequired: true}
 	userReq, remoteReq = newRemotePolicyRequests(t)
