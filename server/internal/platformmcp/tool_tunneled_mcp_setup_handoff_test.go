@@ -81,7 +81,7 @@ func TestTunneledSetupHandoffComposesOnlyWithSafeDependencies(t *testing.T) {
 		if dashboardURL != "" {
 			origin = mustParseURL(t, dashboardURL)
 		}
-		return reader.WithTunneledMCPSetupHandoff(origin, budget).tunneledSetup
+		return reader.WithTunneledMCPSetupHandoff(origin, budget, nil).tunneledSetup
 	}
 
 	require.Nil(t, compose(true, "", budget), "no dashboard origin")

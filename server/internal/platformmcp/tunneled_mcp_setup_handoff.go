@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 )
@@ -38,6 +39,7 @@ var (
 	ErrTunneledMCPSetupForbidden   = errors.New("platform mcp tunneled setup requires organization administration")
 	ErrTunneledMCPSetupNotFound    = errors.New("platform mcp tunneled setup target not found")
 	ErrTunneledMCPSetupNotTunneled = errors.New("platform mcp tunneled setup target is not tunneled")
+	ErrTunneledMCPSetupNotEnabled  = errors.New("platform mcp tunneled setup is not enabled for the organization")
 )
 
 // Instructions returned with each handoff. They are fixed text: nothing from
@@ -90,18 +92,24 @@ type TunneledMCPSetupHandoffService struct {
 	}
 	dashboardURL *url.URL
 	budget       OperationBudget
+
+	// flags decides whether the organization can add tunneled MCP servers in
+	// the dashboard. Only the add form is gated: an existing tunneled
+	// server's settings page is always shown.
+	flags feature.Provider
 }
 
 // WithTunneledMCPSetupHandoff enables get_tunneled_mcp_setup_handoff. It must
 // follow WithAuthorization. Without an HTTPS dashboard origin or a handoff
-// budget the tool stays in the catalogue as a stable refusal.
-func (r *PostgresReader) WithTunneledMCPSetupHandoff(dashboardURL *url.URL, budget OperationBudget) *PostgresReader {
+// budget the tool stays in the catalogue as a stable refusal. Without a flag
+// provider the add form is reported unavailable.
+func (r *PostgresReader) WithTunneledMCPSetupHandoff(dashboardURL *url.URL, budget OperationBudget, flags feature.Provider) *PostgresReader {
 	if r != nil && r.db != nil && r.authz != nil && validDashboardURL(dashboardURL) && budget.valid() {
 		origin := *dashboardURL
 		origin.RawQuery = ""
 		origin.Fragment = ""
 		origin.RawFragment = ""
-		r.tunneledSetup = &TunneledMCPSetupHandoffService{db: r.db, authz: r.authz, projects: r, dashboardURL: &origin, budget: budget}
+		r.tunneledSetup = &TunneledMCPSetupHandoffService{db: r.db, authz: r.authz, projects: r, dashboardURL: &origin, budget: budget, flags: flags}
 	}
 	return r
 }
@@ -154,16 +162,29 @@ func (s *TunneledMCPSetupHandoffService) Handoff(ctx context.Context, principal 
 		}
 	}
 
-	if err := s.budget.Allow(ctx, principal); err != nil {
-		return GetTunneledMCPSetupHandoffOutput{}, err
-	}
-
 	organization, err := organizationsrepo.New(s.db).GetOrganizationMetadata(ctx, principal.OrganizationID)
 	if err != nil {
 		return GetTunneledMCPSetupHandoffOutput{}, fmt.Errorf("resolve tunneled setup organization: %w", err)
 	}
 	if organization.Slug == "" {
 		return GetTunneledMCPSetupHandoffOutput{}, ErrUnavailable
+	}
+	if mcpID == uuid.Nil {
+		// The dashboard redirects away from the add form unless this flag is
+		// on, so the link is only offered when the form will render.
+		evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagTunneledMCP, principal.OrganizationID, feature.OrgProjectGroups(organization.Slug, project.Slug))
+		switch {
+		case err != nil:
+			return GetTunneledMCPSetupHandoffOutput{}, fmt.Errorf("%w: evaluate tunneled MCP availability: %w", ErrUnavailable, err)
+		case evaluation == feature.EvaluationDisabled:
+			return GetTunneledMCPSetupHandoffOutput{}, ErrTunneledMCPSetupNotEnabled
+		case evaluation != feature.EvaluationEnabled:
+			return GetTunneledMCPSetupHandoffOutput{}, ErrUnavailable
+		}
+	}
+
+	if err := s.budget.Allow(ctx, principal); err != nil {
+		return GetTunneledMCPSetupHandoffOutput{}, err
 	}
 
 	output := GetTunneledMCPSetupHandoffOutput{

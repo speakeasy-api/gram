@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -21,22 +22,29 @@ import (
 type tunneledSetupHarness struct {
 	fixture tunnelStatusFixture
 	limiter *recordingOperationLimiter
+	flags   *feature.InMemory
 	tool    Descriptor
 	orgSlug string
 }
 
 // newTunneledSetupHarness returns the harness and the caller's context: the
 // principal bound to the grants its live organization membership prepared.
-func newTunneledSetupHarness(t *testing.T, fixture tunnelStatusFixture, dashboardURL string, limiter *recordingOperationLimiter) (tunneledSetupHarness, context.Context) {
+func newTunneledSetupHarness(t *testing.T, fixture tunnelStatusFixture, dashboardURL string, limiter *recordingOperationLimiter, tunnelsEnabled bool) (tunneledSetupHarness, context.Context) {
 	t.Helper()
 	engine := authz.NewEngine(testenv.NewLogger(t), fixture.conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
 	prepared, err := NewLiveOrgAdminAuthorizer(fixture.conn, engine).PrepareExternalContext(t.Context(), fixture.principal)
 	require.NoError(t, err)
 	origin, err := url.Parse(dashboardURL)
 	require.NoError(t, err)
+	// Without tunnelsEnabled the provider holds no decision for the
+	// organization, which evaluates as indeterminate.
+	flags := &feature.InMemory{}
+	if tunnelsEnabled {
+		flags.SetFlag(feature.FlagTunneledMCP, fixture.principal.OrganizationID, true)
+	}
 	reader := NewPostgresReader(testenv.NewLogger(t), fixture.conn).
 		WithAuthorization(engine).
-		WithTunneledMCPSetupHandoff(origin, OperationBudget{Connection: limiter, Organization: limiter})
+		WithTunneledMCPSetupHandoff(origin, OperationBudget{Connection: limiter, Organization: limiter}, flags)
 	require.NotNil(t, reader.tunneledSetup)
 
 	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
@@ -47,6 +55,7 @@ func newTunneledSetupHarness(t *testing.T, fixture tunnelStatusFixture, dashboar
 	return tunneledSetupHarness{
 		fixture: fixture,
 		limiter: limiter,
+		flags:   flags,
 		tool:    descriptorByName(t, registrar, getTunneledMCPSetupHandoffToolName),
 		orgSlug: organization.Slug,
 	}, ContextWithPrincipal(prepared, fixture.principal)
@@ -94,7 +103,7 @@ func TestTunneledSetupHandoffReturnsAddFormURL(t *testing.T) {
 
 	fixture := seedTunnelStatusFixture(t, "platform_mcp_tunneled_setup_add")
 	fixture.grantSetupAdmin(t)
-	harness, ctx := newTunneledSetupHarness(t, fixture, "https://dashboard.example.test/console?ignored=1#ignored", allowingLimiter())
+	harness, ctx := newTunneledSetupHarness(t, fixture, "https://dashboard.example.test/console?ignored=1#ignored", allowingLimiter(), true)
 
 	output, err := harness.invoke(t, ctx, GetTunneledMCPSetupHandoffInput{ProjectID: fixture.project.ID.String()})
 	require.NoError(t, err)
@@ -114,7 +123,7 @@ func TestTunneledSetupHandoffReturnsAgentSetupURLForExistingServer(t *testing.T)
 
 	fixture := seedTunnelStatusFixture(t, "platform_mcp_tunneled_setup_existing")
 	fixture.grantSetupAdmin(t)
-	harness, ctx := newTunneledSetupHarness(t, fixture, "https://dashboard.example.test", allowingLimiter())
+	harness, ctx := newTunneledSetupHarness(t, fixture, "https://dashboard.example.test", allowingLimiter(), true)
 
 	output, err := harness.invoke(t, ctx, GetTunneledMCPSetupHandoffInput{ProjectID: fixture.project.ID.String(), MCPID: fixture.wrapperID.String()})
 	require.NoError(t, err)
@@ -134,7 +143,7 @@ func TestTunneledSetupHandoffRefusesNonAdministrator(t *testing.T) {
 
 	fixture := seedTunnelStatusFixture(t, "platform_mcp_tunneled_setup_non_admin")
 	fixture.grantProjectSourceRead(t)
-	harness, ctx := newTunneledSetupHarness(t, fixture, "https://dashboard.example.test", allowingLimiter())
+	harness, ctx := newTunneledSetupHarness(t, fixture, "https://dashboard.example.test", allowingLimiter(), true)
 
 	for _, input := range []GetTunneledMCPSetupHandoffInput{
 		{ProjectID: fixture.project.ID.String()},
@@ -151,7 +160,7 @@ func TestTunneledSetupHandoffHidesProjectWithoutProjectRead(t *testing.T) {
 
 	fixture := seedTunnelStatusFixture(t, "platform_mcp_tunneled_setup_admin_only")
 	fixture.grant(t, authz.ScopeOrgAdmin, fixture.principal.OrganizationID, false)
-	harness, ctx := newTunneledSetupHarness(t, fixture, "https://dashboard.example.test", allowingLimiter())
+	harness, ctx := newTunneledSetupHarness(t, fixture, "https://dashboard.example.test", allowingLimiter(), true)
 
 	_, err := harness.invoke(t, ctx, GetTunneledMCPSetupHandoffInput{ProjectID: fixture.project.ID.String()})
 	requireTunneledSetupRefusal(t, err, "not_found")
@@ -165,7 +174,7 @@ func TestTunneledSetupHandoffHidesServerWithoutProjectSourceRead(t *testing.T) {
 	fixture.grant(t, authz.ScopeOrgAdmin, fixture.principal.OrganizationID, false)
 	fixture.grant(t, authz.ScopeProjectRead, fixture.project.ID.String(), false)
 	fixture.grant(t, authz.ScopeMCPRead, fixture.wrapperID.String(), true)
-	harness, ctx := newTunneledSetupHarness(t, fixture, "https://dashboard.example.test", allowingLimiter())
+	harness, ctx := newTunneledSetupHarness(t, fixture, "https://dashboard.example.test", allowingLimiter(), true)
 
 	_, err := harness.invoke(t, ctx, GetTunneledMCPSetupHandoffInput{ProjectID: fixture.project.ID.String(), MCPID: fixture.wrapperID.String()})
 	requireTunneledSetupRefusal(t, err, "not_found")
@@ -177,7 +186,7 @@ func TestTunneledSetupHandoffRefusesNonTunneledServer(t *testing.T) {
 
 	fixture := seedTunnelStatusFixture(t, "platform_mcp_tunneled_setup_not_tunneled")
 	fixture.grantSetupAdmin(t)
-	harness, ctx := newTunneledSetupHarness(t, fixture, "https://dashboard.example.test", allowingLimiter())
+	harness, ctx := newTunneledSetupHarness(t, fixture, "https://dashboard.example.test", allowingLimiter(), true)
 
 	_, err := harness.invoke(t, ctx, GetTunneledMCPSetupHandoffInput{ProjectID: fixture.project.ID.String(), MCPID: fixture.otherMCP.String()})
 	requireTunneledSetupRefusal(t, err, "not_tunneled")
@@ -190,7 +199,7 @@ func TestTunneledSetupHandoffHidesDeletedSource(t *testing.T) {
 	fixture.grantSetupAdmin(t)
 	_, err := tunneledmcprepo.New(fixture.conn).DeleteServer(t.Context(), tunneledmcprepo.DeleteServerParams{ID: fixture.tunnelID, ProjectID: fixture.project.ID})
 	require.NoError(t, err)
-	harness, ctx := newTunneledSetupHarness(t, fixture, "https://dashboard.example.test", allowingLimiter())
+	harness, ctx := newTunneledSetupHarness(t, fixture, "https://dashboard.example.test", allowingLimiter(), true)
 
 	_, err = harness.invoke(t, ctx, GetTunneledMCPSetupHandoffInput{ProjectID: fixture.project.ID.String(), MCPID: fixture.wrapperID.String()})
 	requireTunneledSetupRefusal(t, err, "not_found")
@@ -202,7 +211,7 @@ func TestTunneledSetupHandoffHidesMissingAndForeignTargets(t *testing.T) {
 	fixture := seedTunnelStatusFixture(t, "platform_mcp_tunneled_setup_missing")
 	fixture.grantSetupAdmin(t)
 	foreign := seedTunnelStatusFixture(t, "platform_mcp_tunneled_setup_foreign")
-	harness, ctx := newTunneledSetupHarness(t, fixture, "https://dashboard.example.test", allowingLimiter())
+	harness, ctx := newTunneledSetupHarness(t, fixture, "https://dashboard.example.test", allowingLimiter(), true)
 
 	for _, input := range []GetTunneledMCPSetupHandoffInput{
 		{ProjectID: uuid.NewString()},
@@ -219,7 +228,7 @@ func TestTunneledSetupHandoffRejectsMalformedTarget(t *testing.T) {
 
 	fixture := seedTunnelStatusFixture(t, "platform_mcp_tunneled_setup_malformed")
 	fixture.grantSetupAdmin(t)
-	harness, ctx := newTunneledSetupHarness(t, fixture, "https://dashboard.example.test", allowingLimiter())
+	harness, ctx := newTunneledSetupHarness(t, fixture, "https://dashboard.example.test", allowingLimiter(), true)
 
 	_, err := harness.invoke(t, ctx, GetTunneledMCPSetupHandoffInput{ProjectID: fixture.project.ID.String(), MCPID: "not-a-uuid"})
 	requireTunneledSetupRefusal(t, err, "invalid_request")
@@ -231,11 +240,42 @@ func TestTunneledSetupHandoffReportsExhaustedBudget(t *testing.T) {
 
 	fixture := seedTunnelStatusFixture(t, "platform_mcp_tunneled_setup_budget")
 	fixture.grantSetupAdmin(t)
-	harness, ctx := newTunneledSetupHarness(t, fixture, "https://dashboard.example.test", &recordingOperationLimiter{result: ratelimit.Result{Allowed: false}})
+	harness, ctx := newTunneledSetupHarness(t, fixture, "https://dashboard.example.test", &recordingOperationLimiter{result: ratelimit.Result{Allowed: false}}, true)
 
 	_, err := harness.invoke(t, ctx, GetTunneledMCPSetupHandoffInput{ProjectID: fixture.project.ID.String()})
 	var refusal *ToolRefusalError
 	require.ErrorAs(t, err, &refusal)
 	require.Contains(t, refusal.Payload, `"code":"rate_limited"`)
 	require.NotContains(t, refusal.Payload, "https://")
+}
+
+func TestTunneledSetupHandoffRefusesAddFormWhenTunnelsAreNotEnabled(t *testing.T) {
+	t.Parallel()
+
+	fixture := seedTunnelStatusFixture(t, "platform_mcp_tunneled_setup_flag_disabled")
+	fixture.grantSetupAdmin(t)
+	harness, ctx := newTunneledSetupHarness(t, fixture, "https://dashboard.example.test", allowingLimiter(), true)
+	harness.flags.SetFlag(feature.FlagTunneledMCP, fixture.principal.OrganizationID, false)
+
+	_, err := harness.invoke(t, ctx, GetTunneledMCPSetupHandoffInput{ProjectID: fixture.project.ID.String()})
+	requireTunneledSetupRefusal(t, err, "not_enabled")
+	require.Empty(t, harness.limiter.keys, "an add form the dashboard would not show is never charged")
+
+	// An existing tunneled server's settings page is not behind the rollout.
+	output, err := harness.invoke(t, ctx, GetTunneledMCPSetupHandoffInput{ProjectID: fixture.project.ID.String(), MCPID: fixture.wrapperID.String()})
+	require.NoError(t, err)
+	require.Equal(t, TunneledMCPSetupIntentAgent, output.Intent)
+}
+
+func TestTunneledSetupHandoffReportsAddFormUnavailableWhenRolloutIsIndeterminate(t *testing.T) {
+	t.Parallel()
+
+	fixture := seedTunnelStatusFixture(t, "platform_mcp_tunneled_setup_flag_unknown")
+	fixture.grantSetupAdmin(t)
+	// A flag the provider holds no decision for is indeterminate, not off.
+	harness, ctx := newTunneledSetupHarness(t, fixture, "https://dashboard.example.test", allowingLimiter(), false)
+
+	_, err := harness.invoke(t, ctx, GetTunneledMCPSetupHandoffInput{ProjectID: fixture.project.ID.String()})
+	requireTunneledSetupRefusal(t, err, unavailableCode)
+	require.Empty(t, harness.limiter.keys)
 }

@@ -51,6 +51,14 @@ const (
 	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
 	FlagRiskAsyncScanShadow  Flag = "risk-async-scan-shadow"
 
+	// FlagTunneledMCP gates adding tunneled MCP servers. The dashboard hides
+	// the tunneled option and redirects its add form behind the same key;
+	// Platform MCP's tunneled setup handoff evaluates it server-side for the
+	// add form only, so it never links to a form the dashboard would not show.
+	// Targeted by PostHog organization group (org slug). Fails closed. Removed
+	// once tunneled MCP servers are GA.
+	FlagTunneledMCP Flag = "gram-tunneled-mcp"
+
 	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk
 	// policy and exclusion writes exposed through Platform MCP. It is evaluated
 	// at invocation time and fails closed when absent, disabled, or indeterminate.

@@ -483,7 +483,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore)).
 		WithTunnelStatus(platformMCPTunnelConnections(config)).
-		WithTunneledMCPSetupHandoff(config.DashboardURL, budgets.Handoff)
+		WithTunneledMCPSetupHandoff(config.DashboardURL, budgets.Handoff, config.FeatureFlags)
 	// Metered on the diagnostics allowance, like the other aggregate reads.
 	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics))
 	attachShadowInventory(platformReader, config, budgets.SensitiveDiagnostics)
@@ -1054,7 +1054,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore)).
 		WithTunnelStatus(platformMCPTunnelConnections(config)).
-		WithTunneledMCPSetupHandoff(config.DashboardURL, budgets.Handoff)
+		WithTunneledMCPSetupHandoff(config.DashboardURL, budgets.Handoff, config.FeatureFlags)
 	// Metered on the diagnostics allowance, like the other aggregate reads.
 	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics))
 	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)

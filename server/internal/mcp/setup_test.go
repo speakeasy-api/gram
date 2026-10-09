@@ -528,7 +528,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 				logger, nil, nil, platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine), "", "test-cursor-key",
 				platformmcp.NewPostgresReader(logger, conn).WithAuthorization(authzEngine).
 					WithTunnelStatus(noLiveTunnelConnections{}).
-					WithTunneledMCPSetupHandoff(testDashboardURL, platformmcp.OperationBudget{Connection: allowAllLimiter{}, Organization: allowAllLimiter{}}), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+					WithTunneledMCPSetupHandoff(testDashboardURL, platformmcp.OperationBudget{Connection: allowAllLimiter{}, Organization: allowAllLimiter{}}, features), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 				platformmcp.CatalogDescriptor{},
 			).AssistantTools(),
 			platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine),

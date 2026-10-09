@@ -77,6 +77,7 @@ func newTunneledAssistantFixture(t *testing.T, adminGrants bool) tunneledAssista
 		AssistantID: managedID,
 	}))
 	ti.features.SetFlagVariant(feature.FlagAssistantPlatformMCP, authCtx.ActiveOrganizationID, feature.VariantAssistantToolsPlatformMCP)
+	ti.features.SetFlag(feature.FlagTunneledMCP, authCtx.ActiveOrganizationID, true)
 
 	wrapperID := seedTunneledWrapper(t, ti, *authCtx.ProjectID, "private-inventory")
 	foreignProject, err := projectsrepo.New(ti.conn).CreateProject(t.Context(), projectsrepo.CreateProjectParams{
@@ -206,4 +207,20 @@ func TestServePlatformToolset_TunneledSetupHandoffRefusedWithoutOrgAdmin(t *test
 	_, raw := f.call(t, "get_tunneled_mcp_setup_handoff", map[string]any{"mcp_id": f.wrapperID.String()})
 	require.NotContains(t, raw, "setup_url")
 	require.NotContains(t, raw, "dashboard.example.test")
+}
+
+// For an organization outside the tunneled MCP rollout the add form is refused
+// as not enabled, while an existing tunneled server's setup stays reachable.
+func TestServePlatformToolset_TunneledSetupHandoffNotEnabledForOrganization(t *testing.T) {
+	t.Parallel()
+	f := newTunneledAssistantFixture(t, true)
+	f.ti.features.SetFlag(feature.FlagTunneledMCP, f.authCtx.ActiveOrganizationID, false)
+
+	result, _ := f.call(t, "get_tunneled_mcp_setup_handoff", map[string]any{})
+	require.Contains(t, result.text, `"code":"not_enabled"`)
+	require.NotContains(t, result.text, "setup_url")
+
+	result, _ = f.call(t, "get_tunneled_mcp_setup_handoff", map[string]any{"mcp_id": f.wrapperID.String()})
+	require.False(t, result.isError, result.text)
+	require.Contains(t, result.text, "#agent-setup")
 }
