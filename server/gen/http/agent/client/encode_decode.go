@@ -2922,6 +2922,23 @@ func marshalAgentAIScanMatchToAIScanMatchRequestBody(v *agent.AIScanMatch) *AISc
 	return res
 }
 
+// marshalAgentAIScanAccountToAIScanAccountRequestBody builds a value of type
+// *AIScanAccountRequestBody from a value of type *agent.AIScanAccount.
+func marshalAgentAIScanAccountToAIScanAccountRequestBody(v *agent.AIScanAccount) *AIScanAccountRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &AIScanAccountRequestBody{
+		Provider:    v.Provider,
+		Surface:     v.Surface,
+		AccountUUID: v.AccountUUID,
+		OrgUUID:     v.OrgUUID,
+		LastSeenAt:  v.LastSeenAt,
+	}
+
+	return res
+}
+
 // marshalAIScanMatchRequestBodyToAgentAIScanMatch builds a value of type
 // *agent.AIScanMatch from a value of type *AIScanMatchRequestBody.
 func marshalAIScanMatchRequestBodyToAgentAIScanMatch(v *AIScanMatchRequestBody) *agent.AIScanMatch {
@@ -2930,6 +2947,23 @@ func marshalAIScanMatchRequestBodyToAgentAIScanMatch(v *AIScanMatchRequestBody) 
 		Category: v.Category,
 		Signal:   v.Signal,
 		Version:  v.Version,
+	}
+
+	return res
+}
+
+// marshalAIScanAccountRequestBodyToAgentAIScanAccount builds a value of type
+// *agent.AIScanAccount from a value of type *AIScanAccountRequestBody.
+func marshalAIScanAccountRequestBodyToAgentAIScanAccount(v *AIScanAccountRequestBody) *agent.AIScanAccount {
+	if v == nil {
+		return nil
+	}
+	res := &agent.AIScanAccount{
+		Provider:    v.Provider,
+		Surface:     v.Surface,
+		AccountUUID: v.AccountUUID,
+		OrgUUID:     v.OrgUUID,
+		LastSeenAt:  v.LastSeenAt,
 	}
 
 	return res

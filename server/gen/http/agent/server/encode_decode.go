@@ -2576,3 +2576,20 @@ func unmarshalAIScanMatchRequestBodyToAgentAIScanMatch(v *AIScanMatchRequestBody
 
 	return res
 }
+
+// unmarshalAIScanAccountRequestBodyToAgentAIScanAccount builds a value of type
+// *agent.AIScanAccount from a value of type *AIScanAccountRequestBody.
+func unmarshalAIScanAccountRequestBodyToAgentAIScanAccount(v *AIScanAccountRequestBody) *agent.AIScanAccount {
+	if v == nil {
+		return nil
+	}
+	res := &agent.AIScanAccount{
+		Provider:    *v.Provider,
+		Surface:     *v.Surface,
+		AccountUUID: *v.AccountUUID,
+		OrgUUID:     *v.OrgUUID,
+		LastSeenAt:  *v.LastSeenAt,
+	}
+
+	return res
+}

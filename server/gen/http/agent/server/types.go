@@ -89,6 +89,12 @@ type ReportAIScanRequestBody struct {
 	// Detection targets the scan matched. Empty when the device came back clean;
 	// the report still lands as a scan receipt.
 	Matches []*AIScanMatchRequestBody `form:"matches,omitempty" json:"matches,omitempty" xml:"matches,omitempty"`
+	// Claude Desktop account and organization pairs signed in on the device, read
+	// from the names of the directories Claude Desktop keeps its session stores
+	// in. Each account is recorded against the enrolled user; an organization no
+	// other employee uses marks the account personal. Omitted by agents that
+	// predate account discovery.
+	Accounts []*AIScanAccountRequestBody `form:"accounts,omitempty" json:"accounts,omitempty" xml:"accounts,omitempty"`
 }
 
 // CreateSessionHandoffRequestBody is the type of the "agent" service
@@ -2423,6 +2429,21 @@ type AIScanMatchRequestBody struct {
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 }
 
+// AIScanAccountRequestBody is used to define fields on request body types.
+type AIScanAccountRequestBody struct {
+	// AI provider the account belongs to. Only anthropic is accepted today.
+	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
+	// App the account was signed in to: claude-code-desktop or cowork.
+	Surface *string `form:"surface,omitempty" json:"surface,omitempty" xml:"surface,omitempty"`
+	// The provider's stable account id (Claude's account UUID).
+	AccountUUID *string `form:"account_uuid,omitempty" json:"account_uuid,omitempty" xml:"account_uuid,omitempty"`
+	// The provider organization the account was used in (Claude's organization
+	// UUID).
+	OrgUUID *string `form:"org_uuid,omitempty" json:"org_uuid,omitempty" xml:"org_uuid,omitempty"`
+	// When the account was last used in this organization on the device.
+	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
+}
+
 // NewGetPluginsResponseBody builds the HTTP response body from the result of
 // the "getPlugins" endpoint of the "agent" service.
 func NewGetPluginsResponseBody(res *agent.GetPluginsResult) *GetPluginsResponseBody {
@@ -4282,6 +4303,16 @@ func NewReportAIScanPayload(body *ReportAIScanRequestBody, apikeyToken *string, 
 		}
 		v.Matches[i] = unmarshalAIScanMatchRequestBodyToAgentAIScanMatch(val)
 	}
+	if body.Accounts != nil {
+		v.Accounts = make([]*agent.AIScanAccount, len(body.Accounts))
+		for i, val := range body.Accounts {
+			if val == nil {
+				v.Accounts[i] = nil
+				continue
+			}
+			v.Accounts[i] = unmarshalAIScanAccountRequestBodyToAgentAIScanAccount(val)
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.Email = email
 	v.SerialNumber = serialNumber
@@ -4449,6 +4480,16 @@ func ValidateReportAIScanRequestBody(body *ReportAIScanRequestBody) (err error) 
 			}
 		}
 	}
+	if len(body.Accounts) > 50 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.accounts", body.Accounts, len(body.Accounts), 50, false))
+	}
+	for _, e := range body.Accounts {
+		if e != nil {
+			if err2 := ValidateAIScanAccountRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	return
 }
 
@@ -4601,6 +4642,46 @@ func ValidateAIScanMatchRequestBody(body *AIScanMatchRequestBody) (err error) {
 		if utf8.RuneCountInString(*body.Version) > 64 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.version", *body.Version, utf8.RuneCountInString(*body.Version), 64, false))
 		}
+	}
+	return
+}
+
+// ValidateAIScanAccountRequestBody runs the validations defined on
+// AIScanAccountRequestBody
+func ValidateAIScanAccountRequestBody(body *AIScanAccountRequestBody) (err error) {
+	if body.Provider == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
+	}
+	if body.Surface == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("surface", "body"))
+	}
+	if body.AccountUUID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("account_uuid", "body"))
+	}
+	if body.OrgUUID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("org_uuid", "body"))
+	}
+	if body.LastSeenAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("last_seen_at", "body"))
+	}
+	if body.Provider != nil {
+		if utf8.RuneCountInString(*body.Provider) > 32 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.provider", *body.Provider, utf8.RuneCountInString(*body.Provider), 32, false))
+		}
+	}
+	if body.Surface != nil {
+		if utf8.RuneCountInString(*body.Surface) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.surface", *body.Surface, utf8.RuneCountInString(*body.Surface), 64, false))
+		}
+	}
+	if body.AccountUUID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.account_uuid", *body.AccountUUID, goa.FormatUUID))
+	}
+	if body.OrgUUID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.org_uuid", *body.OrgUUID, goa.FormatUUID))
+	}
+	if body.LastSeenAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen_at", *body.LastSeenAt, goa.FormatDateTime))
 	}
 	return
 }

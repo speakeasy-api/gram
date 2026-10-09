@@ -428,3 +428,72 @@ ORDER BY id;
 
 -- name: AcquireAIScanTargetsLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended('ai_scan_targets:' || @organization_id::text, 0));
+
+-- name: UpsertDesktopUserAccount :exec
+-- Records a Claude Desktop account the device agent found signed in on an
+-- enrolled user's device. Desktop reports no email or account id, so those
+-- columns are left to other sources. An account holds one provider org, so
+-- the org is overwritten by the one the agent says was used most recently.
+-- account_type is only written when classification reached a verdict, and
+-- last_seen_at never moves backwards: hook ingest may have seen the account
+-- more recently than the device's session store did.
+INSERT INTO user_accounts (
+    organization_id
+  , provider
+  , external_account_uuid
+  , user_id
+  , external_org_id
+  , account_type
+  , last_seen_at
+) VALUES (
+    @organization_id
+  , @provider
+  , @external_account_uuid
+  , @user_id
+  , @external_org_id
+  , sqlc.narg(account_type)
+  , @last_seen_at
+)
+ON CONFLICT (organization_id, provider, external_account_uuid) WHERE deleted_at IS NULL
+DO UPDATE SET
+    user_id         = COALESCE(user_accounts.user_id, EXCLUDED.user_id)
+  , external_org_id = EXCLUDED.external_org_id
+  , account_type    = COALESCE(EXCLUDED.account_type, user_accounts.account_type)
+  , last_seen_at    = GREATEST(user_accounts.last_seen_at, EXCLUDED.last_seen_at)
+  , updated_at      = clock_timestamp();
+
+-- name: CountOtherEmployeesForExternalOrg :one
+-- Distinct employees other than @user_id seen under a provider org. Any marks
+-- the org as the company's: with the reporting employee that makes the two the
+-- hooks rule (CountEmployeesForExternalOrg) requires.
+SELECT COUNT(DISTINCT user_id)::bigint
+FROM user_accounts
+WHERE organization_id = @organization_id
+  AND provider = @provider
+  AND external_org_id = @external_org_id
+  AND user_id IS NOT NULL
+  AND user_id <> @user_id
+  AND deleted_at IS NULL;
+
+-- name: EmployeeHasSharedExternalOrg :one
+-- Whether this employee also appears under a different provider org shared by
+-- >= 2 employees (the company's org). Mirrors the hooks query of the same name.
+SELECT EXISTS (
+  SELECT 1
+  FROM user_accounts mine
+  WHERE mine.organization_id = @organization_id
+    AND mine.provider = @provider
+    AND mine.user_id = @user_id
+    AND mine.deleted_at IS NULL
+    AND mine.external_org_id IS NOT NULL
+    AND mine.external_org_id <> @external_org_id
+    AND (
+      SELECT COUNT(DISTINCT peers.user_id)
+      FROM user_accounts peers
+      WHERE peers.organization_id = mine.organization_id
+        AND peers.provider = mine.provider
+        AND peers.external_org_id = mine.external_org_id
+        AND peers.user_id IS NOT NULL
+        AND peers.deleted_at IS NULL
+    ) >= 2
+)::boolean;

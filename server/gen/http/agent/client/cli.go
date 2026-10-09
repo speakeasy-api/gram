@@ -340,7 +340,7 @@ func BuildReportAIScanPayload(agentReportAIScanBody string, agentReportAIScanApi
 	{
 		err = json.Unmarshal([]byte(agentReportAIScanBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"matches\": [\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         },\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         },\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         }\n      ],\n      \"scan_completed_at\": \"1970-01-01T00:00:01Z\",\n      \"scan_started_at\": \"1970-01-01T00:00:01Z\",\n      \"target_list_version\": 1\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"accounts\": [\n         {\n            \"account_uuid\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"last_seen_at\": \"1970-01-01T00:00:01Z\",\n            \"org_uuid\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"provider\": \"aaa\",\n            \"surface\": \"aaa\"\n         },\n         {\n            \"account_uuid\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"last_seen_at\": \"1970-01-01T00:00:01Z\",\n            \"org_uuid\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"provider\": \"aaa\",\n            \"surface\": \"aaa\"\n         },\n         {\n            \"account_uuid\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"last_seen_at\": \"1970-01-01T00:00:01Z\",\n            \"org_uuid\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"provider\": \"aaa\",\n            \"surface\": \"aaa\"\n         }\n      ],\n      \"matches\": [\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         },\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         },\n         {\n            \"category\": \"aaa\",\n            \"signal\": \"aaa\",\n            \"target_id\": \"aa\",\n            \"version\": \"aaa\"\n         }\n      ],\n      \"scan_completed_at\": \"1970-01-01T00:00:01Z\",\n      \"scan_started_at\": \"1970-01-01T00:00:01Z\",\n      \"target_list_version\": 1\n   }'")
 		}
 		if body.Matches == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("matches", "body"))
@@ -359,6 +359,16 @@ func BuildReportAIScanPayload(agentReportAIScanBody string, agentReportAIScanApi
 		for _, e := range body.Matches {
 			if e != nil {
 				if err2 := ValidateAIScanMatchRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if len(body.Accounts) > 50 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.accounts", body.Accounts, len(body.Accounts), 50, false))
+		}
+		for _, e := range body.Accounts {
+			if e != nil {
+				if err2 := ValidateAIScanAccountRequestBody(e); err2 != nil {
 					err = goa.MergeErrors(err, err2)
 				}
 			}
@@ -407,6 +417,16 @@ func BuildReportAIScanPayload(agentReportAIScanBody string, agentReportAIScanApi
 		}
 	} else {
 		v.Matches = []*agent.AIScanMatch{}
+	}
+	if body.Accounts != nil {
+		v.Accounts = make([]*agent.AIScanAccount, len(body.Accounts))
+		for i, val := range body.Accounts {
+			if val == nil {
+				v.Accounts[i] = nil
+				continue
+			}
+			v.Accounts[i] = marshalAIScanAccountRequestBodyToAgentAIScanAccount(val)
+		}
 	}
 	v.ApikeyToken = apikeyToken
 	v.Email = email

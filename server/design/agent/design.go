@@ -355,6 +355,9 @@ var _ = Service("agent", func() {
 			Attribute("matches", ArrayOf(AIScanMatchModel), "Detection targets the scan matched. Empty when the device came back clean; the report still lands as a scan receipt.", func() {
 				MaxLength(100)
 			})
+			Attribute("accounts", ArrayOf(AIScanAccountModel), "Claude Desktop account and organization pairs signed in on the device, read from the names of the directories Claude Desktop keeps its session stores in. Each account is recorded against the enrolled user; an organization no other employee uses marks the account personal. Omitted by agents that predate account discovery.", func() {
+				MaxLength(50)
+			})
 			// Identity attributes mirror getPlugins: all three ride in headers
 			// (see the HTTP mapping) for the access-log hygiene reason
 			// getPlugins documents.
@@ -524,6 +527,26 @@ var AIScanMatchModel = Type("AIScanMatch", func() {
 	})
 	Attribute("version", String, "Installed version, when the scan could read one statically (e.g. from the app bundle's Info.plist).", func() {
 		MaxLength(64)
+	})
+})
+
+var AIScanAccountModel = Type("AIScanAccount", func() {
+	Description("One AI provider account and organization pair a device-agent scan found signed in on the device.")
+	Required("provider", "surface", "account_uuid", "org_uuid", "last_seen_at")
+	Attribute("provider", String, "AI provider the account belongs to. Only anthropic is accepted today.", func() {
+		MaxLength(32)
+	})
+	Attribute("surface", String, "App the account was signed in to: claude-code-desktop or cowork.", func() {
+		MaxLength(64)
+	})
+	Attribute("account_uuid", String, "The provider's stable account id (Claude's account UUID).", func() {
+		Format(FormatUUID)
+	})
+	Attribute("org_uuid", String, "The provider organization the account was used in (Claude's organization UUID).", func() {
+		Format(FormatUUID)
+	})
+	Attribute("last_seen_at", String, "When the account was last used in this organization on the device.", func() {
+		Format(FormatDateTime)
 	})
 })
 
