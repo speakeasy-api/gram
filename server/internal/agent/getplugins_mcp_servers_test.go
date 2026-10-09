@@ -1,7 +1,6 @@
 package agent_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -15,11 +14,12 @@ import (
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-// seedToolsetServer adds a toolset-backed MCP server to a plugin and returns
-// the toolset and the URL its package, and so the agent poll, addresses it by.
-func seedToolsetServer(t *testing.T, ti *testInstance, pluginID uuid.UUID, displayName string) (uuid.UUID, string) {
+// seedToolsetServer adds a toolset-backed MCP server with the given MCP slug
+// to a plugin and returns the toolset and the URL its package, and so the
+// agent poll, addresses it by. Each test has its own database, so fixed slugs
+// do not collide across tests.
+func seedToolsetServer(t *testing.T, ti *testInstance, pluginID uuid.UUID, slug, displayName string) (uuid.UUID, string) {
 	t.Helper()
-	slug := fmt.Sprintf("mcp-%s", uuid.NewString()[:8])
 	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{
 		OrganizationID:         ti.orgID,
 		ProjectID:              ti.projectID,
@@ -65,21 +65,21 @@ func TestGetPlugins_AgentKeyListsAssignedPluginServers(t *testing.T) {
 
 	agentTool := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "agent-tool")
 	assignPlugin(t, ctx, ti.conn, agentTool, ti.orgID, actor.String())
-	_, linearURL := seedToolsetServer(t, ti, agentTool, "Team Linear")
+	_, linearURL := seedToolsetServer(t, ti, agentTool, "team-linear", "Team Linear")
 
 	wildcardTool := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "wildcard-tool")
 	assignPlugin(t, ctx, ti.conn, wildcardTool, ti.orgID, "*")
-	_, githubURL := seedToolsetServer(t, ti, wildcardTool, "GitHub")
+	_, githubURL := seedToolsetServer(t, ti, wildcardTool, "GitHub_Enterprise", "GitHub")
 
 	humanTool := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "human-tool")
 	assignPlugin(t, ctx, ti.conn, humanTool, ti.orgID, "email:"+mockidp.MockUserEmail)
-	seedToolsetServer(t, ti, humanTool, "Slack")
+	seedToolsetServer(t, ti, humanTool, "slack", "Slack")
 
 	res, err := ti.service.GetPlugins(agentCtx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)
 
-	require.Equal(t, map[string]string{"Team_Linear": linearURL, "GitHub": githubURL}, mcpServersByName(res),
-		"servers come from the agent's and the org wildcard's plugins, under tool-safe names")
+	require.Equal(t, map[string]string{"speakeasy-team-linear": linearURL, "speakeasy-github-enterprise": githubURL}, mcpServersByName(res),
+		"servers come from the agent's and the org wildcard's plugins, named speakeasy-<slug>")
 	for _, s := range res.McpServers {
 		require.Empty(t, s.Tools, "plugin servers apply to every managed tool")
 	}
@@ -92,7 +92,7 @@ func TestGetPlugins_HumanPollSendsEmptyMCPServers(t *testing.T) {
 	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
 	tool := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "tool")
 	assignPlugin(t, ctx, ti.conn, tool, ti.orgID, "*")
-	seedToolsetServer(t, ti, tool, "GitHub")
+	seedToolsetServer(t, ti, tool, "github", "GitHub")
 
 	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new(mockidp.MockUserEmail)})
 	require.NoError(t, err)
@@ -122,15 +122,15 @@ func TestGetPlugins_AgentSkipsAvailablePluginServers(t *testing.T) {
 
 	offered := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "offered")
 	assignPluginWithMode(t, ti, offered, actor.String(), installmode.Available)
-	seedToolsetServer(t, ti, offered, "Offered")
+	seedToolsetServer(t, ti, offered, "offered", "Offered")
 
 	required := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "required")
 	assignPluginWithMode(t, ti, required, actor.String(), installmode.Required)
-	_, requiredURL := seedToolsetServer(t, ti, required, "Required")
+	_, requiredURL := seedToolsetServer(t, ti, required, "required", "Required")
 
 	res, err := ti.service.GetPlugins(agentCtx, &gen.GetPluginsPayload{})
 	require.NoError(t, err)
-	require.Equal(t, map[string]string{"Required": requiredURL}, mcpServersByName(res),
+	require.Equal(t, map[string]string{"speakeasy-required": requiredURL}, mcpServersByName(res),
 		"nobody on an agent's machine can turn on an available plugin")
 }
 
@@ -141,13 +141,15 @@ func TestGetPlugins_AgentListsSharedServerOnceAndSuffixesNameCollisions(t *testi
 	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
 	agentCtx, actor := withAgentKeyAuth(t, ctx, ti, "CI agent")
 
+	// Both slugs reduce to speakeasy-dup-linear. Suffixes follow URL order, so
+	// /mcp/dup-linear keeps the bare name whichever plugin lists it.
 	first := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "a-first")
 	assignPlugin(t, ctx, ti.conn, first, ti.orgID, actor.String())
-	sharedToolset, sharedURL := seedToolsetServer(t, ti, first, "Linear")
+	sharedToolset, underscoreURL := seedToolsetServer(t, ti, first, "dup_linear", "Linear")
 
 	second := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "b-second")
 	assignPlugin(t, ctx, ti.conn, second, ti.orgID, actor.String())
-	_, otherURL := seedToolsetServer(t, ti, second, "Linear")
+	_, dashURL := seedToolsetServer(t, ti, second, "dup-linear", "Linear")
 
 	// The same toolset in a third plugin is one server, not two entries.
 	third := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "c-third")
@@ -156,7 +158,33 @@ func TestGetPlugins_AgentListsSharedServerOnceAndSuffixesNameCollisions(t *testi
 
 	res, err := ti.service.GetPlugins(agentCtx, &gen.GetPluginsPayload{})
 	require.NoError(t, err)
-	require.Equal(t, map[string]string{"Linear": sharedURL, "Linear_2": otherURL}, mcpServersByName(res))
+	require.Equal(t, map[string]string{"speakeasy-dup-linear": dashURL, "speakeasy-dup-linear-2": underscoreURL}, mcpServersByName(res))
+}
+
+func TestGetPlugins_AgentMCPServerNamesStayStable(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+	agentCtx, actor := withAgentKeyAuth(t, ctx, ti, "CI agent")
+
+	tool := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "m-tool")
+	assignPlugin(t, ctx, ti.conn, tool, ti.orgID, actor.String())
+	_, linearURL := seedToolsetServer(t, ti, tool, "linear", "Linear")
+
+	before, err := ti.service.GetPlugins(agentCtx, &gen.GetPluginsPayload{})
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"speakeasy-linear": linearURL}, mcpServersByName(before))
+
+	// A plugin that sorts first and shares the display name must not take the
+	// existing server's name: names come from slugs, suffixes from name and URL.
+	earlier := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "a-earlier")
+	assignPlugin(t, ctx, ti.conn, earlier, ti.orgID, actor.String())
+	_, otherURL := seedToolsetServer(t, ti, earlier, "other-linear", "Linear")
+
+	after, err := ti.service.GetPlugins(agentCtx, &gen.GetPluginsPayload{})
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"speakeasy-linear": linearURL, "speakeasy-other-linear": otherURL}, mcpServersByName(after))
 }
 
 func TestGetPlugins_AgentMCPServerChangesChangeETag(t *testing.T) {
@@ -166,7 +194,7 @@ func TestGetPlugins_AgentMCPServerChangesChangeETag(t *testing.T) {
 	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
 	agentCtx, actor := withAgentKeyAuth(t, ctx, ti, "CI agent")
 	tool := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "tool")
-	seedToolsetServer(t, ti, tool, "GitHub")
+	seedToolsetServer(t, ti, tool, "github", "GitHub")
 
 	unassigned, err := ti.service.GetPlugins(agentCtx, &gen.GetPluginsPayload{})
 	require.NoError(t, err)
@@ -177,7 +205,7 @@ func TestGetPlugins_AgentMCPServerChangesChangeETag(t *testing.T) {
 	require.Len(t, assigned.McpServers, 1)
 	require.NotEqual(t, unassigned.Etag, assigned.Etag, "an assignment change reaches devices on their next poll")
 
-	seedToolsetServer(t, ti, tool, "Slack")
+	seedToolsetServer(t, ti, tool, "slack", "Slack")
 	withServer, err := ti.service.GetPlugins(agentCtx, &gen.GetPluginsPayload{})
 	require.NoError(t, err)
 	require.Len(t, withServer.McpServers, 2)

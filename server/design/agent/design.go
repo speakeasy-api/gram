@@ -439,7 +439,9 @@ var GetPluginsResult = Type("GetPluginsResult", func() {
 
 var AgentMCPServerModel = Type("AgentMCPServer", func() {
 	Required("name", "url")
-	Attribute("name", String, "Stable key the agent writes the server under in each tool's MCP configuration. Unique within the response and limited to letters, digits, `_` and `-`.")
+	Attribute("name", String, "Stable key the agent writes the server under in each tool's MCP configuration: `speakeasy-` followed by the server's slug, using only lowercase letters, digits and `-`. Unique within the response; a second server with the same name gets a numeric suffix such as `speakeasy-linear-2`.", func() {
+		Pattern(`^speakeasy-[a-z0-9-]+$`)
+	})
 	Attribute("url", String, "The server's streamable-HTTP URL.")
 	Attribute("tools", ArrayOf(String), "Stable IDs of the managed tools this server applies to. Absent or empty means every managed tool.")
 })

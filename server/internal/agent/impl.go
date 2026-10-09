@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -327,7 +328,7 @@ func (s *Service) getAgentPlugins(ctx context.Context, authCtx *contextvalues.Au
 // Plugins offered as `available` are left out, because nobody on an agent's
 // machine can turn them on. A server reached through several plugins is
 // listed once, and a name shared by different servers gets a numeric suffix
-// so each entry keeps its own key.
+// (`speakeasy-linear-2`) so each entry keeps its own key.
 func (s *Service) agentMCPServers(ctx context.Context, rows []repo.GetAgentPluginSetRow) ([]*gen.AgentMCPServer, error) {
 	var projectIDs []uuid.UUID
 	pluginsByProject := make(map[uuid.UUID][]uuid.UUID)
@@ -341,28 +342,36 @@ func (s *Service) agentMCPServers(ctx context.Context, rows []repo.GetAgentPlugi
 		pluginsByProject[row.ProjectID] = append(pluginsByProject[row.ProjectID], row.PluginID.UUID)
 	}
 
-	servers := []*gen.AgentMCPServer{}
+	var candidates []plugins.DeviceMCPServer
 	listedURLs := make(map[string]bool)
-	takenNames := make(map[string]bool)
 	for _, projectID := range projectIDs {
 		projectServers, err := plugins.ListDeviceMCPServers(ctx, s.logger, s.db, s.serverURL, projectID, pluginsByProject[projectID])
 		if err != nil {
 			return nil, fmt.Errorf("list plugin MCP servers: %w", err)
 		}
 		for _, server := range projectServers {
-			if listedURLs[server.URL] {
-				continue
+			if !listedURLs[server.URL] {
+				listedURLs[server.URL] = true
+				candidates = append(candidates, server)
 			}
-			listedURLs[server.URL] = true
-
-			name := server.Key
-			for suffix := 2; takenNames[name]; suffix++ {
-				name = fmt.Sprintf("%s_%d", server.Key, suffix)
-			}
-			takenNames[name] = true
-
-			servers = append(servers, &gen.AgentMCPServer{Name: name, URL: server.URL, Tools: nil})
 		}
+	}
+
+	// The device keys ownership by name, so suffixes are assigned in name and
+	// URL order: a server keeps its name however plugins and projects are
+	// arranged, and only a new server sharing its name can renumber it.
+	slices.SortFunc(candidates, func(a, b plugins.DeviceMCPServer) int {
+		return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.URL, b.URL))
+	})
+	servers := make([]*gen.AgentMCPServer, 0, len(candidates))
+	takenNames := make(map[string]bool, len(candidates))
+	for _, server := range candidates {
+		name := server.Name
+		for suffix := 2; takenNames[name]; suffix++ {
+			name = fmt.Sprintf("%s-%d", server.Name, suffix)
+		}
+		takenNames[name] = true
+		servers = append(servers, &gen.AgentMCPServer{Name: name, URL: server.URL, Tools: nil})
 	}
 	return servers, nil
 }

@@ -2305,8 +2305,9 @@ type AgentPollingPrincipalResponseBody struct {
 // AgentMCPServerResponseBody is used to define fields on response body types.
 type AgentMCPServerResponseBody struct {
 	// Stable key the agent writes the server under in each tool's MCP
-	// configuration. Unique within the response and limited to letters, digits,
-	// `_` and `-`.
+	// configuration: `speakeasy-` followed by the server's slug, using only
+	// lowercase letters, digits and `-`. Unique within the response; a second
+	// server with the same name gets a numeric suffix such as `speakeasy-linear-2`.
 	Name string `form:"name" json:"name" xml:"name"`
 	// The server's streamable-HTTP URL.
 	URL string `form:"url" json:"url" xml:"url"`

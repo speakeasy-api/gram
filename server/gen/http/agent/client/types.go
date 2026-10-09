@@ -2305,8 +2305,9 @@ type AgentPollingPrincipalResponseBody struct {
 // AgentMCPServerResponseBody is used to define fields on response body types.
 type AgentMCPServerResponseBody struct {
 	// Stable key the agent writes the server under in each tool's MCP
-	// configuration. Unique within the response and limited to letters, digits,
-	// `_` and `-`.
+	// configuration: `speakeasy-` followed by the server's slug, using only
+	// lowercase letters, digits and `-`. Unique within the response; a second
+	// server with the same name gets a numeric suffix such as `speakeasy-linear-2`.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The server's streamable-HTTP URL.
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
@@ -7270,6 +7271,9 @@ func ValidateAgentMCPServerResponseBody(body *AgentMCPServerResponseBody) (err e
 	}
 	if body.URL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
+	}
+	if body.Name != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", *body.Name, "^speakeasy-[a-z0-9-]+$"))
 	}
 	return
 }
