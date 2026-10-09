@@ -1,4 +1,5 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlaygroundIssuerConnection } from "./usePlaygroundIssuerConnection";
 import { PlaygroundElements } from "./PlaygroundElements";
@@ -104,7 +105,7 @@ describe("PlaygroundElements connection states", () => {
       errorMessage,
     });
     mount();
-    expect(screen.getByRole("alert").textContent).toBe(errorMessage);
+    expect(screen.getByRole("alert").textContent).toContain(errorMessage);
     expect(mocks.chat).not.toHaveBeenCalled();
   });
 
@@ -133,4 +134,79 @@ describe("PlaygroundElements connection states", () => {
       gatewayToken: "token-S",
     });
   });
+});
+
+it.each(["toolset", "connection"])(
+  "retries only the failed %s stage and blocks chat while retrying",
+  (stage) => {
+    const retryToolset = vi.fn();
+    mocks.toolset.mockReturnValue({
+      isError: stage === "toolset",
+      refetch: retryToolset,
+    });
+    mocks.connection.mockReturnValue({
+      ...connected,
+      isError: stage === "connection",
+      errorMessage: "Temporary failure",
+    });
+    const { rerender } = mount();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(retryToolset).toHaveBeenCalledTimes(stage === "toolset" ? 1 : 0);
+    expect(connected.refetch).toHaveBeenCalledTimes(
+      stage === "connection" ? 1 : 0,
+    );
+    mocks.toolset.mockReturnValue({
+      isError: stage === "toolset",
+      isFetching: stage === "toolset",
+    });
+    mocks.connection.mockReturnValue({
+      ...connected,
+      isLoading: stage === "connection",
+      isError: stage === "connection",
+    });
+    rerender(
+      <PlaygroundElements
+        toolsetSlug="selected"
+        environmentSlug={null}
+        model="test"
+      />,
+    );
+    expect(screen.getByRole("status").textContent).toContain("Connecting");
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(mocks.chat).not.toHaveBeenCalled();
+    mocks.toolset.mockReturnValue({ data: { id: "T", slug: "selected" } });
+    mocks.connection.mockReturnValue(connected);
+    rerender(
+      <PlaygroundElements
+        toolsetSlug="selected"
+        environmentSlug={null}
+        model="test"
+      />,
+    );
+    expect(screen.getByText("Chat ready")).toBeTruthy();
+  },
+);
+
+it("preserves mounted chat when a healthy cached connection refreshes", () => {
+  const mounted = vi.fn();
+  const unmounted = vi.fn();
+  mocks.chat.mockImplementation(function Chat() {
+    useEffect(() => {
+      mounted();
+      return unmounted;
+    }, []);
+    return <div>Chat ready</div>;
+  });
+  const { rerender } = mount();
+  mocks.connection.mockReturnValue({ ...connected });
+  rerender(
+    <PlaygroundElements
+      toolsetSlug="selected"
+      environmentSlug={null}
+      model="test"
+    />,
+  );
+  expect(mounted).toHaveBeenCalledTimes(1);
+  expect(unmounted).not.toHaveBeenCalled();
+  expect(screen.getByText("Chat ready")).toBeTruthy();
 });

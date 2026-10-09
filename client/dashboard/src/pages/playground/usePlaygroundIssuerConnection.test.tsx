@@ -1,5 +1,9 @@
-import { cleanup, renderHook, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQuery,
+} from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
@@ -338,3 +342,205 @@ describe("usePlaygroundIssuerConnection selected target alignment", () => {
     );
   });
 });
+
+// Exercise query transitions, not only static status mocks: the hooks keep
+// cached data after refresh errors and refetch must not restart earlier stages.
+function liveQueries() {
+  const lookup = vi.fn().mockResolvedValue(selected);
+  const probe = vi.fn().mockResolvedValue({});
+  mocks.server.mockImplementation(function useServer() {
+    return useQuery({
+      queryKey: ["selected-server"],
+      queryFn: lookup,
+      retry: false,
+      throwOnError: false,
+    });
+  });
+  mocks.probe.mockImplementation(function useProbe(
+    url: string | undefined,
+    options: { enabled: boolean; headers?: { Authorization: string } },
+  ) {
+    const query = useQuery({
+      queryKey: [
+        "proxiedMcpTools",
+        url,
+        options.headers
+          ? [`Authorization:${options.headers.Authorization}`]
+          : [],
+      ],
+      queryFn: probe,
+      enabled: options.enabled,
+      retry: false,
+      throwOnError: false,
+      staleTime: Infinity,
+    });
+    return {
+      tools: query.data,
+      isLoading: query.isLoading,
+      isError: query.isError,
+      needsAuth: query.isError && query.error?.message.includes("401"),
+      refetch: () => void query.refetch(),
+    };
+  });
+  return { lookup, probe };
+}
+describe("stage-aware retries", () => {
+  it.each(["lookup", "mint", "probe", "401"])(
+    "recovers a transient %s failure without retrying earlier stages",
+    async (stage) => {
+      const { lookup, probe } = liveQueries();
+      const failed =
+        stage === "lookup" ? lookup : stage === "mint" ? mocks.mint : probe;
+      failed.mockRejectedValueOnce(
+        new Error(stage === "401" ? "HTTP 401" : "temporary failure"),
+      );
+      const { result } = mount();
+      await waitFor(() =>
+        expect(
+          stage === "401" ? result.current.needsAuth : result.current.isError,
+        ).toBe(true),
+      );
+      if (stage === "401") {
+        result.current.connect();
+        expect(window.open).toHaveBeenCalledWith(
+          "https://platform.example/mcp/selected/connect/first-party",
+          "_blank",
+          "noopener,noreferrer",
+        );
+      }
+      let finish!: (value: unknown) => void;
+      failed.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+      act(() => {
+        result.current.refetch();
+        result.current.refetch();
+      });
+      await waitFor(() => expect(result.current.isLoading).toBe(true));
+      expect(result.current.connected).toBe(false);
+      await act(async () =>
+        finish(
+          stage === "lookup"
+            ? selected
+            : stage === "mint"
+              ? { accessToken: "token-S" }
+              : {},
+        ),
+      );
+      await waitFor(() => expect(result.current.connected).toBe(true));
+      expect(lookup).toHaveBeenCalledTimes(stage === "lookup" ? 2 : 1);
+      expect(mocks.mint).toHaveBeenCalledTimes(stage === "mint" ? 2 : 1);
+      expect(probe).toHaveBeenCalledTimes(
+        stage === "probe" || stage === "401" ? 2 : 1,
+      );
+      for (const [request] of mocks.mint.mock.calls) {
+        expect(request.request.mintUserSessionRequestBody).toEqual({
+          mcpServerId: "S",
+        });
+      }
+    },
+  );
+  it.each(["disabled", "addressless"])(
+    "refreshes the authoritative %s target before minting",
+    async (state) => {
+      const { lookup } = liveQueries();
+      lookup.mockResolvedValueOnce({
+        ...selected,
+        ...(state === "disabled"
+          ? { visibility: "disabled" }
+          : { platformEndpointSlug: undefined }),
+      });
+      const { result } = mount();
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(mocks.mint).not.toHaveBeenCalled();
+      act(() => result.current.refetch());
+      await waitFor(() => expect(result.current.connected).toBe(true));
+      expect(lookup).toHaveBeenCalledTimes(2);
+      expect(mocks.mint).toHaveBeenCalledTimes(1);
+    },
+  );
+  it("does not use a cached token after a failed refresh", async () => {
+    const { probe } = liveQueries();
+    const { result, client } = mount();
+    await waitFor(() => expect(result.current.connected).toBe(true));
+    mocks.mint.mockRejectedValueOnce(new Error("refresh failed"));
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ["userSessionToken"] });
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.accessToken).toBe("token-S");
+    expect(result.current.connected).toBe(false);
+    const probes = probe.mock.calls.length;
+    act(() => result.current.refetch());
+    await waitFor(() => expect(result.current.connected).toBe(true));
+    expect(probe).toHaveBeenCalledTimes(probes);
+    expect(mocks.mint).toHaveBeenCalledTimes(3);
+  });
+});
+
+it("re-resolves a failed lookup before minting for a changed selection", async () => {
+  const { lookup } = liveQueries();
+  const { result, client } = mount();
+  await waitFor(() => expect(result.current.connected).toBe(true));
+  lookup.mockRejectedValueOnce(new Error("lookup refresh failed"));
+  await act(async () => {
+    await client.refetchQueries({ queryKey: ["selected-server"] });
+  });
+  await waitFor(() => expect(result.current.isError).toBe(true));
+  expect(result.current.accessToken).toBeUndefined();
+  lookup.mockResolvedValueOnce({
+    ...selected,
+    id: "S2",
+    platformEndpointSlug: "selected-2",
+    userSessionIssuerId: "issuer-S2",
+  });
+  mocks.mint.mockResolvedValueOnce({ accessToken: "token-S2" });
+  act(() => result.current.refetch());
+  await waitFor(() => expect(result.current.connected).toBe(true));
+  expect(mocks.mint).toHaveBeenCalledTimes(2);
+  expect(
+    mocks.mint.mock.calls.map(
+      ([request]) => request.request.mintUserSessionRequestBody,
+    ),
+  ).toEqual([{ mcpServerId: "S" }, { mcpServerId: "S2" }]);
+  expect(result.current.accessToken).toBe("token-S2");
+  expect(result.current.mcpUrl).toBe("https://platform.example/mcp/selected-2");
+});
+
+it.each(["userSessionToken", "proxiedMcpTools"])(
+  "keeps healthy cached chat connected during %s refresh",
+  async (key) => {
+    const { probe } = liveQueries();
+    const { result, client } = mount();
+    await waitFor(() => expect(result.current.connected).toBe(true));
+    const request = key === "userSessionToken" ? mocks.mint : probe;
+    let finish!: (value: unknown) => void;
+    request.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    act(() => {
+      void client.refetchQueries({ queryKey: [key] });
+    });
+    await waitFor(() => expect(client.isFetching({ queryKey: [key] })).toBe(1));
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.connected).toBe(true);
+    expect(result.current.accessToken).toBe("token-S");
+    expect(result.current.isError).toBe(false);
+    // Even though this healthy refresh does not block chat, Retry cannot cancel
+    // it or start a second request against the same target.
+    const requests = request.mock.calls.length;
+    act(() => result.current.refetch());
+    expect(request).toHaveBeenCalledTimes(requests);
+    await act(async () =>
+      finish(key === "userSessionToken" ? { accessToken: "token-S" } : {}),
+    );
+    await waitFor(() => expect(client.isFetching({ queryKey: [key] })).toBe(0));
+    expect(result.current.connected).toBe(true);
+  },
+);

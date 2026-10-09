@@ -74,7 +74,13 @@ function IssuerLoginConnection({
             Login
           </Text>
           {isLoading ? (
-            <Loader2 className="text-muted-foreground size-4 animate-spin" />
+            <span
+              role="status"
+              className="text-muted-foreground flex items-center gap-2"
+            >
+              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+              <Text variant="small">Checking connection…</Text>
+            </span>
           ) : isError ? (
             <Badge variant="warning">Connection unavailable</Badge>
           ) : connected ? (
@@ -95,6 +101,12 @@ function IssuerLoginConnection({
           <Text variant="small" role="alert">
             {errorMessage ?? "Unable to check the login connection."}
           </Text>
+        )}
+
+        {isError && !isLoading && (
+          <Button size="sm" variant="secondary" onClick={refetch}>
+            Retry
+          </Button>
         )}
 
         {!connected && !isLoading && !isError && (
@@ -213,21 +225,6 @@ export function PlaygroundAuth({
     }
   };
 
-  if (target.status !== "ready") {
-    return <ToolsetMcpTargetStatus status={target.status} />;
-  }
-
-  // Show "no auth required" only if there are no env vars AND no interactive login
-  if (envVars.length === 0 && !loginSecured) {
-    return (
-      <div className="py-4 text-center">
-        <Text variant="small" className="text-muted-foreground">
-          No authentication required
-        </Text>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-3">
       {/* Environment indicator */}
@@ -241,9 +238,18 @@ export function PlaygroundAuth({
       )}
 
       {/* Interactive (first-party) login for issuer-gated toolsets */}
-      {loginSecured && (
+      {target.status !== "ready" ? (
+        <ToolsetMcpTargetStatus
+          status={target.status}
+          onRetry={target.refetch}
+        />
+      ) : loginSecured ? (
         <IssuerLoginConnection toolset={toolset} providerName={toolset.name} />
-      )}
+      ) : envVars.length === 0 ? (
+        <Text variant="small" className="text-muted-foreground">
+          No authentication required
+        </Text>
+      ) : null}
 
       {/* Environment Variables */}
       {envVars.map((envVar) => {

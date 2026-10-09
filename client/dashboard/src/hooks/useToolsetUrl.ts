@@ -5,7 +5,7 @@ import type { DomainDNSConfig } from "@gram/client/models/components/domaindnsco
 import { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useListDomains } from "@gram/client/react-query/listDomains.js";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 
@@ -217,6 +217,7 @@ export function useToolsetMcpTarget(
   legacy: boolean;
   status: "idle" | "loading" | "error" | "unavailable" | "ready";
   isLoading: boolean;
+  refetch: () => void;
 } {
   const project = useProject();
   const server = useGetMcpServer({ toolsetId: toolset?.id }, undefined, {
@@ -234,7 +235,9 @@ export function useToolsetMcpTarget(
     server.error.statusCode === 404;
   const status = !toolset
     ? "idle"
-    : server.isLoading
+    : server.isLoading ||
+        (server.isFetching &&
+          (server.isError || !enabledServer?.platformEndpointSlug))
       ? "loading"
       : server.isError && !legacy
         ? "error"
@@ -243,6 +246,11 @@ export function useToolsetMcpTarget(
           : enabledServer || legacy
             ? "ready"
             : "loading";
+  const refetchServer = server.refetch;
+  const refetch = useCallback(() => {
+    if (toolset?.id)
+      void refetchServer({ throwOnError: false, cancelRefetch: false });
+  }, [toolset?.id, refetchServer]);
   const platformSlug = enabledServer?.platformEndpointSlug;
   // Playground/connect require the platform origin (session cookie and CSP).
   // Custom-only servers remain unavailable here; never reuse their slug there.
@@ -261,6 +269,7 @@ export function useToolsetMcpTarget(
     legacy,
     status,
     isLoading: status === "loading",
+    refetch,
   };
 }
 

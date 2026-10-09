@@ -172,6 +172,73 @@ describe("useToolsetMcpTarget", () => {
     expect(result.current.status).toBe("ready");
     expect(result.current.userSessionIssuerId).toBeUndefined();
   });
+  it("retries lookup without reviving retained identity and then accepts the new target", () => {
+    const refetch = vi.fn().mockResolvedValue({});
+    mocks.server.mockReturnValue({
+      data: selected,
+      isError: true,
+      error: serviceError(503),
+      refetch,
+    });
+    const { result, rerender } = renderHook(() => useToolsetMcpTarget(toolset));
+    expect(result.current.status).toBe("error");
+    result.current.refetch();
+    expect(refetch).toHaveBeenCalledOnce();
+    expect(refetch).toHaveBeenCalledWith({
+      throwOnError: false,
+      cancelRefetch: false,
+    });
+    mocks.server.mockReturnValue({
+      data: selected,
+      isError: true,
+      isFetching: true,
+      error: serviceError(503),
+      refetch,
+    });
+    rerender();
+    expect(result.current.status).toBe("loading");
+    expect(result.current.serverId).toBeUndefined();
+    expect(result.current.url).toBeUndefined();
+    mocks.server.mockReturnValue({
+      data: {
+        ...selected,
+        id: "S2",
+        userSessionIssuerId: "issuer-S2",
+        platformEndpointSlug: "selected-2",
+      },
+      refetch,
+    });
+    rerender();
+    expect(result.current).toMatchObject({
+      status: "ready",
+      serverId: "S2",
+      userSessionIssuerId: "issuer-S2",
+      url: "https://platform.example/mcp/selected-2",
+    });
+  });
+  it.each([
+    { ...selected, visibility: "disabled" },
+    { ...selected, platformEndpointSlug: undefined },
+  ])("shows loading while retrying an unusable cached target", (data) => {
+    mocks.server.mockReturnValue({ data, isFetching: true });
+    const { result } = renderHook(() => useToolsetMcpTarget(toolset));
+    expect(result.current.status).toBe("loading");
+  });
+  it("keeps healthy cached targets ready during background refresh", () => {
+    mocks.server.mockReturnValue({ data: selected, isFetching: true });
+    const { result } = renderHook(() => useToolsetMcpTarget(toolset));
+    expect(result.current).toMatchObject({
+      status: "ready",
+      serverId: selected.id,
+    });
+  });
+  it("does not refetch an unselected target", () => {
+    const refetch = vi.fn();
+    mocks.server.mockReturnValue({ refetch });
+    const { result } = renderHook(() => useToolsetMcpTarget(undefined));
+    result.current.refetch();
+    expect(refetch).not.toHaveBeenCalled();
+  });
   it("updates the complete selected tuple together", () => {
     const { result, rerender } = renderHook(() => useToolsetMcpTarget(toolset));
     mocks.server.mockReturnValue({

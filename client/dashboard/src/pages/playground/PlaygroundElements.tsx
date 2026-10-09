@@ -5,6 +5,7 @@ import { useRoutes } from "@/routes";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
 import { AlertCircle, ShieldAlert } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { usePlaygroundIssuerConnection } from "./usePlaygroundIssuerConnection";
 import { PlaygroundChat } from "./PlaygroundChat";
@@ -36,6 +37,8 @@ export function PlaygroundElements({
     data: toolset,
     isLoading: isToolsetLoading,
     isError: isToolsetError,
+    isFetching: isToolsetFetching,
+    refetch: refetchToolset,
   } = useToolset(toolsetSlug ?? undefined, { throwOnError: false });
 
   // Get environments and MCP metadata for auth status check
@@ -92,17 +95,11 @@ export function PlaygroundElements({
     );
   }
 
-  if (isToolsetError || issuerConnection.isError) {
-    return (
-      <ConnectionNotice error>
-        {isToolsetError
-          ? "Unable to load the selected MCP server. Try again."
-          : issuerConnection.errorMessage}
-      </ConnectionNotice>
-    );
-  }
-
-  if (isToolsetLoading || issuerConnection.isLoading) {
+  if (
+    isToolsetLoading ||
+    (isToolsetError && isToolsetFetching) ||
+    issuerConnection.isLoading
+  ) {
     return (
       <ConnectionNotice>
         Connecting to the selected MCP server…
@@ -110,9 +107,33 @@ export function PlaygroundElements({
     );
   }
 
+  if (isToolsetError || issuerConnection.isError) {
+    return (
+      <ConnectionNotice
+        error
+        onRetry={
+          isToolsetError
+            ? () => void refetchToolset({ cancelRefetch: false })
+            : issuerConnection.refetch
+        }
+      >
+        {isToolsetError
+          ? "Unable to load the selected MCP server. Try again."
+          : issuerConnection.errorMessage}
+      </ConnectionNotice>
+    );
+  }
+
   if (!mcpUrl || !toolset) {
     return (
-      <ConnectionNotice error>
+      <ConnectionNotice
+        error
+        onRetry={
+          !toolset
+            ? () => void refetchToolset({ cancelRefetch: false })
+            : issuerConnection.refetch
+        }
+      >
         The selected MCP server is unavailable.
       </ConnectionNotice>
     );
@@ -162,16 +183,23 @@ export function PlaygroundElements({
 function ConnectionNotice({
   children,
   error = false,
+  onRetry,
 }: {
   children: React.ReactNode;
   error?: boolean;
+  onRetry?: () => void;
 }) {
   return (
     <div
-      className="flex h-full items-center justify-center"
+      className="flex h-full flex-col gap-3 items-center justify-center"
       role={error ? "alert" : "status"}
     >
       <Text muted>{children}</Text>
+      {onRetry && (
+        <Button variant="secondary" onClick={onRetry}>
+          Retry
+        </Button>
+      )}
     </div>
   );
 }

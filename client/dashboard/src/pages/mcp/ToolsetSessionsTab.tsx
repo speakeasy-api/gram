@@ -11,7 +11,9 @@ export function ToolsetSessionsTab({
 }): JSX.Element {
   const target = useToolsetMcpTarget(toolset);
   if (target.status !== "ready") {
-    return <ToolsetMcpTargetStatus status={target.status} />;
+    return (
+      <ToolsetMcpTargetStatus status={target.status} onRetry={target.refetch} />
+    );
   }
 
   return (

@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/Button";
 import type { useToolsetMcpTarget } from "@/hooks/useToolsetUrl";
 import { Text } from "@/components/ui/Text";
 
@@ -9,15 +10,17 @@ type PendingStatus = Exclude<
 const messages: Record<PendingStatus, string> = {
   idle: "Select an MCP server to view authentication and sessions.",
   loading: "Loading MCP server authentication…",
-  error: "Unable to load MCP server authentication. Try refreshing the page.",
+  error: "Unable to load MCP server authentication.",
   unavailable:
     "This MCP server is disabled. Enable it to view authentication and sessions.",
 };
 
 export function ToolsetMcpTargetStatus({
   status,
+  onRetry,
 }: {
   status: PendingStatus;
+  onRetry?: () => void;
 }): JSX.Element {
   return (
     <div
@@ -27,6 +30,11 @@ export function ToolsetMcpTargetStatus({
       <Text variant="small" className="text-muted-foreground">
         {messages[status]}
       </Text>
+      {status === "error" && onRetry && (
+        <Button size="sm" variant="secondary" onClick={onRetry}>
+          Retry
+        </Button>
+      )}
     </div>
   );
 }
