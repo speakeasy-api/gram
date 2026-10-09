@@ -29,6 +29,20 @@ func TestEmployeeSearchCursorRoundTrips(t *testing.T) {
 	}
 }
 
+// The cursor is handed to dashboards and held across deploys, so its wire
+// format is pinned literally: a round trip alone would pass after coordinated
+// changes to both helpers that break cursors already in flight.
+func TestEmployeeSearchCursorWireFormat(t *testing.T) {
+	t.Parallel()
+
+	cursor := encodeEmployeeSearchCursor(42, "ext:user:7")
+	require.Equal(t, "ls1:NDI6ZXh0OnVzZXI6Nw", cursor)
+
+	key, lastSeen := decodeEmployeeSearchCursor("ls1:NDI6ZXh0OnVzZXI6Nw")
+	require.Equal(t, "ext:user:7", key)
+	require.Equal(t, int64(42), lastSeen)
+}
+
 // A cursor that is not a well-formed sealed cursor is the bare group key a
 // dashboard was handed before the boundary was sealed. It must resolve to that
 // key with no sealed boundary, never to an error.
