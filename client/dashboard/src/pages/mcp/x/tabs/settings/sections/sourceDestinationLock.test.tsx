@@ -304,8 +304,24 @@ describe("useUpstreamUrlDraft", () => {
     expect(result.current.dirty).toBe(false);
     expect(result.current.fieldError).toBeFalsy();
 
-    // A lock that clears (e.g. a failed refresh that later succeeds) brings
-    // the typed URL back.
+    // A refusal discards the draft, so a later grant does not restore it.
+    rerender({ source: remote });
+    expect(result.current.draft).toBe(remote.url);
+    expect(result.current.dirty).toBe(false);
+  });
+
+  it("keeps the draft through a lock a failed refresh makes unknown", () => {
+    const { result, rerender } = renderHook(
+      ({ source }: { source: RemoteMcpServer }) => useUpstreamUrlDraft(source),
+      { wrapper, initialProps: { source: remote } },
+    );
+    act(() => result.current.setDraft("https://example.com/moved"));
+
+    rerender({ source: { ...remote, environmentLinkAuthorized: undefined } });
+    expect(result.current.lockedReason).toBe(SOURCE_DESTINATION_UNKNOWN_REASON);
+    expect(result.current.draft).toBe(remote.url);
+    expect(result.current.dirty).toBe(false);
+
     rerender({ source: remote });
     expect(result.current.draft).toBe("https://example.com/moved");
     expect(result.current.dirty).toBe(true);

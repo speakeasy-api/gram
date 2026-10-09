@@ -43,9 +43,16 @@ export function useUpstreamUrlDraft(
 
   // A locked URL cannot be edited or saved, so it shows the canonical value:
   // a dirty draft there would only block saving the rest of the form (e.g.
-  // after the server refuses it). The draft itself is kept, so typing survives
-  // a lock that a failed background refresh makes briefly unknown.
+  // after the server refuses it). An unknown lock (a failed background
+  // refresh) keeps the draft so typing survives it; a refusal discards it, so
+  // a later grant does not bring back a URL the user has moved on from.
   const lock = sourceDestinationLock(remoteMcpServer);
+  const refused = remoteMcpServer.environmentLinkAuthorized === false;
+  useEffect(() => {
+    if (!refused) return;
+    setDraft(initialUrl);
+    setTouched(false);
+  }, [refused, initialUrl]);
   const shown = lock.reason === null ? draft : initialUrl;
 
   const queryClient = useQueryClient();

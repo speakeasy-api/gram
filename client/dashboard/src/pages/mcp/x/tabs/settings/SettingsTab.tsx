@@ -196,7 +196,7 @@ export function SettingsTab({
         </>
       )}
       <AuthenticationSection mcpServer={mcpServer} />
-      {tunneledMcpServer ? (
+      {tunneledMcpServer && tunneledForLock ? (
         <Fragment key={tunneledMcpServer.id}>
           <ResourceIdentifierSection tunneledMcpServer={tunneledMcpServer} />
           <TunneledHeadersSection
@@ -209,9 +209,7 @@ export function SettingsTab({
             tunneledMcpServerId={tunneledMcpServer.id}
             projectId={mcpServer.projectId}
           />
-          <TunnelKeySection
-            tunneledMcpServer={tunneledForLock ?? tunneledMcpServer}
-          />
+          <TunnelKeySection tunneledMcpServer={tunneledForLock} />
           <AgentSetupSection tunneledMcpServer={tunneledMcpServer} />
         </Fragment>
       ) : null}
