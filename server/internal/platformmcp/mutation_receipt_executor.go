@@ -65,6 +65,21 @@ func executeChargedMutationReceipt[T any](ctx context.Context, charge func(conte
 	return executeMutationReceipt(ctx, execution)
 }
 
+// chargeRerun charges the work that follows a committed receipt: a provider
+// reconciliation, a publish or index signal. A first attempt already paid for
+// it with its own charge, so it returns nil at once. A replay answers free, but
+// re-running that work is real provider or Temporal traffic, so it is charged
+// here and the caller skips or refuses the work when this fails. A retry loop
+// then cannot send unbounded work, while a retry within the allowance still
+// recovers a sync that failed after the commit. Like the main charge, it must
+// run outside any transaction.
+func chargeRerun(ctx context.Context, receipt OperationReceipt, charge func(context.Context) error) error {
+	if !receipt.Replayed {
+		return nil
+	}
+	return charge(ctx)
+}
+
 // noReplay is the empty receipt a pre-check returns beside false.
 var noReplay OperationReceipt
 

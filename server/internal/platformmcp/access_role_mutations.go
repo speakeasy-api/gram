@@ -198,7 +198,9 @@ func (s *AccessRoleMutationService) Create(ctx context.Context, principal Princi
 	if err != nil {
 		return CreateMCPAccessRoleOutput{}, err
 	}
-	s.backend.ReconcileRoleIdentity(ctx, workosOrgID, result.RoleSlug, result.Name, result.Description, true)
+	if chargeRerun(ctx, receipt, s.charge(principal)) == nil {
+		s.backend.ReconcileRoleIdentity(ctx, workosOrgID, result.RoleSlug, result.Name, result.Description, true)
+	}
 	summary, err := s.outputSummary(principal, result)
 	if err != nil {
 		return CreateMCPAccessRoleOutput{}, err

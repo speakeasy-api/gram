@@ -333,7 +333,8 @@ func TestAddToolsToMCPReplaysOneIdempotencyKeyWithoutAppendingTwice(t *testing.T
 
 // A retry of a change that already committed does no work, so it must still
 // return its stored result once the caller's allowance is spent, rather than
-// coming back rate_limited.
+// coming back rate_limited. Re-sending its index signal is work, though, so
+// that is skipped and reported.
 func TestAddToolsToMCPReplaysWithASpentAllowance(t *testing.T) {
 	t.Parallel()
 	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_add_tools_replay_spent")
@@ -353,6 +354,8 @@ func TestAddToolsToMCPReplaysWithASpentAllowance(t *testing.T) {
 	require.NoError(t, err, "a replay must not be charged against a spent allowance")
 	require.True(t, replay.Receipt.Replayed)
 	require.Equal(t, first.Receipt.ID, replay.Receipt.ID)
+	require.Equal(t, "applied", replay.Outcome)
+	require.Equal(t, "rate_limited", replay.IndexSignal, "a replay over a spent allowance must not schedule the index again")
 
 	fresh := input
 	fresh.IdempotencyKey = uuid.NewString()

@@ -84,7 +84,8 @@ func TestAssignMCPAccessRolePreservesRolesAndReplays(t *testing.T) {
 	t.Cleanup(single.Close)
 	reads := NewAccessReadService(logger, single, allowBudget(), "assignment-integration-key")
 	manager := access.NewRoleManager(logger, single, workos.NewStubClient(), audit.NewLogger(), plugins.PublicationRequests{Enabled: false}, nil)
-	roles, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "assignment-integration-key", manager)
+	backend := &countingRoleBackend{RoleManager: manager, identityReconciles: 0, memberReconciles: 0}
+	roles, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "assignment-integration-key", backend)
 	require.NoError(t, err)
 	service, err := NewAccessRoleAssignmentService(roles)
 	require.NoError(t, err)
@@ -123,6 +124,17 @@ func TestAssignMCPAccessRolePreservesRolesAndReplays(t *testing.T) {
 	replayed, err := service.Assign(ctx, principal, input)
 	require.NoError(t, err)
 	require.True(t, replayed.Receipt.Replayed)
+	require.Equal(t, 2, backend.memberReconciles, "a replay within the allowance re-runs reconciliation, so a failed sync recovers")
+
+	// Once the allowance is spent the replay still answers, but its provider
+	// reconciliation is not sent again.
+	budget := roles.budget
+	roles.budget = OperationBudget{Connection: denyOperationLimiter{}, Organization: denyOperationLimiter{}}
+	spent, err := service.Assign(ctx, principal, input)
+	require.NoError(t, err, "a replay must not be refused over a spent allowance")
+	require.True(t, spent.Receipt.Replayed)
+	require.Equal(t, 2, backend.memberReconciles, "a replay over a spent allowance must not reconcile again")
+	roles.budget = budget
 	afterAudit, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionAccessMemberRoleUpdate)
 	require.NoError(t, err)
 	require.Equal(t, beforeAudit+1, afterAudit)

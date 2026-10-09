@@ -172,9 +172,10 @@ func (s *PluginsService) RepublishPlugin(ctx context.Context, principal Principa
 	// Charged after the target is resolved, so a refused call does not spend
 	// the allowance, and only when no completed receipt answers the request;
 	// see executeChargedMutationReceipt.
-	receipt, err := executeChargedMutationReceipt(ctx, func(ctx context.Context) error {
+	charge := func(ctx context.Context) error {
 		return s.republishBudget.AllowConnectionOrOrganization(ctx, principal)
-	}, mutationReceiptExecution[pluginRepublishReceipt]{
+	}
+	receipt, err := executeChargedMutationReceipt(ctx, charge, mutationReceiptExecution[pluginRepublishReceipt]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operationRepublishPlugin,
 		IdempotencyKey: input.IdempotencyKey, InputHash: hex.EncodeToString(digest[:]), Label: "plugin republish",
 		Invalid: func(error) error { return pluginRepublishInvalid("The republish request is invalid.") },
@@ -229,8 +230,12 @@ func (s *PluginsService) RepublishPlugin(ctx context.Context, principal Principa
 	// A durable outbox request already covers the publish. Otherwise signal
 	// the debounced publish now that the receipt committed; a replay signals
 	// again, which the debounce collapses, so a retry after a failed signal
-	// recovers.
-	if stored.Outcome == PluginRepublishEnqueued {
+	// recovers. That repeat signal is charged, so a retry loop over the spent
+	// allowance is refused instead of signalling without bound.
+	if stored.Outcome == PluginRepublishEnqueued && stored.Publication != string(plugindelivery.ProjectPublicationEnqueued) {
+		if err := chargeRerun(ctx, receipt, charge); err != nil {
+			return RepublishPluginOutput{}, err
+		}
 		if err := plugindelivery.SignalPluginPublishAfterRequest(ctx, s.publisher, plugindelivery.ProjectPublicationRequestOutcome(stored.Publication), project.ID, principal.UserID); err != nil {
 			return RepublishPluginOutput{}, pluginRepublishUnavailable(err)
 		}

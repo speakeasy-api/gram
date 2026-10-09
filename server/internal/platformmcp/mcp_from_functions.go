@@ -215,7 +215,7 @@ func (s *MCPToolExposureService) createMCPFromFunctions(ctx context.Context, pri
 	if err := json.Unmarshal(receipt.ResultPayload, &stored); err != nil {
 		return CreateMCPFromFunctionsOutput{}, mcpFromFunctionsUnavailable(err)
 	}
-	return s.finishMCPFromFunctions(ctx, principal, project, stored, receipt), nil
+	return s.finishMCPFromFunctions(ctx, principal, project, stored, receipt, charge), nil
 }
 
 func (s *MCPToolExposureService) createMCPFromFunctionsInTransaction(ctx context.Context, tx pgx.Tx, principal Principal, project ResolvedProject, organizationSlug, name string, requested []urn.Tool) (mcpFromFunctionsReceipt, error) {
@@ -285,7 +285,7 @@ func (s *MCPToolExposureService) createMCPFromFunctionsInTransaction(ctx context
 	return result, nil
 }
 
-func (s *MCPToolExposureService) finishMCPFromFunctions(ctx context.Context, principal Principal, project ResolvedProject, stored mcpFromFunctionsReceipt, receipt OperationReceipt) CreateMCPFromFunctionsOutput {
+func (s *MCPToolExposureService) finishMCPFromFunctions(ctx context.Context, principal Principal, project ResolvedProject, stored mcpFromFunctionsReceipt, receipt OperationReceipt, charge func(context.Context) error) CreateMCPFromFunctionsOutput {
 	output := CreateMCPFromFunctionsOutput{
 		Outcome: "created", MCPID: stored.MCPID, MCPName: stored.MCPName, MCPSlug: stored.MCPSlug, Visibility: stored.Visibility,
 		AddedToDefaultPlugin: stored.AddedToDefaultPlugin,
@@ -297,8 +297,14 @@ func (s *MCPToolExposureService) finishMCPFromFunctions(ctx context.Context, pri
 	// particular still needs it: with emission enabled it means the project
 	// has no marketplace connection yet, and the publish can create that first
 	// repository, exactly as the dashboard's first-server path does.
+	//
+	// A replay re-sends these signals only within the allowance; see
+	// chargeRerun.
+	rerun := chargeRerun(ctx, receipt, charge) == nil
 	if stored.AddedToDefaultPlugin && stored.Publication != string(plugins.ProjectPublicationEnqueued) {
-		if s.publisher == nil {
+		if !rerun {
+			output.PublishSignal = "rate_limited"
+		} else if s.publisher == nil {
 			output.PublishSignal = "unavailable"
 		} else if err := plugins.SignalPluginPublishAfterRequest(ctx, s.publisher, plugins.ProjectPublicationRequestOutcome(stored.Publication), project.ID, principal.UserID); err != nil {
 			output.PublishSignal = "request_failed"
@@ -312,7 +318,10 @@ func (s *MCPToolExposureService) finishMCPFromFunctions(ctx context.Context, pri
 	// a dynamic-mode server refuses tools/list outright until one exists. The
 	// target is the toolset recorded in the receipt, so a replay schedules the
 	// toolset the original wrote.
-	output.IndexSignal = s.scheduleIndex(ctx, project.ID, stored.ToolsetID)
+	output.IndexSignal = "rate_limited"
+	if rerun {
+		output.IndexSignal = s.scheduleIndex(ctx, project.ID, stored.ToolsetID)
+	}
 
 	mcpID, err := uuid.Parse(stored.MCPID)
 	if err != nil {

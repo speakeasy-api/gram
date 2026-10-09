@@ -150,7 +150,9 @@ func (s *AccessRoleAssignmentService) Assign(ctx context.Context, principal Prin
 			stored.Reconciliation = "not_applicable"
 		}
 	}
-	s.roles.backend.ReconcileMemberRoles(ctx, reconciliation)
+	if chargeRerun(ctx, receipt, s.roles.charge(principal)) == nil {
+		s.roles.backend.ReconcileMemberRoles(ctx, reconciliation)
+	}
 	return AssignMCPAccessRoleOutput{
 		Member:        AccessRoleAssignmentMember{MaskedIdentity: stored.MaskedIdentity, Roles: slices.Clone(stored.Roles), Version: stored.Version},
 		SnapshotScope: "assignment_commit",

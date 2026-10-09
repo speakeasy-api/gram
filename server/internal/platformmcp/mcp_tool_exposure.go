@@ -167,6 +167,8 @@ type MCPToolExposureMutationOutput struct {
 	//                    serves it without one
 	//   unavailable    — nothing could schedule a rebuild on this deployment
 	//   request_failed — scheduling was attempted and failed
+	//   rate_limited   — a replay of a committed change found the allowance
+	//                    spent, so the rebuild was not scheduled again
 	IndexSignal string                  `json:"index_signal"`
 	Receipt     RiskMutationToolReceipt `json:"receipt"`
 }
@@ -568,10 +570,10 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 	if err := json.Unmarshal(receipt.ResultPayload, &stored); err != nil {
 		return MCPToolExposureMutationOutput{}, toolExposureUnavailable(err)
 	}
-	return s.finish(ctx, principal, project, mcpID, stored, receipt), nil
+	return s.finish(ctx, principal, project, mcpID, stored, receipt, charge), nil
 }
 
-func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal, project ResolvedProject, mcpID uuid.UUID, stored toolExposureReceipt, receipt OperationReceipt) MCPToolExposureMutationOutput {
+func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal, project ResolvedProject, mcpID uuid.UUID, stored toolExposureReceipt, receipt OperationReceipt, charge func(context.Context) error) MCPToolExposureMutationOutput {
 	output := MCPToolExposureMutationOutput{
 		Outcome: stored.Outcome, Applied: stored.Applied, Unchanged: stored.Unchanged,
 		Distributions: []MCPDistribution{}, PublicationRequest: stored.Publication, PublishSignal: "not_requested",
@@ -583,8 +585,14 @@ func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal
 	if output.Unchanged == nil {
 		output.Unchanged = []string{}
 	}
-	if stored.Outcome == "applied" && stored.Publication != string(plugins.ProjectPublicationEnqueued) {
-		if s.publisher == nil {
+	applied := stored.Outcome == "applied"
+	// A replay re-sends the signals below only within the allowance; see
+	// chargeRerun.
+	rerun := applied && chargeRerun(ctx, receipt, charge) == nil
+	if applied && stored.Publication != string(plugins.ProjectPublicationEnqueued) {
+		if !rerun {
+			output.PublishSignal = "rate_limited"
+		} else if s.publisher == nil {
 			output.PublishSignal = "unavailable"
 		} else if err := plugins.SignalPluginPublishAfterRequest(ctx, s.publisher, plugins.ProjectPublicationRequestOutcome(stored.Publication), project.ID, principal.UserID); err != nil {
 			output.PublishSignal = "request_failed"
@@ -613,8 +621,10 @@ func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal
 	// concurrent repoint lands, which would rebuild one this change never
 	// touched and leave the one it did touch unindexed. Only a real change
 	// needs it — a no-op created no version.
-	if stored.Outcome == "applied" {
+	if rerun {
 		output.IndexSignal = s.scheduleIndex(ctx, project.ID, stored.ToolsetID)
+	} else if applied {
+		output.IndexSignal = "rate_limited"
 	}
 	exposure, err := s.Exposure(ctx, principal, project.ID, mcpID)
 	if err != nil {
