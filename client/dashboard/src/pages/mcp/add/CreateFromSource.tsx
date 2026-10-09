@@ -277,7 +277,10 @@ export default function CreateFromSource(): JSX.Element {
               )}
             </Stack>
           </fieldset>
-          <GatewayAttachmentStatus flow={flow} />
+          <GatewayAttachmentStatus
+            flow={flow}
+            serverHref={(id) => routes.mcp.x.overview.href(id)}
+          />
           {error && (
             <Alert variant="error" dismissible={false}>
               {error}
