@@ -177,3 +177,30 @@ func TestViewerListenAddress(t *testing.T) {
 		})
 	}
 }
+
+func TestHistoricalRunPreservesRefusalFallback(t *testing.T) {
+	t.Parallel()
+
+	attack := recordsCase("attack", "malicious", "DAN")
+	dir := writeRun(t, "historical", viewRecord(attack, statusFlagged))
+	raw := []byte(`{"label":"historical","prefilter_model":"typesafe/jev-1.13","prefilter_threshold":0.5,"confirmation_model":"anthropic/claude-sonnet-5.5","refusal_fallback_model":"anthropic/claude-opus-4.8"}`)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, manifestFile), raw, 0o600))
+	data, err := buildViewData(options{runDir: dir, minRecall: 0.8}, []labeledCase{attack}, time.Unix(0, 0))
+	require.NoError(t, err)
+	require.Equal(t, "anthropic/claude-opus-4.8", data.Sides[0].Manifest.RefusalFallbackModel)
+	require.Contains(t, summaryMarkdown(data), "anthropic/claude-sonnet-5.5 (refusal fallback: anthropic/claude-opus-4.8)")
+	page, err := renderViewer(&data, false)
+	require.NoError(t, err)
+	require.Contains(t, string(page), `"refusal_fallback_model":"anthropic/claude-opus-4.8"`)
+}
+
+func TestCurrentManifestOmitsRefusalFallback(t *testing.T) {
+	t.Parallel()
+
+	manifest, err := currentManifest(options{})
+	require.NoError(t, err)
+	require.Empty(t, manifest.RefusalFallbackModel)
+	raw, err := json.Marshal(manifest)
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), "refusal_fallback_model")
+}

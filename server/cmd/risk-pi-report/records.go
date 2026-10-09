@@ -130,6 +130,10 @@ type runManifest struct {
 	// ConfirmationModel confirms Jev's candidates.
 	ConfirmationModel string `json:"confirmation_model"`
 
+	// RefusalFallbackModel preserves historical run metadata for display only.
+	// Current runs do not use a refusal fallback.
+	RefusalFallbackModel string `json:"refusal_fallback_model,omitempty"`
+
 	// ConfirmationPromptSHA256 hashes the confirmer prompt.
 	ConfirmationPromptSHA256 string `json:"confirmation_prompt_sha256"`
 
@@ -602,6 +606,7 @@ func currentManifest(opts options) (runManifest, error) {
 		PrefilterModel:           typesafe.Model,
 		PrefilterThreshold:       piopenrouter.PrefilterThreshold,
 		ConfirmationModel:        piopenrouter.ConfirmationModel,
+		RefusalFallbackModel:     "",
 		ConfirmationPromptSHA256: confirmationHash,
 		PrefilterQuestionsSHA256: questionsHash,
 		Updated:                  time.Now().UTC(),

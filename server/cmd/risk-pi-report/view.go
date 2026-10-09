@@ -352,8 +352,12 @@ func summaryMarkdown(data viewData) string {
 		if m.ConfirmationModel == "" {
 			continue
 		}
-		fmt.Fprintf(&b, "- %s: %s ≥ %.2f → %s · confirmation prompt `%s` · questions `%s`\n",
-			s.Manifest.Label, m.PrefilterModel, m.PrefilterThreshold, m.ConfirmationModel, prefix(m.ConfirmationPromptSHA256), prefix(m.PrefilterQuestionsSHA256))
+		fallback := ""
+		if m.RefusalFallbackModel != "" {
+			fallback = " (refusal fallback: " + m.RefusalFallbackModel + ")"
+		}
+		fmt.Fprintf(&b, "- %s: %s ≥ %.2f → %s%s · confirmation prompt `%s` · questions `%s`\n",
+			s.Manifest.Label, m.PrefilterModel, m.PrefilterThreshold, m.ConfirmationModel, fallback, prefix(m.ConfirmationPromptSHA256), prefix(m.PrefilterQuestionsSHA256))
 	}
 	if len(data.Sides) == 2 {
 		f := compareSides(data.Cases)
