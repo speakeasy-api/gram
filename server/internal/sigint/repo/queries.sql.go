@@ -822,6 +822,7 @@ WHERE sensor.project_id = $1
   AND project.organization_id = $2
   AND project.deleted IS FALSE
   AND sensor.deleted IS FALSE
+  AND sensor.enabled IS TRUE
 ORDER BY sensor.id, member.sort_order, member.id
 `
 
@@ -841,7 +842,7 @@ type LoadEvaluationSensorsRow struct {
 	ClassifierCriteria pgtype.Text
 }
 
-// One statement captures all active definitions and membership order consistently.
+// One statement captures all enabled definitions and membership order consistently.
 func (q *Queries) LoadEvaluationSensors(ctx context.Context, arg LoadEvaluationSensorsParams) ([]LoadEvaluationSensorsRow, error) {
 	rows, err := q.db.Query(ctx, loadEvaluationSensors, arg.ProjectID, arg.OrganizationID)
 	if err != nil {

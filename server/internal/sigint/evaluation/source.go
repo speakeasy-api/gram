@@ -49,7 +49,8 @@ type Repository struct{ db *pgxpool.Pool }
 func NewRepository(db *pgxpool.Pool) *Repository { return &Repository{db: db} }
 
 // Load pins ownership to the organization and project in the same SQL statement.
-// Empty sensors are retained for draft accounting; deleted/mismatched projects
+// Disabled sensors are excluded before matching or inference. Empty enabled
+// sensors are retained for draft accounting; deleted/mismatched projects
 // yield no definitions.
 func (r *Repository) Load(ctx context.Context, org string, project uuid.UUID, kind string) ([]Sensor, error) {
 	// Existing configuration is conversation-only. New receivers must explicitly
