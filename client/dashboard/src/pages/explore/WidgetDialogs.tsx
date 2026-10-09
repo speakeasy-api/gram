@@ -1,10 +1,16 @@
 import { Button } from "@/components/ui/Button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
+import { Icon } from "@/components/ui/Icon";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { TextArea } from "@/components/ui/Textarea";
 import type { WidgetDashboard } from "@gram/client/models/components/widgetdashboard.js";
-import { useState, type FormEvent, type JSX } from "react";
+import { useState, type FormEvent, type JSX, type ReactNode } from "react";
 import { describeDashboards } from "./widgetUsage";
 import { MAX_NAME_LENGTH } from "./widgetNames";
 
@@ -33,6 +39,8 @@ interface DetailsDialogProps {
   confirm: string;
   initial: Details;
   pending: boolean;
+  /** Controls under an Advanced disclosure, for what few need to set. */
+  advanced?: ReactNode;
   onCancel: () => void;
   onSubmit: (details: Details) => void;
 }
@@ -61,6 +69,7 @@ export function DetailsDialog({
   subject,
   initial,
   pending,
+  advanced,
   onCancel,
   onSubmit,
 }: DetailsDialogProps & { subject: DetailsSubject }): JSX.Element {
@@ -106,6 +115,20 @@ export function DetailsDialog({
             aria-label={`${subject.noun} description`}
             rows={2}
           />
+          {advanced ? (
+            <Collapsible>
+              <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm transition-colors [&[data-state=open]>svg]:rotate-90">
+                <Icon
+                  name="chevron-right"
+                  className="size-4 transition-transform"
+                />
+                Advanced
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-3">
+                {advanced}
+              </CollapsibleContent>
+            </Collapsible>
+          ) : null}
           <Dialog.Footer>
             <Button
               type="button"

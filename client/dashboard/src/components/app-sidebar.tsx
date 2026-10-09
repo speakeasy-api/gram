@@ -286,7 +286,13 @@ export function AppSidebar({
             items={[
               { item: routes.costs, ...accessFor(routes.costs) },
               ...(isExploreEnabled
-                ? [{ item: routes.explore, ...accessFor(routes.explore) }]
+                ? [
+                    { item: routes.explore, ...accessFor(routes.explore) },
+                    {
+                      item: routes.dashboards,
+                      ...accessFor(routes.dashboards),
+                    },
+                  ]
                 : []),
               { item: routes.insights, ...accessFor(routes.insights) },
               {

@@ -34,6 +34,7 @@ import { useMemo, useState, type JSX } from "react";
 import { useLocation, useSearchParams } from "react-router";
 import { Page } from "@/components/page-layout";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
+import { AddToDashboard } from "./AddToDashboard";
 import { WidgetCards } from "./WidgetCards";
 import { longestWindow, type ExploreSpec } from "./exploreModel";
 import { pageFieldsFor, usePageFilters } from "./usePageFilters";
@@ -74,6 +75,7 @@ export function WidgetList({
   confirmLeave,
   onDeleted,
   onExplore,
+  onOpenDashboard,
   onRetry,
 }: {
   widgets: Widget[];
@@ -92,6 +94,8 @@ export function WidgetList({
   onDeleted: (id: string) => void;
   /** Switch to the Explore tab with nothing open. */
   onExplore: () => void;
+  /** Open a dashboard, once a widget is placed on it. */
+  onOpenDashboard: (dashboardId: string) => void;
   onRetry: () => void;
 }): JSX.Element {
   const user = useUser();
@@ -106,6 +110,7 @@ export function WidgetList({
   const [sort, setSort] = useState<SortDescriptor | null>(DEFAULT_SORT);
   const [renaming, setRenaming] = useState<Widget | null>(null);
   const [deleting, setDeleting] = useState<Widget | null>(null);
+  const [placing, setPlacing] = useState<Widget | null>(null);
 
   const datasets = useMemo(
     () => [...new Set(widgets.map((widget) => widget.dataset))].sort(),
@@ -149,6 +154,11 @@ export function WidgetList({
           },
         ]
       : []),
+    {
+      label: "Add to dashboard",
+      icon: "layout-dashboard",
+      onClick: () => setPlacing(widget),
+    },
     {
       label: "Duplicate",
       icon: "copy",
@@ -399,6 +409,11 @@ export function WidgetList({
             () => setRenaming(null),
           );
         }}
+      />
+      <AddToDashboard
+        widget={placing}
+        onClose={() => setPlacing(null)}
+        onOpenDashboard={onOpenDashboard}
       />
       <DeleteWidgetDialog
         name={deleting?.name ?? ""}
