@@ -433,3 +433,16 @@ func TestCloseWaitsForInFlightLogsAndRefusesLaterOnes(t *testing.T) {
 	require.ErrorIs(t, logger.Log(ctx, toolCallRecord(time.Now())), ErrClosed)
 	require.Empty(t, publisher.arrived, "a Log after Close publishes nothing")
 }
+
+type namedError struct{}
+
+func (namedError) Error() string     { return "named" }
+func (namedError) ErrorType() string { return "custom.Named" }
+
+func TestErrorTypeLooksThroughWrappingForANamedType(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "custom.Named", errorType(namedError{}))
+	require.Equal(t, "custom.Named", errorType(fmt.Errorf("outer: %w", namedError{})))
+	require.Equal(t, "custom.Named", errorType(fmt.Errorf("outer: %w", fmt.Errorf("inner: %w", namedError{}))))
+}

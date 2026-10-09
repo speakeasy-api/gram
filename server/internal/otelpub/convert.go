@@ -229,12 +229,12 @@ var fmtWrapErrorType = reflect.TypeOf(fmt.Errorf("wrapped: %w", errors.New("err"
 
 // errorType names an error's type as the OTel SDK does, looking through fmt.Errorf wrapping.
 func errorType(err error) string {
-	if et, ok := err.(interface{ ErrorType() string }); ok && et.ErrorType() != "" {
-		return et.ErrorType()
-	}
-	for reflect.TypeOf(err) == fmtWrapErrorType {
+	for {
+		if et, ok := err.(interface{ ErrorType() string }); ok && et.ErrorType() != "" {
+			return et.ErrorType()
+		}
 		inner := errors.Unwrap(err)
-		if inner == nil {
+		if reflect.TypeOf(err) != fmtWrapErrorType || inner == nil {
 			break
 		}
 		err = inner
