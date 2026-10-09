@@ -25,6 +25,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -40,6 +41,55 @@ const (
 )
 
 var errCatalogProbeResponseTooLarge = errors.New("platform mcp catalogue readiness response too large")
+
+// ReadinessEvidenceIdentityChainingConfigured marks an upstream with no
+// interactive session that identity chaining is configured to serve. It is
+// configuration evidence only: the provider has not answered.
+const ReadinessEvidenceIdentityChainingConfigured = "identity_chaining_configured"
+
+// ReadinessEvidenceIdentityChainingActive marks an upstream with no
+// interactive session that the caller reaches through a usable chained
+// credential, one the provider already issued.
+const ReadinessEvidenceIdentityChainingActive = "identity_chaining_active"
+
+// IdentityChainingGovernor answers identity chaining configuration questions
+// from the database. It never acquires a token or contacts a provider.
+type IdentityChainingGovernor interface {
+	Serves(ctx context.Context, req identitychaining.Request) (uuid.UUID, bool)
+	HasUsableCredential(ctx context.Context, req identitychaining.Request) bool
+}
+
+// IdentityChainingReadiness is readiness for a direct remote upstream the
+// caller has no interactive session for, judged as the MCP runtime does.
+type IdentityChainingReadiness struct {
+	State                 ReadinessState
+	EvidenceCode          string
+	Absence               string
+	RemoteSessionIssuerID uuid.UUID
+}
+
+// ResolveIdentityChainingReadiness reports ready when the caller holds a usable
+// chained credential, and needs-authorization with configuration evidence when
+// chaining serves the upstream without one. ok is false when chaining does not
+// serve it.
+func ResolveIdentityChainingReadiness(ctx context.Context, governor IdentityChainingGovernor, organizationID, userID string, projectID, userSessionIssuerID uuid.UUID, upstreamResource string) (IdentityChainingReadiness, bool) {
+	var none IdentityChainingReadiness
+	if governor == nil {
+		return none, false
+	}
+	req, ok := identitychaining.NewRequest(organizationID, projectID, userSessionIssuerID, userID, upstreamResource, false, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	if !ok {
+		return none, false
+	}
+	issuer, served := governor.Serves(ctx, req)
+	if !served || issuer == uuid.Nil {
+		return none, false
+	}
+	if governor.HasUsableCredential(ctx, req) {
+		return IdentityChainingReadiness{State: ReadinessReady, EvidenceCode: ReadinessEvidenceIdentityChainingActive, Absence: ProviderAuthorizationIdentityChaining, RemoteSessionIssuerID: issuer}, true
+	}
+	return IdentityChainingReadiness{State: ReadinessNeedsGramAuthorization, EvidenceCode: ReadinessEvidenceIdentityChainingConfigured, Absence: "no_session", RemoteSessionIssuerID: issuer}, true
+}
 
 // CatalogReadinessProber verifies a browser-catalogue registration through the
 // same persisted Remote MCP source and remote-session authorization used at
@@ -59,10 +109,21 @@ type RemoteMCPReadinessProber struct {
 	enc      *encryption.Client
 	policy   *guardian.Policy
 	sessions *remotesessions.ChallengeManager
+	chaining IdentityChainingGovernor
 }
 
 func NewRemoteMCPReadinessProber(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, sessions *remotesessions.ChallengeManager) *RemoteMCPReadinessProber {
-	return &RemoteMCPReadinessProber{logger: logger, db: db, enc: enc, policy: policy, sessions: sessions}
+	return &RemoteMCPReadinessProber{logger: logger, db: db, enc: enc, policy: policy, sessions: sessions, chaining: nil}
+}
+
+// WithIdentityChaining judges upstreams without an interactive session by
+// identity chaining: ready on a usable chained credential, otherwise marked
+// configured.
+func (p *RemoteMCPReadinessProber) WithIdentityChaining(governor IdentityChainingGovernor) *RemoteMCPReadinessProber {
+	if p != nil {
+		p.chaining = governor
+	}
+	return p
 }
 
 func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, principal Principal, projectID, registrationID, remoteMCPServerID, userSessionIssuerID, connectionID, generation uuid.UUID) (ProviderReadinessProbeResult, error) {
@@ -103,6 +164,9 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 		return ProviderReadinessProbeResult{}, fmt.Errorf("list configured upstream identity providers: %w", err)
 	}
 	if len(clients) == 0 {
+		if chained, ok := ResolveIdentityChainingReadiness(ctx, p.chaining, principal.OrganizationID, principal.UserID, projectID, userSessionIssuerID, remote.Url); ok {
+			return p.result(principal, registrationID, chained.State, chained.EvidenceCode, remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: chained.RemoteSessionIssuerID}, chained.Absence), nil
+		}
 		state, evidence := p.probe(ctx, remote.Url, headers, "")
 		if state == ReadinessUnauthorized {
 			return p.result(principal, registrationID, ReadinessNeedsConfiguration, "upstream_identity_provider_not_configured", remotesessions.ResolvedAuthorization{}, "no_client"), nil
@@ -120,6 +184,9 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 		return p.result(principal, registrationID, state, evidence, remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: clients[0].RemoteSessionIssuerID}, "no_session"), nil
 	}
 	if errors.Is(err, remotesessions.ErrNoValidToken) {
+		if chained, ok := ResolveIdentityChainingReadiness(ctx, p.chaining, principal.OrganizationID, principal.UserID, projectID, userSessionIssuerID, remote.Url); ok {
+			return p.result(principal, registrationID, chained.State, chained.EvidenceCode, remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: chained.RemoteSessionIssuerID}, chained.Absence), nil
+		}
 		return p.result(principal, registrationID, ReadinessNeedsGramAuthorization, "upstream_authorization_required", remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: clients[0].RemoteSessionIssuerID}, "no_session"), nil
 	}
 	if err != nil {

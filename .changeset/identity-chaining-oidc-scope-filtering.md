@@ -1,0 +1,5 @@
+---
+"server": patch
+---
+
+Identity chaining no longer sends OpenID Connect scopes (`openid`, `profile`, `email`, `offline_access`, `phone`, `address`) in the ID-JAG token exchange, because Okta rejects them. A client whose scope came from the issuer's discovered `scopes_supported` now chains with only its resource scopes, or with no `scope` parameter when none remain, in which case the ID-JAG may carry no scope or only scopes from the configured set. When scopes are requested, the ID-JAG must carry exactly that set: one that omits its `scope` claim fails with `scope_policy_denied` and one that carries only some of them fails with `insufficient_scope`, so an omitted token scope is never recorded as granted on the ID-JAG's behalf. An ID-JAG whose audience is the resource authorization server's issuer is accepted alongside an administrator-confirmed audience. When the resource authorization server's token reports a scope that lacks a requested scope, the server still rejects it and now logs the requested and granted scope names at warning level.

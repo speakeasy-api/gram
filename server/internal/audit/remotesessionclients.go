@@ -23,6 +23,10 @@ const (
 	ActionRemoteSessionClientDetachUserSessionIssuer Action = "remote-session-client:detach-user-session-issuer"
 	ActionRemoteSessionClientAttachJsonWebKeySet     Action = "remote-session-client:attach-json-web-key-set"
 	ActionRemoteSessionClientDetachJsonWebKeySet     Action = "remote-session-client:detach-json-web-key-set"
+
+	ActionRemoteSessionClientEnableIdentityChaining       Action = "remote-session-client:enable-identity-chaining"
+	ActionRemoteSessionClientUpdateIdentityChainingScopes Action = "remote-session-client:update-identity-chaining-scopes"
+	ActionRemoteSessionClientDisableIdentityChaining      Action = "remote-session-client:disable-identity-chaining"
 )
 
 type LogRemoteSessionClientCreateEvent struct {
@@ -418,4 +422,81 @@ func remoteSessionClientAttachmentRow(a remoteSessionClientAttachment) repo.Inse
 		AfterSnapshot:  nil,
 		Metadata:       a.metadata,
 	}
+}
+
+// LogRemoteSessionClientIdentityChainingEvent records a change to the identity
+// chaining binding that routes a user session issuer's users to a resource
+// through this client. The binding is captured in metadata; scopes carry the
+// requested scopes after the change and, for a scope update, before it.
+type LogRemoteSessionClientIdentityChainingEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	RemoteSessionClientURN urn.RemoteSessionClient
+	ClientID               string    //nolint:glint // auditeventurnnaming: RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+	BindingID              uuid.UUID //nolint:glint // auditeventurnnaming: EMA bindings have no URN; recorded in metadata only.
+	UserSessionIssuerURN   urn.UserSessionIssuer
+	RemoteSessionIssuerURN urn.RemoteSessionIssuer
+	Resource               string
+	Generation             int64
+	State                  string
+	ScopesBefore           []string
+	ScopesAfter            []string
+}
+
+func (l *Logger) LogRemoteSessionClientEnableIdentityChaining(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientIdentityChainingEvent) error {
+	return l.logRemoteSessionClientIdentityChaining(ctx, dbtx, ActionRemoteSessionClientEnableIdentityChaining, event)
+}
+
+func (l *Logger) LogRemoteSessionClientUpdateIdentityChainingScopes(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientIdentityChainingEvent) error {
+	return l.logRemoteSessionClientIdentityChaining(ctx, dbtx, ActionRemoteSessionClientUpdateIdentityChainingScopes, event)
+}
+
+func (l *Logger) LogRemoteSessionClientDisableIdentityChaining(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientIdentityChainingEvent) error {
+	return l.logRemoteSessionClientIdentityChaining(ctx, dbtx, ActionRemoteSessionClientDisableIdentityChaining, event)
+}
+
+func (l *Logger) logRemoteSessionClientIdentityChaining(ctx context.Context, dbtx repo.DBTX, action Action, event LogRemoteSessionClientIdentityChainingEvent) error {
+	payload := map[string]any{
+		"binding_id":               event.BindingID.String(),
+		"user_session_issuer_id":   event.UserSessionIssuerURN.ID.String(),
+		"remote_session_issuer_id": event.RemoteSessionIssuerURN.ID.String(),
+		"resource":                 event.Resource,
+		"generation":               event.Generation,
+		"state":                    event.State,
+		"scopes":                   scopesOrEmpty(event.ScopesAfter),
+	}
+	if action == ActionRemoteSessionClientUpdateIdentityChainingScopes {
+		payload["previous_scopes"] = scopesOrEmpty(event.ScopesBefore)
+	}
+	metadata, err := marshalAuditPayload(payload)
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	return l.log(ctx, dbtx, auditEntry{
+		Params: remoteSessionClientAttachmentRow(remoteSessionClientAttachment{
+			organizationID:   event.OrganizationID,
+			projectID:        event.ProjectID,
+			actor:            event.Actor,
+			actorDisplayName: event.ActorDisplayName,
+			actorSlug:        event.ActorSlug,
+			action:           action,
+			clientURN:        event.RemoteSessionClientURN,
+			clientID:         event.ClientID,
+			metadata:         metadata,
+		}),
+		OutboxEvent: events.RemoteSessionClientV1,
+	})
+}
+
+func scopesOrEmpty(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

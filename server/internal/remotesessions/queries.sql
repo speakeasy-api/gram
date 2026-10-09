@@ -4938,6 +4938,16 @@ WHERE project_id = @project_id AND organization_id = @organization_id
 ORDER BY id
 LIMIT 2;
 
+-- name: ListEMABindingsForUpstream :many
+-- Live bindings, in any state, naming one upstream under one issuer pair.
+SELECT * FROM remote_session_ema_bindings
+WHERE project_id = @project_id AND organization_id = @organization_id
+  AND user_session_issuer_id = @user_session_issuer_id
+  AND remote_session_issuer_id = @remote_session_issuer_id
+  AND rtrim(resource, '/') = @upstream_resource::text
+  AND state IS DISTINCT FROM 'unlinked'
+ORDER BY id;
+
 -- name: GetEMAChainingUserIssuer :one
 -- Identity chaining requires an organization-level user session issuer with a
 -- trusted upstream registration; project-level issuers cannot hold one.

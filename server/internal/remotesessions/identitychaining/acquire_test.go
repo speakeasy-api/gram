@@ -1,10 +1,12 @@
 package identitychaining
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"sync"
@@ -15,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -82,7 +85,7 @@ func (p *recordingPoster) form(t *testing.T) url.Values {
 func testChainer(t *testing.T) (*Chainer, time.Time) {
 	t.Helper()
 	now := time.Now().UTC().Truncate(time.Second)
-	return &Chainer{logger: testenv.NewLogger(t), db: nil, enc: nil, challenges: nil, delegation: nil, keys: nil, locks: nil, now: func() time.Time { return now }}, now
+	return &Chainer{Governor: Governor{logger: testenv.NewLogger(t), db: nil, enc: nil, now: func() time.Time { return now }}, challenges: nil, delegation: nil, keys: nil, locks: nil}, now
 }
 
 func TestExchange_RequestsIDJAGForTheResource(t *testing.T) {
@@ -122,7 +125,7 @@ func TestRedeem_PresentsGrantAndDiscardsRefreshToken(t *testing.T) {
 	t.Parallel()
 	resourceAS := &recordingPoster{body: map[string]any{"access_token": "downstream-token", "token_type": "Bearer", "expires_in": 3600, "refresh_token": "downstream-refresh", "scope": "read write extra"}}
 	c, now := testChainer(t)
-	cred, outcome := c.redeem(t.Context(), resourceAS, "id-jag-value", testSelection())
+	cred, outcome := c.redeem(t.Context(), testenv.NewLogger(t), resourceAS, "id-jag-value", testSelection())
 	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
 
 	form := resourceAS.form(t)
@@ -150,7 +153,7 @@ func TestRedeem_RejectsUnusableResponses(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			c, _ := testChainer(t)
-			_, outcome := c.redeem(t.Context(), &recordingPoster{body: tc.body}, "id-jag-value", testSelection())
+			_, outcome := c.redeem(t.Context(), testenv.NewLogger(t), &recordingPoster{body: tc.body}, "id-jag-value", testSelection())
 			require.Equal(t, tc.reason, outcome.Reason)
 			require.Equal(t, StageRedemption, outcome.Stage)
 		})
@@ -171,7 +174,7 @@ func TestRedeem_BoundsReportedLifetime(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			c, now := testChainer(t)
-			cred, outcome := c.redeem(t.Context(), &recordingPoster{body: tc.body}, "id-jag-value", testSelection())
+			cred, outcome := c.redeem(t.Context(), testenv.NewLogger(t), &recordingPoster{body: tc.body}, "id-jag-value", testSelection())
 			require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
 			require.Equal(t, now.Add(tc.want), cred.expiresAt)
 		})
@@ -181,7 +184,7 @@ func TestRedeem_BoundsReportedLifetime(t *testing.T) {
 func TestRedeem_OmittedScopeGrantsRequested(t *testing.T) {
 	t.Parallel()
 	c, _ := testChainer(t)
-	cred, outcome := c.redeem(t.Context(), &recordingPoster{body: map[string]any{"access_token": "t", "token_type": "Bearer", "expires_in": 3600}}, "id-jag-value", testSelection())
+	cred, outcome := c.redeem(t.Context(), testenv.NewLogger(t), &recordingPoster{body: map[string]any{"access_token": "t", "token_type": "Bearer", "expires_in": 3600}}, "id-jag-value", testSelection())
 	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
 	require.False(t, cred.refreshObserved)
 	require.Equal(t, []string{"read", "write"}, cred.grantedScopes)
@@ -273,6 +276,11 @@ func TestValidateGrant_AcceptsBoundGrant(t *testing.T) {
 	arrayResource["resource"] = []string{testResource}
 	outcome := c.validateGrant(t.Context(), testenv.NewLogger(t), claimsVerifier{typ: "oauth-id-jag+jwt", claims: arrayResource, err: nil}, testIdPIssuer, "raw", testUpstreamSubject, sel)
 	require.True(t, outcome.Succeeded(), "a single-element resource array names the same resource: %+v", outcome)
+
+	issuerAudience := validGrantClaims(sel, now)
+	issuerAudience["aud"] = testResourceIssuer
+	outcome = c.validateGrant(t.Context(), testenv.NewLogger(t), claimsVerifier{typ: "oauth-id-jag+jwt", claims: issuerAudience, err: nil}, testIdPIssuer, "raw", testUpstreamSubject, sel)
+	require.True(t, outcome.Succeeded(), "the resource authorization server's issuer is an accepted audience alongside a confirmed one: %+v", outcome)
 }
 
 func TestValidateGrant_RejectsUnboundClaims(t *testing.T) {
@@ -285,9 +293,11 @@ func TestValidateGrant_RejectsUnboundClaims(t *testing.T) {
 		{"plain jwt type", "JWT", func(map[string]any, time.Time) {}},
 		{"other issuer", "oauth-id-jag+jwt", func(c map[string]any, _ time.Time) { c["iss"] = "https://attacker.example.test" }},
 		{"other audience", "oauth-id-jag+jwt", func(c map[string]any, _ time.Time) { c["aud"] = "https://other-as.example.test" }},
-		{"resource issuer instead of confirmed audience", "oauth-id-jag+jwt", func(c map[string]any, _ time.Time) { c["aud"] = testResourceIssuer }},
 		{"several audiences", "oauth-id-jag+jwt", func(c map[string]any, _ time.Time) {
 			c["aud"] = []string{testResourceIssuer, "https://other-as.example.test"}
+		}},
+		{"confirmed audience and issuer together", "oauth-id-jag+jwt", func(c map[string]any, _ time.Time) {
+			c["aud"] = []string{testAudience, testResourceIssuer}
 		}},
 		{"other client", "oauth-id-jag+jwt", func(c map[string]any, _ time.Time) { c["client_id"] = "other-client" }},
 		{"other resource", "oauth-id-jag+jwt", func(c map[string]any, _ time.Time) { c["resource"] = "https://api.resource.example.test" }},
@@ -298,7 +308,6 @@ func TestValidateGrant_RejectsUnboundClaims(t *testing.T) {
 		{"excessive lifetime", "oauth-id-jag+jwt", func(c map[string]any, now time.Time) { c["exp"] = now.Add(time.Hour).Unix() }},
 		{"issued long before expiry", "oauth-id-jag+jwt", func(c map[string]any, now time.Time) { c["iat"] = now.Add(-2 * time.Hour).Unix() }},
 		{"null resource", "oauth-id-jag+jwt", func(c map[string]any, _ time.Time) { c["resource"] = nil }},
-		{"narrowed scope", "oauth-id-jag+jwt", func(c map[string]any, _ time.Time) { c["scope"] = "read" }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -323,4 +332,137 @@ func TestValidateGrant_ClassifiesVerificationFailures(t *testing.T) {
 	unavailable := c.validateGrant(t.Context(), testenv.NewLogger(t), claimsVerifier{typ: "", claims: nil, err: remotesessions.ErrJWTKeySetUnavailable}, testIdPIssuer, "raw", testUpstreamSubject, sel)
 	require.Equal(t, ReasonTransientFailure, unavailable.Reason, "an unreadable key set says nothing about the grant")
 	require.True(t, unavailable.Retryable)
+}
+
+func TestGrantScopes_DropsOIDCReservedScopes(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{"discovery defaults", []string{"openid", "offline_access", "email", "profile"}, nil},
+		{"mixed", []string{"openid", "read", "phone", "address", "write"}, []string{"read", "write"}},
+		{"resource only", []string{"read"}, []string{"read"}},
+		{"empty", nil, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, GrantScopes(tc.in))
+		})
+	}
+}
+
+func TestExchange_OmitsScopeWhenOnlyOIDCScopesConfigured(t *testing.T) {
+	t.Parallel()
+	idp := &recordingPoster{body: map[string]any{"access_token": "id-jag-value", "issued_token_type": oauthwire.TokenTypeIDJAG, "token_type": "N_A", "expires_in": 300}}
+	sel := testSelection()
+	sel.scopes = GrantScopes([]string{"openid", "offline_access", "email", "profile"})
+	_, outcome := exchange(t.Context(), idp, "id-token-value", sel)
+	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
+	require.False(t, idp.form(t).Has("scope"))
+}
+
+func TestExchange_SendsOnlyResourceScopes(t *testing.T) {
+	t.Parallel()
+	idp := &recordingPoster{body: map[string]any{"access_token": "id-jag-value", "issued_token_type": oauthwire.TokenTypeIDJAG, "token_type": "N_A", "expires_in": 300}}
+	sel := testSelection()
+	sel.scopes = GrantScopes([]string{"openid", "read", "offline_access"})
+	_, outcome := exchange(t.Context(), idp, "id-token-value", sel)
+	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
+	require.Equal(t, "read", idp.form(t).Get("scope"))
+}
+
+func TestFilteredScopes_AcceptGrantAndRedemption(t *testing.T) {
+	t.Parallel()
+	c, now := testChainer(t)
+	sel := testSelection()
+	sel.scopes = GrantScopes([]string{"openid", "read", "offline_access"})
+
+	claims := validGrantClaims(sel, now)
+	claims["scope"] = "read"
+	outcome := c.validateGrant(t.Context(), testenv.NewLogger(t), claimsVerifier{typ: "oauth-id-jag+jwt", claims: claims, err: nil}, testIdPIssuer, "raw", testUpstreamSubject, sel)
+	require.True(t, outcome.Succeeded(), "grant: %+v", outcome)
+
+	resourceAS := &recordingPoster{body: map[string]any{"access_token": "downstream-token", "token_type": "Bearer", "expires_in": 3600, "scope": "read"}}
+	cred, outcome := c.redeem(t.Context(), testenv.NewLogger(t), resourceAS, "grant", sel)
+	require.True(t, outcome.Succeeded(), "redeem: %+v", outcome)
+	require.Equal(t, []string{"read"}, cred.grantedScopes)
+	require.False(t, resourceAS.form(t).Has("scope"))
+}
+
+func TestFilteredScopes_EmptySetKeepsConfiguredCeiling(t *testing.T) {
+	t.Parallel()
+	c, now := testChainer(t)
+	sel := testSelection()
+	sel.configuredScopes = []string{"openid", "email"}
+	sel.scopes = GrantScopes(sel.configuredScopes)
+
+	for _, tc := range []struct {
+		scope any
+		ok    bool
+	}{{nil, true}, {"openid", true}, {"openid email", true}, {"read", false}, {"openid admin", false}} {
+		claims := validGrantClaims(sel, now)
+		delete(claims, "scope")
+		if tc.scope != nil {
+			claims["scope"] = tc.scope
+		}
+		outcome := c.validateGrant(t.Context(), testenv.NewLogger(t), claimsVerifier{typ: "oauth-id-jag+jwt", claims: claims, err: nil}, testIdPIssuer, "raw", testUpstreamSubject, sel)
+		if tc.ok {
+			require.True(t, outcome.Succeeded(), "scope %v: %+v", tc.scope, outcome)
+			continue
+		}
+		require.Equal(t, ReasonMalformedAssertion, outcome.Reason, "scope %v exceeds the configured set", tc.scope)
+	}
+
+	resourceAS := &recordingPoster{body: map[string]any{"access_token": "downstream-token", "token_type": "Bearer", "expires_in": 3600}}
+	cred, outcome := c.redeem(t.Context(), testenv.NewLogger(t), resourceAS, "grant", sel)
+	require.True(t, outcome.Succeeded(), "redeem: %+v", outcome)
+	require.Empty(t, cred.grantedScopes)
+}
+
+func TestValidateGrant_ScopeMismatchIsAScopeFailure(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		scope  any
+		reason Reason
+	}{
+		{"omitted", nil, ReasonInsufficientScope},
+		{"empty", "", ReasonInsufficientScope},
+		{"narrowed", "read", ReasonInsufficientScope},
+		{"escalated", "read write admin", ReasonMalformedAssertion},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c, now := testChainer(t)
+			sel := testSelection()
+			claims := validGrantClaims(sel, now)
+			delete(claims, "scope")
+			if tc.scope != nil {
+				claims["scope"] = tc.scope
+			}
+			outcome := c.validateGrant(t.Context(), testenv.NewLogger(t), claimsVerifier{typ: "oauth-id-jag+jwt", claims: claims, err: nil}, testIdPIssuer, "raw", testUpstreamSubject, sel)
+			require.Equal(t, Outcome{Stage: StageValidation, Reason: tc.reason, Confidence: ConfidenceVerified, Retryable: false, Cached: false}, outcome)
+			require.True(t, outcome.cacheable())
+		})
+	}
+}
+
+func TestRedeem_LogsScopesWhenTokenLacksRequestedScope(t *testing.T) {
+	t.Parallel()
+	c, _ := testChainer(t)
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	resourceAS := &recordingPoster{body: map[string]any{"access_token": "downstream-token", "token_type": "Bearer", "expires_in": 3600, "scope": "profile other"}}
+	_, outcome := c.redeem(t.Context(), logger, resourceAS, "grant", testSelection())
+	require.Equal(t, ReasonInsufficientScope, outcome.Reason)
+
+	var entry map[string]any
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &entry))
+	require.Equal(t, "WARN", entry["level"])
+	require.Equal(t, "read write", entry[string(attr.OAuthScopeKey)])
+	require.Equal(t, []any{"profile", "other"}, entry[string(attr.OAuthScopeGrantedKey)])
+	require.Equal(t, testResource, entry[string(attr.OAuthResourceKey)])
+	require.NotContains(t, buf.String(), "downstream-token")
 }

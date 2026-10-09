@@ -19,7 +19,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -201,6 +200,7 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 	}
 	expectedGeneration := b.Generation
 	var client repo.RemoteSessionClient
+	before := b
 	if state == PreparationStateReady || state == PreparationStateUnknownGrants || state == PreparationStateManualSetupRequired {
 		ciphertext, encErr := s.enc.Encrypt([]byte(response.ClientSecret))
 		if encErr != nil {
@@ -227,9 +227,9 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "persist preparation registration")
 		}
-		auth, ok := contextvalues.GetAuthContext(saveCtx)
-		if !ok || auth == nil {
-			return nil, oops.C(oops.CodeUnauthorized)
+		actor, displayName, actorErr := preparationAuditActor(saveCtx)
+		if actorErr != nil {
+			return nil, actorErr
 		}
 		// Identity-chaining clients bind through the preparation, not a user
 		// session issuer.
@@ -239,7 +239,7 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 		}
 		if err := s.auditLogger.LogRemoteSessionClientCreate(saveCtx, tx, audit.LogRemoteSessionClientCreateEvent{
 			OrganizationID: b.OrganizationID, ProjectID: b.ProjectID,
-			Actor: urn.NewPrincipal(urn.PrincipalTypeUser, auth.UserID), ActorDisplayName: auth.Email, ActorSlug: nil,
+			Actor: actor, ActorDisplayName: displayName, ActorSlug: nil,
 			RemoteSessionClientURN: urn.NewRemoteSessionClient(client.ID), ClientID: client.ClientID, SnapshotAfter: snapshot,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "audit preparation client creation")
@@ -261,6 +261,9 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 	b, err = setPreparationBinding(saveCtx, q, b, expectedGeneration)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "persist preparation registration")
+	}
+	if err := s.auditIdentityChainingTransition(saveCtx, tx, before, b, client); err != nil {
+		return nil, err
 	}
 	if err = tx.Commit(saveCtx); err != nil {
 		return preparationResult(claim, issuer, emptyClient, PreparationStateIndeterminate), err

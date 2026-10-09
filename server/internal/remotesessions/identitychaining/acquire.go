@@ -68,7 +68,7 @@ func (c *Chainer) acquire(ctx context.Context, logger *slog.Logger, req Request,
 	if outcome = c.validateGrant(ctx, logger, idp, idp.Issuer(), grant, assertion.Subject(), sel); !outcome.Succeeded() {
 		return none, outcome, false
 	}
-	cred, outcome := c.redeem(ctx, resourceAS, grant, sel)
+	cred, outcome := c.redeem(ctx, logger, resourceAS, grant, sel)
 	if !outcome.Succeeded() {
 		return none, outcome, true
 	}
@@ -127,6 +127,9 @@ func (c *Chainer) validateGrant(ctx context.Context, logger *slog.Logger, verifi
 	}
 	if err := claims.check(header, idpIssuer, upstreamSubject, sel, c.now()); err != nil {
 		logger.WarnContext(ctx, "identity chaining assertion grant rejected", attr.SlogError(err))
+		if scopeErr, ok := errors.AsType[scopeError](err); ok {
+			return newOutcome(StageValidation, scopeErr.reason, ConfidenceVerified, false)
+		}
 		return invalid
 	}
 	return success
@@ -135,7 +138,7 @@ func (c *Chainer) validateGrant(ctx context.Context, logger *slog.Logger, verifi
 // redeem presents the ID-JAG to the resource authorization server as an RFC
 // 7523 JWT bearer grant. Any downstream refresh token is discarded; expiry
 // renewal re-exchanges instead.
-func (c *Chainer) redeem(ctx context.Context, resourceAS tokenPoster, grant string, sel selection) (credential, Outcome) {
+func (c *Chainer) redeem(ctx context.Context, logger *slog.Logger, resourceAS tokenPoster, grant string, sel selection) (credential, Outcome) {
 	var none credential
 	form := url.Values{}
 	form.Set(oauthwire.ParamGrantType, oauthwire.GrantTypeJWTBearer)
@@ -155,6 +158,8 @@ func (c *Chainer) redeem(ctx context.Context, resourceAS tokenPoster, grant stri
 		granted = tok.Scopes()
 		for _, scope := range sel.scopes {
 			if !slices.Contains(granted, scope) {
+				logger.WarnContext(ctx, "identity chaining token lacks requested scope",
+					attr.SlogOAuthScope(strings.Join(sel.scopes, " ")), attr.SlogOAuthScopeGranted(granted), attr.SlogOAuthResource(sel.resource))
 				return none, newOutcome(StageRedemption, ReasonInsufficientScope, ConfidenceVerified, false)
 			}
 		}

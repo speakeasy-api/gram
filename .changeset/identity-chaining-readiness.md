@@ -1,0 +1,5 @@
+---
+"server": patch
+---
+
+Platform MCP readiness now judges MCP servers that identity chaining serves the way the MCP runtime does. When a user has no interactive session for such a server, including when no interactive client is attached, `get_mcp_readiness` reports `ready` with `identity_chaining_active` evidence once the user holds a usable chained credential, and otherwise keeps reporting that authorization is needed with `identity_chaining_configured` evidence instead of `upstream_authorization_required` or `no_valid_authorization`. `get_my_mcp_connection_status` reports the server as active with reason `identity_chaining` when the user holds a usable chained credential, and otherwise reason `identity_chaining_configured` with next action `use_mcp`; an active interactive session the provider rejected still reports reauthorization, since the runtime forwards it rather than chaining. With several interactive clients for the server, identity chaining is consulted before reporting `multiple_authorization_clients`. A stored chained credential that no longer decrypts counts as unusable. Neither surface requests a token.

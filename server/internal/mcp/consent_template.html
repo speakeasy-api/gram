@@ -210,7 +210,12 @@
         >
           <div class="flex items-baseline justify-between gap-3">
             <h2 class="text-eyebrow">Connected services</h2>
-            <p class="text-xs text-muted-foreground">
+            <p
+              class="text-xs text-muted-foreground"
+              data-connected-summary
+              data-connected-count="{{.ConnectedCardCount}}"
+              data-connected-total="{{len .RemoteSessionCards}}"
+            >
               {{.ConnectedCardCount}} of {{len .RemoteSessionCards}} connected
             </p>
           </div>
@@ -271,6 +276,22 @@
                     >Reconnect to add account details</span
                   >
                   {{end}}
+                  {{else if .Chained}}
+                  {{/* Pending renders neutral so the card reads right without
+                  script; the script shows checking and settles it. */}}
+                  {{if eq .ChainCheck "connected"}}
+                  <span class="text-xs text-default-success" data-card-status data-identity-chained data-chain-check="connected"
+                    >Connected through your identity provider</span
+                  >
+                  {{else if eq .ChainCheck "rejected"}}
+                  <span class="text-xs text-default-warning" data-card-status data-identity-chained data-chain-check="rejected"
+                    >{{.ChainMessage}}</span
+                  >
+                  {{else}}
+                  <span class="text-xs text-muted-foreground" data-card-status data-identity-chained data-chain-check="{{.ChainCheck}}"
+                    >Managed by your identity provider</span
+                  >
+                  {{end}}
                   {{else if .Expired}}
                   <span class="text-xs text-default-warning"
                     >Expired — reconnect to continue</span
@@ -326,6 +347,18 @@
                   Verify
                 </button>
                 {{end}} {{if or (not .Connected) .IdentityReconnect .Rejected .Inactive}}
+                {{if and .Chained (ne .ChainCheck "rejected")}}
+                <button
+                  type="submit"
+                  name="action"
+                  value="connect"
+                  class="text-muted-foreground interact:text-foreground interact:underline flex h-8 cursor-pointer items-center px-1 text-xs underline-offset-2"
+                  data-connect-link
+                  data-connect-fallback
+                >
+                  Use a separate sign-in instead
+                </button>
+                {{else}}
                 <button
                   type="submit"
                   name="action"
@@ -335,6 +368,7 @@
                 >
                   {{if or .Expired .Unroutable .IdentityReconnect .Rejected .Inactive}}Reconnect{{else}}Connect{{end}}
                 </button>
+                {{end}}
                 {{end}} {{if or .Connected .Expired .Unroutable}}
                 <button
                   type="submit"

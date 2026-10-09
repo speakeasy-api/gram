@@ -79,16 +79,13 @@ const (
 // Chainer obtains resource-bound downstream access tokens for a human by
 // identity chaining. It is safe for concurrent use.
 type Chainer struct {
-	logger     *slog.Logger
-	db         *pgxpool.Pool
-	enc        *encryption.Client
+	Governor
 	challenges *remotesessions.ChallengeManager
 	delegation *remotesessions.DelegationService
 	keys       *jwks.KeyResolver
 	locks      cache.Cache
 	observerMu sync.RWMutex
 	observer   Observer
-	now        func() time.Time
 }
 
 // New builds a chainer over the challenge manager's egress, tunnel and
@@ -96,16 +93,13 @@ type Chainer struct {
 // locks serializes acquisition across processes and shares failures.
 func New(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, challenges *remotesessions.ChallengeManager, delegation *remotesessions.DelegationService, keys *jwks.KeyResolver, locks cache.Cache) *Chainer {
 	return &Chainer{
-		logger:     logger.With(attr.SlogComponent("identity_chaining")),
-		db:         db,
-		enc:        enc,
+		Governor:   *NewGovernor(logger, db, enc),
 		challenges: challenges,
 		delegation: delegation,
 		keys:       keys,
 		locks:      locks,
 		observerMu: sync.RWMutex{},
 		observer:   nil,
-		now:        time.Now,
 	}
 }
 
@@ -211,17 +205,6 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 		StartedAt:       startedAt,
 	})
 	return token, outcome
-}
-
-// Governs reports whether identity chaining owns the request's upstream: a
-// ready binding names it. It reads configuration only and never contacts a
-// provider.
-func (c *Chainer) Governs(ctx context.Context, req Request) bool {
-	if !req.complete() {
-		return false
-	}
-	_, outcome := c.selectBinding(ctx, c.logger, req)
-	return outcome.Applicable() && !outcome.Retryable
 }
 
 // awaitConcurrentAcquisition adopts a concurrent holder's credential, or its

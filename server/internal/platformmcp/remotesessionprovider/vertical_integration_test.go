@@ -36,6 +36,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -88,10 +89,66 @@ func TestReviewedRemoteSessionProviderVerticalSlice(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, platformmcp.ReadinessNeedsConfiguration, readiness.State)
 
+	for _, usable := range []bool{false, true} {
+		governor := &fixedGovernor{issuer: remoteIssuerID, serves: true, usable: usable}
+		result, err := adapter.WithIdentityChaining(governor).ProbeReadiness(ctx, providerProbeRequest(principal, project.ID, registration))
+		require.NoError(t, err)
+		if usable {
+			require.Equal(t, platformmcp.ReadinessReady, result.State)
+			require.Equal(t, platformmcp.ReadinessEvidenceIdentityChainingActive, result.EvidenceCode)
+		} else {
+			require.Equal(t, platformmcp.ReadinessNeedsGramAuthorization, result.State)
+			require.Equal(t, platformmcp.ReadinessEvidenceIdentityChainingConfigured, result.EvidenceCode)
+		}
+		require.Len(t, governor.requests, 1, "chaining does not require an interactive client")
+	}
+	adapter.WithIdentityChaining(nil)
+
 	remoteClientID := seedReviewedRemoteClient(t, ctx, conn, project.ID, principal.OrganizationID, registration.UserSessionIssuerID.UUID, remoteIssuerID)
 	readiness, err = store.ProbeProviderReadiness(ctx, principal, project.ID, registration.ID, adapters)
 	require.NoError(t, err)
 	require.Equal(t, platformmcp.ReadinessNeedsGramAuthorization, readiness.State)
+
+	governor := &fixedGovernor{issuer: remoteIssuerID, serves: true}
+	chained, err := remotesessionprovider.New(probePolicy, manager, remotesessionprovider.Descriptor{
+		ProviderKey:                "fixture",
+		RemoteSessionIssuerID:      remoteIssuerID,
+		StreamableHTTPURL:          upstream.URL + "/mcp",
+		ProviderSetupCompletionURL: "https://gram.test/platform-mcp/provider-setup-complete",
+		TestOnlyAllowedCIDRBlocks:  []string{fixtureCIDR(t, upstream.URL)},
+	}).WithIdentityChaining(governor).ProbeReadiness(ctx, providerProbeRequest(principal, project.ID, registration))
+	require.NoError(t, err)
+	require.Equal(t, platformmcp.ReadinessNeedsGramAuthorization, chained.State, "configuration alone is not provider evidence")
+	require.Equal(t, platformmcp.ReadinessEvidenceIdentityChainingConfigured, chained.EvidenceCode)
+	require.Equal(t, "no_session", chained.AuthorizationIdentity.Absence)
+	require.Len(t, governor.requests, 1)
+	require.Equal(t, upstream.URL+"/mcp", governor.requests[0].UpstreamResource)
+	require.Equal(t, principal.UserID, governor.requests[0].UserID)
+	require.Equal(t, registration.UserSessionIssuerID.UUID, governor.requests[0].UserSessionIssuerID)
+
+	governor.usable = true
+	chainedReady, err := remotesessionprovider.New(probePolicy, manager, remotesessionprovider.Descriptor{
+		ProviderKey:                "fixture",
+		RemoteSessionIssuerID:      remoteIssuerID,
+		StreamableHTTPURL:          upstream.URL + "/mcp",
+		ProviderSetupCompletionURL: "https://gram.test/platform-mcp/provider-setup-complete",
+		TestOnlyAllowedCIDRBlocks:  []string{fixtureCIDR(t, upstream.URL)},
+	}).WithIdentityChaining(governor).ProbeReadiness(ctx, providerProbeRequest(principal, project.ID, registration))
+	require.NoError(t, err)
+	require.Equal(t, platformmcp.ReadinessReady, chainedReady.State, "a usable chained credential is ready")
+	require.Equal(t, platformmcp.ReadinessEvidenceIdentityChainingActive, chainedReady.EvidenceCode)
+	require.Equal(t, platformmcp.ProviderAuthorizationIdentityChaining, chainedReady.AuthorizationIdentity.Absence)
+
+	chainedIssuer := uuid.New()
+	rebound, err := remotesessionprovider.New(probePolicy, manager, remotesessionprovider.Descriptor{
+		ProviderKey:                "fixture",
+		RemoteSessionIssuerID:      remoteIssuerID,
+		StreamableHTTPURL:          upstream.URL + "/mcp",
+		ProviderSetupCompletionURL: "https://gram.test/platform-mcp/provider-setup-complete",
+		TestOnlyAllowedCIDRBlocks:  []string{fixtureCIDR(t, upstream.URL)},
+	}).WithIdentityChaining(&fixedGovernor{issuer: chainedIssuer, serves: true, usable: true}).ProbeReadiness(ctx, providerProbeRequest(principal, project.ID, registration))
+	require.NoError(t, err)
+	require.Equal(t, chainedIssuer, rebound.AuthorizationIdentity.RemoteSessionIssuerID, "readiness tracks the issuer identity chaining selected")
 
 	handoff, err := store.IssueSetupHandoff(ctx, principal, platformmcp.SetupHandoffBinding{
 		ProjectID:        project.ID,
@@ -398,4 +455,20 @@ func visitProviderAuthorization(t *testing.T, upstream *reviewedUpstream, rawURL
 	callback, err := url.Parse(response.Header.Get("Location"))
 	require.NoError(t, err)
 	return callback
+}
+
+type fixedGovernor struct {
+	issuer   uuid.UUID
+	serves   bool
+	usable   bool
+	requests []identitychaining.Request
+}
+
+func (g *fixedGovernor) Serves(_ context.Context, req identitychaining.Request) (uuid.UUID, bool) {
+	g.requests = append(g.requests, req)
+	return g.issuer, g.serves
+}
+
+func (g *fixedGovernor) HasUsableCredential(context.Context, identitychaining.Request) bool {
+	return g.usable
 }
