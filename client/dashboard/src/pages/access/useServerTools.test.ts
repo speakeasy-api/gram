@@ -117,21 +117,38 @@ describe("resolveToolSource", () => {
   });
 
   it("does not present tools kept from a listing whose refetch failed", () => {
-    // The hook passes tools only for a listing that succeeded, so a failed
-    // refetch arrives as no tools plus an error.
+    const retry = vi.fn<() => void>();
     const source = resolveToolSource(
       inputs({
         live: {
           loading: false,
           needsAuth: false,
           isError: true,
-          tools: undefined,
+          tools: [listDevices],
+          connect: undefined,
+          retry,
+        },
+      }),
+    );
+    expect(source).toEqual({ status: "error", retry });
+  });
+
+  it("does not present a cached listing while the session is still loading", () => {
+    // The user-session token is still minting, so the cached listing says
+    // nothing about what this session can list.
+    const source = resolveToolSource(
+      inputs({
+        live: {
+          loading: true,
+          needsAuth: false,
+          isError: false,
+          tools: [listDevices],
           connect: undefined,
           retry: vi.fn<() => void>(),
         },
       }),
     );
-    expect(source.status).toBe("error");
+    expect(source).toEqual({ status: "loading" });
   });
 
   it("asks for write access before opening a live session", () => {

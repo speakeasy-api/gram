@@ -514,7 +514,9 @@ that URL.
     **Support Desk**. MCP access opens on Specific servers with the Default
     project expanded: Acme Support Tools is ticked with no badge, and Slack
     is ticked with a **Read-Only Tools** badge that opens its tool access
-    sheet on By annotation. Edit **Contractors**: GitHub sits in the
+    sheet on By annotation. JAMF is ticked with a **1 Tool** badge that
+    opens its tool access sheet on By tool, listing JAMF's five recorded
+    tools with only `list_devices` checked. Edit **Contractors**: GitHub sits in the
     Forbidden section with Remove. Edit **Engineer**: every server row is
     ticked and locked, and the lock's card links to Platform access, where
     `mcp:read` and `mcp:write` carry the note that they also connect. Edit
@@ -540,6 +542,12 @@ that URL.
       that uses it. Do not bind it to a server to populate a page: its secret
       is an invalid ciphertext, so any request would fail with the
       administrator misconfiguration error.
+30. **Inspect: tunneled server offline** — open MCP → **JAMF** → Inspect.
+    The tunnel has never connected an agent, so the tools section reads
+    "Tunnel offline — connect the agent to list its tools." with Retry,
+    and below it lists the five recorded tools: `list_devices` and
+    `get_device` (read-only), `lock_device` (idempotent), `wipe_device`
+    (destructive), and `device_status` (no annotation).
 
 30. **Enterprise Managed Authorization**
     - Open **Team → IDP and SSO → Identity providers**. The Services table

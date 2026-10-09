@@ -1,5 +1,6 @@
 import type { ConnectionStatus } from "@gram/client/models/components/tunneledmcpserver.js";
 import { useGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
+import { useEffect, useRef } from "react";
 
 // Agent sessions come from heartbeats; polling at the connections panel's
 // cadence lets a reconnected agent clear the offline state without a reload.
@@ -31,6 +32,7 @@ export function useTunnelAgentStatus({
   projectSlug,
   enabled,
   poll,
+  onReconnect,
 }: {
   tunneledSourceId: string | undefined;
   /** The source's project, for org-level pages with no ambient project. */
@@ -38,12 +40,18 @@ export function useTunnelAgentStatus({
   enabled: boolean;
   /** Keep re-reading, e.g. while the tools listing is failing. */
   poll: boolean;
+  /**
+   * Called when a status read stops saying the agent is offline, so a listing
+   * that failed while it was can be tried again.
+   */
+  onReconnect?: () => void;
 }): TunnelAgentStatus {
+  const active = enabled && !!tunneledSourceId;
   const query = useGetTunneledMcpServer(
     { id: tunneledSourceId ?? "", gramProject: projectSlug },
     undefined,
     {
-      enabled: enabled && !!tunneledSourceId,
+      enabled: active,
       throwOnError: false,
       retry: false,
       refetchInterval: poll ? TUNNEL_STATUS_POLL_MS : false,
@@ -51,11 +59,20 @@ export function useTunnelAgentStatus({
     },
   );
 
+  const offline =
+    query.isSuccess && tunnelAgentOffline(query.data?.connectionStatus);
+
+  const wasOffline = useRef(false);
+  useEffect(() => {
+    if (wasOffline.current && !offline) onReconnect?.();
+    wasOffline.current = offline;
+  }, [offline, onReconnect]);
+
   return {
-    offline:
-      query.isSuccess && tunnelAgentOffline(query.data?.connectionStatus),
+    offline,
+    // refetch() ignores `enabled`, and with no source it would read an empty ID.
     refetch: () => {
-      void query.refetch();
+      if (active) void query.refetch();
     },
   };
 }
