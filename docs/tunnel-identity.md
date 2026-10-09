@@ -110,14 +110,14 @@ follows the token actually sent, including on retries that replace it. It is
 absent when the request carries no upstream credential, a configured
 `Authorization` header, or a token obtained by identity chaining.
 
-| Field              | Meaning                                                                                                                                       |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `owner`            | `subject`: the assertion's subject granted it. `self`: the remote session client's own credential, not the subject's.                         |
-| `client_id`        | The Speakeasy remote session client the credential belongs to.                                                                                |
-| `grant_id`         | Subject credentials only: the grant the token came from.                                                                                      |
-| `grant_generation` | Subject credentials only: increases when the subject authorizes the grant again, for example with another upstream account. Refresh keeps it. |
-| `token_sha256`     | Lowercase hex SHA-256 of the bearer token's bytes, without the `Bearer ` scheme.                                                              |
-| `token_expires_at` | The token's expiry in Unix seconds; omitted when the upstream stated none.                                                                    |
+| Field              | Meaning                                                                                                                                                                                                                            |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `owner`            | `subject`: the assertion's subject granted it. `self`: the remote session client's own credential, not the subject's.                                                                                                              |
+| `client_id`        | The Speakeasy remote session client the credential belongs to.                                                                                                                                                                     |
+| `grant_id`         | Subject credentials only: the grant the token came from.                                                                                                                                                                           |
+| `grant_generation` | Subject credentials only: increases when the subject authorizes the grant again, for example with another upstream account. Refresh keeps it.                                                                                      |
+| `token_sha256`     | Lowercase hex SHA-256 of the bearer token's bytes, without the `Bearer ` scheme.                                                                                                                                                   |
+| `token_expires_at` | When the token stops being usable, in Unix seconds. Subject credentials: the upstream's stated expiry, omitted when it stated none. Self credentials: Speakeasy's serving cutoff, present even when the upstream stated no expiry. |
 
 To use it, verify the assertion, then require exactly one `Authorization:
 Bearer` value whose SHA-256 equals `token_sha256`. The tunnel agent's

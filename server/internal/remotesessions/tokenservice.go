@@ -424,8 +424,10 @@ type UpstreamToken struct {
 	// refresh. Zero for a token that came from no grant row.
 	GrantGeneration int64
 
-	// AccessExpiresAt is when Token expires. Nil when the upstream stated no
-	// expiry.
+	// AccessExpiresAt is when Token stops being usable. For a subject grant
+	// it is the upstream's stated expiry, nil when it stated none. For a self
+	// credential it is Speakeasy's serving cutoff, which its source sets even
+	// when the upstream stated no expiry.
 	AccessExpiresAt *time.Time
 
 	// ClientCredentialErr is why the self client this entry stands for has

@@ -884,3 +884,17 @@ func TestServedUntil(t *testing.T) {
 		})
 	}
 }
+
+func TestCredential_OmittedExpiryStillHasServingCutoff(t *testing.T) {
+	t.Parallel()
+
+	f := newFixture(t, func(int) tokenResponse {
+		return tokenResponse{status: http.StatusOK, body: map[string]any{"access_token": "no-expiry-token", "token_type": "Bearer"}}
+	})
+	clientID := f.secretClient(t, oauthwire.AuthMethodClientSecretBasic, []string{"read"})
+
+	cred, err := f.newMinter(t).Credential(t.Context(), f.request(clientID, testResource))
+	require.NoError(t, err)
+	// The serving cutoff the self credential's caller assertion reports.
+	require.WithinDuration(t, time.Now().Add(unknownExpiryLifetime-expirySkew), cred.ExpiresAt(), 10*time.Second)
+}
