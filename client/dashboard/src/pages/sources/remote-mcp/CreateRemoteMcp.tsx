@@ -366,7 +366,10 @@ function CreateRemoteMcpForm() {
               </Stack>
             ) : null}
           </fieldset>
-          <GatewayAttachmentStatus flow={flow} />
+          <GatewayAttachmentStatus
+            flow={flow}
+            serverHref={(id) => routes.mcp.x.overview.href(id)}
+          />
           {mode === "proxied" && isVerified ? (
             <CreationIdentityChoice
               value={identityMode}
