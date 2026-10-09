@@ -419,6 +419,16 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 		}
 	}
 
+	if opts.internalCatalog && p.internalCatalog != nil {
+		// Direct TLS dialing keeps the destination check local rather than
+		// delegating DNS or connections to an environment proxy.
+		transport.Proxy = nil
+		if transport.TLSClientConfig == nil {
+			transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		}
+		transport.DialTLSContext = p.catalogTLSDialer(dialer, transport.TLSClientConfig).DialContext
+	}
+
 	otelOpts := []otelhttp.Option{otelhttp.WithTracerProvider(p.tracerProvider)}
 	otelOpts = append(otelOpts, opts.otelHTTPOptions...)
 
@@ -426,18 +436,8 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	// the outbound HTTP span, and stamps the gram.resilience.* dimensions
 	// derived per request by the resilience transport.
 	var base http.RoundTripper = transport
-	closeIdleConnections := transport.CloseIdleConnections
-	if opts.internalCatalog && p.internalCatalog != nil {
-		transport.Proxy = nil
-		catalog := p.catalogTransport(transport, dialer)
-		base = &catalogRoundTripper{next: transport, catalog: catalog}
-		closeIdleConnections = func() {
-			transport.CloseIdleConnections()
-			catalog.CloseIdleConnections()
-		}
-	}
 	if opts.resilience != nil {
-		base = &resilienceSpanAnnotator{next: base}
+		base = &resilienceSpanAnnotator{next: transport}
 	}
 
 	// Retries sit outside the resilience layer so every attempt is admitted
@@ -455,7 +455,7 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	}
 	roundTripper = &closeIdleRoundTripper{
 		RoundTripper:         roundTripper,
-		closeIdleConnections: closeIdleConnections,
+		closeIdleConnections: transport.CloseIdleConnections,
 	}
 
 	if opts.retryConfig == nil {
@@ -504,7 +504,7 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	}
 	client.Transport = &closeIdleRoundTripper{
 		RoundTripper:         client.Transport,
-		closeIdleConnections: closeIdleConnections,
+		closeIdleConnections: transport.CloseIdleConnections,
 	}
 	return client
 }
@@ -595,12 +595,16 @@ func (p *Policy) Dialer(options ...func(*dialerOptions)) *net.Dialer {
 // whose host points anywhere blocked, even if a public address happens to be
 // tried first at dial time.
 func (p *Policy) ValidateHost(ctx context.Context, host string) error {
+	return p.validateHost(ctx, host, p.checkIP)
+}
+
+func (p *Policy) validateHost(ctx context.Context, host string, checkIP func(net.IP) error) error {
 	if host == "" {
 		return fmt.Errorf("%w: empty host", ErrBadHost)
 	}
 
 	if ip := net.ParseIP(host); ip != nil {
-		return p.checkIP(ip)
+		return checkIP(ip)
 	}
 
 	ips, err := p.resolver.LookupIP(ctx, "ip", host)
@@ -612,7 +616,7 @@ func (p *Policy) ValidateHost(ctx context.Context, host string) error {
 	}
 
 	for _, ip := range ips {
-		if err := p.checkIP(ip); err != nil {
+		if err := checkIP(ip); err != nil {
 			return err
 		}
 	}
@@ -659,14 +663,12 @@ func (p *Policy) validateAbsoluteURL(ctx context.Context, rawURL string, schemes
 	for _, option := range options {
 		option(&opts)
 	}
-	if opts.internalCatalog && p.internalCatalog != nil && isCatalogHost(u.Hostname()) {
-		if err := p.validateCatalogURL(ctx, u); err != nil {
-			return nil, err
-		}
-		return u, nil
+	checkIP := p.checkIP
+	if opts.internalCatalog && p.internalCatalog != nil && catalogHTTPSURL(u) {
+		checkIP = p.checkCatalogIP
 	}
 
-	if err := p.ValidateHost(ctx, u.Hostname()); err != nil {
+	if err := p.validateHost(ctx, u.Hostname(), checkIP); err != nil {
 		return nil, fmt.Errorf("validate host: %w", err)
 	}
 

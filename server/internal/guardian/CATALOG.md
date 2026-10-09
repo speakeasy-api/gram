@@ -27,25 +27,29 @@ reachability from the dev pod range. No deployment or infrastructure changes are
 part of this code change. Local tests use mock DNS and a loopback TLS server;
 they do not prove deployed DNS, certificates, firewall rules, or ILB routing.
 
-The endpoint shape is `https://<customer>.catalog.dev.speakeasy.com/<server>/mcp`.
+The catalog uses `https://<customer>.catalog.dev.speakeasy.com/<server>/mcp`.
 The ILB handles path-prefix stripping; the application sends the original path.
-Customer labels are release-channel conventions, **not authorization boundaries**.
-Every customer can route to every catalog server; ordinary product authorization
-and upstream authentication still apply.
+The exception trusts the configured ILB's HTTPS listener, regardless of the
+hostname used to reach it. Customer labels are release-channel conventions,
+**not authorization boundaries**. Every customer can route to every catalog
+server; ordinary product authorization and upstream authentication still apply.
 
 ## Enforcement and path audit
 
-- One ASCII DNS label under the exact development catalog domain, case-insensitive
-  with one optional terminal dot; HTTPS and implicit or explicit `443` only.
-- No IP literals, nested labels, suffix lookalikes, userinfo, or alternate ports.
-- Preflight checks every DNS answer against the configured destination. Runtime
-  checks the actual resolved socket destination on every connection, including
-  after preflight. Unexpected public addresses are rejected too.
-- Transport selection is repeated for redirects/retries. Other destinations use
-  the ordinary Guardian blocklist. MCP redirect/body-replay rules remain in force.
+- The configured private IPv4 address is permitted only over HTTPS on port 443.
+  Other destinations retain the ordinary Guardian blocklist; public destinations
+  remain allowed. There is no hostname allowlist.
+- Preflight checks every DNS answer. Runtime checks the actual resolved socket
+  on every connection, including after preflight and redirects. A DNS change to
+  another private address cannot reuse the exception.
+- The standard TLS dialer receives the socket exception; the plaintext dialer
+  does not. A redirect to HTTP, even on port 443, cannot use it. Existing MCP
+  URL validation and redirect/body-replay rules remain in force.
 - Opted-in clients connect directly (environment HTTP proxies are disabled) so
   DNS and socket checks cannot be delegated to a proxy. TLS trust and hostname
-  verification remain enabled, using the original request hostname.
+  verification remain enabled, using the original request hostname. IP-literal
+  URLs require a certificate valid for that IP. The load balancer must expose
+  only services intended to be reachable by all catalog consumers.
 - Remote MCP create/update/provision/verify use `proxy.ValidateRemoteMCPURL`;
   probes and the hosted proxy opt in at client construction. Unproxied registration
   uses the same validation option.

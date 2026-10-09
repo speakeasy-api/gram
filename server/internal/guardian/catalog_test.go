@@ -58,21 +58,15 @@ func TestCatalogURLValidation(t *testing.T) {
 		{"approved", "https://alpha.catalog.dev.speakeasy.com/okta/mcp", []string{"10.23.45.67"}, true},
 		{"second label", "https://beta.catalog.dev.speakeasy.com/okta/mcp", []string{"10.23.45.67"}, true},
 		{"normalized", "https://ALPHA.CATALOG.DEV.SPEAKEASY.COM.:443/okta/mcp", []string{"10.23.45.67"}, true},
-		{"lookalike", "https://alpha.catalog.dev.speakeasy.com.evil.test/mcp", []string{"10.23.45.67"}, false},
-		{"missing boundary", "https://alphacatalog.dev.speakeasy.com/mcp", []string{"10.23.45.67"}, false},
-		{"unicode lookalike", "https://alpha.catalog.dev.speaKeasy.com/mcp", []string{"10.23.45.67"}, false},
-		{"apex", "https://catalog.dev.speakeasy.com/mcp", []string{"10.23.45.67"}, false},
-		{"nested label", "https://nested.alpha.catalog.dev.speakeasy.com/mcp", []string{"10.23.45.67"}, false},
-		{"invalid label", "https://-alpha.catalog.dev.speakeasy.com/mcp", []string{"10.23.45.67"}, false},
-		{"literal", "https://10.23.45.67/mcp", nil, false},
-		{"mapped literal", "https://[::ffff:10.23.45.67]/mcp", nil, false},
+		{"alternate hostname", "https://alternate.example.test/mcp", []string{"10.23.45.67"}, true},
+		{"literal", "https://10.23.45.67/mcp", nil, true},
+		{"mapped literal", "https://[::ffff:10.23.45.67]/mcp", nil, true},
 		{"http", "http://alpha.catalog.dev.speakeasy.com:443/mcp", []string{"10.23.45.67"}, false},
 		{"other port", "https://alpha.catalog.dev.speakeasy.com:8443/mcp", []string{"10.23.45.67"}, false},
 		{"empty port", "https://alpha.catalog.dev.speakeasy.com:/mcp", []string{"10.23.45.67"}, false},
-		{"userinfo", "https://user@alpha.catalog.dev.speakeasy.com/mcp", []string{"10.23.45.67"}, false},
 		{"other private IP", "https://alpha.catalog.dev.speakeasy.com/mcp", []string{"10.23.45.68"}, false},
-		{"public IP", "https://alpha.catalog.dev.speakeasy.com/mcp", []string{"8.8.8.8"}, false},
-		{"mixed DNS", "https://alpha.catalog.dev.speakeasy.com/mcp", []string{"10.23.45.67", "8.8.8.8"}, false},
+		{"public IP", "https://alpha.catalog.dev.speakeasy.com/mcp", []string{"8.8.8.8"}, true},
+		{"mixed DNS with private IP", "https://alpha.catalog.dev.speakeasy.com/mcp", []string{"10.23.45.67", "10.23.45.68"}, false},
 		{"empty DNS", "https://alpha.catalog.dev.speakeasy.com/mcp", nil, false},
 		{"ordinary public", "https://public.example.com/mcp", []string{"8.8.8.8"}, true},
 	} {
@@ -151,12 +145,7 @@ func TestCatalogSocketDestination(t *testing.T) {
 	} {
 		t.Run(tc.address, func(t *testing.T) {
 			t.Parallel()
-			err := policy.internalCatalog.checkDestination(tc.address)
-			if tc.valid {
-				require.NoError(t, err)
-			} else {
-				require.ErrorIs(t, err, ErrBlockedIP)
-			}
+			require.Equal(t, tc.valid, policy.internalCatalog.permits(tc.address))
 		})
 	}
 }
@@ -173,11 +162,11 @@ func TestCatalogRebindingRejectedByClient(t *testing.T) {
 	_, err = policy.ValidateHTTPURL(t.Context(), endpoint, WithInternalCatalog())
 	require.NoError(t, err)
 	// The runtime lookup now returns loopback. It must fail before connecting,
-	// despite preflight succeeding and even if another option allows loopback.
+	// despite preflight succeeding.
 	policy.resolver = dns.NewMockResolver(dns.MockResolverConfig{LookupIPFunc: func(context.Context, string, string) ([]net.IP, error) {
 		return []net.IP{net.ParseIP("127.0.0.1")}, nil
 	}})
-	client := policy.PooledClient(WithInternalCatalog(), WithAllowedCIDRBlocks("127.0.0.1/32"))
+	client := policy.PooledClient(WithInternalCatalog())
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint, nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
@@ -188,16 +177,17 @@ func TestCatalogRebindingRejectedByClient(t *testing.T) {
 }
 
 // catalogTLSFixture substitutes only the expected socket and port for a local
-// TLS listener. Requests still use the catalog hostname, HTTPS/443 URL checks,
-// DNS resolver, real Guardian ControlContext and normal certificate validation.
+// TLS listener. It exercises the production client, TLS-only dialer, DNS
+// resolver, real Guardian ControlContext and normal certificate validation.
 func catalogTLSFixture(t *testing.T, trusted bool, handler http.Handler) *http.Client {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
-	cert := &x509.Certificate{SerialNumber: big.NewInt(1), DNSNames: []string{"*.catalog.dev.speakeasy.com"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+	cert := &x509.Certificate{SerialNumber: big.NewInt(1), DNSNames: []string{"*.catalog.dev.speakeasy.com", "alternate.example.test"}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
 	der, err := x509.CreateCertificate(rand.Reader, cert, cert, &key.PublicKey, key)
 	require.NoError(t, err)
 	server := httptest.NewUnstartedServer(handler)
+	server.EnableHTTP2 = true
 	server.TLS = &tls.Config{Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key}}, MinVersion: tls.VersionTLS12}
 	server.StartTLS()
 	t.Cleanup(server.Close)
@@ -207,24 +197,30 @@ func catalogTLSFixture(t *testing.T, trusted bool, handler http.Handler) *http.C
 	if trusted {
 		roots.AddCert(parsedCert)
 	}
-	resolver := dns.NewMockResolver(dns.MockResolverConfig{LookupIPFunc: func(context.Context, string, string) ([]net.IP, error) {
+	resolver := dns.NewMockResolver(dns.MockResolverConfig{LookupIPFunc: func(_ context.Context, _, host string) ([]net.IP, error) {
+		if host == "private.example.test" || host == "private.example.test." {
+			return []net.IP{net.ParseIP("127.0.0.2")}, nil
+		}
 		return []net.IP{net.ParseIP("127.0.0.1")}, nil
 	}})
 	policy := NewDefaultPolicy(noop.NewTracerProvider(), WithResolver(resolver), WithTLSRootCAs(roots)) //nolint:forbidigo // testenv imports guardian through its identity fixtures, causing an import cycle.
 	local := netip.MustParseAddrPort(server.Listener.Addr().String())
 	policy.internalCatalog = &catalogRule{destination: local}
-	base := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}}
-	catalog := policy.catalogTransport(base, policy.Dialer())
-	dial := catalog.DialContext
-	catalog.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
-		host, _, err := net.SplitHostPort(address)
+	base := &http.Transport{ForceAttemptHTTP2: true}
+	client := policy.clientWithBaseTransport(base, WithInternalCatalog())
+	dial := base.DialTLSContext
+	base.DialTLSContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(address)
 		if err != nil {
 			return nil, fmt.Errorf("split fixture address: %w", err)
 		}
-		return dial(ctx, network, net.JoinHostPort(host, strconv.Itoa(int(local.Port()))))
+		if port == "443" {
+			address = net.JoinHostPort(host, strconv.Itoa(int(local.Port())))
+		}
+		return dial(ctx, network, address)
 	}
-	t.Cleanup(catalog.CloseIdleConnections)
-	return &http.Client{Transport: &catalogRoundTripper{next: policy.Client().Transport, catalog: catalog}}
+	t.Cleanup(client.CloseIdleConnections)
+	return client
 }
 
 func TestCatalogTransportAndRedirects(t *testing.T) {
@@ -235,15 +231,20 @@ func TestCatalogTransportAndRedirects(t *testing.T) {
 	}{
 		{"same origin", "/okta/mcp", true},
 		{"second customer", "https://beta.catalog.dev.speakeasy.com/okta/mcp", true},
-		{"lookalike", "https://alpha.catalog.dev.speakeasy.com.evil.test/mcp", false},
+		{"alternate hostname", "https://alternate.example.test/mcp", true},
+		{"wrong certificate hostname", "https://wrong.example.test/mcp", false},
 		{"other private host", "https://private.example.test/mcp", false},
-		{"literal", "https://10.23.45.67/mcp", false},
+		{"literal with valid certificate", "https://127.0.0.1/mcp", true},
 		{"scheme", "http://alpha.catalog.dev.speakeasy.com/okta/mcp", false},
+		{"plaintext on TLS port", "http://alpha.catalog.dev.speakeasy.com:443/okta/mcp", false},
 		{"port", "https://alpha.catalog.dev.speakeasy.com:8443/okta/mcp", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			client := catalogTLSFixture(t, true, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.ProtoMajor != 2 {
+					t.Errorf("expected HTTP/2, got %s", r.Proto)
+				}
 				if r.URL.Path == "/redirect" {
 					http.Redirect(w, r, tc.target, http.StatusFound)
 					return

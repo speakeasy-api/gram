@@ -27,8 +27,9 @@ func TestValidateRemoteMCPCatalogURL(t *testing.T) {
 		{"https://beta.catalog.dev.speakeasy.com:443/okta/mcp", true},
 		{"http://alpha.catalog.dev.speakeasy.com/okta/mcp", false},
 		{"https://alpha.catalog.dev.speakeasy.com:8443/okta/mcp", false},
-		{"https://alpha.catalog.dev.speakeasy.com.evil.test/okta/mcp", false},
-		{"https://10.23.45.67/okta/mcp", false},
+		{"https://alternate.example.test/okta/mcp", true},
+		{"https://10.23.45.67/okta/mcp", true},
+		{"https://user@alternate.example.test/okta/mcp", false},
 	} {
 		t.Run(tc.url, func(t *testing.T) {
 			t.Parallel()
