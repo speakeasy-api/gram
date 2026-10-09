@@ -608,6 +608,26 @@ func (q *Queries) LockOrganizationTunneledMcpLimit(ctx context.Context, organiza
 	return err
 }
 
+const markServerSeenFixture = `-- name: MarkServerSeenFixture :exec
+UPDATE tunneled_mcp_servers
+SET status = 'active',
+    last_seen_at = clock_timestamp()
+WHERE id = $1
+  AND project_id = $2
+`
+
+type MarkServerSeenFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Test fixture: records an agent sighting the way the tunnel gateway does, so
+// tests can reach the "seen before, not connected now" state.
+func (q *Queries) MarkServerSeenFixture(ctx context.Context, arg MarkServerSeenFixtureParams) error {
+	_, err := q.db.Exec(ctx, markServerSeenFixture, arg.ID, arg.ProjectID)
+	return err
+}
+
 const rotateServerKey = `-- name: RotateServerKey :one
 UPDATE tunneled_mcp_servers
 SET

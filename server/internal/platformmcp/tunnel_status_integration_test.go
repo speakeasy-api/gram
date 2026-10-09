@@ -294,3 +294,16 @@ func TestTunnelStatusDiagnosticsReadWithProjectSourceRead(t *testing.T) {
 
 	require.Equal(t, &MCPTunnel{ConnectionStatus: TunnelConnectionNeverConnected}, mcp.Tunnel)
 }
+
+func TestTunnelStatusReportsInactiveForSeenSourceWithoutLiveConnections(t *testing.T) {
+	t.Parallel()
+
+	fixture := seedTunnelStatusFixture(t, "platform_mcp_tunnel_status_inactive")
+	fixture.grantProjectSourceRead(t)
+	require.NoError(t, tunneledmcprepo.New(fixture.conn).MarkServerSeenFixture(t.Context(), tunneledmcprepo.MarkServerSeenFixtureParams{ID: fixture.tunnelID, ProjectID: fixture.project.ID}))
+	reader, ctx := fixture.reader(t, &recordingTunnelConnections{})
+
+	mcp := fixture.getMCP(t, reader, ctx, fixture.wrapperID)
+
+	require.Equal(t, &MCPTunnel{ConnectionStatus: TunnelConnectionInactive}, mcp.Tunnel)
+}
