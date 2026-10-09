@@ -231,12 +231,13 @@ WHERE id = @id
 -- target's deletion.
 -- The JSON guards below never raise on a malformed scope: Postgres does not
 -- order AND operands, so a cast or array function cannot rely on an earlier
--- filter to skip a scalar such as {"servers": null}.
+-- filter to skip a scalar such as {"servers": null}. Only a missing or JSON
+-- false all_servers marks a policy server-bound; any other value keeps it.
 SELECT *
 FROM risk_policies
 WHERE project_id = @project_id
   AND deleted IS FALSE
-  AND mcp_scope->'all_servers' IS DISTINCT FROM 'true'::jsonb
+  AND COALESCE(mcp_scope->'all_servers', 'false'::jsonb) = 'false'::jsonb
   AND jsonb_array_length(CASE WHEN jsonb_typeof(mcp_scope->'servers') = 'array' THEN mcp_scope->'servers' ELSE '[]'::jsonb END) = 1
   AND mcp_scope @> jsonb_build_object(
     'servers',
@@ -248,7 +249,7 @@ ORDER BY id;
 SELECT DISTINCT policy.project_id
 FROM risk_policies AS policy
 WHERE policy.deleted IS FALSE
-  AND policy.mcp_scope->'all_servers' IS DISTINCT FROM 'true'::jsonb
+  AND COALESCE(policy.mcp_scope->'all_servers', 'false'::jsonb) = 'false'::jsonb
   AND jsonb_array_length(CASE WHEN jsonb_typeof(policy.mcp_scope->'servers') = 'array' THEN policy.mcp_scope->'servers' ELSE '[]'::jsonb END) = 1
   AND (
     EXISTS (
@@ -273,7 +274,7 @@ SELECT *
 FROM risk_policies AS policy
 WHERE policy.project_id = @project_id
   AND policy.deleted IS FALSE
-  AND policy.mcp_scope->'all_servers' IS DISTINCT FROM 'true'::jsonb
+  AND COALESCE(policy.mcp_scope->'all_servers', 'false'::jsonb) = 'false'::jsonb
   AND jsonb_array_length(CASE WHEN jsonb_typeof(policy.mcp_scope->'servers') = 'array' THEN policy.mcp_scope->'servers' ELSE '[]'::jsonb END) = 1
   AND (
     EXISTS (
