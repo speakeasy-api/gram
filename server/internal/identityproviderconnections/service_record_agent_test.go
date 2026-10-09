@@ -9,6 +9,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/identity_provider_connections"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	resourceconnectionsrepo "github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 func TestRecordAgent_DeletesResourceConnectionsOnlyOnChange(t *testing.T) {
@@ -61,4 +62,18 @@ func TestRecordAgent_DeletesResourceConnectionsOnlyOnChange(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRecordAgent_RejectsTheManagedClientID(t *testing.T) {
+	t.Parallel()
+	ctx, si := newTestService(t)
+	created := createConnection(t, ctx, si, fullOrgURL)
+	submitClientID(t, ctx, si, created.ID)
+
+	_, err := si.svc.RecordAgent(ctx, &gen.RecordAgentPayload{ID: created.ID, AgentID: conv.PtrEmpty(testClientID), AgentAppID: nil})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	view, err := si.svc.RecordAgent(ctx, &gen.RecordAgentPayload{ID: created.ID, AgentID: conv.PtrEmpty("wlpagent000000000001"), AgentAppID: nil})
+	require.NoError(t, err)
+	require.Equal(t, "wlpagent000000000001", conv.PtrValOr(view.AgentID, ""))
 }

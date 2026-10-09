@@ -483,6 +483,14 @@ export function AgentSetupForm({
         </Field>
       </div>
       <ApiErrorAlert error={record.error} />
+      {connection.agentId && agentId.trim() !== connection.agentId && (
+        <Text small warning>
+          Changing the agent ID leaves sign-in issuers trusting the previous
+          agent&apos;s sign-in client. After saving, set up Okta sign-in for the
+          new agent, paste its public key in Okta, and trust it on those
+          issuers.
+        </Text>
+      )}
       <FieldDescription id="okta-agent-help">
         The agent ID is the wlp... value in the Okta agent page URL, and it
         drives the Okta deep links in the Server connections table below. The

@@ -98125,6 +98125,7 @@ components:
                         - link_agent_app
                         - activate_agent_app
                         - record_ai_agent
+                        - add_agent_public_key
                         - first_resource_connection
                 title:
                     type: string

@@ -129,7 +129,7 @@ func TestCreate_ProvisionsPendingConnection(t *testing.T) {
 	keys := checklistKeys(created.Checklist)
 	require.Equal(t, []string{
 		"create_api_services_app", "public_key_auth", "dpop", "grant_scopes", "assign_admin_roles", "submit_client_id",
-		"register_ai_agent", "link_agent_app", "activate_agent_app", "record_ai_agent", "first_resource_connection",
+		"register_ai_agent", "link_agent_app", "record_ai_agent", "add_agent_public_key", "activate_agent_app", "first_resource_connection",
 	}, keys)
 	for _, item := range created.Checklist {
 		switch item.Key {
@@ -145,7 +145,7 @@ func TestCreate_ProvisionsPendingConnection(t *testing.T) {
 		case "submit_client_id":
 			require.NotNil(t, item.Completed)
 			require.False(t, *item.Completed)
-		case "register_ai_agent", "link_agent_app", "activate_agent_app", "record_ai_agent", "first_resource_connection":
+		case "register_ai_agent", "link_agent_app", "activate_agent_app", "record_ai_agent", "add_agent_public_key", "first_resource_connection":
 			require.Equal(t, "cross_app_access", item.Group)
 		default:
 			require.Equal(t, "connect", item.Group)
