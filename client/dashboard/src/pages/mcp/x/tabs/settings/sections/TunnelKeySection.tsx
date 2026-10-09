@@ -14,7 +14,10 @@ import { KeyRound, Loader2, RotateCcw } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useSourceDestinationLock } from "./useSourceDestinationLock";
+import { isForbidden, sourceDestinationLock } from "./sourceDestinationLock";
+import { invalidateTunneledMcpSourceViews } from "./sourceInvalidation";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { useQueryClient } from "@tanstack/react-query";
 
 export const MCP_TUNNEL_KEY_SECTION_ID = "tunnel-key";
 
@@ -61,9 +64,15 @@ function RotatedKeyDialogBody({
   );
 }
 
-function RotateKeyButton({ onClick }: { onClick: () => void }) {
+function RotateKeyButton({
+  onClick,
+  disabled = false,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+}) {
   return (
-    <Button variant="secondary" size="md" onClick={onClick}>
+    <Button variant="secondary" size="md" onClick={onClick} disabled={disabled}>
       <Button.LeftIcon>
         <RotateCcw className="h-4 w-4" />
       </Button.LeftIcon>
@@ -100,15 +109,14 @@ export function TunnelKeySection({
       tunneledMcpServer.projectId,
       tunneledMcpServer.projectId,
     );
-  const lock = useSourceDestinationLock({
-    projectId: tunneledMcpServer.projectId,
-    environmentLinked: tunneledMcpServer.environmentLinked,
-  });
+  const lock = sourceDestinationLock(tunneledMcpServer);
+  const queryClient = useQueryClient();
   // Tracks the open dialog so a rotation that resolves after Cancel is
   // dropped instead of repopulating the cleared state.
   const dialogOpenRef = useRef(false);
 
   const handleOpenChange = (open: boolean) => {
+    if (open && lock.reason !== null) return;
     dialogOpenRef.current = open;
     setRotateDialogOpen(open);
     if (!open) {
@@ -131,6 +139,10 @@ export function TunnelKeySection({
       setRotatedKey(result);
       toast.success("Tunnel key rotated");
     } catch (error) {
+      // The cached lock said yes; refresh it so the reason appears.
+      if (isForbidden(error)) {
+        void invalidateTunneledMcpSourceViews(queryClient);
+      }
       const message =
         error instanceof Error ? error.message : "Failed to rotate tunnel key";
       toast.error(message);
@@ -174,15 +186,13 @@ export function TunnelKeySection({
               level="component"
             >
               {lock.reason !== null ? (
-                <RequireScope
-                  scope="environment:read"
-                  resourceId={tunneledMcpServer.projectId}
-                  projectId={tunneledMcpServer.projectId}
-                  level="component"
-                  reason={lock.reason}
-                >
-                  <RotateKeyButton onClick={() => handleOpenChange(true)} />
-                </RequireScope>
+                <SimpleTooltip tooltip={lock.reason}>
+                  {/* A disabled button fires no pointer events; the span
+                      carries the tooltip. */}
+                  <span tabIndex={0} aria-label={lock.reason}>
+                    <RotateKeyButton disabled onClick={() => {}} />
+                  </span>
+                </SimpleTooltip>
               ) : (
                 <RotateKeyButton onClick={() => handleOpenChange(true)} />
               )}

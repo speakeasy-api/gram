@@ -15,7 +15,7 @@ import { GeneralSection } from "./GeneralSection";
 import {
   SOURCE_DESTINATION_LOCK_REASON,
   SOURCE_DESTINATION_UNKNOWN_REASON,
-} from "./useSourceDestinationLock";
+} from "./sourceDestinationLock";
 import type { UpstreamUrlDraft } from "./useUpstreamUrlDraft";
 
 const mocks = vi.hoisted(() => ({

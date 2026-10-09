@@ -45,6 +45,7 @@ const tunnel = {
   name: "jamf",
   keyPrefix: "gram_tun_",
   environmentLinked: false,
+  environmentLinkAuthorized: true,
 } as unknown as TunneledMcpServer;
 
 function section() {

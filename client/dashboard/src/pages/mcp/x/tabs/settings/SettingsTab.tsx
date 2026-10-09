@@ -14,7 +14,7 @@ import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServ
 import { useGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
 import { useGetUnproxiedMcpServer } from "@gram/client/react-query/getUnproxiedMcpServer.js";
 import { Fragment, useEffect, useMemo } from "react";
-import { withUnconfirmedEnvironmentLink } from "./sections/useSourceDestinationLock";
+import { withUnconfirmedEnvironmentLink } from "./sections/sourceDestinationLock";
 import { useLocation } from "react-router";
 import {
   AgentSetupSection,

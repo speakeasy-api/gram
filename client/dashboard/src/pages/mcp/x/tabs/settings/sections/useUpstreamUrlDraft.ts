@@ -8,7 +8,7 @@ import { useUpdateRemoteMcpServerMutation } from "@gram/client/react-query/updat
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { invalidateRemoteMcpSourceViews } from "./sourceInvalidation";
-import { useSourceDestinationLock } from "./useSourceDestinationLock";
+import { isForbidden, sourceDestinationLock } from "./sourceDestinationLock";
 
 export type UpstreamUrlDraft = {
   draft: string;
@@ -44,10 +44,7 @@ export function useUpstreamUrlDraft(
   const queryClient = useQueryClient();
   const update = useUpdateRemoteMcpServerMutation();
   const verify = useVerifyRemoteMcpUrl(draft);
-  const lock = useSourceDestinationLock({
-    projectId: remoteMcpServer.projectId,
-    environmentLinked: remoteMcpServer.environmentLinked,
-  });
+  const lock = sourceDestinationLock(remoteMcpServer);
 
   const urlError = validateMcpServerUrl(draft);
   const dirty = draft.trim() !== initialUrl;
@@ -69,11 +66,19 @@ export function useUpstreamUrlDraft(
       setTouched(true);
       if (urlError !== null) throw new Error(urlError);
       if (lock.reason !== null) throw new Error(lock.reason);
-      await update.mutateAsync({
-        request: {
-          updateServerForm: { id: remoteMcpServer.id, url: draft.trim() },
-        },
-      });
+      try {
+        await update.mutateAsync({
+          request: {
+            updateServerForm: { id: remoteMcpServer.id, url: draft.trim() },
+          },
+        });
+      } catch (error) {
+        // The cached lock said yes; refresh it so the reason appears. The
+        // draft stays, and the refusal still reaches the caller.
+        if (isForbidden(error))
+          void invalidateRemoteMcpSourceViews(queryClient);
+        throw error;
+      }
       await invalidateRemoteMcpSourceViews(queryClient);
     },
   };

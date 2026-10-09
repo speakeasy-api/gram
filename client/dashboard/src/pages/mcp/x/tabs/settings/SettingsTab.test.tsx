@@ -8,7 +8,11 @@ const received = vi.hoisted(() => ({
   general: [] as unknown[],
   tunnelKey: [] as unknown[],
   // Lets a test hand back a retained row from a refetch that failed.
-  source: { environmentLinked: false as boolean | undefined, isError: false },
+  source: {
+    environmentLinked: false as boolean | undefined,
+    environmentLinkAuthorized: true as boolean | undefined,
+    isError: false,
+  },
 }));
 
 vi.mock("./sections/GeneralSection", () => ({
@@ -81,7 +85,11 @@ function sourceRow(id: string) {
     query?: { enabled?: boolean },
   ) => ({
     data: query?.enabled
-      ? { id, environmentLinked: received.source.environmentLinked }
+      ? {
+          id,
+          environmentLinked: received.source.environmentLinked,
+          environmentLinkAuthorized: received.source.environmentLinkAuthorized,
+        }
       : undefined,
     isError: received.source.isError,
   });
@@ -128,7 +136,11 @@ afterEach(() => {
   cleanup();
   received.general = [];
   received.tunnelKey = [];
-  received.source = { environmentLinked: false, isError: false };
+  received.source = {
+    environmentLinked: false,
+    environmentLinkAuthorized: true,
+    isError: false,
+  };
 });
 
 describe("SettingsTab", () => {
@@ -184,26 +196,34 @@ describe("SettingsTab", () => {
     expect(received.general.at(-1)).toMatchObject({
       id: "remote-source-1",
       environmentLinked: false,
+      environmentLinkAuthorized: true,
     });
     cleanup();
     renderSettings(server({ tunneledMcpServerId: "tunneled-source-1" }));
     expect(received.tunnelKey.at(-1)).toMatchObject({
       id: "tunneled-source-1",
       environmentLinked: false,
+      environmentLinkAuthorized: true,
     });
   });
 
   it("treats a retained row from a failed refetch as an unknown link", () => {
-    received.source = { environmentLinked: false, isError: true };
+    received.source = {
+      environmentLinked: false,
+      environmentLinkAuthorized: true,
+      isError: true,
+    };
     renderSettings(server({ remoteMcpServerId: "remote-source-1" }));
     const general = received.general.at(-1) as Record<string, unknown>;
     expect(general.id).toBe("remote-source-1");
     expect(general.environmentLinked).toBeUndefined();
+    expect(general.environmentLinkAuthorized).toBeUndefined();
 
     cleanup();
     renderSettings(server({ tunneledMcpServerId: "tunneled-source-1" }));
     const tunnelKey = received.tunnelKey.at(-1) as Record<string, unknown>;
     expect(tunnelKey.id).toBe("tunneled-source-1");
     expect(tunnelKey.environmentLinked).toBeUndefined();
+    expect(tunnelKey.environmentLinkAuthorized).toBeUndefined();
   });
 });
