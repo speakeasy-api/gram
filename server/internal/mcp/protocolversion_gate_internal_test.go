@@ -51,6 +51,11 @@ func TestRejectMissingMCPTarget_ValidatesRequest(t *testing.T) {
 		{name: "invalid envelope", body: strings.Replace(body, `"jsonrpc":"2.0"`, `"jsonrpc":"1.0"`, 1), version: mcpversions.Version20260728, method: mcpversions.MethodToolsList, status: http.StatusBadRequest, code: oops.MCPCodeInvalidRequest, id: "0"},
 		{name: "batch", body: "[" + body + "]", version: mcpversions.Version20260728, method: mcpversions.MethodToolsList, status: http.StatusBadRequest, code: oops.MCPCodeInvalidRequest},
 		{name: "missing method header", body: body, version: mcpversions.Version20260728, status: http.StatusBadRequest, code: oops.MCPCodeHeaderMismatch, id: "0"},
+		{name: "missing version header with modern _meta", body: body, method: mcpversions.MethodToolsList, status: http.StatusBadRequest, code: oops.MCPCodeHeaderMismatch, id: "0"},
+		{name: "notification with missing version header and modern _meta", body: strings.Replace(body, `"id":0,`, "", 1), method: mcpversions.MethodToolsList, status: http.StatusBadRequest, code: oops.MCPCodeHeaderMismatch},
+		{name: "absent declarations", body: `{"jsonrpc":"2.0","id":0,"method":"tools/list"}`, method: mcpversions.MethodToolsList, status: http.StatusNotFound, code: oops.MCPCodeResourceNotFound, id: "null"},
+		{name: "absent declarations and malformed body", body: "{", method: mcpversions.MethodToolsList, status: http.StatusNotFound, code: oops.MCPCodeResourceNotFound, id: "null"},
+		{name: "absent declarations and oversized body", body: strings.Repeat(" ", missingMCPTargetMaxBodyBytes+1), method: mcpversions.MethodToolsList, status: http.StatusNotFound, code: oops.MCPCodeResourceNotFound, id: "null"},
 		{name: "mismatched method", body: body, version: mcpversions.Version20260728, method: mcpversions.MethodToolsCall, status: http.StatusBadRequest, code: oops.MCPCodeHeaderMismatch, id: "0"},
 		{name: "mismatched revision", body: strings.Replace(body, mcpversions.Version20260728, mcpversions.Version20251125, 1), version: mcpversions.Version20260728, method: mcpversions.MethodToolsList, status: http.StatusBadRequest, code: oops.MCPCodeHeaderMismatch, id: "0"},
 		{name: "malformed version header", body: body, version: "2026-\t07-28", method: mcpversions.MethodToolsList, status: http.StatusBadRequest, code: oops.MCPCodeHeaderMismatch, id: "0"},
@@ -75,7 +80,9 @@ func TestRejectMissingMCPTarget_ValidatesRequest(t *testing.T) {
 				return rejectMissingMCPTarget(w, r, logger, mcpversions.SupportedHostedToolset(), oops.C(oops.CodeNotFound))
 			})
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/missing-target", strings.NewReader(tc.body))
-			req.Header.Set(mcpversions.HTTPHeader, tc.version)
+			if tc.version != "" {
+				req.Header.Set(mcpversions.HTTPHeader, tc.version)
+			}
 			req.Header.Set(httpheaders.MethodHeader, tc.method)
 			w := httptest.NewRecorder()
 			handler.ServeHTTP(w, req)
@@ -156,7 +163,7 @@ func TestRejectMissingMCPTarget_BodyReadFailure(t *testing.T) {
 func TestRejectMissingMCPTarget_HandshakeDoesNotReadBody(t *testing.T) {
 	t.Parallel()
 
-	for _, version := range []string{"", mcpversions.Version20241105, mcpversions.Version20250326, mcpversions.Version20250618, mcpversions.Version20251125} {
+	for _, version := range []string{mcpversions.Version20241105, mcpversions.Version20250326, mcpversions.Version20250618, mcpversions.Version20251125} {
 		t.Run(version, func(t *testing.T) {
 			t.Parallel()
 

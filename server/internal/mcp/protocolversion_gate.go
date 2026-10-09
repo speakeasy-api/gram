@@ -48,13 +48,26 @@ const missingMCPTargetMaxBodyBytes = 1 << 20
 // telemetry is emitted for caller-controlled addresses.
 func rejectMissingMCPTarget(w http.ResponseWriter, r *http.Request, logger *slog.Logger, supported []string, cause error) error {
 	rawVersion := r.Header.Get(mcpversions.HTTPHeader)
-	if rawVersion == "" || isHandshakeDeclaration(mcpversions.Sanitize(rawVersion)) {
+	if isHandshakeDeclaration(mcpversions.Sanitize(rawVersion)) {
 		return cause
 	}
 
 	prepared := prepareMCPRequest(w, r, missingMCPTargetMaxBodyBytes, supported)
+	return rejectPreparedMCPTarget(w, r, logger, prepared, supported, cause)
+}
+
+// rejectPreparedMCPTarget gives a denied target the same response as a missing
+// one, reusing the body already read before authentication.
+func rejectPreparedMCPTarget(w http.ResponseWriter, r *http.Request, logger *slog.Logger, prepared *preparedMCPRequest, supported []string, cause error) error {
 	resolution := prepared.protocolVersion
-	if isHandshakeDeclaration(resolution.Declared) {
+	if (r.Header.Get(mcpversions.HTTPHeader) == "" && resolution.Declared == "") || isHandshakeDeclaration(resolution.Declared) {
+		// Reading an undeclared request to look for modern `_meta` must not
+		// change its legacy lookup response. Denied targets also discard the
+		// prepared ID so their response matches a missing target's.
+		if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok {
+			rpcCtx.ID = mcpjsonrpc.NullID()
+			rpcCtx.ProtocolVersion = ""
+		}
 		return cause
 	}
 

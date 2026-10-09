@@ -482,6 +482,32 @@ func TestConformanceMatrix_MissingTargets(t *testing.T) {
 		denied,
 		{router: router, path: "/platform/mcp/conformance-missing-target", supported: mcpversions.SupportedPlatformToolset()},
 	} {
+		for _, row := range missingTargetRows {
+			t.Run(target.path+"/modern-meta-without-header/"+row.name, func(t *testing.T) {
+				t.Parallel()
+
+				declaration := conformanceDeclaration{label: "modern-meta", revision: mcpversions.Version20260728, era: eraPerRequest}
+				req := buildConformanceRequest(t, target, row, declaration)
+				req.Header.Del(mcpversions.HTTPHeader)
+				w := httptest.NewRecorder()
+				target.router.ServeHTTP(w, req)
+
+				require.Equal(t, http.StatusBadRequest, w.Code, "body=%s", w.Body.String())
+				var response struct {
+					ID    json.RawMessage `json:"id"`
+					Error struct {
+						Code oops.MCPCode `json:"code"`
+					} `json:"error"`
+				}
+				require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+				require.Equal(t, oops.MCPCodeHeaderMismatch, response.Error.Code)
+				if row.notification {
+					require.Empty(t, response.ID)
+				} else {
+					require.Equal(t, "1", string(response.ID))
+				}
+			})
+		}
 		for _, declaration := range declarationsFor(target.supported) {
 			for _, row := range missingTargetRows {
 				t.Run(target.path+"/"+declaration.label+"/"+row.name, func(t *testing.T) {
