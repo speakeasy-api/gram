@@ -157,6 +157,12 @@ describe("AUDIT_ACTIONS", () => {
     expect(staticActionPhrase("environment:link-source")).toBe(
       "linked a source to environment",
     );
+    expect(staticActionPhrase("environment:unlink-source")).toBe(
+      "unlinked a source from environment",
+    );
+    expect(staticActionPhrase("environment:link-toolset")).toBe(
+      "linked a toolset to environment",
+    );
     expect(staticActionPhrase("environment:unlink-toolset")).toBe(
       "unlinked a toolset from environment",
     );

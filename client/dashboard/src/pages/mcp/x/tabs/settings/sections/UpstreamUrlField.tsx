@@ -28,11 +28,12 @@ export function UpstreamUrlField({
         disabled={upstream.pending || upstream.lockedReason !== null}
         aria-invalid={upstream.fieldError ? true : undefined}
         aria-describedby={
-          upstream.fieldError
-            ? "mcp-upstream-url-error"
-            : upstream.lockedReason
-              ? "mcp-upstream-url-locked"
-              : undefined
+          [
+            upstream.fieldError && "mcp-upstream-url-error",
+            upstream.lockedReason && "mcp-upstream-url-locked",
+          ]
+            .filter(Boolean)
+            .join(" ") || undefined
         }
       />
       {upstream.lockedReason && (

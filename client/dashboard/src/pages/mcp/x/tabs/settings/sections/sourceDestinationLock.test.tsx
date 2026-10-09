@@ -243,6 +243,20 @@ describe("UpstreamUrlField", () => {
     expect(screen.getByText(SOURCE_DESTINATION_LOCK_REASON)).toBeTruthy();
   });
 
+  it("describes the input by both the error and the lock reason", () => {
+    renderWithProviders(
+      <UpstreamUrlField
+        upstream={{
+          ...draft(SOURCE_DESTINATION_LOCK_REASON),
+          fieldError: "Enter a valid URL",
+        }}
+      />,
+    );
+    expect(
+      screen.getByLabelText("Remote URL").getAttribute("aria-describedby"),
+    ).toBe("mcp-upstream-url-error mcp-upstream-url-locked");
+  });
+
   it("keeps the URL editable when unlocked", () => {
     renderWithProviders(<UpstreamUrlField upstream={draft(null)} />);
     expect(
@@ -259,18 +273,41 @@ describe("useUpstreamUrlDraft", () => {
     environmentLinkAuthorized: true,
   } as unknown as RemoteMcpServer;
 
-  it("refreshes the source and keeps the draft when the server refuses the URL", async () => {
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={new QueryClient()}>
+      {children}
+    </QueryClientProvider>
+  );
+
+  it("refreshes the source and rethrows when the server refuses the URL", async () => {
     mocks.updateRemote.mockRejectedValue(forbidden());
     const { result } = renderHook(() => useUpstreamUrlDraft(remote), {
-      wrapper: ({ children }) => (
-        <QueryClientProvider client={new QueryClient()}>
-          {children}
-        </QueryClientProvider>
-      ),
+      wrapper,
     });
     act(() => result.current.setDraft("https://example.com/moved"));
     await expect(result.current.save()).rejects.toBeInstanceOf(GramError);
     expect(mocks.invalidateRemote).toHaveBeenCalled();
+    expect(mocks.updateRemote).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the canonical URL, not an unsavable draft, while the source is locked", () => {
+    const { result, rerender } = renderHook(
+      ({ source }: { source: RemoteMcpServer }) => useUpstreamUrlDraft(source),
+      { wrapper, initialProps: { source: remote } },
+    );
+    act(() => result.current.setDraft("https://example.com/moved"));
+    expect(result.current.dirty).toBe(true);
+
+    rerender({ source: { ...remote, environmentLinkAuthorized: false } });
+    expect(result.current.lockedReason).toBe(SOURCE_DESTINATION_LOCK_REASON);
+    expect(result.current.draft).toBe(remote.url);
+    expect(result.current.dirty).toBe(false);
+    expect(result.current.fieldError).toBeFalsy();
+
+    // A lock that clears (e.g. a failed refresh that later succeeds) brings
+    // the typed URL back.
+    rerender({ source: remote });
     expect(result.current.draft).toBe("https://example.com/moved");
+    expect(result.current.dirty).toBe(true);
   });
 });

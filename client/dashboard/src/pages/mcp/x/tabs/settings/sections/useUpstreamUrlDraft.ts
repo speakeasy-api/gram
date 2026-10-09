@@ -41,16 +41,22 @@ export function useUpstreamUrlDraft(
     setTouched(false);
   }, [initialUrl]);
 
+  // A locked URL cannot be edited or saved, so it shows the canonical value:
+  // a dirty draft there would only block saving the rest of the form (e.g.
+  // after the server refuses it). The draft itself is kept, so typing survives
+  // a lock that a failed background refresh makes briefly unknown.
+  const lock = sourceDestinationLock(remoteMcpServer);
+  const shown = lock.reason === null ? draft : initialUrl;
+
   const queryClient = useQueryClient();
   const update = useUpdateRemoteMcpServerMutation();
-  const verify = useVerifyRemoteMcpUrl(draft);
-  const lock = sourceDestinationLock(remoteMcpServer);
+  const verify = useVerifyRemoteMcpUrl(shown);
 
-  const urlError = validateMcpServerUrl(draft);
-  const dirty = draft.trim() !== initialUrl;
+  const urlError = validateMcpServerUrl(shown);
+  const dirty = shown.trim() !== initialUrl;
 
   return {
-    draft,
+    draft: shown,
     setDraft: (value: string): void => {
       setDraft(value);
       setTouched(true);
@@ -69,12 +75,13 @@ export function useUpstreamUrlDraft(
       try {
         await update.mutateAsync({
           request: {
-            updateServerForm: { id: remoteMcpServer.id, url: draft.trim() },
+            updateServerForm: { id: remoteMcpServer.id, url: shown.trim() },
           },
         });
       } catch (error) {
-        // The cached lock said yes; refresh it so the reason appears. The
-        // draft stays, and the refusal still reaches the caller.
+        // The cached lock said yes; refresh it so the reason appears and the
+        // input falls back to the canonical URL. The refusal still reaches
+        // the caller.
         if (isForbidden(error))
           void invalidateRemoteMcpSourceViews(queryClient);
         throw error;
