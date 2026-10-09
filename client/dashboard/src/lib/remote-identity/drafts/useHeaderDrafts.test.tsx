@@ -1,9 +1,13 @@
 import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, renderHook } from "@testing-library/react";
+import { act, cleanup, render, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useHeaderDrafts, useTunneledHeaderDrafts } from "./useHeaderDrafts";
+import {
+  useHeaderDrafts,
+  useTunneledHeaderDrafts,
+  type HeaderDraftsState,
+} from "./useHeaderDrafts";
 
 const mocks = vi.hoisted(() => ({
   headers: vi.fn(),
@@ -771,5 +775,56 @@ describe("useHeaderDrafts recovers from a partial save", () => {
     });
     expect(mocks.tunneledCreate).toHaveBeenCalledTimes(1);
     expect(result.current.drafts[0]?.id).toBeDefined();
+  });
+});
+
+describe("useTunneledHeaderDrafts across a tunnel change", () => {
+  it("keeps an in-flight save on its own tunnel when the page moves on", async () => {
+    let release: () => void = () => {};
+    mocks.tunneledCreate.mockImplementationOnce(async (args) => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return echoSaved(args);
+    });
+    const states: Record<string, HeaderDraftsState> = {};
+    function Probe({ id }: { id: string }): null {
+      states[id] = useTunneledHeaderDrafts({ tunneledMcpServerId: id });
+      return null;
+    }
+    // The settings page keys the section by tunnel, so a new tunnel mounts a
+    // fresh editor instead of reusing the old one's rows.
+    function Page({ id }: { id: string }): JSX.Element {
+      return <Probe key={id} id={id} />;
+    }
+
+    const view = render(<Page id="tunnel-1" />, { wrapper });
+    act(() => states["tunnel-1"]!.addHeader());
+    act(() =>
+      states["tunnel-1"]!.replaceHeader(0, {
+        ...states["tunnel-1"]!.drafts[0]!,
+        name: "X-Api-Key",
+        staticValue: "synthetic-secret",
+      }),
+    );
+    let pending: Promise<boolean> = Promise.resolve(false);
+    act(() => {
+      pending = states["tunnel-1"]!.save();
+    });
+
+    view.rerender(<Page id="tunnel-2" />);
+    expect(states["tunnel-2"]!.drafts).toEqual([]);
+    expect(states["tunnel-2"]!.isDirty).toBe(false);
+
+    await act(async () => {
+      release();
+      await pending;
+    });
+    expect(mocks.tunneledCreate).toHaveBeenCalledTimes(1);
+    expect(
+      mocks.tunneledCreate.mock.calls[0]?.[0].request
+        .createTunneledMcpServerHeaderForm.tunneledMcpServerId,
+    ).toBe("tunnel-1");
+    expect(states["tunnel-2"]!.drafts).toEqual([]);
   });
 });

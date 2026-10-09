@@ -374,3 +374,42 @@ func TestTunnelConfiguredHeaders_CrossProjectIsolation(t *testing.T) {
 	require.Empty(t, forwardedB.Values("X-Api-Key"))
 	require.Empty(t, forwardedB.Values("X-Jamf-Region"))
 }
+
+// A request that first lands on a gateway with no live agent session is
+// rerouted by the real tunnel retryer, and the rerouted request still carries
+// the tunnel's decrypted static, secret and request-derived headers.
+func TestTunnelConfiguredHeaders_RerouteKeepsConfiguredHeaders(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	live := &fakeTunnelGateway{t: t, agentSessionID: "agent-live", backendSessionID: "", legacy: false, dead: false, busy: false, challenge: ""}
+	fixture := newPublicTunnelFixture(t, ctx, ti, live, true)
+	seedTunnelHeaders(t, ctx, ti, *authCtx.ProjectID, fixture.tunnelID, false)
+
+	dead := &fakeTunnelGateway{t: t, agentSessionID: "agent-dead", backendSessionID: "", legacy: false, dead: true, busy: false, challenge: ""}
+	deadServer := httptest.NewServer(dead)
+	t.Cleanup(deadServer.Close)
+
+	// Anonymous requests pick a route at random, and the retryer unpublishes a
+	// dead route, so republish it until a request lands there first. The odds
+	// of never doing so in this many attempts are negligible.
+	const maxAttempts = 32
+	for range maxAttempts {
+		if dead.forwardCount() > 0 {
+			break
+		}
+		require.NoError(t, ti.tunnelRoutes.Publish(ctx, fixture.tunnelID.String(), deadServer.URL, time.Hour))
+		w := httptest.NewRecorder()
+		require.NoError(t, ti.service.ServePublic(w, publicTunnelRequest(fixture.endpointSlug, makeInitializeBody(), "")))
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	}
+	require.Equal(t, 1, dead.forwardCount(), "a request should have been routed to the dead gateway first")
+
+	requireConfiguredHeadersForwarded(t, dead.lastForward(), "tenant-1")
+	rerouted := live.lastForward()
+	requireConfiguredHeadersForwarded(t, rerouted, "tenant-1")
+	requireNoSpeakeasyCredentialsForwarded(t, rerouted)
+	require.Equal(t, fixture.tunnelID.String(), rerouted.Get(wire.HeaderTunnelID))
+}
