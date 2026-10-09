@@ -119,6 +119,8 @@ export const AUDIT_ACTIONS = [
   "mcp-endpoint:update",
   "mcp-server:create",
   "mcp-server:delete",
+  "mcp-server:link-environment",
+  "mcp-server:unlink-environment",
   "mcp-server:update",
   "mcp-server:update-scope-pin",
   "mcp-server:update-tool-metadata",
@@ -598,6 +600,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated pinned scopes on MCP server";
     case "mcp-server:update-tool-metadata":
       return "updated tool metadata on MCP server";
+    case "mcp-server:link-environment":
+      return "linked an environment to MCP server";
+    case "mcp-server:unlink-environment":
+      return "unlinked the environment from MCP server";
 
     case "mcp_approval_request:approve":
       return "approved MCP access to";
