@@ -106,12 +106,15 @@ export function useServerTools(
     project: projectRef,
     enabled: needsLive && !!mcpServer.data && !!platformSlug,
   });
-  const liveListed = !!live.tools && !live.isError;
+  // A cached listing can surface while the session token is still minting;
+  // only a settled, successful listing counts.
+  const liveListed = live.listed && !live.loading;
   const tunnel = useTunnelAgentStatus({
     tunneledSourceId: server?.tunneledSourceId,
     projectSlug: project?.slug,
     enabled: needsLive,
     poll: needsLive && !liveListed,
+    onReconnect: live.refetch,
   });
   const liveTools = useMemo(
     () =>
@@ -143,7 +146,7 @@ export function useServerTools(
       loading: live.loading,
       needsAuth: live.needsAuth,
       isError: live.isError,
-      tools: liveListed ? liveTools : undefined,
+      tools: liveTools,
       connect: live.connect,
       retry: live.refetch,
     },
@@ -175,7 +178,10 @@ export interface ToolSourceInputs {
     loading: boolean;
     needsAuth: boolean;
     isError: boolean;
-    /** Only a listing that succeeded; undefined otherwise. */
+    /**
+     * The latest listing, which may be cached from an earlier session. Only
+     * used once the session has settled without an error.
+     */
     tools: ServerTool[] | undefined;
     connect: (() => void) | undefined;
     retry: () => void;
@@ -209,7 +215,9 @@ export function resolveToolSource({
   }
   if (target.isError) return { status: "error", retry: target.retry };
   if (target.isLoading) return { status: "loading" };
-  if (live.tools) return { status: "ready", tools: live.tools };
+  if (live.tools && !live.loading && !live.isError) {
+    return { status: "ready", tools: live.tools };
+  }
   if (tunnel.offline) return { status: "offline", retry: tunnel.retry };
   // No Speakeasy-origin endpoint: nothing to list through or connect to.
   if (!platformSlug) return { status: "needs-connect", connect: undefined };

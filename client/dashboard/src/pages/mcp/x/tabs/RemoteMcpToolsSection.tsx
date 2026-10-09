@@ -219,11 +219,12 @@ function RemoteMcpToolsSectionInner({
   // A failed listing through a tunnel looks the same whether the agent is
   // offline or anything else went wrong, so only the source's own status can
   // say it is offline. Polled while the listing fails, so a reconnected agent
-  // clears it.
+  // clears it and the listing is tried again.
   const tunnel = useTunnelAgentStatus({
     tunneledSourceId: tunneledMcpServerId,
     enabled: !!tunneledMcpServerId,
     poll: !!tunneledMcpServerId && !loading && !listed,
+    onReconnect: refetch,
   });
 
   // Drift compares the stored set with a listing that succeeded; tools kept

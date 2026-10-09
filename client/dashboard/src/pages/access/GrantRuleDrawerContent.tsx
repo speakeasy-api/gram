@@ -324,8 +324,8 @@ export function GrantRuleDrawerContent({
   }, [assistantInventory.groups, selectedResourceIds]);
 
   // The "Specific tools" picker shows servers with enumerable deploy-time tools
-  // plus remote/tunneled (dynamic-tools) servers. Remote-backed ones resolve
-  // their tools from the stored metadata table on expand; tunneled ones stay a
+  // plus remote/tunneled (dynamic-tools) servers. Both resolve their tools from
+  // the stored metadata table on expand; unproxied servers stay a
   // non-selectable row. Proxy servers (no tools/list at deploy time) appear in
   // the "Specific servers" picker for server-level grants but must not render a
   // zero-tools row here.
