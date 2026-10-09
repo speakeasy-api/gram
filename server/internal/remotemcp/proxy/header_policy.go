@@ -91,7 +91,7 @@ const tunnelHeaderPrefix = "x-gram-tunnel-"
 
 // IsProtectedInboundHeader reports whether a header on the inbound request
 // carries a Speakeasy credential, session, caller assertion or tunnel
-// transport field. Under [HeaderPolicyTunneled] such a header is never copied
+// transport field. Under [HeaderPolicyRemote] such a header is never copied
 // upstream and never used as the source of a configured header.
 func IsProtectedInboundHeader(name string) bool {
 	if mcpauthz.ReservedHeader(name) {
@@ -151,6 +151,18 @@ func isReservedRemoteDestination(h ConfiguredHeader) bool {
 		return h.ValueFromRequestHeader != ""
 	}
 	return false
+}
+
+// ProtectedSourceRemediation explains how to replace a configured header that
+// reads a protected inbound header, for the header named destination. Upstream
+// OAuth is offered only for Authorization: the resolved token supplies that
+// header and no other.
+func ProtectedSourceRemediation(destination string) string {
+	const separate = "Speakeasy does not forward caller credentials or Speakeasy headers to remote MCP servers. Have clients send the upstream credential in a separate request header and read it from there"
+	if headerKey(destination) == "authorization" {
+		return separate + ", store a static credential, or connect the server's upstream OAuth, which supplies Authorization itself"
+	}
+	return separate + ", or store a static credential. Upstream OAuth supplies only Authorization, so it does not replace this header"
 }
 
 // checkStoredRemoteName validates a stored header name or source at request

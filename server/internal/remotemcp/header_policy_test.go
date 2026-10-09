@@ -395,3 +395,94 @@ func TestCreateServerHeader_ServerDeletedWhileWaiting(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, live)
 }
+
+// An update decides whether to keep a stored secret from the header as it is
+// once the server is locked, not from a read taken before it waited: a header
+// another writer turned into a pass-through has no secret left to keep.
+func TestUpdateServerHeader_RereadsHeaderAfterServerLock(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+	project := projectID(t, ctx)
+	created := createSecretHeader(t, ctx, ti, server.ID, "X-Api-Key", "original-secret")
+
+	holder := testenv.BeginTx(t, ctx, ti.conn)
+	_, err := repo.New(holder).GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{ID: uuid.MustParse(server.ID), ProjectID: project})
+	require.NoError(t, err)
+
+	result := make(chan error, 1)
+	go func() {
+		_, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-Api-Key", func(p *gen.UpdateServerHeaderPayload) {
+			p.IsSecret = new(true)
+		}))
+		result <- err
+	}()
+	testenv.WaitForQueryBlockedBy(t, ctx, ti.conn, testenv.BackendPID(holder), "%FROM remote_mcp_servers%FOR UPDATE%")
+
+	source := "X-Client-Token"
+	_, err = repo.New(holder).UpdateServerHeader(ctx, repo.UpdateServerHeaderParams{
+		Name:                   "X-Api-Key",
+		Description:            conv.PtrToPGText(nil),
+		IsRequired:             false,
+		IsSecret:               false,
+		SetValue:               true,
+		Value:                  conv.PtrToPGTextEmpty(nil),
+		ValueFromRequestHeader: conv.PtrToPGTextEmpty(&source),
+		ID:                     uuid.MustParse(created.ID),
+		ProjectID:              project,
+	})
+	require.NoError(t, err)
+	require.NoError(t, holder.Commit(ctx))
+
+	requireOopsCode(t, <-result, oops.CodeBadRequest)
+	stored, err := ti.service.GetServerHeader(ctx, &gen.GetServerHeaderPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               created.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "X-Client-Token", *stored.ValueFromRequestHeader, "the competing writer's row stands")
+}
+
+// A rename checks for a case-insensitive duplicate only once it holds the
+// server lock, so it sees a duplicate a writer ahead of it committed.
+func TestUpdateServerHeader_DuplicateCheckWaitsForServerLock(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+	project := projectID(t, ctx)
+	other := createSecretHeader(t, ctx, ti, server.ID, "X-Other", "other-secret")
+
+	holder := testenv.BeginTx(t, ctx, ti.conn)
+	_, err := repo.New(holder).GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{ID: uuid.MustParse(server.ID), ProjectID: project})
+	require.NoError(t, err)
+
+	result := make(chan error, 1)
+	go func() {
+		_, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(other.ID, "x-api-key", func(p *gen.UpdateServerHeaderPayload) {
+			p.IsSecret = new(true)
+		}))
+		result <- err
+	}()
+	testenv.WaitForQueryBlockedBy(t, ctx, ti.conn, testenv.BackendPID(holder), "%FROM remote_mcp_servers%FOR UPDATE%")
+
+	value := "holder"
+	_, err = repo.New(holder).CreateServerHeader(ctx, repo.CreateServerHeaderParams{
+		RemoteMcpServerID:      uuid.MustParse(server.ID),
+		ProjectID:              project,
+		Name:                   "X-Api-Key",
+		Description:            conv.PtrToPGText(nil),
+		IsRequired:             false,
+		IsSecret:               false,
+		Value:                  conv.PtrToPGTextEmpty(&value),
+		ValueFromRequestHeader: conv.PtrToPGTextEmpty(nil),
+	})
+	require.NoError(t, err)
+	require.NoError(t, holder.Commit(ctx))
+
+	requireOopsCode(t, <-result, oops.CodeConflict)
+	requireStoredSecretValue(t, ctx, ti, server.ID, "X-Other", "other-secret")
+}

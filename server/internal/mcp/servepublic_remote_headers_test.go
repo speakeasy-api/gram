@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
@@ -205,5 +206,75 @@ func TestServeConsentMCP_RemoteDoesNotForwardSpeakeasyHeaders(t *testing.T) {
 		require.NotContains(t, received, "X-Upstream-Token")
 		require.Equal(t, "allowed", markers[i]["X-Client-Trace"])
 		require.Equal(t, "operator-credential", markers[i]["X-Api-Key"])
+	}
+}
+
+// remoteServerIDOf returns the remote_mcp_servers row behind an mcp_servers row.
+func remoteServerIDOf(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, mcpServerID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	server, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
+		ID:        mcpServerID,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	require.True(t, server.RemoteMcpServerID.Valid)
+	return server.RemoteMcpServerID.UUID
+}
+
+// A meta MCP dials each remote member through the hardened remote header
+// policy: a credential stored under a lowercase name reaches the member, a
+// Set-Cookie row does not, and a required row reading a Speakeasy credential
+// fails the call before the member is contacted.
+func TestServePublic_MetaEndpoint_RemoteMembersApplyRemoteHeaderPolicy(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	sharedIssuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-header-policy-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, sharedIssuerID)
+
+	upstreamA := newRecordingUpstream(t, "ping")
+	upstreamB := newRecordingUpstream(t, "ping")
+	memberA := seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Member A", "member-a", 0, upstreamA.url)
+	memberB := seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Member B", "member-b", 1, upstreamB.url)
+	remoteA := remoteServerIDOf(t, ctx, ti.conn, projectID, memberA)
+	remoteB := remoteServerIDOf(t, ctx, ti.conn, projectID, memberB)
+	seedRemoteHeader(t, ctx, ti.conn, projectID, remoteA, "x-api-key", "operator-credential", "", true)
+	seedRemoteHeader(t, ctx, ti.conn, projectID, remoteA, "Set-Cookie", "synthetic=1", "", false)
+	seedRemoteHeader(t, ctx, ti.conn, projectID, remoteB, "X-Upstream-Token", "", "Authorization", true)
+
+	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-header-a", "", []uuid.UUID{sharedIssuerID})
+	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-header-b", "", []uuid.UUID{sharedIssuerID})
+	subject := createTestUser(t, ctx, ti, "meta-header-user-"+uuid.NewString())
+	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientA, subject, "token-member-a", upstreamA.url)
+	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientB, subject, "token-member-b", upstreamB.url)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
+
+	rpc := executeMetaTool(t, ti, metaSlug, bearer, "member-a--ping")
+	text, isError := metaToolResultText(t, rpc)
+	require.False(t, isError, "member A execute_tool must succeed: %s", text)
+	var sawToolCall bool
+	for _, req := range upstreamA.journal() {
+		if req.httpMethod != http.MethodPost {
+			continue
+		}
+		sawToolCall = sawToolCall || req.rpcMethod == "tools/call"
+		require.Equal(t, "operator-credential", req.apiKey, "rpc %s", req.rpcMethod)
+		require.Empty(t, req.setCookie, "rpc %s", req.rpcMethod)
+	}
+	require.True(t, sawToolCall)
+
+	rpc = executeMetaTool(t, ti, metaSlug, bearer, "member-b--ping")
+	_, isError = metaToolResultText(t, rpc)
+	require.True(t, isError, "a required row reading Authorization must fail member B's call")
+	for _, req := range upstreamB.journal() {
+		require.NotEqual(t, "tools/call", req.rpcMethod, "member B must not receive the call")
 	}
 }

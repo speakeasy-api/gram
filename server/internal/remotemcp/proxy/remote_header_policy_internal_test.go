@@ -365,3 +365,30 @@ func TestCheckRemoteHeader(t *testing.T) {
 		})
 	}
 }
+
+// A resolved upstream token owns Authorization only. A custom header reading
+// a protected source is still refused with one, and its remediation does not
+// pretend upstream OAuth would supply it.
+func TestApplyRequestHeadersRemoteOverrideDoesNotRescueCustomDestination(t *testing.T) {
+	t.Parallel()
+
+	userReq, remoteReq := newRemotePolicyRequests(t)
+	userReq.Header.Set("Authorization", "Bearer synthetic-speakeasy-token")
+	p := &Proxy{
+		Logger:                testenv.NewLogger(t),
+		AuthorizationOverride: "upstream-token",
+		Headers: []ConfiguredHeader{
+			{Name: "X-Upstream-Token", StaticValue: "", ValueFromRequestHeader: "Authorization", IsRequired: true},
+		},
+	}
+	message := requireBadRequest(t, p.applyRequestHeaders(t.Context(), userReq, remoteReq))
+	require.Contains(t, message, "does not replace this header")
+	require.NotContains(t, message, "connect the server's upstream OAuth")
+}
+
+func TestProtectedSourceRemediationOffersOAuthOnlyForAuthorization(t *testing.T) {
+	t.Parallel()
+
+	require.Contains(t, ProtectedSourceRemediation("authorization"), "connect the server's upstream OAuth")
+	require.NotContains(t, ProtectedSourceRemediation("X-Upstream-Token"), "connect the server's upstream OAuth")
+}

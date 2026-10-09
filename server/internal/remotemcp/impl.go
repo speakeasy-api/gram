@@ -644,7 +644,7 @@ func (s *Service) CreateServerHeader(ctx context.Context, payload *gen.CreateSer
 	isSecret := conv.PtrValOr(payload.IsSecret, false)
 	name, source, err := validateHeaderWrite(payload.Name, payload.Value, payload.ValueFromRequestHeader, isSecret, false)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "%s", headerWriteErrorMessage(err)).LogWarn(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", headerWriteErrorMessage(payload.Name, err)).LogWarn(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -783,7 +783,7 @@ func (s *Service) UpdateServerHeader(ctx context.Context, payload *gen.UpdateSer
 
 	name, source, err := validateHeaderWrite(payload.Name, payload.Value, payload.ValueFromRequestHeader, isSecret, preserveStoredValue)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "%s", headerWriteErrorMessage(err)).LogWarn(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", headerWriteErrorMessage(payload.Name, err)).LogWarn(ctx, logger)
 	}
 
 	if err := requireUnusedHeaderName(ctx, txRepo, server.ID, *authCtx.ProjectID, name, existing.ID); err != nil {
@@ -958,9 +958,9 @@ func validateHeaderWrite(name string, value *string, valueFromRequestHeader *str
 
 // headerWriteErrorMessage is the client-facing explanation for a header write
 // that validateHeaderWrite refused. It names headers, never values.
-func headerWriteErrorMessage(err error) string {
+func headerWriteErrorMessage(name string, err error) string {
 	if errors.Is(err, proxy.ErrProtectedSource) {
-		return err.Error() + ". Speakeasy does not forward caller credentials or Speakeasy headers to remote MCP servers: have clients send the upstream credential in a separate request header, store a static credential, or configure upstream OAuth where the server supports it"
+		return err.Error() + ". " + proxy.ProtectedSourceRemediation(name)
 	}
 	return "invalid header: " + err.Error()
 }

@@ -327,7 +327,7 @@ func (p *Proxy) applyRemoteConfiguredHeaders(ctx context.Context, userReq *http.
 func remoteHeaderFailureMessage(h ConfiguredHeader, err error) string {
 	switch {
 	case errors.Is(err, ErrProtectedSource):
-		return fmt.Sprintf("required header %q for remote mcp server cannot be populated from request header %q: Speakeasy does not forward caller credentials or Speakeasy headers upstream. Send the upstream credential in a separate request header, store a static credential, or configure upstream OAuth where the server supports it", h.Name, h.ValueFromRequestHeader)
+		return fmt.Sprintf("required header %q for remote mcp server cannot be populated from request header %q. %s", h.Name, h.ValueFromRequestHeader, ProtectedSourceRemediation(h.Name))
 	case errors.Is(err, ErrReservedHeader):
 		return fmt.Sprintf("required header %q cannot be configured on a remote mcp server: change or remove it in the server's settings", h.Name)
 	case errors.Is(err, ErrInvalidHeaderName), errors.Is(err, ErrInvalidHeaderValue):
