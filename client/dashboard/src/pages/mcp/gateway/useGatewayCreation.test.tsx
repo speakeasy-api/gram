@@ -224,6 +224,22 @@ it("stops retrying when the gateway already fronts the same backend", async () =
   expect(api.add).toHaveBeenCalledTimes(1);
   expect(api.navigate).not.toHaveBeenCalled();
 });
+it("reports the refusal even when re-reading the members fails", async () => {
+  api.add.mockRejectedValueOnce(
+    conflict(
+      "another member of this meta mcp server already fronts the same backend",
+    ),
+  );
+  const { result } = setup();
+  api.list.mockResolvedValueOnce({ members: [] });
+  api.list.mockRejectedValueOnce(new Error("offline"));
+  await act(async () => {
+    await expect(result.current.complete("server")).rejects.toThrow(
+      "same backend",
+    );
+  });
+  expect(result.current.attachmentRefused).toBe(true);
+});
 it("keeps other conflicts retryable", async () => {
   api.add.mockRejectedValueOnce(
     conflict("direct-remote membership is not admitted"),
