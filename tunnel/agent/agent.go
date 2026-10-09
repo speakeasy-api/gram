@@ -264,7 +264,7 @@ func normalizeGatewayURL(raw string) (string, error) {
 		if isLocalGatewayHost(u.Hostname()) {
 			return u.String(), nil
 		}
-		return "", errors.New("TUNNEL_GATEWAY_URL must use wss:// unless it targets localhost or host.docker.internal")
+		return "", errors.New("TUNNEL_GATEWAY_URL must use wss:// unless it targets localhost, a .localhost name, a loopback address or host.docker.internal")
 	default:
 		return "", errors.New("TUNNEL_GATEWAY_URL must use wss:// or https://")
 	}
