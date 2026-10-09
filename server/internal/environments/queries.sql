@@ -154,17 +154,19 @@ WHERE se.source_kind = @source_kind
     AND e.deleted IS FALSE;
 
 -- name: SetSourceEnvironment :one
+-- Writes nothing (no row returned) unless the environment is live in this
+-- project.
 INSERT INTO source_environments (
     source_kind,
     source_slug,
     project_id,
     environment_id
-) VALUES (
-    @source_kind,
-    @source_slug,
-    @project_id,
-    @environment_id
 )
+SELECT @source_kind, @source_slug, e.project_id, e.id
+FROM environments e
+WHERE e.id = @environment_id
+  AND e.project_id = @project_id
+  AND e.deleted IS FALSE
 ON CONFLICT (source_kind, source_slug, project_id)
 DO UPDATE SET
     environment_id = EXCLUDED.environment_id,
@@ -185,7 +187,8 @@ WHERE te.toolset_id = @toolset_id
 
 -- name: SetToolsetEnvironment :one
 -- Writes nothing (no row returned) unless the toolset is live in this
--- project, and never rewrites a binding that belongs to another project.
+-- project, the environment is live in the same project, and never rewrites a
+-- binding that belongs to another project.
 INSERT INTO toolset_environments (
     toolset_id,
     project_id,
@@ -196,6 +199,13 @@ FROM toolsets t
 WHERE t.id = @toolset_id
   AND t.project_id = @project_id
   AND t.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM environments e
+    WHERE e.id = @environment_id
+      AND e.project_id = @project_id
+      AND e.deleted IS FALSE
+  )
 ON CONFLICT (toolset_id)
 DO UPDATE SET
     environment_id = EXCLUDED.environment_id,

@@ -569,12 +569,12 @@ INSERT INTO source_environments (
     source_slug,
     project_id,
     environment_id
-) VALUES (
-    $1,
-    $2,
-    $3,
-    $4
 )
+SELECT $1, $2, e.project_id, e.id
+FROM environments e
+WHERE e.id = $3
+  AND e.project_id = $4
+  AND e.deleted IS FALSE
 ON CONFLICT (source_kind, source_slug, project_id)
 DO UPDATE SET
     environment_id = EXCLUDED.environment_id,
@@ -585,16 +585,18 @@ RETURNING id, source_kind, source_slug, project_id, environment_id, created_at, 
 type SetSourceEnvironmentParams struct {
 	SourceKind    string
 	SourceSlug    string
-	ProjectID     uuid.UUID
 	EnvironmentID uuid.UUID
+	ProjectID     uuid.UUID
 }
 
+// Writes nothing (no row returned) unless the environment is live in this
+// project.
 func (q *Queries) SetSourceEnvironment(ctx context.Context, arg SetSourceEnvironmentParams) (SourceEnvironment, error) {
 	row := q.db.QueryRow(ctx, setSourceEnvironment,
 		arg.SourceKind,
 		arg.SourceSlug,
-		arg.ProjectID,
 		arg.EnvironmentID,
+		arg.ProjectID,
 	)
 	var i SourceEnvironment
 	err := row.Scan(
@@ -620,6 +622,13 @@ FROM toolsets t
 WHERE t.id = $2
   AND t.project_id = $3
   AND t.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM environments e
+    WHERE e.id = $1
+      AND e.project_id = $3
+      AND e.deleted IS FALSE
+  )
 ON CONFLICT (toolset_id)
 DO UPDATE SET
     environment_id = EXCLUDED.environment_id,
@@ -635,7 +644,8 @@ type SetToolsetEnvironmentParams struct {
 }
 
 // Writes nothing (no row returned) unless the toolset is live in this
-// project, and never rewrites a binding that belongs to another project.
+// project, the environment is live in the same project, and never rewrites a
+// binding that belongs to another project.
 func (q *Queries) SetToolsetEnvironment(ctx context.Context, arg SetToolsetEnvironmentParams) (ToolsetEnvironment, error) {
 	row := q.db.QueryRow(ctx, setToolsetEnvironment, arg.EnvironmentID, arg.ToolsetID, arg.ProjectID)
 	var i ToolsetEnvironment

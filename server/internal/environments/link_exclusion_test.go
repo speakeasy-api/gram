@@ -91,6 +91,21 @@ func (f linkFixture) toolset(t *testing.T, projectID uuid.UUID) string {
 	return toolset.ID.String()
 }
 
+// otherProject creates a second project in the fixture's organization with
+// one environment, returning both ids.
+func (f linkFixture) otherProject(t *testing.T) (uuid.UUID, uuid.UUID) {
+	t.Helper()
+
+	slug := "other-" + uuid.NewString()[:8]
+	project, err := projectsrepo.New(f.ti.conn).CreateProject(f.ctx, projectsrepo.CreateProjectParams{Name: slug, Slug: slug, OrganizationID: f.orgID})
+	require.NoError(t, err)
+	env, err := repo.New(f.ti.conn).CreateEnvironment(f.ctx, repo.CreateEnvironmentParams{
+		OrganizationID: f.orgID, ProjectID: project.ID, Name: slug, Slug: slug, Description: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	return project.ID, env.ID
+}
+
 func requireCode(t *testing.T, err error, code oops.Code) {
 	t.Helper()
 
@@ -195,33 +210,83 @@ func TestToolsetEnvironmentLink_RefusesAnotherProjectsToolset(t *testing.T) {
 	t.Parallel()
 
 	f := newLinkExclusionFixture(t)
-	slug := "other-" + uuid.NewString()[:8]
-	other, err := projectsrepo.New(f.ti.conn).CreateProject(f.ctx, projectsrepo.CreateProjectParams{Name: slug, Slug: slug, OrganizationID: f.orgID})
-	require.NoError(t, err)
-	otherEnv, err := repo.New(f.ti.conn).CreateEnvironment(f.ctx, repo.CreateEnvironmentParams{
-		OrganizationID: f.orgID, ProjectID: other.ID, Name: slug, Slug: slug, Description: pgtype.Text{String: "", Valid: false},
-	})
-	require.NoError(t, err)
+	otherProjectID, otherEnvID := f.otherProject(t)
 
-	unlinked := f.toolset(t, other.ID)
+	unlinked := f.toolset(t, otherProjectID)
 	requireCode(t, f.setToolset(f.ctx, unlinked, f.readable), oops.CodeNotFound)
 
-	linked := f.toolset(t, other.ID)
-	_, err = repo.New(f.ti.conn).SetToolsetEnvironment(f.ctx, repo.SetToolsetEnvironmentParams{
-		ToolsetID: uuid.MustParse(linked), ProjectID: other.ID, EnvironmentID: otherEnv.ID,
+	linked := f.toolset(t, otherProjectID)
+	_, err := repo.New(f.ti.conn).SetToolsetEnvironment(f.ctx, repo.SetToolsetEnvironmentParams{
+		ToolsetID: uuid.MustParse(linked), ProjectID: otherProjectID, EnvironmentID: otherEnvID,
 	})
 	require.NoError(t, err)
 	requireCode(t, f.setToolset(f.ctx, linked, f.readable), oops.CodeNotFound)
 
 	stored, err := repo.New(f.ti.conn).LockToolsetEnvironmentBinding(f.ctx, repo.LockToolsetEnvironmentBindingParams{
-		ToolsetID: uuid.MustParse(linked), ProjectID: other.ID,
+		ToolsetID: uuid.MustParse(linked), ProjectID: otherProjectID,
 	})
 	require.NoError(t, err)
-	require.Equal(t, otherEnv.ID, stored)
+	require.Equal(t, otherEnvID, stored)
 	_, err = repo.New(f.ti.conn).LockToolsetEnvironmentBinding(f.ctx, repo.LockToolsetEnvironmentBindingParams{
-		ToolsetID: uuid.MustParse(unlinked), ProjectID: other.ID,
+		ToolsetID: uuid.MustParse(unlinked), ProjectID: otherProjectID,
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+// The write itself refuses an environment from another project, so a caller
+// that skipped the handler's environment check still cannot bind one.
+func TestSetToolsetEnvironment_RefusesAnotherProjectsEnvironment(t *testing.T) {
+	t.Parallel()
+
+	f := newLinkExclusionFixture(t)
+	_, otherEnvID := f.otherProject(t)
+
+	unlinked := uuid.MustParse(f.toolset(t, f.projectID))
+	_, err := repo.New(f.ti.conn).SetToolsetEnvironment(f.ctx, repo.SetToolsetEnvironmentParams{
+		ToolsetID: unlinked, ProjectID: f.projectID, EnvironmentID: otherEnvID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	_, err = repo.New(f.ti.conn).LockToolsetEnvironmentBinding(f.ctx, repo.LockToolsetEnvironmentBindingParams{
+		ToolsetID: unlinked, ProjectID: f.projectID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	linked := uuid.MustParse(f.toolset(t, f.projectID))
+	_, err = repo.New(f.ti.conn).SetToolsetEnvironment(f.ctx, repo.SetToolsetEnvironmentParams{
+		ToolsetID: linked, ProjectID: f.projectID, EnvironmentID: uuid.MustParse(f.readable),
+	})
+	require.NoError(t, err)
+	_, err = repo.New(f.ti.conn).SetToolsetEnvironment(f.ctx, repo.SetToolsetEnvironmentParams{
+		ToolsetID: linked, ProjectID: f.projectID, EnvironmentID: otherEnvID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	stored, err := repo.New(f.ti.conn).LockToolsetEnvironmentBinding(f.ctx, repo.LockToolsetEnvironmentBindingParams{
+		ToolsetID: linked, ProjectID: f.projectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, uuid.MustParse(f.readable), stored)
+}
+
+// The write itself refuses an environment from another project, so a caller
+// that skipped the handler's environment check still cannot bind one.
+func TestSetSourceEnvironment_RefusesAnotherProjectsEnvironment(t *testing.T) {
+	t.Parallel()
+
+	f := newLinkExclusionFixture(t)
+	_, otherEnvID := f.otherProject(t)
+	set := func(slug string, environmentID uuid.UUID) error {
+		_, err := repo.New(f.ti.conn).SetSourceEnvironment(f.ctx, repo.SetSourceEnvironmentParams{
+			SourceKind: "http", SourceSlug: slug, ProjectID: f.projectID, EnvironmentID: environmentID,
+		})
+		return err //nolint:wrapcheck // returned for pgx.ErrNoRows assertions
+	}
+
+	require.ErrorIs(t, set("unlinked", otherEnvID), pgx.ErrNoRows)
+	require.Empty(t, f.sourceBinding(t, "unlinked"))
+
+	require.NoError(t, set("linked", uuid.MustParse(f.readable)))
+	require.ErrorIs(t, set("linked", otherEnvID), pgx.ErrNoRows)
+	require.Equal(t, f.readable, f.sourceBinding(t, "linked"))
 }
 
 // Link changes take the project lock MCP-server links and source destination

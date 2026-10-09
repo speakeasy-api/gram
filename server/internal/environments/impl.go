@@ -815,7 +815,10 @@ func (s *Service) SetSourceEnvironmentLink(ctx context.Context, payload *gen.Set
 		ProjectID:     *authCtx.ProjectID,
 		EnvironmentID: environmentID,
 	})
-	if err != nil {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "environment not found").LogError(ctx, s.logger)
+	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to set source environment link").LogError(ctx, s.logger)
 	}
 	if err := s.auditSourceBinding(ctx, txRepo, dbtx, authCtx, string(payload.SourceKind), payload.SourceSlug, previous, uuid.NullUUID{UUID: environmentID, Valid: true}); err != nil {
