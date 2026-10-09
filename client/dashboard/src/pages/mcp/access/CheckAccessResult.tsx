@@ -27,7 +27,7 @@ import {
   type ServerVisibility,
 } from "./explainAccess";
 import { PrincipalBadge } from "./PrincipalBadge";
-import { RoleLink } from "./RoleLink";
+import { RoleLink } from "@/components/role-link";
 
 const LEVELS: ExplainedLevel[] = ["use", "view", "manage"];
 
@@ -73,15 +73,14 @@ export function CheckAccessResult({
 
   if (isPending) {
     return (
-      <div className="space-y-3 border-t px-6 py-5">
-        <Skeleton className="h-5 w-40" />
-        <Skeleton className="h-7 w-2/3" />
+      <div className="border-t px-6 py-4">
+        <Skeleton className="h-6 w-2/3" />
       </div>
     );
   }
   if (isError || !data) {
     return (
-      <div className="border-t px-6 py-5">
+      <div className="border-t px-6 py-4">
         <Text muted small>
           Access for {memberName} could not be checked. Try again in a moment.
         </Text>
@@ -95,12 +94,12 @@ export function CheckAccessResult({
   return (
     <div className="border-t">
       <div className="flex flex-col md:flex-row">
-        <div className="flex-1 px-6 py-5">
-          <div className="text-eyebrow flex items-center gap-2">
+        <div className="flex flex-1 items-center gap-4 px-6 py-4">
+          <span className="text-eyebrow flex shrink-0 items-center gap-2">
             <ToneMark tone={decision.tone} />
             {decision.label}
-          </div>
-          <Text variant="body" className="mt-2 text-lg">
+          </span>
+          <Text variant="body" className="text-base">
             {decision.sentence}
           </Text>
         </div>
@@ -157,10 +156,12 @@ function LevelTab({
       aria-pressed={active}
       onClick={onSelect}
       className={cn(
-        "flex min-w-36 flex-col items-start gap-2 border-b-2 px-5 py-5 text-left transition-colors",
+        "flex min-w-32 flex-col items-start justify-center gap-1.5 border-b-2 px-5 py-3.5 text-left whitespace-nowrap transition-colors",
+        // Only the bottom edge takes the active color: the side edges are the
+        // group's hairline dividers.
         active
-          ? "border-foreground bg-muted/40"
-          : "hover:bg-muted/20 border-transparent",
+          ? "border-b-foreground bg-background"
+          : "hover:bg-muted/20 border-b-transparent",
       )}
     >
       <span className="text-eyebrow">{LEVEL_NAME[level.level]}</span>
@@ -194,21 +195,33 @@ function LevelWhy({
     {
       key: "source",
       header: "Source",
-      width: "280px",
+      width: "1fr",
       render: (group) => <RuleSource rule={group.rule} />,
     },
     {
       key: "rule",
       header: "Rule",
-      width: "1fr",
+      width: "1.25fr",
+      render: (group) => <RuleDescription group={group} />,
+    },
+    {
+      key: "reach",
+      header: "Applies to",
+      width: "240px",
       render: (group) => (
-        <RuleDescription group={group} serverName={serverName} />
+        <Badge
+          variant="neutral"
+          size="sm"
+          className="max-w-full self-start truncate"
+        >
+          {ruleReachLabel(group.rule, serverName)}
+        </Badge>
       ),
     },
     {
       key: "effect",
       header: "Effect",
-      width: "300px",
+      width: "1.25fr",
       render: (group) => (
         <RuleEffect
           rule={group.rule}
@@ -222,8 +235,8 @@ function LevelWhy({
 
   return (
     <>
-      <div className="flex items-start gap-6 border-t px-6 py-4">
-        <span className="text-eyebrow w-32 shrink-0 pt-0.5">
+      <div className="bg-background flex items-center gap-6 border-t px-6 py-4">
+        <span className="text-eyebrow w-32 shrink-0">
           Why · {LEVEL_NAME[level.level]}
         </span>
         <Text variant="body" className="flex-1 text-sm">
@@ -252,6 +265,9 @@ function LevelWhy({
             columns={columns}
             data={groups}
             rowKey={(group) => group.key}
+            // The card already frames the table, and its cells line up with
+            // the card's own gutter.
+            className="border-0 [--cell-padding-inline:1.5rem]"
           />
         </div>
       )}
@@ -262,7 +278,7 @@ function LevelWhy({
 function RuleSource({ rule }: { rule: ExplainedAccessRule }): JSX.Element {
   const directory = directorySourceLabel(rule);
   return (
-    <div className="min-w-0 space-y-1">
+    <div className="min-w-0 space-y-1 self-start">
       <div className="flex items-center gap-2">
         <PrincipalBadge kind={rule.kind} />
         <Text variant="body" className="truncate text-sm font-medium">
@@ -284,21 +300,15 @@ function RuleSource({ rule }: { rule: ExplainedAccessRule }): JSX.Element {
   );
 }
 
-function RuleDescription({
-  group,
-  serverName,
-}: {
-  group: RuleGroup;
-  serverName: string;
-}): JSX.Element {
+function RuleDescription({ group }: { group: RuleGroup }): JSX.Element {
   const { rule, labels } = group;
   const block = ruleIsBlock(rule);
   // A rule that lost still says what it would have done, struck through so
   // it is not read as access the person has.
   const lost = rule.effect === "blocked" || rule.effect === "overridden";
   return (
-    <div className="flex flex-wrap items-start gap-x-2 gap-y-1 text-sm">
-      <span className="text-eyebrow flex items-center gap-1.5 pt-0.5">
+    <div className="flex items-start gap-3 self-start text-sm">
+      <span className="text-eyebrow flex w-16 shrink-0 items-center gap-1.5 pt-0.5">
         <ToneMark tone={block ? "blocked" : "allowed"} />
         {block ? "Blocks" : "Grants"}
       </span>
@@ -312,10 +322,6 @@ function RuleDescription({
           <span key={label}>{label}</span>
         ))}
       </span>
-      <span className="text-muted-foreground">on</span>
-      <Badge variant="neutral" size="sm">
-        {ruleReachLabel(rule, serverName)}
-      </Badge>
     </div>
   );
 }
@@ -333,7 +339,7 @@ function RuleEffect({
 }): JSX.Element {
   const badge = effectBadge(rule);
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 self-start">
       <Badge variant={badge.variant} size="sm">
         {badge.label}
       </Badge>

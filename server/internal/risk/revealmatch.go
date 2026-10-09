@@ -36,9 +36,8 @@ const (
 	surfaceNone           = "none"
 )
 
-// maxUnmaskAssetReadSize caps content-part asset reads for reveal, mirroring
-// the batch analysis activity's cap (risk_analysis.maxContentPartAssetReadSize)
-// so reveal can reconstruct from exactly the text the scanner saw.
+// maxUnmaskAssetReadSize caps content-part asset reads for reveal. Batch
+// analysis scans only a 50 KiB prefix, so finding offsets always fall inside it.
 const maxUnmaskAssetReadSize = 20 * 1024 * 1024 // 20 MiB
 
 // RevealMatcher reconstructs a ClickHouse finding's raw match text from the

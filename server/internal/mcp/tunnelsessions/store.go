@@ -1,6 +1,6 @@
 // Package tunnelsessions holds the Redis-only session state for anonymous
-// (public) tunneled MCP traffic. Gram terminates MCP sessions for these
-// endpoints: it mints a Gram-owned session id (gram_sid) on a successful
+// (public) tunneled MCP traffic. Speakeasy terminates MCP sessions for these
+// endpoints: it mints a Speakeasy-owned session id (gram_sid) on a successful
 // initialize, maps it to the backend's own Mcp-Session-Id plus the exact
 // tunnel target that owns it, and resolves that mapping on every subsequent
 // session-bearing request. There is deliberately no Postgres record — these
@@ -21,7 +21,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// SessionIDPrefix namespaces Gram-minted anonymous tunnel session ids so they
+// SessionIDPrefix namespaces Speakeasy-minted anonymous tunnel session ids so they
 // are recognizable in logs (hashed) and cannot be confused with backend ids.
 const SessionIDPrefix = "gsid_"
 
@@ -48,11 +48,11 @@ func (e *CapacityError) Error() string {
 	return fmt.Sprintf("tunnel is at its anonymous session capacity (retry in %s)", e.RetryAfter)
 }
 
-// Session is the Redis-stored mapping value for one Gram-owned anonymous MCP
+// Session is the Redis-stored mapping value for one Speakeasy-owned anonymous MCP
 // session.
 type Session struct {
 	// BackendSessionID is the Mcp-Session-Id the customer's MCP server minted
-	// at initialize. Forwarded upstream in place of the Gram-owned id.
+	// at initialize. Forwarded upstream in place of the Speakeasy-owned id.
 	BackendSessionID string `json:"backend_session_id"`
 	// GatewayAddr is the tunnel gateway advertise address that served the
 	// initialize. Session-bearing requests dial it directly instead of
@@ -80,7 +80,7 @@ func NewStore(redisClient *redis.Client, ttl time.Duration, liveCap int) *Store 
 // TTL exposes the configured session lifetime for logging/Retry-After math.
 func (s *Store) TTL() time.Duration { return s.ttl }
 
-// MintSessionID returns a fresh Gram-owned session id: gsid_ + 128 bits of
+// MintSessionID returns a fresh Speakeasy-owned session id: gsid_ + 128 bits of
 // crypto/rand hex. The id doubles as a bearer credential for the anonymous
 // session, so it must be unguessable and must never be logged raw.
 func MintSessionID() (string, error) {
@@ -91,7 +91,7 @@ func MintSessionID() (string, error) {
 	return SessionIDPrefix + hex.EncodeToString(buf), nil
 }
 
-// IsSessionID reports whether value is a well-formed Gram-owned tunnel
+// IsSessionID reports whether value is a well-formed Speakeasy-owned tunnel
 // session id. Callers must check this before using client-supplied values as
 // Redis key material.
 func IsSessionID(value string) bool {

@@ -110,7 +110,7 @@ function cap(overrides: Partial<InferenceSpendCap> = {}): InferenceSpendCap {
   };
 }
 
-/** The list as the endpoint reports it: this org's materialized Gram keys. */
+/** The list as the endpoint reports it: this org's materialized Speakeasy keys. */
 function inferenceCapsState(data?: InferenceSpendCap[]) {
   mocks.inferenceCaps.mockReturnValue({ data });
 }

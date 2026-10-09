@@ -7,7 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type CreatePlatformGcpIamCredentialForm = {
   /**
-   * The service account Gram impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.
+   * The service account Speakeasy impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.
    */
   impersonateServiceAccount?: string | undefined;
   /**

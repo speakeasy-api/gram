@@ -35,6 +35,13 @@ export function connectionStep(
   return "connected";
 }
 
+/** Older OIN connections still authenticate with a private key. */
+export function usesClientSecret(
+  connection: Pick<OktaIdentityProviderConnection, "listingMode" | "jwksUrl">,
+): boolean {
+  return connection.listingMode === "oin" && !connection.jwksUrl;
+}
+
 /** Mirrors the server: a verification has completed, whether or not it found gaps. */
 export function isConnectionChecked(connection: {
   status: OktaIdentityProviderConnectionStatus;
@@ -137,6 +144,8 @@ export const VERIFICATION_REASON_LABELS: Record<VerificationReasons, string> = {
     "Okta did not apply the required token protection (DPoP). Check the app’s DPoP setting in Okta.",
   key_not_fetched:
     "Okta has not retrieved the public signing key. Check that the app uses the public key URL (JWKS) on the Okta Setup tab.",
+  secret_rejected:
+    "Okta rejected the client ID or client secret. Check both values against the Speakeasy app in Okta.",
   "read_failed:okta.apps.read":
     "Speakeasy could not read applications from Okta.",
   "read_failed:okta.users.read": "Speakeasy could not read users from Okta.",
@@ -145,7 +154,7 @@ export const VERIFICATION_REASON_LABELS: Record<VerificationReasons, string> = {
 
 export const LAST_ERROR_LABELS: Record<LastError, string> = {
   credential_rejected:
-    "Okta rejected the connection. Check the Client ID and that the app uses the public key URL (JWKS) on the Okta Setup tab.",
+    "Okta rejected the connection's credentials. Check the Client ID, and either the client secret (Okta Integration Network installs) or that the app uses the public key URL (JWKS).",
   okta_unreachable: "Okta could not be reached during the last verification.",
 };
 

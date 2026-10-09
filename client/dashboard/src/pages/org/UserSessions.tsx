@@ -204,7 +204,7 @@ function UserSessionsInner(): JSX.Element {
       scope="project:read"
       resourceId={project.id}
       title="MCP Sessions"
-      description="Connections Gram brokers for this project. Revoking ends current sessions immediately, but clients can authenticate and reconnect. A killswitch is a separate action that blocks matching MCP tool calls without ending sessions; revocation never creates or lifts one."
+      description="Connections Speakeasy brokers for this project. Revoking ends current sessions immediately, but clients can authenticate and reconnect. A killswitch is a separate action that blocks matching MCP tool calls without ending sessions; revocation never creates or lifts one."
     >
       <div className="space-y-8">
         {/* `Page.Section` stacks two `mb-6`s under the description, which reads

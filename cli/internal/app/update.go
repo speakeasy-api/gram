@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/charmbracelet/lipgloss"
@@ -24,6 +25,17 @@ import (
 const (
 	githubReleasesAPI = "https://api.github.com/repos/speakeasy-api/gram/releases"
 	githubDownloadURL = "https://github.com/speakeasy-api/gram/releases/download"
+
+	// homebrewFormula is the Homebrew formula that installs the speakeasy
+	// command.
+	homebrewFormula = "speakeasy-api/tap/cli"
+
+	// legacyHomebrewFormula is the Homebrew formula that installs the same
+	// binary under the legacy gram command name.
+	legacyHomebrewFormula = "speakeasy-api/tap/gram"
+
+	// npmPackage is the npm package that installs the speakeasy command.
+	npmPackage = "@speakeasy-api/cli"
 )
 
 type installMethod string
@@ -31,8 +43,32 @@ type installMethod string
 const (
 	installMethodHomebrew installMethod = "homebrew"
 	installMethodAqua     installMethod = "aqua"
-	installMethodManual   installMethod = "manual"
+	installMethodNPM      installMethod = "npm"
+	installMethodPNPM     installMethod = "pnpm"
+	installMethodYarn     installMethod = "yarn"
+
+	// installMethodNodeModules is a node_modules directory that is not a
+	// known global root, such as a project dependency or an npx cache.
+	installMethodNodeModules installMethod = "node_modules"
+	installMethodManual      installMethod = "manual"
 )
+
+// nodeGlobalRootTimeout bounds each package manager query for its global
+// root. They answer in well under a second; a hung shim must not block update.
+const nodeGlobalRootTimeout = 10 * time.Second
+
+// nodeGlobalRoots holds the global package directories that npm, pnpm and
+// yarn report. An empty field means that manager is missing or failed.
+type nodeGlobalRoots struct {
+	// NPM is the output of `npm root -g`.
+	NPM string
+
+	// PNPM is the output of `pnpm root -g`.
+	PNPM string
+
+	// Yarn is the output of `yarn global dir`.
+	Yarn string
+}
 
 type githubRelease struct {
 	TagName string `json:"tag_name"`
@@ -47,11 +83,14 @@ type githubRelease struct {
 func newUpdateCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "update",
-		Usage: "Update the Gram CLI to the latest version",
-		Description: `Update the Gram CLI to the latest available version.
+		Usage: "Update the speakeasy CLI to the latest version",
+		Description: `Update the speakeasy CLI to the latest available version.
 
 This command supports multiple installation methods:
-  - Homebrew (macOS/Linux): Automatically runs 'brew upgrade speakeasy-api/tap/gram'
+  - Homebrew (macOS/Linux): Automatically runs 'brew upgrade speakeasy-api/tap/cli'
+    ('brew upgrade speakeasy-api/tap/gram' when run as the legacy gram command)
+  - npm: Automatically runs 'npm install -g @speakeasy-api/cli@latest'
+  - pnpm or yarn global installs: Prints the command to run
   - Aqua: Automatically runs 'aqua upgrade speakeasy-api/gram/gram'
   - Manual installation: Downloads and replaces the current binary
 
@@ -79,7 +118,7 @@ func doUpdate(c *cli.Context) error {
 	currentVersion := Version
 	if currentVersion == "dev" {
 		logger.InfoContext(ctx, "Running development build, skipping update check")
-		fmt.Println("⚠️  You are running a development build of gram CLI")
+		fmt.Println("⚠️  You are running a development build of the speakeasy CLI")
 		fmt.Println("   Development builds cannot be updated via this command")
 		return nil
 	}
@@ -130,6 +169,11 @@ func doUpdate(c *cli.Context) error {
 	switch method {
 	case installMethodHomebrew:
 		return updateViaHomebrew(ctx, logger)
+	case installMethodNPM:
+		return updateViaNPM(ctx, logger)
+	case installMethodPNPM, installMethodYarn, installMethodNodeModules:
+		fmt.Println(nodePackageManagerHint(method))
+		return nil
 	case installMethodAqua:
 		return updateViaAqua(ctx, logger)
 	case installMethodManual:
@@ -146,7 +190,7 @@ func fetchLatestRelease(ctx context.Context) (*githubRelease, error) {
 	}
 
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	req.Header.Set("User-Agent", "gram-cli")
+	req.Header.Set("User-Agent", "speakeasy-cli")
 
 	client := api.SharedHTTPClient()
 	resp, err := client.Do(req)
@@ -178,77 +222,142 @@ func fetchLatestRelease(ctx context.Context) (*githubRelease, error) {
 }
 
 func detectInstallMethod(logger *slog.Logger, ctx context.Context) installMethod {
-	// Check if installed via Homebrew
-	if isHomebrewInstalled(logger, ctx) {
-		return installMethodHomebrew
-	}
-
-	// Check if installed via Aqua
-	if isAquaInstalled(logger, ctx) {
-		return installMethodAqua
-	}
-
-	// Default to manual installation
-	return installMethodManual
-}
-
-func isHomebrewInstalled(logger *slog.Logger, ctx context.Context) bool {
-	// Get the current executable path
 	exePath, err := os.Executable()
 	if err != nil {
 		logger.DebugContext(ctx, "failed to get executable path", slog.String("error", err.Error()))
-		return false
+		return installMethodManual
 	}
 
 	// Resolve symlinks to get the real path
 	realPath, err := filepath.EvalSymlinks(exePath)
 	if err != nil {
 		logger.DebugContext(ctx, "failed to resolve symlinks", slog.String("error", err.Error()))
-		return false
+		return installMethodManual
 	}
 
-	// Check if the path contains Homebrew indicators
-	// Homebrew typically installs to /usr/local/Cellar, /opt/homebrew/Cellar, or /home/linuxbrew
-	homebrewPaths := []string{"/Cellar/", "/homebrew/"}
-	for _, path := range homebrewPaths {
-		if strings.Contains(realPath, path) {
-			logger.DebugContext(ctx, "detected Homebrew installation", slog.String("path", realPath))
-			return true
+	var roots nodeGlobalRoots
+	if strings.Contains(normalizePath(realPath), "/node_modules/") {
+		roots = nodeGlobalRoots{
+			NPM:  commandPath(ctx, "npm", "root", "-g"),
+			PNPM: commandPath(ctx, "pnpm", "root", "-g"),
+			Yarn: commandPath(ctx, "yarn", "global", "dir"),
 		}
 	}
 
-	return false
+	method := installMethodForPath(realPath, roots)
+	logger.DebugContext(ctx, "resolved executable path", slog.String("path", realPath), slog.String("method", string(method)))
+	return method
 }
 
-func isAquaInstalled(logger *slog.Logger, ctx context.Context) bool {
-	// Get the current executable path
-	exePath, err := os.Executable()
+// commandPath runs a package manager query and returns the directory it
+// prints, with symlinks resolved. It returns "" when the command fails.
+func commandPath(ctx context.Context, name string, args ...string) string {
+	ctx, cancel := context.WithTimeout(ctx, nodeGlobalRootTimeout)
+	defer cancel()
+
+	out, err := exec.CommandContext(ctx, name, args...).Output() //nolint:gosec // callers pass fixed package manager commands
 	if err != nil {
-		logger.DebugContext(ctx, "failed to get executable path", slog.String("error", err.Error()))
-		return false
+		return ""
 	}
 
-	// Resolve symlinks
-	realPath, err := filepath.EvalSymlinks(exePath)
-	if err != nil {
-		logger.DebugContext(ctx, "failed to resolve symlinks", slog.String("error", err.Error()))
+	dir := strings.TrimSpace(string(out))
+	if dir == "" {
+		return ""
+	}
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		return resolved
+	}
+	return dir
+}
+
+// normalizePath uses forward slashes so path checks work on every OS.
+func normalizePath(path string) string {
+	return strings.ReplaceAll(path, `\`, "/")
+}
+
+// isUnder reports whether path is inside dir. Windows paths are not case
+// sensitive, so the comparison ignores case.
+func isUnder(path, dir string) bool {
+	if dir == "" {
 		return false
 	}
+	prefix := strings.TrimSuffix(normalizePath(dir), "/") + "/"
+	return len(path) > len(prefix) && strings.EqualFold(path[:len(prefix)], prefix)
+}
 
-	// Check if the path contains aqua indicators
+// installMethodForPath infers how the CLI was installed from the resolved path
+// of its executable and the global roots of the Node package managers.
+func installMethodForPath(realPath string, roots nodeGlobalRoots) installMethod {
+	p := normalizePath(realPath)
+
+	// Check the Node package managers before Homebrew, because a
+	// Homebrew-installed Node keeps its global packages under the Homebrew
+	// prefix.
+	switch {
+	case isUnder(p, roots.NPM):
+		return installMethodNPM
+	case isUnder(p, roots.PNPM):
+		return installMethodPNPM
+	case isUnder(p, roots.Yarn):
+		return installMethodYarn
+	case strings.Contains(p, "/node_modules/"):
+		return installMethodNodeModules
+	}
+
+	// Homebrew typically installs to /usr/local/Cellar, /opt/homebrew/Cellar, or /home/linuxbrew
+	for _, marker := range []string{"/Cellar/", "/homebrew/"} {
+		if strings.Contains(p, marker) {
+			return installMethodHomebrew
+		}
+	}
+
 	// Aqua typically installs to ~/.local/share/aquaproj-aqua/
-	if strings.Contains(realPath, "aquaproj-aqua") {
-		logger.DebugContext(ctx, "detected Aqua installation", slog.String("path", realPath))
-		return true
+	if strings.Contains(p, "aquaproj-aqua") {
+		return installMethodAqua
 	}
 
-	return false
+	return installMethodManual
+}
+
+// nodePackageManagerHint tells the user how to update an install that a Node
+// package manager owns but this command does not update itself.
+func nodePackageManagerHint(method installMethod) string {
+	switch method {
+	case installMethodPNPM:
+		return fmt.Sprintf("Installed with pnpm. Update with: pnpm add -g %s@latest", npmPackage)
+	case installMethodYarn:
+		return fmt.Sprintf("Installed with yarn. Update with: yarn global add %s@latest", npmPackage)
+	case installMethodNodeModules:
+		return fmt.Sprintf("Installed inside a node_modules directory that is not a global npm, pnpm or yarn root. Update %s with the package manager that installed it.", npmPackage)
+	case installMethodHomebrew, installMethodAqua, installMethodNPM, installMethodManual:
+		return ""
+	}
+	return ""
+}
+
+// homebrewFormulaFor returns the formula that installed the CLI, based on the
+// command name it was run as.
+func homebrewFormulaFor(arg0 string) string {
+	if invokedAs(arg0) == legacyCommandName {
+		return legacyHomebrewFormula
+	}
+	return homebrewFormula
+}
+
+// versionHint tells the user how to check the version they now have, using
+// the command name they ran.
+func versionHint() string {
+	name := commandName
+	if invokedAs(os.Args[0]) == legacyCommandName {
+		name = legacyCommandName
+	}
+	return fmt.Sprintf("  Run '%s --version' to verify the new version", name)
 }
 
 func updateViaHomebrew(ctx context.Context, logger *slog.Logger) error {
 	fmt.Println("🍺 Updating via Homebrew...")
 
-	cmd := exec.CommandContext(ctx, "brew", "upgrade", "speakeasy-api/tap/gram")
+	cmd := exec.CommandContext(ctx, "brew", "upgrade", homebrewFormulaFor(os.Args[0])) //nolint:gosec // the formula is one of two constants
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -257,8 +366,25 @@ func updateViaHomebrew(ctx context.Context, logger *slog.Logger) error {
 	}
 
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true)
-	fmt.Println(successStyle.Render("✓ Successfully updated gram CLI via Homebrew"))
-	fmt.Println("  Run 'gram --version' to verify the new version")
+	fmt.Println(successStyle.Render("✓ Successfully updated the speakeasy CLI via Homebrew"))
+	fmt.Println(versionHint())
+	return nil
+}
+
+func updateViaNPM(ctx context.Context, logger *slog.Logger) error {
+	fmt.Println("📦 Updating via npm...")
+
+	cmd := exec.CommandContext(ctx, "npm", "install", "-g", npmPackage+"@latest")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("npm install failed: %w", err)
+	}
+
+	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true)
+	fmt.Println(successStyle.Render("✓ Successfully updated the speakeasy CLI via npm"))
+	fmt.Println(versionHint())
 	return nil
 }
 
@@ -274,8 +400,8 @@ func updateViaAqua(ctx context.Context, logger *slog.Logger) error {
 	}
 
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true)
-	fmt.Println(successStyle.Render("✓ Successfully updated gram CLI via Aqua"))
-	fmt.Println("  Run 'gram --version' to verify the new version")
+	fmt.Println(successStyle.Render("✓ Successfully updated the speakeasy CLI via Aqua"))
+	fmt.Println(versionHint())
 	return nil
 }
 
@@ -283,7 +409,7 @@ func updateManual(ctx context.Context, logger *slog.Logger, release *githubRelea
 	fmt.Printf("📦 Updating manually to version %s...\n", version)
 
 	// Determine the asset name for the current platform
-	assetName := fmt.Sprintf("gram_%s_%s.zip", runtime.GOOS, runtime.GOARCH)
+	assetName := fmt.Sprintf("%s_%s_%s.zip", commandName, runtime.GOOS, runtime.GOARCH)
 	logger.DebugContext(ctx, "looking for asset", slog.String("name", assetName))
 
 	// Find the matching asset
@@ -330,8 +456,8 @@ func updateManual(ctx context.Context, logger *slog.Logger, release *githubRelea
 	}
 
 	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true)
-	fmt.Println(successStyle.Render(fmt.Sprintf("✓ Successfully updated gram CLI to version %s", version)))
-	fmt.Println("  Run 'gram --version' to verify the new version")
+	fmt.Println(successStyle.Render(fmt.Sprintf("✓ Successfully updated the speakeasy CLI to version %s", version)))
+	fmt.Println(versionHint())
 	return nil
 }
 
@@ -355,7 +481,7 @@ func downloadBinary(ctx context.Context, url string) (string, error) {
 	}
 
 	// Create temporary file
-	tmpFile, err := os.CreateTemp("", "gram-update-*.zip")
+	tmpFile, err := os.CreateTemp("", "speakeasy-update-*.zip")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp file: %w", err)
 	}
@@ -426,10 +552,10 @@ func extractBinaryFromZip(zipPath string) (string, error) {
 		_ = reader.Close()
 	}()
 
-	// Find the gram binary in the zip
-	binaryName := "gram"
+	// Find the speakeasy binary in the zip
+	binaryName := commandName
 	if runtime.GOOS == "windows" {
-		binaryName = "gram.exe"
+		binaryName = commandName + ".exe"
 	}
 
 	for _, file := range reader.File {
@@ -445,7 +571,7 @@ func extractBinaryFromZip(zipPath string) (string, error) {
 			}()
 
 			// Create a temporary file for the extracted binary
-			tmpFile, err := os.CreateTemp("", "gram-binary-*")
+			tmpFile, err := os.CreateTemp("", "speakeasy-binary-*")
 			if err != nil {
 				return "", fmt.Errorf("failed to create temp file: %w", err)
 			}

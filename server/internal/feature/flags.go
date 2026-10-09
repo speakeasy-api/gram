@@ -3,7 +3,7 @@ package feature
 type Flag string
 
 const (
-	// FlagGramMCPCatalog temporarily selects the Gram MCP catalog per organization.
+	// FlagGramMCPCatalog temporarily selects the Speakeasy MCP catalog per organization.
 	FlagGramMCPCatalog Flag = "gram-mcp-catalog"
 
 	FlagSpeakeasyOpenAPIParserV0 Flag = "speakeasy-openapi-parser-v0"
@@ -94,6 +94,11 @@ const (
 	// Key matches the dashboard's page-level flag so a single PostHog flag
 	// controls both the UI and the API surface.
 	FlagRiskWatchdog Flag = "gram-risk-watchdog"
+	// FlagExplore gates Explore and the Platform MCP analytics tools. The key
+	// matches the dashboard's page-level flag so one PostHog flag controls
+	// both surfaces; targeted by organization group (org slug), like
+	// FlagBudgets. A rollout gate, not authorization. Removed once Explore is GA.
+	FlagExplore Flag = "gram-explore"
 	// FlagRiskLLMAnalyzer selects the engine behind an organization's secret,
 	// PII, prompt injection and destructive tool call detection on both the
 	// realtime enforcement lane and the batch flag lane. It is multivariate:
@@ -128,6 +133,14 @@ const (
 	// when the fold flag is on. Same targeting; removed with the fold flag.
 	FlagCanonicalIdentityFoldShadow Flag = "canonical-identity-fold-shadow"
 
+	// FlagRemoteSessionLiveResourceScopes lets a remote-session login consult
+	// its protected resource row (the last WWW-Authenticate challenge's
+	// scopes, the operator's pin, else the RFC 9728 scopes_supported read
+	// live or from the cached row) ahead of the issuer's whole
+	// scopes_supported catalogue. Client scopes and issuer overrides apply
+	// either way.
+	FlagRemoteSessionLiveResourceScopes Flag = "remote-session-live-resource-scopes"
+
 	// FlagPaygSelfServeBilling gates the self-serve Stripe Checkout rollout.
 	// Targeted by PostHog organization group (org slug) and removed once PAYG
 	// billing is generally available.
@@ -139,7 +152,7 @@ const (
 	// client_id_metadata_document_supported, assistants publish a stable
 	// metadata document and send its URL as client_id instead of dynamic
 	// client registration. Off (the default) keeps the DCR reuse path.
-	// Gram-hosted issuers admit assistant documents ahead of their CIMD
+	// Speakeasy-hosted issuers admit assistant documents ahead of their CIMD
 	// admission policy, so enabling this never depends on a catalog preset
 	// or a per-issuer custom URL. Targeted by PostHog organization group
 	// (org slug). Removed once CIMD is GA.

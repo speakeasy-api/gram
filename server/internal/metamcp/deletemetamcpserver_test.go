@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -15,6 +16,7 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
 func TestDeleteMetaMcpServer_DetachesPluginGateway(t *testing.T) {
@@ -219,4 +221,52 @@ func TestDeleteMetaMcpServer_RootAutoClearsAndAudits(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uuid.Nil, route.RootMcpEndpointID)
 	require.Empty(t, route.RootSlug)
+}
+
+func TestDeleteMetaMcpServer_SoftDeletesLifecycleBoundRiskPolicy(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	gateway, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{Name: "policy gateway"})
+	require.NoError(t, err)
+	policy, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID:                   uuid.New(),
+		ProjectID:            *authCtx.ProjectID,
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		Name:                 "gateway policy",
+		PolicyType:           "standard",
+		Sources:              []string{"gitleaks"},
+		PresidioEntities:     nil,
+		AnalyzerConfig:       []byte(`{}`),
+		PromptInjectionRules: nil,
+		DisabledRules:        nil,
+		CustomRuleIds:        nil,
+		McpScope:             []byte(`{"servers":[{"mcp_server_id":"` + gateway.ID + `"}]}`),
+		Enabled:              true,
+		Action:               "flag",
+		AudienceType:         "everyone",
+		ShadowMcpDisposition: pgtype.Text{String: "", Valid: false},
+		AutoName:             false,
+		UserMessage:          pgtype.Text{String: "", Valid: false},
+		Prompt:               pgtype.Text{String: "", Valid: false},
+		ModelConfig:          nil,
+		Score:                pgtype.Float8{Float64: 0, Valid: false},
+	})
+	require.NoError(t, err)
+	beforeDeletes, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyDelete)
+	require.NoError(t, err)
+
+	require.NoError(t, ti.service.DeleteMetaMcpServer(ctx, &gen.DeleteMetaMcpServerPayload{ID: gateway.ID}))
+
+	_, err = riskrepo.New(ti.conn).GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{
+		ID:        policy.ID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	afterDeletes, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyDelete)
+	require.NoError(t, err)
+	require.Equal(t, beforeDeletes+1, afterDeletes)
 }

@@ -232,7 +232,7 @@ func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx contex
 // for issuerURL, reporting false when none exists and the caller must create one.
 //
 // A stored issuer bound to a tunneled MCP server is refused rather than reused.
-// Everything this flow does reaches the provider over Gram's direct egress —
+// Everything this flow does reaches the provider over Speakeasy's direct egress —
 // the metadata discovery above and the dynamic client registration below — but
 // once the client hangs off a tunnel-bound issuer, its refreshes and
 // revocations go out over the tunnel instead. An issuer is bound precisely
@@ -363,6 +363,7 @@ func discoveredIssuerParams(principal Principal, project ResolvedProject, regist
 		BackchannelLogoutSupported:                 pgtype.Bool{Bool: metadata.BackchannelLogoutSupported, Valid: true},
 		AuthorizationResponseIssParameterSupported: pgtype.Bool{Bool: metadata.AuthorizationResponseIssParameterSupported, Valid: true},
 		ScopeOverride:                              nil,
+		OmitScopeFallback:                          pgtype.Bool{Bool: false, Valid: false},
 		ResourceIndicatorSupported:                 pgtype.Bool{Bool: false, Valid: false},
 		Metadata:                                   metadata.Metadata,
 		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
@@ -372,7 +373,7 @@ func discoveredIssuerParams(principal Principal, project ResolvedProject, regist
 }
 
 // identityProviderRegistrationError preserves the important distinction
-// between a provider rejecting Gram's fixed registration contract (which cannot
+// between a provider rejecting Speakeasy's fixed registration contract (which cannot
 // succeed unchanged) and a temporary upstream/transport failure (which can be
 // retried). It intentionally does not carry an upstream response detail into
 // the MCP tool result or logs.

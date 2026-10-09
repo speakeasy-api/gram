@@ -65,7 +65,7 @@ func (p *FederatedProvider) CallbackBaseURL() pgtype.Text {
 	return p.client.CallbackBaseUrl
 }
 
-// ValidateResponseIssuer implements RFC 9207 before the code leaves Gram.
+// ValidateResponseIssuer implements RFC 9207 before the code leaves Speakeasy.
 // The response issuer is never used to select a provider. The shared callback
 // has no issuer-specific redirect URI fallback, so iss is always required.
 func (p *FederatedProvider) ValidateResponseIssuer(issuer string) error {
@@ -505,26 +505,26 @@ func classifyFederatedExchangeError(err error) error {
 	return ErrFederatedIdentity
 }
 
-func (m *ChallengeManager) federatedTokenClient(p *FederatedProvider) (httpDoer, tokenEndpointClientAuth, error) {
+func (m *ChallengeManager) federatedTokenClient(p *FederatedProvider) (httpDoer, TokenEndpointClientAuth, error) {
 	secret := ""
 	if p.client.ClientSecretEncrypted.Valid && p.client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
 		var err error
 		secret, err = m.enc.Decrypt(p.client.ClientSecretEncrypted.String)
 		if err != nil {
-			return nil, tokenEndpointClientAuth{}, ErrFederatedConfiguration
+			return nil, TokenEndpointClientAuth{}, ErrFederatedConfiguration
 		}
 	}
 	method, err := ResolveTokenEndpointAuthMethod(p.client.TokenEndpointAuthMethod.String, secret)
 	if err != nil || method == TokenEndpointAuthMethodNone {
-		return nil, tokenEndpointClientAuth{}, ErrFederatedConfiguration
+		return nil, TokenEndpointClientAuth{}, ErrFederatedConfiguration
 	}
 	audience, err := ResolveTokenEndpointAuthAudience(p.client.TokenEndpointAuthAudienceFormat.String, p.issuer.Issuer, p.metadata.TokenEndpoint)
 	if err != nil {
-		return nil, tokenEndpointClientAuth{}, ErrFederatedConfiguration
+		return nil, TokenEndpointClientAuth{}, ErrFederatedConfiguration
 	}
 	doer, err := upstreamHTTPDoer(noRedirectClient(m.policy.PooledClient()), m.tunnels, p.issuer.TunneledMcpServerID)
 	if err != nil {
-		return nil, tokenEndpointClientAuth{}, ErrFederatedConfiguration
+		return nil, TokenEndpointClientAuth{}, ErrFederatedConfiguration
 	}
-	return doer, tokenEndpointClientAuth{Method: method, RemoteSessionClientID: p.client.ID, OrganizationID: p.organizationID, JSONWebKeySetID: p.client.JsonWebKeySetID.UUID, ClientID: p.client.ClientID, ClientSecret: secret, AssertionAudience: audience, AssertionSigner: m.assertions}, nil
+	return doer, TokenEndpointClientAuth{Method: method, RemoteSessionClientID: p.client.ID, OrganizationID: p.organizationID, JSONWebKeySetID: p.client.JsonWebKeySetID.UUID, ClientID: p.client.ClientID, ClientSecret: secret, AssertionAudience: audience, AssertionSigner: m.assertions}, nil
 }

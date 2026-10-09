@@ -80,6 +80,7 @@ import {
   useReconcileWrappers,
 } from "./useGatewayMemberRows";
 import { useToolsets } from "../../toolsets/useToolsets";
+import { memberWrappers } from "./ensureToolsetWrapper";
 
 const CLASSIFICATION_LABEL: Record<MemberClassification, string> = {
   hosted: "Hosted",
@@ -342,9 +343,11 @@ export function GatewayMembersSection({
             const findWrapper = async () => {
               // Read from the server, not the picker cache: a previous create
               // may have committed even when its response never reached us.
-              const { mcpServers } = await client.mcpServers.list({
-                toolsetId: toolset.id,
-              });
+              const mcpServers = memberWrappers(
+                (await client.mcpServers.list({ toolsetId: toolset.id }))
+                  .mcpServers,
+                toolset.id,
+              );
               if (mcpServers.length > 1) {
                 throw new Error(
                   "Multiple servers use this source. Select the intended existing server.",
@@ -832,7 +835,7 @@ export function AddServersSheet({
     {
       label: "Hosted remotely",
       description:
-        "Add a server that already runs elsewhere by its URL, proxied through Gram.",
+        "Add a server that already runs elsewhere by its URL, proxied through Speakeasy.",
       Icon: Cloud,
       group: "Recommended",
       href:

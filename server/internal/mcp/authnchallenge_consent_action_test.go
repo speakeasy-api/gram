@@ -93,7 +93,7 @@ func createConsentRemoteClient(t *testing.T, ctx context.Context, conn *pgxpool.
 
 // attachConsentRemoteMcpServer binds a remote-backed mcp_server to issuerID
 // so clients on that issuer derive serverURL as their resource.
-func attachConsentRemoteMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, issuerID uuid.UUID, slug, serverURL string) {
+func attachConsentRemoteMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, issuerID uuid.UUID, slug, serverURL string) uuid.UUID {
 	t.Helper()
 	remoteServer, err := remotemcp_repo.New(conn).CreateServer(ctx, remotemcp_repo.CreateServerParams{
 		ID:            uuid.New(),
@@ -102,7 +102,7 @@ func attachConsentRemoteMcpServer(t *testing.T, ctx context.Context, conn *pgxpo
 		Url:           serverURL,
 	})
 	require.NoError(t, err)
-	_, err = mcpservers_repo.New(conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
+	server, err := mcpservers_repo.New(conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
 		ID:                  uuid.New(),
 		ProjectID:           projectID,
 		Name:                conv.ToPGText(slug),
@@ -112,6 +112,7 @@ func attachConsentRemoteMcpServer(t *testing.T, ctx context.Context, conn *pgxpo
 		UserSessionIssuerID: conv.ToNullUUID(issuerID),
 	})
 	require.NoError(t, err)
+	return server.ID
 }
 
 // mintConsentEndpointState builds the resolved endpoint (with an endpoint-
@@ -294,11 +295,12 @@ func seedSharedUpstreamEndpoint(t *testing.T, slug string) (context.Context, con
 
 	shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	other := createUserSessionIssuer(t, ctx, ti.conn, projectID)
-	attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, shared, slug+"-srv-a", consentUpstreamA+"/")
+	serverA := attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, shared, slug+"-srv-a", consentUpstreamA+"/")
 	attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, other, slug+"-srv-b", consentUpstreamB)
 
 	endpoint, stateID, subject := mintConsentEndpointState(t, ctx, ti, projectID, orgID, shared, slug)
-	// As resolveUpstreamResource reads it: the registered URL, verbatim.
+	// As the endpoint resolves: server A, and the registered URL, verbatim.
+	endpoint.McpServerID = conv.ToNullUUID(serverA)
 	endpoint.UpstreamResource = consentUpstreamA + "/"
 
 	return ctx, consentActionFixture{
@@ -569,4 +571,36 @@ func TestServeConsentAction_ConnectSendsRegisteredResourceVerbatim(t *testing.T)
 			require.Equal(t, tc.resource, sess.Resource.String, "refresh replays the recorded resource")
 		})
 	}
+}
+
+// ResourceOwners is the ownership surfaces without a challenge manager read
+// (Okta readiness): the owning sibling owns the upstream, the shared client
+// does not, matching what the connect arm sends.
+func TestResourceOwners_MatchesConnectOwnership(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, other := seedSharedUpstreamEndpoint(t, "aim431-owners")
+	owner := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim431-owner", "", []uuid.UUID{fx.shared})
+	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim431-shared", "", []uuid.UUID{fx.shared, other})
+
+	owners, err := remotesessions.ResourceOwners(ctx, fx.ti.conn, fx.projectID, fx.orgID, fx.shared, consentUpstreamA)
+	require.NoError(t, err)
+	require.True(t, owners[owner])
+	require.False(t, owners[shared], "a sibling that derives the upstream on its own holds it")
+
+	// The batch answers per server from one listing and one attachment load,
+	// and only for projects in the caller's organization.
+	here, elsewhere := uuid.New(), uuid.New()
+	batch, err := remotesessions.ResourceOwnersForServers(ctx, fx.ti.conn, fx.orgID, []remotesessions.ResourceOwnerQuery{
+		{ServerID: here, ProjectID: fx.projectID, UserSessionIssuerID: fx.shared, Upstream: consentUpstreamA},
+		{ServerID: elsewhere, ProjectID: fx.projectID, UserSessionIssuerID: fx.shared, Upstream: consentUpstreamA},
+	})
+	require.NoError(t, err)
+	require.Equal(t, owners, batch[here])
+	require.Equal(t, owners, batch[elsewhere])
+	foreign, err := remotesessions.ResourceOwnersForServers(ctx, fx.ti.conn, "org-not-"+fx.orgID, []remotesessions.ResourceOwnerQuery{
+		{ServerID: here, ProjectID: fx.projectID, UserSessionIssuerID: fx.shared, Upstream: consentUpstreamA},
+	})
+	require.NoError(t, err)
+	require.Empty(t, foreign[here], "another organization's caller sees no clients")
 }

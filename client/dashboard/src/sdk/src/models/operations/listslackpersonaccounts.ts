@@ -11,7 +11,7 @@ export type ListSlackPersonAccountsSecurity = {
 
 export type ListSlackPersonAccountsRequest = {
   /**
-   * Exact Gram user ID of the active organization person.
+   * Exact Speakeasy user ID of the active organization person.
    */
   userId: string;
   /**

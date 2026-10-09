@@ -50,7 +50,7 @@ func (fs *fakeServer) all() []components.IngestRequestBody {
 // binary as a detached drain.
 func piServe(t *testing.T, cfg Config, frames ...string) []piReply {
 	t.Helper()
-	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
 	if v := os.Getenv("XDG_STATE_HOME"); v == "" || v != spoolStateHome {
 		t.Setenv("XDG_STATE_HOME", t.TempDir())
 	}

@@ -75,7 +75,7 @@ type Service struct {
 	dashboardURL         *url.URL
 	supportHandoffIssuer supportHandoffIssuer
 
-	// mcpServerURL is the public Gram server origin that platform-domain MCP
+	// mcpServerURL is the public Speakeasy server origin that platform-domain MCP
 	// URLs are built on. Nil leaves those URLs out.
 	mcpServerURL *url.URL
 
@@ -110,6 +110,8 @@ type BillingOperations interface {
 	GetPaygBillingSummaryForOrganization(context.Context, string) (*usage.PaygBillingSummary, error)
 	GetMeterUsageForOrganization(context.Context, string, *usagegen.GetMeterUsagePayload) (*usagegen.MeterUsageResponse, error)
 	GetSpendBreakdownForOrganization(context.Context, string, *usagegen.GetSpendBreakdownPayload) (*usagegen.SpendBreakdownResponse, error)
+	// GetCustomerUsage reads usage for many organizations in one query, returning one entry per organization in request order.
+	GetCustomerUsage(context.Context, []usage.CustomerUsageOrganization, usage.CustomerUsageInterval) (*usage.CustomerUsageReport, error)
 	GetStripeCustomer(context.Context, string) (*stripeclient.CustomerDetails, error)
 	// GetStripeSubscriptionByID loads a live Stripe subscription so an assignment can verify its customer.
 	GetStripeSubscriptionByID(context.Context, string) (*stripeclient.SubscriptionState, error)
@@ -437,6 +439,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.GetStripeCustomer = service.preauthorizeAdmin(server.GetStripeCustomer)
 	server.GetMeterUsage = service.preauthorizeAdmin(server.GetMeterUsage)
 	server.GetSpendBreakdown = service.preauthorizeAdmin(server.GetSpendBreakdown)
+	server.ListCustomerUsage = service.preauthorizeAdmin(server.ListCustomerUsage)
 	server.OpenOrganizationInDashboard = service.preauthorizeAdmin(server.OpenOrganizationInDashboard)
 	server.SetOrganizationFeature = service.strictAdminJSON(server.SetOrganizationFeature, func() any { return new(adminserver.SetOrganizationFeatureRequestBody) })
 	server.SetOrganizationChatAnalysisSettings = service.strictAdminJSON(server.SetOrganizationChatAnalysisSettings, func() any { return new(adminserver.SetOrganizationChatAnalysisSettingsRequestBody) })
@@ -1478,10 +1481,10 @@ func (s *Service) rejectTrialChange(ctx context.Context, logger *slog.Logger, or
 
 const organizationCreationUncertain = "Creation could not be confirmed. Check existing organizations before retrying."
 
-// CreateOrganization creates an organization in WorkOS and then in Gram.
+// CreateOrganization creates an organization in WorkOS and then in Speakeasy.
 //
 // The WorkOS create happens before the transaction opens, because it is the one
-// step that cannot be rolled back. Everything Gram stores is written inside a
+// step that cannot be rolled back. Everything Speakeasy stores is written inside a
 // single transaction afterwards. A transaction failure rolls back local writes;
 // a response read failure can occur after those writes have committed.
 //
@@ -1894,7 +1897,7 @@ func (s *Service) reconcileRearmedTrialKeys(ctx context.Context, logger *slog.Lo
 }
 
 // adminActor identifies the operator behind an admin-app write. An admin session
-// carries an OIDC subject rather than a Gram user id, and a call without one
+// carries an OIDC subject rather than a Speakeasy user id, and a call without one
 // records the system actor the demotion sweeper uses. The email is returned
 // separately for private structured logs.
 func adminActor(ctx context.Context) (actor urn.Principal, displayName, operatorEmail *string) {

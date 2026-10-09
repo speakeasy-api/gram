@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/url"
@@ -30,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientcredentials"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/temporal"
@@ -63,6 +65,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
@@ -121,6 +124,36 @@ type testInstance struct {
 	// variant) with SetFlagVariant.
 	features         *feature.InMemory
 	efficacySignaler *background.ThrottledSignaler
+	// clientCredentials serves self clients from the production minter;
+	// tests replace it to control the upstream credential.
+	clientCredentials *testClientCredentials
+}
+
+// testClientCredentials is the challenge manager's client credential source.
+// It delegates to the production minter until a test replaces the source.
+type testClientCredentials struct {
+	mu     sync.Mutex
+	source remotesessions.ClientCredentialSource
+}
+
+func (c *testClientCredentials) Credential(ctx context.Context, req remotesessions.ClientCredentialRequest) (remotesessions.ClientCredential, error) {
+	c.mu.Lock()
+	source := c.source
+	c.mu.Unlock()
+
+	cred, err := source.Credential(ctx, req)
+	if err != nil {
+		return cred, fmt.Errorf("test client credential source: %w", err)
+	}
+	return cred, nil
+}
+
+// use replaces the source for the rest of the test.
+func (c *testClientCredentials) use(source remotesessions.ClientCredentialSource) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.source = source
 }
 
 // newTestMCPService wires a permissive identity resolver. Tests asserting
@@ -456,11 +489,23 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
 	idTokenKeys, err := remotesessions.NewIDTokenKeyResolver(logger, guardianPolicy, meterProvider, ratelimit.NewRedisStore(redisClient))
 	require.NoError(t, err)
-	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, conn, enc, guardianPolicy, nil, cacheAdapter, serverURL, remotesessions.WithIDTokenVerifier(remotesessions.NewIDTokenVerifier(idTokenKeys)))
+	features := &feature.InMemory{}
+	// One prober shared by login and proxy, as in production.
+	protectedResources := protectedresource.NewProber(conn, guardianPolicy)
+	clientCredentials := &testClientCredentials{}
+	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, conn, enc, guardianPolicy, nil, cacheAdapter, serverURL,
+		remotesessions.WithClientCredentialSource(func(m *remotesessions.ChallengeManager) remotesessions.ClientCredentialSource {
+			clientCredentials.use(clientcredentials.New(logger, conn, enc, m, cacheAdapter))
+			return clientCredentials
+		}),
+		remotesessions.WithIDTokenVerifier(remotesessions.NewIDTokenVerifier(idTokenKeys)),
+		remotesessions.WithFeatureFlags(features),
+		remotesessions.WithProtectedResourceProber(protectedResources),
+	)
 	mcpToolExecutionCheckpoint, err := mcptoolexecution.NewCheckpoint(conn, mcptoolexecution.DefaultEvaluationTimeout, meterProvider, logger)
 	require.NoError(t, err)
 	scanEvaluator := mcpriskscan.NewNoop(tracerProvider, meterProvider, logger)
-	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, conn, guardianPolicy, authzEngine, posthog, telemLogger, billingStub, billingStub, mcpservers.NewToolDispositionCache(logger, conn, cacheAdapter), toolcallobserver.NoopSuccessRecorder{}, toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache()), mcpToolExecutionCheckpoint, scanEvaluator)
+	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, conn, guardianPolicy, authzEngine, posthog, telemLogger, billingStub, billingStub, mcpservers.NewToolDispositionCache(logger, conn, cacheAdapter), toolcallobserver.NoopSuccessRecorder{}, toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache()), mcpToolExecutionCheckpoint, scanEvaluator, protectedResources)
 	managedLogsTools := platformtoolsruntime.ManagedAssistantLogsTools(telemService)
 	efficacySignaler := background.NewThrottledSignaler(
 		&background.TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
@@ -488,7 +533,6 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 		),
 	})
 	tunnelRoutes := route.NewRouteTable()
-	features := &feature.InMemory{}
 	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime)
 	require.NoError(t, err)
 	// Identity chaining runs as in production, so gate tests without bindings
@@ -515,6 +559,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 		tunnelRoutes:         tunnelRoutes,
 		features:             features,
 		efficacySignaler:     efficacySignaler,
+		clientCredentials:    clientCredentials,
 	}
 }
 

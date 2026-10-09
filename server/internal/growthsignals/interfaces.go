@@ -53,6 +53,6 @@ type Enricher interface {
 	// Project resolves a project id to its slug and name.
 	Project(ctx context.Context, projectID uuid.UUID) (ProjectDetails, error)
 
-	// UserEmail resolves a Gram user id to that user's email address.
+	// UserEmail resolves a Speakeasy user id to that user's email address.
 	UserEmail(ctx context.Context, userID string) (string, error)
 }

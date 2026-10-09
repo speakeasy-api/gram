@@ -96,6 +96,23 @@ func TestCreateWidget(t *testing.T) {
 		require.NoError(t, err, "the client owns the chart vocabulary")
 	})
 
+	t.Run("it saves a distinct count over a dimension and refuses one over a measure", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+		query := validQuery()
+		query["measures"] = []any{map[string]any{"op": "count_distinct", "field": "user", "alias": "people"}}
+		created, err := ti.service.CreateWidget(ctx, createPayload("people", query, barChart()))
+		require.NoError(t, err)
+		require.Nil(t, created.InvalidReason)
+
+		query = validQuery()
+		query["measures"] = []any{map[string]any{"op": "count_distinct", "field": "tool_call_count"}}
+		_, err = ti.service.CreateWidget(ctx, createPayload("distinct counts", query, barChart()))
+		requireOopsCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, "unsupported_aggregation")
+		require.ErrorContains(t, err, "measures[0].op")
+	})
+
 	t.Run("it rejects a query the catalog cannot plan, naming the field", func(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestService(t)
