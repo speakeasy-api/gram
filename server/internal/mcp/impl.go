@@ -176,7 +176,7 @@ type Service struct {
 	telemLogger       *tm.Logger
 	// toolCallLogger emits the started and completed records of every tool
 	// call the gateway runs into the OTel pipeline, where they become
-	// agent_events rows. It is the gramotel logger for the gateway's scope.
+	// agent_events rows. It is the otelpub logger for the gateway's scope.
 	toolCallLogger         log.Logger
 	vectorToolStore        *rag.ToolsetVectorStore
 	assistantTokens        *assistanttokens.Manager

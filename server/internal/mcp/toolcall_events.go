@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -13,7 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
+	"github.com/speakeasy-api/gram/server/internal/otel/otelpub"
 )
 
 // toolCallTenant is the organization and project a tool call belongs to,
@@ -75,10 +74,9 @@ func (id toolCallIdentity) attributes() []attribute.KeyValue {
 //
 // Each Emit publishes synchronously and waits for the Pub/Sub ack, so a
 // call pays one publish before the tool runs and one more before its
-// response is written. A publish that fails is counted and logged, and the
+// response is written. A publish that fails is logged by otelpub, and the
 // tool call is never failed over it.
 type toolCallEvents struct {
-	logger  *slog.Logger
 	emitter log.Logger
 	tenant  toolCallTenant
 	callID  string
@@ -88,14 +86,12 @@ type toolCallEvents struct {
 }
 
 func newToolCallEvents(
-	logger *slog.Logger,
 	emitter log.Logger,
 	tenant toolCallTenant,
 	identity toolCallIdentity,
 	now func() time.Time,
 ) *toolCallEvents {
 	return &toolCallEvents{
-		logger:  logger,
 		emitter: emitter,
 		tenant:  tenant,
 		callID:  identity.callID,
@@ -136,14 +132,9 @@ func (e *toolCallEvents) completed(ctx context.Context, statusCode int, resultIs
 // detached from the request's cancellation so a client that goes away
 // mid-call still gets its completed record.
 func (e *toolCallEvents) emit(ctx context.Context, record log.Record) {
-	ctx = gramotel.WithTenant(context.WithoutCancel(ctx), e.tenant.organizationID, e.tenant.projectID)
-	ctx = gramotel.WithRecordID(ctx, e.callID)
-	ctx, result := gramotel.WithResult(ctx)
+	ctx = otelpub.WithTenant(context.WithoutCancel(ctx), e.tenant.organizationID, e.tenant.projectID)
+	ctx = otelpub.WithRecordID(ctx, e.callID)
 	e.emitter.Emit(ctx, record)
-	if err := result.Err(); err != nil {
-		// gramotel counted the loss; this names the call it happened to.
-		e.logger.WarnContext(ctx, "tool call record was not published", attr.SlogToolCallID(e.callID), attr.SlogError(err))
-	}
 }
 
 func toolCallCompletedAttributes(statusCode int, resultIsError bool, duration time.Duration, failure *oops.ShareableError) []attribute.KeyValue {

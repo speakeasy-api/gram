@@ -16,7 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
+	"github.com/speakeasy-api/gram/server/internal/otel/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -40,10 +40,10 @@ func newToolCallEventsFixture(t *testing.T, result gcp.PublishResult, identity t
 	}).Return(result).Maybe()
 
 	logger := testenv.NewLogger(t)
-	emitter := gramotel.NewLoggerProvider(logger, nil, publisher, resource.NewSchemaless(semconv.ServiceNameKey.String("gram-server"))).
+	emitter := otelpub.NewLoggerProvider(logger, publisher, resource.NewSchemaless(semconv.ServiceNameKey.String("gram-server"))).
 		Logger(dialect.GramGatewayLogScope)
 	at := time.Unix(1_700_000_000, 0)
-	events := newToolCallEvents(logger, emitter, toolCallTenant{organizationID: "org-1", projectID: "project-1"}, identity, func() time.Time { return at })
+	events := newToolCallEvents(emitter, toolCallTenant{organizationID: "org-1", projectID: "project-1"}, identity, func() time.Time { return at })
 	return toolCallEventsFixture{events: events, published: &published, at: &at}
 }
 
@@ -138,8 +138,7 @@ func TestToolCallEventsNeverFailTheCall(t *testing.T) {
 	fixture := newToolCallEventsFixture(t, gcp.NewErrPublishResult(errors.New("pubsub unavailable")), toolCallIdentity{callID: "call-3"})
 
 	// The publisher refuses both acks. Both emits still return normally:
-	// the loss is counted and logged by gramotel and named by the gateway,
-	// and the caller sees no error to fail the call with.
+	// otelpub logs the loss, and the caller sees no error to fail the call with.
 	fixture.events.started(t.Context())
 	fixture.events.completed(t.Context(), http.StatusOK, false, nil)
 	require.Len(t, *fixture.published, 2, "both records were handed to the publisher before it refused them")

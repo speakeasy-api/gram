@@ -416,7 +416,7 @@ func handleToolsCall(
 	// One id names the call on its telemetry_logs row and on the pair of
 	// records that becomes its agent_events rows. The tenant is the tool's
 	// own organization and project, as the telemetry row records them.
-	events := newToolCallEvents(logger, toolCallLogger, toolCallTenant{
+	events := newToolCallEvents(toolCallLogger, toolCallTenant{
 		organizationID: descriptor.OrganizationID,
 		projectID:      descriptor.ProjectID,
 	}, toolCallIdentity{

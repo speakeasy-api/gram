@@ -31,7 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
+	"github.com/speakeasy-api/gram/server/internal/otel/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/rag"
@@ -60,10 +60,10 @@ import (
 // one source for hosted tool use rather than one per tier.
 const gatewayRecordsServiceName = "gram-server"
 
-// newToolCallLogs is the gramotel logger provider the gateway emits its tool
+// newToolCallLogs is the otelpub logger provider the gateway emits its tool
 // call records through, into the inbound log topic.
-func newToolCallLogs(logger *slog.Logger, meterProvider metric.MeterProvider, publisher gcp.Publisher[*otelv1.InboundLogRecord]) *sdklog.LoggerProvider {
-	return gramotel.NewLoggerProvider(logger, gramotel.NewMetrics(logger, meterProvider), publisher,
+func newToolCallLogs(logger *slog.Logger, publisher gcp.Publisher[*otelv1.InboundLogRecord]) *sdklog.LoggerProvider {
+	return otelpub.NewLoggerProvider(logger, publisher,
 		resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(gatewayRecordsServiceName)))
 }
 
@@ -86,7 +86,7 @@ type mcpServiceDependencies struct {
 	BillingTracker billing.Tracker
 	Billing        billing.Repository
 	Telemetry      *tm.Logger
-	// ToolCallLogs is the gramotel logger provider the gateway emits its
+	// ToolCallLogs is the otelpub logger provider the gateway emits its
 	// tool call records through, into the OTel pipeline.
 	ToolCallLogs           log.LoggerProvider
 	TelemetryService       *tm.Service
