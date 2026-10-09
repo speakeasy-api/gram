@@ -32431,6 +32431,140 @@ paths:
       x-speakeasy-name-override: get
       x-speakeasy-react-hook:
         name: GetMcpServer
+  /rpc/mcpServers.getEnvironmentHeaders:
+    get:
+      description: Preview the upstream headers an MCP server sends from an environment. Only entries named MCP_HEADER_<Header-Name> are sent. The result lists entry and header names with a status for each, never values. Requires read access to the MCP server and project-wide environment read access, the authority needed to link an environment.
+      operationId: getMcpServerEnvironmentHeaders
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the MCP server. It must be backed by a remote or tunneled MCP server.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the MCP server. It must be backed by a remote or tunneled MCP server.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: 'Which environment to preview: linked previews the server''s current link, environment previews environment_id, and none previews no environment.'
+          in: query
+          name: selection
+          required: true
+          schema:
+            description: 'Which environment to preview: linked previews the server''s current link, environment previews environment_id, and none previews no environment.'
+            enum:
+              - linked
+              - environment
+              - none
+            type: string
+        - allowEmptyValue: true
+          description: The environment to preview. Required when selection is environment and rejected otherwise.
+          in: query
+          name: environment_id
+          schema:
+            description: The environment to preview. Required when selection is environment and rejected otherwise.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpServerEnvironmentHeaders'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getEnvironmentHeaders mcpServers
+      tags:
+        - mcpServers
+      x-speakeasy-name-override: getEnvironmentHeaders
+      x-speakeasy-react-hook:
+        name: GetMcpServerEnvironmentHeaders
   /rpc/mcpServers.list:
     get:
       description: List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
@@ -92941,6 +93075,81 @@ components:
         - target_label
         - total_tool_calls
         - recent_tool_calls
+    McpServerEnvironmentHeader:
+      type: object
+      properties:
+        entry_name:
+          type: string
+          description: The environment entry name
+        header_name:
+          type: string
+          description: The canonical header the entry targets. Absent when the entry is not mapped or its name is not a valid header name.
+        status:
+          type: string
+          description: 'mapped: sent upstream. overrides_source: sent upstream in place of the source header of the same name. invalid_name, reserved, empty_value, invalid_value, duplicate, undecryptable: the entry cannot be sent, and requests to the server are refused until it is fixed or removed. not_mapped: the name resembles the MCP_HEADER_ prefix without matching it exactly, so the entry is ignored.'
+          enum:
+            - mapped
+            - overrides_source
+            - invalid_name
+            - reserved
+            - empty_value
+            - invalid_value
+            - duplicate
+            - undecryptable
+            - not_mapped
+      description: One environment entry relevant to the headers an MCP server sends upstream. Values are never included.
+      required:
+        - entry_name
+        - status
+    McpServerEnvironmentHeaders:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpServerEnvironmentHeader'
+          description: Entries named with the MCP_HEADER_ prefix, plus near-miss names that are ignored.
+        environment:
+          $ref: '#/components/schemas/McpServerEnvironmentSummary'
+        environment_configuration_invalid:
+          type: boolean
+          description: Whether requests to the server would be refused because of the previewed environment. It reports only on the environment, not on the server's overall readiness.
+        environment_status:
+          type: string
+          description: 'none: no environment is previewed. ok: the environment is live. unavailable: the environment is deleted, missing or in another project; requests to a server linked to it are refused.'
+          enum:
+            - none
+            - ok
+            - unavailable
+        environments:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpServerEnvironmentSummary'
+          description: The live environments in the project that can be linked.
+      description: A names-only preview of the upstream headers an MCP server sends from an environment.
+      required:
+        - environment_status
+        - environment_configuration_invalid
+        - entries
+        - environments
+    McpServerEnvironmentSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the environment
+          format: uuid
+        name:
+          type: string
+          description: The name of the environment
+        slug:
+          type: string
+          description: The slug of the environment
+      description: An environment that can be linked to an MCP server.
+      required:
+        - id
+        - name
+        - slug
     MetaMcpDiscoveryFunnel:
       type: object
       properties:
