@@ -178,11 +178,13 @@ must read the token file when it calls the upstream API rather than caching it
 at startup; the file is written before the process starts and replaced
 atomically.
 
-Package caches stay outside the session directory, so a server installed on
-first use is not downloaded again into every session's memory. Unless the
-agent's environment sets them, the agent sets `XDG_CACHE_HOME` to
+The XDG and npm caches stay outside the session directory, so a server
+installed on first use is not downloaded again into every session's memory.
+Unless the agent's environment sets them, the agent sets `XDG_CACHE_HOME` to
 `$HOME/.cache` and `npm_config_cache` to `$XDG_CACHE_HOME/npm`, using the
-agent's own home. When the agent has no absolute `HOME`, set both explicitly.
+agent's own home. When the agent has no absolute `HOME`, or that home is not
+writable, set both explicitly. A tool that ignores both settings and keeps its
+cache under `HOME` still caches inside the session.
 Caches are shared by every session; keep them free of credentials, and prefer
 a server installed in the image to one fetched at startup.
 
