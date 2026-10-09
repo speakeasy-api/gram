@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -313,7 +314,7 @@ func (s *Server) tokenHandler(w http.ResponseWriter, r *http.Request) {
 			"access_token":  accessToken,
 			"refresh_token": refreshToken,
 			"token_type":    "Bearer",
-			"expires_in":    int(time.Until(accessExpires).Seconds()),
+			"expires_in":    expiresIn(accessExpires),
 		}
 		if entry.scope != "" {
 			resp["scope"] = entry.scope
@@ -375,7 +376,7 @@ func (s *Server) tokenHandler(w http.ResponseWriter, r *http.Request) {
 		"access_token":  accessToken,
 		"refresh_token": refreshToken,
 		"token_type":    "Bearer",
-		"expires_in":    int(time.Until(accessExpires).Seconds()),
+		"expires_in":    expiresIn(accessExpires),
 		"id_token":      idToken,
 	}
 	if entry.scope != "" {
@@ -466,4 +467,10 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+// expiresIn is the token's remaining lifetime in whole seconds, rounded up so
+// a short configured lifetime is never advertised as already expired.
+func expiresIn(expires time.Time) int {
+	return max(1, int(math.Ceil(time.Until(expires).Seconds())))
 }
