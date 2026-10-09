@@ -61,6 +61,10 @@ import {
   invalidateAllDirectoryRoleMappings,
   useDirectoryRoleMappings,
 } from "@gram/client/react-query/directoryRoleMappings.js";
+import {
+  mutationKeyDeleteDirectoryRoleMapping,
+  useDeleteDirectoryRoleMappingMutation,
+} from "@gram/client/react-query/deleteDirectoryRoleMapping.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import {
@@ -222,8 +226,10 @@ export function DirectoryRoleMappings({
       : undefined;
   const queryClient = useQueryClient();
   const savePending = useSetDirectoryRoleMappingsMutation({
+    retry: false,
     onError: (error) => {
       toast.error(errorMessage(error, "Failed to map the new role"));
+      void refetch();
     },
   });
   const savedPending = useRef<string | null>(null);
@@ -586,14 +592,29 @@ function RolePicker({
   const navigate = useNavigate();
   const orgRoutes = useOrgRoutes();
   const save = useSetDirectoryRoleMappingsMutation({
+    retry: false,
     onSuccess: async () => {
       await invalidateDirectoryMappingAccess(queryClient);
       onSaved?.();
     },
     onError: (error) => {
       toast.error(errorMessage(error, "Failed to save role mapping"));
+      void invalidateDirectoryMappingAccess(queryClient);
     },
   });
+  const remove = useDeleteDirectoryRoleMappingMutation({
+    retry: false,
+    onSuccess: async () => {
+      await invalidateDirectoryMappingAccess(queryClient);
+      onSaved?.();
+    },
+    onError: (error) => {
+      toast.error(errorMessage(error, "Failed to remove role mapping"));
+      void invalidateDirectoryMappingAccess(queryClient);
+    },
+  });
+  const deleting =
+    useIsMutating({ mutationKey: mutationKeyDeleteDirectoryRoleMapping() }) > 0;
   const setting =
     useIsMutating({ mutationKey: mutationKeySetDirectoryRoleMappings() }) > 0;
   const refreshing =
@@ -601,8 +622,14 @@ function RolePicker({
       queryKey: ["@gram/client", "access", "listDirectoryRoleMappings"],
     }) > 0;
   const [preparing, setPreparing] = useState(false);
-  const saving = preparing || refreshing || save.isPending || setting;
-  const changeRole = async (roleUrn: string, remove = false) => {
+  const saving =
+    preparing ||
+    refreshing ||
+    save.isPending ||
+    remove.isPending ||
+    setting ||
+    deleting;
+  const changeRole = async (roleUrn: string) => {
     setPreparing(true);
     try {
       const mappings = await refreshMappings();
@@ -620,9 +647,8 @@ function RolePicker({
         request: {
           setDirectoryRoleMappingsForm: {
             ...row.form,
-            roleUrns: remove
-              ? current.filter((role) => role !== roleUrn)
-              : [...new Set([...current, roleUrn])],
+            expectedRoleUrns: current,
+            roleUrns: [...new Set([...current, roleUrn])],
           },
         },
       });
@@ -679,7 +705,7 @@ function RolePicker({
             <RemoveMappingButton
               label={`${name} from ${row.label}`}
               disabled={saving || !!disabledMessage}
-              onRemove={() => void changeRole(mapping.roleUrn, true)}
+              onRemove={() => remove.mutate({ request: { id: mapping.id } })}
             />
           </span>
         );

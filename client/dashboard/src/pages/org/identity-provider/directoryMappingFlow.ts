@@ -114,6 +114,7 @@ export function pendingMappingFromParams(
     key,
     form: {
       ...record.source,
+      expectedRoleUrns: existingRoles,
       roleUrns: [...new Set([...existingRoles, record.roleUrn])],
     },
   };

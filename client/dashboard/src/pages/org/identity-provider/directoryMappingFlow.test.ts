@@ -42,6 +42,7 @@ describe("create role round trip", () => {
     expect(pending?.form).toEqual({
       sourceKind: "group",
       directoryGroupId: "group-1",
+      expectedRoleUrns: [],
       roleUrns: ["role:organization:1"],
     });
 
@@ -80,6 +81,7 @@ describe("create role round trip", () => {
     ];
     expect(pendingMappingFromParams(back, mappings)?.form).toEqual({
       ...source,
+      expectedRoleUrns: ["role:organization:base", "role:organization:tools"],
       roleUrns: [
         "role:organization:base",
         "role:organization:tools",
