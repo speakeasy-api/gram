@@ -304,6 +304,40 @@ func TestServePublic_Tunneled_AnonymousInitializeMintsGramSession(t *testing.T) 
 	require.Empty(t, forwarded.Get(wire.HeaderTunnelAgentSession), "initialize must not pin an exact target")
 }
 
+func TestServePublic_Tunneled_AnonymousToolCallRecordsTelemetry(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		stateful bool
+	}{
+		{name: "stateless", stateful: false},
+		{name: "stateful", stateful: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPService(t)
+			gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1"}
+			if tc.stateful {
+				gateway.backendSessionID = "backend-session"
+			}
+			fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
+			sessionID := ""
+			if tc.stateful {
+				sessionID = initializeTunneledPublicSession(t, ti, fixture)
+			}
+			w, err := serveTunneledPublicRequest(t, ti, fixture.endpointSlug, http.MethodPost,
+				[]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ping","arguments":{}}}`), sessionID)
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Contains(t, w.Body.String(), "pong through the tunnel")
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			requireTelemetryRowCount(t, "gram_project_id = ? AND toString(attributes.gram.tunneled_mcp_server.id) = ? AND tool_name = ? AND user_id = ''", 1, authCtx.ProjectID.String(), fixture.tunnelID.String(), "ping")
+		})
+	}
+}
+
 func TestServePublic_Tunneled_BusyGatewayReturnsGenericJSONRPCError(t *testing.T) {
 	t.Parallel()
 
