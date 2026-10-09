@@ -29,6 +29,10 @@ const (
 	// revoked credential cannot outlive its revocation indefinitely.
 	defaultCredentialMaxAge = time.Hour
 
+	// maxCredentialMaxAge caps the configured maximum age, so no setting
+	// lets a token outlive its revocation for longer than a day.
+	maxCredentialMaxAge = 24 * time.Hour
+
 	// credentialExpiryGrace keeps a session past its token's expiry long
 	// enough for a request carrying the refreshed token to arrive.
 	credentialExpiryGrace = 30 * time.Second
@@ -43,6 +47,7 @@ var inheritedCredentialEnv = []string{
 	"HOME",
 	"XDG_CONFIG_HOME",
 	"XDG_DATA_HOME",
+	"XDG_STATE_HOME",
 }
 
 // CredentialsConfig enables per-user upstream credentials for a stdio server.
@@ -106,8 +111,8 @@ func (c CredentialsConfig) normalize() (CredentialsConfig, error) {
 	if !filepath.IsAbs(c.Root) || filepath.Clean(c.Root) != c.Root {
 		return c, errors.New("TUNNEL_STDIO_CREDENTIALS_DIR must be a clean absolute path")
 	}
-	if c.MaxAge < 0 {
-		return c, errors.New("TUNNEL_STDIO_CREDENTIALS_MAX_AGE must be positive")
+	if c.MaxAge < 0 || c.MaxAge > maxCredentialMaxAge {
+		return c, fmt.Errorf("TUNNEL_STDIO_CREDENTIALS_MAX_AGE must be positive and at most %s", maxCredentialMaxAge)
 	}
 	if c.MaxAge == 0 {
 		c.MaxAge = defaultCredentialMaxAge
@@ -165,6 +170,7 @@ func credentialChildEnv(base []string, tokenPath, home string) []string {
 		"HOME="+home,
 		"XDG_CONFIG_HOME="+filepath.Join(home, ".config"),
 		"XDG_DATA_HOME="+filepath.Join(home, ".local", "share"),
+		"XDG_STATE_HOME="+filepath.Join(home, ".local", "state"),
 	)
 }
 

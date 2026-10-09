@@ -434,13 +434,13 @@ func (b *stdioBridge) admitSessionCredential(w http.ResponseWriter, r *http.Requ
 	if err != nil && !errors.Is(err, errCredentialExpired) {
 		sess.logger.Info("tunnel stdio session credential no longer admitted; stopping server", slog.String("reason", err.Error()))
 		writeUnauthorized(w)
-		go sess.terminate()
+		sess.beginTerminate()
 		return cred, false
 	}
 	if cred.context != sess.cred.context {
 		sess.logger.Info("tunnel stdio session credential changed grant; stopping server")
 		writeRPCError(w, http.StatusNotFound, nil, rpcCodeSessionMissing, "session not found")
-		go sess.terminate()
+		sess.beginTerminate()
 		return cred, false
 	}
 	for _, msg := range msgs {

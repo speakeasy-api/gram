@@ -271,8 +271,13 @@ func normalizeGatewayURL(raw string) (string, error) {
 }
 
 func isLocalGatewayHost(host string) bool {
-	switch strings.ToLower(strings.TrimSpace(host)) {
+	host = strings.ToLower(strings.TrimSpace(host))
+	switch host {
 	case "localhost", "host.docker.internal":
+		return true
+	}
+	// RFC 6761 reserves .localhost names for the loopback interface.
+	if strings.HasSuffix(host, ".localhost") {
 		return true
 	}
 	ip := net.ParseIP(host)

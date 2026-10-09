@@ -116,19 +116,20 @@ func randomHex(n int) (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-// requireMemoryBacked refuses filesystems that may write pages to disk on
-// their own. tmpfs can still swap; that host property is a documented
-// deployment prerequisite.
+// requireMemoryBacked accepts only tmpfs: other filesystems may write pages to
+// disk on their own, and ramfs has no size limit, so a server could exhaust
+// host memory through it. tmpfs can still swap; that host property is a
+// documented deployment prerequisite.
 func requireMemoryBacked(fd int) error {
 	var st unix.Statfs_t
 	if err := unix.Fstatfs(fd, &st); err != nil {
 		return fmt.Errorf("statfs: %w", err)
 	}
 	switch int64(st.Type) {
-	case unix.TMPFS_MAGIC, unix.RAMFS_MAGIC:
+	case unix.TMPFS_MAGIC:
 		return nil
 	default:
-		return errors.New("must be on a memory-backed filesystem (tmpfs or ramfs)")
+		return errors.New("must be on a memory-backed tmpfs filesystem")
 	}
 }
 
