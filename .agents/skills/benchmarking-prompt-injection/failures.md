@@ -8,6 +8,6 @@ Open the viewer (`mise run risk:pi --view`) and click the failing count: the tab
 
 **No verdict.** These score as misses. Causes: refusals by both models, malformed verdicts, timeouts, oversized evidence, or a provider outage. Name the cause in the PR.
 
-**Out of credit.** These cases are not scored. Add credit and rerun; the run checks available key allowance first and redoes only them. Normal inference keys do not reveal the account balance; an unlimited key leaves this preflight unverified and emits a warning.
+**Out of credit.** These cases are not scored. Add account credit or raise the key spending limit as appropriate, then rerun; the run checks available key allowance first and redoes only them. Normal inference keys do not reveal the account balance; an unlimited key leaves this preflight unverified and emits a warning.
 
 **Key.** An exported key must be `OPENROUTER_API_KEY`. A saved `OPENROUTER_DEV_KEY` wins, so replace a rejected one in `mise.local.toml`.

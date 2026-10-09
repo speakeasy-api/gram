@@ -524,7 +524,7 @@ func finishRun(opts options, corpus []labeledCase, records map[string]caseRecord
 	totals := computeTotals(corpus, records)
 	fmt.Fprintln(os.Stderr, formatTotals(opts.label, totals))
 	if stopped || totals.OutOfCredit > 0 {
-		return fmt.Errorf("%s: out of OpenRouter credit with %d cases left; add credit at https://openrouter.ai/settings/credits and rerun to continue", opts.label, totals.Pending+totals.OutOfCredit)
+		return fmt.Errorf("%s: out of OpenRouter credit with %d cases left; add account credit at https://openrouter.ai/settings/credits or raise the key spending limit as appropriate, then rerun to continue", opts.label, totals.Pending+totals.OutOfCredit)
 	}
 	if opts.maxFalsePositives == gateDisabledFalsePositives && opts.minRecall == 0 {
 		return nil
