@@ -276,11 +276,6 @@ function Sentence({
           onClick={addMeasure}
         />
       </Segments>
-      {spec.measures.length === 0 ? (
-        <span className="text-muted-foreground px-2 text-xs">
-          Nothing measured, so the results are rows at the dataset's grain.
-        </span>
-      ) : null}
 
       <Joint />
       <Segments>
@@ -659,19 +654,14 @@ function FilterPill({
   );
 }
 
-// The dataset's one-line description with its grain, behind an info icon
-// beside the picker so the picker itself carries no hover text.
+// The dataset's one-line description, behind an info icon beside the picker
+// so the picker itself carries no hover text.
 function DatasetSummary({
   dataset,
 }: {
   dataset: AnalyticsDataset;
 }): JSX.Element {
-  return (
-    <span className="block max-w-sm">
-      {dataset.description}
-      <span className="font-mono text-xs"> · {dataset.grain} grain</span>
-    </span>
-  );
+  return <span className="block max-w-sm">{dataset.description}</span>;
 }
 
 // ── The results panel's header: how it is drawn, over when, and Run ───────
