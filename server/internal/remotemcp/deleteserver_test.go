@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestDeleteServer(t *testing.T) {
@@ -146,4 +147,50 @@ func TestDeleteServer_OtherProjectLeavesHeadersIntact(t *testing.T) {
 	surviving, err := repo.New(ti.conn).ListHeadersByServerID(ctx, otherServer.ID)
 	require.NoError(t, err)
 	require.Len(t, surviving, 1)
+}
+
+// Server deletion locks the server before its headers, the same order header
+// writers use, so a header created while the deletion waits is deleted with
+// it and the two never deadlock.
+func TestDeleteServer_LocksServerBeforeHeaders(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+	project := projectID(t, ctx)
+
+	holder := testenv.BeginTx(t, ctx, ti.conn)
+
+	_, err := repo.New(holder).GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{ID: uuid.MustParse(server.ID), ProjectID: project})
+	require.NoError(t, err)
+
+	result := make(chan error, 1)
+	go func() {
+		result <- ti.service.DeleteServer(ctx, &gen.DeleteServerPayload{
+			SessionToken:     nil,
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+			ID:               server.ID,
+		})
+	}()
+	testenv.WaitForQueryBlockedBy(t, ctx, ti.conn, testenv.BackendPID(holder), "%FROM remote_mcp_servers%FOR UPDATE%")
+
+	value := "created-while-deleting"
+	_, err = repo.New(holder).CreateServerHeader(ctx, repo.CreateServerHeaderParams{
+		RemoteMcpServerID:      uuid.MustParse(server.ID),
+		ProjectID:              project,
+		Name:                   "X-Late",
+		Description:            conv.PtrToPGText(nil),
+		IsRequired:             false,
+		IsSecret:               false,
+		Value:                  conv.PtrToPGTextEmpty(&value),
+		ValueFromRequestHeader: conv.PtrToPGTextEmpty(nil),
+	})
+	require.NoError(t, err)
+	require.NoError(t, holder.Commit(ctx))
+
+	require.NoError(t, <-result)
+	live, err := repo.New(ti.conn).ListHeadersByServerID(ctx, uuid.MustParse(server.ID))
+	require.NoError(t, err)
+	require.Empty(t, live, "no live header may outlive its deleted server")
 }
