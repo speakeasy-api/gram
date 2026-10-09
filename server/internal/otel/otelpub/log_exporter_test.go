@@ -278,3 +278,45 @@ func TestUnixNanoSaturatesInsteadOfOverflowing(t *testing.T) {
 	require.Equal(t, uint64(1_700_000_000_000_000_001), unixNano(time.Unix(1_700_000_000, 1)))
 	require.Equal(t, uint64(math.MaxUint64), unixNano(time.Unix(1<<62, 0)))
 }
+
+// barrierPublisher holds every Publish until want of them are in flight at once.
+type barrierPublisher struct {
+	arrived chan struct{}
+	release chan struct{}
+}
+
+func (p *barrierPublisher) Publish(context.Context, *otelv1.InboundLogRecord, ...gcp.PublishOption) gcp.PublishResult {
+	p.arrived <- struct{}{}
+	<-p.release
+	return gcp.NewSuccessPublishResult()
+}
+
+func (*barrierPublisher) Stop(context.Context) error { return nil }
+
+func TestConcurrentEmitsPublishInParallel(t *testing.T) {
+	t.Parallel()
+
+	const emits = 2
+	publisher := &barrierPublisher{arrived: make(chan struct{}, emits), release: make(chan struct{})}
+	logger, _ := testLogger(t, publisher)
+	ctx := authenticated(t.Context())
+
+	done := make(chan struct{}, emits)
+	for range emits {
+		go func() {
+			logger.Emit(ctx, toolCallRecord(time.Now()))
+			done <- struct{}{}
+		}()
+	}
+	for range emits {
+		select {
+		case <-publisher.arrived:
+		case <-time.After(5 * time.Second):
+			t.Fatal("emits were serialized: a second publish never started while the first was in flight")
+		}
+	}
+	close(publisher.release)
+	for range emits {
+		<-done
+	}
+}
