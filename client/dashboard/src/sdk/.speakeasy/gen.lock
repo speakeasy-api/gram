@@ -731,12 +731,17 @@ trackedFiles:
   src/funcs/triggersResume.ts: {}
   src/funcs/triggersUpdate.ts: {}
   src/funcs/tunneledMcpCreateServer.ts: {}
+  src/funcs/tunneledMcpCreateServerHeader.ts: {}
   src/funcs/tunneledMcpDeleteServer.ts: {}
+  src/funcs/tunneledMcpDeleteServerHeader.ts: {}
   src/funcs/tunneledMcpGetServer.ts: {}
+  src/funcs/tunneledMcpGetServerHeader.ts: {}
   src/funcs/tunneledMcpListServerConnections.ts: {}
+  src/funcs/tunneledMcpListServerHeaders.ts: {}
   src/funcs/tunneledMcpListServers.ts: {}
   src/funcs/tunneledMcpRotateServerKey.ts: {}
   src/funcs/tunneledMcpUpdateServer.ts: {}
+  src/funcs/tunneledMcpUpdateServerHeader.ts: {}
   src/funcs/unproxiedMcpCreateServer.ts: {}
   src/funcs/unproxiedMcpDeleteServer.ts: {}
   src/funcs/unproxiedMcpGetServer.ts: {}
@@ -1004,6 +1009,7 @@ trackedFiles:
   src/models/components/createtoolsetrequestbody.ts: {}
   src/models/components/createtriggerinstanceform.ts: {}
   src/models/components/createtunneledmcpserverform.ts: {}
+  src/models/components/createtunneledmcpserverheaderform.ts: {}
   src/models/components/createtunneledmcpserverresult.ts: {}
   src/models/components/createunproxiedmcpserverform.ts: {}
   src/models/components/createusersessionissuercimdclientform.ts: {}
@@ -1380,6 +1386,7 @@ trackedFiles:
   src/models/components/listtriggerdefinitionsresult.ts: {}
   src/models/components/listtriggereventsresult.ts: {}
   src/models/components/listtriggerinstancesresult.ts: {}
+  src/models/components/listtunneledmcpserverheadersresult.ts: {}
   src/models/components/listtunneledmcpserversresult.ts: {}
   src/models/components/listunknownskillactivationsresult.ts: {}
   src/models/components/listunproxiedmcpserversresult.ts: {}
@@ -1850,6 +1857,7 @@ trackedFiles:
   src/models/components/tunneledmcpconnection.ts: {}
   src/models/components/tunneledmcpserver.ts: {}
   src/models/components/tunneledmcpserverconnections.ts: {}
+  src/models/components/tunneledmcpserverheader.ts: {}
   src/models/components/undistributeskillrequestbody.ts: {}
   src/models/components/unknownskillactivation.ts: {}
   src/models/components/unlinkemarequestbody.ts: {}
@@ -1913,6 +1921,7 @@ trackedFiles:
   src/models/components/updatetoolsetrequestbody.ts: {}
   src/models/components/updatetriggerinstanceform.ts: {}
   src/models/components/updatetunneledmcpserverform.ts: {}
+  src/models/components/updatetunneledmcpserverheaderform.ts: {}
   src/models/components/updateusersessionissuerform.ts: {}
   src/models/components/updatewidgetrequestbody.ts: {}
   src/models/components/updateworkloadissuerform.ts: {}
@@ -2091,6 +2100,7 @@ trackedFiles:
   src/models/operations/createtopupcheckout.ts: {}
   src/models/operations/createtriggerinstance.ts: {}
   src/models/operations/createtunneledmcpserver.ts: {}
+  src/models/operations/createtunneledmcpserverheader.ts: {}
   src/models/operations/createunproxiedmcpserver.ts: {}
   src/models/operations/createusersessionissuer.ts: {}
   src/models/operations/createusersessionissuercimdclient.ts: {}
@@ -2149,6 +2159,7 @@ trackedFiles:
   src/models/operations/deletetoolsetenvironmentlink.ts: {}
   src/models/operations/deletetriggerinstance.ts: {}
   src/models/operations/deletetunneledmcpserver.ts: {}
+  src/models/operations/deletetunneledmcpserverheader.ts: {}
   src/models/operations/deleteunproxiedmcpserver.ts: {}
   src/models/operations/deleteusersessionissuer.ts: {}
   src/models/operations/deleteusersessionissuercimdclient.ts: {}
@@ -2316,6 +2327,7 @@ trackedFiles:
   src/models/operations/gettoolusageusertimeseries.ts: {}
   src/models/operations/gettriggerinstance.ts: {}
   src/models/operations/gettunneledmcpserver.ts: {}
+  src/models/operations/gettunneledmcpserverheader.ts: {}
   src/models/operations/getunproxiedmcpserver.ts: {}
   src/models/operations/getunproxiedmcpserverclientusage.ts: {}
   src/models/operations/getunproxiedmcpservertoolusage.ts: {}
@@ -2491,6 +2503,7 @@ trackedFiles:
   src/models/operations/listtriggerevents.ts: {}
   src/models/operations/listtriggerinstances.ts: {}
   src/models/operations/listtunneledmcpserverconnections.ts: {}
+  src/models/operations/listtunneledmcpserverheaders.ts: {}
   src/models/operations/listtunneledmcpservers.ts: {}
   src/models/operations/listunknownskillactivations.ts: {}
   src/models/operations/listunproxiedmcpservers.ts: {}
@@ -2723,6 +2736,7 @@ trackedFiles:
   src/models/operations/updatetoolset.ts: {}
   src/models/operations/updatetriggerinstance.ts: {}
   src/models/operations/updatetunneledmcpserver.ts: {}
+  src/models/operations/updatetunneledmcpserverheader.ts: {}
   src/models/operations/updateusersessionissuer.ts: {}
   src/models/operations/updatewidget.ts: {}
   src/models/operations/updateworkloadissuer.ts: {}
@@ -2920,6 +2934,7 @@ trackedFiles:
   src/react-query/createTopUpCheckout.ts: {}
   src/react-query/createTrigger.ts: {}
   src/react-query/createTunneledMcpServer.ts: {}
+  src/react-query/createTunneledMcpServerHeader.ts: {}
   src/react-query/createUnproxiedMcpServer.ts: {}
   src/react-query/createUserSessionIssuer.ts: {}
   src/react-query/createUserSessionIssuerCimdClient.ts: {}
@@ -2975,6 +2990,7 @@ trackedFiles:
   src/react-query/deleteToolsetEnvironmentLink.ts: {}
   src/react-query/deleteTrigger.ts: {}
   src/react-query/deleteTunneledMcpServer.ts: {}
+  src/react-query/deleteTunneledMcpServerHeader.ts: {}
   src/react-query/deleteUnproxiedMcpServer.ts: {}
   src/react-query/deleteUserSessionIssuer.ts: {}
   src/react-query/deleteUserSessionIssuerCimdClient.ts: {}
@@ -3136,6 +3152,8 @@ trackedFiles:
   src/react-query/getToolsetEnvironment.ts: {}
   src/react-query/getTunneledMcpServer.core.ts: {}
   src/react-query/getTunneledMcpServer.ts: {}
+  src/react-query/getTunneledMcpServerHeader.core.ts: {}
+  src/react-query/getTunneledMcpServerHeader.ts: {}
   src/react-query/getUnproxiedMcpServer.core.ts: {}
   src/react-query/getUnproxiedMcpServer.ts: {}
   src/react-query/getUnproxiedMcpServerClientUsage.core.ts: {}
@@ -3746,6 +3764,8 @@ trackedFiles:
   src/react-query/triggerSkillSuggestion.ts: {}
   src/react-query/triggers.core.ts: {}
   src/react-query/triggers.ts: {}
+  src/react-query/tunneledMcpServerHeaders.core.ts: {}
+  src/react-query/tunneledMcpServerHeaders.ts: {}
   src/react-query/tunneledMcpServers.core.ts: {}
   src/react-query/tunneledMcpServers.ts: {}
   src/react-query/undistributeSkill.ts: {}
@@ -3798,6 +3818,7 @@ trackedFiles:
   src/react-query/updateToolset.ts: {}
   src/react-query/updateTrigger.ts: {}
   src/react-query/updateTunneledMcpServer.ts: {}
+  src/react-query/updateTunneledMcpServerHeader.ts: {}
   src/react-query/updateUserSessionIssuer.ts: {}
   src/react-query/updateWidget.ts: {}
   src/react-query/updateWorkloadIssuer.ts: {}
@@ -5277,6 +5298,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  createTunneledMcpServerHeader:
+    speakeasy-default-create-tunneled-mcp-server-header:
+      requestBody:
+        application/json: {"name": "<value>", "tunneled_mcp_server_id": "62a0c955-32e6-46c2-820a-5d836da673a1"}
+      responses:
+        "200":
+          application/json: {"created_at": "2026-08-16T01:27:11.224Z", "id": "8d57354a-e7b5-4ab2-8e3f-7328460bd27e", "is_required": true, "is_secret": true, "name": "<value>", "updated_at": "2024-11-18T20:04:40.294Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   createUnproxiedMcpServer:
     speakeasy-default-create-unproxied-mcp-server:
       requestBody:
@@ -5954,6 +5986,16 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  deleteTunneledMcpServerHeader:
+    speakeasy-default-delete-tunneled-mcp-server-header:
+      parameters:
+        query:
+          id: "91e74543-c5f3-4591-90f4-15b528718fcf"
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   deleteUnproxiedMcpServer:
     speakeasy-default-delete-unproxied-mcp-server:
       parameters:
@@ -8001,6 +8043,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getTunneledMcpServerHeader:
+    speakeasy-default-get-tunneled-mcp-server-header:
+      parameters:
+        query:
+          id: "7b793bd3-8d7f-4407-822f-899ee5fabc26"
+      responses:
+        "200":
+          application/json: {"created_at": "2024-08-14T23:25:57.367Z", "id": "709a96e1-6a72-4e34-8755-363274cf5ead", "is_required": false, "is_secret": true, "name": "<value>", "updated_at": "2024-09-24T02:13:31.347Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getUnproxiedMcpServer:
     speakeasy-default-get-unproxied-mcp-server:
       responses:
@@ -10090,6 +10144,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listTunneledMcpServerHeaders:
+    speakeasy-default-list-tunneled-mcp-server-headers:
+      parameters:
+        query:
+          tunneled_mcp_server_id: "160821c8-333d-4008-ae97-bb8f5fb7c9c1"
+      responses:
+        "200":
+          application/json: {"headers": [{"created_at": "2026-10-23T09:39:42.540Z", "id": "d008c3a8-bcea-4eb9-b739-76fedeee14d4", "is_required": true, "is_secret": true, "name": "<value>", "updated_at": "2026-06-30T20:53:38.674Z"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listTunneledMcpServers:
     speakeasy-default-list-tunneled-mcp-servers:
       responses:
@@ -12833,6 +12899,17 @@ examples:
       responses:
         "200":
           application/json: {"active_connection_count": 408126, "active_consumer_session_count": 923001, "allow_public": false, "connection_status": "connected", "created_at": "2025-03-07T12:23:20.151Z", "effective_public_request_burst": 932305, "effective_public_request_rate_per_second": 93802, "id": "1bf5c61a-7401-4732-9a1c-7572bf19031e", "key_prefix": "<value>", "name": "<value>", "project_id": "f095b93d-e0ba-430e-a940-6ea2b3b7de5d", "status": "revoked", "updated_at": "2025-02-19T20:11:46.920Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  updateTunneledMcpServerHeader:
+    speakeasy-default-update-tunneled-mcp-server-header:
+      requestBody:
+        application/json: {"id": "3bc38f0c-5abe-4738-9e12-3b115ac142d4", "name": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2026-06-12T09:50:34.595Z", "id": "f417e9f6-f050-4ba2-91d1-130e1fd4b9ce", "is_required": true, "is_secret": false, "name": "<value>", "updated_at": "2025-09-18T14:58:16.636Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

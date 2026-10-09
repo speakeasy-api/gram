@@ -27,8 +27,10 @@ import (
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
@@ -38,6 +40,7 @@ import (
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -3090,4 +3093,83 @@ func TestPluginsService_PublishProject_SkipsAfterDashboardPublish(t *testing.T) 
 	require.NoError(t, err)
 	require.True(t, result.Skipped, "rollout must skip a project the dashboard just published unchanged")
 	require.False(t, mock.pushFilesCalled)
+}
+
+// A tunneled backing whose source passes a header through from the caller's
+// request cannot be distributed: the generated plugin has no way to supply it.
+// Static headers do not block distribution.
+func TestPluginsService_TunneledRequestDerivedHeaderBlocksCompatibility(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+
+	tunnel, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
+		ID:                 uuid.New(),
+		ProjectID:          projectID,
+		Name:               "headers-tunnel-" + uuid.NewString()[:8],
+		KeyHash:            "hash-" + uuid.NewString(),
+		KeyPrefix:          "gram_tunnel_test",
+		ResourceIdentifier: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	_, err = tunneledmcprepo.New(ti.conn).UpdateServer(ctx, tunneledmcprepo.UpdateServerParams{
+		Name:        pgtype.Text{String: tunnel.Name, Valid: true},
+		AllowPublic: pgtype.Bool{Bool: true, Valid: true},
+		ID:          tunnel.ID,
+		ProjectID:   projectID,
+	})
+	require.NoError(t, err)
+	serverID := uuid.New()
+	slug := "tunneled-headers-" + uuid.NewString()[:8]
+	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                  serverID,
+		ProjectID:           projectID,
+		Name:                pgtype.Text{String: "Tunneled Headers", Valid: true},
+		Slug:                pgtype.Text{String: slug, Valid: true},
+		TunneledMcpServerID: uuid.NullUUID{UUID: tunnel.ID, Valid: true},
+		Visibility:          mcpservers.VisibilityPublic,
+	})
+	require.NoError(t, err)
+	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:   projectID,
+		McpServerID: uuid.NullUUID{UUID: serverID, Valid: true},
+		Slug:        slug + "-endpoint",
+	})
+	require.NoError(t, err)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Tunneled Headers"})
+	require.NoError(t, err)
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, McpServerID: conv.PtrEmpty(serverID.String()), Policy: "required", SortOrder: 0})
+	require.NoError(t, err)
+
+	headers := tunneledmcprepo.New(ti.conn)
+	_, err = headers.CreateServerHeader(ctx, tunneledmcprepo.CreateServerHeaderParams{
+		Name: "X-Tenant", Description: pgtype.Text{}, IsRequired: true, IsSecret: false,
+		Value: pgtype.Text{String: "tenant-1", Valid: true}, ValueFromRequestHeader: pgtype.Text{},
+		TunneledMcpServerID: tunnel.ID, ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	fetched, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+	require.NoError(t, err)
+	require.True(t, fetched.AgentPluginsV1Compatible, "a static header does not block distribution")
+
+	passThrough, err := headers.CreateServerHeader(ctx, tunneledmcprepo.CreateServerHeaderParams{
+		Name: "X-Region", Description: pgtype.Text{}, IsRequired: false, IsSecret: false,
+		Value: pgtype.Text{}, ValueFromRequestHeader: pgtype.Text{String: "X-Client-Region", Valid: true},
+		TunneledMcpServerID: tunnel.ID, ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	fetched, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+	require.NoError(t, err)
+	require.False(t, fetched.AgentPluginsV1Compatible)
+
+	_, err = headers.DeleteServerHeader(ctx, tunneledmcprepo.DeleteServerHeaderParams{ID: passThrough.ID, ProjectID: projectID})
+	require.NoError(t, err)
+	fetched, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+	require.NoError(t, err)
+	require.True(t, fetched.AgentPluginsV1Compatible)
 }

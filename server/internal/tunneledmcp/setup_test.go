@@ -67,7 +67,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), nil, redisClient)
+	svc := NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), testenv.NewEncryptionClient(t), nil, redisClient)
 
 	return ctx, &testInstance{
 		service:        svc,

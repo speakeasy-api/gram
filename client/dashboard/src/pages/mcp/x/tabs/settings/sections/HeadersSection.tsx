@@ -27,6 +27,7 @@ import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { Lock, Plus, Trash2 } from "lucide-react";
+import type { ReactNode } from "react";
 import { Link } from "react-router";
 
 /** What the lock on a row the identity section owns says when you ask it. */
@@ -90,16 +91,25 @@ const ROW_GRID =
 export function HeadersSection({
   state,
   resourceId,
+  projectId,
   siblingMcpServers,
+  sharedNotice,
 }: {
   state: HeaderDraftsState;
   resourceId?: string;
+  /** Adds the project dimension to the write gate, for a project-level source. */
+  projectId?: string;
   /**
    * Other MCP servers backed by the same remote source. Their headers are the
    * same rows, and since #6524 removed the remote's own page this is the only
    * place to edit them — so the change is named rather than locked.
    */
   siblingMcpServers: readonly McpServer[];
+  /**
+   * Replaces the shared-source warning. When set it is shown even with no
+   * siblings, for sources whose headers are always shared.
+   */
+  sharedNotice?: ReactNode;
 }): JSX.Element {
   const { authorization, readOnly } = state;
   const routes = useRoutes();
@@ -112,17 +122,19 @@ export function HeadersSection({
 
   return (
     <Stack gap={4}>
-      {siblingMcpServers.length > 0 ? (
+      {sharedNotice || siblingMcpServers.length > 0 ? (
         <Alert variant="warning" dismissible={false}>
           <Stack gap={1}>
-            <Text small>
-              These headers are stored on the remote source, which also backs{" "}
-              {siblingMcpServers.length}{" "}
-              {siblingMcpServers.length === 1
-                ? "other MCP server"
-                : "other MCP servers"}
-              . Changes here apply to every one of them:
-            </Text>
+            {sharedNotice ?? (
+              <Text small>
+                These headers are stored on the remote source, which also backs{" "}
+                {siblingMcpServers.length}{" "}
+                {siblingMcpServers.length === 1
+                  ? "other MCP server"
+                  : "other MCP servers"}
+                . Changes here apply to every one of them:
+              </Text>
+            )}
             <div className="flex flex-wrap gap-2">
               {siblingMcpServers.map((server) => (
                 <Link
@@ -181,6 +193,7 @@ export function HeadersSection({
                   valuePlaceholder="Filled by the identity provider"
                   legacyPassThroughAuthorization={false}
                   resourceId={resourceId}
+                  projectId={projectId}
                   error={null}
                   onChange={noop}
                   onRemove={noop}
@@ -203,6 +216,7 @@ export function HeadersSection({
                       draft.id === authorization.passThroughHeaderId
                     }
                     resourceId={resourceId}
+                    projectId={projectId}
                     error={
                       state.reportErrors
                         ? (state.fieldErrors.get(draft.key) ?? null)
@@ -235,6 +249,7 @@ export function HeadersSection({
           <RequireScope
             scope="mcp:write"
             resourceId={resourceId}
+            projectId={projectId}
             level="component"
           >
             <Button
@@ -261,6 +276,7 @@ function HeaderDraftRow({
   managed,
   legacyPassThroughAuthorization,
   resourceId,
+  projectId,
   valuePlaceholder = "Bearer …",
   error,
   onChange,
@@ -272,6 +288,7 @@ function HeaderDraftRow({
   managed: string | null;
   legacyPassThroughAuthorization: boolean;
   resourceId?: string;
+  projectId?: string;
   valuePlaceholder?: string;
   /** The row's problem, when there is one worth pointing at yet. */
   error: HeaderDraftError | null;
@@ -400,6 +417,7 @@ function HeaderDraftRow({
             readOnly={readOnly}
             name={draft.name}
             resourceId={resourceId}
+            projectId={projectId}
             onRemove={onRemove}
           />
         </div>
@@ -419,12 +437,14 @@ function ManagedOrRemove({
   readOnly,
   name,
   resourceId,
+  projectId,
   onRemove,
 }: {
   managed: string | null;
   readOnly: boolean;
   name: string;
   resourceId?: string;
+  projectId?: string;
   onRemove: () => void;
 }): JSX.Element {
   if (managed) {
@@ -444,7 +464,12 @@ function ManagedOrRemove({
   if (readOnly) return <span />;
 
   return (
-    <RequireScope scope="mcp:write" resourceId={resourceId} level="component">
+    <RequireScope
+      scope="mcp:write"
+      resourceId={resourceId}
+      projectId={projectId}
+      level="component"
+    >
       <Button
         variant="tertiary"
         size="md"

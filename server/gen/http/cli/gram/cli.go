@@ -195,7 +195,7 @@ func UsageCommands() []string {
 		"tools list-tools",
 		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|list-tool-schema-static-values|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|update-externaloauth-server|removeoauth-server|set-user-session-issuer|set-tool-variations-group)",
 		"triggers (list-trigger-definitions|list-trigger-instances|list-trigger-events|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
-		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
+		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
 		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|get-mcp-server-tool-calls|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage)",
@@ -4100,6 +4100,36 @@ func ParseEndpoint(
 		tunneledMcpDeleteServerApikeyTokenFlag      = tunneledMcpDeleteServerFlags.String("apikey-token", "", "")
 		tunneledMcpDeleteServerProjectSlugInputFlag = tunneledMcpDeleteServerFlags.String("project-slug-input", "", "")
 
+		tunneledMcpListServerHeadersFlags                   = flag.NewFlagSet("list-server-headers", flag.ExitOnError)
+		tunneledMcpListServerHeadersTunneledMcpServerIDFlag = tunneledMcpListServerHeadersFlags.String("tunneled-mcp-server-id", "REQUIRED", "")
+		tunneledMcpListServerHeadersSessionTokenFlag        = tunneledMcpListServerHeadersFlags.String("session-token", "", "")
+		tunneledMcpListServerHeadersApikeyTokenFlag         = tunneledMcpListServerHeadersFlags.String("apikey-token", "", "")
+		tunneledMcpListServerHeadersProjectSlugInputFlag    = tunneledMcpListServerHeadersFlags.String("project-slug-input", "", "")
+
+		tunneledMcpGetServerHeaderFlags                = flag.NewFlagSet("get-server-header", flag.ExitOnError)
+		tunneledMcpGetServerHeaderIDFlag               = tunneledMcpGetServerHeaderFlags.String("id", "REQUIRED", "")
+		tunneledMcpGetServerHeaderSessionTokenFlag     = tunneledMcpGetServerHeaderFlags.String("session-token", "", "")
+		tunneledMcpGetServerHeaderApikeyTokenFlag      = tunneledMcpGetServerHeaderFlags.String("apikey-token", "", "")
+		tunneledMcpGetServerHeaderProjectSlugInputFlag = tunneledMcpGetServerHeaderFlags.String("project-slug-input", "", "")
+
+		tunneledMcpCreateServerHeaderFlags                = flag.NewFlagSet("create-server-header", flag.ExitOnError)
+		tunneledMcpCreateServerHeaderBodyFlag             = tunneledMcpCreateServerHeaderFlags.String("body", "REQUIRED", "")
+		tunneledMcpCreateServerHeaderSessionTokenFlag     = tunneledMcpCreateServerHeaderFlags.String("session-token", "", "")
+		tunneledMcpCreateServerHeaderApikeyTokenFlag      = tunneledMcpCreateServerHeaderFlags.String("apikey-token", "", "")
+		tunneledMcpCreateServerHeaderProjectSlugInputFlag = tunneledMcpCreateServerHeaderFlags.String("project-slug-input", "", "")
+
+		tunneledMcpUpdateServerHeaderFlags                = flag.NewFlagSet("update-server-header", flag.ExitOnError)
+		tunneledMcpUpdateServerHeaderBodyFlag             = tunneledMcpUpdateServerHeaderFlags.String("body", "REQUIRED", "")
+		tunneledMcpUpdateServerHeaderSessionTokenFlag     = tunneledMcpUpdateServerHeaderFlags.String("session-token", "", "")
+		tunneledMcpUpdateServerHeaderApikeyTokenFlag      = tunneledMcpUpdateServerHeaderFlags.String("apikey-token", "", "")
+		tunneledMcpUpdateServerHeaderProjectSlugInputFlag = tunneledMcpUpdateServerHeaderFlags.String("project-slug-input", "", "")
+
+		tunneledMcpDeleteServerHeaderFlags                = flag.NewFlagSet("delete-server-header", flag.ExitOnError)
+		tunneledMcpDeleteServerHeaderIDFlag               = tunneledMcpDeleteServerHeaderFlags.String("id", "REQUIRED", "")
+		tunneledMcpDeleteServerHeaderSessionTokenFlag     = tunneledMcpDeleteServerHeaderFlags.String("session-token", "", "")
+		tunneledMcpDeleteServerHeaderApikeyTokenFlag      = tunneledMcpDeleteServerHeaderFlags.String("apikey-token", "", "")
+		tunneledMcpDeleteServerHeaderProjectSlugInputFlag = tunneledMcpDeleteServerHeaderFlags.String("project-slug-input", "", "")
+
 		unproxiedMcpFlags = flag.NewFlagSet("unproxied-mcp", flag.ContinueOnError)
 
 		unproxiedMcpCreateServerFlags                = flag.NewFlagSet("create-server", flag.ExitOnError)
@@ -5752,6 +5782,11 @@ func ParseEndpoint(
 	tunneledMcpUpdateServerFlags.Usage = tunneledMcpUpdateServerUsage
 	tunneledMcpRotateServerKeyFlags.Usage = tunneledMcpRotateServerKeyUsage
 	tunneledMcpDeleteServerFlags.Usage = tunneledMcpDeleteServerUsage
+	tunneledMcpListServerHeadersFlags.Usage = tunneledMcpListServerHeadersUsage
+	tunneledMcpGetServerHeaderFlags.Usage = tunneledMcpGetServerHeaderUsage
+	tunneledMcpCreateServerHeaderFlags.Usage = tunneledMcpCreateServerHeaderUsage
+	tunneledMcpUpdateServerHeaderFlags.Usage = tunneledMcpUpdateServerHeaderUsage
+	tunneledMcpDeleteServerHeaderFlags.Usage = tunneledMcpDeleteServerHeaderUsage
 
 	unproxiedMcpFlags.Usage = unproxiedMcpUsage
 	unproxiedMcpCreateServerFlags.Usage = unproxiedMcpCreateServerUsage
@@ -8556,6 +8591,21 @@ func ParseEndpoint(
 
 			case "delete-server":
 				epf = tunneledMcpDeleteServerFlags
+
+			case "list-server-headers":
+				epf = tunneledMcpListServerHeadersFlags
+
+			case "get-server-header":
+				epf = tunneledMcpGetServerHeaderFlags
+
+			case "create-server-header":
+				epf = tunneledMcpCreateServerHeaderFlags
+
+			case "update-server-header":
+				epf = tunneledMcpUpdateServerHeaderFlags
+
+			case "delete-server-header":
+				epf = tunneledMcpDeleteServerHeaderFlags
 
 			}
 
@@ -11547,6 +11597,21 @@ func ParseEndpoint(
 			case "delete-server":
 				endpoint = c.DeleteServer()
 				data, err = tunneledmcpc.BuildDeleteServerPayload(*tunneledMcpDeleteServerIDFlag, *tunneledMcpDeleteServerSessionTokenFlag, *tunneledMcpDeleteServerApikeyTokenFlag, *tunneledMcpDeleteServerProjectSlugInputFlag)
+			case "list-server-headers":
+				endpoint = c.ListServerHeaders()
+				data, err = tunneledmcpc.BuildListServerHeadersPayload(*tunneledMcpListServerHeadersTunneledMcpServerIDFlag, *tunneledMcpListServerHeadersSessionTokenFlag, *tunneledMcpListServerHeadersApikeyTokenFlag, *tunneledMcpListServerHeadersProjectSlugInputFlag)
+			case "get-server-header":
+				endpoint = c.GetServerHeader()
+				data, err = tunneledmcpc.BuildGetServerHeaderPayload(*tunneledMcpGetServerHeaderIDFlag, *tunneledMcpGetServerHeaderSessionTokenFlag, *tunneledMcpGetServerHeaderApikeyTokenFlag, *tunneledMcpGetServerHeaderProjectSlugInputFlag)
+			case "create-server-header":
+				endpoint = c.CreateServerHeader()
+				data, err = tunneledmcpc.BuildCreateServerHeaderPayload(*tunneledMcpCreateServerHeaderBodyFlag, *tunneledMcpCreateServerHeaderSessionTokenFlag, *tunneledMcpCreateServerHeaderApikeyTokenFlag, *tunneledMcpCreateServerHeaderProjectSlugInputFlag)
+			case "update-server-header":
+				endpoint = c.UpdateServerHeader()
+				data, err = tunneledmcpc.BuildUpdateServerHeaderPayload(*tunneledMcpUpdateServerHeaderBodyFlag, *tunneledMcpUpdateServerHeaderSessionTokenFlag, *tunneledMcpUpdateServerHeaderApikeyTokenFlag, *tunneledMcpUpdateServerHeaderProjectSlugInputFlag)
+			case "delete-server-header":
+				endpoint = c.DeleteServerHeader()
+				data, err = tunneledmcpc.BuildDeleteServerHeaderPayload(*tunneledMcpDeleteServerHeaderIDFlag, *tunneledMcpDeleteServerHeaderSessionTokenFlag, *tunneledMcpDeleteServerHeaderApikeyTokenFlag, *tunneledMcpDeleteServerHeaderProjectSlugInputFlag)
 			}
 		case "unproxied-mcp":
 			c := unproxiedmcpc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -29169,6 +29234,11 @@ func tunneledMcpUsage() {
 	fmt.Fprintln(os.Stderr, `    update-server: Update a tunneled MCP server source`)
 	fmt.Fprintln(os.Stderr, `    rotate-server-key: Rotate a tunneled MCP server source key. Returns the new tunnel key once.`)
 	fmt.Fprintln(os.Stderr, `    delete-server: Delete a tunneled MCP server source`)
+	fmt.Fprintln(os.Stderr, `    list-server-headers: List the headers configured for a tunneled MCP server`)
+	fmt.Fprintln(os.Stderr, `    get-server-header: Get a tunneled MCP server header by ID`)
+	fmt.Fprintln(os.Stderr, `    create-server-header: Create a header on a tunneled MCP server`)
+	fmt.Fprintln(os.Stderr, `    update-server-header: Update a tunneled MCP server header`)
+	fmt.Fprintln(os.Stderr, `    delete-server-header: Delete a tunneled MCP server header`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s tunneled-mcp COMMAND --help\n", os.Args[0])
@@ -29337,6 +29407,126 @@ func tunneledMcpDeleteServerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tunneled-mcp delete-server --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func tunneledMcpListServerHeadersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] tunneled-mcp list-server-headers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -tunneled-mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the headers configured for a tunneled MCP server`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -tunneled-mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tunneled-mcp list-server-headers --tunneled-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func tunneledMcpGetServerHeaderUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] tunneled-mcp get-server-header", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get a tunneled MCP server header by ID`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tunneled-mcp get-server-header --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func tunneledMcpCreateServerHeaderUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] tunneled-mcp create-server-header", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a header on a tunneled MCP server`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tunneled-mcp create-server-header --body '{\n      \"description\": \"abc123\",\n      \"is_required\": false,\n      \"is_secret\": false,\n      \"name\": \"aaa\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"value\": \"abc123\",\n      \"value_from_request_header\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func tunneledMcpUpdateServerHeaderUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] tunneled-mcp update-server-header", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Update a tunneled MCP server header`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tunneled-mcp update-server-header --body '{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"is_required\": false,\n      \"is_secret\": false,\n      \"name\": \"aaa\",\n      \"value\": \"abc123\",\n      \"value_from_request_header\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func tunneledMcpDeleteServerHeaderUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] tunneled-mcp delete-server-header", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a tunneled MCP server header`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tunneled-mcp delete-server-header --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // unproxiedMcpUsage displays the usage of the unproxied-mcp command and its
