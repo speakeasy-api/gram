@@ -50,6 +50,7 @@ INSERT INTO sigint_sensors (
     description,
     instructions,
     mode,
+    enabled,
     match_expression
 )
 VALUES (
@@ -60,9 +61,10 @@ VALUES (
     $5,
     $6,
     $7,
-    $8
+    $8,
+    $9
 )
-RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateSensorParams struct {
@@ -73,6 +75,7 @@ type CreateSensorParams struct {
 	Description     pgtype.Text
 	Instructions    pgtype.Text
 	Mode            string
+	Enabled         bool
 	MatchExpression string
 }
 
@@ -85,6 +88,7 @@ func (q *Queries) CreateSensor(ctx context.Context, arg CreateSensorParams) (Sig
 		arg.Description,
 		arg.Instructions,
 		arg.Mode,
+		arg.Enabled,
 		arg.MatchExpression,
 	)
 	var i SigintSensor
@@ -97,6 +101,7 @@ func (q *Queries) CreateSensor(ctx context.Context, arg CreateSensorParams) (Sig
 		&i.Instructions,
 		&i.Mode,
 		&i.MatchExpression,
+		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -166,7 +171,7 @@ SET deleted_at = clock_timestamp(),
 WHERE id = $1
   AND project_id = $2
   AND deleted IS FALSE
-RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteSensorParams struct {
@@ -186,6 +191,7 @@ func (q *Queries) DeleteSensor(ctx context.Context, arg DeleteSensorParams) (Sig
 		&i.Instructions,
 		&i.Mode,
 		&i.MatchExpression,
+		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -290,6 +296,7 @@ SELECT
     sensor.description,
     sensor.instructions,
     sensor.mode,
+    sensor.enabled,
     sensor.match_expression,
     COALESCE(membership.signal_ids, ARRAY[]::uuid[])::uuid[] AS signal_ids,
     sensor.created_at,
@@ -320,6 +327,7 @@ type GetSensorRow struct {
 	Description     pgtype.Text
 	Instructions    pgtype.Text
 	Mode            string
+	Enabled         bool
 	MatchExpression string
 	SignalIds       []uuid.UUID
 	CreatedAt       pgtype.Timestamptz
@@ -337,6 +345,7 @@ func (q *Queries) GetSensor(ctx context.Context, arg GetSensorParams) (GetSensor
 		&i.Description,
 		&i.Instructions,
 		&i.Mode,
+		&i.Enabled,
 		&i.MatchExpression,
 		&i.SignalIds,
 		&i.CreatedAt,
@@ -354,6 +363,7 @@ SELECT
     sensor.description,
     sensor.instructions,
     sensor.mode,
+    sensor.enabled,
     sensor.match_expression,
     COALESCE(membership.signal_ids, ARRAY[]::uuid[])::uuid[] AS signal_ids,
     sensor.created_at,
@@ -385,6 +395,7 @@ type GetSensorsByIDsRow struct {
 	Description     pgtype.Text
 	Instructions    pgtype.Text
 	Mode            string
+	Enabled         bool
 	MatchExpression string
 	SignalIds       []uuid.UUID
 	CreatedAt       pgtype.Timestamptz
@@ -408,6 +419,7 @@ func (q *Queries) GetSensorsByIDs(ctx context.Context, arg GetSensorsByIDsParams
 			&i.Description,
 			&i.Instructions,
 			&i.Mode,
+			&i.Enabled,
 			&i.MatchExpression,
 			&i.SignalIds,
 			&i.CreatedAt,
@@ -497,6 +509,7 @@ SELECT
     sensor.description,
     sensor.instructions,
     sensor.mode,
+    sensor.enabled,
     sensor.match_expression,
     COALESCE(membership.signal_ids, ARRAY[]::uuid[])::uuid[] AS signal_ids,
     sensor.created_at,
@@ -530,6 +543,7 @@ type ListSensorsRow struct {
 	Description     pgtype.Text
 	Instructions    pgtype.Text
 	Mode            string
+	Enabled         bool
 	MatchExpression string
 	SignalIds       []uuid.UUID
 	CreatedAt       pgtype.Timestamptz
@@ -553,6 +567,7 @@ func (q *Queries) ListSensors(ctx context.Context, arg ListSensorsParams) ([]Lis
 			&i.Description,
 			&i.Instructions,
 			&i.Mode,
+			&i.Enabled,
 			&i.MatchExpression,
 			&i.SignalIds,
 			&i.CreatedAt,
@@ -577,6 +592,7 @@ SELECT
     sensor.description,
     sensor.instructions,
     sensor.mode,
+    sensor.enabled,
     sensor.match_expression,
     COALESCE(membership.signal_ids, ARRAY[]::uuid[])::uuid[] AS signal_ids,
     sensor.created_at,
@@ -612,6 +628,7 @@ type ListSensorsForSignalRow struct {
 	Description     pgtype.Text
 	Instructions    pgtype.Text
 	Mode            string
+	Enabled         bool
 	MatchExpression string
 	SignalIds       []uuid.UUID
 	CreatedAt       pgtype.Timestamptz
@@ -635,6 +652,7 @@ func (q *Queries) ListSensorsForSignal(ctx context.Context, arg ListSensorsForSi
 			&i.Description,
 			&i.Instructions,
 			&i.Mode,
+			&i.Enabled,
 			&i.MatchExpression,
 			&i.SignalIds,
 			&i.CreatedAt,
@@ -795,12 +813,13 @@ SET name = $1,
     description = $3,
     instructions = $4,
     mode = $5,
-    match_expression = $6,
+    enabled = $6,
+    match_expression = $7,
     updated_at = clock_timestamp()
-WHERE id = $7
-  AND project_id = $8
+WHERE id = $8
+  AND project_id = $9
   AND deleted IS FALSE
-RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, name, slug, description, instructions, mode, match_expression, enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateSensorParams struct {
@@ -809,6 +828,7 @@ type UpdateSensorParams struct {
 	Description     pgtype.Text
 	Instructions    pgtype.Text
 	Mode            string
+	Enabled         bool
 	MatchExpression string
 	ID              uuid.UUID
 	ProjectID       uuid.UUID
@@ -821,6 +841,7 @@ func (q *Queries) UpdateSensor(ctx context.Context, arg UpdateSensorParams) (Sig
 		arg.Description,
 		arg.Instructions,
 		arg.Mode,
+		arg.Enabled,
 		arg.MatchExpression,
 		arg.ID,
 		arg.ProjectID,
@@ -835,6 +856,7 @@ func (q *Queries) UpdateSensor(ctx context.Context, arg UpdateSensorParams) (Sig
 		&i.Instructions,
 		&i.Mode,
 		&i.MatchExpression,
+		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

@@ -92563,6 +92563,9 @@ components:
                 description:
                     type: string
                     description: Optional description; empty stores no value
+                enabled:
+                    type: boolean
+                    description: Whether to enable evaluation; omission defaults to true
                 instructions:
                     type: string
                     description: Optional classification instructions; empty stores no value
@@ -111918,6 +111921,9 @@ components:
                 description:
                     type: string
                     description: Optional author-facing description
+                enabled:
+                    type: boolean
+                    description: Whether the sensor is eligible for evaluation. Disabled sensors remain visible and editable.
                 id:
                     type: string
                     description: Sensor ID
@@ -111959,6 +111965,7 @@ components:
                     format: date-time
             description: A project-scoped sensor with ordered live references to custom signals. signal_ids is always present, including when empty.
             required:
+                - enabled
                 - match_expression
                 - id
                 - project_id
@@ -118393,6 +118400,9 @@ components:
                 description:
                     type: string
                     description: Replacement description; empty clears it
+                enabled:
+                    type: boolean
+                    description: Enable or disable evaluation; omission preserves the current state. Evaluations already in progress may finish.
                 id:
                     type: string
                     description: Sensor ID

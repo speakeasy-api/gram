@@ -2461,6 +2461,7 @@ func unmarshalSigintSignalResponseBodyToTypesSigintSignal(v *SigintSignalRespons
 // *types.SigintSensor from a value of type *SigintSensorResponseBody.
 func unmarshalSigintSensorResponseBodyToTypesSigintSensor(v *SigintSensorResponseBody) *types.SigintSensor {
 	res := &types.SigintSensor{
+		Enabled:         *v.Enabled,
 		MatchExpression: *v.MatchExpression,
 		Slug:            types.Slug(*v.Slug),
 		ID:              *v.ID,

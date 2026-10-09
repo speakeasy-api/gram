@@ -27,6 +27,10 @@ export type UpdateSigintSensorForm = {
    */
   description?: string | undefined;
   /**
+   * Enable or disable evaluation; omission preserves the current state. Evaluations already in progress may finish.
+   */
+  enabled?: boolean | undefined;
+  /**
    * Sensor ID
    */
   id: string;
@@ -64,6 +68,7 @@ export const UpdateSigintSensorFormMode$outboundSchema: z.ZodMiniEnum<
 /** @internal */
 export type UpdateSigintSensorForm$Outbound = {
   description?: string | undefined;
+  enabled?: boolean | undefined;
   id: string;
   instructions?: string | undefined;
   match_expression?: string | undefined;
@@ -80,6 +85,7 @@ export const UpdateSigintSensorForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     description: z.optional(z.string()),
+    enabled: z.optional(z.boolean()),
     id: z.string(),
     instructions: z.optional(z.string()),
     matchExpression: z.optional(z.string()),

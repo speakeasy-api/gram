@@ -280,7 +280,7 @@ func BuildCreateSensorPayload(sigintCreateSensorBody string, sigintCreateSensorS
 	{
 		err = json.Unmarshal([]byte(sigintCreateSensorBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"instructions\": \"abc123\",\n      \"match_expression\": \"abc123\",\n      \"mode\": \"exclusive\",\n      \"name\": \"abc123\",\n      \"signal_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"slug\": \"aaa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"enabled\": false,\n      \"instructions\": \"abc123\",\n      \"match_expression\": \"abc123\",\n      \"mode\": \"exclusive\",\n      \"name\": \"abc123\",\n      \"signal_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"slug\": \"aaa\"\n   }'")
 		}
 		if body.Slug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
@@ -319,6 +319,7 @@ func BuildCreateSensorPayload(sigintCreateSensorBody string, sigintCreateSensorS
 		}
 	}
 	v := &sigint.CreateSensorPayload{
+		Enabled:         body.Enabled,
 		MatchExpression: body.MatchExpression,
 		Name:            body.Name,
 		Description:     body.Description,
@@ -451,7 +452,7 @@ func BuildUpdateSensorPayload(sigintUpdateSensorBody string, sigintUpdateSensorS
 	{
 		err = json.Unmarshal([]byte(sigintUpdateSensorBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"instructions\": \"abc123\",\n      \"match_expression\": \"abc123\",\n      \"mode\": \"exclusive\",\n      \"name\": \"abc123\",\n      \"signal_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"slug\": \"aaa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"instructions\": \"abc123\",\n      \"match_expression\": \"abc123\",\n      \"mode\": \"exclusive\",\n      \"name\": \"abc123\",\n      \"signal_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"slug\": \"aaa\"\n   }'")
 		}
 		if body.Slug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
@@ -493,6 +494,7 @@ func BuildUpdateSensorPayload(sigintUpdateSensorBody string, sigintUpdateSensorS
 		}
 	}
 	v := &sigint.UpdateSensorPayload{
+		Enabled:         body.Enabled,
 		MatchExpression: body.MatchExpression,
 		ID:              body.ID,
 		Name:            body.Name,

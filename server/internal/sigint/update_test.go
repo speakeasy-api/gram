@@ -162,3 +162,42 @@ func TestUpdateSensorRejectsDuplicateUUIDsAtomically(t *testing.T) {
 	require.Equal(t, sensor.Name, stored.Name)
 	require.Equal(t, []string{signal.ID}, stored.SignalIds)
 }
+
+func TestSensorEnabledLifecycle(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	sensor := createSensor(t, ctx, ti, "enabled by default", "multi_label")
+	require.True(t, sensor.Enabled)
+
+	disabled, err := ti.service.CreateSensor(ctx, &gen.CreateSensorPayload{Name: "disabled initially", Mode: "multi_label", Enabled: new(false)})
+	require.NoError(t, err)
+	require.False(t, disabled.Enabled)
+
+	handler := srv.NewUpdateSensorHandler(func(ctx context.Context, request any) (any, error) {
+		payload, ok := request.(*gen.UpdateSensorPayload)
+		require.True(t, ok)
+		return ti.service.UpdateSensor(ctx, payload)
+	}, nil, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+
+	for _, step := range []struct {
+		body    string
+		enabled bool
+	}{
+		{`"enabled":false`, false},
+		{`"name":"still editable"`, false},
+		{`"enabled":true`, true},
+	} {
+		request := httptest.NewRequestWithContext(ctx, http.MethodPost, "/rpc/sigint.updateSensor", strings.NewReader(fmt.Sprintf(`{"id":%q,%s}`, sensor.ID, step.body)))
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Gram-Session", "transport-test")
+		request.Header.Set("Gram-Project", "transport-test")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		require.Equal(t, step.enabled, getSensor(t, ctx, ti, sensor.ID).Enabled)
+	}
+
+	listed, err := ti.service.ListSensors(ctx, &gen.ListSensorsPayload{Limit: 100})
+	require.NoError(t, err)
+	require.Len(t, listed.Sensors, 2)
+}

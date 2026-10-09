@@ -2396,6 +2396,7 @@ func marshalTypesSigintSignalToSigintSignalResponseBody(v *types.SigintSignal) *
 // *SigintSensorResponseBody from a value of type *types.SigintSensor.
 func marshalTypesSigintSensorToSigintSensorResponseBody(v *types.SigintSensor) *SigintSensorResponseBody {
 	res := &SigintSensorResponseBody{
+		Enabled:         v.Enabled,
 		MatchExpression: v.MatchExpression,
 		Slug:            string(v.Slug),
 		ID:              v.ID,

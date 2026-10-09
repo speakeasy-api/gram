@@ -90,6 +90,8 @@ type CreateSensorPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+	// Whether to enable evaluation; omission defaults to true
+	Enabled *bool
 	// Boolean CEL predicate, at most 4096 UTF-8 bytes; omission defaults to
 	// message.role == "user"
 	MatchExpression *string
@@ -210,6 +212,9 @@ type UpdateSensorPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
+	// Enable or disable evaluation; omission preserves the current state.
+	// Evaluations already in progress may finish.
+	Enabled *bool
 	// Replacement boolean CEL predicate, at most 4096 UTF-8 bytes; omission
 	// preserves it
 	MatchExpression *string

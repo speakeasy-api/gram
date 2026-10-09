@@ -269,6 +269,8 @@ var SigintSignal = Type("SigintSignal", func() {
 })
 
 var SigintSensor = Type("SigintSensor", func() {
+	Attribute("enabled", Boolean, "Whether the sensor is eligible for evaluation. Disabled sensors remain visible and editable.")
+	Required("enabled")
 	Attribute("match_expression", String, "Boolean CEL predicate over message.role (lowercase user, assistant, system, or tool)")
 	Required("match_expression")
 	Attribute("slug", shared.Slug, "Project-scoped sensor identifier for analytics and integrations")
@@ -304,6 +306,7 @@ var UpdateSignalForm = Type("UpdateSigintSignalForm", func() {
 })
 
 var CreateSensorForm = Type("CreateSigintSensorForm", func() {
+	Attribute("enabled", Boolean, "Whether to enable evaluation; omission defaults to true")
 	Attribute("match_expression", String, "Boolean CEL predicate, at most 4096 UTF-8 bytes; omission defaults to message.role == \"user\"")
 	Attribute("slug", shared.Slug, "Optional project-scoped slug; defaults to a slugified display name. Must be unique including deleted sensors.")
 	Attribute("name", String, "Display name; trimmed before enforcing the 1 to 200 character limit")
@@ -315,6 +318,7 @@ var CreateSensorForm = Type("CreateSigintSensorForm", func() {
 })
 
 var UpdateSensorForm = Type("UpdateSigintSensorForm", func() {
+	Attribute("enabled", Boolean, "Enable or disable evaluation; omission preserves the current state. Evaluations already in progress may finish.")
 	Attribute("match_expression", String, "Replacement boolean CEL predicate, at most 4096 UTF-8 bytes; omission preserves it")
 	Attribute("slug", shared.Slug, "Replacement slug; omission preserves it. Changing it changes the identifier used by future exports.")
 	Attribute("id", String, "Sensor ID", func() { Format(FormatUUID) })

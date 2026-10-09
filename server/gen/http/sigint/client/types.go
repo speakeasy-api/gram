@@ -49,6 +49,8 @@ type UpdateSignalRequestBody struct {
 // CreateSensorRequestBody is the type of the "sigint" service "createSensor"
 // endpoint HTTP request body.
 type CreateSensorRequestBody struct {
+	// Whether to enable evaluation; omission defaults to true
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Boolean CEL predicate, at most 4096 UTF-8 bytes; omission defaults to
 	// message.role == "user"
 	MatchExpression *string `form:"match_expression,omitempty" json:"match_expression,omitempty" xml:"match_expression,omitempty"`
@@ -69,6 +71,9 @@ type CreateSensorRequestBody struct {
 // UpdateSensorRequestBody is the type of the "sigint" service "updateSensor"
 // endpoint HTTP request body.
 type UpdateSensorRequestBody struct {
+	// Enable or disable evaluation; omission preserves the current state.
+	// Evaluations already in progress may finish.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Replacement boolean CEL predicate, at most 4096 UTF-8 bytes; omission
 	// preserves it
 	MatchExpression *string `form:"match_expression,omitempty" json:"match_expression,omitempty" xml:"match_expression,omitempty"`
@@ -186,6 +191,9 @@ type DeleteSignalResponseBody struct {
 // CreateSensorResponseBody is the type of the "sigint" service "createSensor"
 // endpoint HTTP response body.
 type CreateSensorResponseBody struct {
+	// Whether the sensor is eligible for evaluation. Disabled sensors remain
+	// visible and editable.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Boolean CEL predicate over message.role (lowercase user, assistant, system,
 	// or tool)
 	MatchExpression *string `form:"match_expression,omitempty" json:"match_expression,omitempty" xml:"match_expression,omitempty"`
@@ -214,6 +222,9 @@ type CreateSensorResponseBody struct {
 // GetSensorResponseBody is the type of the "sigint" service "getSensor"
 // endpoint HTTP response body.
 type GetSensorResponseBody struct {
+	// Whether the sensor is eligible for evaluation. Disabled sensors remain
+	// visible and editable.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Boolean CEL predicate over message.role (lowercase user, assistant, system,
 	// or tool)
 	MatchExpression *string `form:"match_expression,omitempty" json:"match_expression,omitempty" xml:"match_expression,omitempty"`
@@ -251,6 +262,9 @@ type ListSensorsResponseBody struct {
 // UpdateSensorResponseBody is the type of the "sigint" service "updateSensor"
 // endpoint HTTP response body.
 type UpdateSensorResponseBody struct {
+	// Whether the sensor is eligible for evaluation. Disabled sensors remain
+	// visible and editable.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Boolean CEL predicate over message.role (lowercase user, assistant, system,
 	// or tool)
 	MatchExpression *string `form:"match_expression,omitempty" json:"match_expression,omitempty" xml:"match_expression,omitempty"`
@@ -279,6 +293,9 @@ type UpdateSensorResponseBody struct {
 // DeleteSensorResponseBody is the type of the "sigint" service "deleteSensor"
 // endpoint HTTP response body.
 type DeleteSensorResponseBody struct {
+	// Whether the sensor is eligible for evaluation. Disabled sensors remain
+	// visible and editable.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Boolean CEL predicate over message.role (lowercase user, assistant, system,
 	// or tool)
 	MatchExpression *string `form:"match_expression,omitempty" json:"match_expression,omitempty" xml:"match_expression,omitempty"`
@@ -2134,6 +2151,9 @@ type SigintSignalResponseBody struct {
 
 // SigintSensorResponseBody is used to define fields on response body types.
 type SigintSensorResponseBody struct {
+	// Whether the sensor is eligible for evaluation. Disabled sensors remain
+	// visible and editable.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Boolean CEL predicate over message.role (lowercase user, assistant, system,
 	// or tool)
 	MatchExpression *string `form:"match_expression,omitempty" json:"match_expression,omitempty" xml:"match_expression,omitempty"`
@@ -2194,6 +2214,7 @@ func NewUpdateSignalRequestBody(p *sigint.UpdateSignalPayload) *UpdateSignalRequ
 // the "createSensor" endpoint of the "sigint" service.
 func NewCreateSensorRequestBody(p *sigint.CreateSensorPayload) *CreateSensorRequestBody {
 	body := &CreateSensorRequestBody{
+		Enabled:         p.Enabled,
 		MatchExpression: p.MatchExpression,
 		Name:            p.Name,
 		Description:     p.Description,
@@ -2217,6 +2238,7 @@ func NewCreateSensorRequestBody(p *sigint.CreateSensorPayload) *CreateSensorRequ
 // the "updateSensor" endpoint of the "sigint" service.
 func NewUpdateSensorRequestBody(p *sigint.UpdateSensorPayload) *UpdateSensorRequestBody {
 	body := &UpdateSensorRequestBody{
+		Enabled:         p.Enabled,
 		MatchExpression: p.MatchExpression,
 		ID:              p.ID,
 		Name:            p.Name,
@@ -3079,6 +3101,7 @@ func NewDeleteSignalGatewayError(body *DeleteSignalGatewayErrorResponseBody) *go
 // endpoint result from a HTTP "OK" response.
 func NewCreateSensorSigintSensorOK(body *CreateSensorResponseBody) *types.SigintSensor {
 	v := &types.SigintSensor{
+		Enabled:         *body.Enabled,
 		MatchExpression: *body.MatchExpression,
 		Slug:            types.Slug(*body.Slug),
 		ID:              *body.ID,
@@ -3252,6 +3275,7 @@ func NewCreateSensorGatewayError(body *CreateSensorGatewayErrorResponseBody) *go
 // result from a HTTP "OK" response.
 func NewGetSensorSigintSensorOK(body *GetSensorResponseBody) *types.SigintSensor {
 	v := &types.SigintSensor{
+		Enabled:         *body.Enabled,
 		MatchExpression: *body.MatchExpression,
 		Slug:            types.Slug(*body.Slug),
 		ID:              *body.ID,
@@ -3592,6 +3616,7 @@ func NewListSensorsGatewayError(body *ListSensorsGatewayErrorResponseBody) *goa.
 // endpoint result from a HTTP "OK" response.
 func NewUpdateSensorSigintSensorOK(body *UpdateSensorResponseBody) *types.SigintSensor {
 	v := &types.SigintSensor{
+		Enabled:         *body.Enabled,
 		MatchExpression: *body.MatchExpression,
 		Slug:            types.Slug(*body.Slug),
 		ID:              *body.ID,
@@ -3765,6 +3790,7 @@ func NewUpdateSensorGatewayError(body *UpdateSensorGatewayErrorResponseBody) *go
 // endpoint result from a HTTP "OK" response.
 func NewDeleteSensorSigintSensorOK(body *DeleteSensorResponseBody) *types.SigintSensor {
 	v := &types.SigintSensor{
+		Enabled:         *body.Enabled,
 		MatchExpression: *body.MatchExpression,
 		Slug:            types.Slug(*body.Slug),
 		ID:              *body.ID,
@@ -4132,6 +4158,9 @@ func ValidateDeleteSignalResponseBody(body *DeleteSignalResponseBody) (err error
 // ValidateCreateSensorResponseBody runs the validations defined on
 // CreateSensorResponseBody
 func ValidateCreateSensorResponseBody(body *CreateSensorResponseBody) (err error) {
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
 	if body.MatchExpression == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("match_expression", "body"))
 	}
@@ -4193,6 +4222,9 @@ func ValidateCreateSensorResponseBody(body *CreateSensorResponseBody) (err error
 // ValidateGetSensorResponseBody runs the validations defined on
 // GetSensorResponseBody
 func ValidateGetSensorResponseBody(body *GetSensorResponseBody) (err error) {
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
 	if body.MatchExpression == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("match_expression", "body"))
 	}
@@ -4273,6 +4305,9 @@ func ValidateListSensorsResponseBody(body *ListSensorsResponseBody) (err error) 
 // ValidateUpdateSensorResponseBody runs the validations defined on
 // UpdateSensorResponseBody
 func ValidateUpdateSensorResponseBody(body *UpdateSensorResponseBody) (err error) {
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
 	if body.MatchExpression == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("match_expression", "body"))
 	}
@@ -4334,6 +4369,9 @@ func ValidateUpdateSensorResponseBody(body *UpdateSensorResponseBody) (err error
 // ValidateDeleteSensorResponseBody runs the validations defined on
 // DeleteSensorResponseBody
 func ValidateDeleteSensorResponseBody(body *DeleteSensorResponseBody) (err error) {
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
 	if body.MatchExpression == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("match_expression", "body"))
 	}
@@ -6839,6 +6877,9 @@ func ValidateSigintSignalResponseBody(body *SigintSignalResponseBody) (err error
 // ValidateSigintSensorResponseBody runs the validations defined on
 // SigintSensorResponseBody
 func ValidateSigintSensorResponseBody(body *SigintSensorResponseBody) (err error) {
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
 	if body.MatchExpression == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("match_expression", "body"))
 	}

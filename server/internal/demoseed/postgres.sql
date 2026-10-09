@@ -580,20 +580,20 @@ BEGIN
      'A future customer renewal campaign.', NULL);
 
   INSERT INTO sigint_sensors
-    (id, project_id, name, slug, description, instructions, mode)
+    (id, project_id, name, slug, description, instructions, mode, enabled)
   VALUES
     (demo.det_uuid('gram-demo-sigint-sensor-service-areas'), proj_a,
      'Service areas', 'service-areas', 'Labels every service area discussed in a conversation.',
-     'Select every product service that materially appears.', 'multi_label'),
+     'Select every product service that materially appears.', 'multi_label', true),
     (demo.det_uuid('gram-demo-sigint-sensor-primary-service'), proj_a,
      'Primary service', 'primary-service', 'Chooses the service most central to a conversation.',
-     'Choose the single service that best describes the main request.', 'exclusive'),
+     'Choose the single service that best describes the main request.', 'exclusive', true),
     (demo.det_uuid('gram-demo-sigint-sensor-impact'), proj_a,
      'Customer impact', 'customer-impact', 'Orders conversations by customer impact.',
-     'Score impact from low to high using the supplied levels.', 'ordered_score'),
+     'Score impact from low to high using the supplied levels.', 'ordered_score', true),
     (demo.det_uuid('gram-demo-sigint-sensor-draft-campaign'), proj_a,
      'Draft campaign', 'draft-campaign', 'An incomplete campaign classifier awaiting its labels.',
-     NULL, 'multi_label');
+     NULL, 'multi_label', false);
 
   INSERT INTO sigint_sensor_signals
     (id, project_id, sensor_id, signal_id, sort_order)

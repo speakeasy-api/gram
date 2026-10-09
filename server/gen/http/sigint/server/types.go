@@ -49,6 +49,8 @@ type UpdateSignalRequestBody struct {
 // CreateSensorRequestBody is the type of the "sigint" service "createSensor"
 // endpoint HTTP request body.
 type CreateSensorRequestBody struct {
+	// Whether to enable evaluation; omission defaults to true
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Boolean CEL predicate, at most 4096 UTF-8 bytes; omission defaults to
 	// message.role == "user"
 	MatchExpression *string `form:"match_expression,omitempty" json:"match_expression,omitempty" xml:"match_expression,omitempty"`
@@ -69,6 +71,9 @@ type CreateSensorRequestBody struct {
 // UpdateSensorRequestBody is the type of the "sigint" service "updateSensor"
 // endpoint HTTP request body.
 type UpdateSensorRequestBody struct {
+	// Enable or disable evaluation; omission preserves the current state.
+	// Evaluations already in progress may finish.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 	// Replacement boolean CEL predicate, at most 4096 UTF-8 bytes; omission
 	// preserves it
 	MatchExpression *string `form:"match_expression,omitempty" json:"match_expression,omitempty" xml:"match_expression,omitempty"`
@@ -186,6 +191,9 @@ type DeleteSignalResponseBody struct {
 // CreateSensorResponseBody is the type of the "sigint" service "createSensor"
 // endpoint HTTP response body.
 type CreateSensorResponseBody struct {
+	// Whether the sensor is eligible for evaluation. Disabled sensors remain
+	// visible and editable.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Boolean CEL predicate over message.role (lowercase user, assistant, system,
 	// or tool)
 	MatchExpression string `form:"match_expression" json:"match_expression" xml:"match_expression"`
@@ -214,6 +222,9 @@ type CreateSensorResponseBody struct {
 // GetSensorResponseBody is the type of the "sigint" service "getSensor"
 // endpoint HTTP response body.
 type GetSensorResponseBody struct {
+	// Whether the sensor is eligible for evaluation. Disabled sensors remain
+	// visible and editable.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Boolean CEL predicate over message.role (lowercase user, assistant, system,
 	// or tool)
 	MatchExpression string `form:"match_expression" json:"match_expression" xml:"match_expression"`
@@ -251,6 +262,9 @@ type ListSensorsResponseBody struct {
 // UpdateSensorResponseBody is the type of the "sigint" service "updateSensor"
 // endpoint HTTP response body.
 type UpdateSensorResponseBody struct {
+	// Whether the sensor is eligible for evaluation. Disabled sensors remain
+	// visible and editable.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Boolean CEL predicate over message.role (lowercase user, assistant, system,
 	// or tool)
 	MatchExpression string `form:"match_expression" json:"match_expression" xml:"match_expression"`
@@ -279,6 +293,9 @@ type UpdateSensorResponseBody struct {
 // DeleteSensorResponseBody is the type of the "sigint" service "deleteSensor"
 // endpoint HTTP response body.
 type DeleteSensorResponseBody struct {
+	// Whether the sensor is eligible for evaluation. Disabled sensors remain
+	// visible and editable.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Boolean CEL predicate over message.role (lowercase user, assistant, system,
 	// or tool)
 	MatchExpression string `form:"match_expression" json:"match_expression" xml:"match_expression"`
@@ -2134,6 +2151,9 @@ type SigintSignalResponseBody struct {
 
 // SigintSensorResponseBody is used to define fields on response body types.
 type SigintSensorResponseBody struct {
+	// Whether the sensor is eligible for evaluation. Disabled sensors remain
+	// visible and editable.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 	// Boolean CEL predicate over message.role (lowercase user, assistant, system,
 	// or tool)
 	MatchExpression string `form:"match_expression" json:"match_expression" xml:"match_expression"`
@@ -2248,6 +2268,7 @@ func NewDeleteSignalResponseBody(res *types.SigintSignal) *DeleteSignalResponseB
 // the "createSensor" endpoint of the "sigint" service.
 func NewCreateSensorResponseBody(res *types.SigintSensor) *CreateSensorResponseBody {
 	body := &CreateSensorResponseBody{
+		Enabled:         res.Enabled,
 		MatchExpression: res.MatchExpression,
 		Slug:            string(res.Slug),
 		ID:              res.ID,
@@ -2274,6 +2295,7 @@ func NewCreateSensorResponseBody(res *types.SigintSensor) *CreateSensorResponseB
 // the "getSensor" endpoint of the "sigint" service.
 func NewGetSensorResponseBody(res *types.SigintSensor) *GetSensorResponseBody {
 	body := &GetSensorResponseBody{
+		Enabled:         res.Enabled,
 		MatchExpression: res.MatchExpression,
 		Slug:            string(res.Slug),
 		ID:              res.ID,
@@ -2321,6 +2343,7 @@ func NewListSensorsResponseBody(res *sigint.ListSigintSensorsResult) *ListSensor
 // the "updateSensor" endpoint of the "sigint" service.
 func NewUpdateSensorResponseBody(res *types.SigintSensor) *UpdateSensorResponseBody {
 	body := &UpdateSensorResponseBody{
+		Enabled:         res.Enabled,
 		MatchExpression: res.MatchExpression,
 		Slug:            string(res.Slug),
 		ID:              res.ID,
@@ -2347,6 +2370,7 @@ func NewUpdateSensorResponseBody(res *types.SigintSensor) *UpdateSensorResponseB
 // the "deleteSensor" endpoint of the "sigint" service.
 func NewDeleteSensorResponseBody(res *types.SigintSensor) *DeleteSensorResponseBody {
 	body := &DeleteSensorResponseBody{
+		Enabled:         res.Enabled,
 		MatchExpression: res.MatchExpression,
 		Slug:            string(res.Slug),
 		ID:              res.ID,
@@ -3843,6 +3867,7 @@ func NewDeleteSignalPayload(id string, sessionToken *string, apikeyToken *string
 // NewCreateSensorPayload builds a sigint service createSensor endpoint payload.
 func NewCreateSensorPayload(body *CreateSensorRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *sigint.CreateSensorPayload {
 	v := &sigint.CreateSensorPayload{
+		Enabled:         body.Enabled,
 		MatchExpression: body.MatchExpression,
 		Name:            *body.Name,
 		Description:     body.Description,
@@ -3892,6 +3917,7 @@ func NewListSensorsPayload(cursor *string, limit int, sessionToken *string, apik
 // NewUpdateSensorPayload builds a sigint service updateSensor endpoint payload.
 func NewUpdateSensorPayload(body *UpdateSensorRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *sigint.UpdateSensorPayload {
 	v := &sigint.UpdateSensorPayload{
+		Enabled:         body.Enabled,
 		MatchExpression: body.MatchExpression,
 		ID:              *body.ID,
 		Name:            body.Name,

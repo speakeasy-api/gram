@@ -35,6 +35,10 @@ export type SigintSensor = {
    */
   description?: string | undefined;
   /**
+   * Whether the sensor is eligible for evaluation. Disabled sensors remain visible and editable.
+   */
+  enabled: boolean;
+  /**
    * Sensor ID
    */
   id: string;
@@ -86,6 +90,7 @@ export const SigintSensor$inboundSchema: z.ZodMiniType<SigintSensor, unknown> =
         z.transform(v => new Date(v)),
       ),
       description: z.optional(z.string()),
+      enabled: z.boolean(),
       id: z.string(),
       instructions: z.optional(z.string()),
       match_expression: z.string(),

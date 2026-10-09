@@ -531,6 +531,7 @@ func (s *Service) CreateSensorWithTx(ctx context.Context, dbtx pgx.Tx, payload *
 		ID:   id, ProjectID: *authCtx.ProjectID, Name: name,
 		Description: conv.PtrToPGTextEmpty(payload.Description), Instructions: conv.PtrToPGTextEmpty(payload.Instructions), Mode: mode,
 		MatchExpression: expression,
+		Enabled:         conv.PtrValOr(payload.Enabled, true),
 	})
 	if isSlugConflict(err) {
 		return nil, oops.E(oops.CodeConflict, err, "sensor slug already exists")
@@ -676,6 +677,7 @@ func (s *Service) UpdateSensorWithTx(ctx context.Context, dbtx pgx.Tx, payload *
 		Name: beforeRow.Name, Description: beforeRow.Description, Instructions: beforeRow.Instructions,
 		Mode: beforeRow.Mode, ID: id, ProjectID: *authCtx.ProjectID,
 		MatchExpression: beforeRow.MatchExpression,
+		Enabled:         conv.PtrValOr(payload.Enabled, beforeRow.Enabled),
 	}
 	if payload.Name != nil {
 		params.Name, err = validateName(*payload.Name)
@@ -900,6 +902,7 @@ func sensorViewFromAffected(sensor repo.ListSensorsForSignalRow) *types.SigintSe
 		Description: conv.FromPGText[string](sensor.Description), Instructions: conv.FromPGText[string](sensor.Instructions),
 		Mode: types.SigintSensorMode(sensor.Mode), SignalIds: signalIDs,
 		MatchExpression: sensor.MatchExpression,
+		Enabled:         sensor.Enabled,
 		CreatedAt:       sensor.CreatedAt.Time.Format(time.RFC3339), UpdatedAt: sensor.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }

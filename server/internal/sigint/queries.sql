@@ -68,6 +68,7 @@ INSERT INTO sigint_sensors (
     description,
     instructions,
     mode,
+    enabled,
     match_expression
 )
 VALUES (
@@ -78,6 +79,7 @@ VALUES (
     sqlc.narg('description'),
     sqlc.narg('instructions'),
     @mode,
+    @enabled,
     @match_expression
 )
 RETURNING *;
@@ -91,6 +93,7 @@ SELECT
     sensor.description,
     sensor.instructions,
     sensor.mode,
+    sensor.enabled,
     sensor.match_expression,
     COALESCE(membership.signal_ids, ARRAY[]::uuid[])::uuid[] AS signal_ids,
     sensor.created_at,
@@ -116,6 +119,7 @@ SELECT
     sensor.description,
     sensor.instructions,
     sensor.mode,
+    sensor.enabled,
     sensor.match_expression,
     COALESCE(membership.signal_ids, ARRAY[]::uuid[])::uuid[] AS signal_ids,
     sensor.created_at,
@@ -141,6 +145,7 @@ SET name = @name,
     description = sqlc.narg('description'),
     instructions = sqlc.narg('instructions'),
     mode = @mode,
+    enabled = @enabled,
     match_expression = @match_expression,
     updated_at = clock_timestamp()
 WHERE id = @id
@@ -232,6 +237,7 @@ SELECT
     sensor.description,
     sensor.instructions,
     sensor.mode,
+    sensor.enabled,
     sensor.match_expression,
     COALESCE(membership.signal_ids, ARRAY[]::uuid[])::uuid[] AS signal_ids,
     sensor.created_at,
@@ -296,6 +302,7 @@ SELECT
     sensor.description,
     sensor.instructions,
     sensor.mode,
+    sensor.enabled,
     sensor.match_expression,
     COALESCE(membership.signal_ids, ARRAY[]::uuid[])::uuid[] AS signal_ids,
     sensor.created_at,

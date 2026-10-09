@@ -9,6 +9,9 @@ package types
 
 // SigintSensor is the result type of the sigint service createSensor method.
 type SigintSensor struct {
+	// Whether the sensor is eligible for evaluation. Disabled sensors remain
+	// visible and editable.
+	Enabled bool
 	// Boolean CEL predicate over message.role (lowercase user, assistant, system,
 	// or tool)
 	MatchExpression string

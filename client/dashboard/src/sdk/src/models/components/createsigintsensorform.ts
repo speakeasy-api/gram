@@ -25,6 +25,10 @@ export type CreateSigintSensorForm = {
    */
   description?: string | undefined;
   /**
+   * Whether to enable evaluation; omission defaults to true
+   */
+  enabled?: boolean | undefined;
+  /**
    * Optional classification instructions; empty stores no value
    */
   instructions?: string | undefined;
@@ -56,6 +60,7 @@ export const Mode$outboundSchema: z.ZodMiniEnum<typeof Mode> = z.enum(Mode);
 /** @internal */
 export type CreateSigintSensorForm$Outbound = {
   description?: string | undefined;
+  enabled?: boolean | undefined;
   instructions?: string | undefined;
   match_expression?: string | undefined;
   mode: string;
@@ -71,6 +76,7 @@ export const CreateSigintSensorForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     description: z.optional(z.string()),
+    enabled: z.optional(z.boolean()),
     instructions: z.optional(z.string()),
     matchExpression: z.optional(z.string()),
     mode: Mode$outboundSchema,
