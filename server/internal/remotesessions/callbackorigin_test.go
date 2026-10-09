@@ -65,6 +65,9 @@ func TestCallbackOrigins_ResolveClientAndNewClientOrigins(t *testing.T) {
 	managedClient := orgClient
 	managedClient.IdentityProviderConnectionID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	require.Nil(t, origins.ClientFederatedCallbackURL(managedClient), "identity provider connection clients can never be trusted for federation")
+	selfClient := orgClient
+	selfClient.CredentialOwner = string(remotesessions.CredentialOwnerSelf)
+	require.Nil(t, origins.ClientFederatedCallbackURL(selfClient), "self clients can never be trusted for federation")
 	require.Nil(t, origins.ClientFederatedCallbackURL(repo.RemoteSessionClient{ID: federatedClient}), "global clients can never be trusted for federation")
 	noOrigins := remotesessions.CallbackOrigins{Outbound: nil, Registration: nil}
 	require.Nil(t, noOrigins.ClientFederatedCallbackURL(repo.RemoteSessionClient{ID: federatedClient, OrganizationID: pgtype.Text{String: "org-test", Valid: true}}), "no origin omits the callback")

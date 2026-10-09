@@ -85,7 +85,7 @@ func FederatedIDPCallbackPath(clientID uuid.UUID) string {
 
 // ClientFederatedCallbackURL is FederatedIDPCallbackURL on the client's origin, nil for clients federation can never trust.
 func (o CallbackOrigins) ClientFederatedCallbackURL(client repo.RemoteSessionClient) *string {
-	if client.ProjectID.Valid || !client.OrganizationID.Valid || client.OrganizationID.String == "" || client.IdentityProviderConnectionID.Valid {
+	if client.ProjectID.Valid || !client.OrganizationID.Valid || client.OrganizationID.String == "" || client.IdentityProviderConnectionID.Valid || CredentialOwner(client.CredentialOwner) == CredentialOwnerSelf {
 		return nil
 	}
 	origin := o.ForClient(client.CallbackBaseUrl)
