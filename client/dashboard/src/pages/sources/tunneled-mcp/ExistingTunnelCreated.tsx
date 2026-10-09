@@ -6,6 +6,7 @@ import { Text } from "@/components/ui/Text";
 import { formatTunneledMcpDisplay, mcpServerRouteParam } from "@/lib/sources";
 import { GatewayAttachmentStatus } from "@/pages/mcp/gateway/GatewayAttachmentStatus";
 import type { GatewayCreationFlow } from "@/pages/mcp/gateway/useGatewayCreation";
+import { MCP_AGENT_SETUP_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/AgentSetupSection";
 import { MCP_SERVER_URL_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/ServerUrlSection";
 import { NewServerGuardrailOutcomeAlert } from "@/pages/security/server-guardrails/NewServerGuardrailOutcomeAlert";
 import type { NewServerGuardrailOutcome } from "@/pages/security/server-guardrails/useNewServerGuardrail";
@@ -85,32 +86,34 @@ export function ExistingTunnelCreated({
         )}
         <Stack direction="horizontal" gap={2}>
           {flow.gatewayId ? (
-            <>
-              <Button
-                variant="primary"
-                disabled={flow.isAttaching || flow.attachmentRefused}
-                onClick={() => {
-                  void flow.complete(mcpServer.id).catch(() => {});
-                }}
-              >
-                <Button.Text>Add to gateway</Button.Text>
-              </Button>
-              <Button
-                variant="secondary"
-                disabled={flow.isAttaching}
-                onClick={() => routes.mcp.x.overview.goTo(serverParam)}
-              >
-                <Button.Text>Open MCP server</Button.Text>
-              </Button>
-            </>
-          ) : (
             <Button
               variant="primary"
-              onClick={() => routes.mcp.x.overview.goTo(serverParam)}
+              disabled={flow.isAttaching || flow.attachmentRefused}
+              onClick={() => {
+                void flow.complete(mcpServer.id).catch(() => {});
+              }}
             >
-              <Button.Text>Open MCP server</Button.Text>
+              <Button.Text>Add to gateway</Button.Text>
             </Button>
-          )}
+          ) : null}
+          <Button
+            variant={flow.gatewayId ? "secondary" : "primary"}
+            disabled={flow.isAttaching}
+            onClick={() => routes.mcp.x.overview.goTo(serverParam)}
+          >
+            <Button.Text>Open MCP server</Button.Text>
+          </Button>
+          <Button
+            variant="secondary"
+            disabled={flow.isAttaching}
+            onClick={() =>
+              void navigate(
+                `${routes.mcp.x.settings.href(serverParam)}#${MCP_AGENT_SETUP_SECTION_ID}`,
+              )
+            }
+          >
+            <Button.Text>Agent setup</Button.Text>
+          </Button>
         </Stack>
       </Stack>
     </FormPage>
