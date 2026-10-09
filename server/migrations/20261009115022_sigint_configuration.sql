@@ -29,6 +29,7 @@ CREATE TABLE "sigint_sensors" (
   "instructions" text NULL,
   "mode" text NOT NULL,
   "match_expression" text NOT NULL DEFAULT 'message.role == "user"',
+  "enabled" boolean NOT NULL DEFAULT true,
   "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   "deleted_at" timestamptz NULL,

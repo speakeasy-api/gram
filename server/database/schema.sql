@@ -10680,6 +10680,7 @@ CREATE TABLE IF NOT EXISTS sigint_sensors (
   mode TEXT NOT NULL,
   -- CEL predicate over the message; roles use lowercase domain values.
   match_expression TEXT NOT NULL DEFAULT 'message.role == "user"',
+  enabled boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,

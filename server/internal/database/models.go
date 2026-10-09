@@ -3080,6 +3080,7 @@ type SigintSensor struct {
 	Instructions    pgtype.Text
 	Mode            string
 	MatchExpression string
+	Enabled         bool
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
