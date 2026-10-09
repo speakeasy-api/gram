@@ -424,3 +424,28 @@ func TestForwardRequestWithRetryKeepsEnvironmentHeaders(t *testing.T) {
 		require.Equal(t, []string{syntheticEnvValue}, got.Values("X-Instance-Url"))
 	}
 }
+
+// An environment row can only be a static value. A forged row that reads an
+// inbound header, protected or not, is refused on both policies, so the
+// environment can never copy a caller's credential upstream under any name.
+func TestApplyRequestHeadersEnvironmentRefusesPassThroughRows(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range bothPolicies {
+		for _, source := range []string{"X-Client-Region", "Gram-Key", "Authorization", "Cookie"} {
+			t.Run(tc.name+"/"+source, func(t *testing.T) {
+				t.Parallel()
+
+				p := envProxy(t, tc.policy, nil, []ConfiguredHeader{{IsRequired: true, Name: "X-Upstream", StaticValue: "", ValueFromRequestHeader: source}})
+				userReq := credentialBearingRequest(t)
+				remoteReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "https://upstream.test/mcp", nil)
+
+				err := p.applyRequestHeaders(t.Context(), userReq, remoteReq)
+				var oopsErr *oops.ShareableError
+				require.ErrorAs(t, err, &oopsErr)
+				require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+				require.Empty(t, remoteReq.Header.Values("X-Upstream"))
+			})
+		}
+	}
+}

@@ -92,6 +92,10 @@ type validationMemberRequest struct {
 	session     string
 	version     string
 	metaVersion string
+
+	// instanceURL is the X-Instance-Url header as it arrived, empty when
+	// absent.
+	instanceURL string
 }
 
 // validationMember is a scripted MCP upstream recording every request it receives on the wire.
@@ -159,6 +163,7 @@ func (m *validationMember) serve(w http.ResponseWriter, r *http.Request) {
 		session:     r.Header.Get("Mcp-Session-Id"),
 		version:     r.Header.Get("MCP-Protocol-Version"),
 		metaVersion: metaVersion,
+		instanceURL: r.Header.Get("X-Instance-Url"),
 	})
 	version := m.protocolVersion
 	mode := m.mode

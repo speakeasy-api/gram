@@ -3,8 +3,15 @@ package mcp_test
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -150,26 +157,26 @@ func addPublicSibling(t *testing.T, ctx context.Context, ti *testInstance, proje
 	return sibling.ID, slug
 }
 
-func servePublicInitialize(t *testing.T, ti *testInstance, slug string, extra map[string]string) *httptest.ResponseRecorder {
+// servePublicInitialize sends an anonymous initialize to a public endpoint
+// and returns the recorder and the handler's error, whose oops code is the
+// HTTP status the error middleware would write.
+func servePublicInitialize(t *testing.T, ti *testInstance, slug string, extra map[string]string) (*httptest.ResponseRecorder, error) {
 	t.Helper()
 	req := publicTunnelRequest(slug, makeInitializeBody(), "")
 	for k, v := range extra {
 		req.Header.Set(k, v)
 	}
 	w := httptest.NewRecorder()
-	err := ti.service.ServePublic(w, req)
-	if err != nil {
-		// Mirror the HTTP error mapping so assertions read a status.
-		writeServeError(w, err)
+	if err := ti.service.ServePublic(w, req); err != nil {
+		return w, fmt.Errorf("serve public initialize: %w", err)
 	}
-	return w
+	return w, nil
 }
 
-// writeServeError records a handler error as a non-2xx response for tests that
-// expect a refusal.
-func writeServeError(w *httptest.ResponseRecorder, err error) {
-	w.WriteHeader(http.StatusBadRequest)
-	_, _ = w.WriteString(err.Error())
+func requireServed(t *testing.T, w *httptest.ResponseRecorder, err error) {
+	t.Helper()
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 }
 
 func requireNotContainsValues(t *testing.T, body string, values ...string) {
@@ -207,8 +214,8 @@ func TestEnvironmentHeaders_TwoServersOnOneTunnel(t *testing.T) {
 	linkEnvironment(t, ctx, ti, projectID, fixture.mcpServerID, linkTo(prod))
 	linkEnvironment(t, ctx, ti, projectID, siblingID, linkTo(sandbox))
 
-	w := servePublicInitialize(t, ti, fixture.endpointSlug, map[string]string{"Gram-Environment": sandbox.slug})
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	w, err := servePublicInitialize(t, ti, fixture.endpointSlug, map[string]string{"Gram-Environment": sandbox.slug})
+	requireServed(t, w, err)
 	sid := w.Header().Get("Mcp-Session-Id")
 	prodForward := gateway.lastForward()
 	require.Equal(t, envProdTenant, prodForward.Get("X-Jamf-Tenant"))
@@ -218,8 +225,8 @@ func TestEnvironmentHeaders_TwoServersOnOneTunnel(t *testing.T) {
 	require.Empty(t, prodForward.Values("Gram-Environment"))
 	requireNoSpeakeasyCredentialsForwarded(t, prodForward)
 
-	w = servePublicInitialize(t, ti, siblingSlug, nil)
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	w, err = servePublicInitialize(t, ti, siblingSlug, nil)
+	requireServed(t, w, err)
 	sandboxForward := gateway.lastForward()
 	require.Equal(t, envSandboxTenant, sandboxForward.Get("X-Jamf-Tenant"))
 	require.Equal(t, envSandboxInstance, sandboxForward.Get("X-Instance-Url"))
@@ -253,8 +260,8 @@ func TestEnvironmentHeaders_ChangesApplyToTheNextRequest(t *testing.T) {
 
 	tenant := func() string {
 		t.Helper()
-		w := servePublicInitialize(t, ti, fixture.endpointSlug, nil)
-		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		w, err := servePublicInitialize(t, ti, fixture.endpointSlug, nil)
+		requireServed(t, w, err)
 		return gateway.lastForward().Get("X-Jamf-Tenant")
 	}
 	require.Equal(t, envProdTenant, tenant())
@@ -278,9 +285,9 @@ func TestEnvironmentHeaders_ChangesApplyToTheNextRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	before := gateway.forwardCount()
-	w := servePublicInitialize(t, ti, fixture.endpointSlug, nil)
-	require.NotEqual(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), "environment headers are misconfigured")
+	_, err = servePublicInitialize(t, ti, fixture.endpointSlug, nil)
+	refused := requireOopsCode(t, err, oops.CodeBadRequest)
+	require.Contains(t, refused, "environment headers are misconfigured")
 	require.Equal(t, before, gateway.forwardCount(), "a deleted linked environment makes no upstream call")
 }
 
@@ -307,10 +314,10 @@ func TestEnvironmentHeaders_InvalidEntryRefuses(t *testing.T) {
 			env := seedEnvironment(t, ctx, ti, projectID, entry, envEntry{name: "MCP_HEADER_X-Ok", value: envProdTenant, secret: false})
 			linkEnvironment(t, ctx, ti, projectID, fixture.mcpServerID, linkTo(env))
 
-			w := servePublicInitialize(t, ti, fixture.endpointSlug, nil)
-			require.NotEqual(t, http.StatusOK, w.Code)
-			require.Contains(t, w.Body.String(), "environment headers are misconfigured")
-			requireNotContainsValues(t, w.Body.String(), envSecretValue, entry.name)
+			_, err := servePublicInitialize(t, ti, fixture.endpointSlug, nil)
+			refused := requireOopsCode(t, err, oops.CodeBadRequest)
+			require.Contains(t, refused, "environment headers are misconfigured")
+			requireNotContainsValues(t, refused, envSecretValue, entry.name)
 			require.Zero(t, gateway.forwardCount())
 		})
 	}
@@ -496,13 +503,10 @@ func TestEnvironmentHeaders_RemoteDirect(t *testing.T) {
 
 	bad := seedEnvironment(t, ctx, ti, projectID, envEntry{name: "MCP_HEADER_X-Gram-Scope-Override", value: envSecretValue, secret: true})
 	linkEnvironment(t, ctx, ti, projectID, mcpServer.ID, linkTo(bad))
-	w, err = servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), token, nil)
-	if err == nil {
-		require.NotEqual(t, http.StatusOK, w.Code)
-	} else {
-		require.Contains(t, err.Error(), "environment headers are misconfigured")
-		require.NotContains(t, err.Error(), envSecretValue)
-	}
+	_, err = servePublicHTTP(t, ctx, ti, endpointSlug, makeInitializeBody(), token, nil)
+	refused := requireOopsCode(t, err, oops.CodeBadRequest)
+	require.Contains(t, refused, "environment headers are misconfigured")
+	require.NotContains(t, refused, envSecretValue)
 	require.Len(t, calls(), 1, "a misconfigured environment makes no upstream call")
 }
 
@@ -537,4 +541,211 @@ func TestEnvironmentHeaders_RemoteMetaMember(t *testing.T) {
 		}
 	}
 	require.True(t, sawToolCall)
+}
+
+// logBuffer captures every log record as text so a test can prove a value
+// never reached the logs.
+type logBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (l *logBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	n, err := l.buf.Write(p)
+	if err != nil {
+		return n, fmt.Errorf("buffer log record: %w", err)
+	}
+	return n, nil
+}
+
+func (l *logBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.String()
+}
+
+// A configuration problem is a 400 and a mapped secret that cannot be
+// decrypted a 500; neither calls the upstream, and the logs name the entry
+// but never the plaintext or ciphertext.
+func TestEnvironmentHeaders_ErrorClassesAndLogs(t *testing.T) {
+	t.Parallel()
+
+	logs := &logBuffer{mu: sync.Mutex{}, buf: bytes.Buffer{}}
+	ctx, ti := newTestMCPServiceWithLogger(t, slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-session", legacy: false, dead: false, busy: false, challenge: ""}
+	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
+
+	reserved := seedEnvironment(t, ctx, ti, projectID, envEntry{name: "MCP_HEADER_Gram-Key", value: envSecretValue, secret: true})
+	linkEnvironment(t, ctx, ti, projectID, fixture.mcpServerID, linkTo(reserved))
+	_, err := servePublicInitialize(t, ti, fixture.endpointSlug, nil)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	const syntheticCiphertext = "synthetic-not-ciphertext"
+	broken := seedEnvironment(t, ctx, ti, projectID)
+	_, err = environmentsrepo.New(ti.conn).CreateEnvironmentEntries(ctx, environmentsrepo.CreateEnvironmentEntriesParams{
+		EnvironmentID: broken.id, Names: []string{"MCP_HEADER_X-Broken"}, Values: []string{syntheticCiphertext}, IsSecrets: []bool{true},
+	})
+	require.NoError(t, err)
+	linkEnvironment(t, ctx, ti, projectID, fixture.mcpServerID, linkTo(broken))
+	_, err = servePublicInitialize(t, ti, fixture.endpointSlug, nil)
+	requireOopsCode(t, err, oops.CodeUnexpected)
+
+	require.Zero(t, gateway.forwardCount())
+	captured := logs.String()
+	require.Contains(t, captured, "MCP_HEADER_Gram-Key")
+	require.Contains(t, captured, "MCP_HEADER_X-Broken")
+	require.NotContains(t, captured, envSecretValue)
+	require.NotContains(t, captured, syntheticCiphertext)
+}
+
+// The remote consent transport sends the server's environment headers and
+// refuses a misconfigured environment before calling the upstream.
+func TestEnvironmentHeaders_RemoteConsentTransport(t *testing.T) {
+	t.Parallel()
+
+	issuer, _ := callerIssuerForTest(t)
+	ctx, ti := newTestMCPServiceWithCallerAssertions(t, issuer)
+	_, sessionIssuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	projectID := sessionIssuer.ProjectID.UUID
+
+	var (
+		mu   sync.Mutex
+		seen []http.Header
+	)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == wellknown.OAuthProtectedResourcePath {
+			http.NotFound(w, r)
+			return
+		}
+		mu.Lock()
+		seen = append(seen, r.Header.Clone())
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{},"serverInfo":{"name":"upstream","version":"1.0"}}}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	slug := "env-remote-consent-" + uuid.NewString()
+	remote, err := remotemcprepo.New(ti.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
+		ID: uuid.New(), ProjectID: projectID, TransportType: "streamable-http", Url: upstream.URL,
+	})
+	require.NoError(t, err)
+	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: projectID, Name: conv.ToPGText(slug), Slug: conv.ToPGText(slug),
+		RemoteMcpServerID: conv.ToNullUUID(remote.ID), Visibility: "private", UserSessionIssuerID: conv.ToNullUUID(sessionIssuer.ID),
+	})
+	require.NoError(t, err)
+	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{ProjectID: projectID, McpServerID: conv.ToNullUUID(server.ID), Slug: slug})
+	require.NoError(t, err)
+	env := seedEnvironment(t, ctx, ti, projectID, envEntry{name: "MCP_HEADER_X-Instance-Url", value: envProdInstance, secret: true})
+	linkEnvironment(t, ctx, ti, projectID, server.ID, linkTo(env))
+
+	stateID, csrf := seedModernConsentChallenge(t, ctx, ti, sessionIssuer.ID, client, server.ID, slug)
+	state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+	require.NoError(t, err)
+	state.AuthorizerUserID = state.Subject.ID
+	state.AuthorizerImpersonated = new(false)
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
+	seedMetaMemberConnectGrant(t, ctx, ti.conn, sessionIssuer.OrganizationID.String, server.ID)
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "x/mcp")
+	require.NoError(t, err)
+
+	initialize := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`
+	init := serveConsentMCPRequest(t, ctx, ti, endpoint, stateID, csrf, uuid.NewString(), initialize, map[string]string{"X_Instance_Url": "client-alias"})
+	require.Contains(t, init.Body.String(), "serverInfo")
+	mu.Lock()
+	require.Len(t, seen, 1)
+	require.Equal(t, []string{envProdInstance}, seen[0].Values("X-Instance-Url"))
+	require.Empty(t, seen[0].Values("X_Instance_Url"))
+	mu.Unlock()
+
+	bad := seedEnvironment(t, ctx, ti, projectID, envEntry{name: "MCP_HEADER_Cookie", value: envSecretValue, secret: true})
+	linkEnvironment(t, ctx, ti, projectID, server.ID, linkTo(bad))
+	endpoint, err = ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "x/mcp")
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/"+endpoint.RouteBase+"/"+endpoint.Slug+"/connect/mcp", strings.NewReader(initialize))
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Gram-Consent-State", stateID)
+	req.Header.Set("Gram-Consent-Csrf", csrf)
+	req.Header.Set("Gram-Consent-Inventory-Attempt", uuid.NewString())
+	err = ti.service.ServeConsentMCP(httptest.NewRecorder(), req.WithContext(ctx), endpoint)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	mu.Lock()
+	require.Len(t, seen, 1, "a misconfigured environment makes no upstream call")
+	mu.Unlock()
+}
+
+// Standalone consent validation probes a remote server with its environment
+// headers on every exchange, and makes no probe when the environment is
+// misconfigured.
+func TestEnvironmentHeaders_StandaloneValidationRemote(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedStandaloneValidationFixture(t, "env-validate")
+	projectID, _ := consentTestTenant(t, ctx)
+	serverID := fx.endpoint.McpServerID.UUID
+	env := seedEnvironment(t, ctx, fx.ti, projectID, envEntry{name: "MCP_HEADER_X-Instance-Url", value: envProdInstance, secret: true})
+	linkEnvironment(t, ctx, fx.ti, projectID, serverID, linkTo(env))
+
+	fx.member.set(memberAccepts)
+	requireValidated(t, fx)
+	requests := fx.member.drain()
+	require.NotEmpty(t, requests)
+	for _, req := range requests {
+		require.Equal(t, envProdInstance, req.instanceURL, "%s %s", req.method, req.rpcMethod)
+	}
+
+	bad := seedEnvironment(t, ctx, fx.ti, projectID, envEntry{name: "MCP_HEADER_Gram-Session", value: envSecretValue, secret: true})
+	linkEnvironment(t, ctx, fx.ti, projectID, serverID, linkTo(bad))
+	_, _ = postValidate(t, fx, fx.clientID)
+	require.Empty(t, fx.member.drain(), "a misconfigured environment makes no probe")
+}
+
+// Standalone consent validation of a tunneled server carries the server's
+// environment headers on every probe exchange.
+func TestEnvironmentHeaders_StandaloneValidationTunneled(t *testing.T) {
+	t.Parallel()
+
+	reader, provider := newValidationMeterProvider()
+	ctx, ti := newTestMCPServiceWithValidationTimeout(t, provider, validationProbeTimeout)
+	projectID, orgID := consentTestTenant(t, ctx)
+	shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+
+	tunnel, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
+		ID: uuid.New(), ProjectID: projectID, Name: "env-validate-tunnel-" + uuid.NewString()[:8],
+		KeyHash: uuid.NewString(), KeyPrefix: "gram_tunnel_test", ResourceIdentifier: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: projectID, Name: conv.ToPGText("env-validate-tunnel"), Slug: conv.ToPGText("env-validate-tunnel"),
+		TunneledMcpServerID: conv.ToNullUUID(tunnel.ID), Visibility: "public", UserSessionIssuerID: conv.ToNullUUID(shared),
+	})
+	require.NoError(t, err)
+	env := seedEnvironment(t, ctx, ti, projectID, envEntry{name: "MCP_HEADER_X-Instance-Url", value: envSandboxInstance, secret: true})
+	linkEnvironment(t, ctx, ti, projectID, server.ID, linkTo(env))
+
+	endpoint, stateID, subject := mintFirstPartyConsentState(t, ctx, ti, projectID, orgID, shared, "env-validate-tunnel")
+	endpoint.McpServerID = conv.ToNullUUID(server.ID)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "env-validate-tunnel", "", []uuid.UUID{shared})
+	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{shared}))
+	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, clientID, subject, "token-env-validate-tunnel", "")
+
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "agent-1", backendSessionID: "backend-session", legacy: false, dead: false, busy: false, challenge: "", mu: sync.Mutex{}, forwards: nil, forwardBodies: nil}
+	gatewayServer := httptest.NewServer(gateway)
+	t.Cleanup(gatewayServer.Close)
+	require.NoError(t, ti.tunnelRoutes.Publish(ctx, tunnel.ID.String(), gatewayServer.URL, time.Hour))
+
+	fx := validationFixture{ti: ti, reader: reader, endpoint: endpoint, stateID: stateID, subject: subject, member: nil, clientID: clientID, name: "env-validate-tunnel"}
+	requireValidated(t, fx)
+	headers, _ := tunnelForwards(gateway)
+	require.NotEmpty(t, headers)
+	for _, forwarded := range headers {
+		require.Equal(t, []string{envSandboxInstance}, forwarded.Values("X-Instance-Url"))
+	}
 }
