@@ -49,7 +49,7 @@ func TestCreateServerHeader_RejectsProtectedPassThroughSources(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	for _, source := range []string{"Authorization", "authorization", "Gram-Key", "gRaM-cHaT-sEsSiOn", "Gram_Session", "Gram-Project", "Gram-Consent-State", "X-Gram-Tunnel-Id", "X-Gram-Agent-Version", "X_Speakeasy_Identity", "Proxy-Authorization", "Set-Cookie"} {
+	for _, source := range []string{"Authorization", "authorization", "Gram-Key", "gRaM-cHaT-sEsSiOn", "Gram_Session", "Gram-Project", "Gram-Consent-State", "X-Gram-Tunnel-Id", "X-Gram-Agent-Version", "X_Speakeasy_Identity", "Proxy-Authorization", "Set-Cookie", "Speakeasy-AI-Key", "speakeasy-ai-chat-session"} {
 		_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Upstream-Token", func(p *gen.CreateServerHeaderPayload) {
 			p.ValueFromRequestHeader = new(source)
 		}))
@@ -485,4 +485,19 @@ func TestUpdateServerHeader_DuplicateCheckWaitsForServerLock(t *testing.T) {
 
 	requireOopsCode(t, <-result, oops.CodeConflict)
 	requireStoredSecretValue(t, ctx, ti, server.ID, "X-Other", "other-secret")
+}
+
+// Underscores read as dashes when names are compared, as the header policy and
+// some upstreams read them, so X_Api_Key duplicates X-Api-Key.
+func TestCreateServerHeader_UnderscoreDuplicateConflicts(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+	seedLegacyHeader(t, ctx, ti, server.ID, "X-Api-Key", "legacy", "")
+
+	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "x_api_key", func(p *gen.CreateServerHeaderPayload) {
+		p.Value = new("new")
+	}))
+	requireOopsCode(t, err, oops.CodeConflict)
 }

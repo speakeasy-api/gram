@@ -622,3 +622,94 @@ describe("useHeaderDrafts under User Identity with a refused Authorization row",
     });
   });
 });
+
+describe("useHeaderDrafts with malformed or colliding saved rows", () => {
+  it("saves and deletes beside an untouched whitespace-only saved name", async () => {
+    mocks.headers.mockReturnValue(
+      headersResult([
+        serverHeader({ id: "header-blank", name: " ", isRequired: true }),
+        refusedPassThrough({
+          id: "header-key",
+          name: "X-Key",
+          valueFromRequestHeader: "Gram-Key",
+        }),
+      ]),
+    );
+    const { result } = renderDraftsWithoutIdentity();
+
+    act(() => result.current.removeHeader(1));
+    act(() => result.current.addHeader());
+    act(() =>
+      result.current.replaceHeader(1, {
+        ...result.current.drafts[1]!,
+        name: "X-Trace",
+        staticValue: "on",
+      }),
+    );
+    expect(result.current.validationError).toBeNull();
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    expect(mocks.remove).toHaveBeenCalledWith({
+      request: { id: "header-key" },
+    });
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("still refuses a new or edited row with a blank name", () => {
+    mocks.headers.mockReturnValue(
+      headersResult([serverHeader({ id: "header-trace", name: "X-Trace" })]),
+    );
+    const { result } = renderDraftsWithoutIdentity();
+
+    act(() =>
+      result.current.replaceHeader(0, {
+        ...result.current.drafts[0]!,
+        name: "  ",
+      }),
+    );
+    expect(result.current.validationError).toBe("Every header needs a name.");
+  });
+
+  it("leaves untouched saved rows that already collide alone", () => {
+    mocks.headers.mockReturnValue(
+      headersResult([
+        serverHeader({ id: "header-upper", name: "X-Api-Key" }),
+        serverHeader({ id: "header-lower", name: "x_api_key" }),
+      ]),
+    );
+    const { result } = renderDraftsWithoutIdentity();
+
+    act(() => result.current.addHeader());
+    act(() =>
+      result.current.replaceHeader(2, {
+        ...result.current.drafts[2]!,
+        name: "X-Trace",
+        staticValue: "on",
+      }),
+    );
+    expect(result.current.validationError).toBeNull();
+  });
+
+  it("refuses a new row whose name differs from a saved one only by underscores", () => {
+    mocks.headers.mockReturnValue(
+      headersResult([serverHeader({ id: "header-key", name: "X-Api-Key" })]),
+    );
+    const { result } = renderDraftsWithoutIdentity();
+
+    act(() => result.current.addHeader());
+    act(() =>
+      result.current.replaceHeader(1, {
+        ...result.current.drafts[1]!,
+        name: "x_api_key",
+        staticValue: "on",
+      }),
+    );
+    expect(result.current.validationError).toBe(
+      'Duplicate header name "x_api_key".',
+    );
+  });
+});

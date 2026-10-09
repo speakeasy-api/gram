@@ -165,6 +165,14 @@ export function draftsEqual(a: HeaderDraft[], b: HeaderDraft[]): boolean {
   return true;
 }
 
+/**
+ * Header names compared the way the server compares them for duplicates:
+ * case-insensitive, with underscores read as dashes.
+ */
+function duplicateKey(name: string): string {
+  return name.trim().toLowerCase().replaceAll("_", "-");
+}
+
 /** Which field a problem belongs to, so the row can point at the right one. */
 export type HeaderDraftError = {
   readonly field: "name" | "value";
@@ -185,10 +193,38 @@ export function headerDraftErrors(
   managedAuthorizationHeaderId?: string,
 ): ReadonlyMap<string, HeaderDraftError> {
   const errors = new Map<string, HeaderDraftError>();
+  // Untouched saved rows are never written, so they cannot conflict with each
+  // other here, even when legacy rows already collide or are malformed; a new
+  // or edited row still may not take a name one of them holds.
+  const savedNames = new Set(
+    drafts
+      .filter(isUnchangedSavedDraft)
+      .map((draft) => duplicateKey(draft.name))
+      .filter((key) => key !== ""),
+  );
   const names = new Set<string>();
 
   for (const draft of drafts) {
     const name = draft.name.trim();
+
+    if (isUnchangedSavedDraft(draft)) {
+      // A Service Account writes its own static Authorization row, so a saved
+      // row claiming that name has to go first. Otherwise an untouched saved
+      // row is left alone, and its row explains any refusal.
+      const authorizationError =
+        identityMode === "agent"
+          ? authorizationHeaderGuard(
+              identityMode,
+              name,
+              !!draft.id && draft.id === managedAuthorizationHeaderId,
+            )
+          : null;
+      if (authorizationError) {
+        errors.set(draft.key, { field: "name", message: authorizationError });
+      }
+      continue;
+    }
+
     if (!name) {
       errors.set(draft.key, {
         field: "name",
@@ -197,23 +233,17 @@ export function headerDraftErrors(
       continue;
     }
 
-    const normalized = name.toLowerCase();
-    if (names.has(normalized)) {
+    const key = duplicateKey(name);
+    if (names.has(key) || savedNames.has(key)) {
       errors.set(draft.key, {
         field: "name",
         message: `Duplicate header name "${name}".`,
       });
       continue;
     }
-    names.add(normalized);
+    names.add(key);
 
-    // A Service Account writes its own static Authorization row, so a saved
-    // row claiming that name has to go first. Otherwise an untouched saved
-    // row is left to the policy check below rather than blocking every edit.
-    if (
-      identityMode &&
-      !(identityMode !== "agent" && isUnchangedSavedDraft(draft))
-    ) {
+    if (identityMode) {
       const authorizationError = authorizationHeaderGuard(
         identityMode,
         name,
@@ -224,11 +254,6 @@ export function headerDraftErrors(
         continue;
       }
     }
-
-    // A saved row is checked when it is edited, not merely for existing:
-    // the server leaves untouched rows alone, so one the policy now refuses
-    // must not hold every other row hostage. Its row explains the refusal.
-    if (isUnchangedSavedDraft(draft)) continue;
 
     const policyIssue = draftPolicyIssue(draft);
     if (policyIssue) {

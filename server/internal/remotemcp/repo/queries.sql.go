@@ -712,7 +712,7 @@ SELECT EXISTS (
     FROM remote_mcp_server_headers
     WHERE remote_mcp_server_headers.remote_mcp_server_id = $1
         AND remote_mcp_server_headers.deleted IS FALSE
-        AND lower(remote_mcp_server_headers.name) = lower($2::text)
+        AND replace(lower(remote_mcp_server_headers.name), '_', '-') = replace(lower($2::text), '_', '-')
         AND remote_mcp_server_headers.id <> $3
         AND remote_mcp_server_headers.remote_mcp_server_id IN (
             SELECT remote_mcp_servers.id FROM remote_mcp_servers
@@ -729,9 +729,10 @@ type ServerHeaderNameExistsParams struct {
 }
 
 // Reports whether another live header of the server already uses name,
-// ignoring case. The unique index compares names exactly, and headers stored
-// before names were canonicalized can differ only in case, so writers check
-// this while holding the parent server's row lock. exclude_id is the header
+// ignoring case and reading underscores as dashes, which is how the header
+// policy and some upstreams match names. The unique index compares names
+// exactly, and headers stored before names were canonicalized can differ only
+// in case, so writers check this while holding the parent server's row lock. exclude_id is the header
 // being updated, or the nil UUID on create.
 func (q *Queries) ServerHeaderNameExists(ctx context.Context, arg ServerHeaderNameExistsParams) (bool, error) {
 	row := q.db.QueryRow(ctx, serverHeaderNameExists,

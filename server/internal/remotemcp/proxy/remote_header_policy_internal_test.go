@@ -20,6 +20,9 @@ var protectedInboundFixture = map[string]string{
 	"Gram-Project":                 "synthetic-project",
 	"Gram-Consent-State":           "synthetic-consent",
 	"Gram_Key":                     "synthetic-alias-key",
+	"Speakeasy-AI-Key":             "synthetic-ai-key",
+	"Speakeasy-AI-Chat-Session":    "synthetic-ai-chat-session",
+	"Speakeasy_AI_Session":         "synthetic-ai-session",
 	"X-Gram-Tunnel-Require-Active": "1",
 	"X-Gram-Tunnel-Forward-Token":  "synthetic-forward-token",
 	"X-Gram-Agent-Version":         "1.0.0",
@@ -342,6 +345,8 @@ func TestCheckRemoteHeader(t *testing.T) {
 		{name: "authorization source", header: ConfiguredHeader{Name: "X-Upstream-Token", ValueFromRequestHeader: "Authorization"}, wantErr: ErrProtectedSource},
 		{name: "gram key source", header: ConfiguredHeader{Name: "X-Upstream-Token", ValueFromRequestHeader: "Gram-Key"}, wantErr: ErrProtectedSource},
 		{name: "mixed case gram source", header: ConfiguredHeader{Name: "X-Upstream-Token", ValueFromRequestHeader: "gRaM-cHaT-sEsSiOn"}, wantErr: ErrProtectedSource},
+		{name: "speakeasy-ai key source", header: ConfiguredHeader{Name: "X-Upstream-Token", ValueFromRequestHeader: "Speakeasy-AI-Key"}, wantErr: ErrProtectedSource},
+		{name: "speakeasy-ai alias source", header: ConfiguredHeader{Name: "X-Upstream-Token", ValueFromRequestHeader: "speakeasy_ai_project"}, wantErr: ErrProtectedSource},
 		{name: "tunnel source", header: ConfiguredHeader{Name: "X-Upstream-Token", ValueFromRequestHeader: "X-Gram-Tunnel-Id"}, wantErr: ErrProtectedSource},
 		{name: "agent version source", header: ConfiguredHeader{Name: "X-Upstream-Token", ValueFromRequestHeader: "X-Gram-Agent-Version"}, wantErr: ErrProtectedSource},
 		{name: "assertion alias source", header: ConfiguredHeader{Name: "X-Upstream-Token", ValueFromRequestHeader: "X_Speakeasy_Identity"}, wantErr: ErrProtectedSource},
@@ -391,4 +396,24 @@ func TestProtectedSourceRemediationOffersOAuthOnlyForAuthorization(t *testing.T)
 
 	require.Contains(t, ProtectedSourceRemediation("authorization"), "connect the server's upstream OAuth")
 	require.NotContains(t, ProtectedSourceRemediation("X-Upstream-Token"), "connect the server's upstream OAuth")
+}
+
+// A padded optional row is suppressed, and the client's own value under the
+// trimmed name, the header it would actually send, is cleared with it.
+func TestApplyRequestHeadersRemotePaddedOptionalRowClearsClientValue(t *testing.T) {
+	t.Parallel()
+
+	userReq, remoteReq := newRemotePolicyRequests(t)
+	userReq.Header.Set("X-Api-Key", "client-supplied")
+	userReq.Header.Set("Mcp-Method", "tools/call")
+	p := &Proxy{
+		Logger: testenv.NewLogger(t),
+		Headers: []ConfiguredHeader{
+			{Name: " X-Api-Key ", StaticValue: "operator-credential", ValueFromRequestHeader: "", IsRequired: false},
+			{Name: " Mcp-Method ", StaticValue: "configured", ValueFromRequestHeader: "", IsRequired: false},
+		},
+	}
+	require.NoError(t, p.applyRequestHeaders(t.Context(), userReq, remoteReq))
+	require.Empty(t, remoteReq.Header.Values("X-Api-Key"))
+	require.Equal(t, []string{"tools/call"}, remoteReq.Header.Values("Mcp-Method"), "the client's protocol header is never cleared")
 }

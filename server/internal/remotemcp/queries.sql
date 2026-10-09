@@ -86,16 +86,17 @@ WHERE remote_mcp_server_headers.id = @id
 
 -- name: ServerHeaderNameExists :one
 -- Reports whether another live header of the server already uses name,
--- ignoring case. The unique index compares names exactly, and headers stored
--- before names were canonicalized can differ only in case, so writers check
--- this while holding the parent server's row lock. exclude_id is the header
+-- ignoring case and reading underscores as dashes, which is how the header
+-- policy and some upstreams match names. The unique index compares names
+-- exactly, and headers stored before names were canonicalized can differ only
+-- in case, so writers check this while holding the parent server's row lock. exclude_id is the header
 -- being updated, or the nil UUID on create.
 SELECT EXISTS (
     SELECT 1
     FROM remote_mcp_server_headers
     WHERE remote_mcp_server_headers.remote_mcp_server_id = @remote_mcp_server_id
         AND remote_mcp_server_headers.deleted IS FALSE
-        AND lower(remote_mcp_server_headers.name) = lower(@name::text)
+        AND replace(lower(remote_mcp_server_headers.name), '_', '-') = replace(lower(@name::text), '_', '-')
         AND remote_mcp_server_headers.id <> @exclude_id
         AND remote_mcp_server_headers.remote_mcp_server_id IN (
             SELECT remote_mcp_servers.id FROM remote_mcp_servers

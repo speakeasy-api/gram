@@ -107,6 +107,7 @@ export function isProtectedInboundHeader(name: string): boolean {
   const key = headerKey(name);
   return (
     key.startsWith("gram-") ||
+    key.startsWith("speakeasy-ai-") ||
     key.startsWith("x-gram-tunnel-") ||
     key === "x-gram-agent-version" ||
     key === CALLER_ASSERTION_HEADER ||

@@ -20,6 +20,8 @@ describe("isProtectedInboundHeader", () => {
       "X-Gram-Tunnel-Id",
       "X-Gram-Agent-Version",
       "X_Speakeasy_Identity",
+      "Speakeasy-AI-Key",
+      "speakeasy_ai_chat_session",
     ]) {
       expect(isProtectedInboundHeader(name), name).toBe(true);
     }

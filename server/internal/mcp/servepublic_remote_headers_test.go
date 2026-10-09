@@ -35,6 +35,8 @@ var protectedInboundHeaders = map[string]string{
 	"X-Gram-Tunnel-Forward-Token":  "synthetic-forward-token",
 	"X-Gram-Agent-Version":         "1.0.0",
 	"X-Speakeasy-Identity":         "synthetic-assertion",
+	"Speakeasy-AI-Key":             "synthetic-ai-key",
+	"Speakeasy-AI-Project":         "synthetic-ai-project",
 }
 
 // headerRecordingUpstream is an MCP upstream that records the names of the

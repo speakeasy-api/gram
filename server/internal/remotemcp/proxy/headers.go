@@ -312,14 +312,29 @@ func (p *Proxy) applyRemoteConfiguredHeaders(ctx context.Context, userReq *http.
 			value = ""
 		}
 		if value == "" {
-			if checkStoredRemoteName(h.Name) == nil {
-				remoteReq.Header.Del(h.Name)
-			}
+			clearSuppressedRemoteDestination(remoteReq.Header, h.Name)
 			continue
 		}
 		remoteReq.Header.Set(h.Name, value)
 	}
 	return nil
+}
+
+// clearSuppressedRemoteDestination removes a client value under the name of a
+// configured header that is not being sent, so it cannot stand in for the
+// operator's configuration. A stored name with surrounding whitespace is
+// cleared under its trimmed form, which is the header the client would send;
+// a name that is not a field name at all cannot be on the request. The client's
+// standard MCP request headers and the caller assertion are never touched.
+func clearSuppressedRemoteDestination(header http.Header, stored string) {
+	name, err := NormalizeHeaderName(stored)
+	if err != nil {
+		return
+	}
+	if mcpauthz.ReservedHeader(name) || httpheaders.IsStandardMCPRequestHeader(strings.ReplaceAll(name, "_", "-")) {
+		return
+	}
+	header.Del(name)
 }
 
 // remoteHeaderFailureMessage is the client-facing explanation for a required
