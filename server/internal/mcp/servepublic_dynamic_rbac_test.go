@@ -1,14 +1,18 @@
 package mcp_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	pgvector_go "github.com/pgvector/pgvector-go"
@@ -59,11 +63,19 @@ func unitVector() []float32 {
 
 // dynamicRBACFixture is a private hosted toolset whose tools are reader
 // (read-only), purger (destructive) and writer (no annotations), indexed for
-// tool search, with a bearer for the mock user.
+// tool search, with a bearer for the mock user. Each tool carries its own tag
+// (see dynamicToolTags), so a test can tell whose tags a response reveals.
 type dynamicRBACFixture struct {
 	toolset    toolsets_repo.Toolset
+	issuer     usersessions_repo.UserSessionIssuer
 	bearer     string
 	embeddings *countingEmbeddings
+}
+
+var dynamicToolTags = map[string]string{
+	"reader": "tag-reader",
+	"purger": "tag-purger",
+	"writer": "tag-writer",
 }
 
 func newDynamicRBACFixture(t *testing.T) (context.Context, *testInstance, dynamicRBACFixture) {
@@ -110,7 +122,7 @@ func newDynamicRBACFixture(t *testing.T) (context.Context, *testInstance, dynami
 			Name:            tool.name,
 			Summary:         tool.name + " summary",
 			Description:     tool.name + " description",
-			Tags:            []string{},
+			Tags:            []string{dynamicToolTags[tool.name]},
 			HttpMethod:      "GET",
 			Path:            "/test",
 			SchemaVersion:   "3.0.0",
@@ -132,7 +144,7 @@ func newDynamicRBACFixture(t *testing.T) (context.Context, *testInstance, dynami
 			EmbeddingModel: "test-embedding-model",
 			Embedding1536:  pgvector_go.NewVector(unitVector()),
 			Payload:        []byte(`{"name":"` + tool.name + `","_gramIndexDeploymentId":"` + deploymentID.String() + `"}`),
-			Tags:           []string{"source:http"},
+			Tags:           []string{dynamicToolTags[tool.name]},
 		})
 		require.NoError(t, err)
 	}
@@ -160,10 +172,20 @@ func newDynamicRBACFixture(t *testing.T) (context.Context, *testInstance, dynami
 	require.NoError(t, err)
 	setToolsetMcpPrivate(t, ctx, ti, toolset.ID, toolset.ProjectID)
 
+	f := dynamicRBACFixture{toolset: toolset, issuer: issuer, bearer: "", embeddings: embeddings}
+	f.bearer = f.mintBearer(t, ctx, ti, nil)
+	return ctx, ti, f
+}
+
+// mintBearer mints a session for the mock user whose stored consent tool
+// selection is selection (nil for none).
+func (f dynamicRBACFixture) mintBearer(t *testing.T, ctx context.Context, ti *testInstance, selection []byte) string {
+	t.Helper()
+
 	subject := urn.NewUserSubject(mockidp.MockUserID)
 	bearer, jti, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
 		Subject:  subject,
-		Audience: urn.NewToolset(toolset.ID).String(),
+		Audience: urn.NewToolset(f.toolset.ID).String(),
 		Issuer:   "https://test.example",
 		Lifetime: time.Hour,
 		ClientID: "test-client",
@@ -171,16 +193,16 @@ func newDynamicRBACFixture(t *testing.T) (context.Context, *testInstance, dynami
 	require.NoError(t, err)
 	now := time.Now()
 	_, err = usersessions_repo.New(ti.conn).CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
-		UserSessionIssuerID: issuer.ID,
+		UserSessionIssuerID: f.issuer.ID,
 		SubjectUrn:          subject,
 		Jti:                 jti,
 		RefreshTokenHash:    conv.ToPGText("dynamic-rbac-" + uuid.NewString()),
 		RefreshExpiresAt:    pgtype.Timestamptz{Time: now.Add(24 * time.Hour), Valid: true},
 		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(time.Hour), Valid: true},
+		ToolSelection:       selection,
 	})
 	require.NoError(t, err)
-
-	return ctx, ti, dynamicRBACFixture{toolset: toolset, bearer: bearer, embeddings: embeddings}
+	return bearer
 }
 
 var dynamicModeHeaders = map[string]string{"Gram-Mode": "dynamic"}
@@ -343,4 +365,64 @@ func TestServePublic_PrivateDynamic_NamedGrants(t *testing.T) {
 		require.Contains(t, out, "permission")
 		require.Zero(t, f.embeddings.calls.Load())
 	})
+}
+
+// dynamicListBody lists tools in dynamic mode at the server's address plus
+// query, with bearer, and returns the raw response.
+func dynamicListBody(t *testing.T, ti *testInstance, f dynamicRBACFixture, query string, bearer string) string {
+	t.Helper()
+
+	body := makeToolsListBody()
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+f.toolset.McpSlug.String+query, bytes.NewReader(body))
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	for k, v := range dynamicModeHeaders {
+		req.Header.Set(k, v)
+	}
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", f.toolset.McpSlug.String)
+	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServePublic(w, req))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	return w.Body.String()
+}
+
+// Search tag suggestions come from the whole toolset's index, so they must
+// not appear when anything narrowed this caller's catalog, including filters
+// that ran before the per-tool checks and left only allowed tools behind.
+func TestServePublic_PrivateDynamic_TagSuggestionsNeverRevealWithheldTools(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, f := newDynamicRBACFixture(t)
+	seedMockUserToolsetGrant(t, ctx, ti, f.toolset.ID, map[string]string{authz.SelectorKeyDisposition: authz.DispositionReadOnly})
+	readerOnly := fmt.Appendf(nil, `{"resource":"toolset:%s","grant_id":"%s","allow":[{"type":"tool","name":"reader"}]}`, f.toolset.ID, uuid.NewString())
+
+	for name, list := range map[string]string{
+		"rbac":          dynamicListBody(t, ti, f, "", f.bearer),
+		"url tags":      dynamicListBody(t, ti, f, "?tags="+dynamicToolTags["reader"], f.bearer),
+		"consent":       dynamicListBody(t, ti, f, "", f.mintBearer(t, ctx, ti, readerOnly)),
+		"url + consent": dynamicListBody(t, ti, f, "?tags="+dynamicToolTags["reader"], f.mintBearer(t, ctx, ti, readerOnly)),
+	} {
+		require.Contains(t, list, "search_tools", name)
+		require.Contains(t, list, "reader", name)
+		for _, withheld := range []string{"purger", "writer"} {
+			require.NotContains(t, list, dynamicToolTags[withheld], "%s: the search tool's description and schema must not name a withheld tool's tag", name)
+		}
+	}
+}
+
+// A caller who may call every tool still gets the toolset's tag suggestions.
+func TestServePublic_PrivateDynamic_TagSuggestionsForUnrestrictedCaller(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, f := newDynamicRBACFixture(t)
+	seedMockUserToolsetGrant(t, ctx, ti, f.toolset.ID, nil)
+
+	list := dynamicListBody(t, ti, f, "", f.bearer)
+	for _, tag := range dynamicToolTags {
+		require.Contains(t, list, tag)
+	}
 }
