@@ -1,4 +1,4 @@
-import { QueryCache, QueryClient } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
 import { createContext, useContext } from "react";
 import {
   isGramSessionUnauthorizedError,
@@ -9,6 +9,10 @@ import { useLocation, useParams } from "react-router";
 
 import { Gram } from "@gram/client";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
+import {
+  changesUpstreamHeaders,
+  invalidateUpstreamHeaderDependents,
+} from "@/lib/environment-header-dependents";
 import { handleError } from "@/lib/errors";
 import { redirectToLoginOnUnauthorized } from "@/lib/session-expired";
 
@@ -32,8 +36,18 @@ export const useSdkClient = (): Gram => {
 };
 
 // Preserve QueryClient across HMR to prevent cache loss
-const createQueryClient = () =>
-  new QueryClient({
+export const createQueryClient = (): QueryClient => {
+  const queryClient: QueryClient = new QueryClient({
+    // Every editor of an environment, an MCP server's link or a source's
+    // headers goes through these mutations, so the queries that depend on
+    // them are refreshed here once rather than in each editor.
+    mutationCache: new MutationCache({
+      onSuccess: (_data, _variables, _context, mutation) => {
+        if (changesUpstreamHeaders(mutation.options.mutationKey)) {
+          void invalidateUpstreamHeaderDependents(queryClient);
+        }
+      },
+    }),
     // A Speakeasy API 401 means the session is dead (expired, revoked, or — in
     // local dev — overwritten by another worktree's stack, since the cookie is
     // scoped to `localhost` and cookies ignore ports). Send the user to /login
@@ -90,6 +104,8 @@ const createQueryClient = () =>
       },
     },
   });
+  return queryClient;
+};
 
 // In development, preserve queryClient across HMR
 export const queryClient: QueryClient =

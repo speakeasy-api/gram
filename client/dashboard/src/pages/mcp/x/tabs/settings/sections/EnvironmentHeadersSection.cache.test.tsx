@@ -40,12 +40,20 @@ vi.mock("@gram/client/funcs/mcpServersGetEnvironmentHeaders.js", () => ({
   ) => ({ ok: true, value: mocks.preview(request) }),
 }));
 
-vi.mock("@gram/client/react-query/updateMcpServer.js", () => ({
-  useUpdateMcpServerMutation: (options: { onSuccess: () => Promise<void> }) => {
-    mocks.saveSuccess = options.onSuccess;
-    return { mutate: vi.fn(), isPending: false };
-  },
-}));
+vi.mock(
+  "@gram/client/react-query/updateMcpServer.js",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@gram/client/react-query/updateMcpServer.js")
+    >()),
+    useUpdateMcpServerMutation: (options: {
+      onSuccess: () => Promise<void>;
+    }) => {
+      mocks.saveSuccess = options.onSuccess;
+      return { mutate: vi.fn(), isPending: false };
+    },
+  }),
+);
 
 vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
 

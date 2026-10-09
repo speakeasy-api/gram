@@ -50,15 +50,21 @@ vi.mock("@/hooks/useRBAC", () => ({
   }),
 }));
 
-vi.mock("@gram/client/react-query/getMcpServerEnvironmentHeaders.js", () => ({
-  useGetMcpServerEnvironmentHeaders: (
-    request: GetMcpServerEnvironmentHeadersRequest,
-  ) => {
-    mocks.previewRequests.push(request);
-    return mocks.preview(request);
-  },
-  invalidateAllGetMcpServerEnvironmentHeaders: vi.fn(),
-}));
+vi.mock(
+  "@gram/client/react-query/getMcpServerEnvironmentHeaders.js",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@gram/client/react-query/getMcpServerEnvironmentHeaders.js")
+    >()),
+    useGetMcpServerEnvironmentHeaders: (
+      request: GetMcpServerEnvironmentHeadersRequest,
+    ) => {
+      mocks.previewRequests.push(request);
+      return mocks.preview(request);
+    },
+    invalidateAllGetMcpServerEnvironmentHeaders: vi.fn(),
+  }),
+);
 
 vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
 
@@ -70,12 +76,18 @@ vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
   invalidateAllGetMcpServer: vi.fn(),
 }));
 
-vi.mock("@gram/client/react-query/updateMcpServer.js", () => ({
-  useUpdateMcpServerMutation: () => ({
-    mutate: mocks.mutate,
-    isPending: false,
+vi.mock(
+  "@gram/client/react-query/updateMcpServer.js",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@gram/client/react-query/updateMcpServer.js")
+    >()),
+    useUpdateMcpServerMutation: () => ({
+      mutate: mocks.mutate,
+      isPending: false,
+    }),
   }),
-}));
+);
 
 // A native select stands in for the Radix one so tests can pick a value.
 vi.mock("@/components/ui/Select", () => ({

@@ -1,3 +1,4 @@
+import { invalidateUpstreamHeaderDependents } from "@/lib/environment-header-dependents";
 import { Assistant } from "@gram/client/models/components/assistant.js";
 import {
   invalidateAllAssistantsGet,
@@ -87,6 +88,9 @@ export function AssistantDraftProvider({
     void invalidateAllAssistantsGet(queryClient);
     void invalidateAllAssistantsList(queryClient);
     void invalidateAllListEnvironments(queryClient);
+    // Onboarding writes environments through the SDK directly, which the
+    // query client's mutation hook does not see.
+    void invalidateUpstreamHeaderDependents(queryClient);
     void invalidateAllListToolsets(queryClient);
     void invalidateAllTriggers(queryClient);
     void invalidateAllTrigger(queryClient);

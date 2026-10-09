@@ -17,6 +17,7 @@ import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
+import { invalidateUpstreamHeaderDependents } from "@/lib/environment-header-dependents";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { McpServerEnvironmentHeader } from "@gram/client/models/components/mcpserverenvironmentheader.js";
@@ -25,10 +26,7 @@ import {
   buildGetMcpServerQuery,
   invalidateAllGetMcpServer,
 } from "@gram/client/react-query/getMcpServer.js";
-import {
-  invalidateAllGetMcpServerEnvironmentHeaders,
-  useGetMcpServerEnvironmentHeaders,
-} from "@gram/client/react-query/getMcpServerEnvironmentHeaders.js";
+import { useGetMcpServerEnvironmentHeaders } from "@gram/client/react-query/getMcpServerEnvironmentHeaders.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
 import { useQueryClient } from "@tanstack/react-query";
@@ -194,10 +192,11 @@ function EnvironmentHeadersEditor({
       await Promise.all([
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
-        invalidateAllGetMcpServerEnvironmentHeaders(queryClient),
         // The upstream's tool list can differ per environment, so a listing
-        // cached under the old link must not be shown for the new one.
-        queryClient.invalidateQueries({ queryKey: ["proxiedMcpTools"] }),
+        // cached under the old link must not be shown for the new one. The
+        // query client's mutation hook does this too; awaiting it here keeps
+        // the success toast after the refresh.
+        invalidateUpstreamHeaderDependents(queryClient),
       ]);
       toast.success("Environment link saved");
     },
