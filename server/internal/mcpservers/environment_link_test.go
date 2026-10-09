@@ -552,3 +552,32 @@ func TestCreateMcpServer_EnvironmentLink_TakesProjectLock(t *testing.T) {
 		t.Fatal("create did not finish after the lock was released")
 	}
 }
+
+// A caller can hold write over a source while a read exclusion hides one of
+// its servers. The listing then omits the linked server, which is why the
+// dashboard reads environment_linked from the source rather than this list.
+func TestListMcpServers_ReadExclusionHidesLinkedServer(t *testing.T) {
+	t.Parallel()
+
+	f := newLinkFixture(t)
+	remoteID := seedRemoteMcpServer(t, f.ctx, f.ti.conn, f.projectID).String()
+	visible, err := f.ti.service.CreateMcpServer(f.ctx, createPayload("visible", nil, &remoteID, nil))
+	require.NoError(t, err)
+	hidden, err := f.ti.service.CreateMcpServer(f.ctx, createPayload("hidden", &f.envID, &remoteID, nil))
+	require.NoError(t, err)
+
+	caller := withExactAuthzGrants(t, f.ctx, f.ti.conn,
+		authz.NewGrant(authz.ScopeMCPWrite, authz.WildcardResource),
+		authz.NewGrantWithSelector(authz.ScopeMCPBlockedRead, authz.Selector{
+			authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+			authz.SelectorKeyResourceID:   hidden.ID,
+		}),
+	)
+	listed, err := f.ti.service.ListMcpServers(caller, &gen.ListMcpServersPayload{RemoteMcpServerID: &remoteID})
+	require.NoError(t, err)
+	ids := make([]string, 0, len(listed.McpServers))
+	for _, server := range listed.McpServers {
+		ids = append(ids, server.ID)
+	}
+	require.Equal(t, []string{visible.ID}, ids)
+}

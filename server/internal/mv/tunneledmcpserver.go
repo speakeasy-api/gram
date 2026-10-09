@@ -43,8 +43,11 @@ func BuildTunneledMcpServerView(server repo.TunneledMcpServer, connections []Tun
 		LastSeenAt:                          lastSeenAt,
 		ActiveConnectionCount:               len(connections),
 		ActiveConsumerSessionCount:          activeConsumerSessionCount(connections),
-		CreatedAt:                           server.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:                           server.UpdatedAt.Time.Format(time.RFC3339),
+		// Set by getServer, which is the only response that checks the
+		// tunnel's MCP servers for environment links.
+		EnvironmentLinked: nil,
+		CreatedAt:         server.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:         server.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 

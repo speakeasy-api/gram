@@ -266,7 +266,16 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 		return nil, oops.E(oops.CodeUnexpected, err, "get tunneled mcp server").LogError(ctx, s.logger)
 	}
 
-	return s.tunnelManager.serverView(ctx, s.logger, server), nil
+	// Lets the dashboard explain up front why a key rotation will be refused.
+	// Only a boolean: it names no server or environment the caller may not
+	// be able to read.
+	linked, err := mcpservers.TunnelHasEnvironmentLinkedServers(ctx, s.db, *authCtx.ProjectID, server.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check environment-linked mcp servers").LogError(ctx, s.logger)
+	}
+	view := s.tunnelManager.serverView(ctx, s.logger, server)
+	view.EnvironmentLinked = &linked
+	return view, nil
 }
 
 func (s *Service) ListServerConnections(ctx context.Context, payload *gen.ListServerConnectionsPayload) (*types.TunneledMcpServerConnections, error) {

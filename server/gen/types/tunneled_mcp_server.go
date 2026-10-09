@@ -54,6 +54,10 @@ type TunneledMcpServer struct {
 	ActiveConnectionCount int
 	// Total MCP consumer sessions currently pinned across active tunnel connections
 	ActiveConsumerSessionCount int
+	// Returned by getServer only. True when a non-deleted MCP server on this
+	// tunnel, disabled ones included, has a linked environment; rotating the key
+	// then also requires environment:read across the project.
+	EnvironmentLinked *bool
 	// When the tunneled MCP server source was created
 	CreatedAt string
 	// When the tunneled MCP server source was last updated

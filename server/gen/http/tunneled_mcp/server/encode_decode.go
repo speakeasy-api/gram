@@ -2799,6 +2799,7 @@ func marshalTypesTunneledMcpServerToTunneledMcpServerResponseBody(v *types.Tunne
 		LastSeenAt:                          v.LastSeenAt,
 		ActiveConnectionCount:               v.ActiveConnectionCount,
 		ActiveConsumerSessionCount:          v.ActiveConsumerSessionCount,
+		EnvironmentLinked:                   v.EnvironmentLinked,
 		CreatedAt:                           v.CreatedAt,
 		UpdatedAt:                           v.UpdatedAt,
 	}

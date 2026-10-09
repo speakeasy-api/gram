@@ -48,9 +48,10 @@ func serverBackendChanged(existing repo.McpServer, ids serverIDs) bool {
 }
 
 // RemoteHasEnvironmentLinkedServers reports whether any live MCP server on
-// the remote source carries an environment link. The caller must hold
-// admission.LockProject for projectID.
-func RemoteHasEnvironmentLinkedServers(ctx context.Context, tx pgx.Tx, projectID, remoteMCPServerID uuid.UUID) (bool, error) {
+// the remote source carries an environment link. A caller deciding whether to
+// allow a destination change must hold admission.LockProject for projectID;
+// a read for display needs no lock.
+func RemoteHasEnvironmentLinkedServers(ctx context.Context, tx repo.DBTX, projectID, remoteMCPServerID uuid.UUID) (bool, error) {
 	linked, err := repo.New(tx).HasEnvironmentLinkedMCPServerForRemote(ctx, repo.HasEnvironmentLinkedMCPServerForRemoteParams{
 		ProjectID:         projectID,
 		RemoteMcpServerID: uuid.NullUUID{UUID: remoteMCPServerID, Valid: true},
@@ -62,9 +63,10 @@ func RemoteHasEnvironmentLinkedServers(ctx context.Context, tx pgx.Tx, projectID
 }
 
 // TunnelHasEnvironmentLinkedServers reports whether any live MCP server on the
-// tunneled source carries an environment link. The caller must hold
-// admission.LockProject for projectID.
-func TunnelHasEnvironmentLinkedServers(ctx context.Context, tx pgx.Tx, projectID, tunneledMCPServerID uuid.UUID) (bool, error) {
+// tunneled source carries an environment link. A caller deciding whether to
+// allow a key rotation must hold admission.LockProject for projectID; a read
+// for display needs no lock.
+func TunnelHasEnvironmentLinkedServers(ctx context.Context, tx repo.DBTX, projectID, tunneledMCPServerID uuid.UUID) (bool, error) {
 	linked, err := repo.New(tx).HasEnvironmentLinkedMCPServerForTunnel(ctx, repo.HasEnvironmentLinkedMCPServerForTunnelParams{
 		ProjectID:           projectID,
 		TunneledMcpServerID: uuid.NullUUID{UUID: tunneledMCPServerID, Valid: true},

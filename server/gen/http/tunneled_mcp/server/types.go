@@ -170,6 +170,10 @@ type GetServerResponseBody struct {
 	ActiveConnectionCount int `form:"active_connection_count" json:"active_connection_count" xml:"active_connection_count"`
 	// Total MCP consumer sessions currently pinned across active tunnel connections
 	ActiveConsumerSessionCount int `form:"active_consumer_session_count" json:"active_consumer_session_count" xml:"active_consumer_session_count"`
+	// Returned by getServer only. True when a non-deleted MCP server on this
+	// tunnel, disabled ones included, has a linked environment; rotating the key
+	// then also requires environment:read across the project.
+	EnvironmentLinked *bool `form:"environment_linked,omitempty" json:"environment_linked,omitempty" xml:"environment_linked,omitempty"`
 	// When the tunneled MCP server source was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the tunneled MCP server source was last updated
@@ -234,6 +238,10 @@ type UpdateServerResponseBody struct {
 	ActiveConnectionCount int `form:"active_connection_count" json:"active_connection_count" xml:"active_connection_count"`
 	// Total MCP consumer sessions currently pinned across active tunnel connections
 	ActiveConsumerSessionCount int `form:"active_consumer_session_count" json:"active_consumer_session_count" xml:"active_consumer_session_count"`
+	// Returned by getServer only. True when a non-deleted MCP server on this
+	// tunnel, disabled ones included, has a linked environment; rotating the key
+	// then also requires environment:read across the project.
+	EnvironmentLinked *bool `form:"environment_linked,omitempty" json:"environment_linked,omitempty" xml:"environment_linked,omitempty"`
 	// When the tunneled MCP server source was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the tunneled MCP server source was last updated
@@ -2610,6 +2618,10 @@ type TunneledMcpServerResponseBody struct {
 	ActiveConnectionCount int `form:"active_connection_count" json:"active_connection_count" xml:"active_connection_count"`
 	// Total MCP consumer sessions currently pinned across active tunnel connections
 	ActiveConsumerSessionCount int `form:"active_consumer_session_count" json:"active_consumer_session_count" xml:"active_consumer_session_count"`
+	// Returned by getServer only. True when a non-deleted MCP server on this
+	// tunnel, disabled ones included, has a linked environment; rotating the key
+	// then also requires environment:read across the project.
+	EnvironmentLinked *bool `form:"environment_linked,omitempty" json:"environment_linked,omitempty" xml:"environment_linked,omitempty"`
 	// When the tunneled MCP server source was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the tunneled MCP server source was last updated
@@ -2713,6 +2725,7 @@ func NewGetServerResponseBody(res *types.TunneledMcpServer) *GetServerResponseBo
 		LastSeenAt:                          res.LastSeenAt,
 		ActiveConnectionCount:               res.ActiveConnectionCount,
 		ActiveConsumerSessionCount:          res.ActiveConsumerSessionCount,
+		EnvironmentLinked:                   res.EnvironmentLinked,
 		CreatedAt:                           res.CreatedAt,
 		UpdatedAt:                           res.UpdatedAt,
 	}
@@ -2761,6 +2774,7 @@ func NewUpdateServerResponseBody(res *types.TunneledMcpServer) *UpdateServerResp
 		LastSeenAt:                          res.LastSeenAt,
 		ActiveConnectionCount:               res.ActiveConnectionCount,
 		ActiveConsumerSessionCount:          res.ActiveConsumerSessionCount,
+		EnvironmentLinked:                   res.EnvironmentLinked,
 		CreatedAt:                           res.CreatedAt,
 		UpdatedAt:                           res.UpdatedAt,
 	}

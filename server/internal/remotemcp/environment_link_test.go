@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -220,4 +221,52 @@ func TestUpdateServer_URLChangeWaitsForConcurrentEnvironmentLink(t *testing.T) {
 		t.Fatal("URL change did not finish after the link committed")
 	}
 	require.Equal(t, originalURL, f.storedURL(t))
+}
+
+func getServer(t *testing.T, ctx context.Context, f remoteLinkFixture, id uuid.UUID) *types.RemoteMcpServer {
+	t.Helper()
+
+	idStr := id.String()
+	server, err := f.ti.service.GetServer(ctx, &gen.GetServerPayload{ID: &idStr})
+	require.NoError(t, err)
+	return server
+}
+
+// getServer reports a linked server even when the caller cannot list it, so
+// the dashboard never unlocks a destination change from a filtered inventory.
+func TestGetServer_EnvironmentLinkedCountsServersTheCallerCannotList(t *testing.T) {
+	t.Parallel()
+
+	f := newRemoteLinkFixture(t)
+	f.wrapper(t, f.remoteID, false, "private")
+	hidden := f.wrapper(t, f.remoteID, true, "disabled")
+
+	// Write across the project, but reading the linked server is blocked.
+	caller := withExactAccessGrants(t, f.ctx, f.ti.conn,
+		authz.NewGrant(authz.ScopeMCPWrite, authz.WildcardResource),
+		authz.NewGrantWithSelector(authz.ScopeMCPBlockedRead, authz.Selector{
+			authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+			authz.SelectorKeyResourceID:   hidden.ID.String(),
+		}),
+	)
+
+	require.True(t, conv.PtrValOr(getServer(t, caller, f, f.remoteID).EnvironmentLinked, false))
+	_, err := f.ti.service.UpdateServer(caller, urlUpdate(f.remoteID, "https://moved.example.com/mcp"))
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestGetServer_EnvironmentLinkedIsFalseForUnlinkedSources(t *testing.T) {
+	t.Parallel()
+
+	f := newRemoteLinkFixture(t)
+	f.wrapper(t, f.remoteID, false, "private")
+	deleted := f.wrapper(t, f.remoteID, true, "private")
+	_, err := mcpserversrepo.New(f.ti.conn).DeleteMCPServer(f.ctx, mcpserversrepo.DeleteMCPServerParams{ID: deleted.ID, ProjectID: f.projectID})
+	require.NoError(t, err)
+	// A linked server on another source does not count.
+	f.wrapper(t, uuid.MustParse(createTestServer(t, f.ctx, f.ti).ID), true, "private")
+
+	linked := getServer(t, f.ctx, f, f.remoteID).EnvironmentLinked
+	require.NotNil(t, linked)
+	require.False(t, *linked)
 }

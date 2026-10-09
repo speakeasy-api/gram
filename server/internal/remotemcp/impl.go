@@ -260,7 +260,16 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 		return nil, oops.E(oops.CodeUnexpected, err, "get remote mcp server").LogError(ctx, s.logger)
 	}
 
-	return mv.BuildRemoteMcpServerView(server), nil
+	// Lets the dashboard explain up front why a URL change will be refused.
+	// Only a boolean: it names no server or environment the caller may not
+	// be able to read.
+	linked, err := mcpservers.RemoteHasEnvironmentLinkedServers(ctx, s.db, *authCtx.ProjectID, server.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check environment-linked mcp servers").LogError(ctx, s.logger)
+	}
+	view := mv.BuildRemoteMcpServerView(server)
+	view.EnvironmentLinked = &linked
+	return view, nil
 }
 
 func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPayload) (*types.RemoteMcpServer, error) {

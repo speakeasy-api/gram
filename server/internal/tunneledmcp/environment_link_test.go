@@ -203,3 +203,38 @@ func TestRotateServerKey_WaitsForConcurrentEnvironmentLink(t *testing.T) {
 	}
 	require.Equal(t, tunnel.KeyHash, storedKeyHash(t, ctx, ti.conn, projectID, tunnel.ID))
 }
+
+// getServer reports a linked server even when the caller cannot list it, so
+// the dashboard never unlocks rotation from a filtered inventory.
+func TestGetServer_EnvironmentLinkedCountsServersTheCallerCannotList(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx := requireAuthContext(t, ctx)
+	projectID := *authCtx.ProjectID
+	tunnel := seedTunneledMcpServer(t, ctx, ti.conn, projectID)
+	envID := seedLinkEnvironment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, projectID)
+	seedTunnelWrapper(t, ctx, ti.conn, projectID, tunnel.ID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "private")
+	hidden := seedTunnelWrapper(t, ctx, ti.conn, projectID, tunnel.ID, uuid.NullUUID{UUID: envID, Valid: true}, "disabled")
+
+	caller := authztest.WithExactGrants(t, ctx,
+		projectScopedMCPGrant(authz.ScopeMCPWrite, projectID),
+		authz.NewGrantWithSelector(authz.ScopeMCPBlockedRead, authz.Selector{
+			authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+			authz.SelectorKeyResourceID:   hidden.ID.String(),
+		}),
+	)
+
+	got, err := ti.service.GetServer(caller, &gen.GetServerPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, ID: tunnel.ID.String()})
+	require.NoError(t, err)
+	require.True(t, conv.PtrValOr(got.EnvironmentLinked, false))
+	_, err = ti.service.RotateServerKey(caller, rotatePayload(tunnel.ID))
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	// Another tunnel with no linked server reports false.
+	other := seedTunneledMcpServer(t, ctx, ti.conn, projectID)
+	got, err = ti.service.GetServer(ctx, &gen.GetServerPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, ID: other.ID.String()})
+	require.NoError(t, err)
+	require.NotNil(t, got.EnvironmentLinked)
+	require.False(t, *got.EnvironmentLinked)
+}
