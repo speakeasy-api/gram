@@ -29,6 +29,9 @@ func registerGetMCPTool(reg *Registrar, reader Reader) {
 		if err != nil {
 			return nil, MCP{}, fmt.Errorf("get configured mcp: %w", err)
 		}
+		if tunnels, ok := reader.(tunnelStatusReader); ok {
+			output.Tunnel = tunnels.TunnelStatus(ctx, principal, output)
+		}
 		return nil, output, nil
 	})
 }

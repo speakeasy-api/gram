@@ -454,6 +454,10 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 	if err := s.budget.Allow(ctx, principal); err != nil {
 		return GetMCPDiagnosticsOutput{}, err
 	}
+	var tunnel *MCPTunnel
+	if tunnels, ok := s.reader.(tunnelStatusReader); ok {
+		tunnel = tunnels.TunnelStatus(ctx, principal, mcp)
+	}
 	identity, err := s.serverIdentity(ctx, principal.OrganizationID, input.ProjectID, input.MCPID)
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, err
@@ -514,7 +518,7 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 			CheckedAt:     readinessTimestamp(readiness.CheckedAt),
 			Actions:       setupRepairActions(setupCategory, normalized.State),
 		},
-		Tunnel:                      mcp.Tunnel,
+		Tunnel:                      tunnel,
 		Outcomes:                    summaryFromTotals(serverTotals),
 		OrganizationOutcomes:        summaryFromTotals(organizationTotals),
 		OrganizationOutcomesPartial: projectsTruncated,

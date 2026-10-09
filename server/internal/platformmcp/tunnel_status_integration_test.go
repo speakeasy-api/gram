@@ -135,6 +135,9 @@ func (f tunnelStatusFixture) getMCP(t *testing.T, reader *PostgresReader, ctx co
 	t.Helper()
 	mcp, err := reader.GetMCP(ctx, f.principal, GetMCPInput{ProjectID: f.project.ID.String(), MCPID: mcpID.String()})
 	require.NoError(t, err)
+	require.Nil(t, mcp.Tunnel, "the shared read never adds the tunnel block")
+	// What the get_mcp tool adds after the read.
+	mcp.Tunnel = reader.TunnelStatus(ctx, f.principal, mcp)
 	return mcp
 }
 
@@ -277,6 +280,8 @@ func TestTunnelStatusDiagnosticsReadRequiresProjectSourceRead(t *testing.T) {
 
 	mcp, err := reader.GetMCPForDiagnostics(ctx, fixture.principal, GetMCPInput{ProjectID: fixture.project.ID.String(), MCPID: fixture.wrapperID.String()})
 	require.NoError(t, err)
+	// What get_mcp_diagnostics adds after its budget is spent.
+	mcp.Tunnel = reader.TunnelStatus(ctx, fixture.principal, mcp)
 
 	require.Equal(t, MCPBackendTunneled, mcp.BackendKind)
 	require.Nil(t, mcp.Tunnel)
@@ -292,6 +297,8 @@ func TestTunnelStatusDiagnosticsReadWithProjectSourceRead(t *testing.T) {
 
 	mcp, err := reader.GetMCPForDiagnostics(ctx, fixture.principal, GetMCPInput{ProjectID: fixture.project.ID.String(), MCPID: fixture.wrapperID.String()})
 	require.NoError(t, err)
+	// What get_mcp_diagnostics adds after its budget is spent.
+	mcp.Tunnel = reader.TunnelStatus(ctx, fixture.principal, mcp)
 
 	require.Equal(t, &MCPTunnel{ConnectionStatus: TunnelConnectionNeverConnected}, mcp.Tunnel)
 }

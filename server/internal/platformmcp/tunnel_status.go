@@ -86,6 +86,33 @@ func (r *PostgresReader) WithTunnelStatus(connections TunnelConnectionReader) *P
 	return r
 }
 
+// tunnelStatusReader adds the tunnel connection state to an MCP that has
+// already been read. Only get_mcp and get_mcp_diagnostics ask for it, after
+// their own admission and budget, so internal reads that use an MCP read as an
+// access check never touch the runtime store.
+type tunnelStatusReader interface {
+	TunnelStatus(ctx context.Context, principal Principal, mcp MCP) *MCPTunnel
+}
+
+// TunnelStatus returns the tunnel connection state for a tunneled MCP the
+// caller has read, or nil when it is not tunneled or must not be reported.
+// The service applies its own project-level source-read check, so a caller
+// admitted on the server or on project read alone gets no tunnel block.
+func (r *PostgresReader) TunnelStatus(ctx context.Context, principal Principal, mcp MCP) *MCPTunnel {
+	if r == nil || mcp.BackendKind != MCPBackendTunneled {
+		return nil
+	}
+	projectID, err := uuid.Parse(mcp.ProjectID)
+	if err != nil {
+		return nil
+	}
+	mcpID, err := uuid.Parse(mcp.ID)
+	if err != nil {
+		return nil
+	}
+	return r.tunnelStatus.Status(ctx, principal, projectID, mcpID)
+}
+
 // Status returns the tunnel connection state for one MCP server, or nil when
 // it must not be reported: the caller cannot read the project's tunneled
 // sources (the same project-level mcp:read the dashboard's tunnel detail
