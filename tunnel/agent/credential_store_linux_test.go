@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -197,8 +198,12 @@ func TestCredentialStoreScavengingRules(t *testing.T) {
 	require.NoError(t, os.Chtimes(aged, old, old))
 	unknown := filepath.Join(base, "not-an-instance")
 	require.NoError(t, os.Mkdir(unknown, 0o700))
-	lockless := filepath.Join(base, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	// Interrupted between removing its lock and its directory.
+	emptyLockless := filepath.Join(base, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	require.NoError(t, os.Mkdir(emptyLockless, 0o700))
+	lockless := filepath.Join(base, "dddddddddddddddddddddddddddddddd")
 	require.NoError(t, os.Mkdir(lockless, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(lockless, "unknown"), nil, 0o600))
 	// A stale instance whose lock was replaced with a symlink.
 	swapped := filepath.Join(base, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
 	require.NoError(t, os.Mkdir(swapped, 0o700))
@@ -213,7 +218,7 @@ func TestCredentialStoreScavengingRules(t *testing.T) {
 
 	store.scavenge()
 
-	for path, wantExists := range map[string]bool{young: true, aged: false, unknown: true, lockless: true, swapped: true, stale: false, outside: true} {
+	for path, wantExists := range map[string]bool{young: true, aged: false, unknown: true, emptyLockless: false, lockless: true, swapped: true, stale: false, outside: true} {
 		_, err := os.Lstat(path)
 		if wantExists {
 			require.NoError(t, err, path)
@@ -363,4 +368,105 @@ func TestCredentialTokenWriteFailsWhenDirectoryIsGone(t *testing.T) {
 	require.Error(t, dir.writeToken(testTokenA))
 	_ = dir.remove()
 	require.NoError(t, store.Close())
+}
+
+func TestCredentialRootMustBeSafeFromOtherUsers(t *testing.T) {
+	t.Parallel()
+	open := memoryRoot(t)
+	require.NoError(t, os.Chmod(open, 0o777))
+	_, err := openCredentialStore(t.Context(), open, discardLogger())
+	require.ErrorContains(t, err, "without the sticky bit", "anyone could rename the agent's directory")
+
+	sticky := memoryRoot(t)
+	require.NoError(t, os.Chmod(sticky, 0o777|os.ModeSticky))
+	store := openTestStore(t, sticky)
+	require.NoError(t, store.Close())
+
+	parent := memoryRoot(t)
+	require.NoError(t, os.Chmod(parent, 0o777))
+	nested := filepath.Join(parent, "nested")
+	require.NoError(t, os.Mkdir(nested, 0o700))
+	_, err = openCredentialStore(t.Context(), nested, discardLogger())
+	require.Error(t, err, "an unsafe ancestor is refused too")
+}
+
+// requireOtherUserEnv makes the other-user tests fail instead of skipping;
+// CI sets it when it reruns them as root.
+const requireOtherUserEnv = "TUNNEL_TEST_REQUIRE_OTHER_USER"
+
+// otherUser runs a command as an unprivileged user other than the agent's.
+// It needs root to switch users, so it runs where the tests run as root, such
+// as the Linux container used for local verification; CI runs as a regular
+// user and covers the same refusal through TestCredentialRootMustBeSafeFromOtherUsers.
+func otherUser(t *testing.T, args ...string) *exec.Cmd {
+	t.Helper()
+	required := os.Getenv(requireOtherUserEnv) == "1"
+	if os.Geteuid() != 0 {
+		if required {
+			t.Fatal("switching to another user needs root")
+		}
+		t.Skip("switching to another user needs root")
+	}
+	setpriv, err := exec.LookPath("setpriv")
+	if err != nil {
+		if required {
+			t.Fatal("setpriv is not installed")
+		}
+		t.Skip("setpriv is not installed")
+	}
+	return exec.Command(setpriv, append([]string{"--reuid=2000", "--regid=2000", "--clear-groups"}, args...)...)
+}
+
+func TestCredentialTokenPathCannotBeRedirectedByAnotherUser(t *testing.T) {
+	t.Parallel()
+	root := memoryRoot(t)
+	require.NoError(t, os.Chmod(root, 0o777|os.ModeSticky))
+	store := openTestStore(t, root)
+	dir, err := store.createSession()
+	require.NoError(t, err)
+
+	base := filepath.Join(root, credentialBaseName)
+	out, err := otherUser(t, "mv", base, filepath.Join(root, "moved")).CombinedOutput()
+	require.Error(t, err, "another user cannot move the agent's directory out of a sticky root: %s", out)
+	out, err = otherUser(t, "mkdir", "-p", filepath.Join(root, "decoy")).CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	require.NoError(t, dir.writeToken(testTokenA))
+	read, err := os.ReadFile(dir.tokenPath())
+	require.NoError(t, err)
+	require.Equal(t, identity.TokenSHA256(testTokenA), identity.TokenSHA256(string(read)), "the server's pathname reaches the token the agent wrote")
+	require.NoError(t, dir.remove())
+	require.NoError(t, store.Close())
+
+	foreign := memoryRoot(t)
+	require.NoError(t, os.Chown(foreign, 2000, 2000))
+	_, err = openCredentialStore(t.Context(), foreign, discardLogger())
+	require.ErrorContains(t, err, "owned by another user")
+}
+
+func TestCredentialCleanupFailureKeepsRecoveryLock(t *testing.T) {
+	t.Parallel()
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores the permissions this test uses to make removal fail")
+	}
+	root := memoryRoot(t)
+	store := openTestStore(t, root)
+	dir, err := store.createSession()
+	require.NoError(t, err)
+	require.NoError(t, dir.writeToken(testTokenA))
+	sessionPath := filepath.Dir(dir.tokenPath())
+	instance := store.instPath
+
+	require.NoError(t, os.Chmod(sessionPath, 0o000))
+	require.Error(t, store.Close(), "the session directory cannot be removed")
+	_, err = os.Stat(filepath.Join(instance, instanceLockName))
+	require.NoError(t, err, "the lock stays so the instance can be recovered")
+
+	require.NoError(t, os.Chmod(sessionPath, 0o700))
+	next := openTestStore(t, root)
+	_, err = os.Stat(dir.tokenPath())
+	require.ErrorIs(t, err, os.ErrNotExist, "the next agent removes the token once the fault is repaired")
+	_, err = os.Stat(instance)
+	require.ErrorIs(t, err, os.ErrNotExist)
+	require.NoError(t, next.Close())
 }
