@@ -287,6 +287,23 @@ func (s *Service) setDirectoryRoleMappings(ctx context.Context, payload *gen.Set
 		return nil, oops.E(oops.CodeUnexpected, err, "list current directory role mappings").LogError(ctx, s.logger)
 	}
 
+	// Check under the source lock, before changing rows or emitting audit events.
+	// A nil slice means omitted; an explicitly empty slice requires no mappings.
+	if payload.ExpectedRoleUrns != nil {
+		expected := slices.Clone(payload.ExpectedRoleUrns)
+		slices.Sort(expected)
+		expected = slices.Compact(expected)
+		actual := make([]string, 0, len(current))
+		for _, row := range current {
+			actual = append(actual, row.RoleUrn)
+		}
+		slices.Sort(actual)
+		actual = slices.Compact(actual)
+		if !slices.Equal(expected, actual) {
+			return nil, oops.E(oops.CodeConflict, nil, "directory role mappings changed; refresh before retrying").LogWarn(ctx, s.logger)
+		}
+	}
+
 	if legacy && len(current) > 1 {
 		return nil, oops.E(oops.CodeConflict, nil, "this source grants multiple roles; refresh the dashboard to edit its role set").LogWarn(ctx, s.logger)
 	}

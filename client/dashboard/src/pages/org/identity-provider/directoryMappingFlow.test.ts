@@ -40,7 +40,7 @@ describe("create role round trip", () => {
     expect(pending?.form).toEqual({
       sourceKind: "group",
       directoryGroupId: "group-1",
-      roleUrns: ["role:organization:1"],
+      roleUrn: "role:organization:1",
     });
 
     const done = finishCreateRoleFlow(back, pending!.key);

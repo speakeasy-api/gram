@@ -51,7 +51,7 @@ import type { AccessMember } from "@gram/client/models/components/accessmember.j
 import type { DirectoryRoleMapping } from "@gram/client/models/components/directoryrolemapping.js";
 import type { ListDirectoryRoleMappingsResult } from "@gram/client/models/components/listdirectoryrolemappingsresult.js";
 import type { Role } from "@gram/client/models/components/role.js";
-import type { SetDirectoryRoleMappingsForm } from "@gram/client/models/components/setdirectoryrolemappingsform.js";
+import type { SetDirectoryRoleMappingForm } from "@gram/client/models/components/setdirectoryrolemappingform.js";
 import {
   mutationKeyDeleteDirectoryRoleMapping,
   useDeleteDirectoryRoleMappingMutation,
@@ -65,7 +65,7 @@ import {
   invalidateAllRoles,
   useRoles,
 } from "@gram/client/react-query/roles.js";
-import { useSetDirectoryRoleMappingsMutation } from "@gram/client/react-query/setDirectoryRoleMappings.js";
+import { useSetDirectoryRoleMappingMutation } from "@gram/client/react-query/setDirectoryRoleMapping.js";
 import { useSyncDirectoryGroupsMutation } from "@gram/client/react-query/syncDirectoryGroups.js";
 
 import {
@@ -84,7 +84,7 @@ type SourceRow = {
   detail: string;
   /** Gram members in the source, shown as faces in place of the detail. */
   members?: FacepileMember[];
-  form: Omit<SetDirectoryRoleMappingsForm, "roleUrns">;
+  form: Omit<SetDirectoryRoleMappingForm, "roleUrn">;
   mapping: DirectoryRoleMapping | undefined;
 };
 
@@ -195,7 +195,9 @@ export function DirectoryRoleMappings({
   const [params, setParams] = useSearchParams();
   const pending = pendingMappingFromParams(params);
   const queryClient = useQueryClient();
-  const savePending = useSetDirectoryRoleMappingsMutation({
+  // Singleton controls must use the legacy guard: a role created while this
+  // tab was away must not replace a source that now grants multiple roles.
+  const savePending = useSetDirectoryRoleMappingMutation({
     onError: (error) => {
       toast.error(errorMessage(error, "Failed to map the new role"));
     },
@@ -205,7 +207,7 @@ export function DirectoryRoleMappings({
     if (!pending || savedPending.current === pending.key) return;
     savedPending.current = pending.key;
     savePending.mutate(
-      { request: { setDirectoryRoleMappingsForm: pending.form } },
+      { request: { setDirectoryRoleMappingForm: pending.form } },
       {
         onSuccess: () => {
           setParams((previous) => finishCreateRoleFlow(previous, pending.key), {
@@ -552,8 +554,9 @@ function RolePicker({
       invalidateAllDirectoryRoleMappings(queryClient),
       invalidateAllRoles(queryClient),
     ]);
+  // Keep singleton writes on the guarded endpoint, not the complete-set API.
   // Returning the refresh keeps the mutation pending until the row reloads.
-  const save = useSetDirectoryRoleMappingsMutation({
+  const save = useSetDirectoryRoleMappingMutation({
     onSuccess: async () => {
       await refresh();
       onSaved?.();
@@ -624,7 +627,7 @@ function RolePicker({
     }
     save.mutate({
       request: {
-        setDirectoryRoleMappingsForm: { ...row.form, roleUrns: [value] },
+        setDirectoryRoleMappingForm: { ...row.form, roleUrn: value },
       },
     });
   };
