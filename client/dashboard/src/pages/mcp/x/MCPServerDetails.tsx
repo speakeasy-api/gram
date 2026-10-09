@@ -449,7 +449,13 @@ export function MCPServerStatusDropdown({
           currentMcpServerId={server.id}
           title="Make this MCP server public?"
           description="Anyone who can reach its URL can call every tool it exposes, with no login."
-          effect="Making this server public does not change the others, but they share its upstream service."
+          intro={
+            <>
+              Only this MCP server becomes public. It reaches the same upstream
+              service, through the same tunnel agent and credentials, as every
+              MCP server on the tunnel, including any you cannot view.
+            </>
+          }
           publicWarning
           confirmLabel="Make public"
           pendingLabel="Saving"

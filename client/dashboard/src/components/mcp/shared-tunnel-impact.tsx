@@ -98,6 +98,7 @@ export function SharedTunnelImpact({
   currentMcpServerId,
   effect,
   publicWarning = false,
+  intro,
 }: {
   impact: SharedTunnelImpactState;
   tunnelName: string;
@@ -106,6 +107,11 @@ export function SharedTunnelImpact({
   effect?: ReactNode;
   /** Always show the public-sibling warning, e.g. when enabling public access. */
   publicWarning?: boolean;
+  /**
+   * Replaces the default "this belongs to the tunnel" sentence, for a control
+   * that changes one server but whose effect reaches the shared upstream.
+   */
+  intro?: ReactNode;
 }): JSX.Element {
   const showPublicWarning =
     publicWarning ||
@@ -114,8 +120,12 @@ export function SharedTunnelImpact({
   return (
     <Stack gap={2} data-testid="shared-tunnel-impact">
       <Text small>
-        This belongs to the tunnel <strong>{tunnelName}</strong> and applies to
-        every MCP server on it, including any you cannot view.
+        {intro ?? (
+          <>
+            This belongs to the tunnel <strong>{tunnelName}</strong> and applies
+            to every MCP server on it, including any you cannot view.
+          </>
+        )}
         {effect ? <> {effect}</> : null}
       </Text>
       <Text small muted>
@@ -145,6 +155,7 @@ export function SharedTunnelConfirmDialog({
   description,
   effect,
   publicWarning,
+  intro,
   children,
   confirmLabel,
   pendingLabel,
@@ -161,6 +172,7 @@ export function SharedTunnelConfirmDialog({
   description: ReactNode;
   effect?: ReactNode;
   publicWarning?: boolean;
+  intro?: ReactNode;
   /** Extra content above the impact, such as the value being saved. */
   children?: ReactNode;
   confirmLabel: string;
@@ -190,6 +202,7 @@ export function SharedTunnelConfirmDialog({
           currentMcpServerId={currentMcpServerId}
           effect={effect}
           publicWarning={publicWarning}
+          intro={intro}
         />
         {errorMessage !== undefined ? (
           <Alert variant="error" dismissible={false}>

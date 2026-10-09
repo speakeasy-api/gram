@@ -83,7 +83,7 @@ export function useCreateTunneledMcpSource(): UseMutationResult<
               ? rollbackError.message
               : String(rollbackError);
           throw new Error(
-            `Created tunneled MCP server ${tunneledMcpServer.id} but failed to link an MCP server, and the rollback also failed. Delete the unused tunnel from Add MCP server, Existing tunnel before retrying. Cause: ${linkMsg}. Rollback: ${rollbackMsg}.`,
+            `Created tunneled MCP server ${tunneledMcpServer.id} but failed to link an MCP server, and the rollback also failed. Check the tunnel and its MCP servers under Add MCP server, Existing tunnel; if it is unused, delete it there before retrying. Cause: ${linkMsg}. Rollback: ${rollbackMsg}.`,
           );
         }
         throw linkError instanceof Error
