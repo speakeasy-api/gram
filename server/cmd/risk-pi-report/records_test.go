@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
@@ -32,11 +33,6 @@ func TestCaseHashUsesTheFixtureLine(t *testing.T) {
 	dir := t.TempDir()
 	line := `{"id": "gram_benigns.api.001", "label": "benign", "text": "List my deployments", "source": "gram_benigns", "field_this_version_ignores": true}`
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "gram_benigns.jsonl"), []byte(line+"\n"), 0o600))
-	for _, name := range requiredCorpusFiles {
-		if name != "gram_benigns.jsonl" {
-			require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(`{"id": "`+name+`", "label": "benign", "text": "`+name+`", "source": "x"}`+"\n"), 0o600))
-		}
-	}
 	corpus, err := loadCorpus(dir)
 	require.NoError(t, err)
 	var loaded labeledCase
@@ -246,6 +242,33 @@ func TestRunRecordsRefusesDuplicateCaseKeys(t *testing.T) {
 	first, repeat := recordsCase("a", "benign"), recordsCase("a", "malicious")
 	err := runRecords(t.Context(), options{runDir: t.TempDir(), commit: mainCommit}, []labeledCase{first, repeat})
 	require.ErrorContains(t, err, `two cases share the key "s::a"`)
+}
+
+func TestLockRunDirMakesASecondRunWait(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	unlock, err := lockRunDir(dir)
+	require.NoError(t, err)
+
+	locked := make(chan func(), 1)
+	go func() {
+		second, err := lockRunDir(dir)
+		assert.NoError(t, err)
+		locked <- second
+	}()
+	select {
+	case <-locked:
+		t.Fatal("a second run locked the run dir while the first held it")
+	case <-time.After(200 * time.Millisecond):
+	}
+	unlock()
+	select {
+	case second := <-locked:
+		second()
+	case <-time.After(5 * time.Second):
+		t.Fatal("the second run never locked the run dir after the first released it")
+	}
 }
 
 // blockingClient holds each completion until release closes, counting calls.

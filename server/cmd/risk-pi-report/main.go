@@ -12,12 +12,12 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -112,6 +112,12 @@ func (c labeledCase) judgeMessage() judgemessage.Message {
 func main() {
 	corpusDir := flag.String("corpus-dir", defaultCorpusDir, "directory of prompt-injection JSONL fixtures to score; defaults to this checkout's")
 	flag.Parse()
+	// A command this version does not know must not start a paid run.
+	if flag.NArg() > 0 {
+		fmt.Fprintf(os.Stderr, "risk-pi-report: unexpected argument %q\n", flag.Arg(0))
+		flag.Usage()
+		os.Exit(2)
+	}
 	if err := run(context.Background(), *corpusDir); err != nil {
 		fmt.Fprintf(os.Stderr, "risk-pi-report: %v\n", err)
 		os.Exit(1)
@@ -134,18 +140,16 @@ func run(ctx context.Context, corpusDir string) error {
 	return runRecords(ctx, options{runDir: filepath.Join(runs, code.key), commit: code.commit}, corpus)
 }
 
-// requiredCorpusFiles must exist; optionalCorpusFiles are loaded when present
-// (the agent-runtime extended slices: FP-category benigns and the adversarial
-// coverage set). A missing optional file is skipped, not an error.
-var requiredCorpusFiles = []string{
+// corpusOrder lists the fixture files that load first, in this order, so
+// text they share dedupes as it always has. Every other *.jsonl file in the
+// corpus directory loads after them, in name order, so a version of this tool
+// scores fixture files added after it.
+var corpusOrder = []string{
 	"deepset.jsonl",
 	"gram_benigns.jsonl",
 	"litellm_extended.jsonl",
 	"mutations.jsonl",
 	"operational_benigns.jsonl",
-}
-
-var optionalCorpusFiles = []string{
 	"agent_fp_benigns.jsonl",
 	"adversarial_fable.jsonl",
 	"adversarial_codex.jsonl",
@@ -157,17 +161,35 @@ var optionalCorpusFiles = []string{
 	"agentdyn.jsonl",
 }
 
+// repeatedTextFiles hold cases that share text on purpose: paired trajectory
+// rows and AgentDojo's clean twins carry different context. Their cases are
+// never deduped.
+var repeatedTextFiles = []string{"trajectory_twins.jsonl", "agentdojo.jsonl"}
+
+// corpusFiles lists dir's fixture files in load order.
+func corpusFiles(dir string) ([]string, error) {
+	paths, err := filepath.Glob(filepath.Join(dir, "*.jsonl"))
+	if err != nil {
+		return nil, fmt.Errorf("list corpus files: %w", err)
+	}
+	rank := func(path string) int {
+		if i := slices.Index(corpusOrder, filepath.Base(path)); i >= 0 {
+			return i
+		}
+		return len(corpusOrder)
+	}
+	slices.SortStableFunc(paths, func(a, b string) int { return rank(a) - rank(b) })
+	return paths, nil
+}
+
 func loadCorpus(dir string) ([]labeledCase, error) {
 	seen := map[string]string{}
 	var out []labeledCase
 
-	load := func(path string, optional, dedupe bool) error {
+	load := func(path string, dedupe bool) error {
 		name := filepath.Base(path)
 		f, err := os.Open(path) // #nosec G304 -- local developer/CI harness intentionally reads a configured corpus path.
 		if err != nil {
-			if optional && errors.Is(err, os.ErrNotExist) {
-				return nil
-			}
 			return fmt.Errorf("open %s: %w", path, err)
 		}
 		defer func() { _ = f.Close() }()
@@ -209,22 +231,18 @@ func loadCorpus(dir string) ([]labeledCase, error) {
 		return nil
 	}
 
-	for _, name := range requiredCorpusFiles {
-		if err := load(filepath.Join(dir, name), false, true); err != nil {
-			return nil, err
-		}
+	paths, err := corpusFiles(dir)
+	if err != nil {
+		return nil, err
 	}
-	for _, name := range optionalCorpusFiles {
-		// Paired trajectory rows and AgentDojo's clean twins intentionally share
-		// current-event text. Preserve those semantics; the committed merge is
-		// deduped across source corpora.
-		dedupe := name != "trajectory_twins.jsonl" && name != "agentdojo.jsonl"
-		if err := load(filepath.Join(dir, name), true, dedupe); err != nil {
+	for _, path := range paths {
+		dedupe := !slices.Contains(repeatedTextFiles, filepath.Base(path))
+		if err := load(path, dedupe); err != nil {
 			return nil, err
 		}
 	}
 	if len(out) == 0 {
-		return nil, fmt.Errorf("loaded corpus is empty")
+		return nil, fmt.Errorf("no cases in %s", dir)
 	}
 	return out, nil
 }

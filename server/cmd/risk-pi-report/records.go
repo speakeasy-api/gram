@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -44,6 +45,9 @@ const (
 	// its metadata.
 	casesFile    = "cases.jsonl"
 	manifestFile = "run.json"
+
+	// lockFile is held while a run writes the directory.
+	lockFile = "run.lock"
 
 	// caseHashHexLen is the length of a case's content hash. 64 bits tells
 	// apart the edits of a corpus of a few thousand cases.
@@ -307,6 +311,11 @@ func runRecords(ctx context.Context, opts options, corpus []labeledCase) error {
 	if err := os.MkdirAll(opts.runDir, 0o750); err != nil {
 		return fmt.Errorf("create run dir: %w", err)
 	}
+	unlock, err := lockRunDir(opts.runDir)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if err := claimRunDir(opts.runDir, opts.commit, time.Now()); err != nil {
 		return err
 	}
@@ -428,6 +437,27 @@ func appendRecord(w io.Writer, rec caseRecord) error {
 		return fmt.Errorf("append run record: %w", err)
 	}
 	return nil
+}
+
+// lockRunDir holds dir for one run until the returned func releases it.
+// Commits that share code share a run directory, so two runs at once, such as
+// main and a fixture-only change, would judge the same cases twice. The second
+// run waits, then reuses the first run's records.
+func lockRunDir(dir string) (func(), error) {
+	file, err := os.OpenFile(filepath.Join(dir, lockFile), os.O_CREATE|os.O_RDWR, 0o600) // #nosec G304 -- the run directory is under the user's cache.
+	if err != nil {
+		return nil, fmt.Errorf("open run lock: %w", err)
+	}
+	fd := int(file.Fd()) // #nosec G115 -- a file descriptor fits in an int.
+	err = syscall.Flock(fd, syscall.LOCK_EX|syscall.LOCK_NB)
+	if errors.Is(err, syscall.EWOULDBLOCK) {
+		fmt.Fprintf(os.Stderr, "waiting for another run to finish with %s\n", dir)
+		err = syscall.Flock(fd, syscall.LOCK_EX)
+	}
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("lock run dir: %w", err), file.Close())
+	}
+	return func() { o11y.NoLogDefer(file.Close) }, nil
 }
 
 // currentDetector identifies the detector this build ships.
