@@ -57,7 +57,8 @@ const (
 // which follows failOpen, fails with err when it is set, or panics when panics
 // is set. When read is set, each hooks_fail_open lookup signals it without
 // blocking. When wait is set, each hooks_fail_open lookup first waits for it to
-// close.
+// close, for up to testClaudeBudgetAnswerWithin rather than the lookup's own
+// shorter timeout.
 type hooksPostureFeatures struct {
 	failOpen bool
 	err      error
@@ -66,7 +67,7 @@ type hooksPostureFeatures struct {
 	wait     <-chan struct{}
 }
 
-func (f hooksPostureFeatures) IsFeatureEnabled(ctx context.Context, _ string, feature productfeatures.Feature) (bool, error) {
+func (f hooksPostureFeatures) IsFeatureEnabled(_ context.Context, _ string, feature productfeatures.Feature) (bool, error) {
 	if feature != productfeatures.FeatureHooksFailOpen {
 		return true, nil
 	}
@@ -79,8 +80,8 @@ func (f hooksPostureFeatures) IsFeatureEnabled(ctx context.Context, _ string, fe
 	if f.wait != nil {
 		select {
 		case <-f.wait:
-		case <-ctx.Done():
-			return false, fmt.Errorf("wait to read hooks_fail_open: %w", ctx.Err())
+		case <-time.After(testClaudeBudgetAnswerWithin):
+			return false, errors.New("hooks_fail_open read never released")
 		}
 	}
 	if f.panics {

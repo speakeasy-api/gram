@@ -86,6 +86,11 @@ func (s *Service) claimHookIdempotency(ctx context.Context, token string, replay
 }
 
 func (s *Service) claimBlockedPromptTelemetry(ctx context.Context, payload *gen.ClaudePayload) bool {
+	// A superseded verdict writes no block telemetry, so it must not use up the
+	// dedupe key that a later block of the same prompt needs.
+	if isVerdictSuperseded(ctx) {
+		return false
+	}
 	if payload == nil || payload.SessionID == nil || payload.Prompt == nil {
 		return true
 	}
