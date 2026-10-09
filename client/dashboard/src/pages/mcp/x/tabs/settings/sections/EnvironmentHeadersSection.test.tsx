@@ -8,11 +8,13 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { EnvironmentHeadersSection } from "./EnvironmentHeadersSection";
 
 const PROJECT = "project-1";
@@ -25,9 +27,11 @@ const mocks = vi.hoisted(() => ({
     (request: GetMcpServerEnvironmentHeadersRequest) => {
       data?: unknown;
       isError: boolean;
+      error?: unknown;
     }
   >(),
   mutate: vi.fn(),
+  latest: undefined as unknown,
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
@@ -54,6 +58,16 @@ vi.mock("@gram/client/react-query/getMcpServerEnvironmentHeaders.js", () => ({
     return mocks.preview(request);
   },
   invalidateAllGetMcpServerEnvironmentHeaders: vi.fn(),
+}));
+
+vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
+
+vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
+  buildGetMcpServerQuery: () => ({
+    queryKey: ["latest-mcp-server"],
+    queryFn: async () => mocks.latest,
+  }),
+  invalidateAllGetMcpServer: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/updateMcpServer.js", () => ({
@@ -94,6 +108,16 @@ vi.mock("@/components/ui/Select", () => ({
 }));
 
 const prod = { id: "env-prod", name: "Prod", slug: "prod" };
+
+function forbidden(): GramError {
+  return new GramError("forbidden", {
+    response: new Response("{}", { status: 403 }),
+    request: new Request(
+      "https://gram.test/rpc/mcpServers.getEnvironmentHeaders",
+    ),
+    body: "{}",
+  });
+}
 const sandbox = { id: "env-sandbox", name: "Sandbox", slug: "sandbox" };
 
 function result(
@@ -139,6 +163,7 @@ function renderSection(mcpServer: McpServer): ReturnType<typeof render> {
 }
 
 beforeEach(() => {
+  mocks.latest = server();
   mocks.scopes.clear();
   mocks.previewRequests = [];
   mocks.preview.mockImplementation((request) => {
@@ -189,7 +214,8 @@ describe("EnvironmentHeadersSection", () => {
 
     expect(mocks.previewRequests).toContainEqual({
       id: "server-1",
-      selection: "linked",
+      selection: "environment",
+      environmentId: prod.id,
     });
     expect(screen.getByText("MCP_HEADER_X-Instance-Url")).toBeTruthy();
     expect(screen.getByText("Overrides source header")).toBeTruthy();
@@ -202,7 +228,7 @@ describe("EnvironmentHeadersSection", () => {
     expect(screen.queryByRole("button", { name: /save/i })).toBeNull();
   });
 
-  it("previews a picked candidate and saves the link with every other field", () => {
+  it("previews a picked candidate and saves the link with every other field", async () => {
     grantAll();
     renderSection(server());
 
@@ -216,6 +242,7 @@ describe("EnvironmentHeadersSection", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(mocks.mutate).toHaveBeenCalled());
     expect(mocks.mutate).toHaveBeenCalledWith({
       request: {
         updateMcpServerForm: {
@@ -233,10 +260,14 @@ describe("EnvironmentHeadersSection", () => {
     });
   });
 
-  it("previews None and saves it as an unlink, even from a deleted environment", () => {
+  it("previews None and saves it as an unlink, even from a deleted environment", async () => {
     grantAll();
+    mocks.latest = server({ environmentId: "env-deleted" });
     mocks.preview.mockImplementation((request) => {
-      if (request.selection === "linked") {
+      if (
+        request.selection === "environment" &&
+        request.environmentId !== sandbox.id
+      ) {
         return {
           data: result({
             environmentStatus: "unavailable",
@@ -263,6 +294,7 @@ describe("EnvironmentHeadersSection", () => {
     expect(screen.queryByText(/deleted or unavailable/i)).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(mocks.mutate).toHaveBeenCalled());
     expect(
       mocks.mutate.mock.calls[0]?.[0].request.updateMcpServerForm,
     ).toMatchObject({ id: "server-1", environmentId: undefined });
@@ -333,7 +365,10 @@ describe("EnvironmentHeadersSection", () => {
     mocks.preview.mockImplementation((request) => {
       if (request.selection === "none")
         return { data: result(), isError: false };
-      if (request.selection === "linked") {
+      if (
+        request.selection === "environment" &&
+        request.environmentId !== sandbox.id
+      ) {
         return {
           data: result({
             environment: prod,
@@ -474,5 +509,57 @@ describe("EnvironmentHeadersSection", () => {
       (screen.getByLabelText("Environment") as HTMLSelectElement).value,
     ).toBe(sandbox.id);
     expect(screen.queryByRole("button", { name: /save/i })).toBeNull();
+  });
+
+  it("keeps a visibility change saved elsewhere when saving the link", async () => {
+    grantAll();
+    mocks.latest = server({
+      visibility: "disabled",
+      toolVariationsGroupId: "group-2",
+    });
+    renderSection(server());
+
+    fireEvent.change(screen.getByLabelText("Environment"), {
+      target: { value: sandbox.id },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(mocks.mutate).toHaveBeenCalled());
+    expect(
+      mocks.mutate.mock.calls[0]?.[0].request.updateMcpServerForm,
+    ).toMatchObject({
+      environmentId: sandbox.id,
+      visibility: "disabled",
+      toolVariationsGroupId: "group-2",
+    });
+  });
+
+  it("stops a save when the link was changed elsewhere", async () => {
+    grantAll();
+    mocks.latest = server({ environmentId: undefined });
+    renderSection(server());
+
+    fireEvent.change(screen.getByLabelText("Environment"), {
+      target: { value: sandbox.id },
+    });
+    const save = screen.getByRole("button", {
+      name: /save/i,
+    }) as HTMLButtonElement;
+    fireEvent.click(save);
+    await waitFor(() => expect(save.disabled).toBe(false));
+    expect(mocks.mutate).not.toHaveBeenCalled();
+  });
+
+  it("explains a refused preview as missing access to the environment", () => {
+    grantAll();
+    mocks.preview.mockImplementation((request) =>
+      request.selection === "none"
+        ? { data: result(), isError: false }
+        : { data: undefined, isError: true, error: forbidden() },
+    );
+    renderSection(server());
+
+    expect(
+      screen.getByText(/don't have read access to this environment/i),
+    ).toBeTruthy();
   });
 });

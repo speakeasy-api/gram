@@ -15,11 +15,16 @@ import {
 } from "@/components/ui/Select";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
+import { useSdkClient } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { McpServerEnvironmentHeader } from "@gram/client/models/components/mcpserverenvironmentheader.js";
 import type { GetMcpServerEnvironmentHeadersRequest } from "@gram/client/models/operations/getmcpserverenvironmentheaders.js";
-import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import {
+  buildGetMcpServerQuery,
+  invalidateAllGetMcpServer,
+} from "@gram/client/react-query/getMcpServer.js";
 import {
   invalidateAllGetMcpServerEnvironmentHeaders,
   useGetMcpServerEnvironmentHeaders,
@@ -80,17 +85,21 @@ const columns: Column<McpServerEnvironmentHeader>[] = [
 ];
 
 /**
- * Picks the preview the API should compute for the drafted environment, so a
- * response for an earlier pick never renders for the current one.
+ * Picks the preview the API should compute for the drafted environment. The
+ * environment id is always part of the request, and so of its cache key, so a
+ * result for an earlier pick, or for the link before it changed elsewhere,
+ * never renders for the current one.
  */
 function previewRequest(
-  mcpServer: McpServer,
+  mcpServerId: string,
   draft: string,
 ): GetMcpServerEnvironmentHeadersRequest {
-  const linked = mcpServer.environmentId ?? NO_ENVIRONMENT;
-  if (draft === linked) return { id: mcpServer.id, selection: "linked" };
-  if (draft === NO_ENVIRONMENT) return { id: mcpServer.id, selection: "none" };
-  return { id: mcpServer.id, selection: "environment", environmentId: draft };
+  if (draft === NO_ENVIRONMENT) return { id: mcpServerId, selection: "none" };
+  return { id: mcpServerId, selection: "environment", environmentId: draft };
+}
+
+function isForbidden(error: unknown): boolean {
+  return error instanceof GramError && error.statusCode === 403;
 }
 
 /**
@@ -119,9 +128,10 @@ export function EnvironmentHeadersSection({
           Send headers that differ per MCP server, such as an instance URL or
           tenant, from a linked environment. Only entries named{" "}
           <code>MCP_HEADER_&lt;Header-Name&gt;</code> are sent; every other
-          variable in the environment is ignored. An environment header replaces
-          a source header with the same name and applies to this MCP server
-          only.
+          variable in the environment is ignored. Underscores in the name become
+          dashes, so <code>MCP_HEADER_X_INSTANCE_URL</code> is sent as{" "}
+          <code>X-Instance-Url</code>. An environment header replaces a source
+          header with the same name and applies to this MCP server only.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
@@ -149,6 +159,7 @@ function EnvironmentHeadersEditor({
   canWrite: boolean;
 }): JSX.Element {
   const queryClient = useQueryClient();
+  const client = useSdkClient();
   const linked = mcpServer.environmentId ?? NO_ENVIRONMENT;
   // The draft remembers the link it was started from. When the stored link
   // changes (a save landing, another tab, another operator), a draft that is
@@ -173,7 +184,7 @@ function EnvironmentHeadersEditor({
     { throwOnError: false },
   );
   const preview = useGetMcpServerEnvironmentHeaders(
-    previewRequest(mcpServer, draft),
+    previewRequest(mcpServer.id, draft),
     undefined,
     { throwOnError: false },
   );
@@ -184,6 +195,9 @@ function EnvironmentHeadersEditor({
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllGetMcpServerEnvironmentHeaders(queryClient),
+        // The upstream's tool list can differ per environment, so a listing
+        // cached under the old link must not be shown for the new one.
+        queryClient.invalidateQueries({ queryKey: ["proxiedMcpTools"] }),
       ]);
       toast.success("Environment link saved");
     },
@@ -193,24 +207,49 @@ function EnvironmentHeadersEditor({
       ),
   });
 
-  // mcpServers.update is a full-record replace for the optional references,
-  // so every other field is re-sent unchanged.
-  const save = () =>
-    update.mutate({
-      request: {
-        updateMcpServerForm: {
-          id: mcpServer.id,
-          name: mcpServer.name ?? undefined,
-          remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
-          tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
-          toolsetId: mcpServer.toolsetId ?? undefined,
-          unproxiedMcpServerId: mcpServer.unproxiedMcpServerId ?? undefined,
-          toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
-          environmentId: draft === NO_ENVIRONMENT ? undefined : draft,
-          visibility: mcpServer.visibility,
+  // mcpServers.update is a full-record replace, so the form is built from the
+  // latest stored server rather than this page's copy: a visibility or other
+  // change saved elsewhere since the page loaded is kept, and a link changed
+  // elsewhere stops the save so the user can review it first.
+  const [isFetchingLatest, setIsFetchingLatest] = useState(false);
+  const save = async () => {
+    setIsFetchingLatest(true);
+    try {
+      const latest = await queryClient.fetchQuery({
+        ...buildGetMcpServerQuery(client, { id: mcpServer.id }),
+        staleTime: 0,
+      });
+      if ((latest.environmentId ?? NO_ENVIRONMENT) !== editing.base) {
+        await invalidateAllGetMcpServer(queryClient, { refetchType: "all" });
+        toast.error(
+          "This server's environment was changed elsewhere. Review it before saving.",
+        );
+        return;
+      }
+      update.mutate({
+        request: {
+          updateMcpServerForm: {
+            id: latest.id,
+            name: latest.name ?? undefined,
+            remoteMcpServerId: latest.remoteMcpServerId ?? undefined,
+            tunneledMcpServerId: latest.tunneledMcpServerId ?? undefined,
+            toolsetId: latest.toolsetId ?? undefined,
+            unproxiedMcpServerId: latest.unproxiedMcpServerId ?? undefined,
+            toolVariationsGroupId: latest.toolVariationsGroupId ?? undefined,
+            environmentId: draft === NO_ENVIRONMENT ? undefined : draft,
+            visibility: latest.visibility,
+          },
         },
-      },
-    });
+      });
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to save environment",
+      );
+    } finally {
+      setIsFetchingLatest(false);
+    }
+  };
+  const saving = isFetchingLatest || update.isPending;
 
   const environments = options.data?.environments ?? [];
   const linkedMissing =
@@ -224,8 +263,9 @@ function EnvironmentHeadersEditor({
       <SettingsSection.Body>
         {loadFailed ? (
           <Alert variant="error" dismissible={false}>
-            Could not load this server's environment headers. Saving is
-            disabled.
+            {isForbidden(preview.error) || isForbidden(options.error)
+              ? "You don't have read access to this environment, so its headers can't be previewed or linked. Saving is disabled."
+              : "Could not load this server's environment headers. Saving is disabled."}
           </Alert>
         ) : null}
         <Field>
@@ -238,7 +278,7 @@ function EnvironmentHeadersEditor({
           >
             <Select
               value={draft}
-              disabled={!canWrite || update.isPending || !options.data}
+              disabled={!canWrite || saving || !options.data}
               onValueChange={setDraft}
             >
               <SelectTrigger id="mcp-server-environment" className="w-72">
@@ -287,11 +327,9 @@ function EnvironmentHeadersEditor({
               level="component"
             >
               <FooterSaveButton
-                pending={update.isPending}
-                disabled={
-                  !canWrite || update.isPending || loadFailed || !result
-                }
-                onClick={save}
+                pending={saving}
+                disabled={!canWrite || saving || loadFailed || !result}
+                onClick={() => void save()}
               />
             </RequireScope>
           </SettingsSection.FooterActions>
