@@ -2,14 +2,17 @@ package otelpub
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
+	"reflect"
 	"time"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/sdk/resource"
+	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -46,6 +49,7 @@ func inboundFromRecord(ctx context.Context, record *log.Record, res *resource.Re
 	if walkErr != nil {
 		return nil, walkErr
 	}
+	attributes = append(attributes, exceptionAttributes(record.Err(), attributes)...)
 
 	span := trace.SpanContextFromContext(ctx)
 	severity := severityNumber(record.Severity())
@@ -191,4 +195,53 @@ func attributeKeyValues(attrs []attribute.KeyValue) ([]*otelv1.InboundLogRecord_
 		out = append(out, (&otelv1.InboundLogRecord_KeyValue_builder{Key: &key, Value: converted}).Build())
 	}
 	return out, nil
+}
+
+// exceptionAttributes maps a record's error the way the OTel SDK does,
+// unless the record already states an exception.
+func exceptionAttributes(err error, attributes []*otelv1.InboundLogRecord_KeyValue) []*otelv1.InboundLogRecord_KeyValue {
+	if err == nil {
+		return nil
+	}
+	for _, kv := range attributes {
+		switch kv.GetKey() {
+		case string(semconv.ExceptionTypeKey), string(semconv.ExceptionMessageKey), string(semconv.ExceptionStacktraceKey):
+			return nil
+		}
+	}
+	var out []*otelv1.InboundLogRecord_KeyValue
+	for _, kv := range []attribute.KeyValue{
+		semconv.ExceptionMessage(err.Error()),
+		semconv.ExceptionTypeKey.String(errorType(err)),
+	} {
+		if v := kv.Value.AsString(); v != "" {
+			key := string(kv.Key)
+			out = append(out, (&otelv1.InboundLogRecord_KeyValue_builder{
+				Key:   &key,
+				Value: (&otelv1.InboundLogRecord_AnyValue_builder{StringValue: &v}).Build(),
+			}).Build())
+		}
+	}
+	return out
+}
+
+var fmtWrapErrorType = reflect.TypeOf(fmt.Errorf("wrapped: %w", errors.New("err")))
+
+// errorType names an error's type as the OTel SDK does, looking through fmt.Errorf wrapping.
+func errorType(err error) string {
+	if et, ok := err.(interface{ ErrorType() string }); ok && et.ErrorType() != "" {
+		return et.ErrorType()
+	}
+	for reflect.TypeOf(err) == fmtWrapErrorType {
+		inner := errors.Unwrap(err)
+		if inner == nil {
+			break
+		}
+		err = inner
+	}
+	t := reflect.TypeOf(err)
+	if t.PkgPath() != "" && t.Name() != "" {
+		return t.PkgPath() + "." + t.Name()
+	}
+	return t.String()
 }

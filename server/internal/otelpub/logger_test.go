@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
@@ -288,11 +289,13 @@ func (r ackOnRelease) Get(ctx context.Context) (string, error) {
 
 // heldPublisher signals each Publish on arrived and acks it once release closes.
 type heldPublisher struct {
-	arrived chan struct{}
-	release chan struct{}
+	arrived  chan struct{}
+	contexts chan context.Context
+	release  chan struct{}
 }
 
 func (p *heldPublisher) Publish(ctx context.Context, _ *otelv1.InboundLogRecord, _ ...gcp.PublishOption) gcp.PublishResult {
+	p.contexts <- ctx
 	p.arrived <- struct{}{}
 	return ackOnRelease{done: ctx.Done(), err: ctx.Err, release: p.release}
 }
@@ -300,21 +303,69 @@ func (p *heldPublisher) Publish(ctx context.Context, _ *otelv1.InboundLogRecord,
 func (*heldPublisher) Stop(context.Context) error { return nil }
 
 func newHeldPublisher(capacity int) *heldPublisher {
-	return &heldPublisher{arrived: make(chan struct{}, capacity), release: make(chan struct{})}
+	return &heldPublisher{arrived: make(chan struct{}, capacity), contexts: make(chan context.Context, capacity), release: make(chan struct{})}
 }
 
 func TestLogStillPublishesWhenTheCallerIsCancelled(t *testing.T) {
 	t.Parallel()
 
 	publisher := newHeldPublisher(1)
-	close(publisher.release)
 	ctx, cancel := context.WithCancel(authenticated(t.Context()))
+	defer cancel()
+
+	result := make(chan error, 1)
+	go func() { result <- testLogger(publisher).Log(ctx, toolCallRecord(time.Now())) }()
+	<-publisher.arrived
 	cancel()
 
-	err := testLogger(publisher).Log(ctx, toolCallRecord(time.Now()))
+	// Cancellation propagates synchronously, so a still-live context here means it was detached.
+	require.NoError(t, (<-publisher.contexts).Err(), "the caller's cancellation reached the publish")
+	close(publisher.release)
+	require.NoError(t, <-result)
+}
 
-	require.NoError(t, err)
-	require.Len(t, publisher.arrived, 1)
+func TestLogStampsARecordWithNoTimestampSoDistinctRecordsGetDistinctIDs(t *testing.T) {
+	t.Parallel()
+
+	publisher, published := capture(t, gcp.NewSuccessPublishResult())
+	logger := testLogger(publisher)
+	ctx := authenticated(t.Context())
+
+	require.NoError(t, logger.Log(ctx, toolCallRecord(time.Time{})))
+	require.NotZero(t, (*published)[0].GetTimeUnixNano())
+
+	// Two calls in the same clock tick may legitimately share a timestamp.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		require.NoError(c, logger.Log(ctx, toolCallRecord(time.Time{})))
+		last := (*published)[len(*published)-1]
+		assert.NotEqual(c, (*published)[0].GetRecordId(), last.GetRecordId())
+	}, time.Second, time.Millisecond)
+}
+
+type typedError struct{}
+
+func (typedError) Error() string { return "tool exploded" }
+
+func TestLogMapsTheRecordsErrorToExceptionAttributes(t *testing.T) {
+	t.Parallel()
+
+	publisher, published := capture(t, gcp.NewSuccessPublishResult())
+	logger := testLogger(publisher)
+	ctx := authenticated(t.Context())
+
+	record := toolCallRecord(time.Unix(1_700_000_000, 0))
+	record.SetErr(fmt.Errorf("call failed: %w", typedError{}))
+	require.NoError(t, logger.Log(ctx, record))
+
+	stated := toolCallRecord(time.Unix(1_700_000_000, 0), log.String("exception.message", "stated"))
+	stated.SetErr(errors.New("ignored"))
+	require.NoError(t, logger.Log(ctx, stated))
+
+	require.Len(t, *published, 2)
+	require.Equal(t, "call failed: tool exploded", attributeValue((*published)[0], "exception.message"))
+	require.Equal(t, "github.com/speakeasy-api/gram/server/internal/otelpub.typedError", attributeValue((*published)[0], "exception.type"))
+	require.Equal(t, "stated", attributeValue((*published)[1], "exception.message"), "a stated exception wins over the record's error")
+	require.Empty(t, attributeValue((*published)[1], "exception.type"))
 }
 
 func TestLogReturnsAnErrorWhenThePublishOutlastsTheTimeout(t *testing.T) {

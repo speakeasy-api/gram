@@ -87,6 +87,10 @@ func (l *Logger) inbound(ctx context.Context, record *log.Record) (*otelv1.Inbou
 		return nil, errors.New("no tenancy in context")
 	}
 
+	// Without a timestamp, two distinct records could share a content-derived id.
+	if record.Timestamp().IsZero() {
+		record.SetTimestamp(time.Now())
+	}
 	inbound, err := inboundFromRecord(ctx, record, l.resource, l.scope)
 	if err != nil {
 		return nil, err
