@@ -11,9 +11,7 @@ const TUNNEL_STATUS_POLL_MS = 15_000;
  * caller without project-level mcp:read cannot read the source) — is not
  * evidence the tunnel is offline.
  */
-export function tunnelAgentOffline(
-  status: ConnectionStatus | undefined,
-): boolean {
+function tunnelAgentOffline(status: ConnectionStatus | undefined): boolean {
   return status === "inactive" || status === "never_connected";
 }
 
