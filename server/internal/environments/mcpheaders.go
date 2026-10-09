@@ -53,20 +53,9 @@ func (e *EnvironmentEntries) InspectMCPHeaders(ctx context.Context, projectID uu
 
 	entries := make([]proxy.EnvironmentHeaderEntry, 0, len(rows))
 	for _, row := range rows {
-		if !row.EntryName.Valid {
-			continue
+		if row.EntryName.Valid {
+			entries = append(entries, e.revealMCPHeaderEntry(row.EntryName.String, row.EntryValue.String, row.EntryIsSecret.Bool))
 		}
-		entry := proxy.EnvironmentHeaderEntry{Name: row.EntryName.String, Value: row.EntryValue.String, Undecryptable: false}
-		if row.EntryIsSecret.Bool {
-			decrypted, derr := e.enc.Decrypt(row.EntryValue.String)
-			if derr != nil {
-				entry.Value = ""
-				entry.Undecryptable = true
-			} else {
-				entry.Value = decrypted
-			}
-		}
-		entries = append(entries, entry)
 	}
 
 	return MCPHeaderEnvironment{
@@ -74,6 +63,84 @@ func (e *EnvironmentEntries) InspectMCPHeaders(ctx context.Context, projectID uu
 		Name:    rows[0].EnvironmentName,
 		Slug:    rows[0].EnvironmentSlug,
 		Headers: proxy.InspectEnvironmentHeaders(entries),
+	}, nil
+}
+
+// revealMCPHeaderEntry decrypts one MCP_HEADER_ entry for inspection. A value
+// that cannot be decrypted is reported, never returned.
+func (e *EnvironmentEntries) revealMCPHeaderEntry(name, value string, isSecret bool) proxy.EnvironmentHeaderEntry {
+	entry := proxy.EnvironmentHeaderEntry{Name: name, Value: value, Undecryptable: false}
+	if isSecret {
+		decrypted, err := e.enc.Decrypt(value)
+		if err != nil {
+			entry.Value = ""
+			entry.Undecryptable = true
+		} else {
+			entry.Value = decrypted
+		}
+	}
+	return entry
+}
+
+// ErrMCPServerUnavailable reports that the MCP server is deleted or missing.
+var ErrMCPServerUnavailable = errors.New("mcp server is unavailable")
+
+// MCPServerHeaderSnapshot is an MCP server's backend, remote source URL,
+// environment link and the inspection of that environment's MCP_HEADER_
+// entries, all read at one instant.
+type MCPServerHeaderSnapshot struct {
+	// EnvironmentID is the server's environment link.
+	EnvironmentID uuid.NullUUID
+
+	// EnvironmentLive reports whether the linked environment exists, is not
+	// deleted and belongs to the server's project.
+	EnvironmentLive bool
+
+	// RemoteMcpServerID is the server's remote source, if any.
+	RemoteMcpServerID uuid.NullUUID
+
+	// TunneledMcpServerID is the server's tunneled source, if any.
+	TunneledMcpServerID uuid.NullUUID
+
+	// RemoteURL is the remote source's URL, empty for other backends or a
+	// deleted source.
+	RemoteURL string
+
+	// Headers classifies every MCP_HEADER_ entry of a live linked
+	// environment, ordered by entry name.
+	Headers []proxy.EnvironmentHeaderInspection
+}
+
+// InspectMCPServerHeaders reads the snapshot for the MCP server serverID of
+// projectID. It returns [ErrMCPServerUnavailable] when the server is deleted
+// or missing.
+func (e *EnvironmentEntries) InspectMCPServerHeaders(ctx context.Context, projectID uuid.UUID, serverID uuid.UUID) (MCPServerHeaderSnapshot, error) {
+	rows, err := e.repo.GetMCPServerHeaderSnapshot(ctx, repo.GetMCPServerHeaderSnapshotParams{
+		McpServerID: serverID,
+		ProjectID:   projectID,
+	})
+	if err != nil {
+		return MCPServerHeaderSnapshot{}, fmt.Errorf("get mcp server header snapshot: %w", err)
+	}
+	if len(rows) == 0 {
+		return MCPServerHeaderSnapshot{}, ErrMCPServerUnavailable
+	}
+
+	entries := make([]proxy.EnvironmentHeaderEntry, 0, len(rows))
+	for _, row := range rows {
+		if row.EntryName.Valid {
+			entries = append(entries, e.revealMCPHeaderEntry(row.EntryName.String, row.EntryValue.String, row.EntryIsSecret.Bool))
+		}
+	}
+
+	first := rows[0]
+	return MCPServerHeaderSnapshot{
+		EnvironmentID:       first.ServerEnvironmentID,
+		EnvironmentLive:     first.LiveEnvironmentID.Valid,
+		RemoteMcpServerID:   first.ServerRemoteMcpServerID,
+		TunneledMcpServerID: first.ServerTunneledMcpServerID,
+		RemoteURL:           first.RemoteUrl.String,
+		Headers:             proxy.InspectEnvironmentHeaders(entries),
 	}, nil
 }
 

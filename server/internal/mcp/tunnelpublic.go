@@ -688,7 +688,7 @@ func (s *Service) serveTunneledPublicSession(
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "load tunneled mcp server headers").LogError(ctx, logger)
 	}
-	environment, err := loadEnvironmentHeaders(ctx, logger, m.environments, endpoint.ProjectID, mcpServer.EnvironmentID)
+	environment, err := loadEnvironmentHeaders(ctx, logger, m.environments, endpoint.ProjectID, mcpServer, "")
 	if err != nil {
 		return err
 	}

@@ -139,7 +139,7 @@ func (m *tunnelManager) buildProxy(
 
 	environment := params.EnvironmentHeaders
 	if environment == nil {
-		loaded, err := loadEnvironmentHeaders(ctx, logger, m.environments, params.ProjectID, mcpServer.EnvironmentID)
+		loaded, err := loadEnvironmentHeaders(ctx, logger, m.environments, params.ProjectID, mcpServer, "")
 		if err != nil {
 			return nil, err
 		}

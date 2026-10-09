@@ -169,26 +169,11 @@ func (s *Service) routeMetaMember(
 		return memberDial{}, "", fmt.Errorf("load meta MCP member server: %w", err)
 	}
 
-	// One environment snapshot serves every exchange built for this member,
-	// and a member whose environment headers cannot be sent is isolated
-	// rather than failing the whole gateway.
-	// Only proxied members carry environment headers.
-	backend := ""
-	switch {
-	case member.remoteServerID.Valid:
-		backend = "remote"
-	case member.tunneledServerID.Valid:
-		backend = "tunneled"
-	default:
-		return memberDial{}, "", &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
-	}
-	environment, err := readEnvironmentHeaders(ctx, s.environmentHeaders, member.projectID, serverRow.EnvironmentID)
-	if err != nil {
-		if isEnvironmentHeaderConfigError(err) {
-			logger.WarnContext(ctx, "meta MCP member environment headers are misconfigured", attr.SlogError(err))
-			return memberDial{}, backend, &metaMemberError{message: fmt.Sprintf("server %q has an invalid environment header configuration; contact the MCP server administrator", member.slug)}
-		}
-		return memberDial{}, backend, fmt.Errorf("load meta MCP member environment headers: %w", err)
+	// The member snapshot authorized this dispatch against one backend and
+	// environment link. A member whose server has since moved to another
+	// backend or link is refused rather than served with a mix of the two.
+	if !memberMatchesServer(member, serverRow) {
+		return memberDial{}, memberBackendLabel(member), &metaMemberError{message: fmt.Sprintf("server %q changed while handling the request; retry", member.slug)}
 	}
 
 	// gate.toolSelection is provably nil today: meta endpoints mint no tool
@@ -213,6 +198,10 @@ func (s *Service) routeMetaMember(
 		if herr != nil {
 			return memberDial{}, "remote", fmt.Errorf("load meta MCP member upstream headers: %w", herr)
 		}
+		environment, eerr := s.metaMemberEnvironmentHeaders(ctx, logger, member, &serverRow, remoteServer.Url)
+		if eerr != nil {
+			return memberDial{}, "remote", eerr
+		}
 		routed, terr := routeMetaMemberToken(gate.tokens, member, strings.TrimRight(remoteServer.Url, "/"))
 		upstreamToken := routed.Token
 		if terr == nil && upstreamToken == "" && gate.chainUpstream != nil {
@@ -233,6 +222,10 @@ func (s *Service) routeMetaMember(
 		}}, "remote", nil
 
 	case member.tunneledServerID.Valid:
+		environment, eerr := s.metaMemberEnvironmentHeaders(ctx, logger, member, &serverRow, "")
+		if eerr != nil {
+			return memberDial{}, "tunneled", eerr
+		}
 		routed, terr := routeMetaMemberToken(gate.tokens, member, strings.TrimRight(member.tunneledResourceIdentifier, "/"))
 		upstreamToken := routed.Token
 		if terr == nil && upstreamToken == "" && gate.chainUpstream != nil {
@@ -522,4 +515,43 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 		}
 	}
 	return catalog, nil
+}
+
+// memberMatchesServer reports whether the member snapshot that authorized a
+// dispatch still describes the server's backend and environment link.
+func memberMatchesServer(member metaMember, server mcpservers_repo.McpServer) bool {
+	return member.remoteServerID == server.RemoteMcpServerID &&
+		member.tunneledServerID == server.TunneledMcpServerID &&
+		member.toolsetID == server.ToolsetID &&
+		member.environmentID == server.EnvironmentID
+}
+
+func memberBackendLabel(member metaMember) string {
+	switch {
+	case member.remoteServerID.Valid:
+		return "remote"
+	case member.tunneledServerID.Valid:
+		return "tunneled"
+	default:
+		return ""
+	}
+}
+
+// metaMemberEnvironmentHeaders loads one environment snapshot for a member,
+// reused by every exchange built for it. A configuration problem, or a
+// configuration that changed mid-request, isolates the member rather than
+// failing the whole gateway.
+func (s *Service) metaMemberEnvironmentHeaders(ctx context.Context, logger *slog.Logger, member metaMember, server *mcpservers_repo.McpServer, remoteURL string) (environmentHeaderSnapshot, error) {
+	environment, err := readEnvironmentHeaders(ctx, s.environmentHeaders, member.projectID, server, remoteURL)
+	switch {
+	case err == nil:
+		return environment, nil
+	case errors.Is(err, errServingConfigurationChanged):
+		return environmentHeaderSnapshot{}, &metaMemberError{message: fmt.Sprintf("server %q changed while handling the request; retry", member.slug)}
+	case isEnvironmentHeaderConfigError(err):
+		logger.WarnContext(ctx, "meta MCP member environment headers are misconfigured", attr.SlogError(err))
+		return environmentHeaderSnapshot{}, &metaMemberError{message: fmt.Sprintf("server %q has an invalid environment header configuration; contact the MCP server administrator", member.slug)}
+	default:
+		return environmentHeaderSnapshot{}, fmt.Errorf("load meta MCP member environment headers: %w", err)
+	}
 }

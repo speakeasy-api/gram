@@ -405,7 +405,7 @@ func (s *Service) serveConsentProxiedMCP(
 		if herr != nil {
 			return oops.E(oops.CodeUnexpected, herr, "load remote mcp server headers for consent transport").LogError(ctx, logger)
 		}
-		environment, eerr := loadEnvironmentHeaders(ctx, logger, s.environmentHeaders, endpoint.ProjectID, serverRow.EnvironmentID)
+		environment, eerr := loadEnvironmentHeaders(ctx, logger, s.environmentHeaders, endpoint.ProjectID, serverRow, remoteServer.Url)
 		if eerr != nil {
 			return eerr
 		}

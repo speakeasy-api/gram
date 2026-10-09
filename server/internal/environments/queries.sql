@@ -268,3 +268,32 @@ WHERE e.id = @environment_id
   AND ee.name NOT LIKE 'MCP\_HEADER\_%'
   AND (LOWER(ee.name) LIKE 'mcp\_header\_%' OR LOWER(ee.name) LIKE 'header\_%')
 ORDER BY ee.name;
+
+-- name: GetMCPServerHeaderSnapshot :many
+-- Reads, in one statement, an MCP server's current backend, the URL of its
+-- remote source, its environment link and only the MCP_HEADER_ entries of
+-- that environment. A caller compares the backend, URL and link with the row
+-- it already authorized the request against, so the headers it sends and the
+-- destination it dials belong to one configuration that existed at one
+-- instant. A missing or deleted server yields no rows; a server whose linked
+-- environment is deleted, missing or foreign yields NULL environment columns.
+SELECT
+    s.environment_id AS server_environment_id,
+    s.remote_mcp_server_id AS server_remote_mcp_server_id,
+    s.tunneled_mcp_server_id AS server_tunneled_mcp_server_id,
+    r.url AS remote_url,
+    e.id AS live_environment_id,
+    ee.name AS entry_name,
+    ee.value AS entry_value,
+    ee.is_secret AS entry_is_secret
+FROM mcp_servers s
+LEFT JOIN remote_mcp_servers r
+    ON r.id = s.remote_mcp_server_id AND r.project_id = s.project_id AND r.deleted IS FALSE
+LEFT JOIN environments e
+    ON e.id = s.environment_id AND e.project_id = s.project_id AND e.deleted IS FALSE
+LEFT JOIN environment_entries ee
+    ON ee.environment_id = e.id AND ee.name LIKE 'MCP\_HEADER\_%'
+WHERE s.id = @mcp_server_id
+  AND s.project_id = @project_id
+  AND s.deleted IS FALSE
+ORDER BY ee.name;

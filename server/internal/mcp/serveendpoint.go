@@ -778,7 +778,7 @@ func (s *Service) remoteBackendProxyBuilder(
 		return nil, oops.E(oops.CodeUnexpected, err, "load remote mcp server headers").LogError(ctx, logger)
 	}
 
-	environment, err := loadEnvironmentHeaders(ctx, logger, s.environmentHeaders, projectID, mcpServer.EnvironmentID)
+	environment, err := loadEnvironmentHeaders(ctx, logger, s.environmentHeaders, projectID, mcpServer, server.Url)
 	if err != nil {
 		return nil, err
 	}

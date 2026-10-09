@@ -391,6 +391,81 @@ func (q *Queries) GetEnvironmentForToolset(ctx context.Context, arg GetEnvironme
 	return i, err
 }
 
+const getMCPServerHeaderSnapshot = `-- name: GetMCPServerHeaderSnapshot :many
+SELECT
+    s.environment_id AS server_environment_id,
+    s.remote_mcp_server_id AS server_remote_mcp_server_id,
+    s.tunneled_mcp_server_id AS server_tunneled_mcp_server_id,
+    r.url AS remote_url,
+    e.id AS live_environment_id,
+    ee.name AS entry_name,
+    ee.value AS entry_value,
+    ee.is_secret AS entry_is_secret
+FROM mcp_servers s
+LEFT JOIN remote_mcp_servers r
+    ON r.id = s.remote_mcp_server_id AND r.project_id = s.project_id AND r.deleted IS FALSE
+LEFT JOIN environments e
+    ON e.id = s.environment_id AND e.project_id = s.project_id AND e.deleted IS FALSE
+LEFT JOIN environment_entries ee
+    ON ee.environment_id = e.id AND ee.name LIKE 'MCP\_HEADER\_%'
+WHERE s.id = $1
+  AND s.project_id = $2
+  AND s.deleted IS FALSE
+ORDER BY ee.name
+`
+
+type GetMCPServerHeaderSnapshotParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+type GetMCPServerHeaderSnapshotRow struct {
+	ServerEnvironmentID       uuid.NullUUID
+	ServerRemoteMcpServerID   uuid.NullUUID
+	ServerTunneledMcpServerID uuid.NullUUID
+	RemoteUrl                 pgtype.Text
+	LiveEnvironmentID         uuid.NullUUID
+	EntryName                 pgtype.Text
+	EntryValue                pgtype.Text
+	EntryIsSecret             pgtype.Bool
+}
+
+// Reads, in one statement, an MCP server's current backend, the URL of its
+// remote source, its environment link and only the MCP_HEADER_ entries of
+// that environment. A caller compares the backend, URL and link with the row
+// it already authorized the request against, so the headers it sends and the
+// destination it dials belong to one configuration that existed at one
+// instant. A missing or deleted server yields no rows; a server whose linked
+// environment is deleted, missing or foreign yields NULL environment columns.
+func (q *Queries) GetMCPServerHeaderSnapshot(ctx context.Context, arg GetMCPServerHeaderSnapshotParams) ([]GetMCPServerHeaderSnapshotRow, error) {
+	rows, err := q.db.Query(ctx, getMCPServerHeaderSnapshot, arg.McpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetMCPServerHeaderSnapshotRow
+	for rows.Next() {
+		var i GetMCPServerHeaderSnapshotRow
+		if err := rows.Scan(
+			&i.ServerEnvironmentID,
+			&i.ServerRemoteMcpServerID,
+			&i.ServerTunneledMcpServerID,
+			&i.RemoteUrl,
+			&i.LiveEnvironmentID,
+			&i.EntryName,
+			&i.EntryValue,
+			&i.EntryIsSecret,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEnvironmentEntries = `-- name: ListEnvironmentEntries :many
 SELECT ee.name, ee.value, ee.is_secret, ee.environment_id, ee.created_at, ee.updated_at
 FROM environment_entries ee

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/environments"
@@ -12,7 +13,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/environments/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -221,4 +224,88 @@ func TestMCPHeaderNearMissNames(t *testing.T) {
 	foreign, err := entries.MCPHeaderNearMissNames(ctx, uuid.New(), uuid.MustParse(env.ID))
 	require.NoError(t, err)
 	require.Empty(t, foreign)
+}
+
+func seedRemote(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, url string) uuid.UUID {
+	t.Helper()
+	remote, err := remotemcprepo.New(ti.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
+		ID: uuid.New(), ProjectID: projectID, Name: pgtype.Text{}, Slug: pgtype.Text{}, TransportType: "streamable-http", Url: url,
+	})
+	require.NoError(t, err)
+	return remote.ID
+}
+
+func updateServerLink(t *testing.T, ctx context.Context, ti *testInstance, server mcpserversrepo.McpServer, remoteID uuid.UUID, environmentID uuid.NullUUID) {
+	t.Helper()
+	_, err := mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{
+		Name: server.Name, Slug: server.Slug, EnvironmentID: environmentID, UserSessionIssuerID: server.UserSessionIssuerID,
+		RemoteMcpServerID: uuid.NullUUID{UUID: remoteID, Valid: true}, Visibility: server.Visibility, ID: server.ID, ProjectID: server.ProjectID,
+	})
+	require.NoError(t, err)
+}
+
+// The snapshot reads the server's backend, remote URL, link and mapped
+// entries together, and reflects each concurrent change a serving request
+// must detect.
+func TestInspectMCPServerHeaders_SnapshotTracksBackendURLAndLink(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+	projectID := mustProjectID(t, ctx)
+	env := createEnvironment(t, ctx, ti, "mcp-headers-snapshot",
+		&gen.EnvironmentEntryInput{Name: "MCP_HEADER_X-Instance-Url", Value: new(syntheticSecretValue), IsSecret: new(true)},
+		&gen.EnvironmentEntryInput{Name: "UNRELATED", Value: new("synthetic-unrelated"), IsSecret: new(true)},
+	)
+	envID := uuid.NullUUID{UUID: uuid.MustParse(env.ID), Valid: true}
+	remoteA := seedRemote(t, ctx, ti, projectID, "https://a.example.invalid/mcp")
+	remoteB := seedRemote(t, ctx, ti, projectID, "https://b.example.invalid/mcp")
+	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: projectID, Name: pgtype.Text{String: "snap", Valid: true}, Slug: pgtype.Text{String: "snap-" + uuid.NewString()[:8], Valid: true},
+		RemoteMcpServerID: uuid.NullUUID{UUID: remoteA, Valid: true}, Visibility: "private",
+	})
+	require.NoError(t, err)
+	entries := environments.NewEnvironmentEntries(testenv.NewLogger(t), ti.conn, ti.enc, nil)
+
+	snap, err := entries.InspectMCPServerHeaders(ctx, projectID, server.ID)
+	require.NoError(t, err)
+	require.False(t, snap.EnvironmentID.Valid)
+	require.Equal(t, remoteA, snap.RemoteMcpServerID.UUID)
+	require.Equal(t, "https://a.example.invalid/mcp", snap.RemoteURL)
+	require.Empty(t, snap.Headers)
+
+	// Repointed and linked in one update.
+	updateServerLink(t, ctx, ti, server, remoteB, envID)
+	snap, err = entries.InspectMCPServerHeaders(ctx, projectID, server.ID)
+	require.NoError(t, err)
+	require.Equal(t, envID, snap.EnvironmentID)
+	require.True(t, snap.EnvironmentLive)
+	require.Equal(t, remoteB, snap.RemoteMcpServerID.UUID)
+	require.Equal(t, "https://b.example.invalid/mcp", snap.RemoteURL)
+	require.Len(t, snap.Headers, 1)
+	require.Equal(t, "MCP_HEADER_X-Instance-Url", snap.Headers[0].EntryName)
+
+	// Unlinked, then the source URL moved.
+	updateServerLink(t, ctx, ti, server, remoteB, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	_, err = remotemcprepo.New(ti.conn).UpdateServer(ctx, remotemcprepo.UpdateServerParams{
+		Name: pgtype.Text{}, Slug: pgtype.Text{}, TransportType: "streamable-http", Url: "https://moved.example.invalid/mcp", ID: remoteB, ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	snap, err = entries.InspectMCPServerHeaders(ctx, projectID, server.ID)
+	require.NoError(t, err)
+	require.False(t, snap.EnvironmentID.Valid)
+	require.Equal(t, "https://moved.example.invalid/mcp", snap.RemoteURL)
+	require.Empty(t, snap.Headers)
+
+	// A deleted linked environment keeps the link but is not live.
+	updateServerLink(t, ctx, ti, server, remoteB, envID)
+	require.NoError(t, ti.service.DeleteEnvironment(ctx, &gen.DeleteEnvironmentPayload{Slug: env.Slug, SessionToken: nil, ProjectSlugInput: nil}))
+	snap, err = entries.InspectMCPServerHeaders(ctx, projectID, server.ID)
+	require.NoError(t, err)
+	require.Equal(t, envID, snap.EnvironmentID)
+	require.False(t, snap.EnvironmentLive)
+	require.Empty(t, snap.Headers)
+
+	// Another project sees no server.
+	_, err = entries.InspectMCPServerHeaders(ctx, uuid.New(), server.ID)
+	require.ErrorIs(t, err, environments.ErrMCPServerUnavailable)
 }
