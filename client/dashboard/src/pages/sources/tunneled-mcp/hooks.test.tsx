@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useCreateMcpServerOnExistingTunnel,
+  useCreateTunneledMcpSource,
   useDeleteUnusedTunnel,
 } from "./hooks";
 
@@ -12,12 +13,16 @@ const sdk = vi.hoisted(() => ({
   deleteServer: vi.fn(),
   deleteTunnel: vi.fn(),
   createEndpoint: vi.fn(),
+  createTunnel: vi.fn(),
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     mcpServers: { create: sdk.createServer, delete: sdk.deleteServer },
-    tunneledMcp: { deleteServer: sdk.deleteTunnel },
+    tunneledMcp: {
+      deleteServer: sdk.deleteTunnel,
+      createServer: sdk.createTunnel,
+    },
     mcpEndpoints: { create: sdk.createEndpoint },
   }),
   useSlugs: () => ({ orgSlug: "acme" }),
@@ -119,5 +124,47 @@ describe("useDeleteUnusedTunnel", () => {
 
     expect(sdk.deleteTunnel).toHaveBeenCalledWith({ id: "tunnel-1" });
     expect(sdk.deleteServer).not.toHaveBeenCalled();
+  });
+});
+
+describe("useCreateTunneledMcpSource", () => {
+  const created = {
+    server: { id: "tunnel-new", name: "JAMF" },
+    tunnelKey: "synthetic-key",
+  };
+
+  it("rolls back the new tunnel when the server create is refused", async () => {
+    sdk.createTunnel.mockResolvedValue(created);
+    sdk.createServer.mockRejectedValue(new Error("refused"));
+    sdk.deleteTunnel.mockResolvedValue(undefined);
+    const { result } = renderHook(useCreateTunneledMcpSource, { wrapper });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ name: "JAMF" }),
+      ).rejects.toThrow("refused");
+    });
+    expect(sdk.deleteTunnel).toHaveBeenCalledWith({ id: "tunnel-new" });
+  });
+
+  it("keeps the tunnel and says the server may exist when the rollback finds it in use", async () => {
+    sdk.createTunnel.mockResolvedValue(created);
+    sdk.createServer.mockRejectedValue(new Error("Failed to fetch"));
+    sdk.deleteTunnel.mockRejectedValue(
+      Object.assign(new Error("in use"), { statusCode: 409 }),
+    );
+    const { result } = renderHook(useCreateTunneledMcpSource, { wrapper });
+
+    let message = "";
+    await act(async () => {
+      message = await result.current
+        .mutateAsync({ name: "JAMF" })
+        .then(() => "")
+        .catch((error: Error) => error.message);
+    });
+    expect(message).toContain("may have been created");
+    expect(message).toContain("rotate it");
+    expect(message).not.toContain("Delete");
+    expect(message).not.toContain("synthetic-key");
   });
 });
