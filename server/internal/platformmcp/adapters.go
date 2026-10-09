@@ -380,6 +380,7 @@ type PostgresReader struct {
 	reviewRequestBudget       OperationBudget
 	toolExposure              *MCPToolExposureService
 	tunnelStatus              *TunnelStatusService
+	tunneledSetup             *TunneledMCPSetupHandoffService
 	projectLifecycle          *ProjectLifecycleService
 	analytics                 *AnalyticsService
 }
@@ -414,6 +415,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
 		toolExposure:              nil,
 		tunnelStatus:              nil,
+		tunneledSetup:             nil,
 		projectLifecycle:          nil,
 		analytics:                 nil,
 	}

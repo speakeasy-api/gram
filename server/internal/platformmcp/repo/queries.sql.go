@@ -3832,6 +3832,54 @@ func (q *Queries) GetPlatformMCPSubjectConnectionAuthState(ctx context.Context, 
 	return i, err
 }
 
+const getPlatformMCPTunneledSetupTarget = `-- name: GetPlatformMCPTunneledSetupTarget :one
+SELECT
+    server.id,
+    server.slug,
+    (server.tunneled_mcp_server_id IS NOT NULL)::boolean AS tunneled,
+    (source.id IS NOT NULL)::boolean AS source_live
+FROM mcp_servers server
+JOIN projects project
+  ON project.id = server.project_id
+ AND project.organization_id = $1
+ AND project.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers source
+  ON source.id = server.tunneled_mcp_server_id
+ AND source.project_id = server.project_id
+ AND source.deleted IS FALSE
+WHERE server.id = $2
+  AND server.project_id = $3
+  AND server.deleted IS FALSE
+`
+
+type GetPlatformMCPTunneledSetupTargetParams struct {
+	OrganizationID string
+	McpServerID    uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+type GetPlatformMCPTunneledSetupTargetRow struct {
+	ID         uuid.UUID
+	Slug       pgtype.Text
+	Tunneled   bool
+	SourceLive bool
+}
+
+// One exact organization/project-scoped MCP server for the tunneled setup
+// handoff: its dashboard route and whether it is backed by a live tunneled
+// source in the same project. Returns no key, header, or agent detail.
+func (q *Queries) GetPlatformMCPTunneledSetupTarget(ctx context.Context, arg GetPlatformMCPTunneledSetupTargetParams) (GetPlatformMCPTunneledSetupTargetRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPTunneledSetupTarget, arg.OrganizationID, arg.McpServerID, arg.ProjectID)
+	var i GetPlatformMCPTunneledSetupTargetRow
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Tunneled,
+		&i.SourceLive,
+	)
+	return i, err
+}
+
 const getPlatformMCPTunneledSourceForMCP = `-- name: GetPlatformMCPTunneledSourceForMCP :one
 SELECT
     source.id,

@@ -395,6 +395,11 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	} else {
 		registerSetupHandoffTool(reg, registrations)
 	}
+	var tunneledSetup *TunneledMCPSetupHandoffService
+	if postgresReader, ok := reader.(*PostgresReader); ok {
+		tunneledSetup = postgresReader.tunneledSetup
+	}
+	registerTunneledMCPSetupHandoffTool(reg, tunneledSetup)
 	if registrations == nil || !registrations.clientAdmission.valid() || !registrations.budgets.LifecycleMetadata.valid() {
 		registerUnavailableClientAdmissionTools(reg)
 	} else {

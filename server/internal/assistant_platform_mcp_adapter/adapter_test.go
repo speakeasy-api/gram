@@ -319,3 +319,34 @@ func TestPluginReadSchemasHideAndInjectTheAssistantProject(t *testing.T) {
 		require.Equal(t, projectPolicy().ProjectID, decoded["project_id"], "%q acts in the assistant's project, not the model's", read.name)
 	}
 }
+
+// The tunneled setup handoff builds a dashboard link for a project. Composed
+// for the assistant, that project is the assistant's own: the model cannot see
+// or name another one, while the optional exact MCP server stays its choice.
+func TestTunneledSetupHandoffSchemaPinsTheAssistantProject(t *testing.T) {
+	t.Parallel()
+
+	inferred, err := jsonschema.ForType(reflect.TypeFor[platformmcp.GetTunneledMCPSetupHandoffInput](), nil)
+	require.NoError(t, err)
+	inputSchema, err := json.Marshal(inferred)
+	require.NoError(t, err)
+
+	tool := Tool{descriptor: platformmcp.Descriptor{
+		Name:        "get_tunneled_mcp_setup_handoff",
+		InputSchema: inputSchema,
+		Meta:        platformmcp.ToolMeta{ProjectScope: platformmcp.ProjectScopeExplicit},
+	}}
+
+	var advertised struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+		Required   []string                   `json:"required"`
+	}
+	require.NoError(t, json.Unmarshal(tool.assistantInputSchema(), &advertised))
+	require.NotContains(t, advertised.Properties, "project_id")
+	require.NotContains(t, advertised.Required, "project_id")
+	require.Contains(t, advertised.Properties, "mcp_id")
+
+	arguments, err := tool.applyTargetPolicy(projectPolicy(), []byte(`{"project_id":"someone-elses-project","mcp_id":"22222222-2222-4222-8222-222222222222"}`))
+	require.NoError(t, err)
+	require.JSONEq(t, `{"project_id":"11111111-1111-4111-8111-111111111111","mcp_id":"22222222-2222-4222-8222-222222222222"}`, string(arguments))
+}
