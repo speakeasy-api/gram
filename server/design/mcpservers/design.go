@@ -466,7 +466,7 @@ var McpServer = Type("McpServer", func() {
 	})
 	Attribute("name", String, "A human-readable display name for the server")
 	Attribute("slug", String, "A URL-safe, project-unique slug derived server-side from the name and ID")
-	Attribute("platform_endpoint_slug", String, "An addressable platform endpoint slug for this server, populated by get. Absent when no platform endpoint exists; never a custom-domain slug.")
+	Attribute("platform_endpoint_slug", String, "An addressable platform endpoint slug for this server, populated only when getting by toolset ID. Absent when no platform endpoint exists; never a custom-domain slug.")
 	Attribute("environment_id", String, "The ID of the environment associated with the server", func() {
 		Format(FormatUUID)
 	})

@@ -19,6 +19,7 @@ import {
 import { useEnvironmentVariables } from "../mcp/useEnvironmentVariables";
 import { usePlaygroundIssuerConnection } from "./usePlaygroundIssuerConnection";
 import { useToolsetMcpTarget } from "@/hooks/useToolsetUrl";
+import { ToolsetMcpTargetStatus } from "@/components/ToolsetMcpTargetStatus";
 
 interface PlaygroundAuthProps {
   toolset: Toolset;
@@ -41,8 +42,16 @@ function IssuerLoginConnection({
   toolset: Toolset;
   providerName: string;
 }) {
-  const { connected, needsAuth, isLoading, refetch, connect, canConnect } =
-    usePlaygroundIssuerConnection(toolset);
+  const {
+    connected,
+    needsAuth,
+    isLoading,
+    isError,
+    errorMessage,
+    refetch,
+    connect,
+    canConnect,
+  } = usePlaygroundIssuerConnection(toolset);
 
   // Re-probe when the user returns from the connect tab so a newly linked
   // session surfaces without a manual refresh.
@@ -66,6 +75,8 @@ function IssuerLoginConnection({
           </Text>
           {isLoading ? (
             <Loader2 className="text-muted-foreground size-4 animate-spin" />
+          ) : isError ? (
+            <Badge variant="warning">Connection unavailable</Badge>
           ) : connected ? (
             <Badge variant="success">
               <CheckCircle className="mr-1 size-3" />
@@ -80,7 +91,13 @@ function IssuerLoginConnection({
           {providerName}
         </Text>
 
-        {!connected && !isLoading && (
+        {isError && (
+          <Text variant="small" role="alert">
+            {errorMessage ?? "Unable to check the login connection."}
+          </Text>
+        )}
+
+        {!connected && !isLoading && !isError && (
           <Button
             size="sm"
             variant="primary"
@@ -195,6 +212,10 @@ export function PlaygroundAuth({
       // Error toast is already shown by usePlaygroundEnvironment.
     }
   };
+
+  if (target.status !== "ready") {
+    return <ToolsetMcpTargetStatus status={target.status} />;
+  }
 
   // Show "no auth required" only if there are no env vars AND no interactive login
   if (envVars.length === 0 && !loginSecured) {

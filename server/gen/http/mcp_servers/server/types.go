@@ -123,8 +123,9 @@ type CreateMcpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// An addressable platform endpoint slug for this server, populated by get.
-	// Absent when no platform endpoint exists; never a custom-domain slug.
+	// An addressable platform endpoint slug for this server, populated only when
+	// getting by toolset ID. Absent when no platform endpoint exists; never a
+	// custom-domain slug.
 	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
@@ -164,8 +165,9 @@ type GetMcpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// An addressable platform endpoint slug for this server, populated by get.
-	// Absent when no platform endpoint exists; never a custom-domain slug.
+	// An addressable platform endpoint slug for this server, populated only when
+	// getting by toolset ID. Absent when no platform endpoint exists; never a
+	// custom-domain slug.
 	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
@@ -217,8 +219,9 @@ type UpdateMcpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// An addressable platform endpoint slug for this server, populated by get.
-	// Absent when no platform endpoint exists; never a custom-domain slug.
+	// An addressable platform endpoint slug for this server, populated only when
+	// getting by toolset ID. Absent when no platform endpoint exists; never a
+	// custom-domain slug.
 	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
@@ -2798,8 +2801,9 @@ type McpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// An addressable platform endpoint slug for this server, populated by get.
-	// Absent when no platform endpoint exists; never a custom-domain slug.
+	// An addressable platform endpoint slug for this server, populated only when
+	// getting by toolset ID. Absent when no platform endpoint exists; never a
+	// custom-domain slug.
 	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`

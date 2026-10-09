@@ -21,6 +21,8 @@ export interface UseUserSessionTokenResult {
   /** The minted user-session JWT, or undefined while loading / not gated. */
   accessToken: string | undefined;
   isLoading: boolean;
+  /** Mint failures stay inline so consumers can block dependent connections. */
+  isError: boolean;
 }
 
 function mintRequestBody(
@@ -110,6 +112,7 @@ export function useUserSessionToken({
     refetchInterval: 1000 * 60 * 45,
     refetchOnWindowFocus: false,
     retry: false,
+    throwOnError: false,
   });
 
   return {
@@ -118,5 +121,6 @@ export function useUserSessionToken({
     // connection.
     accessToken: enabled ? query.data?.accessToken : undefined,
     isLoading: enabled && query.isLoading,
+    isError: enabled && query.isError,
   };
 }

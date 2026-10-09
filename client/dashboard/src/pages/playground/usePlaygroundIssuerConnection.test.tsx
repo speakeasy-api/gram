@@ -49,7 +49,7 @@ const selected = {
 const clients: QueryClient[] = [];
 function mount() {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: { queries: { retry: false, throwOnError: true } },
   });
   clients.push(client);
   const wrapper = ({ children }: PropsWithChildren) => (
@@ -68,6 +68,7 @@ beforeEach(() => {
     tools: [],
     isLoading: false,
     needsAuth: false,
+    isError: false,
     refetch: vi.fn(),
   });
   vi.spyOn(window, "open").mockReturnValue(null);
@@ -79,6 +80,81 @@ afterEach(() => {
 });
 
 describe("usePlaygroundIssuerConnection selected target alignment", () => {
+  it("blocks non-401 probe failures even with cached tools", async () => {
+    mocks.probe.mockReturnValue({
+      tools: [],
+      isLoading: false,
+      isError: true,
+      needsAuth: false,
+      error: new Error("HTTP 503 Service Unavailable"),
+      refetch: vi.fn(),
+    });
+    const { result } = mount();
+    await waitFor(() => expect(result.current.accessToken).toBe("token-S"));
+    expect(result.current.isError).toBe(true);
+    expect(result.current.errorMessage).toContain("Unable to connect");
+    expect(result.current.connected).toBe(false);
+    expect(result.current.needsAuth).toBe(false);
+  });
+
+  it("keeps a 401 as a needs-auth state, not a connection error", async () => {
+    mocks.probe.mockReturnValue({
+      tools: undefined,
+      isLoading: false,
+      isError: true,
+      needsAuth: true,
+      error: new Error("HTTP 401 Unauthorized"),
+      refetch: vi.fn(),
+    });
+    const { result } = mount();
+    await waitFor(() => expect(result.current.accessToken).toBe("token-S"));
+    expect(result.current.needsAuth).toBe(true);
+    expect(result.current.isError).toBe(false);
+    expect(result.current.errorMessage).toBeUndefined();
+    expect(result.current.connected).toBe(false);
+  });
+
+  it("surfaces mint failure inline without probing", async () => {
+    mocks.mint.mockRejectedValue(new Error("mint failed"));
+    const { result } = mount();
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.errorMessage).toContain("Unable to create a session");
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.connected).toBe(false);
+    expect(result.current.accessToken).toBeUndefined();
+    expect(mocks.probe).toHaveBeenLastCalledWith(
+      "https://platform.example/mcp/selected",
+      expect.objectContaining({ enabled: false }),
+    );
+  });
+
+  it.each([
+    ["loading", undefined],
+    ["error", "Unable to load"],
+    ["disabled", "disabled"],
+    ["noAddress", "no platform address"],
+  ])("distinguishes the %s target state", (state, message) => {
+    mocks.server.mockReturnValue(
+      state === "loading"
+        ? { isLoading: true }
+        : state === "error"
+          ? { isError: true, error: new Error("lookup failed") }
+          : {
+              data: {
+                ...selected,
+                ...(state === "disabled"
+                  ? { visibility: "disabled" }
+                  : { platformEndpointSlug: undefined }),
+              },
+            },
+    );
+    const { result } = mount();
+    expect(result.current.isLoading).toBe(state === "loading");
+    expect(result.current.isError).toBe(state !== "loading");
+    if (message) expect(result.current.errorMessage).toContain(message);
+    else expect(result.current.errorMessage).toBeUndefined();
+  });
+
   it("mints explicitly for S and aligns probe, Connect, and the chat URL with S", async () => {
     const { result, client } = mount();
     await waitFor(() => expect(result.current.accessToken).toBe("token-S"));

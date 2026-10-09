@@ -17,6 +17,9 @@ export interface PlaygroundIssuerConnection {
   needsAuth: boolean;
   /** True while minting the token or probing the endpoint. */
   isLoading: boolean;
+  /** A lookup, address, mint, or non-auth probe failure blocks the chat. */
+  isError: boolean;
+  errorMessage: string | undefined;
   /** Re-run the probe (e.g. after returning from the connect tab). */
   refetch: () => void;
   /** Opens the first-party connect page in a new tab, if a URL is available. */
@@ -43,7 +46,11 @@ export function usePlaygroundIssuerConnection(
   const target = useToolsetMcpTarget(toolset);
   const isIssuerGated = !!target.userSessionIssuerId;
 
-  const { accessToken, isLoading: isTokenLoading } = useUserSessionToken({
+  const {
+    accessToken,
+    isLoading: isTokenLoading,
+    isError: isTokenError,
+  } = useUserSessionToken({
     target: target.legacy
       ? { kind: "toolset", id: target.url ? toolset?.id : undefined }
       : { kind: "mcpServer", id: target.url ? target.serverId : undefined },
@@ -63,16 +70,20 @@ export function usePlaygroundIssuerConnection(
 
   // Issuer-gated toolsets must wait for the JWT before probing, otherwise the
   // unauthenticated request 401s and caches a spurious `needsAuth`.
-  const probeEnabled = isIssuerGated && !!accessToken;
+  const probeEnabled =
+    target.status === "ready" && !!mcpUrl && isIssuerGated && !!accessToken;
 
-  const { tools, isLoading, needsAuth, refetch } = useProxiedMcpTools(
-    connectUrl,
-    {
-      headers,
-      enabled: probeEnabled,
-      throwOnError: false,
-    },
-  );
+  const {
+    tools,
+    isLoading,
+    isError: isProbeError,
+    needsAuth,
+    refetch,
+  } = useProxiedMcpTools(connectUrl, {
+    headers,
+    enabled: probeEnabled,
+    throwOnError: false,
+  });
 
   // The connect page is opened as a top-level tab on the toolset `/mcp` surface
   // so it rides the gram_session cookie on the backend origin (not the proxy).
@@ -85,12 +96,27 @@ export function usePlaygroundIssuerConnection(
     if (authUrl) window.open(authUrl, "_blank", "noopener,noreferrer");
   }, [authUrl]);
 
+  const errorMessage =
+    target.status === "error"
+      ? "Unable to load the selected MCP server. Try again."
+      : target.status === "unavailable"
+        ? "The selected MCP server is disabled."
+        : target.status === "ready" && !mcpUrl
+          ? "The selected MCP server has no platform address available for the playground."
+          : isIssuerGated && isTokenError
+            ? "Unable to create a session for the selected MCP server. Try again."
+            : probeEnabled && isProbeError && !needsAuth
+              ? "Unable to connect to the selected MCP server. Try again."
+              : undefined;
+
   return {
     mcpUrl,
     isIssuerGated,
     accessToken,
-    connected: probeEnabled && !!tools && !needsAuth,
-    needsAuth,
+    connected: probeEnabled && !!tools && !isProbeError && !needsAuth,
+    needsAuth: probeEnabled && needsAuth,
+    isError: !!errorMessage,
+    errorMessage,
     isLoading:
       target.isLoading || (isIssuerGated && (isTokenLoading || isLoading)),
     refetch,

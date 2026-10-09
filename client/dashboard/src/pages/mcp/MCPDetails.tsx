@@ -1,8 +1,6 @@
-import { useToolsetMcpTarget } from "@/hooks/useToolsetUrl";
+import { ToolsetSessionsTab } from "./ToolsetSessionsTab";
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
-import { ToolsetAttachedUserSessions } from "@/components/sessions/AttachedUserSessions";
-import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
 import { MCPToolFilteringSection } from "@/components/mcp-tool-filtering-section";
 import {
   useMcpMetadataMetadataForm,
@@ -1878,15 +1876,3 @@ export function OAuthDetailsModal({
 }
 
 export { ConnectOAuthModal } from "./oauth-wizard";
-
-function ToolsetSessionsTab({ toolset }: { toolset: Toolset }) {
-  const target = useToolsetMcpTarget(toolset);
-  return (
-    <ClientsAndSessionsTab
-      issuerId={target.userSessionIssuerId}
-      originatingMcpServerId={target.serverId}
-      authTabPath="authentication"
-      attachedSessions={<ToolsetAttachedUserSessions toolset={toolset} />}
-    />
-  );
-}

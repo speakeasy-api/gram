@@ -62,7 +62,7 @@ export type McpServer = {
    */
   networkAccessMode: McpServerNetworkAccessMode;
   /**
-   * An addressable platform endpoint slug for this server, populated by get. Absent when no platform endpoint exists; never a custom-domain slug.
+   * An addressable platform endpoint slug for this server, populated only when getting by toolset ID. Absent when no platform endpoint exists; never a custom-domain slug.
    */
   platformEndpointSlug?: string | undefined;
   /**

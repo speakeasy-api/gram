@@ -32,7 +32,11 @@ export function PlaygroundElements({
   playgroundEnvironmentSlug,
 }: PlaygroundElementsProps): JSX.Element {
   // Get toolset data to construct MCP URL
-  const { data: toolset } = useToolset(toolsetSlug ?? undefined);
+  const {
+    data: toolset,
+    isLoading: isToolsetLoading,
+    isError: isToolsetError,
+  } = useToolset(toolsetSlug ?? undefined, { throwOnError: false });
 
   // Get environments and MCP metadata for auth status check
   const { data: environmentsData } = useListEnvironments();
@@ -80,17 +84,37 @@ export function PlaygroundElements({
   const gatewayToken = issuerConnection.accessToken;
   const mcpUrl = issuerConnection.mcpUrl;
 
-  // Don't render until we have a valid MCP URL
-  if (
-    !mcpUrl ||
-    !toolsetSlug ||
-    issuerConnection.isLoading ||
-    (issuerConnection.isIssuerGated && !gatewayToken)
-  ) {
+  if (!toolsetSlug) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <Text muted>Select an MCP server to start chatting</Text>
-      </div>
+      <ConnectionNotice>
+        Select an MCP server to start chatting
+      </ConnectionNotice>
+    );
+  }
+
+  if (isToolsetError || issuerConnection.isError) {
+    return (
+      <ConnectionNotice error>
+        {isToolsetError
+          ? "Unable to load the selected MCP server. Try again."
+          : issuerConnection.errorMessage}
+      </ConnectionNotice>
+    );
+  }
+
+  if (isToolsetLoading || issuerConnection.isLoading) {
+    return (
+      <ConnectionNotice>
+        Connecting to the selected MCP server…
+      </ConnectionNotice>
+    );
+  }
+
+  if (!mcpUrl || !toolset) {
+    return (
+      <ConnectionNotice error>
+        The selected MCP server is unavailable.
+      </ConnectionNotice>
     );
   }
 
@@ -100,6 +124,18 @@ export function PlaygroundElements({
   // PlaygroundAuth (the sidebar), which shares this hook's probe state.
   if (issuerConnection.isIssuerGated && issuerConnection.needsAuth) {
     return <LoginRequiredNotice providerName={toolset?.name ?? "provider"} />;
+  }
+
+  // A cached token alone is not proof that the upstream session is linked.
+  if (
+    issuerConnection.isIssuerGated &&
+    (!gatewayToken || !issuerConnection.connected)
+  ) {
+    return (
+      <ConnectionNotice>
+        Connecting to the selected MCP server…
+      </ConnectionNotice>
+    );
   }
 
   return (
@@ -120,6 +156,23 @@ export function PlaygroundElements({
         ) : undefined
       }
     />
+  );
+}
+
+function ConnectionNotice({
+  children,
+  error = false,
+}: {
+  children: React.ReactNode;
+  error?: boolean;
+}) {
+  return (
+    <div
+      className="flex h-full items-center justify-center"
+      role={error ? "alert" : "status"}
+    >
+      <Text muted>{children}</Text>
+    </div>
   );
 }
 

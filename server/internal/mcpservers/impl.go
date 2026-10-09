@@ -466,6 +466,11 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 		return nil, err
 	}
 
+	view := mv.BuildMcpServerView(server)
+	if !toolsetProvided {
+		return view, nil
+	}
+
 	// Resolve only this authorized server's platform address. Requiring the
 	// project-wide endpoint-list permission here would reject resource-scoped readers.
 	endpoints, err := mcpendpointsrepo.New(s.db).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{
@@ -475,7 +480,6 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve mcp server platform endpoint").LogError(ctx, s.logger)
 	}
-	view := mv.BuildMcpServerView(server)
 	for _, endpoint := range endpoints {
 		if !endpoint.CustomDomainID.Valid {
 			view.PlatformEndpointSlug = &endpoint.Slug

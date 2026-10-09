@@ -116,6 +116,15 @@ describe("useToolsetMcpTarget", () => {
     const { result } = renderHook(() => useToolsetMcpTarget(toolset));
     expect(result.current.url).toBeUndefined();
     expect(result.current.legacy).toBe(false);
+    const expectedStatus =
+      state === "disabled"
+        ? "unavailable"
+        : state === "loading"
+          ? "loading"
+          : state === "missingEndpoint" || state === "customOnly"
+            ? "ready"
+            : "error";
+    expect(result.current.status).toBe(expectedStatus);
     if (state === "loading") expect(result.current.isLoading).toBe(true);
   });
   it("allows legacy routing only for a typed no-wrapper 404", () => {
@@ -126,6 +135,7 @@ describe("useToolsetMcpTarget", () => {
       url: "https://platform.example/mcp/canonical",
       userSessionIssuerId: "issuer-C",
       legacy: true,
+      status: "ready",
     });
   });
   it.each([403, 404])(
@@ -149,6 +159,19 @@ describe("useToolsetMcpTarget", () => {
       );
     },
   );
+  it("has no resolved identity before selecting a toolset", () => {
+    const { result } = renderHook(() => useToolsetMcpTarget(undefined));
+    expect(result.current.status).toBe("idle");
+    expect(result.current.userSessionIssuerId).toBeUndefined();
+  });
+  it("confirms an ungated selected identity without inheriting the toolset issuer", () => {
+    mocks.server.mockReturnValue({
+      data: { ...selected, userSessionIssuerId: undefined },
+    });
+    const { result } = renderHook(() => useToolsetMcpTarget(toolset));
+    expect(result.current.status).toBe("ready");
+    expect(result.current.userSessionIssuerId).toBeUndefined();
+  });
   it("updates the complete selected tuple together", () => {
     const { result, rerender } = renderHook(() => useToolsetMcpTarget(toolset));
     mocks.server.mockReturnValue({

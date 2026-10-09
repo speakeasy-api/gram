@@ -42,7 +42,7 @@ func TestGetMcpServer_ByToolsetID(t *testing.T) {
 	require.NoError(t, err)
 	// An addressless selected server is distinct from a missing wrapper.
 	alternateID := alternate.ID.String()
-	addressless, err := ti.service.GetMcpServer(ctx, &gen.GetMcpServerPayload{ID: &alternateID})
+	addressless, err := ti.service.GetMcpServer(ctx, &gen.GetMcpServerPayload{ToolsetID: conv.PtrEmpty(toolset.ID.String())})
 	require.NoError(t, err)
 	require.Nil(t, addressless.PlatformEndpointSlug)
 
@@ -67,7 +67,11 @@ func TestGetMcpServer_ByToolsetID(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, canonicalID, got.ID)
 	require.Equal(t, types.McpServerVisibility("disabled"), got.Visibility)
-	require.Equal(t, conv.PtrEmpty(canonical.Slug.String+"-endpoint"), got.PlatformEndpointSlug)
+	require.Nil(t, got.PlatformEndpointSlug, "exact-ID reads do not resolve connection addresses")
+	got, err = ti.service.GetMcpServer(ctx, &gen.GetMcpServerPayload{Slug: &alternate.Slug.String})
+	require.NoError(t, err)
+	require.Equal(t, alternateID, got.ID)
+	require.Nil(t, got.PlatformEndpointSlug, "exact-slug reads do not resolve connection addresses")
 
 	// Management reads retain the existing backing-toolset grant resource.
 	granted := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPRead, toolsetID))
@@ -109,6 +113,26 @@ func TestGetMcpServer_ToolsetSelectorValidation(t *testing.T) {
 			requireOopsCode(t, err, tt.code)
 		})
 	}
+}
+
+func TestGetMcpServer_ExactSelectorsDoNotRequireEndpointLookup(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	server, toolsetID := createToolsetBackedServerFixture(t, ctx, ti, "endpoint lookup independence")
+	require.NotNil(t, server.Slug)
+
+	// This service has an isolated cloned test database. Make endpoint reads fail
+	// without affecting the server row or its authorization data.
+	_, err := ti.conn.Exec(ctx, "ALTER TABLE mcp_endpoints RENAME TO unavailable_mcp_endpoints") //nolint:glint // notestingrawsql: isolated test-database fault injection; never expose destructive DDL through production SQLc methods.
+	require.NoError(t, err)
+	for _, payload := range []*gen.GetMcpServerPayload{{ID: &server.ID}, {Slug: server.Slug}} {
+		got, err := ti.service.GetMcpServer(ctx, payload)
+		require.NoError(t, err)
+		require.Equal(t, server.ID, got.ID)
+		require.Nil(t, got.PlatformEndpointSlug)
+	}
+	_, err = ti.service.GetMcpServer(ctx, &gen.GetMcpServerPayload{ToolsetID: conv.PtrEmpty(toolsetID.String())})
+	requireOopsCode(t, err, oops.CodeUnexpected)
 }
 
 func TestGetMcpServer(t *testing.T) {

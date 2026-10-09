@@ -102354,7 +102354,7 @@ components:
                         - private_only
                 platform_endpoint_slug:
                     type: string
-                    description: An addressable platform endpoint slug for this server, populated by get. Absent when no platform endpoint exists; never a custom-domain slug.
+                    description: An addressable platform endpoint slug for this server, populated only when getting by toolset ID. Absent when no platform endpoint exists; never a custom-domain slug.
                 project_id:
                     type: string
                     description: The project ID this MCP server belongs to

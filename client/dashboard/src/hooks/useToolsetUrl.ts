@@ -215,6 +215,7 @@ export function useToolsetMcpTarget(
   serverId: string | undefined;
   userSessionIssuerId: string | undefined;
   legacy: boolean;
+  status: "idle" | "loading" | "error" | "unavailable" | "ready";
   isLoading: boolean;
 } {
   const project = useProject();
@@ -231,6 +232,17 @@ export function useToolsetMcpTarget(
     !!toolset &&
     server.error instanceof ServiceError &&
     server.error.statusCode === 404;
+  const status = !toolset
+    ? "idle"
+    : server.isLoading
+      ? "loading"
+      : server.isError && !legacy
+        ? "error"
+        : selected?.visibility === "disabled"
+          ? "unavailable"
+          : enabledServer || legacy
+            ? "ready"
+            : "loading";
   const platformSlug = enabledServer?.platformEndpointSlug;
   // Playground/connect require the platform origin (session cookie and CSP).
   // Custom-only servers remain unavailable here; never reuse their slug there.
@@ -247,15 +259,9 @@ export function useToolsetMcpTarget(
       enabledServer?.userSessionIssuerId ??
       (legacy ? toolset.userSessionIssuerId : undefined),
     legacy,
-    isLoading: !!toolset && server.isLoading,
+    status,
+    isLoading: status === "loading",
   };
-}
-
-/** The selected server's platform URL, never a custom-domain slug on that origin. */
-export function useInternalMcpUrl(
-  toolset: ToolsetConnectionSource | undefined,
-): string | undefined {
-  return useToolsetMcpTarget(toolset).url;
 }
 
 /**
