@@ -50,10 +50,9 @@ type GetMCPOutcomeBreakdownParams struct {
 	// MCPServerURLSuffixes matches the same servers in hook-observed traffic,
 	// where the server is identified by the URL the client called (/mcp/<slug>).
 	MCPServerURLSuffixes []string
-	// MCPServerIDs matches calls the gateway proxied to a configured MCP server
-	// and stamped with gram.mcp_server.id. Remote, tunneled, and gateway-member
-	// servers carry no toolset slug, so this is the only direct-lane identity
-	// they have.
+	// MCPServerIDs matches calls stamped with gram.mcp_server.id. When set,
+	// ToolsetSlugs only matches rows without a server id, so a hosted gateway
+	// member's calls, which carry both, stay with the member.
 	MCPServerIDs []string
 	// ToolSources matches hook-observed calls by the server name the calling
 	// agent reported (gram.tool_call.source), by exact value; the caller
@@ -378,7 +377,7 @@ func (q *Queries) mcpOutcomeDirectSource(arg GetMCPOutcomeBreakdownParams) (stri
 		// carries whichever applies, so matching either never counts one twice.
 		predicate := squirrel.Or{}
 		if len(arg.ToolsetSlugs) > 0 {
-			predicate = append(predicate, squirrel.Eq{"toolset_slug": arg.ToolsetSlugs})
+			predicate = append(predicate, toolsetSlugArm(arg.ToolsetSlugs, len(arg.MCPServerIDs) > 0))
 		}
 		if len(arg.MCPServerIDs) > 0 {
 			predicate = append(predicate, squirrel.Eq{"mcp_server_id": arg.MCPServerIDs})
@@ -506,6 +505,16 @@ SELECT
 	g_user_id AS user_id,
 	%s AS outcome
 FROM (%s)`, chFirstNonEmpty("g_hook_source", "'"+MCPClientUnattributed+"'"), outcome, groupedSQL), groupedArgs, nil
+}
+
+// toolsetSlugArm matches hosted rows by toolset slug. Paired with a server id
+// arm, it leaves out rows stamped with another server's id, such as a gateway
+// member fronting the same toolset.
+func toolsetSlugArm(slugs []string, withServerArm bool) squirrel.Sqlizer {
+	if !withServerArm {
+		return squirrel.Eq{"toolset_slug": slugs}
+	}
+	return squirrel.And{squirrel.Eq{"toolset_slug": slugs}, squirrel.Eq{"mcp_server_id": ""}}
 }
 
 // hookServerURLExpr is the URL a hook-observed client called, as the hook

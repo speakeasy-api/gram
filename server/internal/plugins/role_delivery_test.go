@@ -228,3 +228,47 @@ func TestAddPluginServerRejectsLegacyDuplicateOfRoleDeliveredServer(t *testing.T
 	require.NoError(t, err)
 	require.Empty(t, got.Servers)
 }
+
+func TestRoleAudienceDeliversCanonicalRowOnceBesideGatewayMember(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestPluginsService(t)
+	ac, _ := contextvalues.GetAuthContext(ctx)
+	role := createTestRolePrincipal(t, ctx, ti, "canonical-delivery")
+	toolset := createTestToolset(t, ctx, ti.conn, "Hosted")
+	fixtures := testrepo.New(ti.conn)
+	canonical, err := fixtures.CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{ID: toolset.ID, ProjectID: *ac.ProjectID, ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: "private"})
+	require.NoError(t, err)
+	member, err := fixtures.CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{ID: uuid.New(), ProjectID: *ac.ProjectID, ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: "private"})
+	require.NoError(t, err)
+	for _, id := range []uuid.UUID{canonical, member} {
+		_, err = endpointrepo.New(ti.conn).CreateMCPEndpoint(ctx, endpointrepo.CreateMCPEndpointParams{ProjectID: *ac.ProjectID, McpServerID: uuid.NullUUID{UUID: id, Valid: true}, Slug: "endpoint-" + id.String()[:8]})
+		require.NoError(t, err)
+	}
+	principal, err := urn.ParsePrincipal(role)
+	require.NoError(t, err)
+	selectors, err := authz.NewSelector(authz.ScopeMCPConnect, toolset.ID.String()).MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: principal, Scope: string(authz.ScopeMCPConnect), Selectors: selectors})
+	require.NoError(t, err)
+
+	fresh, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Canonical delivery"})
+	require.NoError(t, err)
+	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: fresh.ID, PrincipalUrns: []string{role}})
+	require.NoError(t, err)
+	got, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: fresh.ID})
+	require.NoError(t, err)
+	require.Len(t, got.Servers, 1)
+	require.Equal(t, canonical.String(), *got.Servers[0].McpServerID)
+
+	// An entry already delivered through the member stays and is not doubled.
+	existing, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Member delivery"})
+	require.NoError(t, err)
+	delivered, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: existing.ID, McpServerID: conv.PtrEmpty(member.String()), Policy: "required"})
+	require.NoError(t, err)
+	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: existing.ID, PrincipalUrns: []string{role}})
+	require.NoError(t, err)
+	got, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: existing.ID})
+	require.NoError(t, err)
+	require.Len(t, got.Servers, 1)
+	require.Equal(t, delivered.ID, got.Servers[0].ID)
+}

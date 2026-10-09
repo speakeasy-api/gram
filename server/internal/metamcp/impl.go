@@ -860,6 +860,10 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 	if server.UnproxiedMcpServerID.Valid {
 		return nil, oops.E(oops.CodeInvalid, nil, "unproxied mcp servers cannot be meta mcp members").LogError(ctx, logger)
 	}
+	// A toolset's own hosted server keeps its identity; members are separate servers.
+	if server.ToolsetID.Valid && server.ID == server.ToolsetID.UUID {
+		return nil, oops.E(oops.CodeInvalid, nil, "a hosted toolset's own mcp server cannot be a meta mcp member; add a separate server for the toolset").LogError(ctx, logger)
+	}
 
 	// The meta lock above serializes concurrent adds, so this sees every
 	// committed member.

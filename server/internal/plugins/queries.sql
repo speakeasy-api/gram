@@ -1240,10 +1240,13 @@ SELECT COALESCE((SELECT pid FROM pg_catalog.pg_stat_activity WHERE datname = cur
 -- name: ListRoleDeliveryServers :many
 -- Keep ineligible live backends as removal candidates. Only additions require eligibility.
 -- Load latest live contents with the inventory for typed platform classification.
+-- A toolset with a canonical row (id = toolset id) is delivered through that row only.
 SELECT m.id, m.project_id, COALESCE(NULLIF(m.name, ''), NULLIF(m.slug, ''), m.id::text)::text AS name,
   'mcp_server'::text AS backend_kind, COALESCE(m.toolset_id, m.id)::uuid AS resource_id, m.toolset_id AS legacy_toolset_id,
   (m.visibility <> 'disabled' AND (m.unproxied_mcp_server_id IS NOT NULL OR EXISTS (
     SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = m.id AND e.project_id = p.id AND e.deleted IS FALSE
+  )) AND NOT (m.toolset_id IS NOT NULL AND m.id <> m.toolset_id AND EXISTS (
+    SELECT 1 FROM mcp_servers canonical WHERE canonical.id = m.toolset_id AND canonical.project_id = p.id AND canonical.deleted IS FALSE
   )))::boolean AS eligible, latest.tool_urns
 FROM mcp_servers m JOIN projects p ON p.id = m.project_id
 LEFT JOIN toolsets backing ON backing.id = m.toolset_id AND backing.project_id = p.id AND backing.deleted IS FALSE
@@ -1270,7 +1273,8 @@ WHERE p.organization_id = @organization_id AND p.id = @project_id
 ORDER BY id;
 
 -- name: HasRoleDeliveryMembership :one
--- A legacy toolset membership and its typed MCP wrapper are the same delivery.
+-- A legacy toolset membership and its typed MCP wrapper are the same delivery,
+-- and a canonical row is already delivered by any server on its toolset.
 -- Setup/eligibility preserve deleted history; explicit new grants/audiences do not.
 SELECT EXISTS (
   SELECT 1 FROM plugin_servers ps JOIN plugins p ON p.id = ps.plugin_id
@@ -1286,6 +1290,11 @@ SELECT EXISTS (
       OR (ps.toolset_id IN (
         SELECT m.toolset_id FROM mcp_servers m
         WHERE m.id = sqlc.narg('mcp_server_id')::uuid
+          AND m.project_id = @project_id AND m.deleted IS FALSE
+      ))
+      OR (sqlc.narg('mcp_server_id')::uuid = sqlc.narg('legacy_toolset_id')::uuid AND ps.mcp_server_id IN (
+        SELECT m.id FROM mcp_servers m
+        WHERE m.toolset_id = sqlc.narg('legacy_toolset_id')::uuid
           AND m.project_id = @project_id AND m.deleted IS FALSE
       )))
     AND (ps.deleted IS FALSE OR @preserve_removal::boolean)

@@ -19,6 +19,7 @@ type proxiedToolEventParams struct {
 	projectID   string
 	timestamp   time.Time
 	mcpServerID string
+	toolsetSlug string
 	toolName    string
 	userID      string
 	statusCode  int
@@ -38,6 +39,12 @@ func insertProxiedToolEvent(t *testing.T, ctx context.Context, ti *testInstance,
 		"http.response.status_code":    p.statusCode,
 		"http.server.request.duration": 0.4,
 		"user.id":                      p.userID,
+	}
+	if p.mcpServerID == "" {
+		delete(attrs, "gram.mcp_server.id")
+	}
+	if p.toolsetSlug != "" {
+		attrs["gram.toolset.slug"] = p.toolsetSlug
 	}
 	attrsJSON, err := json.Marshal(attrs)
 	require.NoError(t, err)
@@ -109,6 +116,61 @@ func TestGetMCPOutcomeBreakdown_MatchesProxiedCallsByConfiguredServerID(t *testi
 		telemetryRepo.MCPOutcomeSuccess:     2,
 		telemetryRepo.MCPOutcomeServerError: 1,
 	}, outcomeCounts(all))
+}
+
+// TestServerReads_LeaveToolsetRowsOfOtherServers pins that a hosted server's
+// toolset slug does not pull in calls stamped with another server on the same
+// toolset, such as a gateway member.
+func TestServerReads_LeaveToolsetRowsOfOtherServers(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+	selected := uuid.New().String()
+	member := uuid.New().String()
+	slug := "hosted-" + uuid.NewString()[:8]
+
+	insertProxiedToolEvent(t, ctx, ti, proxiedToolEventParams{projectID: projectID, timestamp: now.Add(-5 * time.Minute), toolsetSlug: slug, toolName: "search", userID: "user-1", statusCode: 200})
+	insertProxiedToolEvent(t, ctx, ti, proxiedToolEventParams{projectID: projectID, timestamp: now.Add(-4 * time.Minute), mcpServerID: selected, toolsetSlug: slug, toolName: "search", userID: "user-2", statusCode: 502})
+	insertProxiedToolEvent(t, ctx, ti, proxiedToolEventParams{projectID: projectID, timestamp: now.Add(-3 * time.Minute), mcpServerID: member, toolsetSlug: slug, toolName: "search", userID: "user-3", statusCode: 200})
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	start, end := now.Add(-time.Hour).UnixNano(), now.UnixNano()
+	rows, err := ti.chClient.GetMCPOutcomeBreakdown(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
+		GramProjectIDs: []string{projectID},
+		ToolsetSlugs:   []string{slug},
+		MCPServerIDs:   []string{selected},
+		TimeStart:      start,
+		TimeEnd:        end,
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[string]uint64{
+		telemetryRepo.MCPOutcomeSuccess:     1,
+		telemetryRepo.MCPOutcomeServerError: 1,
+	}, outcomeCounts(rows))
+
+	counts, err := ti.chClient.GetActiveCounts(ctx, telemetryRepo.GetActiveCountsParams{
+		GramProjectID: projectID,
+		TimeStart:     start,
+		TimeEnd:       end,
+		ToolsetSlug:   slug,
+		MCPServerID:   selected,
+	})
+	require.NoError(t, err)
+	require.Equal(t, uint64(2), counts.ActiveUsersCount)
+
+	summary, err := ti.chClient.GetOverviewSummary(ctx, telemetryRepo.GetOverviewSummaryParams{
+		GramProjectID:       projectID,
+		TimeStart:           start,
+		TimeEnd:             end,
+		ToolsetSlug:         slug,
+		ToolsetSlugServerID: selected,
+	})
+	require.NoError(t, err)
+	require.Equal(t, uint64(2), summary.TotalToolCalls)
 }
 
 // TestGetMCPOutcomeBreakdown_MatchesHookCallsByReportedServerName pins that a
