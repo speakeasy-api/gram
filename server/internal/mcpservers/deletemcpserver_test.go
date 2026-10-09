@@ -213,29 +213,15 @@ func TestRiskPolicyLifecycleCleanup_ToleratesMalformedMCPScope(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	ownerBackendID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
-	owner, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		Name:              "policy owner",
-		RemoteMcpServerID: &ownerBackendID,
-		Visibility:        types.McpServerVisibility("disabled"),
-	})
-	require.NoError(t, err)
-	ownerID := uuid.MustParse(owner.ID)
+	owner, _ := createDisabledRemoteServer(t, ctx, ti, *authCtx.ProjectID, "policy owner")
+	live, _ := createDisabledRemoteServer(t, ctx, ti, *authCtx.ProjectID, "live policy target")
 
-	liveBackendID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
-	live, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		Name:              "live policy target",
-		RemoteMcpServerID: &liveBackendID,
-		Visibility:        types.McpServerVisibility("disabled"),
-	})
-	require.NoError(t, err)
-
-	lifecyclePolicy := seedMCPScopedRiskPolicy(t, ctx, ti, "lifecycle policy", []uuid.UUID{ownerID})
+	lifecyclePolicy := seedMCPScopedRiskPolicy(t, ctx, ti, "lifecycle policy", []uuid.UUID{uuid.MustParse(owner.ID)})
 	nullServersPolicy := seedRiskPolicyWithRawMCPScope(t, ctx, ti, "null servers", []byte(`{"servers": null}`))
 	nonBooleanAllServersPolicy := seedRiskPolicyWithRawMCPScope(t, ctx, ti, "non-boolean all servers",
 		[]byte(`{"all_servers": "not-a-boolean", "servers": [{"mcp_server_id": "`+live.ID+`"}]}`))
 
-	err = ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{ID: owner.ID})
+	err := ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{ID: owner.ID})
 	require.NoError(t, err)
 
 	deleted, err := policylifecycle.NewCleaner(testenv.NewTracerProvider(t), audit.NewLogger()).RepairOrphans(ctx, ti.conn)

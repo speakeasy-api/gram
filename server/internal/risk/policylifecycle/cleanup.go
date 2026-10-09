@@ -54,8 +54,8 @@ func NewCleaner(tracerProvider trace.TracerProvider, auditLogger *audit.Logger) 
 
 // SoftDeleteForMCPServer tombstones policies owned exclusively by one server.
 // The caller must invoke it after tombstoning the server in the same
-// transaction, and must take shadowadmission.LockProject before locking the
-// server row.
+// transaction, and must have taken the Shadow MCP admission lock before the
+// server row lock, as tombstone.Lock does.
 func (c *Cleaner) SoftDeleteForMCPServer(
 	ctx context.Context,
 	tx pgx.Tx,

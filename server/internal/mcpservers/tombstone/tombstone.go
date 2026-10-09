@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/policylifecycle"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -30,11 +31,13 @@ type Locked struct {
 	RootEndpoints []mcpendpointsrepo.McpEndpoint
 }
 
-// Lock takes the domain -> endpoint -> server locks; pgx.ErrNoRows means the server is gone.
-// Callers must take the project's Shadow MCP admission lock first, because
-// Tombstone's risk policy cleanup needs it and other writers take it before
-// the server row lock.
+// Lock takes the project admission -> domain -> endpoint -> server locks;
+// pgx.ErrNoRows means the server is gone. Tombstone's risk policy cleanup needs
+// the admission lock, and other writers take it before the server row lock.
 func Lock(ctx context.Context, tx pgx.Tx, organizationID string, projectID, serverID uuid.UUID) (Locked, error) {
+	if err := admission.LockProject(ctx, tx, projectID); err != nil {
+		return Locked{}, fmt.Errorf("lock project admission: %w", err)
+	}
 	endpoints := mcpendpointsrepo.New(tx)
 	domainIDs, err := endpoints.ListCustomDomainIDsByMCPServerID(ctx, mcpendpointsrepo.ListCustomDomainIDsByMCPServerIDParams{McpServerID: serverID, ProjectID: projectID})
 	if err != nil {
@@ -82,7 +85,7 @@ type Result struct {
 
 // Tombstone soft-deletes a locked server and its attachments; the caller audits the server delete.
 func Tombstone(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, locked Locked, input Input) (Result, error) {
-	if tx == nil || auditLogger == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || !ActorPresent(ctx, input.ActorUserID) {
+	if tx == nil || auditLogger == nil || input.TracerProvider == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || !ActorPresent(ctx, input.ActorUserID) {
 		return Result{}, errors.New("invalid MCP server tombstone input")
 	}
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID)

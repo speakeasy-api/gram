@@ -1037,11 +1037,6 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	// Tombstone's risk policy cleanup takes the admission lock, and every
-	// writer takes it before the server row lock.
-	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "lock project admission").LogError(ctx, logger)
-	}
 	lockedServer, err := tombstone.Lock(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

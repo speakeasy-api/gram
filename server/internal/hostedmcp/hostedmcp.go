@@ -386,7 +386,6 @@ func retireEndpoints(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, 
 }
 
 // Delete tombstones a deleted toolset's canonical wrapper; returned domains need a post-commit reconcile.
-// The caller must hold the project's Shadow MCP admission lock.
 func Delete(ctx context.Context, tx pgx.Tx, tracerProvider trace.TracerProvider, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset) ([]uuid.UUID, error) {
 	if auditLogger == nil || !tombstone.ActorPresent(ctx, actor.UserID) {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "missing hosted MCP actor")

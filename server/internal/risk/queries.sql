@@ -250,21 +250,19 @@ FROM risk_policies AS policy
 WHERE policy.deleted IS FALSE
   AND policy.mcp_scope->'all_servers' IS DISTINCT FROM 'true'::jsonb
   AND jsonb_array_length(CASE WHEN jsonb_typeof(policy.mcp_scope->'servers') = 'array' THEN policy.mcp_scope->'servers' ELSE '[]'::jsonb END) = 1
-  AND EXISTS (
-    SELECT 1
-    FROM jsonb_array_elements(CASE WHEN jsonb_typeof(policy.mcp_scope->'servers') = 'array' THEN policy.mcp_scope->'servers' ELSE '[]'::jsonb END) AS target
-    WHERE EXISTS (
+  AND (
+    EXISTS (
       SELECT 1
       FROM mcp_servers AS server
       WHERE server.project_id = policy.project_id
-        AND server.id::text = target->>'mcp_server_id'
+        AND server.id::text = policy.mcp_scope #>> '{servers,0,mcp_server_id}'
         AND server.deleted IS TRUE
     )
     OR EXISTS (
       SELECT 1
       FROM meta_mcp_servers AS gateway
       WHERE gateway.project_id = policy.project_id
-        AND gateway.id::text = target->>'mcp_server_id'
+        AND gateway.id::text = policy.mcp_scope #>> '{servers,0,mcp_server_id}'
         AND gateway.deleted IS TRUE
     )
   )
@@ -277,21 +275,19 @@ WHERE policy.project_id = @project_id
   AND policy.deleted IS FALSE
   AND policy.mcp_scope->'all_servers' IS DISTINCT FROM 'true'::jsonb
   AND jsonb_array_length(CASE WHEN jsonb_typeof(policy.mcp_scope->'servers') = 'array' THEN policy.mcp_scope->'servers' ELSE '[]'::jsonb END) = 1
-  AND EXISTS (
-    SELECT 1
-    FROM jsonb_array_elements(CASE WHEN jsonb_typeof(policy.mcp_scope->'servers') = 'array' THEN policy.mcp_scope->'servers' ELSE '[]'::jsonb END) AS target
-    WHERE EXISTS (
+  AND (
+    EXISTS (
       SELECT 1
       FROM mcp_servers AS server
       WHERE server.project_id = policy.project_id
-        AND server.id::text = target->>'mcp_server_id'
+        AND server.id::text = policy.mcp_scope #>> '{servers,0,mcp_server_id}'
         AND server.deleted IS TRUE
     )
     OR EXISTS (
       SELECT 1
       FROM meta_mcp_servers AS gateway
       WHERE gateway.project_id = policy.project_id
-        AND gateway.id::text = target->>'mcp_server_id'
+        AND gateway.id::text = policy.mcp_scope #>> '{servers,0,mcp_server_id}'
         AND gateway.deleted IS TRUE
     )
   )
