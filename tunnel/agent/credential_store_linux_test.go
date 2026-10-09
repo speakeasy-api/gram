@@ -478,18 +478,26 @@ func TestCredentialCleanupFailureKeepsRecoveryLock(t *testing.T) {
 func TestCredentialStoreRecoversCrashUnderRestrictiveUmask(t *testing.T) {
 	root := memoryRoot(t)
 	previous := unix.Umask(0o277)
+	restore := sync.OnceFunc(func() { unix.Umask(previous) })
+	t.Cleanup(restore)
 	crashed, err := openCredentialStore(t.Context(), root, discardLogger())
-	unix.Umask(previous)
 	require.NoError(t, err)
 	store := crashed.(*linuxCredentialStore)
-
-	info, err := os.Stat(filepath.Join(store.instPath, instanceLockName))
-	require.NoError(t, err)
-	require.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "the lock is usable by a later scavenger")
-
 	dir, err := store.createSession()
 	require.NoError(t, err)
 	require.NoError(t, dir.writeToken(testTokenA))
+	restore()
+
+	for path, mode := range map[string]os.FileMode{
+		filepath.Join(store.instPath, instanceLockName): 0o600,
+		filepath.Dir(dir.tokenPath()):                   0o700,
+		dir.homePath():                                  0o700,
+		dir.tokenPath():                                 0o600,
+	} {
+		info, err := os.Stat(path)
+		require.NoError(t, err)
+		require.Equal(t, mode, info.Mode().Perm(), "%s keeps its exact mode under a restrictive umask", path)
+	}
 	simulateCrash(t, store, dir)
 
 	survivor := openTestStore(t, root)
