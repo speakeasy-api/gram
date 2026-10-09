@@ -89,7 +89,7 @@ flowchart LR
   p4 --> t_gram_otel_v1_inbound_log_record
   p5[/"📤<br/>server/internal/hooks/otel_tee.go"/]:::go
   p5 --> t_gram_otel_v1_inbound_log_record
-  p6[/"📤<br/>server/internal/otel/otelpub/convert.go"/]:::go
+  p6[/"📤<br/>server/internal/otelpub/convert.go"/]:::go
   p6 --> t_gram_otel_v1_inbound_log_record
   p7[/"📤<br/>server/internal/ping/publisher.go"/]:::go
   p7 --> t_gram_ping_v2_message
@@ -245,7 +245,7 @@ flowchart LR
 | [`gram-conversation-v1-message-event`](../infra/proto/gram/conversation/v1/message_event.proto) | topic | 4d | [`server/internal/chat/message_publication.go`](../server/internal/chat/message_publication.go) |
 | [`gram-metering-v1-meter-reading`](../infra/proto/gram/metering/v1/meter_reading.proto) | topic | 4d | [`pystreams/src/pystreams/risk/metering.py`](../pystreams/src/pystreams/risk/metering.py) |
 | [`gram-networkingress-v1-reconcile-requested`](../infra/proto/gram/networkingress/v1/reconcile_requested.proto) | topic | 7d | [`server/internal/networkingress/reconcile_requests.go`](../server/internal/networkingress/reconcile_requests.go) |
-| [`gram-otel-v1-inbound-log-record`](../infra/proto/gram/otel/v1/inbound_log_record.proto) | topic | — | [`server/internal/hooks/ingest_tee.go`](../server/internal/hooks/ingest_tee.go)<br/>[`server/internal/hooks/otel_tee.go`](../server/internal/hooks/otel_tee.go)<br/>[`server/internal/otel/otelpub/convert.go`](../server/internal/otel/otelpub/convert.go) |
+| [`gram-otel-v1-inbound-log-record`](../infra/proto/gram/otel/v1/inbound_log_record.proto) | topic | — | [`server/internal/hooks/ingest_tee.go`](../server/internal/hooks/ingest_tee.go)<br/>[`server/internal/hooks/otel_tee.go`](../server/internal/hooks/otel_tee.go)<br/>[`server/internal/otelpub/convert.go`](../server/internal/otelpub/convert.go) |
 | [`gram-otel-v1-inbound-metric`](../infra/proto/gram/otel/v1/inbound_metric.proto) | topic | 7d | — |
 | [`gram-otel-v1-inbound-span`](../infra/proto/gram/otel/v1/inbound_span.proto) | topic | — | — |
 | [`gram-otel-v1-log-record`](../infra/proto/gram/otel/v1/log_record.proto) | topic | 7d | — |
