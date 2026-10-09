@@ -20,6 +20,18 @@ type Client struct {
 	// List Doer is the HTTP client used to make requests to the list endpoint.
 	ListDoer goahttp.Doer
 
+	// ListPlatforms Doer is the HTTP client used to make requests to the
+	// listPlatforms endpoint.
+	ListPlatformsDoer goahttp.Doer
+
+	// GetCustomFlows Doer is the HTTP client used to make requests to the
+	// getCustomFlows endpoint.
+	GetCustomFlowsDoer goahttp.Doer
+
+	// ListTokenEndpoints Doer is the HTTP client used to make requests to the
+	// listTokenEndpoints endpoint.
+	ListTokenEndpointsDoer goahttp.Doer
+
 	// RegisterIssuer Doer is the HTTP client used to make requests to the
 	// registerIssuer endpoint.
 	RegisterIssuerDoer goahttp.Doer
@@ -65,18 +77,21 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListDoer:            doer,
-		RegisterIssuerDoer:  doer,
-		UpdateIssuerDoer:    doer,
-		WithdrawIssuerDoer:  doer,
-		AdmitSubjectDoer:    doer,
-		UpdateSubjectDoer:   doer,
-		WithdrawSubjectDoer: doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		ListDoer:               doer,
+		ListPlatformsDoer:      doer,
+		GetCustomFlowsDoer:     doer,
+		ListTokenEndpointsDoer: doer,
+		RegisterIssuerDoer:     doer,
+		UpdateIssuerDoer:       doer,
+		WithdrawIssuerDoer:     doer,
+		AdmitSubjectDoer:       doer,
+		UpdateSubjectDoer:      doer,
+		WithdrawSubjectDoer:    doer,
+		RestoreResponseBody:    restoreBody,
+		scheme:                 scheme,
+		host:                   host,
+		decoder:                dec,
+		encoder:                enc,
 	}
 }
 
@@ -99,6 +114,78 @@ func (c *Client) List() goa.Endpoint {
 		resp, err := c.ListDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("workloadIdentities", "list", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListPlatforms returns an endpoint that makes HTTP requests to the
+// workloadIdentities service listPlatforms server.
+func (c *Client) ListPlatforms() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListPlatformsRequest(c.encoder)
+		decodeResponse = DecodeListPlatformsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListPlatformsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListPlatformsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("workloadIdentities", "listPlatforms", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetCustomFlows returns an endpoint that makes HTTP requests to the
+// workloadIdentities service getCustomFlows server.
+func (c *Client) GetCustomFlows() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetCustomFlowsRequest(c.encoder)
+		decodeResponse = DecodeGetCustomFlowsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetCustomFlowsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetCustomFlowsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("workloadIdentities", "getCustomFlows", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListTokenEndpoints returns an endpoint that makes HTTP requests to the
+// workloadIdentities service listTokenEndpoints server.
+func (c *Client) ListTokenEndpoints() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListTokenEndpointsRequest(c.encoder)
+		decodeResponse = DecodeListTokenEndpointsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListTokenEndpointsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListTokenEndpointsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("workloadIdentities", "listTokenEndpoints", err)
 		}
 		return decodeResponse(resp)
 	}

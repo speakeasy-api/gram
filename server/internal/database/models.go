@@ -2454,6 +2454,7 @@ type PluginAssignment struct {
 	PluginID       uuid.UUID
 	OrganizationID string
 	PrincipalUrn   string
+	InstallMode    string
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 }
@@ -2744,6 +2745,7 @@ type RemoteSessionClient struct {
 	ResourceTosUri                  pgtype.Text
 	UpstreamRejectedAt              pgtype.Timestamptz
 	IdentityProviderConnectionID    uuid.NullUUID
+	CredentialOwner                 string
 	CreatedAt                       pgtype.Timestamptz
 	UpdatedAt                       pgtype.Timestamptz
 	DeletedAt                       pgtype.Timestamptz
@@ -3054,6 +3056,47 @@ type SessionQuarantine struct {
 	UpdatedAt      pgtype.Timestamptz
 	ReleasedAt     pgtype.Timestamptz
 	ReleasedBy     pgtype.Text
+}
+
+type SigintCustomSignal struct {
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	Name               string
+	Slug               string
+	Description        pgtype.Text
+	ClassifierCriteria pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	Deleted            bool
+}
+
+type SigintSensor struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	Name            string
+	Slug            string
+	Description     pgtype.Text
+	Instructions    pgtype.Text
+	Mode            string
+	MatchExpression string
+	Enabled         bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
+type SigintSensorSignal struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	SensorID  uuid.UUID
+	SignalID  uuid.UUID
+	SortOrder int32
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+	DeletedAt pgtype.Timestamptz
+	Deleted   bool
 }
 
 type Skill struct {

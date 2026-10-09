@@ -4,7 +4,7 @@ import { ICON_TARGET_IDS } from "./ai-tool-icon-sources";
 import { AIToolIcon } from "./AIToolIcon";
 
 describe("AIToolIcon", () => {
-  it("renders the vendor mark for a tool Gram ships a target for", () => {
+  it("renders the vendor mark for a tool Speakeasy ships a target for", () => {
     const { container } = render(
       <AIToolIcon targetId="cursor" displayName="Cursor" />,
     );
@@ -28,7 +28,7 @@ describe("AIToolIcon", () => {
     expect(screen.getByText("A")).toBeTruthy();
   });
 
-  it("covers every scan target Gram ships a mark for", () => {
+  it("covers every scan target Speakeasy ships a mark for", () => {
     // Walk the map itself: a hand-kept list of ids drifts from it, and a
     // vendor mark that stopped resolving would then go unnoticed.
     expect(ICON_TARGET_IDS.length).toBeGreaterThanOrEqual(17);

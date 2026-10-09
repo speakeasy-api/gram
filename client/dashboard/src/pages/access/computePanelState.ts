@@ -61,9 +61,11 @@ export function computePanelState(
     : projectFiltered
       ? resourceType
       : "server";
-  const allLabel = isProjectScopedResourceType(resourceType)
-    ? "All projects"
-    : "All servers";
+  const allLabel = projectFiltered
+    ? "All assistants"
+    : isProjectScopedResourceType(resourceType)
+      ? "All projects"
+      : "All servers";
 
   // Unrestricted
   if (selectors === null) {

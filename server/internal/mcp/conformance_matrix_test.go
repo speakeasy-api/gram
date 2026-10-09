@@ -23,7 +23,7 @@ import (
 )
 
 // The conformance matrix runs one fixed request set against every surface on
-// which Gram terminates MCP, once for each protocol revision the surface
+// which Speakeasy terminates MCP, once for each protocol revision the surface
 // supports plus an absent and an unsupported declaration, and asserts the wire
 // behavior the specification of the governing revision requires. Requests go
 // through the production router, so error wrapping is exercised as clients see
@@ -189,7 +189,7 @@ var conformanceRequests = []conformanceRequest{
 		name:   "subscriptions/listen",
 		method: mcpversions.MethodSubscriptionsListen,
 		expect: map[conformanceEra]conformanceOutcome{
-			// Gram advertises no list-change notifications, so it implements
+			// Speakeasy advertises no list-change notifications, so it implements
 			// no listen stream to deliver them on.
 			eraHandshake:   methodNotFoundOK,
 			eraPerRequest:  methodNotFound404,

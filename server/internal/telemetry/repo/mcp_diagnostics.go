@@ -19,7 +19,7 @@ const (
 	MCPOutcomeUnauthorized = "unauthorized"
 	// MCPOutcomeClientError is any other 4xx: the request itself was rejected.
 	MCPOutcomeClientError = "client_error"
-	// MCPOutcomeServerError is 5xx. It does not by itself say whether Gram or
+	// MCPOutcomeServerError is 5xx. It does not by itself say whether Speakeasy or
 	// the upstream provider produced the status, which is why fault
 	// attribution weighs it against readiness rather than reading it alone.
 	MCPOutcomeServerError = "server_error"
@@ -43,7 +43,7 @@ type GetMCPOutcomeBreakdownParams struct {
 	// GramProjectIDs scopes the read. One project answers "this server";
 	// an organization's projects answer "is this happening everywhere".
 	GramProjectIDs []string
-	// ToolsetSlugs matches hosted MCP traffic arriving directly at Gram.
+	// ToolsetSlugs matches hosted MCP traffic arriving directly at Speakeasy.
 	// Empty selects every server in scope, which is how the organization-wide
 	// comparison is taken.
 	ToolsetSlugs []string
@@ -80,7 +80,7 @@ func (arg GetMCPOutcomeBreakdownParams) selectsServer() bool {
 }
 
 // selectsDirectLane reports whether any identity can match a call that arrived
-// at Gram directly: a hosted toolset slug or a configured server id.
+// at Speakeasy directly: a hosted toolset slug or a configured server id.
 func (arg GetMCPOutcomeBreakdownParams) selectsDirectLane() bool {
 	return len(arg.ToolsetSlugs) > 0 || len(arg.MCPServerIDs) > 0
 }

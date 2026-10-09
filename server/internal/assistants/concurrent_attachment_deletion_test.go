@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -143,7 +144,7 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 					require.NoError(t, err)
 				}
 				id := uuid.MustParse(assistantID)
-				require.NoError(t, writeAssistantToolsets(ctx, tx, id, projectID, resolved))
+				require.NoError(t, writeAssistantToolsets(ctx, tx, newTestAuditLogger(), hostedmcp.Actor{UserID: "user-test", Email: nil}, id, projectID, resolved))
 				require.NoError(t, writeAssistantMcpServers(ctx, tx, id, projectID, resolvedServers))
 				counts, err := testrepo.New(tx).CountAssistantAttachments(ctx, testrepo.CountAssistantAttachmentsParams{
 					ProjectID: projectID, AssistantID: id,

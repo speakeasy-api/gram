@@ -375,6 +375,7 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			logger.ErrorContext(ctx, "list clients for remote session re-check", attr.SlogError(err))
 			continue
 		}
+		clients = subjectConnectedClients(clients)
 		client := findConsentClient(clients, sess.RemoteSessionClientID)
 		if client == nil {
 			logger.InfoContext(ctx, "remote session re-check skipped: client is not bound to the endpoint")

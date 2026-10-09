@@ -81,7 +81,7 @@ export type ManagedDevice = {
    */
   userEmail?: string | undefined;
   /**
-   * Resolved Gram user for the assigned email. Omitted when the email is missing or does not resolve to an org member.
+   * Resolved Speakeasy user for the assigned email. Omitted when the email is missing or does not resolve to an org member.
    */
   userId?: string | undefined;
 };

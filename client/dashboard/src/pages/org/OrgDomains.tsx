@@ -160,7 +160,7 @@ function CustomDomainHealthMessage({
   );
 }
 
-// A single failed probe (check_failed) is usually a transient Gram-side issue,
+// A single failed probe (check_failed) is usually a transient Speakeasy-side issue,
 // not a customer-actionable problem; only surface it once it has persisted
 // across consecutive checks.
 function showCustomDomainUnhealthy(domain: {

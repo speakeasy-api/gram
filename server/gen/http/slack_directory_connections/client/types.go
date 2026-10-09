@@ -102,7 +102,7 @@ type GetMemberResponseBody struct {
 	SlackUserID *string `form:"slack_user_id,omitempty" json:"slack_user_id,omitempty" xml:"slack_user_id,omitempty"`
 	// Optional observed display name.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
-	// Observed email; never evidence of a confirmed Gram identity.
+	// Observed email; never evidence of a confirmed Speakeasy identity.
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
 	// Observed account state.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
@@ -141,7 +141,7 @@ type SetMappingResponseBody struct {
 	SlackUserID *string `form:"slack_user_id,omitempty" json:"slack_user_id,omitempty" xml:"slack_user_id,omitempty"`
 	// Optional observed display name.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
-	// Observed email; never evidence of a confirmed Gram identity.
+	// Observed email; never evidence of a confirmed Speakeasy identity.
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
 	// Observed account state.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
@@ -1909,7 +1909,7 @@ type SlackDirectoryMemberResponseBody struct {
 	SlackUserID *string `form:"slack_user_id,omitempty" json:"slack_user_id,omitempty" xml:"slack_user_id,omitempty"`
 	// Optional observed display name.
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
-	// Observed email; never evidence of a confirmed Gram identity.
+	// Observed email; never evidence of a confirmed Speakeasy identity.
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
 	// Observed account state.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`

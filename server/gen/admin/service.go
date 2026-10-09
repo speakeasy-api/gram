@@ -80,11 +80,11 @@ type Service interface {
 	// Only a running trial can be extended: one that has converted, has been
 	// demoted, or has already expired is rejected rather than re-armed.
 	ExtendTrial(context.Context, *ExtendTrialPayload) (res *AdminOrganization, err error)
-	// Creates an organization in WorkOS and in Gram, so an operator does not have
-	// to leave the admin app for the WorkOS dashboard. The organization starts
-	// with no members, is not whitelisted, and gets no trial. Idempotent against
-	// the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID,
-	// so both writers converge on one row.
+	// Creates an organization in WorkOS and in Speakeasy, so an operator does not
+	// have to leave the admin app for the WorkOS dashboard. The organization
+	// starts with no members, is not whitelisted, and gets no trial. Idempotent
+	// against the WorkOS organization webhook: the Speakeasy ID is derived from
+	// the WorkOS ID, so both writers converge on one row.
 	CreateOrganization(context.Context, *CreateOrganizationPayload) (res *AdminOrganization, err error)
 	// Puts a demoted enterprise trial back on: restores the organization's account
 	// type and whitelist flag, revives its model provider keys, and gives the
@@ -156,7 +156,7 @@ type Service interface {
 	// Re-fetch an existing global remote_session_issuer's RFC 8414 metadata
 	// document and persist the discovered values. Keyed by issuer id. Only RFC
 	// 8414-derived columns are written — endpoints, the *_supported arrays,
-	// client_id_metadata_document_supported, and the documentation URLs. Gram
+	// client_id_metadata_document_supported, and the documentation URLs. Speakeasy
 	// behavior and display fields (oidc, passthrough, name, slug, logo, client
 	// setup documentation) are left alone. Requires platform admin.
 	RefreshGlobalIssuerMetadata(context.Context, *RefreshGlobalIssuerMetadataPayload) (res *types.RemoteSessionIssuerRefresh, err error)
@@ -292,6 +292,10 @@ type Service interface {
 	// subscription ID is empty, after verifying the subscription belongs to the
 	// organization's Stripe customer.
 	SetStripeSubscription(context.Context, *SetStripeSubscriptionPayload) (res *AdminOrganization, err error)
+	// Returns estimated usage at current PAYG list prices for every active paying
+	// organization: enterprise organizations not on a running or ending trial, and
+	// pro or payg organizations that never trialled.
+	ListCustomerUsage(context.Context, *ListCustomerUsagePayload) (res *AdminCustomerUsageResponse, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -314,7 +318,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [83]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "getStripeSubscriptionCandidate", "setStripeSubscription"}
+var MethodNames = [84]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -342,6 +346,50 @@ type AdminChatAnalysisSettings struct {
 // triggerOrganizationChatAnalysis method.
 type AdminChatAnalysisTriggerResult struct {
 	ProjectsSignaled int
+}
+
+// One paying organization's estimated usage at current PAYG list prices.
+type AdminCustomerUsage struct {
+	OrganizationID string
+	Name           string
+	Slug           string
+	AccountType    string
+	TrialState     string
+	// The billing cycle containing queried_at
+	CurrentCycle *MeterUsageWindow
+	// From the first chart bucket's start to the last bucket's end
+	Window *MeterUsageWindow
+	// The three metered products in stable display order. quantity and cost_usd
+	// cover the current cycle to date. buckets are the chart buckets for the
+	// requested interval: billing cycles for monthly, days or Monday-start weeks
+	// of the current cycle otherwise.
+	Products []*SpendProduct
+	// The start of the previous billing cycle, cut to the same number of elapsed
+	// days as the current one. Absent when the organization did not exist before
+	// the current cycle.
+	PreviousPeriod *MeterUsageWindow
+	// Per-product costs over previous_period. Empty when previous_period is absent.
+	PreviousPeriodCosts []*AdminCustomerUsageProductCost
+	// Why this organization's usage could not be read. products is empty when set.
+	Error *string
+}
+
+type AdminCustomerUsageProductCost struct {
+	ProductID string
+	// Exact estimated cost at current PAYG list prices
+	CostUsd string
+}
+
+// AdminCustomerUsageResponse is the result type of the admin service
+// listCustomerUsage method.
+type AdminCustomerUsageResponse struct {
+	Interval     string
+	Currency     string
+	PricingBasis string
+	// Retrieval timestamp used to distinguish current and future buckets
+	QueriedAt string
+	// Every qualifying organization, ordered by name
+	Customers []*AdminCustomerUsage
 }
 
 // AdminDashboardRedirect is the result type of the admin service
@@ -515,7 +563,7 @@ type AdminMcpServerHealthRemoteSessionIssuer struct {
 	Issuer string
 	// Where the row is attached. global is platform-wide.
 	AttachmentScope string
-	// Whether Gram reaches the issuer over the public internet or a tunnel.
+	// Whether Speakeasy reaches the issuer over the public internet or a tunnel.
 	Networking string
 	// Whether the issuer is treated as an OpenID Connect provider.
 	Oidc bool
@@ -528,6 +576,9 @@ type AdminMcpServerHealthRemoteSessionIssuer struct {
 	// Operator-pinned scopes sent in place of the discovered set. Absent when
 	// unset.
 	ScopeOverride []string
+	// Whether a login with no other scope source sends no scope instead of the
+	// issuer's whole scopes_supported. Absent when unset, which behaves as false.
+	OmitScopeFallback *bool
 	// Last successful metadata discovery.
 	MetadataFetchedAt *string
 	// Last failed metadata discovery.
@@ -575,7 +626,7 @@ type AdminMcpServerHealthServerRef struct {
 type AdminMcpServerHealthTrustedRemoteSession struct {
 	// The trusted remote session issuer ID.
 	IssuerID string
-	// The remote session client ID Gram uses with the trusted issuer.
+	// The remote session client ID Speakeasy uses with the trusted issuer.
 	ClientID string
 }
 
@@ -832,7 +883,7 @@ type AdminOrganization struct {
 	Name string
 	// The slug of the organization
 	Slug string
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string
 	// WorkOS organization ID, if linked.
 	WorkosID *string
@@ -1335,6 +1386,11 @@ type CreateGlobalIssuerPayload struct {
 	// authorize redirect in place of the resolved scope set. Omit or send an empty
 	// array to leave it unset.
 	ScopeOverride []string
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Omit to leave it unset: such a login requests the provider's whole
+	// scopes_supported.
+	OmitScopeFallback *bool
 	// Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it
 	// unset: the parameter is then sent, and a login or refresh the issuer answers
 	// with invalid_target is retried once without it. Set false to never send it.
@@ -1754,6 +1810,15 @@ type IssuerMigratePreflight struct {
 	TargetTenantClientCount int
 }
 
+// ListCustomerUsagePayload is the payload type of the admin service
+// listCustomerUsage method.
+type ListCustomerUsagePayload struct {
+	AdminSessionToken *string
+	// Chart bucketing. monthly gives one bucket per billing cycle over the last
+	// six cycles. daily and weekly bucket the current cycle.
+	Interval string
+}
+
 // ListGlobalIssuerConvergenceCandidatesPayload is the payload type of the
 // admin service listGlobalIssuerConvergenceCandidates method.
 type ListGlobalIssuerConvergenceCandidatesPayload struct {
@@ -2058,7 +2123,7 @@ type ProductFeatures struct {
 	SkillCaptureMetadataOnly bool
 	// Whether the organization can provision push integrations for AI platforms
 	AiPlatformPushIntegrationsEnabled bool
-	// Whether the organization can use the Gram Platform MCP capability
+	// Whether the organization can use the Speakeasy Platform MCP capability
 	PlatformMcpEnabled bool
 	// Whether the organization can manage the external credentials and cloud KMS
 	// keys backing customer-managed encryption
@@ -2423,6 +2488,11 @@ type UpdateGlobalIssuerPayload struct {
 	// Set or clear the operator-pinned scope request. Omitting the field (or
 	// sending null) leaves the stored value unchanged; an empty array clears it.
 	ScopeOverride []string `json:"scope_override"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Omit or send null to keep the stored value; false restores the
+	// default.
+	OmitScopeFallback *bool
 	// Whether the issuer accepts the RFC 8707 resource parameter. Omitting the
 	// field leaves the stored value unchanged.
 	ResourceIndicatorSupported *bool
@@ -2471,7 +2541,7 @@ type UpdateSupportMatrixPayload struct {
 // UploadImageResult is the result type of the admin service
 // uploadPlatformImage method.
 type UploadImageResult struct {
-	// The asset entry that was created in Gram
+	// The asset entry that was created in Speakeasy
 	Asset *Asset
 }
 

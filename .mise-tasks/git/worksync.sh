@@ -74,7 +74,7 @@ if [ "$generate_idp_client_secret" = "true" ]; then
   printf '%s' "$idp_client_secret" \
     | mise set --file mise.local.toml --stdin GRAM_IDP_CLIENT_SECRET >/dev/null
   unset idp_client_secret
-  echo "✅ Generated a dev-idp client secret for Gram callers."
+  echo "✅ Generated a dev-idp client secret for Speakeasy callers."
 fi
 unset generate_idp_client_secret
 

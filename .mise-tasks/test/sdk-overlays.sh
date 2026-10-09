@@ -4,6 +4,13 @@
 
 set -euo pipefail
 
+# The SDK generator is installed as speakeasy-sdks (see mise.toml). mise only
+# applies rename_exe on install, so an install made before the rename still
+# serves the old speakeasy name. Reinstall it once in that case.
+if mise which speakeasy >/dev/null 2>&1; then
+  mise install --force "github:speakeasy-api/speakeasy" >&2
+fi
+
 raw_spec="server/gen/http/openapi3.yaml"
 common_overlay="overlays/goa-common.yaml"
 dashboard_overlay="overlays/dashboard-sdk.yaml"
@@ -28,15 +35,15 @@ if [ "$probe_count" -ne 1 ]; then
 fi
 
 for input in baseline probe; do
-  speakeasy overlay apply \
+  speakeasy-sdks overlay apply \
     --schema "$tmpdir/$input.yaml" \
     --overlay "$common_overlay" \
     --out "$tmpdir/$input.common.yaml" >/dev/null 2>&1
-  speakeasy overlay apply \
+  speakeasy-sdks overlay apply \
     --schema "$tmpdir/$input.common.yaml" \
     --overlay "$dashboard_overlay" \
     --out "$tmpdir/$input.overlay.yaml" >/dev/null 2>&1
-  speakeasy openapi transform remove-unused \
+  speakeasy-sdks openapi transform remove-unused \
     --schema "$tmpdir/$input.overlay.yaml" \
     --out "$tmpdir/$input.dashboard.yaml" >/dev/null 2>&1
 done
@@ -69,7 +76,7 @@ if grep -q 'admin_auth_header_Authorization' "$output"; then
   exit 1
 fi
 
-speakeasy overlay apply \
+speakeasy-sdks overlay apply \
   --schema "$tmpdir/baseline.common.yaml" \
   --overlay "$admin_overlay" \
   --out "$tmpdir/admin.yaml" >/dev/null 2>&1

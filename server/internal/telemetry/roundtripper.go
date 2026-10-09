@@ -57,7 +57,7 @@ var allowedNonSensitiveHeaders = map[string]bool{
 	"allow":       true,
 	"retry-after": true,
 
-	// Gram specific headers
+	// Speakeasy specific headers
 	"x-gram-proxy": true,
 }
 

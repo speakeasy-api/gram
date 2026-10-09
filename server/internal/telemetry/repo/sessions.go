@@ -59,7 +59,7 @@ const (
 	// spend, both polled from the Admin Analytics API. chatgpt:usage rows are
 	// ChatGPT/Work per-user usage+spend from the OpenAI compliance COSTS
 	// import. codex:usage rows are that import's Codex spend, cost-only since
-	// DNO-733 — their tokens would duplicate the Codex OTEL stream. Gram-hosted
+	// DNO-733 — their tokens would duplicate the Codex OTEL stream. Speakeasy-hosted
 	// chat completions and claude-code:usage rows are deliberately excluded:
 	// the summaries cover agent surfaces only, and claude-code:usage
 	// duplicates the OTEL api_request stream.

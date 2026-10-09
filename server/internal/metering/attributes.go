@@ -43,7 +43,7 @@ const (
 	// AttributeChatID identifies the chat containing the metered message.
 	AttributeChatID = "chat_id"
 
-	// AttributeExternalConversationID identifies the external agent's conversation, not a Gram chat row.
+	// AttributeExternalConversationID identifies the external agent's conversation, not a Speakeasy chat row.
 	AttributeExternalConversationID = "external_conversation_id"
 
 	// AttributeAssistantID identifies the assistant responsible for the workload.
@@ -86,7 +86,7 @@ const (
 	// AttributeBillingMode identifies the AI account billing mode resolved for the session.
 	AttributeBillingMode = "billing_mode"
 
-	// AttributeMessageUserID identifies the Gram user attached to the message.
+	// AttributeMessageUserID identifies the Speakeasy user attached to the message.
 	AttributeMessageUserID = "message_user_id"
 
 	// AttributeMessageExternalUserID preserves the message actor's opaque external ID.
@@ -95,10 +95,10 @@ const (
 	// AttributeMessageUserEmail preserves the email explicitly observed by the producer.
 	AttributeMessageUserEmail = "message_user_email"
 
-	// AttributeBillingUserID identifies the Gram user to whom the producer allocates usage.
+	// AttributeBillingUserID identifies the Speakeasy user to whom the producer allocates usage.
 	AttributeBillingUserID = "billing_user_id"
 
-	// AttributeBillingUserAccountEmail is the current Gram account email for the billing user.
+	// AttributeBillingUserAccountEmail is the current Speakeasy account email for the billing user.
 	AttributeBillingUserAccountEmail = "billing_user_account_email"
 
 	// AttributeBillingUserDivisionName identifies the billing user's active directory division.
@@ -130,7 +130,7 @@ const (
 type WorkloadSource string
 
 const (
-	// WorkloadSourceAssistant identifies workload produced by a Gram assistant.
+	// WorkloadSourceAssistant identifies workload produced by a Speakeasy assistant.
 	WorkloadSourceAssistant WorkloadSource = "assistant"
 
 	// WorkloadSourceHook identifies workload captured by a live agent hook.
@@ -139,6 +139,6 @@ const (
 	// WorkloadSourceImport identifies workload imported from an external provider.
 	WorkloadSourceImport WorkloadSource = "import"
 
-	// WorkloadSourceNative identifies workload written through Gram's native chat surface.
+	// WorkloadSourceNative identifies workload written through Speakeasy's native chat surface.
 	WorkloadSourceNative WorkloadSource = "native"
 )

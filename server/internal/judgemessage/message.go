@@ -9,7 +9,7 @@ import (
 
 // Message is the message under evaluation by a judge.
 type Message struct {
-	// Type is the Gram chat message type that produced this judge input.
+	// Type is the Speakeasy chat message type that produced this judge input.
 	Type message.Type
 	// Body is the text content rendered for judge evaluation.
 	Body string

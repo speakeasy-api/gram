@@ -30,7 +30,7 @@ export interface PlatformSetupStep {
    * image — use it to call out what the user should look for or click. */
   screenshot?: { src: string; alt: string; caption?: string };
   /**
-   * When true, the instrument-agents component generates a Gram API key with
+   * When true, the instrument-agents component generates a Speakeasy API key with
    * the "hooks" scope on demand and substitutes the literal "{{GRAM_API_KEY}}"
    * marker in `code` or `fields` with the issued key token.
    */
@@ -58,7 +58,7 @@ export interface PlatformSetupStep {
     personalSteps: PlatformSetupStep[];
   };
   /** Renders a button that downloads this platform's observability plugin ZIP. */
-  download?: { platform: "claude" | "cursor"; label: string };
+  download?: { platform: "claude" | "cursor" | "copilot"; label: string };
 }
 
 export interface AgentPlatform {

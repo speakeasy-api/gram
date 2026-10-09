@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -26,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -37,8 +37,8 @@ const (
 	// maxToolExposureBatch bounds one call so a single confirmation covers a
 	// change a person can actually read back before approving it.
 	maxToolExposureBatch = 50
-	// maxExposedToolURNs bounds what one read returns. A larger list is
-	// reported as truncated with its true count rather than silently cut.
+	// maxExposedToolURNs bounds one page of a server's tool list. A larger
+	// list is read page by page through next_tool_cursor.
 	maxExposedToolURNs = 200
 
 	toolExposureFeature = "mcp_tool_exposure"
@@ -113,13 +113,24 @@ type ListProjectToolsOutput struct {
 type MCPToolExposure struct {
 	ToolsetID   string `json:"toolset_id"`
 	ToolsetSlug string `json:"toolset_slug"`
-	// ExposureVersion identifies the exact tool list this snapshot describes.
-	// add_tools_to_mcp and remove_tools_from_mcp take it back and refuse a
-	// change computed against a list that has since moved on.
-	ExposureVersion string   `json:"exposure_version"`
-	ToolCount       int      `json:"tool_count"`
-	ToolURNs        []string `json:"tool_urns"`
-	Truncated       bool     `json:"truncated"`
+	// ExposureVersion identifies the complete tool list, never one page of
+	// it. add_tools_to_mcp and remove_tools_from_mcp take it back and refuse a
+	// change computed against a list that has since moved on. It is present
+	// only on the page that completes the read — a single-page list, or the
+	// last page of a paged one — so a change cannot be confirmed against a
+	// list the caller has seen only part of.
+	ExposureVersion string `json:"exposure_version,omitempty"`
+	// ToolCount is the size of the complete list, not of this page.
+	ToolCount int `json:"tool_count"`
+	// ToolURNs is this page of the list, in URN order.
+	ToolURNs []string `json:"tool_urns"`
+	// Truncated is true when more pages follow; NextToolCursor continues it.
+	Truncated bool `json:"truncated"`
+	// NextToolCursor is passed back to get_mcp as tool_cursor for the next
+	// page. Every page of one read describes the same committed list: a page
+	// requested after the list changed is refused rather than stitched onto
+	// pages of the old one.
+	NextToolCursor string `json:"next_tool_cursor,omitempty"`
 	// SharedWithOther counts the other MCP servers offering this same tool
 	// list. The list lives on the toolset behind the server, so those servers
 	// are aliases for it and a change moves all of them. It is a count rather
@@ -133,7 +144,7 @@ type ChangeMCPToolsInput struct {
 	ProjectID       string   `json:"project_id" jsonschema:"project ID that owns the MCP server"`
 	MCPID           string   `json:"mcp_id" jsonschema:"exact MCP server ID from find_mcp or get_mcp"`
 	ToolURNs        []string `json:"tool_urns" jsonschema:"exact tool URNs from list_project_tools"`
-	ExpectedVersion string   `json:"expected_version" jsonschema:"exposure_version from the latest get_mcp read of this server"`
+	ExpectedVersion string   `json:"expected_version" jsonschema:"exposure_version from the page that completes the latest get_mcp read of this server"`
 	IdempotencyKey  string   `json:"idempotency_key" jsonschema:"caller-chosen key that makes a retry of this exact change safe"`
 	Confirmed       bool     `json:"confirmed" jsonschema:"true only after the user confirmed this exact server and tool list"`
 }
@@ -144,15 +155,19 @@ type ChangeMCPToolsInput struct {
 // with a non-empty Unchanged), and a refusal, which is returned as an error
 // result and never as this struct.
 type MCPToolExposureMutationOutput struct {
-	Outcome   string   `json:"outcome"`
-	Applied   []string `json:"applied"`
-	Unchanged []string `json:"unchanged"`
+	// RemovedPluginIDs names plugins whose automatic membership this edit removed.
+	RemovedPluginIDs []string `json:"removed_plugin_ids,omitempty"`
+	Outcome          string   `json:"outcome"`
+	Applied          []string `json:"applied"`
+	Unchanged        []string `json:"unchanged"`
 	// Exposure is a fresh read taken after the commit, so a caller reports the
-	// committed list rather than the one it asked for.
+	// committed list rather than the one it asked for. It is the first page of
+	// that list; a longer list continues through get_mcp's tool_cursor.
 	Exposure      *MCPToolExposure `json:"exposure,omitempty"`
 	SnapshotScope string           `json:"snapshot_scope"`
 	// Distributions names the plugins that carry this server. Changing the
-	// tool list republishes each of them to everyone holding that plugin.
+	// tool list requests publication for those plugins; removed memberships are
+	// reported separately in RemovedPluginIDs.
 	Distributions      []MCPDistribution `json:"distributions"`
 	PublicationRequest string            `json:"publication_request"`
 	PublishSignal      string            `json:"publish_signal"`
@@ -184,10 +199,15 @@ type MCPToolExposureService struct {
 	// admin re-checks org:admin live through the shared authorizer, so a
 	// denial keeps the challenge and audit behavior every other
 	// admin-gated Platform MCP path records.
-	admin       Authorizer
-	cursors     *toolInventoryCursorCodec
-	publication plugins.PublicationRequests
-	publisher   plugins.PluginPublishSignaler
+	admin   Authorizer
+	cursors *toolInventoryCursorCodec
+	// exposureCursors signs get_mcp's tool-list pages, under a key of its
+	// own so a project tool-list cursor never opens as one.
+	exposureCursors signedCursorKey
+	// exposurePageSize is maxExposedToolURNs outside tests.
+	exposurePageSize int
+	publication      plugins.PublicationRequests
+	publisher        plugins.PluginPublishSignaler
 	// reads meters the paginated project tool listing, and changes meters the
 	// write. They are separate allowances because the two cost different
 	// things and must not fund each other: walking the catalogue is a bounded
@@ -226,7 +246,8 @@ func NewMCPToolExposureService(logger *slog.Logger, db *pgxpool.Pool, auditLogge
 	}
 	return &MCPToolExposureService{
 		db: db, queries: platformrepo.New(db), logger: logger, audit: auditLogger, engine: engine, admin: admin,
-		cursors: cursors, publication: publication, publisher: publisher, reads: reads, changes: changes, now: time.Now,
+		cursors: cursors, exposureCursors: newSignedCursorKey("platform-mcp-tool-exposure-cursor", cursorKeyMaterial), exposurePageSize: maxExposedToolURNs,
+		publication: publication, publisher: publisher, reads: reads, changes: changes, now: time.Now,
 	}, nil
 }
 
@@ -242,7 +263,7 @@ func (s *MCPToolExposureService) WithIndexing(index ToolExposureIndexer) *MCPToo
 }
 
 func (s *MCPToolExposureService) valid() bool {
-	return s != nil && s.db != nil && s.queries != nil && s.audit != nil && s.engine != nil && s.admin != nil && s.cursors != nil && s.reads.valid() && s.changes.valid() && s.now != nil
+	return s != nil && s.db != nil && s.queries != nil && s.audit != nil && s.engine != nil && s.admin != nil && s.cursors != nil && len(s.exposureCursors) > 0 && s.exposurePageSize > 0 && s.reads.valid() && s.changes.valid() && s.now != nil
 }
 
 // ListProjectTools reports the tools a project's latest completed deployment
@@ -308,18 +329,121 @@ func (s *MCPToolExposureService) ListProjectTools(ctx context.Context, principal
 	return output, nil
 }
 
-// Exposure reads the tool list of one hosted MCP server. It returns
-// ErrMCPToolExposureMissing when the server has no Gram toolset behind it:
-// a remote, tunneled, or unproxied server's tools come from its upstream.
+// Exposure reads the first page of one hosted MCP server's tool list. It
+// returns ErrMCPToolExposureMissing when the server has no Speakeasy toolset
+// behind it: a remote, tunneled, or unproxied server's tools come from its
+// upstream.
 func (s *MCPToolExposureService) Exposure(ctx context.Context, principal Principal, projectID, mcpID uuid.UUID) (MCPToolExposure, error) {
+	return s.ExposurePage(ctx, principal, projectID, mcpID, "")
+}
+
+// toolExposureCursor resumes a paged read of one server's tool list. It pins
+// a digest of the complete list's version, so a later page is served only
+// while the committed list is still that one. The cursor is signed, not
+// encrypted, so it carries the digest rather than the version itself: the
+// version is what a change is confirmed against, and handing it out before the
+// last page would let a caller confirm a change against a list it never read.
+type toolExposureCursor struct {
+	OrganizationID string `json:"organization_id"`
+	Binding        string `json:"binding"`
+	ProjectID      string `json:"project_id"`
+	MCPID          string `json:"mcp_id"`
+	ListDigest     string `json:"list_digest"`
+	Position       int    `json:"position"`
+}
+
+// toolExposureListDigest is a one-way digest of an exposure version, so a
+// cursor can pin the list without revealing the version. It also pins every
+// other server sharing the list, in this project and outside it, so the pages
+// of one read all describe the same reach.
+func toolExposureListDigest(version string, sharedWithOther int, foreignSharing int64) string {
+	digest := sha256.Sum256(fmt.Appendf(nil, "platform-mcp-tool-exposure-cursor-list-v3\x00%s\x00%d\x00%d", version, sharedWithOther, foreignSharing))
+	return hex.EncodeToString(digest[:])
+}
+
+func toolExposureCursorInvalid() error {
+	return toolExposureInvalid("That tool page marker is not valid for this MCP server. Read the server again without tool_cursor.")
+}
+
+// openExposureCursor verifies a tool_cursor and that it was issued to this
+// caller for this server. It touches no data, so a reader can refuse a bad
+// cursor before doing any of the work the page would need.
+func (s *MCPToolExposureService) openExposureCursor(principal Principal, projectID, mcpID uuid.UUID, cursor string) (toolExposureCursor, error) {
+	binding := principalCursorBinding(principal)
+	decoded, ok := openCursor[toolExposureCursor](s.exposureCursors, cursor)
+	if !ok || binding == "" || decoded.OrganizationID != principal.OrganizationID || decoded.Binding != binding ||
+		decoded.ProjectID != projectID.String() || decoded.MCPID != mcpID.String() || decoded.ListDigest == "" || decoded.Position <= 0 {
+		return toolExposureCursor{}, toolExposureCursorInvalid()
+	}
+	return decoded, nil
+}
+
+// ExposurePage reads one page of a server's tool list; an empty cursor is the
+// first page. The version is always derived from the complete committed list
+// and is returned only on the page that completes the read.
+func (s *MCPToolExposureService) ExposurePage(ctx context.Context, principal Principal, projectID, mcpID uuid.UUID, cursor string) (MCPToolExposure, error) {
 	if !s.valid() {
 		return MCPToolExposure{}, ErrUnavailable
 	}
+	binding := principalCursorBinding(principal)
+	position, pinnedDigest := 0, ""
+	if cursor != "" {
+		decoded, err := s.openExposureCursor(principal, projectID, mcpID, cursor)
+		if err != nil {
+			return MCPToolExposure{}, err
+		}
+		position, pinnedDigest = decoded.Position, decoded.ListDigest
+	}
 	row, err := s.exposureRow(ctx, s.queries, principal, projectID, mcpID)
+	if errors.Is(err, ErrMCPToolExposureMissing) && pinnedDigest != "" {
+		// The server stopped being toolset-backed mid-read. Reporting it as an
+		// upstream-backed server would let the pages already served pass for
+		// the whole list.
+		return MCPToolExposure{}, toolExposurePageConflict()
+	}
 	if err != nil {
 		return MCPToolExposure{}, err
 	}
-	return toolExposureFromRow(projectID, mcpID, row), nil
+	version := toolExposureVersion(projectID, mcpID, row.ToolsetID, row.ToolsetVersion, row.ToolUrns)
+	sharedWithOther := max(len(row.FrontingServerIds)-1, 0)
+	listDigest := toolExposureListDigest(version, sharedWithOther, row.ForeignFrontingServerCount)
+	if pinnedDigest != "" && !hmac.Equal([]byte(pinnedDigest), []byte(listDigest)) {
+		return MCPToolExposure{}, toolExposurePageConflict()
+	}
+	// The row is this call's own copy, so it is sorted in place for paging.
+	urns := row.ToolUrns
+	slices.Sort(urns)
+	if position > len(urns) {
+		return MCPToolExposure{}, toolExposureCursorInvalid()
+	}
+	end := min(position+s.exposurePageSize, len(urns))
+	exposure := MCPToolExposure{
+		ToolsetID:       row.ToolsetID.String(),
+		ToolsetSlug:     row.ToolsetSlug,
+		ToolCount:       len(urns),
+		ToolURNs:        urns[position:end],
+		Truncated:       end < len(urns),
+		SharedWithOther: sharedWithOther,
+	}
+	if !exposure.Truncated {
+		exposure.ExposureVersion = version
+		return exposure, nil
+	}
+	// A caller with no binding could never present a cursor back, so it gets
+	// the partial page with neither a cursor nor a version: it can see the
+	// list is incomplete and has nothing to confirm a change against.
+	if binding == "" {
+		return exposure, nil
+	}
+	next, err := sealCursor(s.exposureCursors, toolExposureCursor{
+		OrganizationID: principal.OrganizationID, Binding: binding,
+		ProjectID: projectID.String(), MCPID: mcpID.String(), ListDigest: listDigest, Position: end,
+	})
+	if err != nil {
+		return MCPToolExposure{}, fmt.Errorf("encode platform MCP tool exposure cursor: %w", err)
+	}
+	exposure.NextToolCursor = next
+	return exposure, nil
 }
 
 // exposureRow is the untruncated read. The public projection bounds the tool
@@ -338,19 +462,6 @@ func (s *MCPToolExposureService) exposureRow(ctx context.Context, queries *platf
 	return row, nil
 }
 
-func toolExposureFromRow(projectID, mcpID uuid.UUID, row platformrepo.GetPlatformMCPServerToolExposureRow) MCPToolExposure {
-	urns, truncated := boundedRows(row.ToolUrns, maxExposedToolURNs)
-	return MCPToolExposure{
-		ToolsetID:       row.ToolsetID.String(),
-		ToolsetSlug:     row.ToolsetSlug,
-		ExposureVersion: toolExposureVersion(projectID, mcpID, row.ToolsetID, row.ToolsetVersion, row.ToolUrns),
-		ToolCount:       len(row.ToolUrns),
-		ToolURNs:        slices.Clone(urns),
-		Truncated:       truncated,
-		SharedWithOther: max(len(row.FrontingServerIds)-1, 0),
-	}
-}
-
 func (s *MCPToolExposureService) AddTools(ctx context.Context, principal Principal, input ChangeMCPToolsInput) (MCPToolExposureMutationOutput, error) {
 	return s.change(ctx, principal, operationAddMCPTools, input)
 }
@@ -360,9 +471,10 @@ func (s *MCPToolExposureService) RemoveTools(ctx context.Context, principal Prin
 }
 
 type toolExposureReceipt struct {
-	Outcome   string   `json:"outcome"`
-	Applied   []string `json:"applied"`
-	Unchanged []string `json:"unchanged"`
+	RemovedPluginIDs []string `json:"removed_plugin_ids,omitempty"`
+	Outcome          string   `json:"outcome"`
+	Applied          []string `json:"applied"`
+	Unchanged        []string `json:"unchanged"`
 	// ToolsetID is the toolset this change actually wrote, recorded while its
 	// row was still locked. The post-commit reindex is scheduled from here and
 	// never from a later read: a read taken after the transaction can report a
@@ -439,12 +551,15 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 			return encoded, nil
 		},
 		Mutate: func(ctx context.Context, tx pgx.Tx) (toolExposureReceipt, error) {
+			if err := admission.LockProject(ctx, tx, project.ID); err != nil {
+				return toolExposureReceipt{}, fmt.Errorf("lock project admission: %w", err)
+			}
 			txQueries := s.queries.WithTx(tx)
 			// Both rows this change depends on are locked before any of it is
 			// decided, and in the order UpdateToolset takes them: toolsets
 			// first, then mcp_servers. Reversing that pair is an ABBA cycle
-			// with the dashboard, which holds the toolset row and then updates
-			// the hosted server row inside reconcileHostedNetworkAccess — so
+			// with the dashboard, which holds the toolset row and then locks
+			// the hosted server row inside hostedmcp.Sync — so
 			// one side would be aborted with deadlock_detected under
 			// concurrency.
 			//
@@ -529,10 +644,15 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 			if err != nil {
 				return toolExposureReceipt{}, classifyToolExposureError(err)
 			}
+			removedPluginIDs := make([]string, len(applied.RemovedPluginIDs))
+			for i, id := range applied.RemovedPluginIDs {
+				removedPluginIDs[i] = id.String()
+			}
 			result := toolExposureReceipt{
 				Outcome: "no_op", Applied: toolURNStrings(applied.Applied), Unchanged: toolURNStrings(applied.Unchanged),
-				ToolsetID:    row.ToolsetID.String(),
-				VersionAfter: applied.VersionAfter, Publication: string(plugins.ProjectPublicationNotConfigured),
+				ToolsetID:        row.ToolsetID.String(),
+				RemovedPluginIDs: removedPluginIDs,
+				VersionAfter:     applied.VersionAfter, Publication: string(plugins.ProjectPublicationNotConfigured),
 			}
 			if !applied.Changed {
 				return result, nil
@@ -572,7 +692,8 @@ func (s *MCPToolExposureService) change(ctx context.Context, principal Principal
 func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal, project ResolvedProject, mcpID uuid.UUID, stored toolExposureReceipt, receipt OperationReceipt) MCPToolExposureMutationOutput {
 	output := MCPToolExposureMutationOutput{
 		Outcome: stored.Outcome, Applied: stored.Applied, Unchanged: stored.Unchanged,
-		Distributions: []MCPDistribution{}, PublicationRequest: stored.Publication, PublishSignal: "not_requested",
+		RemovedPluginIDs: stored.RemovedPluginIDs,
+		Distributions:    []MCPDistribution{}, PublicationRequest: stored.Publication, PublishSignal: "not_requested",
 		IndexSignal: "not_required", Receipt: riskMutationToolReceipt(receipt),
 	}
 	if output.Applied == nil {
@@ -927,6 +1048,17 @@ func toolExposureInvalid(message string) error {
 	return &MCPToolExposureError{Code: "invalid_request", Message: message, Cause: ErrMCPToolExposureInvalid}
 }
 
+// toolExposurePageConflict is the paged read's counterpart of
+// toolExposureConflict: nothing was being changed, so the caller restarts the
+// read rather than a write.
+func toolExposurePageConflict() error {
+	return &MCPToolExposureError{
+		Code:    "conflict",
+		Message: "This MCP server's tool list changed while it was being read page by page. Read the server again without tool_cursor and present the list it reports now.",
+		Cause:   ErrMCPToolExposureConflict,
+	}
+}
+
 func toolExposureConflict() error {
 	return &MCPToolExposureError{
 		Code:    "conflict",
@@ -1040,31 +1172,25 @@ type toolInventoryCursor struct {
 }
 
 type toolInventoryCursorCodec struct {
-	key []byte
+	key signedCursorKey
 }
 
 func newToolInventoryCursorCodec(keyMaterial string) (*toolInventoryCursorCodec, error) {
 	if keyMaterial == "" {
 		return nil, ErrToolInventoryCursor
 	}
-	key := sha256.Sum256([]byte("platform-mcp-tool-inventory-cursor:" + keyMaterial))
-	return &toolInventoryCursorCodec{key: key[:]}, nil
+	return &toolInventoryCursorCodec{key: newSignedCursorKey("platform-mcp-tool-inventory-cursor", keyMaterial)}, nil
 }
 
 func (c *toolInventoryCursorCodec) Encode(cursor toolInventoryCursor) (string, error) {
 	if c == nil || len(c.key) == 0 || cursor.OrganizationID == "" || cursor.Binding == "" || cursor.ProjectID == "" || cursor.AfterToolURN == "" {
 		return "", ErrToolInventoryCursor
 	}
-	payload, err := json.Marshal(cursor)
+	token, err := sealCursor(c.key, cursor)
 	if err != nil {
 		return "", fmt.Errorf("encode platform MCP tool inventory cursor: %w", err)
 	}
-	mac := hmac.New(sha256.New, c.key)
-	_, _ = mac.Write(payload)
-	token := make([]byte, 0, len(payload)+sha256.Size)
-	token = append(token, payload...)
-	token = append(token, mac.Sum(nil)...)
-	return base64.RawURLEncoding.EncodeToString(token), nil
+	return token, nil
 }
 
 func (c *toolInventoryCursorCodec) Decode(value string, principal Principal, projectID uuid.UUID, query, sourceKind string) (string, error) {
@@ -1072,18 +1198,8 @@ func (c *toolInventoryCursorCodec) Decode(value string, principal Principal, pro
 	if c == nil || len(c.key) == 0 || value == "" || principal.OrganizationID == "" || binding == "" || projectID == uuid.Nil {
 		return "", ErrToolInventoryCursor
 	}
-	token, err := base64.RawURLEncoding.DecodeString(value)
-	if err != nil || len(token) <= sha256.Size {
-		return "", ErrToolInventoryCursor
-	}
-	payload, signature := token[:len(token)-sha256.Size], token[len(token)-sha256.Size:]
-	mac := hmac.New(sha256.New, c.key)
-	_, _ = mac.Write(payload)
-	if !hmac.Equal(signature, mac.Sum(nil)) {
-		return "", ErrToolInventoryCursor
-	}
-	var cursor toolInventoryCursor
-	if err := json.Unmarshal(payload, &cursor); err != nil ||
+	cursor, ok := openCursor[toolInventoryCursor](c.key, value)
+	if !ok ||
 		cursor.OrganizationID != principal.OrganizationID || cursor.Binding != binding ||
 		cursor.ProjectID != projectID.String() || cursor.Query != query || cursor.SourceKind != sourceKind || cursor.AfterToolURN == "" {
 		return "", ErrToolInventoryCursor

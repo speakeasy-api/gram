@@ -135,11 +135,11 @@ func TestService_UpdateRole_ExplicitPluginRemovalSurvivesReplayUntilNewGrant(t *
 	require.Equal(t, f.serverID.String(), *f.read(t, ctx, 1).Servers[0].McpServerID)
 }
 
-func TestService_UpdateRole_ProjectReadGrantObeysConnectExclusion(t *testing.T) {
+func TestService_UpdateRole_ProjectConnectGrantObeysConnectExclusion(t *testing.T) {
 	t.Parallel()
 	ctx, f := newRoleDeliveryFixture(t)
 	projectID := f.ac.ProjectID.String()
-	broad := &gen.RoleGrant{Scope: string(authz.ScopeMCPRead), Selectors: []*gen.Selector{{ResourceKind: "mcp", ResourceID: "*", ProjectID: &projectID}}}
+	broad := &gen.RoleGrant{Scope: string(authz.ScopeMCPConnect), Selectors: []*gen.Selector{{ResourceKind: "mcp", ResourceID: "*", ProjectID: &projectID}}}
 	blocked := &gen.RoleGrant{Scope: string(authz.ScopeMCPBlockedConnect), Selectors: []*gen.Selector{{ResourceKind: "mcp", ResourceID: f.toolsetID.String()}}}
 	_, err := f.ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: f.roleID, AddGrants: []*gen.RoleGrant{broad}})
 	require.NoError(t, err)
@@ -155,22 +155,29 @@ func TestService_UpdateRole_ProjectReadGrantObeysConnectExclusion(t *testing.T) 
 	f.read(t, ctx, 0)
 }
 
-func TestService_UpdateRole_ProjectWriteGrantObeysConnectExclusion(t *testing.T) {
+func TestService_UpdateRole_ReadAndWriteGrantsDoNotDeliver(t *testing.T) {
 	t.Parallel()
 	ctx, f := newRoleDeliveryFixture(t)
 	projectID := f.ac.ProjectID.String()
-	broad := &gen.RoleGrant{Scope: string(authz.ScopeMCPWrite), Selectors: []*gen.Selector{{ResourceKind: "mcp", ResourceID: "*", ProjectID: &projectID}}}
-	blocked := &gen.RoleGrant{Scope: string(authz.ScopeMCPBlockedConnect), Selectors: []*gen.Selector{{ResourceKind: "mcp", ResourceID: f.toolsetID.String()}}}
-	_, err := f.ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: f.roleID, AddGrants: []*gen.RoleGrant{broad}})
-	require.NoError(t, err)
+	for _, scope := range []authz.Scope{authz.ScopeMCPRead, authz.ScopeMCPWrite} {
+		broad := &gen.RoleGrant{Scope: string(scope), Selectors: []*gen.Selector{{ResourceKind: "mcp", ResourceID: "*", ProjectID: &projectID}}}
+		_, err := f.ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: f.roleID, AddGrants: []*gen.RoleGrant{broad}})
+		require.NoError(t, err)
+		f.read(t, ctx, 0)
+	}
+	f.patch(t, ctx, f.roleID, true)
 	require.Equal(t, f.serverID.String(), *f.read(t, ctx, 1).Servers[0].McpServerID)
-	_, err = f.ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: f.roleID, AddGrants: []*gen.RoleGrant{blocked}})
-	require.NoError(t, err)
-	f.read(t, ctx, 0)
-	_, err = f.ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: f.roleID, RemoveGrants: []*gen.RoleGrant{blocked}})
-	require.NoError(t, err)
-	f.read(t, ctx, 1)
-	_, err = f.ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: f.roleID, RemoveGrants: []*gen.RoleGrant{broad}})
+}
+
+func TestService_UpdateRole_NewReadGrantDoesNotRestoreRemovedServer(t *testing.T) {
+	t.Parallel()
+	ctx, f := newRoleDeliveryFixture(t)
+	f.patch(t, ctx, f.roleID, true)
+	removedID := f.read(t, ctx, 1).Servers[0].ID
+	require.NoError(t, f.pluginService.RemovePluginServer(ctx, &plugingen.RemovePluginServerPayload{ID: removedID, PluginID: f.plugin.ID}))
+	projectID := f.ac.ProjectID.String()
+	broad := &gen.RoleGrant{Scope: string(authz.ScopeMCPRead), Selectors: []*gen.Selector{{ResourceKind: "mcp", ResourceID: "*", ProjectID: &projectID}}}
+	_, err := f.ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: f.roleID, AddGrants: []*gen.RoleGrant{broad}})
 	require.NoError(t, err)
 	f.read(t, ctx, 0)
 }
@@ -198,8 +205,9 @@ func TestService_UpdateRole_DistinctGrantRestoresExplicitlyRemovedPluginServer(t
 	require.NoError(t, f.pluginService.RemovePluginServer(ctx, &plugingen.RemovePluginServerPayload{ID: removedID, PluginID: f.plugin.ID}))
 	f.patch(t, ctx, f.roleID, true)
 	f.read(t, ctx, 0)
-	newReadGrant := &gen.RoleGrant{Scope: string(authz.ScopeMCPRead), Selectors: []*gen.Selector{{ResourceKind: "mcp", ResourceID: f.toolsetID.String()}}}
-	_, err := f.ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: f.roleID, AddGrants: []*gen.RoleGrant{newReadGrant}})
+	projectID := f.ac.ProjectID.String()
+	newConnectGrant := &gen.RoleGrant{Scope: string(authz.ScopeMCPConnect), Selectors: []*gen.Selector{{ResourceKind: "mcp", ResourceID: "*", ProjectID: &projectID}}}
+	_, err := f.ti.service.UpdateRole(ctx, &gen.UpdateRolePayload{ID: f.roleID, AddGrants: []*gen.RoleGrant{newConnectGrant}})
 	require.NoError(t, err)
 	require.Equal(t, f.serverID.String(), *f.read(t, ctx, 1).Servers[0].McpServerID)
 }

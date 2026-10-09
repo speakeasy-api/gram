@@ -30,13 +30,14 @@ import (
 // requireOrgAccess). Gating the link is not an inherited default: a set is
 // always backed by a customer-provisioned KMS key, because
 // json_web_key_sets.external_key_id is NOT NULL and chains to an external_keys
-// row with provider IN ('aws_kms','gcp_kms'). There is no Gram-managed key
+// row with provider IN ('aws_kms','gcp_kms'). There is no Speakeasy-managed key
 // path, so an organization without the entitlement has no set to attach and
 // this refusal is the honest answer rather than an upsell.
 //
-// Deliberately scoped to attach and detach. The rest of remote_session_client
-// management stays ungated, so an organization that never bought CMEK keeps
-// creating, updating, and deleting clients exactly as before.
+// Deliberately scoped to the link: attach, detach, and a create that names a
+// set. The rest of remote_session_client management stays ungated, so an
+// organization that never bought CMEK keeps creating, updating, and deleting
+// clients exactly as before.
 func (s *Service) requireKeySetEntitlement(ctx context.Context, logger *slog.Logger, organizationID string) error {
 	enabled, err := s.productFeatures.IsFeatureEnabled(ctx, organizationID, productfeatures.FeatureCustomerManagedEncryptionKeys)
 	if err != nil {
@@ -92,6 +93,33 @@ func resolveAttachableKeySet(ctx context.Context, logger *slog.Logger, txRepo *r
 	}
 
 	return managedrows.RequireUnmanaged(set.IdentityProviderConnectionID, "this json web key set")
+}
+
+// resolveCreateKeySet validates the json_web_key_set_id a create form names,
+// applying the attach rules to a client that does not exist yet: the
+// entitlement gate, and a live, unmanaged set in the caller's organization,
+// held FOR SHARE until the create commits so a concurrent deleteSet cannot
+// remove it from under the new client. An omitted id is no set. Must run
+// inside the create transaction.
+func (s *Service) resolveCreateKeySet(ctx context.Context, logger *slog.Logger, txRepo *repo.Queries, rawKeySetID *string, organizationID string) (uuid.NullUUID, error) {
+	if rawKeySetID == nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+	}
+
+	if err := s.requireKeySetEntitlement(ctx, logger, organizationID); err != nil {
+		return uuid.NullUUID{}, err
+	}
+
+	keySetID, err := uuid.Parse(*rawKeySetID)
+	if err != nil {
+		return uuid.NullUUID{}, oops.E(oops.CodeBadRequest, err, "invalid json_web_key_set_id").LogWarn(ctx, logger)
+	}
+
+	if err := resolveAttachableKeySet(ctx, logger, txRepo, keySetID, organizationID); err != nil {
+		return uuid.NullUUID{}, err
+	}
+
+	return uuid.NullUUID{UUID: keySetID, Valid: true}, nil
 }
 
 // AttachKeySet attaches an organization JSON Web Key Set to a project-tier

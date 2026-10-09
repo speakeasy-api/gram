@@ -10,7 +10,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * The network surfaces through which a Gram-hosted MCP server may be reached.
+ * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
 export const MetaMcpServerNetworkAccessMode = {
   PublicOnly: "public_only",
@@ -18,7 +18,7 @@ export const MetaMcpServerNetworkAccessMode = {
   PrivateOnly: "private_only",
 } as const;
 /**
- * The network surfaces through which a Gram-hosted MCP server may be reached.
+ * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
  */
 export type MetaMcpServerNetworkAccessMode = ClosedEnum<
   typeof MetaMcpServerNetworkAccessMode
@@ -51,7 +51,7 @@ export type MetaMcpServer = {
    */
   id: string;
   /**
-   * Operator-authored server instructions returned in the gateway's MCP initialize response. Null when the gateway serves Gram's built-in instructions.
+   * Operator-authored server instructions returned in the gateway's MCP initialize response. Null when the gateway serves Speakeasy's built-in instructions.
    */
   instructions?: string | undefined;
   /**
@@ -63,7 +63,7 @@ export type MetaMcpServer = {
    */
   name: string;
   /**
-   * The network surfaces through which a Gram-hosted MCP server may be reached.
+   * The network surfaces through which a Speakeasy-hosted MCP server may be reached.
    */
   networkAccessMode: MetaMcpServerNetworkAccessMode;
   /**

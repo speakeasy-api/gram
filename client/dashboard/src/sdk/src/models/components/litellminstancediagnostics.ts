@@ -49,7 +49,7 @@ export type LiteLLMInstanceDiagnostics = {
   lastGuardrailEventAt?: Date | undefined;
   lastOtelEventAt?: Date | undefined;
   /**
-   * Percentage of model requests in the last 24 hours that resolved to a Gram user.
+   * Percentage of model requests in the last 24 hours that resolved to a Speakeasy user.
    */
   platformUserPct24h?: number | undefined;
   reportedLitellmVersion?: string | undefined;
