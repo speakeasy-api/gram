@@ -22,6 +22,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 // seedEnvironment creates an environment in projectID. The tests only ever
@@ -165,28 +166,116 @@ func (f linkFixture) remoteServer(t *testing.T, environmentID *string) *types.Mc
 func TestCreateMcpServer_EnvironmentLink_RequiresEnvironmentAuthority(t *testing.T) {
 	t.Parallel()
 
+	cases := map[string]func(t *testing.T, f linkFixture) context.Context{
+		"mcp write only": func(t *testing.T, f linkFixture) context.Context {
+			t.Helper()
+			return f.mcpWriteOnly(t)
+		},
+		// The shape a role editor produces for one environment, project_id
+		// included, still does not cover the whole project.
+		"single environment read grant": func(t *testing.T, f linkFixture) context.Context {
+			t.Helper()
+			return withExactAuthzGrants(t, f.ctx, f.ti.conn, projectMCPWriteGrant(f.projectID),
+				authz.NewGrantWithSelector(authz.ScopeEnvironmentRead, authz.Selector{"resource_kind": "environment", "resource_id": f.envID, "project_id": f.projectID.String()}))
+		},
+		"single environment read grant without project": func(t *testing.T, f linkFixture) context.Context {
+			t.Helper()
+			return withExactAuthzGrants(t, f.ctx, f.ti.conn, projectMCPWriteGrant(f.projectID),
+				authz.NewGrantWithSelector(authz.ScopeEnvironmentRead, authz.Selector{"resource_kind": "environment", "resource_id": f.envID}))
+		},
+		"environment read in another project": func(t *testing.T, f linkFixture) context.Context {
+			t.Helper()
+			return withExactAuthzGrants(t, f.ctx, f.ti.conn, projectMCPWriteGrant(f.projectID),
+				projectEnvironmentGrant(authz.ScopeEnvironmentRead, seedOtherProject(t, f.ctx, f.ti.conn, f.orgID)))
+		},
+		// Environment authority without MCP write is not enough either.
+		"environment write without mcp write": func(t *testing.T, f linkFixture) context.Context {
+			t.Helper()
+			return withExactAuthzGrants(t, f.ctx, f.ti.conn, projectEnvironmentGrant(authz.ScopeEnvironmentWrite, f.projectID))
+		},
+	}
+	for name, caller := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newLinkFixture(t)
+			remoteID := seedRemoteMcpServer(t, f.ctx, f.ti.conn, f.projectID).String()
+			beforeCreates := auditCount(t, f.ctx, f.ti.conn, audit.ActionMcpServerCreate)
+
+			_, err := f.ti.service.CreateMcpServer(caller(t, f), createPayload("denied", &f.envID, &remoteID, nil))
+			requireOopsCode(t, err, oops.CodeForbidden)
+			require.Equal(t, beforeCreates, auditCount(t, f.ctx, f.ti.conn, audit.ActionMcpServerCreate))
+		})
+	}
+}
+
+// The rule does not depend on what the server fronts.
+func TestCreateMcpServer_EnvironmentLink_AppliesToEveryBackend(t *testing.T) {
+	t.Parallel()
+
+	backends := map[string]func(t *testing.T, f linkFixture, payload *gen.CreateMcpServerPayload){
+		"tunneled": func(t *testing.T, f linkFixture, payload *gen.CreateMcpServerPayload) {
+			t.Helper()
+			id := seedTunneledMcpServer(t, f.ctx, f.ti.conn, f.projectID).String()
+			payload.TunneledMcpServerID = &id
+		},
+		"toolset": func(t *testing.T, f linkFixture, payload *gen.CreateMcpServerPayload) {
+			t.Helper()
+			toolset, err := toolsetsrepo.New(f.ti.conn).CreateToolset(f.ctx, toolsetsrepo.CreateToolsetParams{
+				OrganizationID:         f.orgID,
+				ProjectID:              f.projectID,
+				Name:                   "linked toolset",
+				Slug:                   "linked-" + uuid.NewString()[:8],
+				Description:            pgtype.Text{String: "", Valid: false},
+				DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+				McpSlug:                pgtype.Text{String: "", Valid: false},
+				McpEnabled:             false,
+			})
+			require.NoError(t, err)
+			id := toolset.ID.String()
+			payload.ToolsetID = &id
+		},
+	}
+	for name, setBackend := range backends {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newLinkFixture(t)
+			payload := createPayload("linked "+name, &f.envID, nil, nil)
+			setBackend(t, f, payload)
+
+			_, err := f.ti.service.CreateMcpServer(f.mcpWriteOnly(t), payload)
+			requireOopsCode(t, err, oops.CodeForbidden)
+
+			before := auditCount(t, f.ctx, f.ti.conn, audit.ActionMcpServerEnvironmentLink)
+			created, err := f.ti.service.CreateMcpServer(f.withEnvironmentAuthority(t, authz.ScopeEnvironmentRead), payload)
+			require.NoError(t, err)
+			require.Equal(t, f.envID, conv.PtrValOr(created.EnvironmentID, ""))
+			require.Equal(t, before+1, auditCount(t, f.ctx, f.ti.conn, audit.ActionMcpServerEnvironmentLink))
+		})
+	}
+}
+
+// Disabling a server goes through the visibility path, which must apply the
+// same rule and audit the unlink.
+func TestUpdateMcpServer_EnvironmentLink_UnlinkWhileDisabling(t *testing.T) {
+	t.Parallel()
+
 	f := newLinkFixture(t)
-	remoteID := seedRemoteMcpServer(t, f.ctx, f.ti.conn, f.projectID).String()
-	beforeCreates := auditCount(t, f.ctx, f.ti.conn, audit.ActionMcpServerCreate)
+	server := f.remoteServer(t, &f.envID)
+	payload := updatePayload(server, nil)
+	payload.Visibility = types.McpServerVisibility("disabled")
 
-	cases := map[string]context.Context{
-		"mcp write only": f.mcpWriteOnly(t),
-		"single environment read grant": withExactAuthzGrants(t, f.ctx, f.ti.conn, projectMCPWriteGrant(f.projectID),
-			authz.NewGrantWithSelector(authz.ScopeEnvironmentRead, authz.Selector{"resource_kind": "environment", "resource_id": f.envID})),
-		"environment read in another project": withExactAuthzGrants(t, f.ctx, f.ti.conn, projectMCPWriteGrant(f.projectID),
-			projectEnvironmentGrant(authz.ScopeEnvironmentRead, seedOtherProject(t, f.ctx, f.ti.conn, f.orgID))),
-	}
-	for name, ctx := range cases {
-		_, err := f.ti.service.CreateMcpServer(ctx, createPayload("denied "+name, &f.envID, &remoteID, nil))
-		requireOopsCode(t, err, oops.CodeForbidden)
-	}
-
-	// Environment authority without MCP write is not enough either.
-	envOnly := withExactAuthzGrants(t, f.ctx, f.ti.conn, projectEnvironmentGrant(authz.ScopeEnvironmentWrite, f.projectID))
-	_, err := f.ti.service.CreateMcpServer(envOnly, createPayload("denied env only", &f.envID, &remoteID, nil))
+	_, err := f.ti.service.UpdateMcpServer(f.mcpWriteOnly(t), payload)
 	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Equal(t, f.envID, storedEnvironmentID(t, f.ctx, f.ti.conn, server.ID).UUID.String())
 
-	require.Equal(t, beforeCreates, auditCount(t, f.ctx, f.ti.conn, audit.ActionMcpServerCreate))
+	before := auditCount(t, f.ctx, f.ti.conn, audit.ActionMcpServerEnvironmentUnlink)
+	updated, err := f.ti.service.UpdateMcpServer(f.withEnvironmentAuthority(t, authz.ScopeEnvironmentRead), payload)
+	require.NoError(t, err)
+	require.Nil(t, updated.EnvironmentID)
+	require.Equal(t, types.McpServerVisibility("disabled"), updated.Visibility)
+	require.Equal(t, before+1, auditCount(t, f.ctx, f.ti.conn, audit.ActionMcpServerEnvironmentUnlink))
 }
 
 func TestCreateMcpServer_EnvironmentLink_AllowedWithEnvironmentAuthority(t *testing.T) {
