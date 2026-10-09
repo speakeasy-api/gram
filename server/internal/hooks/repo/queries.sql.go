@@ -28,7 +28,7 @@ type CountEmployeesForExternalOrgParams struct {
 	ExternalOrgID  pgtype.Text
 }
 
-// Distinct employees (resolved Gram users) ever seen under a provider org. An
+// Distinct employees (resolved Speakeasy users) ever seen under a provider org. An
 // enterprise org is shared by many employees; a personal org maps to exactly one.
 // A count >= 2 marks the org as the company's enterprise org: accounts under it
 // classify team even when their own email has not resolved, and a resolved work
@@ -176,6 +176,49 @@ func (q *Queries) GetDeviceOwner(ctx context.Context, arg GetDeviceOwnerParams) 
 		&i.DeletedAt,
 		&i.Deleted,
 	)
+	return i, err
+}
+
+const getHooksConfiguration = `-- name: GetHooksConfiguration :one
+SELECT
+  EXISTS (
+    SELECT 1
+    FROM api_keys
+    WHERE organization_id = $1::text
+      AND (project_id IS NULL OR project_id = $2::uuid)
+      AND deleted IS FALSE
+      AND scopes @> ARRAY['hooks']::text[]
+      AND (expires_at IS NULL OR expires_at > clock_timestamp())
+  )::boolean AS agent_hooks_key,
+  EXISTS (
+    SELECT 1
+    FROM ai_integration_configs
+    WHERE organization_id = $1::text
+      AND project_id = $2::uuid
+      AND provider = 'anthropic_inference'
+      AND enabled IS TRUE
+      AND deleted IS FALSE
+  )::boolean AS anthropic_inference_hooks
+`
+
+type GetHooksConfigurationParams struct {
+	OrgID     string
+	ProjectID uuid.UUID
+}
+
+type GetHooksConfigurationRow struct {
+	AgentHooksKey           bool
+	AnthropicInferenceHooks bool
+}
+
+// Whether the project has any hook telemetry source set up: an active
+// hooks-scoped API key usable by the project (bound to it, or organization
+// wide) or a connected Anthropic inference hooks integration for the project.
+// Keys and integrations bound to another project feed only that project.
+func (q *Queries) GetHooksConfiguration(ctx context.Context, arg GetHooksConfigurationParams) (GetHooksConfigurationRow, error) {
+	row := q.db.QueryRow(ctx, getHooksConfiguration, arg.OrgID, arg.ProjectID)
+	var i GetHooksConfigurationRow
+	err := row.Scan(&i.AgentHooksKey, &i.AnthropicInferenceHooks)
 	return i, err
 }
 
@@ -464,7 +507,7 @@ type InsertToolCallBlockParams struct {
 // Records a durable block row at hook-time deny. The reason is captured verbatim
 // so the block page renders from this row alone; the risk_result_id / chat
 // foreign keys are optional enrichment set when those rows are known synchronously.
-// user_id is the Gram user whose agent was blocked (empty string when unresolved)
+// user_id is the Speakeasy user whose agent was blocked (empty string when unresolved)
 // and is used to authorize the block page.
 func (q *Queries) InsertToolCallBlock(ctx context.Context, arg InsertToolCallBlockParams) error {
 	_, err := q.db.Exec(ctx, insertToolCallBlock,

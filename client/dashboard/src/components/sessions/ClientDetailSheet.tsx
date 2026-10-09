@@ -36,7 +36,7 @@ import { ClientCredentialBadge } from "./ClientCredentialBadge";
 import { ClientSourceBadge } from "./ClientSourceBadge";
 
 /**
- * Everything Gram knows about one registered client: the shared registration
+ * Everything Speakeasy knows about one registered client: the shared registration
  * facts, and — for a CIMD-resolved client — the metadata document's cache
  * state (source URL, last read, expiry, validator) with a manual refresh.
  * DCR rows get the base detail without the CIMD panel.

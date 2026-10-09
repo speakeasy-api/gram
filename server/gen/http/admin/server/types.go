@@ -229,6 +229,11 @@ type CreateGlobalIssuerRequestBody struct {
 	// authorize redirect in place of the resolved scope set. Omit or send an empty
 	// array to leave it unset.
 	ScopeOverride []string `form:"scope_override,omitempty" json:"scope_override,omitempty" xml:"scope_override,omitempty"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Omit to leave it unset: such a login requests the provider's whole
+	// scopes_supported.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it
 	// unset: the parameter is then sent, and a login or refresh the issuer answers
 	// with invalid_target is retried once without it. Set false to never send it.
@@ -321,6 +326,11 @@ type UpdateGlobalIssuerRequestBody struct {
 	// Set or clear the operator-pinned scope request. Omitting the field (or
 	// sending null) leaves the stored value unchanged; an empty array clears it.
 	ScopeOverride []string `json:"scope_override"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Omit or send null to keep the stored value; false restores the
+	// default.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter. Omitting the
 	// field leaves the stored value unchanged.
 	ResourceIndicatorSupported *bool `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
@@ -528,7 +538,7 @@ type GetOrganizationFeaturesResponseBody struct {
 	SkillCaptureMetadataOnly bool `form:"skill_capture_metadata_only" json:"skill_capture_metadata_only" xml:"skill_capture_metadata_only"`
 	// Whether the organization can provision push integrations for AI platforms
 	AiPlatformPushIntegrationsEnabled bool `form:"ai_platform_push_integrations_enabled" json:"ai_platform_push_integrations_enabled" xml:"ai_platform_push_integrations_enabled"`
-	// Whether the organization can use the Gram Platform MCP capability
+	// Whether the organization can use the Speakeasy Platform MCP capability
 	PlatformMcpEnabled bool `form:"platform_mcp_enabled" json:"platform_mcp_enabled" xml:"platform_mcp_enabled"`
 	// Whether the organization can manage the external credentials and cloud KMS
 	// keys backing customer-managed encryption
@@ -550,6 +560,8 @@ type GetOrganizationFeaturesResponseBody struct {
 	// Whether the organization has the staff-managed private network ingress
 	// entitlement
 	NetworkIngressEnabled bool `form:"network_ingress_enabled" json:"network_ingress_enabled" xml:"network_ingress_enabled"`
+	// Whether the organization can configure signals intelligence
+	SignalsIntelligenceEnabled bool `form:"signals_intelligence_enabled" json:"signals_intelligence_enabled" xml:"signals_intelligence_enabled"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -586,7 +598,7 @@ type SetOrganizationFeatureResponseBody struct {
 	SkillCaptureMetadataOnly bool `form:"skill_capture_metadata_only" json:"skill_capture_metadata_only" xml:"skill_capture_metadata_only"`
 	// Whether the organization can provision push integrations for AI platforms
 	AiPlatformPushIntegrationsEnabled bool `form:"ai_platform_push_integrations_enabled" json:"ai_platform_push_integrations_enabled" xml:"ai_platform_push_integrations_enabled"`
-	// Whether the organization can use the Gram Platform MCP capability
+	// Whether the organization can use the Speakeasy Platform MCP capability
 	PlatformMcpEnabled bool `form:"platform_mcp_enabled" json:"platform_mcp_enabled" xml:"platform_mcp_enabled"`
 	// Whether the organization can manage the external credentials and cloud KMS
 	// keys backing customer-managed encryption
@@ -608,6 +620,8 @@ type SetOrganizationFeatureResponseBody struct {
 	// Whether the organization has the staff-managed private network ingress
 	// entitlement
 	NetworkIngressEnabled bool `form:"network_ingress_enabled" json:"network_ingress_enabled" xml:"network_ingress_enabled"`
+	// Whether the organization can configure signals intelligence
+	SignalsIntelligenceEnabled bool `form:"signals_intelligence_enabled" json:"signals_intelligence_enabled" xml:"signals_intelligence_enabled"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -682,7 +696,7 @@ type UpdateOrganizationResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -740,7 +754,7 @@ type DisableOrganizationResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -787,7 +801,7 @@ type EnableOrganizationResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -834,7 +848,7 @@ type GetOrganizationResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -940,7 +954,7 @@ type ExtendTrialResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -987,7 +1001,7 @@ type CreateOrganizationResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -1034,7 +1048,7 @@ type RearmTrialResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -1139,7 +1153,7 @@ type SetStripeCustomerResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -1258,8 +1272,8 @@ type CreateGlobalIssuerResponseBody struct {
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
-	// When Gram last successfully fetched or revalidated the JWK Set. Null until
-	// the first successful refresh.
+	// When Speakeasy last successfully fetched or revalidated the JWK Set. Null
+	// until the first successful refresh.
 	JwksFetchedAt *string `form:"jwks_fetched_at,omitempty" json:"jwks_fetched_at,omitempty" xml:"jwks_fetched_at,omitempty"`
 	// When the persisted JWK Set becomes stale under the upstream cache policy.
 	// Null until the first successful refresh.
@@ -1321,6 +1335,10 @@ type CreateGlobalIssuerResponseBody struct {
 	// Operator-pinned scope request, sent verbatim on the upstream authorize
 	// redirect in place of the resolved scope set. Null when unset.
 	ScopeOverride []string `json:"scope_override"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Null when unset.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
 	ResourceIndicatorSupported *bool  `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
@@ -1400,8 +1418,8 @@ type UpdateGlobalIssuerResponseBody struct {
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
-	// When Gram last successfully fetched or revalidated the JWK Set. Null until
-	// the first successful refresh.
+	// When Speakeasy last successfully fetched or revalidated the JWK Set. Null
+	// until the first successful refresh.
 	JwksFetchedAt *string `form:"jwks_fetched_at,omitempty" json:"jwks_fetched_at,omitempty" xml:"jwks_fetched_at,omitempty"`
 	// When the persisted JWK Set becomes stale under the upstream cache policy.
 	// Null until the first successful refresh.
@@ -1463,6 +1481,10 @@ type UpdateGlobalIssuerResponseBody struct {
 	// Operator-pinned scope request, sent verbatim on the upstream authorize
 	// redirect in place of the resolved scope set. Null when unset.
 	ScopeOverride []string `json:"scope_override"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Null when unset.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
 	ResourceIndicatorSupported *bool  `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
@@ -1616,7 +1638,7 @@ type MigrateToGlobalIssuerResponseBody struct {
 // UploadPlatformImageResponseBody is the type of the "admin" service
 // "uploadPlatformImage" endpoint HTTP response body.
 type UploadPlatformImageResponseBody struct {
-	// The asset entry that was created in Gram
+	// The asset entry that was created in Speakeasy
 	Asset *AssetResponseBody `form:"asset" json:"asset" xml:"asset"`
 }
 
@@ -1629,7 +1651,7 @@ type StartTrialResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -1676,7 +1698,7 @@ type ChangeTrialEndDateResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -2072,7 +2094,7 @@ type SetStripeSubscriptionResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -2108,6 +2130,18 @@ type SetStripeSubscriptionResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the organization.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ListCustomerUsageResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body.
+type ListCustomerUsageResponseBody struct {
+	Interval     string `form:"interval" json:"interval" xml:"interval"`
+	Currency     string `form:"currency" json:"currency" xml:"currency"`
+	PricingBasis string `form:"pricing_basis" json:"pricing_basis" xml:"pricing_basis"`
+	// Retrieval timestamp used to distinguish current and future buckets
+	QueriedAt string `form:"queried_at" json:"queried_at" xml:"queried_at"`
+	// Every qualifying organization, ordered by name
+	Customers []*AdminCustomerUsageResponseBody `form:"customers" json:"customers" xml:"customers"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -18018,6 +18052,207 @@ type SetStripeSubscriptionGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListCustomerUsageUnavailableResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "unavailable" error.
+type ListCustomerUsageUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageUnauthorizedResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "unauthorized" error.
+type ListCustomerUsageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageForbiddenResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "forbidden" error.
+type ListCustomerUsageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageBadRequestResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "bad_request" error.
+type ListCustomerUsageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageNotFoundResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "not_found" error.
+type ListCustomerUsageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageConflictResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "conflict" error.
+type ListCustomerUsageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageUnsupportedMediaResponseBody is the type of the "admin"
+// service "listCustomerUsage" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListCustomerUsageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageInvalidResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "invalid" error.
+type ListCustomerUsageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageInvariantViolationResponseBody is the type of the "admin"
+// service "listCustomerUsage" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListCustomerUsageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageUnexpectedResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "unexpected" error.
+type ListCustomerUsageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListCustomerUsageGatewayErrorResponseBody is the type of the "admin" service
+// "listCustomerUsage" endpoint HTTP response body for the "gateway_error"
+// error.
+type ListCustomerUsageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -18121,7 +18356,7 @@ type AdminOrganizationResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the organization
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Gram account type (e.g. free, pro, payg, enterprise).
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
 	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// WorkOS organization ID, if linked.
 	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
@@ -18258,8 +18493,8 @@ type RemoteSessionIssuerResponseBody struct {
 	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
 	// Upstream JWKS URI; null when not advertised.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
-	// When Gram last successfully fetched or revalidated the JWK Set. Null until
-	// the first successful refresh.
+	// When Speakeasy last successfully fetched or revalidated the JWK Set. Null
+	// until the first successful refresh.
 	JwksFetchedAt *string `form:"jwks_fetched_at,omitempty" json:"jwks_fetched_at,omitempty" xml:"jwks_fetched_at,omitempty"`
 	// When the persisted JWK Set becomes stale under the upstream cache policy.
 	// Null until the first successful refresh.
@@ -18321,6 +18556,10 @@ type RemoteSessionIssuerResponseBody struct {
 	// Operator-pinned scope request, sent verbatim on the upstream authorize
 	// redirect in place of the resolved scope set. Null when unset.
 	ScopeOverride []string `json:"scope_override"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Null when unset.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Whether the issuer accepts the RFC 8707 resource parameter, as an operator
 	// stated it. Null when unset; false omits the parameter on every grant.
 	ResourceIndicatorSupported *bool  `form:"resource_indicator_supported,omitempty" json:"resource_indicator_supported,omitempty" xml:"resource_indicator_supported,omitempty"`
@@ -18575,7 +18814,7 @@ type AdminMcpServerHealthUserSessionIssuerResponseBody struct {
 type AdminMcpServerHealthTrustedRemoteSessionResponseBody struct {
 	// The trusted remote session issuer ID.
 	IssuerID string `form:"issuer_id" json:"issuer_id" xml:"issuer_id"`
-	// The remote session client ID Gram uses with the trusted issuer.
+	// The remote session client ID Speakeasy uses with the trusted issuer.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
 }
 
@@ -18639,7 +18878,7 @@ type AdminMcpServerHealthRemoteSessionIssuerResponseBody struct {
 	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
 	// Where the row is attached. global is platform-wide.
 	AttachmentScope string `form:"attachment_scope" json:"attachment_scope" xml:"attachment_scope"`
-	// Whether Gram reaches the issuer over the public internet or a tunnel.
+	// Whether Speakeasy reaches the issuer over the public internet or a tunnel.
 	Networking string `form:"networking" json:"networking" xml:"networking"`
 	// Whether the issuer is treated as an OpenID Connect provider.
 	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
@@ -18652,6 +18891,9 @@ type AdminMcpServerHealthRemoteSessionIssuerResponseBody struct {
 	// Operator-pinned scopes sent in place of the discovered set. Absent when
 	// unset.
 	ScopeOverride []string `form:"scope_override,omitempty" json:"scope_override,omitempty" xml:"scope_override,omitempty"`
+	// Whether a login with no other scope source sends no scope instead of the
+	// issuer's whole scopes_supported. Absent when unset, which behaves as false.
+	OmitScopeFallback *bool `form:"omit_scope_fallback,omitempty" json:"omit_scope_fallback,omitempty" xml:"omit_scope_fallback,omitempty"`
 	// Last successful metadata discovery.
 	MetadataFetchedAt *string `form:"metadata_fetched_at,omitempty" json:"metadata_fetched_at,omitempty" xml:"metadata_fetched_at,omitempty"`
 	// Last failed metadata discovery.
@@ -18861,6 +19103,41 @@ type AdminOnboardingStepApplicabilityResponseBody struct {
 	Reason string `form:"reason" json:"reason" xml:"reason"`
 }
 
+// AdminCustomerUsageResponseBody is used to define fields on response body
+// types.
+type AdminCustomerUsageResponseBody struct {
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	Name           string `form:"name" json:"name" xml:"name"`
+	Slug           string `form:"slug" json:"slug" xml:"slug"`
+	AccountType    string `form:"account_type" json:"account_type" xml:"account_type"`
+	TrialState     string `form:"trial_state" json:"trial_state" xml:"trial_state"`
+	// The billing cycle containing queried_at
+	CurrentCycle *MeterUsageWindowResponseBody `form:"current_cycle" json:"current_cycle" xml:"current_cycle"`
+	// From the first chart bucket's start to the last bucket's end
+	Window *MeterUsageWindowResponseBody `form:"window" json:"window" xml:"window"`
+	// The three metered products in stable display order. quantity and cost_usd
+	// cover the current cycle to date. buckets are the chart buckets for the
+	// requested interval: billing cycles for monthly, days or Monday-start weeks
+	// of the current cycle otherwise.
+	Products []*SpendProductResponseBody `form:"products" json:"products" xml:"products"`
+	// The start of the previous billing cycle, cut to the same number of elapsed
+	// days as the current one. Absent when the organization did not exist before
+	// the current cycle.
+	PreviousPeriod *MeterUsageWindowResponseBody `form:"previous_period,omitempty" json:"previous_period,omitempty" xml:"previous_period,omitempty"`
+	// Per-product costs over previous_period. Empty when previous_period is absent.
+	PreviousPeriodCosts []*AdminCustomerUsageProductCostResponseBody `form:"previous_period_costs" json:"previous_period_costs" xml:"previous_period_costs"`
+	// Why this organization's usage could not be read. products is empty when set.
+	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+}
+
+// AdminCustomerUsageProductCostResponseBody is used to define fields on
+// response body types.
+type AdminCustomerUsageProductCostResponseBody struct {
+	ProductID string `form:"product_id" json:"product_id" xml:"product_id"`
+	// Exact estimated cost at current PAYG list prices
+	CostUsd string `form:"cost_usd" json:"cost_usd" xml:"cost_usd"`
+}
+
 // SupportDraftRequestBody is used to define fields on request body types.
 type SupportDraftRequestBody struct {
 	Mappings   map[string]*SupportMappingRequestBody         `json:"mappings"`
@@ -18923,6 +19200,7 @@ func NewGetOrganizationFeaturesResponseBody(res *adminviews.ProductFeaturesView)
 		ConsentToolFilteringEnabled:             *res.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               *res.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   *res.NetworkIngressEnabled,
+		SignalsIntelligenceEnabled:              *res.SignalsIntelligenceEnabled,
 		DeviceAgent:                             *res.DeviceAgent,
 	}
 	return body
@@ -18951,6 +19229,7 @@ func NewSetOrganizationFeatureResponseBody(res *adminviews.ProductFeaturesView) 
 		ConsentToolFilteringEnabled:             *res.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               *res.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   *res.NetworkIngressEnabled,
+		SignalsIntelligenceEnabled:              *res.SignalsIntelligenceEnabled,
 		DeviceAgent:                             *res.DeviceAgent,
 	}
 	return body
@@ -19578,6 +19857,7 @@ func NewCreateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *CreateGl
 		IntrospectionEndpoint:             res.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        res.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: res.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          res.OmitScopeFallback,
 		ResourceIndicatorSupported:                 res.ResourceIndicatorSupported,
 		CreatedAt:                                  res.CreatedAt,
 		UpdatedAt:                                  res.UpdatedAt,
@@ -19731,6 +20011,7 @@ func NewUpdateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *UpdateGl
 		IntrospectionEndpoint:             res.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        res.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: res.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          res.OmitScopeFallback,
 		ResourceIndicatorSupported:                 res.ResourceIndicatorSupported,
 		CreatedAt:                                  res.CreatedAt,
 		UpdatedAt:                                  res.UpdatedAt,
@@ -20851,6 +21132,30 @@ func NewSetStripeSubscriptionResponseBody(res *admin.AdminOrganization) *SetStri
 		CreationSource:       res.CreationSource,
 		CreatedAt:            res.CreatedAt,
 		UpdatedAt:            res.UpdatedAt,
+	}
+	return body
+}
+
+// NewListCustomerUsageResponseBody builds the HTTP response body from the
+// result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageResponseBody(res *admin.AdminCustomerUsageResponse) *ListCustomerUsageResponseBody {
+	body := &ListCustomerUsageResponseBody{
+		Interval:     res.Interval,
+		Currency:     res.Currency,
+		PricingBasis: res.PricingBasis,
+		QueriedAt:    res.QueriedAt,
+	}
+	if res.Customers != nil {
+		body.Customers = make([]*AdminCustomerUsageResponseBody, len(res.Customers))
+		for i, val := range res.Customers {
+			if val == nil {
+				body.Customers[i] = nil
+				continue
+			}
+			body.Customers[i] = marshalAdminAdminCustomerUsageToAdminCustomerUsageResponseBody(val)
+		}
+	} else {
+		body.Customers = []*AdminCustomerUsageResponseBody{}
 	}
 	return body
 }
@@ -33327,6 +33632,162 @@ func NewSetStripeSubscriptionGatewayErrorResponseBody(res *goa.ServiceError) *Se
 	return body
 }
 
+// NewListCustomerUsageUnavailableResponseBody builds the HTTP response body
+// from the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageUnavailableResponseBody(res *goa.ServiceError) *ListCustomerUsageUnavailableResponseBody {
+	body := &ListCustomerUsageUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageUnauthorizedResponseBody(res *goa.ServiceError) *ListCustomerUsageUnauthorizedResponseBody {
+	body := &ListCustomerUsageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageForbiddenResponseBody builds the HTTP response body from
+// the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageForbiddenResponseBody(res *goa.ServiceError) *ListCustomerUsageForbiddenResponseBody {
+	body := &ListCustomerUsageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageBadRequestResponseBody builds the HTTP response body
+// from the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageBadRequestResponseBody(res *goa.ServiceError) *ListCustomerUsageBadRequestResponseBody {
+	body := &ListCustomerUsageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageNotFoundResponseBody builds the HTTP response body from
+// the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageNotFoundResponseBody(res *goa.ServiceError) *ListCustomerUsageNotFoundResponseBody {
+	body := &ListCustomerUsageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageConflictResponseBody builds the HTTP response body from
+// the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageConflictResponseBody(res *goa.ServiceError) *ListCustomerUsageConflictResponseBody {
+	body := &ListCustomerUsageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listCustomerUsage" endpoint of the "admin"
+// service.
+func NewListCustomerUsageUnsupportedMediaResponseBody(res *goa.ServiceError) *ListCustomerUsageUnsupportedMediaResponseBody {
+	body := &ListCustomerUsageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageInvalidResponseBody builds the HTTP response body from
+// the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageInvalidResponseBody(res *goa.ServiceError) *ListCustomerUsageInvalidResponseBody {
+	body := &ListCustomerUsageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listCustomerUsage" endpoint of the "admin"
+// service.
+func NewListCustomerUsageInvariantViolationResponseBody(res *goa.ServiceError) *ListCustomerUsageInvariantViolationResponseBody {
+	body := &ListCustomerUsageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageUnexpectedResponseBody(res *goa.ServiceError) *ListCustomerUsageUnexpectedResponseBody {
+	body := &ListCustomerUsageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomerUsageGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listCustomerUsage" endpoint of the "admin" service.
+func NewListCustomerUsageGatewayErrorResponseBody(res *goa.ServiceError) *ListCustomerUsageGatewayErrorResponseBody {
+	body := &ListCustomerUsageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginPayload builds a admin service login endpoint payload.
 func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
@@ -33767,6 +34228,7 @@ func NewCreateGlobalIssuerPayload(body *CreateGlobalIssuerRequestBody, adminSess
 		IntrospectionEndpoint:             body.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        body.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: body.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          body.OmitScopeFallback,
 		ResourceIndicatorSupported:                 body.ResourceIndicatorSupported,
 	}
 	if body.ScopesSupported != nil {
@@ -33891,6 +34353,7 @@ func NewUpdateGlobalIssuerPayload(body *UpdateGlobalIssuerRequestBody, adminSess
 		IntrospectionEndpoint:             body.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        body.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: body.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          body.OmitScopeFallback,
 		ResourceIndicatorSupported:                 body.ResourceIndicatorSupported,
 	}
 	if body.ScopesSupported != nil {
@@ -34439,6 +34902,16 @@ func NewSetStripeSubscriptionPayload(body *SetStripeSubscriptionRequestBody, adm
 	return v
 }
 
+// NewListCustomerUsagePayload builds a admin service listCustomerUsage
+// endpoint payload.
+func NewListCustomerUsagePayload(interval string, adminSessionToken *string) *admin.ListCustomerUsagePayload {
+	v := &admin.ListCustomerUsagePayload{}
+	v.Interval = interval
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // ValidateSetOrganizationFeatureRequestBody runs the validations defined on
 // SetOrganizationFeatureRequestBody
 func ValidateSetOrganizationFeatureRequestBody(body *SetOrganizationFeatureRequestBody) (err error) {
@@ -34452,8 +34925,8 @@ func ValidateSetOrganizationFeatureRequestBody(body *SetOrganizationFeatureReque
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	if body.FeatureName != nil {
-		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "sso" || *body.FeatureName == "scim" || *body.FeatureName == "hooks_browser_login" || *body.FeatureName == "hooks_fail_open" || *body.FeatureName == "custom_model_keys" || *body.FeatureName == "skills" || *body.FeatureName == "skill_capture_metadata_only" || *body.FeatureName == "ai_platform_push_integrations" || *body.FeatureName == "platform_mcp" || *body.FeatureName == "customer_managed_encryption_keys" || *body.FeatureName == "remote_session_auto_refresh" || *body.FeatureName == "remote_session_auto_refresh_enforced" || *body.FeatureName == "consent_tool_filtering" || *body.FeatureName == "session_portability" || *body.FeatureName == "network_ingress") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "platform_mcp", "customer_managed_encryption_keys", "remote_session_auto_refresh", "remote_session_auto_refresh_enforced", "consent_tool_filtering", "session_portability", "network_ingress"}))
+		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "sso" || *body.FeatureName == "scim" || *body.FeatureName == "hooks_browser_login" || *body.FeatureName == "hooks_fail_open" || *body.FeatureName == "custom_model_keys" || *body.FeatureName == "skills" || *body.FeatureName == "skill_capture_metadata_only" || *body.FeatureName == "ai_platform_push_integrations" || *body.FeatureName == "platform_mcp" || *body.FeatureName == "customer_managed_encryption_keys" || *body.FeatureName == "remote_session_auto_refresh" || *body.FeatureName == "remote_session_auto_refresh_enforced" || *body.FeatureName == "consent_tool_filtering" || *body.FeatureName == "session_portability" || *body.FeatureName == "network_ingress" || *body.FeatureName == "signals_intelligence") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "platform_mcp", "customer_managed_encryption_keys", "remote_session_auto_refresh", "remote_session_auto_refresh_enforced", "consent_tool_filtering", "session_portability", "network_ingress", "signals_intelligence"}))
 		}
 	}
 	if body.FeatureName != nil {

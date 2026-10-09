@@ -2558,6 +2558,20 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   -- this client; its mutation guards refuse edits to marked rows.
   identity_provider_connection_id uuid,
 
+  -- Who the upstream access credential belongs to. This describes the token
+  -- Speakeasy presents to the upstream resource, not the client's own secret or
+  -- key material, which always belongs to the client.
+  --
+  --   subject  the credential belongs to a session subject (a user), obtained
+  --            through a per-user flow; every row created before this column
+  --            existed reads as subject
+  --   self     the credential belongs to the client itself, e.g. obtained with
+  --            the client_credentials grant
+  --
+  -- The allowed values are validated in application code. The owner is fixed
+  -- at creation: no update query sets this column.
+  credential_owner TEXT NOT NULL DEFAULT 'subject',
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -2594,6 +2608,22 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
       client_id_metadata_uri <> ''
       AND client_secret_encrypted IS NULL
       AND client_id = client_id_metadata_uri
+    )
+  ),
+  -- Structural rules for a client that owns its upstream credential: it must
+  -- be project or organization scoped (no platform-global shared credential),
+  -- must not publish a CIMD document or use the legacy callback, and must
+  -- authenticate at the token endpoint with an explicit method other than
+  -- none. Required key material depends on the authentication method, not the
+  -- owner, so it is not part of this check.
+  CONSTRAINT remote_session_clients_credential_owner_check CHECK (
+    credential_owner <> 'self'
+    OR (
+      (project_id IS NOT NULL OR organization_id IS NOT NULL)
+      AND client_id_metadata_uri IS NULL
+      AND legacy_callback_url IS FALSE
+      AND token_endpoint_auth_method IS NOT NULL
+      AND token_endpoint_auth_method NOT IN ('', 'none')
     )
   )
 );
@@ -7075,6 +7105,10 @@ CREATE TABLE IF NOT EXISTS plugin_assignments (
   plugin_id uuid NOT NULL,
   organization_id TEXT NOT NULL,
   principal_urn TEXT NOT NULL,
+  -- How the device agent installs the plugin for this audience: 'required'
+  -- (on, can't be turned off), 'default' (on, user can turn it off) or
+  -- 'available' (off, user can turn it on). Validated in application code.
+  install_mode TEXT NOT NULL DEFAULT 'default',
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -9484,6 +9518,13 @@ WHERE user_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS platform_mcp_operation_receipts_expires_at_idx
 ON platform_mcp_operation_receipts (expires_at);
 
+-- Replay lookup for an operation that creates its own project: it has no
+-- project to key on yet, so it finds its receipt by user, operation and key
+-- across the organization. The unique key above leads with project_id and
+-- cannot serve that lookup without scanning the user's whole receipt range.
+CREATE INDEX IF NOT EXISTS platform_mcp_operation_receipts_user_operation_idx
+ON platform_mcp_operation_receipts (organization_id, user_id, operation, idempotency_key);
+
 CREATE INDEX IF NOT EXISTS platform_mcp_operation_receipts_organization_connection_idx
 ON platform_mcp_operation_receipts (organization_id, connection_id);
 
@@ -10600,3 +10641,93 @@ CREATE INDEX IF NOT EXISTS chat_message_participants_chat_id_idx
 ON chat_message_participants (chat_id);
 CREATE INDEX IF NOT EXISTS chat_message_participants_message_id_idx
 ON chat_message_participants (message_id);
+
+-- API deletion is soft. Required ownership/reference columns intentionally
+-- prevent physical parent deletion until memberships and owned rows are removed
+-- child-first; ON DELETE SET NULL follows the repository's FK convention.
+CREATE TABLE IF NOT EXISTS sigint_custom_signals (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  description TEXT,
+  classifier_criteria TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT sigint_custom_signals_pkey PRIMARY KEY (id),
+  CONSTRAINT sigint_custom_signals_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS sigint_custom_signals_project_id_id_key
+ON sigint_custom_signals (project_id, id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS sigint_custom_signals_project_id_slug_key
+ON sigint_custom_signals (project_id, slug);
+
+CREATE INDEX IF NOT EXISTS sigint_custom_signals_project_id_id_idx
+ON sigint_custom_signals (project_id, id) WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS sigint_sensors (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  description TEXT,
+  instructions TEXT,
+  mode TEXT NOT NULL,
+  -- CEL predicate over the message; roles use lowercase domain values.
+  match_expression TEXT NOT NULL DEFAULT 'message.role == "user"',
+  enabled boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT sigint_sensors_pkey PRIMARY KEY (id),
+  CONSTRAINT sigint_sensors_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS sigint_sensors_project_id_id_key
+ON sigint_sensors (project_id, id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS sigint_sensors_project_id_slug_key
+ON sigint_sensors (project_id, slug);
+
+CREATE INDEX IF NOT EXISTS sigint_sensors_project_id_id_idx
+ON sigint_sensors (project_id, id) WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS sigint_sensor_signals (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  sensor_id uuid NOT NULL,
+  signal_id uuid NOT NULL,
+  sort_order INTEGER NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT sigint_sensor_signals_pkey PRIMARY KEY (id),
+  CONSTRAINT sigint_sensor_signals_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT sigint_sensor_signals_project_id_sensor_id_fkey FOREIGN KEY (project_id, sensor_id) REFERENCES sigint_sensors (project_id, id) ON DELETE SET NULL,
+  CONSTRAINT sigint_sensor_signals_project_id_signal_id_fkey FOREIGN KEY (project_id, signal_id) REFERENCES sigint_custom_signals (project_id, id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS sigint_sensor_signals_project_id_sensor_id_signal_id_key
+ON sigint_sensor_signals (project_id, sensor_id, signal_id) WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS sigint_sensor_signals_project_id_sensor_id_sort_order_idx
+ON sigint_sensor_signals (project_id, sensor_id, sort_order, id) WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS sigint_sensor_signals_project_id_signal_id_idx
+ON sigint_sensor_signals (project_id, signal_id) WHERE deleted IS FALSE;
+
+-- Foreign-key checks must also locate soft-deleted memberships.
+CREATE INDEX IF NOT EXISTS sigint_sensor_signals_sensor_reference_idx
+ON sigint_sensor_signals (project_id, sensor_id);
+
+CREATE INDEX IF NOT EXISTS sigint_sensor_signals_signal_reference_idx
+ON sigint_sensor_signals (project_id, signal_id);

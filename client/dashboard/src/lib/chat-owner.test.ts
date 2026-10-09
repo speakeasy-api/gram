@@ -27,7 +27,7 @@ const members = [
 const currentUser = { id: "gram-2", email: "grace@example.com" };
 
 describe("resolveChatOwner", () => {
-  it("matches a compliance chat using its resolved Gram user ID", () => {
+  it("matches a compliance chat using its resolved Speakeasy user ID", () => {
     const owner = resolveChatOwner(members, {
       userId: "gram-2",
       externalUserId: "user_01HXXXXXXXXXXXXXXXXXXXXXXX",

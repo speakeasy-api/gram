@@ -721,7 +721,7 @@ type CustomRulesAnalysis_builder struct {
 	UserId                  *string
 	// Reason no policy initiated this scan; excludes origin_risk_policy_id.
 	PolicyLinkReason *string
-	// Raw external conversation ID; independent of the persisted Gram chat_id.
+	// Raw external conversation ID; independent of the persisted Speakeasy chat_id.
 	ExternalConversationId *string
 }
 

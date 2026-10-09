@@ -471,6 +471,7 @@ BEGIN
   DELETE FROM remote_session_clients WHERE project_id = proj_a OR organization_id = demo_org;
   DELETE FROM remote_session_issuers WHERE project_id = proj_a OR organization_id = demo_org;
   DELETE FROM mcp_servers WHERE project_id = proj_a;
+  DELETE FROM remote_protected_resources WHERE project_id = proj_a;
   DELETE FROM meta_mcp_servers WHERE organization_id = demo_org;
   -- meta_mcp_servers RESTRICTs its issuer, so issuers clear after it.
   DELETE FROM user_session_issuers WHERE project_id = proj_a OR organization_id = demo_org;
@@ -521,6 +522,24 @@ BEGIN
   DELETE FROM workload_issuers WHERE organization_id = demo_org;
   -- Participant project IDs are NOT NULL, so delete them before SET NULL project deletion.
   DELETE FROM chat_message_participants WHERE project_id IN (SELECT id FROM projects WHERE organization_id = demo_org);
+  -- Sigint ownership/reference FKs use ON DELETE SET NULL with non-null
+  -- columns, so every project-scoped row, including tombstones, must be
+  -- physically removed child-first before the project can be recreated.
+  DELETE FROM sigint_sensor_signals
+  WHERE project_id IN (
+    SELECT id FROM projects
+    WHERE id = proj_a AND organization_id = demo_org
+  );
+  DELETE FROM sigint_sensors
+  WHERE project_id IN (
+    SELECT id FROM projects
+    WHERE id = proj_a AND organization_id = demo_org
+  );
+  DELETE FROM sigint_custom_signals
+  WHERE project_id IN (
+    SELECT id FROM projects
+    WHERE id = proj_a AND organization_id = demo_org
+  );
   DELETE FROM projects WHERE organization_id = demo_org;
 
   -- Single project: the demo org intentionally has exactly one project so
@@ -528,12 +547,91 @@ BEGIN
   INSERT INTO projects (id, name, slug, organization_id) VALUES
     (proj_a, 'Default', 'default', demo_org);
 
+  -- Signals intelligence examples cover every authoring mode. API is shared
+  -- by two sensors, while Draft campaign intentionally has no memberships so
+  -- the incomplete authoring state remains visible.
+  INSERT INTO sigint_custom_signals
+    (id, project_id, name, slug, description, classifier_criteria)
+  VALUES
+    (demo.det_uuid('gram-demo-sigint-signal-api'), proj_a, 'API', 'api',
+     'Requests involving the public or internal API.',
+     'The conversation concerns API endpoints, requests, responses, or contracts.'),
+    (demo.det_uuid('gram-demo-sigint-signal-database'), proj_a, 'Database', 'database',
+     'Requests involving persistent data stores.',
+     'The conversation concerns queries, migrations, schemas, or database operations.'),
+    (demo.det_uuid('gram-demo-sigint-signal-authentication'), proj_a, 'Authentication', 'authentication',
+     'Requests involving identity and authentication.',
+     'The conversation concerns sign-in, credentials, sessions, or identity providers.'),
+    (demo.det_uuid('gram-demo-sigint-signal-worker'), proj_a, 'Worker', 'worker',
+     'Requests primarily involving asynchronous workers.',
+     'The conversation concerns background jobs, queues, or worker processes.'),
+    (demo.det_uuid('gram-demo-sigint-signal-low'), proj_a, 'Low', 'low',
+     'Little or no customer impact.',
+     'The issue is cosmetic or has a straightforward workaround.'),
+    (demo.det_uuid('gram-demo-sigint-signal-medium'), proj_a, 'Medium', 'medium',
+     'Noticeable but bounded customer impact.',
+     'The issue impairs a workflow but does not make the product broadly unavailable.'),
+    (demo.det_uuid('gram-demo-sigint-signal-high'), proj_a, 'High', 'high',
+     'Severe or widespread customer impact.',
+     'The issue blocks a critical workflow or affects many customers.'),
+    (demo.det_uuid('gram-demo-sigint-signal-launch'), proj_a, 'Launch', 'launch',
+     'A future product launch campaign.', NULL),
+    (demo.det_uuid('gram-demo-sigint-signal-renewal'), proj_a, 'Renewal', 'renewal',
+     'A future customer renewal campaign.', NULL);
+
+  INSERT INTO sigint_sensors
+    (id, project_id, name, slug, description, instructions, mode, enabled)
+  VALUES
+    (demo.det_uuid('gram-demo-sigint-sensor-service-areas'), proj_a,
+     'Service areas', 'service-areas', 'Labels every service area discussed in a conversation.',
+     'Select every product service that materially appears.', 'multi_label', true),
+    (demo.det_uuid('gram-demo-sigint-sensor-primary-service'), proj_a,
+     'Primary service', 'primary-service', 'Chooses the service most central to a conversation.',
+     'Choose the single service that best describes the main request.', 'exclusive', true),
+    (demo.det_uuid('gram-demo-sigint-sensor-impact'), proj_a,
+     'Customer impact', 'customer-impact', 'Orders conversations by customer impact.',
+     'Score impact from low to high using the supplied levels.', 'ordered_score', true),
+    (demo.det_uuid('gram-demo-sigint-sensor-draft-campaign'), proj_a,
+     'Draft campaign', 'draft-campaign', 'An incomplete campaign classifier awaiting its labels.',
+     NULL, 'multi_label', false);
+
+  INSERT INTO sigint_sensor_signals
+    (id, project_id, sensor_id, signal_id, sort_order)
+  VALUES
+    (demo.det_uuid('gram-demo-sigint-membership-service-api'), proj_a,
+     demo.det_uuid('gram-demo-sigint-sensor-service-areas'),
+     demo.det_uuid('gram-demo-sigint-signal-api'), 0),
+    (demo.det_uuid('gram-demo-sigint-membership-service-database'), proj_a,
+     demo.det_uuid('gram-demo-sigint-sensor-service-areas'),
+     demo.det_uuid('gram-demo-sigint-signal-database'), 1),
+    (demo.det_uuid('gram-demo-sigint-membership-service-authentication'), proj_a,
+     demo.det_uuid('gram-demo-sigint-sensor-service-areas'),
+     demo.det_uuid('gram-demo-sigint-signal-authentication'), 2),
+    (demo.det_uuid('gram-demo-sigint-membership-primary-api'), proj_a,
+     demo.det_uuid('gram-demo-sigint-sensor-primary-service'),
+     demo.det_uuid('gram-demo-sigint-signal-api'), 0),
+    (demo.det_uuid('gram-demo-sigint-membership-primary-database'), proj_a,
+     demo.det_uuid('gram-demo-sigint-sensor-primary-service'),
+     demo.det_uuid('gram-demo-sigint-signal-database'), 1),
+    (demo.det_uuid('gram-demo-sigint-membership-primary-worker'), proj_a,
+     demo.det_uuid('gram-demo-sigint-sensor-primary-service'),
+     demo.det_uuid('gram-demo-sigint-signal-worker'), 2),
+    (demo.det_uuid('gram-demo-sigint-membership-impact-low'), proj_a,
+     demo.det_uuid('gram-demo-sigint-sensor-impact'),
+     demo.det_uuid('gram-demo-sigint-signal-low'), 0),
+    (demo.det_uuid('gram-demo-sigint-membership-impact-medium'), proj_a,
+     demo.det_uuid('gram-demo-sigint-sensor-impact'),
+     demo.det_uuid('gram-demo-sigint-signal-medium'), 1),
+    (demo.det_uuid('gram-demo-sigint-membership-impact-high'), proj_a,
+     demo.det_uuid('gram-demo-sigint-sensor-impact'),
+     demo.det_uuid('gram-demo-sigint-signal-high'), 2);
+
   -- 'rbac' is required for the agent-sessions list: without it
   -- authz.ShouldEnforce is false and chatVisibilityScope falls back to
   -- own-sessions-only, hiding every seeded chat (owned by user_demo_*).
   INSERT INTO organization_features (organization_id, feature_name)
   SELECT demo_org, f
-  FROM unnest(ARRAY['logs', 'tool_io_logs', 'session_capture', 'skills', 'rbac']) AS f
+  FROM unnest(ARRAY['logs', 'tool_io_logs', 'session_capture', 'skills', 'rbac', 'signals_intelligence']) AS f
   ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING;
 
   -- Unlike demo entitlements, preserve an explicit fail-closed choice on reseed.
@@ -654,7 +752,7 @@ BEGIN
        ARRAY[]::text[]),
       ('engineer', 'Engineer',
        'Creates and configures MCP servers in this project.',
-       ARRAY['mcp:read', 'mcp:write'],
+       ARRAY['mcp:read', 'mcp:write', 'mcp:connect'],
        ARRAY['user_demo_priya', 'user_demo_mateo'],
        ARRAY[]::text[]),
       ('automation-agent', 'Automation Agent',
@@ -683,6 +781,11 @@ BEGIN
        'Outside contractors. Holds no access of its own; it blocks GitHub.',
        ARRAY[]::text[],
        ARRAY['user_demo_priya'],
+       ARRAY[]::text[]),
+      ('support-desk', 'Support Desk',
+       'Connects to Acme Support Tools with every tool, and to Slack for read-only tools only.',
+       ARRAY[]::text[],
+       ARRAY['user_demo_hana'],
        ARRAY[]::text[]),
       ('temporary-escalation', 'Temporary Escalation',
        'Elevated access granted for a fixed period and reviewed each quarter.',
@@ -956,7 +1059,7 @@ BEGIN
   --     like the majority case;
   --   cursor, openclaw, aider, ollama and lmstudio are left without rows.
   --     Cursor and OpenClaw are the case worth seeing: they publish no CIMD
-  --     document, so Gram cannot recognize them at the gateway and refuses to
+  --     document, so Speakeasy cannot recognize them at the gateway and refuses to
   --     record any decision about them. They read unreviewed, and that is the
   --     honest answer rather than a block that enforces nothing.
   DELETE FROM ai_scan_targets WHERE organization_id = demo_org;
@@ -1188,7 +1291,7 @@ BEGIN
      'https://resource.example.com/mcp');
 
   -- Resolved from a Client ID Metadata Document, and the strongest posture
-  -- available: it signs an assertion with a key it publishes, so Gram holds no
+  -- available: it signs an assertion with a key it publishes, so Speakeasy holds no
   -- secret for it. This is the row the "Key-authenticated" badge appears on.
   INSERT INTO user_session_clients
     (id, project_id, organization_id, user_session_issuer_id, client_id, client_name,
@@ -1212,7 +1315,7 @@ BEGIN
     (usc_public, proj_a, demo_org, us_issuer, 'gram_demo_client_public', NULL,
      'Claude Code', ARRAY['http://127.0.0.1:41293/callback'],
      now() - interval '11 days', 'none'),
-    -- A confidential client presenting a secret Gram issued it.
+    -- A confidential client presenting a secret Speakeasy issued it.
     (usc_secret, proj_a, demo_org, us_issuer, 'gram_demo_client_secret', demo_secret_hash,
      'Acme Nightly Batch', ARRAY['https://batch.example.com/callback'],
      now() - interval '12 days', 'client_secret_basic'),
@@ -1438,7 +1541,7 @@ BEGIN
   ) AS roots(fixture, id, name);
 
   -- Inert display fixture: runtime provisioning uses GRAM_AUTHZ_ISSUER_URL and
-  -- the existing Gram JWKS endpoint; this example cannot sign or run work.
+  -- the existing Speakeasy JWKS endpoint; this example cannot sign or run work.
   INSERT INTO workload_issuers
     (id, organization_id, project_id, name, issuer, jwks_uri, allow_wildcard_admission)
   VALUES (demo.det_uuid('gram-demo-assistant-platform-trust'), demo_org, proj_a,
@@ -1500,7 +1603,7 @@ BEGIN
     (demo.det_uuid('gram-demo-remotemcp-github'), proj_a, 'GitHub', 'github',
      'streamable-http', 'https://api.githubcopilot.com/mcp/');
 
-  -- Remote-backed servers must carry a Gram-as-AS issuer for their lifetime
+  -- Remote-backed servers must carry a Speakeasy-as-AS issuer for their lifetime
   -- (mcp_servers_issuer_required_check); the gateway gets its own so clients
   -- authenticate to it rather than to a member.
   -- session_duration must be a Microseconds-only interval: the user-session
@@ -1533,6 +1636,27 @@ BEGIN
      NULL, demo.det_uuid('gram-demo-remotemcp-github'),
      demo.det_uuid('gram-demo-issuer-workforce'), 'private');
 
+  -- Every toolset with an MCP slug owns a canonical hosted wrapper (id = the
+  -- toolset id) and one endpoint at its address, mirroring its hosting
+  -- columns. The fresh-id servers above stay separate servers over the same
+  -- toolsets.
+  INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
+                           user_session_issuer_id, tool_variations_group_id,
+                           visibility)
+  SELECT t.id, t.project_id, t.name, t.mcp_slug, t.id, t.user_session_issuer_id,
+         t.tool_variations_group_id,
+         CASE WHEN NOT t.mcp_enabled THEN 'disabled'
+              WHEN t.mcp_is_public THEN 'public'
+              ELSE 'private' END
+  FROM toolsets t
+  WHERE t.project_id = proj_a AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL;
+
+  INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, custom_domain_id, slug)
+  SELECT demo.det_uuid('gram-demo-endpoint-hosted-' || t.slug), t.project_id,
+         t.id, t.custom_domain_id, t.mcp_slug
+  FROM toolsets t
+  WHERE t.project_id = proj_a AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL;
+
   -- Check Access scenarios on GitHub. Contractors blocks connecting, which
   -- wins over every other role's grant: Mateo (a contractor through the
   -- directory) is blocked even though Engineer reaches every server, and his
@@ -1547,6 +1671,21 @@ BEGIN
   FROM organization_roles r
   WHERE r.organization_id = demo_org AND r.workos_slug = 'contractors';
 
+  -- Support Desk names its servers one by one, the MCP access tab's main
+  -- shape: Acme Support Tools with every tool (toolset-backed, so the grant
+  -- names the toolset), Slack only for tools annotated read-only.
+  INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+  SELECT demo_org, 'role:organization:' || r.id, 'mcp:connect', sel
+  FROM organization_roles r
+  CROSS JOIN (VALUES
+    (jsonb_build_object('resource_kind', 'mcp',
+       'resource_id', toolset_1::text)),
+    (jsonb_build_object('resource_kind', 'mcp',
+       'resource_id', demo.det_uuid('gram-demo-mcpserver-slack')::text,
+       'disposition', 'read_only'))
+  ) AS v(sel)
+  WHERE r.organization_id = demo_org AND r.workos_slug = 'support-desk';
+
   INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
   VALUES
     (demo.det_uuid('gram-demo-github-direct-grant'), demo_org,
@@ -1557,9 +1696,10 @@ BEGIN
      'user:' || demo_user_ids[4], 'mcp:connect',
      jsonb_build_object('resource_kind', 'mcp', 'resource_id', '*'));
 
-  -- Distribute these servers to the seeded organization roles with Use access:
-  -- mcp:read and mcp:write imply mcp:connect, including disposition-limited
-  -- access. Store server identities, not legacy toolset memberships. Content
+  -- Distribute these servers to the seeded organization roles holding
+  -- mcp:connect, including disposition-limited connect. mcp:read and
+  -- mcp:write still allow connecting at the endpoint but do not deliver
+  -- servers. Store server identities, not legacy toolset memberships. Content
   -- has no manual/automatic distinction and never widens a plugin's audience.
   INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)
   SELECT p.id, s.id, s.name
@@ -1570,16 +1710,38 @@ BEGIN
   CROSS JOIN mcp_servers s
   WHERE p.organization_id = demo_org AND p.project_id = proj_a
     AND s.project_id = proj_a
+    -- Canonical hosted wrappers share their toolset's name with the
+    -- fresh-id servers above; distribute those servers only.
+    AND s.id IS DISTINCT FROM s.toolset_id
     AND EXISTS (
       SELECT 1 FROM principal_grants g
       WHERE g.organization_id = demo_org AND g.principal_urn = a.principal_urn
-        AND g.scope IN ('mcp:connect', 'mcp:read', 'mcp:write')
+        AND g.scope = 'mcp:connect'
         AND g.selectors->>'resource_kind' = 'mcp'
         AND g.selectors->>'resource_id' = '*');
 
   GET DIAGNOSTICS stray = ROW_COUNT;
-  IF stray <> 30 THEN
-    RAISE EXCEPTION 'demo seed: expected 30 role server memberships, found %', stray;
+  IF stray <> 25 THEN
+    RAISE EXCEPTION 'demo seed: expected 25 role server memberships, found %', stray;
+  END IF;
+
+  -- A hand-curated supplement gives Team Access a multiple-plugin example:
+  -- Engineer reaches GitHub through both its role plugin and this one. Other
+  -- servers/roles keep their single-match and no-match examples.
+  INSERT INTO plugins (organization_id, project_id, name, slug)
+  VALUES (demo_org, proj_a, 'Engineering Essentials', 'engineering-essentials')
+  RETURNING id INTO custom_role_id;
+  INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn)
+  SELECT custom_role_id, demo_org, 'role:organization:' || id
+  FROM organization_roles
+  WHERE organization_id = demo_org AND workos_slug = 'engineer';
+  INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)
+  SELECT custom_role_id, id, name FROM mcp_servers
+  WHERE project_id = proj_a AND slug = 'github';
+
+  GET DIAGNOSTICS stray = ROW_COUNT;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed: expected 1 supplemental server membership, found %', stray;
   END IF;
 
   -- Leave instructions NULL so Settings starts with the editable built-in
@@ -1602,8 +1764,7 @@ BEGIN
      'https://identity.example.com/.well-known/jwks.json',
      ARRAY['read', 'write'], ARRAY['authorization_code', 'refresh_token'],
      ARRAY['code'], ARRAY['none'], ARRAY['S256'], TRUE,
-     -- A pinned scope request, so the provider's page shows its override and
-     -- its clients' scope fields show the ignored-scopes warning.
+     -- An issuer-wide scope override, shown on the provider's page.
      'Example Workspace Identity', ARRAY['read']);
 
   INSERT INTO remote_session_clients
@@ -1615,7 +1776,8 @@ BEGIN
      demo.det_uuid('gram-demo-remote-identity-provider-linear'),
      'https://clients.example.com/gram-demo-linear.json',
      'https://clients.example.com/gram-demo-linear.json', clock_timestamp(), 'none',
-     ARRAY['read', 'write']);
+     -- No scope of its own: the resource pin decides once discovery is on.
+     NULL);
 
   INSERT INTO remote_session_client_user_session_issuers
     (remote_session_client_id, user_session_issuer_id)
@@ -1635,6 +1797,24 @@ BEGIN
         demo.det_uuid('gram-demo-remote-identity-provider-linear')
   WHERE id = demo.det_uuid('gram-demo-mcpserver-linear')
     AND project_id = proj_a;
+
+  -- Linear's protected resource, read recently, with a scope pin for the server's scope panel.
+  INSERT INTO remote_protected_resources
+    (id, project_id, organization_id, resource_identifier, metadata_url,
+     authorization_servers, scopes_supported, scope_override, metadata_fetched_at)
+  VALUES
+    (demo.det_uuid('gram-demo-protected-resource-linear'), proj_a, demo_org,
+     'https://mcp.linear.app/mcp',
+     'https://mcp.linear.app/.well-known/oauth-protected-resource/mcp',
+     ARRAY['https://identity.example.com'], ARRAY['read', 'write'],
+     ARRAY['read'], now() - interval '2 hours')
+  ON CONFLICT (project_id, resource_identifier) WHERE deleted IS FALSE DO UPDATE
+  SET metadata_url = EXCLUDED.metadata_url,
+      authorization_servers = EXCLUDED.authorization_servers,
+      scopes_supported = EXCLUDED.scopes_supported,
+      scope_override = EXCLUDED.scope_override,
+      metadata_fetched_at = EXCLUDED.metadata_fetched_at,
+      updated_at = clock_timestamp();
 
   INSERT INTO remote_mcp_server_headers
     (id, remote_mcp_server_id, name, description, is_required, is_secret, value)
@@ -1765,7 +1945,8 @@ BEGIN
   VALUES (demo.det_uuid('gram-demo-attachment-client'), proj_a, demo_org,
           demo.det_uuid('gram-demo-remote-identity-provider-linear'),
           demo.det_uuid('gram-demo-attachment-client')::text, 'none',
-          ARRAY['read', 'write'], TRUE);
+          -- No scope of its own: the resource pin decides once discovery is on.
+          NULL, TRUE);
 
   INSERT INTO remote_session_client_user_session_issuers
     (remote_session_client_id, user_session_issuer_id)
@@ -2694,6 +2875,29 @@ Channel context stays in the Raw view.
   INSERT INTO chat_session_links (project_id, organization_id, parent_chat_id, child_chat_id, parent_session_id, child_session_id, kind, target_harness, source_surface)
   VALUES (proj_a, demo_org, chat_id, demo.det_uuid('gram-demo-claude-tag-helper'), chat_id::text, demo.det_uuid('gram-demo-claude-tag-helper')::text, 'subagent', 'claude-tag', 'claude-tag');
 
+  -- One dashboard session per assistant: the bound one names its agent and the
+  -- member it acted for; the legacy one links to the assistant itself.
+  INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
+  SELECT demo.det_uuid('gram-demo-assistant-session-' || fixture), proj_a, demo_org, demo_user_ids[2], demo_user_emails[2],
+         title, now() - interval '40 minutes', now() - interval '38 minutes'
+  FROM (VALUES ('bound', 'Weekly project activity summary'),
+               ('legacy', 'Open risk findings recap')) AS sessions(fixture, title);
+  INSERT INTO chat_messages (id, chat_id, project_id, role, content, created_at, risk_analyzed_at)
+  SELECT demo.det_uuid('gram-demo-assistant-session-' || fixture || '-' || role),
+         demo.det_uuid('gram-demo-assistant-session-' || fixture), proj_a, role, content,
+         now() - offset_interval, now()
+  FROM (VALUES
+    ('bound', 'user', 'Summarize this week''s project activity.', interval '40 minutes'),
+    ('bound', 'assistant', 'Tool usage rose this week and two new MCP servers were connected.', interval '39 minutes'),
+    ('legacy', 'user', 'Recap the open risk findings.', interval '40 minutes'),
+    ('legacy', 'assistant', 'Three findings remain open, all in coding agent sessions.', interval '39 minutes')
+  ) AS messages(fixture, role, content, offset_interval);
+  INSERT INTO assistant_threads (id, assistant_id, project_id, correlation_id, chat_id, source_kind, last_event_at)
+  SELECT demo.det_uuid('gram-demo-assistant-thread-' || fixture), demo.det_uuid('gram-demo-assistant-' || fixture), proj_a,
+         'demo-dashboard-' || fixture, demo.det_uuid('gram-demo-assistant-session-' || fixture), 'dashboard',
+         now() - interval '38 minutes'
+  FROM (VALUES ('bound'), ('legacy')) AS threads(fixture);
+
   -- Historical shortened trial: audit history shows both dates, not an extension.
   INSERT INTO audit_logs
     (id, organization_id, actor_id, actor_type, actor_display_name,
@@ -3329,6 +3533,29 @@ Channel context stays in the Raw view.
   END IF;
 
   SELECT count(*) INTO stray
+  FROM toolsets t
+  LEFT JOIN mcp_servers s
+    ON s.id = t.id AND s.toolset_id = t.id AND s.deleted IS FALSE
+   AND s.slug = t.mcp_slug AND s.name = t.name
+   AND s.user_session_issuer_id IS NOT DISTINCT FROM t.user_session_issuer_id
+   AND s.tool_variations_group_id IS NOT DISTINCT FROM t.tool_variations_group_id
+   AND s.visibility = CASE WHEN NOT t.mcp_enabled THEN 'disabled'
+                           WHEN t.mcp_is_public THEN 'public'
+                           ELSE 'private' END
+  WHERE t.project_id = proj_a AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL
+    AND (s.id IS NULL
+      OR 1 <> (SELECT count(*) FROM mcp_endpoints e
+               WHERE e.mcp_server_id = t.id AND e.deleted IS FALSE)
+      OR NOT EXISTS (
+        SELECT 1 FROM mcp_endpoints e
+        WHERE e.mcp_server_id = t.id AND e.deleted IS FALSE
+          AND e.slug = t.mcp_slug
+          AND e.custom_domain_id IS NOT DISTINCT FROM t.custom_domain_id));
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % hosted toolsets lack a matching canonical wrapper and endpoint', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
   FROM mcp_endpoints e
   WHERE e.project_id = proj_a AND e.deleted IS FALSE
     AND e.meta_mcp_server_id IS NOT NULL;
@@ -3595,6 +3822,14 @@ Channel context stays in the Raw view.
     RAISE EXCEPTION 'demo seed postflight: expected 1 MCP server stamped with the Remote MCP identity provider, found %', stray;
   END IF;
 
+  SELECT count(*) INTO stray FROM remote_protected_resources
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND resource_identifier = 'https://mcp.linear.app/mcp'
+    AND scope_override = ARRAY['read'];
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected Linear''s protected resource pinned to read, found % matching rows', stray;
+  END IF;
+
   SELECT count(*) INTO stray
   FROM remote_mcp_server_headers header
   JOIN remote_mcp_servers remote ON remote.id = header.remote_mcp_server_id
@@ -3667,6 +3902,10 @@ Channel context stays in the Raw view.
   WHERE organization_id = demo_org AND project_id = proj_a;
   IF stray <> 1 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 1 assistant binding, found %', stray;
+  END IF;
+  SELECT count(*) INTO stray FROM assistant_threads WHERE project_id = proj_a;
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 assistant threads, found %', stray;
   END IF;
   SELECT count(*) INTO stray FROM trigger_workload_bindings
   WHERE organization_id = demo_org AND project_id = proj_a;
@@ -3859,6 +4098,95 @@ Channel context stays in the Raw view.
   SELECT count(*) INTO stray FROM widgets WHERE project_id = proj_a AND deleted IS FALSE;
   IF stray <> 5 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 5 Explore widgets, found %', stray;
+  END IF;
+
+  -- Sigint postflights preserve the complete authoring story: all modes,
+  -- ordered memberships, a shared catalog entry, and an incomplete draft.
+  SELECT count(*) INTO stray FROM sigint_custom_signals
+  WHERE project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 9 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 9 sigint signals, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM sigint_sensors
+  WHERE project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 4 sigint sensors, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM sigint_sensors
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND (id, mode) IN (
+      (demo.det_uuid('gram-demo-sigint-sensor-service-areas'), 'multi_label'),
+      (demo.det_uuid('gram-demo-sigint-sensor-primary-service'), 'exclusive'),
+      (demo.det_uuid('gram-demo-sigint-sensor-impact'), 'ordered_score'),
+      (demo.det_uuid('gram-demo-sigint-sensor-draft-campaign'), 'multi_label')
+    );
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: sigint sensor modes do not match the seeded examples';
+  END IF;
+
+  SELECT count(*) INTO stray FROM sigint_sensor_signals
+  WHERE project_id = proj_a AND deleted IS FALSE;
+  IF stray <> 9 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 9 sigint sensor memberships, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM sigint_sensor_signals
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND signal_id = demo.det_uuid('gram-demo-sigint-signal-api');
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: shared API signal has % memberships, expected 2', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM sigint_sensor_signals
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND sensor_id = demo.det_uuid('gram-demo-sigint-sensor-draft-campaign');
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: incomplete sigint sensor unexpectedly has % memberships', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM (
+    SELECT array_agg(signal_id ORDER BY sort_order) AS signal_ids
+    FROM sigint_sensor_signals
+    WHERE project_id = proj_a AND deleted IS FALSE
+      AND sensor_id = demo.det_uuid('gram-demo-sigint-sensor-impact')
+    HAVING array_agg(signal_id ORDER BY sort_order) = ARRAY[
+      demo.det_uuid('gram-demo-sigint-signal-low'),
+      demo.det_uuid('gram-demo-sigint-signal-medium'),
+      demo.det_uuid('gram-demo-sigint-signal-high')
+    ]::uuid[]
+  ) ordered_score;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: ordered-score sigint membership order is invalid';
+  END IF;
+
+  SELECT count(*) INTO stray FROM (
+    SELECT sort_order,
+           row_number() OVER (
+             PARTITION BY sensor_id ORDER BY sort_order, id
+           ) - 1 AS expected_order
+    FROM sigint_sensor_signals
+    WHERE project_id = proj_a AND deleted IS FALSE
+  ) memberships
+  WHERE sort_order <> expected_order;
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % sigint memberships have non-consecutive order', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM sigint_sensor_signals ss
+  LEFT JOIN sigint_sensors s
+    ON s.project_id = ss.project_id AND s.id = ss.sensor_id
+  LEFT JOIN sigint_custom_signals cs
+    ON cs.project_id = ss.project_id AND cs.id = ss.signal_id
+  WHERE ss.project_id = proj_a AND ss.deleted IS FALSE
+    AND (s.id IS NULL OR s.deleted IS TRUE
+      OR cs.id IS NULL OR cs.deleted IS TRUE);
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % sigint memberships reference missing or deleted resources', stray;
   END IF;
 
   RAISE NOTICE 'demo seed ok: % chats, % findings, % members, % tools',

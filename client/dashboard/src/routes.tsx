@@ -58,7 +58,13 @@ import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
 import Costs from "./pages/costs/Costs";
+import {
+  DashboardRoute,
+  DashboardsIndex,
+  DashboardsRoot,
+} from "./pages/explore/Dashboards";
 import Explore from "./pages/explore/Explore";
+import SignalsIntelligenceRoute from "./components/signals-intelligence-route";
 import IdentitiesIndex, {
   IdentityDetailIndexRedirect,
   IdentitiesRoot,
@@ -113,6 +119,7 @@ import {
   WorkloadIssuersRoot,
 } from "./pages/workload-identities/WorkloadIssuers";
 import { WorkloadIssuerDetailPage } from "./pages/workload-identities/WorkloadIssuerDetail";
+import { CatalogPlatformPage } from "./pages/workload-identities/setup/CatalogPlatformPage";
 import AccessHubRedirect from "./pages/workload-identities/AccessHubRedirect";
 import RemoteIdentityProviderDetail from "./pages/remote-identity-providers/RemoteIdentityProviderDetail";
 import RemoteSessionClientDetail from "./pages/remote-identity-providers/RemoteSessionClientDetail";
@@ -365,6 +372,13 @@ const ROUTE_STRUCTURE = {
         component: AssistantPage,
       },
     },
+  },
+  signalsIntelligence: {
+    title: "Signals intelligence",
+    url: "signals-intelligence",
+    icon: "radio",
+    stage: "preview",
+    component: SignalsIntelligenceRoute,
   },
   skills: {
     title: "Skills",
@@ -824,6 +838,21 @@ const ROUTE_STRUCTURE = {
     icon: "telescope",
     component: Explore,
     stage: "preview",
+  },
+  dashboards: {
+    title: "Dashboards",
+    url: "dashboards",
+    icon: "layout-grid",
+    component: DashboardsRoot,
+    indexComponent: DashboardsIndex,
+    stage: "preview",
+    subPages: {
+      detail: {
+        title: "Dashboard",
+        url: ":dashboardId",
+        component: DashboardRoute,
+      },
+    },
   },
   logs: {
     title: "Tool Logs",
@@ -1462,6 +1491,11 @@ const ORG_ROUTE_STRUCTURE = {
         title: "Trusted Platform",
         url: ":issuerId",
         component: WorkloadIssuerDetailPage,
+      },
+      catalogPlatform: {
+        title: "Catalog Platform",
+        url: "catalog/:platformKey",
+        component: CatalogPlatformPage,
       },
     },
   },

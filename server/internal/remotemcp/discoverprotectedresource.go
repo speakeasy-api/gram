@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -56,7 +57,7 @@ func (s *Service) DiscoverProtectedResourceMetadata(ctx context.Context, payload
 	doc, warnings, probeErr := wellknown.DiscoverProtectedResourceMetadata(ctx, s.policy, server.Url)
 	if probeErr != nil {
 		if typed, ok := errors.AsType[*wellknown.ProtectedResourceDiscoveryError](probeErr); ok {
-			if err := recordProtectedResourceFetchError(ctx, s.db, *authCtx.ProjectID, authCtx.ActiveOrganizationID, server.Url, typed); err != nil {
+			if err := protectedresource.RecordFetchError(ctx, s.db, *authCtx.ProjectID, authCtx.ActiveOrganizationID, server.Url, typed); err != nil {
 				logger.ErrorContext(ctx, "record protected resource fetch error", attr.SlogError(err))
 			}
 			return &gen.ProtectedResourceMetadataDiscovery{
@@ -77,7 +78,7 @@ func (s *Service) DiscoverProtectedResourceMetadata(ctx context.Context, payload
 
 	// Keep the diagnostic response even for invalid metadata, but record the
 	// failed validation rather than refreshing the last successful fetch.
-	if err := recordProtectedResource(ctx, s.db, *authCtx.ProjectID, authCtx.ActiveOrganizationID, server.Url, doc); err != nil {
+	if err := protectedresource.Record(ctx, s.db, *authCtx.ProjectID, authCtx.ActiveOrganizationID, server.Url, doc); err != nil {
 		logger.ErrorContext(ctx, "record protected resource", attr.SlogError(err))
 	}
 

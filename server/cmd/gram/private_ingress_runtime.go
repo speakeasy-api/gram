@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
@@ -280,7 +281,8 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	if err != nil {
 		return nil, fmt.Errorf("build tunnel http client: %w", err)
 	}
-	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner)
+	protectedResources := protectedresource.NewProber(db, guardianPolicy)
+	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags)
 	if err != nil {
 		return nil, err
 	}
@@ -297,10 +299,14 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		ShadowMCP: shadowMCPClient, MCPRisk: mcpRiskEvaluator, Audit: auditLogger,
 		PlatformExtras: platformExtras, PlatformFeatureChecker: productFeatures.PlatformFeatureCheck,
 		PlatformToolsets: map[string]platformtools.Toolset{}, Identity: identityResolver, Challenges: challengeManager, CallbackOrigins: callbackOrigins, PlatformHosts: platformHosts,
+		ProtectedResources: protectedResources,
 	})
 	if err != nil {
 		return nil, err
 	}
+	// The private ingress serves no authentication host routes, but must know
+	// the host to derive the shared authorization servers issuers pin there.
+	mcp.RecordAuthenticationHost(authenticationHost, mcpService)
 	r.cleanup = append(r.cleanup, func(ctx context.Context) error {
 		drainCtx, cancel := context.WithTimeout(ctx, probeDrainTimeout)
 		defer cancel()

@@ -215,6 +215,14 @@ describe("HeadersSection", () => {
     );
   });
 
+  it("shows the server's reason when a save is refused", () => {
+    const message =
+      'header "X-Upstream-Token" cannot read request header "Gram-Key": Speakeasy credentials and cookies are never forwarded to remote MCP servers';
+    renderSection(headerState({ error: new Error(message) }));
+
+    expect(screen.getByText(message)).toBeTruthy();
+  });
+
   it("leaves the name free when no identity claims it", () => {
     renderSection(
       headerState({ authorization: { mode: "none", unknown: false } }),

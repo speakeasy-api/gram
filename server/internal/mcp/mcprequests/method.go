@@ -26,8 +26,8 @@ const (
 // [MethodOther]. The result is always drawn from a fixed set, so a hostile
 // client cannot mint unbounded series no matter what it sends.
 //
-// Recognized methods include those Gram does not implement: the census is an
-// observation instrument and records what clients send, not what Gram serves.
+// Recognized methods include those Speakeasy does not implement: the census is an
+// observation instrument and records what clients send, not what Speakeasy serves.
 // A method a new revision or an extension adds buckets into [MethodOther]
 // until mcpversions learns it, the same silent-staleness trade-off
 // mcpversions.Clamp accepts for versions.

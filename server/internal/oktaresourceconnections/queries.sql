@@ -166,6 +166,7 @@ SELECT
   , c.resource_identifier
   , i.scope_override AS issuer_scope_override
   , i.scopes_supported AS issuer_scopes_supported
+  , i.omit_scope_fallback AS issuer_omit_scope_fallback
   , (
       SELECT COALESCE(array_agg(link.user_session_issuer_id ORDER BY link.user_session_issuer_id), '{}'::uuid[])
       FROM remote_session_client_user_session_issuers AS link
@@ -191,6 +192,25 @@ WHERE c.deleted IS FALSE
     OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id))
   )
 ORDER BY c.remote_session_issuer_id, c.project_id NULLS LAST, c.created_at, c.id;
+
+-- name: ListRemoteProtectedResourceScopes :many
+-- What the cached protected resource rows say about scopes, for any of the
+-- given projects and upstream URLs; callers match rows back to servers.
+SELECT
+    rpr.project_id
+  , rpr.resource_identifier
+  , rpr.scope_override
+  , rpr.challenge_scopes
+  , rpr.scopes_supported
+  , rpr.metadata_fetched_at
+FROM remote_protected_resources AS rpr
+JOIN projects AS p
+  ON p.id = rpr.project_id
+ AND p.organization_id = @organization_id
+ AND p.deleted IS FALSE
+WHERE rpr.project_id = ANY (@project_ids::uuid[])
+  AND rpr.resource_identifier = ANY (@resource_identifiers::text[])
+  AND rpr.deleted IS FALSE;
 
 -- name: ListEMABindings :many
 SELECT

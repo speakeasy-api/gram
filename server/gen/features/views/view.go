@@ -48,7 +48,7 @@ type ProductFeaturesView struct {
 	SkillCaptureMetadataOnly *bool
 	// Whether the organization can provision push integrations for AI platforms
 	AiPlatformPushIntegrationsEnabled *bool
-	// Whether the organization can use the Gram Platform MCP capability
+	// Whether the organization can use the Speakeasy Platform MCP capability
 	PlatformMcpEnabled *bool
 	// Whether the organization can manage the external credentials and cloud KMS
 	// keys backing customer-managed encryption
@@ -70,6 +70,8 @@ type ProductFeaturesView struct {
 	// Whether the organization has the staff-managed private network ingress
 	// entitlement
 	NetworkIngressEnabled *bool
+	// Whether the organization can configure signals intelligence
+	SignalsIntelligenceEnabled *bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -100,6 +102,7 @@ var (
 			"consent_tool_filtering_enabled",
 			"session_portability_enabled",
 			"network_ingress_enabled",
+			"signals_intelligence_enabled",
 			"device_agent",
 		},
 	}
@@ -176,6 +179,9 @@ func ValidateProductFeaturesView(result *ProductFeaturesView) (err error) {
 	}
 	if result.NetworkIngressEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("network_ingress_enabled", "result"))
+	}
+	if result.SignalsIntelligenceEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("signals_intelligence_enabled", "result"))
 	}
 	if result.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "result"))

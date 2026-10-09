@@ -1685,7 +1685,7 @@ func requireEmployees(t *testing.T, ctx context.Context, ti *testInstance, now t
 }
 
 // TestSearchUsers_PaginatesPastAnExcludedLaterEvent pins that the people
-// directory advances past a person whose Gram-hosted (excluded) activity runs
+// directory advances past a person whose Speakeasy-hosted (excluded) activity runs
 // later than their last qualifying event.
 //
 // A cursor carrying only the person's group key makes the next page re-derive
@@ -1705,7 +1705,7 @@ func TestSearchUsers_PaginatesPastAnExcludedLaterEvent(t *testing.T) {
 	personA := "person-a-" + uuid.NewString()[:8] + "@example.com"
 	personB := "person-b-" + uuid.NewString()[:8] + "@example.com"
 
-	// A qualifies at T and has an excluded Gram-hosted event at T+1; B
+	// A qualifies at T and has an excluded Speakeasy-hosted event at T+1; B
 	// qualifies before T.
 	insertPollingLogWithEmail(t, ctx, projectID, deploymentID, now.Add(-10*time.Minute), personA, 100, 50, 1.5)
 	insertGramHostedJudgeLog(t, ctx, projectID, now.Add(-9*time.Minute), personA, 10, 10, 0.1)

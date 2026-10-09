@@ -331,6 +331,48 @@ func TestAddToolsToMCPReplaysOneIdempotencyKeyWithoutAppendingTwice(t *testing.T
 	require.Equal(t, []string{fixture.tools[0]}, replay.Exposure.ToolURNs)
 }
 
+// A retry of a change that already committed does no work, so it must still
+// return its stored result once the caller's allowance is spent, rather than
+// coming back rate_limited. Re-sending its index signal is work, though, so
+// that is skipped and reported.
+func TestAddToolsToMCPReplaysWithASpentAllowance(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_add_tools_replay_spent")
+
+	current, err := fixture.service.Exposure(ctx, fixture.principal, fixture.project.ID, fixture.toolsetID)
+	require.NoError(t, err)
+	input := ChangeMCPToolsInput{
+		ProjectID: fixture.project.ID.String(), MCPID: fixture.toolsetID.String(),
+		ToolURNs: []string{fixture.tools[0]}, ExpectedVersion: current.ExposureVersion,
+		IdempotencyKey: uuid.NewString(), Confirmed: true,
+	}
+	first, err := fixture.service.AddTools(ctx, fixture.principal, input)
+	require.NoError(t, err)
+
+	// A budget store that cannot be reached is not throttling: the skipped
+	// rebuild is reported as unavailable, not rate_limited.
+	fixture.service.changes = OperationBudget{Connection: failingOperationLimiter{}, Organization: failingOperationLimiter{}}
+	outage, err := fixture.service.AddTools(ctx, fixture.principal, input)
+	require.NoError(t, err, "a replay must not be refused when the budget cannot be checked")
+	require.True(t, outage.Receipt.Replayed)
+	require.Equal(t, "unavailable", outage.IndexSignal)
+
+	withSpentBudget(t, &fixture.service.changes)
+	replay, err := fixture.service.AddTools(ctx, fixture.principal, input)
+	require.NoError(t, err, "a replay must not be charged against a spent allowance")
+	require.True(t, replay.Receipt.Replayed)
+	require.Equal(t, first.Receipt.ID, replay.Receipt.ID)
+	require.Equal(t, "applied", replay.Outcome)
+	require.Equal(t, "rate_limited", replay.IndexSignal, "a replay over a spent allowance must not schedule the index again")
+
+	fresh := input
+	fresh.IdempotencyKey = uuid.NewString()
+	_, err = fixture.service.AddTools(ctx, fixture.principal, fresh)
+	var refusal *MCPToolExposureError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, "rate_limited", refusal.Code, "a request that is not a replay is still charged")
+}
+
 // A server that fronts an upstream, and a caller naming something that is not
 // a server at all, must both reach the readable dashboard refusal on the
 // mutation path too — not a forbidden error or a bare not-found leaking out
@@ -340,7 +382,7 @@ func TestChangeMCPToolsRefusesAServerItDoesNotOwnTheToolsOf(t *testing.T) {
 	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_tools_unsupported_target")
 
 	// A server that fronts an upstream: its tools come from that upstream, so
-	// there is no Gram toolset behind it to change.
+	// there is no Speakeasy toolset behind it to change.
 	remoteID, upstreamID := uuid.New(), uuid.New()
 	_, err := remotemcprepo.New(fixture.conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
 		ID: remoteID, ProjectID: fixture.project.ID, TransportType: "streamable-http", Url: "https://upstream.example.test/mcp",
@@ -599,10 +641,10 @@ func TestToolsetRowLockBlocksAttachingAnotherServerToIt(t *testing.T) {
 }
 
 // Lock ORDER, not lock presence. toolsets.UpdateToolset holds the toolset row
-// (GetToolsetForUpdate) and then, inside reconcileHostedNetworkAccess, runs a
-// plain `UPDATE mcp_servers ... WHERE id = $6 AND toolset_id = $6` — an
-// exclusive row lock taken without any FOR UPDATE syntax. For a hosted server
-// both ids are the toolset id, so that is the same pair of rows this path
+// (GetToolsetForUpdate) and then, inside hostedmcp.Sync, locks the hosted
+// mcp_servers row FOR UPDATE (LockMCPServerByIDAndProjectID) before writing
+// it. For a hosted server both ids are the toolset id, so that is the same
+// pair of rows this path
 // touches. Taking them servers-first here would be an ABBA cycle that
 // PostgreSQL breaks by aborting one side with deadlock_detected, turning a
 // concurrent dashboard edit and tool-exposure change into a failed request.
@@ -813,9 +855,13 @@ func TestToolExposureUnavailableRegistrationMatchesLiveManifest(t *testing.T) {
 		require.Equal(t, externalOnly, unavailable[name].Meta.Audiences, "%s", name)
 		require.Equal(t, ExternalAuthorizationOrgAdmin, unavailable[name].Meta.Authorization, "%s", name)
 		require.Equal(t, ProjectScopeExplicit, unavailable[name].Meta.ProjectScope, "%s", name)
-		require.Contains(t, unavailable[name].Description, "republishes every plugin that carries the server",
-			"%s must state the blast radius before it is called", name)
 		require.Contains(t, unavailable[name].Description, "confirmed: true", "%s", name)
+		for _, description := range []string{unavailable[name].Description, live[name].Description} {
+			require.Contains(t, description, "requests publication for affected plugins", "%s", name)
+			require.Contains(t, description, "proven automatic role-plugin memberships are removed", "%s", name)
+			require.Contains(t, description, "preserving prior removal history", "%s", name)
+			require.Contains(t, description, "locally installed ZIPs require replacement", "%s", name)
+		}
 	}
 
 	// The refusals themselves must differ: a caller that only asked to list a

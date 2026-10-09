@@ -7,7 +7,7 @@
   "private": true,
   "keywords": [
     "mcp",
-    "getgram.ai"
+    "speakeasy"
   ],
   "license": "ISC",
   "main": "dist/functions.js",
@@ -21,15 +21,15 @@
   "scripts": {
     "dev": "mcp-inspector nodemon -q --watch src --exec node ./src/server.ts",
     "lint": "tsc --noEmit",
-    "push": "gf push",
+    "push": "speakeasy functions push",
     "prebuild": "tsc -p tsconfig.json",
     "prepublishOnly": "npm run build",
-    "build": "gf build",
+    "build": "speakeasy functions build",
     "test": "vitest",
     "db:seed": "node --import tsx scripts/seed.ts"
   },
   "dependencies": {
-    "@gram-ai/functions": "^0.11.1",
+    "@speakeasy-api/functions": "^0.20.0",
     "@modelcontextprotocol/sdk": "^1.20.1",
     "@neondatabase/serverless": "^1.0.2",
     "papaparse": "^5.5.3",

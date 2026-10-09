@@ -138,12 +138,44 @@ func (i ServerIdentity) AppendAttributes(attrs []attribute.KeyValue) []attribute
 	return attrs
 }
 
+// UpstreamResponseRetry is how a retried upstream request differs from the
+// first. A zero field leaves that part of the request unchanged.
 type UpstreamResponseRetry struct {
+	// RemoteURL replaces the upstream URL; empty keeps it.
 	RemoteURL string
-	Headers   []ConfiguredHeader
+
+	// Headers replaces the configured headers; nil keeps them.
+	Headers []ConfiguredHeader
+
+	// AuthorizationOverride replaces the bearer token presented upstream;
+	// empty keeps it.
+	AuthorizationOverride string
 }
 
+// UpstreamResponseRetryer inspects the first upstream response, before any of
+// it is relayed, and returns how to send the request once more, or nil to
+// keep the response.
 type UpstreamResponseRetryer func(ctx context.Context, resp *http.Response) (*UpstreamResponseRetry, error)
+
+// ChainUpstreamResponseRetryers tries each retryer in order and returns the
+// first retry one asks for, or its error. The proxy retries once, so later
+// retryers only see responses earlier ones keep. Nil retryers are skipped.
+func ChainUpstreamResponseRetryers(retryers ...UpstreamResponseRetryer) UpstreamResponseRetryer {
+	return func(ctx context.Context, resp *http.Response) (*UpstreamResponseRetry, error) {
+		for _, retryer := range retryers {
+			if retryer == nil {
+				continue
+			}
+
+			retry, err := retryer(ctx, resp)
+			if err != nil || retry != nil {
+				return retry, err
+			}
+		}
+
+		return nil, nil
+	}
+}
 
 // Proxy is a one-request handler that forwards inbound MCP client requests
 // to a configured Remote MCP Server. A fresh value is expected per inbound
@@ -209,12 +241,16 @@ type Proxy struct {
 	RemoteURL string
 
 	// Headers are applied on top of any forwarded client headers when
-	// constructing the upstream request.
+	// constructing the upstream request and checked against HeaderPolicy.
 	Headers []ConfiguredHeader
+
+	// HeaderPolicy selects how configured and copied client headers are
+	// filtered. The zero value is [HeaderPolicyRemote].
+	HeaderPolicy HeaderPolicy
 
 	// AuthorizationOverride is the Bearer token to set on the outgoing
 	// Authorization header. The caller's incoming Authorization is
-	// always dropped (Gram-issued credentials — API keys, OAuth tokens,
+	// always dropped (Speakeasy-issued credentials — API keys, OAuth tokens,
 	// chat-session JWTs — are not meaningful upstream); when this field
 	// is non-empty the proxy emits "Authorization: Bearer <override>"
 	// instead. Use it for two flows:
@@ -223,7 +259,7 @@ type Proxy struct {
 	//     setting this to the caller's own token (the upstream MCP
 	//     server is the AS).
 	//   - OAuth-proxy token swap: set this to a stored upstream
-	//     credential resolved from the caller's Gram-issued OAuth
+	//     credential resolved from the caller's Speakeasy-issued OAuth
 	//     token.
 	//
 	// Leave empty (default) to send no Authorization upstream.
@@ -248,7 +284,7 @@ type Proxy struct {
 
 	// DisableRedirects stops the upstream client from following redirect
 	// responses; the 3xx relays to the caller as-is. Following a redirect
-	// would replay Gram's internal forward headers (including the tunnel
+	// would replay Speakeasy's internal forward headers (including the tunnel
 	// forward token) against an upstream-controlled URL.
 	DisableRedirects bool
 
@@ -1049,8 +1085,15 @@ func (p *Proxy) forwardRequestWithRetry(
 	}
 	o11y.NoLogDefer(upstreamResp.Body.Close)
 
-	p.RemoteURL = retry.RemoteURL
-	p.Headers = retry.Headers
+	if retry.RemoteURL != "" {
+		p.RemoteURL = retry.RemoteURL
+	}
+	if retry.Headers != nil {
+		p.Headers = retry.Headers
+	}
+	if retry.AuthorizationOverride != "" {
+		p.AuthorizationOverride = retry.AuthorizationOverride
+	}
 	return p.forwardRequest(ctx, r, body(), validate)
 }
 
@@ -1310,8 +1353,12 @@ func (p *Proxy) requestSpanAttributes(r *http.Request, method string) []attribut
 }
 
 func (p *Proxy) infoContextWithIdentity(ctx context.Context, msg string, attrs ...slog.Attr) {
+	p.logWithIdentity(ctx, slog.LevelInfo, msg, attrs...)
+}
+
+func (p *Proxy) logWithIdentity(ctx context.Context, level slog.Level, msg string, attrs ...slog.Attr) {
 	attrs = append(attrs, p.Identity.SlogAttrs()...)
-	p.Logger.LogAttrs(ctx, slog.LevelInfo, msg, attrs...)
+	p.Logger.LogAttrs(ctx, level, msg, attrs...)
 }
 
 // wrapInterceptorRejection logs the rejection at error level and returns an

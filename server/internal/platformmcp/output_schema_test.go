@@ -188,9 +188,9 @@ func TestInferredOutputSchemaAcceptsFieldsAddedLater(t *testing.T) {
 	}), "labels")
 }
 
-// listAdvertisedTools lists every tool through a real MCP session, following
-// the server's pagination, so the assertion covers what a client actually sees.
-func listAdvertisedTools(t *testing.T, server *mcp.Server) []*mcp.Tool {
+// connectTestClient opens a client session to server over in-memory
+// transports, closed when the test ends.
+func connectTestClient(t *testing.T, server *mcp.Server) *mcp.ClientSession {
 	t.Helper()
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
@@ -198,11 +198,19 @@ func listAdvertisedTools(t *testing.T, server *mcp.Server) []*mcp.Tool {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = serverSession.Close() })
 
-	client := mcp.NewClient(&mcp.Implementation{Name: "output-schema-test", Version: "0.0.1"}, nil)
+	client := mcp.NewClient(&mcp.Implementation{Name: "platform-mcp-test-client", Version: "0.0.1"}, nil)
 	session, err := client.Connect(t.Context(), clientTransport, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = session.Close() })
+	return session
+}
 
+// listAdvertisedTools lists every tool through a real MCP session, following
+// the server's pagination, so the assertion covers what a client actually sees.
+func listAdvertisedTools(t *testing.T, server *mcp.Server) []*mcp.Tool {
+	t.Helper()
+
+	session := connectTestClient(t, server)
 	var tools []*mcp.Tool
 	params := &mcp.ListToolsParams{}
 	for {

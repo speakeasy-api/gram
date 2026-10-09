@@ -166,8 +166,8 @@ func insertObservedAgentUsageRow(t *testing.T, conn driver.Conn, projectID strin
 }
 
 // insertRetainedGramAggregateRow seeds attribute_metrics_summaries directly
-// with a Gram-hosted completion row, the shape RETAINED from before the
-// provenance-first MV cutover stopped admitting Gram completions. The
+// with a Speakeasy-hosted completion row, the shape RETAINED from before the
+// provenance-first MV cutover stopped admitting Speakeasy completions. The
 // tokens-under-management reads must exclude these at read time — that
 // exclusion is untestable through the MV (it no longer ingests such rows),
 // hence the direct aggregate-state insert.
@@ -458,7 +458,7 @@ func TestGetTokensUnderManagement_CountsObservedTraffic(t *testing.T) {
 
 	// Observed agent traffic: counted. Seeded directly (not through the MV) so
 	// it lands in the real-now active cycle this service read is scoped to,
-	// independent of the MV ingestion cutoff. The retained Gram-hosted rows (a
+	// independent of the MV ingestion cutoff. The retained Speakeasy-hosted rows (a
 	// playground completion and pre-tagging '' history) must be excluded by
 	// the service's exclusion list.
 	insertObservedClaudeAggregateRow(t, chConn, projectID.String(), now, 450)
@@ -703,16 +703,16 @@ func TestGetTokensUnderManagementQuery_ExcludesGramHostedSources(t *testing.T) {
 	insertObservedClaudeRow(t, chConn, projectID.String(), now, 100, 0, 0, 0)
 	insertObservedAgentUsageRow(t, chConn, projectID.String(), now, "cursor", 40)
 
-	// Gram-hosted completion rows retained from before the provenance-first
+	// Speakeasy-hosted completion rows retained from before the provenance-first
 	// cutover: a user-facing surface, the platform's scanning inference, and
-	// a pre-tagging '' row. All excluded — Gram-spent inference is never
+	// a pre-tagging '' row. All excluded — Speakeasy-spent inference is never
 	// tokens under management.
 	insertRetainedGramAggregateRow(t, chConn, projectID.String(), now, "playground", 5000)
 	insertRetainedGramAggregateRow(t, chConn, projectID.String(), now, "risk-analysis", 300)
 	insertRetainedGramAggregateRow(t, chConn, projectID.String(), now, "", 60)
 
 	// Confirm everything materialized (an unscoped read sees all five rows),
-	// THEN assert the scoped read excludes exactly the Gram-hosted tokens —
+	// THEN assert the scoped read excludes exactly the Speakeasy-hosted tokens —
 	// the exclusion cannot pass vacuously against a half-ingested view.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
@@ -735,5 +735,5 @@ func TestGetTokensUnderManagementQuery_ExcludesGramHostedSources(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(140), sumTumBuckets(buckets),
-		"the billed sum counts only observed agent traffic — never Gram-hosted surfaces, scanning inference, or untagged Gram-era rows")
+		"the billed sum counts only observed agent traffic — never Speakeasy-hosted surfaces, scanning inference, or untagged Speakeasy-era rows")
 }

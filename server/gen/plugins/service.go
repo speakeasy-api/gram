@@ -54,8 +54,8 @@ type Service interface {
 	// it up, and either revokes previous plugin hooks keys immediately or keeps
 	// them valid for a grace window.
 	RotateObservabilityCredential(context.Context, *RotateObservabilityCredentialPayload) (res *RotateObservabilityCredentialResult, err error)
-	// Download a ZIP of the per-org observability plugin (Gram hooks). Mints a
-	// fresh hooks-scoped API key on each download and embeds it in the plugin's
+	// Download a ZIP of the per-org observability plugin (Speakeasy hooks). Mints
+	// a fresh hooks-scoped API key on each download and embeds it in the plugin's
 	// hook script.
 
 	// If body implements [io.WriterTo], that implementation will be used instead.
@@ -111,10 +111,10 @@ type AddPluginServerPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 	PluginID         string
-	// Gram toolset ID. Provide exactly one of toolset_id, mcp_server_id, or
+	// Speakeasy toolset ID. Provide exactly one of toolset_id, mcp_server_id, or
 	// meta_mcp_server_id.
 	ToolsetID *string
-	// Gram MCP server ID. Provide exactly one backend ID.
+	// Speakeasy MCP server ID. Provide exactly one backend ID.
 	McpServerID *string
 	// MCP gateway ID. Provide exactly one backend ID.
 	MetaMcpServerID *string
@@ -331,7 +331,11 @@ type PluginAssignment struct {
 	ID string
 	// Principal URN (e.g. role:organization:<uuid>, user:id, or *).
 	PrincipalUrn string
-	CreatedAt    string
+	// How the device agent installs the plugin for this audience. `required`:
+	// installed, and the user can't turn it off. `default`: installed, and the
+	// user can turn it off. `available`: not installed until the user turns it on.
+	InstallMode string
+	CreatedAt   string
 }
 
 type PluginAudience struct {
@@ -350,9 +354,9 @@ type PluginAudience struct {
 type PluginServer struct {
 	// Unique plugin server identifier.
 	ID string
-	// Gram toolset ID. Exactly one backend ID is set.
+	// Speakeasy toolset ID. Exactly one backend ID is set.
 	ToolsetID *string
-	// Gram MCP server ID. Exactly one backend ID is set.
+	// Speakeasy MCP server ID. Exactly one backend ID is set.
 	McpServerID *string
 	// MCP gateway ID. Exactly one backend ID is set.
 	MetaMcpServerID *string
@@ -497,6 +501,9 @@ type SetPluginAssignmentsPayload struct {
 	PluginID         string
 	// List of principal URNs to assign.
 	PrincipalUrns []string
+	// Install mode per principal URN in principal_urns. A principal missing from
+	// this map keeps its current mode, or gets `default` when it is newly assigned.
+	InstallModes map[string]string
 }
 
 // SetPluginAssignmentsResult is the result type of the plugins service

@@ -45,6 +45,13 @@ type sharedAuthorizationServerRoute struct {
 
 	// handler serves the route.
 	handler func(http.ResponseWriter, *http.Request) error
+
+	// onAuthenticationHost reports whether the authentication host serves the
+	// route as well.
+	//
+	// TODO(AIM-418): serve the authorization, consent, and registration routes
+	// on the authentication host.
+	onAuthenticationHost bool
 }
 
 // sharedAuthorizationServerRoutes is every route a shared authorization server
@@ -54,17 +61,17 @@ type sharedAuthorizationServerRoute struct {
 // are.
 func (s *Service) sharedAuthorizationServerRoutes() []sharedAuthorizationServerRoute {
 	return []sharedAuthorizationServerRoute{
-		{method: http.MethodGet, path: wellknown.OAuthAuthorizationServerPath + sharedAuthorizationServerPattern, handler: s.HandleSharedAuthorizationServerMetadata},
-		{method: http.MethodGet, path: sharedAuthorizationServerPattern + wellknown.OAuthAuthorizationServerPath, handler: s.HandleSharedAuthorizationServerMetadata},
-		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/register", handler: s.HandleSharedRegister},
-		{method: http.MethodGet, path: sharedAuthorizationServerPattern + "/authorize", handler: s.HandleSharedAuthorize},
-		{method: http.MethodGet, path: sharedAuthorizationServerPattern + "/connect", handler: s.HandleSharedConsent},
-		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/connect", handler: s.HandleSharedConsent},
-		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/connect/remote-session", handler: s.HandleSharedConsentAction},
-		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/connect/mcp", handler: s.HandleSharedConsentMCP},
-		{method: http.MethodDelete, path: sharedAuthorizationServerPattern + "/connect/mcp", handler: s.HandleSharedConsentMCP},
-		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/token", handler: s.HandleSharedToken},
-		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/revoke", handler: s.HandleSharedRevoke},
+		{method: http.MethodGet, path: wellknown.OAuthAuthorizationServerPath + sharedAuthorizationServerPattern, handler: s.HandleSharedAuthorizationServerMetadata, onAuthenticationHost: true},
+		{method: http.MethodGet, path: sharedAuthorizationServerPattern + wellknown.OAuthAuthorizationServerPath, handler: s.HandleSharedAuthorizationServerMetadata, onAuthenticationHost: true},
+		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/register", handler: s.HandleSharedRegister, onAuthenticationHost: false},
+		{method: http.MethodGet, path: sharedAuthorizationServerPattern + "/authorize", handler: s.HandleSharedAuthorize, onAuthenticationHost: false},
+		{method: http.MethodGet, path: sharedAuthorizationServerPattern + "/connect", handler: s.HandleSharedConsent, onAuthenticationHost: false},
+		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/connect", handler: s.HandleSharedConsent, onAuthenticationHost: false},
+		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/connect/remote-session", handler: s.HandleSharedConsentAction, onAuthenticationHost: false},
+		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/connect/mcp", handler: s.HandleSharedConsentMCP, onAuthenticationHost: false},
+		{method: http.MethodDelete, path: sharedAuthorizationServerPattern + "/connect/mcp", handler: s.HandleSharedConsentMCP, onAuthenticationHost: false},
+		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/token", handler: s.HandleSharedToken, onAuthenticationHost: true},
+		{method: http.MethodPost, path: sharedAuthorizationServerPattern + "/revoke", handler: s.HandleSharedRevoke, onAuthenticationHost: true},
 	}
 }
 
@@ -78,10 +85,8 @@ func attachSharedAuthorizationServers(mux goahttp.Muxer, service *Service) {
 
 // HandleSharedAuthorizationServerMetadata serves a shared authorization
 // server's RFC 8414 metadata.
-//
-// It advertises the authorization-code and refresh grants only.
-// TODO(AIM-402): advertise the ID-JAG and workload grants once the shared
-// token endpoint accepts them.
+// Grant metadata describes the issuer's capabilities; each resource still
+// enforces its own grant admission.
 func (s *Service) HandleSharedAuthorizationServerMetadata(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	issuer, err := s.sharedIssuerForRequest(r)
@@ -92,8 +97,69 @@ func (s *Service) HandleSharedAuthorizationServerMetadata(w http.ResponseWriter,
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build OAuth server URLs").LogError(ctx, issuer.logger)
 	}
+	if issuer.authorizationServer.onAuthenticationHost {
+		return writeJSONMetadata(ctx, w, r, issuer.logger, workloadAuthorizationServerMetadata(urls, s.workloadGrant != nil))
+	}
 	grantTypes := []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken}
-	return writeJSONMetadata(ctx, w, r, issuer.logger, s.authorizationServerMetadata(ctx, urls, issuer.cimdAdmissionModeRaw, grantTypes, nil))
+	var grantProfiles []string
+	if issuer.idJAGConfigured {
+		grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
+		grantProfiles = []string{oauthwire.GrantProfileIDJAG}
+	} else if s.workloadGrant != nil {
+		available, err := usersessions_repo.New(s.db).HasWorkloadGrantResourceForIssuer(ctx, usersessions_repo.HasWorkloadGrantResourceForIssuerParams{
+			UserSessionIssuerID: uuid.NullUUID{UUID: issuer.authorizationServer.issuerID, Valid: true},
+			OrganizationID:      issuer.organizationID,
+		})
+		// Fails closed: metadata is cacheable and clients keep it for their
+		// process lifetime, so a document that omits the grant on a transient
+		// error would outlive the error. A 500 is retried instead.
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "load shared authorization server capabilities").LogError(ctx, issuer.logger)
+		}
+		if available {
+			grantTypes = append(grantTypes, oauthwire.GrantTypeJWTBearer)
+		}
+	}
+	return writeJSONMetadata(ctx, w, r, issuer.logger, s.authorizationServerMetadata(ctx, urls, issuer.cimdAdmissionModeRaw, grantTypes, grantProfiles))
+}
+
+// workloadAuthorizationServerMetadata is the RFC 8414 metadata of a shared
+// authorization server on the authentication host. It advertises only what
+// that host serves: the token endpoint, which accepts only the workload grant,
+// and the revocation endpoint. With no authorization or registration endpoint,
+// the authorization-code fields are omitted, and response_types_supported,
+// which RFC 8414 requires, is empty. The workload grant presents no client,
+// and a token request that does present one is the ID-JAG exchange this host
+// refuses, so `none` is the only token endpoint authentication method.
+//
+// The workload grant is advertised when the deployment serves it
+// (workloadGrantServed), whether or not any of the issuer's MCP servers can
+// carry a workload session: it is the only grant this document can describe,
+// and the token endpoint refuses resources that cannot. Otherwise
+// grant_types_supported is empty rather than omitted, which RFC 8414 would
+// read as the authorization-code and implicit grants.
+func workloadAuthorizationServerMetadata(urls AuthorizationServerURLs, workloadGrantServed bool) oauthAuthorizationServerMetadata {
+	grantTypes := []string{}
+	if workloadGrantServed {
+		grantTypes = []string{oauthwire.GrantTypeJWTBearer}
+	}
+	return oauthAuthorizationServerMetadata{
+		Issuer:                                     urls.Issuer,
+		AuthorizationEndpoint:                      "",
+		TokenEndpoint:                              urls.Token,
+		RegistrationEndpoint:                       "",
+		RevocationEndpoint:                         urls.Revoke,
+		ScopesSupported:                            nil,
+		ResponseTypesSupported:                     []string{},
+		GrantTypesSupported:                        grantTypes,
+		AuthorizationGrantProfilesSupported:        nil,
+		TokenEndpointAuthMethodsSupported:          []string{oauthwire.AuthMethodNone},
+		TokenEndpointAuthSigningAlgValuesSupported: nil,
+		CodeChallengeMethodsSupported:              nil,
+		RefreshTokenExpirationTypesSupported:       nil,
+		AuthorizationResponseIssParameterSupported: false,
+		ClientIDMetadataDocumentSupported:          nil,
+	}
 }
 
 // HandleSharedRegister serves RFC 7591 dynamic client registration on a
@@ -279,14 +345,14 @@ func (s *Service) sharedChallengeEndpoint(ctx context.Context, issuer *sharedIss
 }
 
 // HandleSharedToken serves the token endpoint of a shared authorization
-// server. It finds the MCP server the grant is for from the grant itself, the
-// authorization code's challenge or the refresh token's session, so a token
-// request may omit `resource`; when it names one, it must be that server.
-// The grant is then served exactly as the server's per-endpoint token endpoint
-// would serve it, which checks any `resource` after authenticating the
-// client, and mints a session bound to the server.
-//
-// TODO(AIM-402): accept the ID-JAG and workload grants.
+// server. Code and refresh grants resolve their resource from stored state.
+// Assertion grants naming exactly one resource dispatch to that resource's
+// client-authenticated ID-JAG or clientless workload handler. A clientless
+// workload grant naming no resource is served for all of the issuer's MCP
+// servers; an ID-JAG exchange must still name one.
+// On the authentication host, which serves no authorization endpoint, only
+// assertion grants are accepted, and the ID-JAG exchange is refused there by
+// the dispatch it shares with per-endpoint token endpoints.
 func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	issuer, err := s.sharedIssuerForRequest(r)
@@ -302,11 +368,30 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 
 	var endpoint *ResolvedMcpEndpoint
 	grantType := r.PostForm.Get(oauthwire.ParamGrantType)
-	switch grantType {
-	case oauthwire.GrantTypeAuthorizationCode:
+	browserGrants := !issuer.authorizationServer.onAuthenticationHost
+	switch {
+	case grantType == oauthwire.GrantTypeAuthorizationCode && browserGrants:
 		endpoint, err = s.sharedAuthorizationCodeEndpoint(ctx, w, logger, issuer.authorizationServer.issuerID, r.PostForm.Get(oauthwire.ParamCode))
-	case oauthwire.GrantTypeRefreshToken:
+	case grantType == oauthwire.GrantTypeRefreshToken && browserGrants:
 		endpoint, err = s.sharedRefreshTokenEndpoint(ctx, w, logger, issuer.authorizationServer, r.PostForm.Get(oauthwire.ParamRefreshToken))
+	case grantType == oauthwire.GrantTypeJWTBearer:
+		resources := r.PostForm[oauthwire.ParamResource]
+		if len(resources) == 0 && extractClientCredentials(r).clientless(r) {
+			return s.handleIssuerWorkloadAssertionGrant(ctx, w, r, issuer)
+		}
+		var rejection sharedResourceRejection
+		endpoint, rejection, err = s.resolveSharedResourceIndicators(ctx, logger, issuer.authorizationServer, resources)
+		if err != nil {
+			return err
+		}
+		if rejection != sharedResourceAccepted {
+			s.recordSharedResourceRejection(ctx, logger, issuer.authorizationServer.issuerID, mcpmetrics.OAuthFlowStageToken, rejection, resources)
+			code := oautherr.CodeInvalidTarget
+			if rejection == sharedResourceMissing {
+				code = oautherr.CodeInvalidRequest
+			}
+			return writeTokenError(ctx, w, logger, http.StatusBadRequest, code, sharedResourceDescription(rejection))
+		}
 	default:
 		creds := extractClientCredentials(r)
 		clientID, _ := resolvePresentedClientID(creds)

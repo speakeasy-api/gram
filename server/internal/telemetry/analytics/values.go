@@ -2,14 +2,10 @@ package analytics
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"time"
-
-	"github.com/Masterminds/squirrel"
+	"slices"
 
 	gen "github.com/speakeasy-api/gram/server/gen/analytics"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // Dimension value listing guardrails.
@@ -36,8 +32,10 @@ type DimensionValue struct {
 
 // CompileValues turns a values request into SQL. Values are resolved after
 // the dataset collapses its observations, so a caller never sees a value no
-// row would actually match, and the empty value is never offered.
-func CompileValues(catalog *Catalog, organizationID, projectID string, req ValuesRequest) (*Plan, error) {
+// row would actually match, and the empty value is never offered. The
+// dimension is read through its lookup, so the picker offers what a filter
+// will match.
+func CompileValues(catalog *Catalog, tenant Tenant, lookups LookupMaps, req ValuesRequest) (*Plan, error) {
 	ds, ok := catalog.Dataset(req.Dataset)
 	if !ok {
 		return nil, newError(ErrUnknownDataset, req.Dataset, "dataset", req.Dataset, fmt.Sprintf("dataset %q does not exist", req.Dataset))
@@ -60,10 +58,13 @@ func CompileValues(catalog *Catalog, organizationID, projectID string, req Value
 		return nil, newError(ErrLimitExceeded, ds.Name, "limit", fmt.Sprint(req.Limit), fmt.Sprintf("limit must be between 1 and %d", MaxValuesLimit))
 	}
 
-	scope := Scope{OrganizationID: organizationID, ProjectID: projectID, FromUnixNano: req.FromUnixNano, ToUnixNano: req.ToUnixNano}
-	builder := sq.Select(field.Expr+" AS value", "count() AS n").
-		FromSelect(ds.Source(scope), "src").
-		Where(squirrel.NotEq{field.Expr: ""}).
+	qc := QueryContext{Tenant: tenant, Window: Window{FromUnixNano: req.FromUnixNano, ToUnixNano: req.ToUnixNano}, Lookups: lookups}
+	expr, args := readExpr(qc, field)
+	builder := sq.Select().
+		Column(expr+" AS value", args...).
+		Column("count() AS n").
+		FromSelect(ds.Source(qc), "src").
+		Where(expr+" <> ?", append(slices.Clone(args), "")...).
 		GroupBy("value").
 		OrderBy("n DESC", "value ASC").
 		Limit(uint64(limit))
@@ -109,43 +110,27 @@ func (s *Service) DimensionValues(ctx context.Context, payload *gen.DimensionVal
 		return nil, err
 	}
 
-	from, err := time.Parse(time.RFC3339Nano, payload.From)
+	from, to, err := ParseWindow(payload.From, payload.To)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid_time_range: from is not an RFC 3339 time")
-	}
-	to, err := time.Parse(time.RFC3339Nano, payload.To)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid_time_range: to is not an RFC 3339 time")
-	}
-	if !representable(from) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "invalid_time_range: from is outside the years 1678 to 2262")
-	}
-	if !representable(to) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "invalid_time_range: to is outside the years 1678 to 2262")
+		return nil, s.failure(ctx, err, "failed to read dimension values request")
 	}
 	req := ValuesRequest{
 		Dataset:      payload.Dataset,
 		Dimension:    payload.Dimension,
-		FromUnixNano: from.UnixNano(),
-		ToUnixNano:   to.UnixNano(),
+		FromUnixNano: from,
+		ToUnixNano:   to,
 		Limit:        payload.Limit,
 	}
 
-	plan, err := CompileValues(s.catalog, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), req)
+	tenant := Tenant{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: authCtx.ProjectID.String()}
+	values, err := s.engine.Values(ctx, tenant, req)
 	if err != nil {
-		if invalid, ok := errors.AsType[*Error](err); ok {
-			return nil, oops.E(oops.CodeBadRequest, err, "%s", invalid.Error())
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to compile dimension values query").LogError(ctx, s.logger)
-	}
-	values, err := plan.RunValues(ctx, s.ch)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list dimension values").LogError(ctx, s.logger)
+		return nil, s.failure(ctx, err, "failed to list dimension values")
 	}
 
 	out := make([]*gen.AnalyticsDimensionValue, 0, len(values))
 	for _, v := range values {
 		out = append(out, &gen.AnalyticsDimensionValue{Value: v.Value, Count: v.Count})
 	}
-	return &gen.AnalyticsDimensionValuesResult{Dataset: plan.Dataset, Dimension: req.Dimension, Values: out}, nil
+	return &gen.AnalyticsDimensionValuesResult{Dataset: req.Dataset, Dimension: req.Dimension, Values: out}, nil
 }

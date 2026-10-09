@@ -13,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -221,12 +222,13 @@ func (c *PluginMetadataCore) CreateInTransaction(ctx context.Context, tx pgx.Tx,
 	}
 	if isDefaultProject {
 		// agent.getPlugins scopes delivery by assignment; "*" (all org members)
-		// is the closest "everyone" primitive Gram has, since there's no
+		// is the closest "everyone" primitive Speakeasy has, since there's no
 		// project-scoped membership.
 		if _, err := queries.AddPluginAssignment(ctx, repo.AddPluginAssignmentParams{
 			PluginID:       plugin.ID,
 			OrganizationID: mutation.OrganizationID,
 			PrincipalUrn:   urn.PrincipalWildcard,
+			InstallMode:    string(installmode.Default),
 		}); err != nil {
 			return PluginMetadataResult{}, fmt.Errorf("assign new plugin to org: %w", err)
 		}

@@ -2620,6 +2620,9 @@ func unmarshalAgentPluginResponseBodyToAgentAgentPlugin(v *AgentPluginResponseBo
 	res := &agent.AgentPlugin{
 		Slug:            *v.Slug,
 		MarketplaceName: *v.MarketplaceName,
+		InstallMode:     *v.InstallMode,
+		Name:            v.Name,
+		Description:     v.Description,
 	}
 
 	return res

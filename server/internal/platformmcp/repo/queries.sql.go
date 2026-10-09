@@ -1264,6 +1264,31 @@ func (q *Queries) DeleteExpiredPlatformMCPOperationReceipt(ctx context.Context, 
 	return result.RowsAffected(), nil
 }
 
+const deleteExpiredPlatformMCPOperationReceiptsBatch = `-- name: DeleteExpiredPlatformMCPOperationReceiptsBatch :execrows
+DELETE FROM platform_mcp_operation_receipts
+WHERE id IN (
+    SELECT id
+    FROM platform_mcp_operation_receipts
+    WHERE expires_at <= clock_timestamp()
+    ORDER BY expires_at
+    LIMIT $1
+    FOR UPDATE SKIP LOCKED
+)
+`
+
+// The periodic sweep that bounds the receipt table. The per-key reclaim in the
+// receipt transaction only reaches a key that is written again, and a
+// project-creation receipt is never reclaimed that way at all. Bounded by
+// batch so one tick never holds a long delete; SKIP LOCKED leaves rows a
+// receipt transaction is touching to the next tick.
+func (q *Queries) DeleteExpiredPlatformMCPOperationReceiptsBatch(ctx context.Context, batchSize int32) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredPlatformMCPOperationReceiptsBatch, batchSize)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteExpiredPlatformMCPReadiness = `-- name: DeleteExpiredPlatformMCPReadiness :execrows
 DELETE FROM platform_mcp_readiness AS stale
 WHERE stale.organization_id = $1
@@ -2563,7 +2588,7 @@ type GetPlatformMCPInstallTargetRow struct {
 
 // Tenant-scoped exact MCP target plus its canonical public endpoint. Disabled
 // and unproxied servers deliberately expose no endpoint even if an endpoint row
-// remains, because neither can be dispatched through Gram's public MCP route.
+// remains, because neither can be dispatched through Speakeasy's public MCP route.
 func (q *Queries) GetPlatformMCPInstallTarget(ctx context.Context, arg GetPlatformMCPInstallTargetParams) (GetPlatformMCPInstallTargetRow, error) {
 	row := q.db.QueryRow(ctx, getPlatformMCPInstallTarget, arg.OrganizationID, arg.McpServerID, arg.ProjectID)
 	var i GetPlatformMCPInstallTargetRow
@@ -3460,8 +3485,8 @@ type GetPlatformMCPServerToolExposureRow struct {
 }
 
 // The tool list one hosted MCP server exposes, read through its modern server
-// record. A server whose backend is not a Gram toolset, or a bare toolset with
-// no server record, deliberately returns no row: its tool list is not Gram's
+// record. A server whose backend is not a Speakeasy toolset, or a bare toolset with
+// no server record, deliberately returns no row: its tool list is not Speakeasy's
 // to change from here.
 // The columns this returns are only the ones the caller cannot already supply:
 // the organization, project and MCP server ids are query inputs, so echoing
@@ -3828,6 +3853,71 @@ func (q *Queries) GetPlatformMCPSubjectConnectionAuthState(ctx context.Context, 
 		&i.LatestRefreshExpiresAt,
 		&i.LatestSessionRevokedAt,
 		&i.Ready,
+	)
+	return i, err
+}
+
+const getUnexpiredPlatformMCPOperationReceipt = `-- name: GetUnexpiredPlatformMCPOperationReceipt :one
+SELECT receipt.id, receipt.organization_id, receipt.project_id, receipt.registration_id, receipt.connection_id, receipt.connection_generation, receipt.user_id, receipt.acting_surface, receipt.operation, receipt.idempotency_key, receipt.input_hash, receipt.status, receipt.result_code, receipt.result_payload, receipt.expires_at, receipt.created_at, receipt.updated_at
+FROM platform_mcp_operation_receipts AS receipt
+LEFT JOIN platform_mcp_connections AS connection
+  ON connection.id = receipt.connection_id
+ AND connection.organization_id = receipt.organization_id
+WHERE receipt.organization_id = $1
+  AND receipt.project_id = $2
+  AND receipt.operation = $3
+  AND receipt.idempotency_key = $4
+  AND receipt.expires_at > clock_timestamp()
+  AND (
+    receipt.user_id = $5
+    OR (receipt.user_id IS NULL AND connection.subject_urn = $6)
+  )
+ORDER BY receipt.created_at DESC, receipt.id DESC
+LIMIT 1
+`
+
+type GetUnexpiredPlatformMCPOperationReceiptParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Operation      string
+	IdempotencyKey string
+	UserID         pgtype.Text
+	SubjectUrn     string
+}
+
+// The unlocked replay pre-check that runs before a write charges its budget.
+// Same match as GetPlatformMCPOperationReceipt, but expiry is judged here with
+// the database clock, the same clock DeleteExpiredPlatformMCPOperationReceipt
+// uses under the lock, so the pre-check can never replay a receipt the locked
+// path would already treat as expired.
+func (q *Queries) GetUnexpiredPlatformMCPOperationReceipt(ctx context.Context, arg GetUnexpiredPlatformMCPOperationReceiptParams) (PlatformMcpOperationReceipt, error) {
+	row := q.db.QueryRow(ctx, getUnexpiredPlatformMCPOperationReceipt,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Operation,
+		arg.IdempotencyKey,
+		arg.UserID,
+		arg.SubjectUrn,
+	)
+	var i PlatformMcpOperationReceipt
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RegistrationID,
+		&i.ConnectionID,
+		&i.ConnectionGeneration,
+		&i.UserID,
+		&i.ActingSurface,
+		&i.Operation,
+		&i.IdempotencyKey,
+		&i.InputHash,
+		&i.Status,
+		&i.ResultCode,
+		&i.ResultPayload,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -7085,9 +7175,9 @@ type LockPlatformMCPToolsetForToolExposureParams struct {
 // Takes the toolset row lock, and must run BEFORE the server row is locked.
 //
 // The order is the constraint, not the lock. toolsets.UpdateToolset holds this
-// same row (via GetToolsetForUpdate) and then, inside reconcileHostedNetworkAccess,
-// updates the hosted mcp_servers row — an exclusive row lock taken by a plain
-// UPDATE rather than an explicit FOR UPDATE. For a hosted server both ids are
+// same row (via GetToolsetForUpdate) and then, inside hostedmcp.Sync, locks
+// the hosted mcp_servers row FOR UPDATE (LockMCPServerByIDAndProjectID) before
+// writing it. For a hosted server both ids are
 // the toolset id, so it is the same pair of rows this path touches. Locking the
 // server first here and the toolset first there is an ABBA cycle that
 // PostgreSQL resolves by aborting one side with deadlock_detected, so both

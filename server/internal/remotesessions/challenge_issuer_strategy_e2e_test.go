@@ -93,11 +93,27 @@ func TestRemoteLogin_ScopeOverrideIsRequestedVerbatim(t *testing.T) {
 
 	_, env := newSyntheticExpiryEnv(t, "scope-override", scopelessToken,
 		withIssuerScopes("channels:history", "openid", "offline_access"),
-		withClientScope("channels:history"),
 		withScopeOverride("custom:one", "custom:two"),
 	)
 	require.Equal(t, "custom:one custom:two", scopeOf(t, env.authURL))
 	require.Equal(t, []string{"custom:one", "custom:two"}, env.session.Scopes)
+
+	// Without discovery the override still beats the client's own scope.
+	_, legacy := newSyntheticExpiryEnv(t, "scope-override-client-legacy", scopelessToken,
+		withIssuerScopes("channels:history", "openid", "offline_access"),
+		withClientScope("channels:history"),
+		withScopeOverride("custom:one", "custom:two"),
+	)
+	require.Equal(t, "custom:one custom:two", scopeOf(t, legacy.authURL))
+
+	// With discovery a client with its own scope keeps it; the override is the issuer-wide fallback.
+	_, scoped := newSyntheticExpiryEnv(t, "scope-override-client", scopelessToken,
+		withIssuerScopes("channels:history", "openid", "offline_access"),
+		withClientScope("channels:history"),
+		withScopeOverride("custom:one", "custom:two"),
+		withProber(), withLiveResourceScopes(),
+	)
+	require.Equal(t, "channels:history openid offline_access", scopeOf(t, scoped.authURL))
 }
 
 // Empty scopes_supported adds nothing; the NULL case exists only on Client (TestClientRequestedScopes).
@@ -218,6 +234,29 @@ func TestRemoteLoginCallback_InvalidTargetAtTokenEndpointRetriesWithoutResource(
 	})
 	require.NoError(t, err)
 	require.Equal(t, resource, session.Resource.String, "the resource is still recorded so the grant stays routable")
+}
+
+// An issuer set to send no scope strips a scope baked into its authorization
+// endpoint on both legs of an invalid_target retry.
+func TestRemoteLoginCallback_InvalidTargetRetryKeepsScopeOmission(t *testing.T) {
+	t.Parallel()
+
+	var exchanges atomic.Int64
+	_, env, first, err := driveSyntheticLogin(t, "invalid-target-omit", resourceRejectingToken(&exchanges),
+		withResource("https://member.example.com/mcp"),
+		withIssuerScopes("baked", "other"),
+		withOmitScopeFallback(),
+		withAuthorizeQuery("?scope=baked"),
+	)
+	require.NoError(t, err)
+	firstLeg, err := url.Parse(env.authURL)
+	require.NoError(t, err)
+	require.False(t, firstLeg.Query().Has("scope"), "the first leg strips the endpoint's scope")
+
+	retryLocation(t, first)
+	retryLeg, err := url.Parse(first.Header().Get("Location"))
+	require.NoError(t, err)
+	require.False(t, retryLeg.Query().Has("scope"), "the retry leg keeps the omission")
 }
 
 // A second invalid_target fails the login rather than minting a third leg, and records nothing.

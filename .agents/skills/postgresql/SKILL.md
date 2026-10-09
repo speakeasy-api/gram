@@ -1,11 +1,11 @@
 ---
 name: postgresql
-description: Rules when working with PostgreSQL database in Gram
+description: Rules when working with PostgreSQL database in Speakeasy
 ---
 
 # PostgreSQL Best Practices
 
-Comprehensive guidelines when working with PostgreSQL database to build Gram which include rules for schema design, database migration and application logic. All rules are kept in a rules folder with names of each rule outlined below (e.g. `rules/<rule-name>.md`).
+Comprehensive guidelines when working with PostgreSQL database to build Speakeasy which include rules for schema design, database migration and application logic. All rules are kept in a rules folder with names of each rule outlined below (e.g. `rules/<rule-name>.md`).
 
 ## When to Apply
 
@@ -148,7 +148,7 @@ Instead, strongly consider these better alternatives:
 
 These rules apply any time you touch `server/migrations/`, `atlas.sum`, or `server/database/schema.sql`. They are non-negotiable.
 
-Gram uses [Atlas](https://atlasgo.io) in versioned mode. Two file kinds are involved, and they are not the same thing:
+Speakeasy uses [Atlas](https://atlasgo.io) in versioned mode. Two file kinds are involved, and they are not the same thing:
 
 - `server/database/schema.sql` is the **SDL** — the declarative, desired-state schema. This is the file you edit.
 - `server/migrations/*.sql` are the **DDL** diff Atlas generates from that schema. Running `mise db:diff <name>` computes the delta (e.g. `ALTER TABLE ... ADD COLUMN ...`), writes a new timestamped migration file, and updates `atlas.sum`.

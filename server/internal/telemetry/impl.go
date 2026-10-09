@@ -337,18 +337,20 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 		userID = conv.PtrValOr(payload.Filter.UserID, "")
 		externalUserID = conv.PtrValOr(payload.Filter.ExternalUserID, "")
 	}
+	cursorChatID, cursorStart := decodeChatSearchCursor(params.cursor)
 
 	items, err := s.chRepo.ListChats(ctx, repo.ListChatsParams{
-		GramProjectID:    params.projectID,
-		TimeStart:        params.timeStart,
-		TimeEnd:          params.timeEnd,
-		GramDeploymentID: deploymentID,
-		GramURN:          gramURN,
-		UserID:           userID,
-		ExternalUserID:   externalUserID,
-		SortOrder:        params.sortOrder,
-		Cursor:           params.cursor,
-		Limit:            params.limit + 1,
+		GramProjectID:           params.projectID,
+		TimeStart:               params.timeStart,
+		TimeEnd:                 params.timeEnd,
+		GramDeploymentID:        deploymentID,
+		GramURN:                 gramURN,
+		UserID:                  userID,
+		ExternalUserID:          externalUserID,
+		SortOrder:               params.sortOrder,
+		Cursor:                  cursorChatID,
+		CursorStartTimeUnixNano: cursorStart,
+		Limit:                   params.limit + 1,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing chats")
@@ -356,7 +358,8 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 
 	var nextCursor *string
 	if len(items) > params.limit {
-		nextCursor = &items[params.limit-1].GramChatID
+		last := items[params.limit-1]
+		nextCursor = new(encodeChatSearchCursor(last.StartTimeUnixNano, last.GramChatID))
 		items = items[:params.limit]
 	}
 
@@ -383,6 +386,39 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 		Chats:      chats,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+// chatSearchCursorPrefix marks a chat search cursor that carries the
+// start_time boundary its page was cut at alongside the chat id.
+//
+// The boundary has to travel in the cursor. Re-deriving it from the chat id
+// alone looks the chat's earliest activity up again without this search's
+// time window or row filters (deployment, tool URN, user, external user), so
+// an excluded row earlier than the chat's first qualifying one deflates the
+// boundary and, in ascending order, the chat is returned again on every
+// following page.
+const chatSearchCursorPrefix = "st1:"
+
+// encodeChatSearchCursor seals the last row's start time and chat id.
+func encodeChatSearchCursor(startTimeUnixNano int64, chatID string) string {
+	return chatSearchCursorPrefix + encodeToolUsageTraceCursor(startTimeUnixNano, chatID)
+}
+
+// decodeChatSearchCursor returns the chat id and sealed start time a cursor
+// carries. Anything else is a bare chat id with a zero start time, the shape
+// cursors had before the boundary was sealed: a caller holding one
+// mid-traversal gets its next page on the re-derived boundary rather than an
+// error, and the cursor that page returns is sealed.
+func decodeChatSearchCursor(cursor string) (chatID string, startTimeUnixNano int64) {
+	encoded, ok := strings.CutPrefix(cursor, chatSearchCursorPrefix)
+	if !ok {
+		return cursor, 0
+	}
+	start, id, err := decodeToolUsageTraceCursor(encoded)
+	if err != nil || start <= 0 {
+		return cursor, 0
+	}
+	return id, start
 }
 
 // SearchUsers retrieves user usage summaries grouped by user_id or external_user_id.
@@ -461,7 +497,7 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		canonicalOrg = params.organizationID
 	}
 
-	// Gram-hosted inference is excluded only for internal (employee)
+	// Speakeasy-hosted inference is excluded only for internal (employee)
 	// grouping. External users are the opposite case: their hosted-chat
 	// completions ARE their usage — and their only token-bearing rows, so
 	// excluding them would zero the external surfaces entirely.
@@ -534,7 +570,7 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 //
 // The boundary has to travel in the cursor. Re-deriving it from the group key
 // alone looks the person's latest activity up again without this search's
-// window or row filters (Gram-hosted hook sources, event source, account type,
+// window or row filters (Speakeasy-hosted hook sources, event source, account type,
 // account, deployment), so an excluded row later than the person's last
 // qualifying one inflates the boundary and the person is returned again on
 // every following page.
@@ -763,7 +799,7 @@ func (s *Service) assembleUserSummaries(ctx context.Context, userType string, it
 	return users
 }
 
-// resolveSummaryOwnerIDs maps summary group keys to the Gram user id each key
+// resolveSummaryOwnerIDs maps summary group keys to the Speakeasy user id each key
 // authoritatively identifies. SearchUsers keys internal summaries email-first,
 // so an email-shaped key is resolved through the org's user directory; a
 // non-email key is already a raw gram user id and identifies itself. Keys that
@@ -1484,7 +1520,7 @@ func (s *Service) GetUserMetricsSummary(ctx context.Context, payload *telem_gen.
 		return nil, err
 	}
 
-	// An employee's page never counts Gram-hosted inference (risk-analysis
+	// An employee's page never counts Speakeasy-hosted inference (risk-analysis
 	// judges and friends) as their usage. An external user is the opposite
 	// case: their hosted-chat completions ARE their usage — and their only
 	// token-bearing rows, so the exclusion would zero their page.
@@ -2129,7 +2165,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	// the same set of identities.
 	user, canonicalUser := s.resolveUserScope(ctx, authCtx.ActiveOrganizationID, userID)
 
-	// Employee-scoped views exclude Gram-hosted inference (risk-analysis
+	// Employee-scoped views exclude Speakeasy-hosted inference (risk-analysis
 	// judges and friends): those completions log under the session owner's
 	// identity but are the platform's spend, not the employee's usage —
 	// counting them made one employee's page show 60M+ judge tokens as their
@@ -2284,8 +2320,8 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 // GetUnproxiedMcpServerUsage returns a best-effort daily tool-call count for
 // an unproxied MCP server, sourced from Shadow MCP's hook-reported traces
 // (trace_summaries) matched by canonicalized URL. Unlike GetObservabilityOverview,
-// this data isn't written by Gram's own proxy — an unproxied server's traffic
-// never passes through Gram — so coverage depends entirely on whether any
+// this data isn't written by Speakeasy's own proxy — an unproxied server's traffic
+// never passes through Speakeasy — so coverage depends entirely on whether any
 // hook-instrumented session in this project has called this exact URL.
 func (s *Service) GetUnproxiedMcpServerUsage(ctx context.Context, payload *telem_gen.GetUnproxiedMcpServerUsagePayload) (*telem_gen.GetUnproxiedMcpServerUsageResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

@@ -1,5 +1,92 @@
 # dashboard
 
+## 0.134.0
+
+### Minor Changes
+
+- 1ae1678: The Access Hub catalog now offers Claude Tag. Its card opens a page listing the access allowed under the platform, and **Register new access** opens a guided setup that asks only for the Anthropic organization ID, an agent and optional tags, then trusts the platform and allows every channel in that organization in one step. Catalog platforms and their setup steps are YAML files shipped with the server, validated when loaded, and served by the new `workloadIdentities.listPlatforms` method, which requires `workload:read`.
+  
+  The Claude Tag setup links to Claude Tag's federated access settings and to where the Anthropic organization ID is found, can create an agent inline (named Claude Tag by default), and walks through the two Anthropic console dialogs as a checklist: each console field with the value to paste or what to do, and a checkbox to tick off as the operator goes. Definitions place these rows with the new `checklist_item` block. The setup no longer warns that the access rule admits more than one identity, since the operator cannot change that for a catalog platform.
+- 1ae1678: The Access Hub's guided setup now shows the token endpoint, issuer and MCP host an external platform is pointed at. A dropdown lists every user session issuer in shared mode, at the organization level and in each project, by slug, and the values shown are that issuer's `/oauth/usi/{id}` authorization server. They come from the new `workloadIdentities.listTokenEndpoints` method, which requires `workload:read` and derives them exactly as the shared authorization server's own metadata does.
+- 48217fd: Add `remoteMcp.getServerScopes` and `remoteMcp.setServerScopePin` so a remote-backed MCP server's protected resource scope pin can be read and set, including servers whose resource was never discovered. The pin is shared by every server in the project with the same upstream URL, so both endpoints require write access to all of them. The read reports what a login through each bound client would request now and whether the pin applies to it.
+  
+  Add a "Pinned scopes" picker under the connected identity provider on a Remote MCP server's Identity settings, showing whether the pin is used for that connection; it is read-only for organizations without resource scope discovery unless a pin needs clearing. Saving only header or pin edits no longer re-commits the connected client.
+- 3ee542c: Organization admins can set a remote identity provider to send no scope instead of its whole supported list when a sign-in has no other scope source. The provider's Overview, Settings and the admin issuer and server health views show the setting. The issuer scope override is now chosen from a picker of the provider's supported scopes.
+- 5661e01: The role editor's MCP access tab is now a server picker. It opens with a Specific servers / All servers choice; Specific servers lists every MCP server grouped by project, with the Default project pinned first, fuzzy search, collapsible projects that count their chosen servers, and Select all / Clear all. Clicking a server's row ticks it; its badges and ellipsis menu open a side sheet that limits its tools to all tools, a searchable hand-picked list, or tools carrying chosen annotations, and the menu also forbids the server. Forbidden servers sit in their own section, each with Remove. Servers the role already administers through `mcp:read` or `mcp:write` show as ticked and locked, with a hover card that links to Platform access. Rules the picker cannot show, such as access to a whole project, are kept as stored, and the editor now notices when one server is swapped for another.
+- dfe18bd: Rename the request headers and environment variables customers set to Speakeasy AI names. Every Gram name keeps working as a deprecated alias.
+  
+  - **Request headers:** the API accepts `Speakeasy-AI-Key`, `Speakeasy-AI-Project`, `Speakeasy-AI-Session`, `Speakeasy-AI-Chat-Session`, `Speakeasy-AI-Environment`, `Speakeasy-AI-Mode`, `Speakeasy-AI-User-Email` and `Speakeasy-AI-Device-Serial`, `-Hostname` and `-Environment`. Each is the canonical name of the `Gram-*` header it replaces, and wins when a request sends both. LiteLLM ingest also reads `speakeasy-ai-session-id` and `speakeasy-ai-agent-provider`, `-session-id` and `-turn-id` before the `x-gram-*` names.
+  - **Hooks:** `speakeasy-hooks` reads every setting from `SPEAKEASY_AI_HOOKS_*`, for example `SPEAKEASY_AI_HOOKS_API_KEY`, and falls back to the matching `GRAM_HOOKS_*` name when the new one is unset. The plugin bootstrap reads `SPEAKEASY_AI_HOOKS_HOME` before `GRAM_HOOKS_HOME`. New credential caches go to `$XDG_CONFIG_HOME/speakeasy-ai/hooks-auth.env`; an existing cache at `$XDG_CONFIG_HOME/gram/hooks-auth.env` stays in use.
+  - **Generated plugins:** Cursor, OpenCode and Codex plugins read the API key from `SPEAKEASY_AI_API_KEY`, and Claude Code plugins prompt for it under that name. These configs cannot fall back to another variable, so set `SPEAKEASY_AI_API_KEY` after the plugins update. Codex telemetry and the OpenCode LiteLLM attribution use the new header names.
+  - **Install snippets:** the hosted MCP install page, the dashboard setup, hooks and LiteLLM pages, and the SDK samples show only the new names. The MCP install page uses `Speakeasy-AI-Environment` with `SPEAKEASY_AI_ENVIRONMENT` and `SPEAKEASY_AI_API_KEY`.
+  - **Elements:** the `environmentSlug` option replaces `gramEnvironment`, which still works when `environmentSlug` is not set.
+
+### Patch Changes
+
+- ef793bd: The policy Scope step now asks where a policy applies before showing any other controls: Client sessions, which requires the Speakeasy plugin and hooks on each workstation, or Specific MCP servers, which the gateway enforces. New policies no longer default to an unexplained "Everywhere" scope.
+- 23981c4: Assistant permissions on roles and agents can now be narrowed to specific assistants, and an assistant's own write permission is now editable in the agent policy editor.
+- d210c58: Hovering an MCP server, catalog, or source card now shows a quiet black-and-white halftone of rolling waves behind the icon instead of a confetti burst. The pattern follows the theme's foreground colour, is rolled fresh on every hover, and stays off when reduced motion is requested.
+- bf20d80: Claude Code installs now use one settings snippet instead of CLI commands. Pick Just me (`~/.claude/settings.json`) or My organization (managed settings). The snippet registers the marketplace under its exact name with `autoUpdate` on and enables the plugin, so plugins stay current with no manual step. The generated marketplace READMEs match, and the hooks setup dialog no longer uses the unsupported `plugins.required` key.
+- 5661e01: The role editor's tool access sheet can now connect a remote MCP server itself. For a server with no stored tool list, an editor with `mcp:write` on it gets the tools listed through a live session; with no upstream session yet, **Connect** opens the server's connect page in a new tab, and coming back lists the tools and records them. An editor without `mcp:write` is told that setting tool-level permissions requires it, and no session is opened. The Inspect tab and the sheet share one connection hook.
+- 5661e01: The role and agent permission editors now list `mcp:read` and `mcp:write` under Platform access, so MCP access holds only `mcp:connect`. Each of the two rows notes that it also allows connecting to the servers it covers with every tool.
+- 5661e01: Saving a role on its edit page keeps you on the page and confirms with a "Role saved" toast, and creating a role opens the new role's edit page instead of returning to the roles list.
+- 5661e01: Role names now link to the role's edit page on the identity page's Roles panel, the Usage by Role table in agent insights, the grant access dialog's suggested roles, the change role dialog's directory-mapped roles, and plugin audience rows, joining the MCP access pages that already did.
+- ad78247: Rename the "No Identity" option for Remote MCP servers to "Manual", including the warnings that refer to it.
+- ddd2073: Okta connections installed from the Okta Integration Network can authenticate with a client ID and client secret. Admins can choose the installation method, submit credentials, and replace the secret from the dashboard. A pending connection can switch between the two methods until its client ID is submitted, reusing one signing key. Token acquisition respects credential revocation and preserves observed DPoP binding across worker restarts.
+- 81f48f1: Okta connections that authenticate with a client secret get a "Replace client secret" dialog on the connection card, and the Okta Integration Network checklist step links straight to Okta's API Service Integrations page. The Setup tab opens right after the organization URL is entered and lets admins switch between the recommended Okta Integration Network install and a custom API Services app.
+- 35b67b5: User-facing text now names the product Speakeasy instead of Gram across the dashboard, admin dashboard, CLI help and output, server error messages, consent pages, MCP server info, and API descriptions. HTTP header names, environment variables, package names, and code identifiers are unchanged.
+
+## 0.133.0
+
+### Minor Changes
+
+- 432302c: Agent Sessions now shows who an assistant session ran as and on whose behalf. The assistant name links to the agent identity it acts as, or to the assistant when it has no agent identity, and the member it acted for is shown and linked next to it, in both the session list and the session header. Session owners in the list are now clickable. Chat listings and `loadChat` return `assistant_agent_id` for assistant sessions backed by an agent identity.
+
+## 0.132.0
+
+### Minor Changes
+
+- 396924e: The MCP server Team Access tab gains a Check access section: pick an organization member to see whether they can connect to, view, and manage the server, and which rules decide it. The new `access.explainResourceAccess` endpoint returns the decision from the same evaluation as runtime enforcement, naming each rule's source, whether it is blocked or overridden, and the directory role mapping behind a role for organization admins.
+- 36a200f: Assistants have an Identity tab. An assistant without an agent identity can be set up from it, either with a new agent you name or with an existing agent of the project that you own or can authorize. The tab links to the assigned agent. Deleting an assistant withdraws its trigger workload identities and leaves its agent in place, to be managed like any other agent. The upgrade endpoint and the Platform MCP upgrade tool accept the same agent choice.
+- 1a1da25: Add dedicated `assistant:read` and `assistant:write` permissions. Grants can cover every assistant, every assistant in selected projects, or a single assistant, and agent policies can hold them too. Admins keep full assistant access and members keep read access by default; `project:*` grants no longer open assistants.
+- c5f5fd1: Persist Claude Tag message participants independently of session ownership, resolve them through the Slack directory, and show their session rollup. Recognize standing-owner deliveries and retain Claude Tag classification across ambiguous source reports. Persist and display parent/subagent relationships and Slack channels. Detect nonce-prefixed channel wake deliveries regardless of the reported source.
+- 53c0436: Move the dashboard to the active organization's own host. When `auth.info` reports that the active organization lives on a different platform host, the dashboard replaces the page with the same path, query, and hash on that host, where the user signs in once. Each tab moves to a given host at most once, so hosts can never bounce a tab back and forth, and support or impersonation sessions never move.
+- 7f4e1c9: Moving to your organization's own host no longer asks you to sign in again. When your organization lives on a different platform host from the one you are using, the dashboard and the login page now hand your session over to that host and open the same page there. If the hand-over cannot finish, you land on that host's sign-in page instead of an error. Organizations without a recorded host stay where they are.
+- 136ac53: Clicking a Risk Events row opens a detail drawer for every finding kind, including MCP findings. For MCP findings it shows the call path, and with chat:read the full scanned tool-call payload with each finding highlighted in place. Payload reveals are audited.
+
+### Patch Changes
+
+- 23d750a: Agent network allowlists now list both platform hosts, `app.getgram.ai` and `ai.speakeasy.com` (`dev.getgram.ai` and `dev.ai.speakeasy.com` on dev), on whichever host you open the setup page from. Published plugins send to the server URL from their last publish, so an allowlist with both hosts keeps working when the server URL changes and plugins republish.
+- 315511f: The Okta connection form accepts a pasted Admin Console address, and the Okta setup instructions match the current Admin Console, including each server's issuer for enabling Cross App Access.
+- 80e692a: Link MCP overview tools to filtered logs
+- 2eace0c: `https://ai.speakeasy.com/cli.sh` and `/cli.ps1` now redirect to the CLI install scripts, so `curl -fsSL https://ai.speakeasy.com/cli.sh | bash` works. Before, those paths returned the dashboard page.
+- 8f0a3c2: Explore has a Dashboards tab. A dashboard lays saved widgets out on a 12-column grid for everyone in the project:
+  
+  - Any member makes one and adds the project's saved widgets to it; the same widget may be placed more than once, and editing it changes it on every dashboard it is on.
+  - Its creator, or anyone with write access to the project, drags cards by their header and resizes them by their corner. Each move is saved as it lands.
+  - A dashboard can be renamed, duplicated (which copies its widgets too) and deleted from its page or the list; a card opens its question in Explore.
+- 668278c: Fix the gateway "Installation page" link showing "Server Not Found". Gateways with private network access enabled now render their public install page, and a gateway on a custom domain opens its install page on the Gram host you are signed in to, with the custom-domain URL in the instructions.
+- fd3148b: Switching between Dashboard and Headless no longer leaves a band of frozen starfield streaks along the right edge of the Headless page, or an empty strip beside its scrollbar, and the switch animation now lays its two cards out within the visible viewport instead of off the bottom of a long dashboard page.
+- 261c304: Show `speakeasy` instead of `gram` in the CLI commands for OpenAPI uploads.
+- 261c304: Show the `speakeasy functions` commands in the Gram Functions getting started steps.
+- 33867cc: Opening an MCP install page (`/mcp/<slug>/install`) while already signed in now loads the page instead of landing on the organization's home page. The login return target for that page is server-rendered, and the dashboard was routing to it client-side.
+- bd3827f: Simplify the Okta identity provider page. On the Cross App Access tab the setup checklist collapses to a single line once every step is complete, the server list gets its own "Server connections" heading, and the explanatory copy is shorter and sits next to the thing it describes. The Setup tab drops its checklist heading, a checklist you expand or collapse stays that way when you switch tabs, and the page intro is reworded.
+- 4fab2ab: Returning to the old dashboard host in the same tab moves you to your organization's host again. The guard that stops a redirect loop now lasts 15 seconds instead of the life of the tab.
+- e150a29: The tunneled MCP setup no longer shows a CLI tab. Its `gram tunnel run` command never existed. Run the tunnel agent with the Kubernetes or Docker snippet instead.
+- b083989: The Widgets tab can draw each widget as a card. A List | Cards toggle switches views and is kept in the URL. Each card has the same actions as its row and runs its query only once it scrolls into view. Above the cards sits the dashboard's shared filter bar, offering only the fields (user, agent, model, MCP server, status) some widget can be filtered by:
+  
+  - Each card keeps its own saved window until a date range is picked.
+  - A card opens in Explore as the question it ran.
+- c1cef83: Widgets and Explore now use the dashboard's date presets (15 minutes to 90 days), and Explore's Window control is the dashboard's date picker. Widgets saved with "24h" still open, as "1d". A page that places widgets uses the shared filter bar, configured to show only the catalog fields it names, and every widget on it answers within that bar:
+  
+  - The page's date range replaces each widget's own window, and the buckets follow it.
+  - Page filters are ANDed with each widget's own filters, and a card names any page filter its dataset cannot apply.
+  - Dragging across a time chart narrows the page.
+  
+  Open in Explore shows exactly what the card showed.
+- 1fd4e0b: The Widgets tab says where each widget is used. A Dashboards column counts the dashboards a widget is on and names them on hover; saving edits to a widget that is on dashboards says so beside Save, since its card changes on each of them; and deleting one names the dashboards its card leaves.
+- 24e7b01: A widget can be drawn on its own, outside Explore: it runs its own query, names itself, links back into Explore with exactly its query, and says why when it no longer works instead of showing stale or empty numbers.
+
 ## 0.131.0
 
 ### Minor Changes

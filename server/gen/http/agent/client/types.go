@@ -22,8 +22,8 @@ type UpdateConfigurationRequestBody struct {
 	// sync_interval_seconds, ai_scan_interval_seconds, and disable_ai_scan.
 	// update_channel and blocked_versions can only be set by Speakeasy platform
 	// administrators; per-device identity and secret keys are forbidden, as is
-	// ai_scan, which Gram injects from the organization's scan target list when
-	// serving agents.
+	// ai_scan, which Speakeasy injects from the organization's scan target list
+	// when serving agents.
 	Config map[string]any `form:"config" json:"config" xml:"config"`
 }
 
@@ -55,15 +55,15 @@ type DeleteAiScanTargetRequestBody struct {
 // ReportSessionMovedRequestBody is the type of the "agent" service
 // "reportSessionMoved" endpoint HTTP request body.
 type ReportSessionMovedRequestBody struct {
-	// Native harness session identifier of the moved session. Gram derives its
-	// chat id from this the same way hook ingest does; the move is recorded even
-	// if the session has not been captured yet.
+	// Native harness session identifier of the moved session. Speakeasy derives
+	// its chat id from this the same way hook ingest does; the move is recorded
+	// even if the session has not been captured yet.
 	SessionID string `form:"session_id" json:"session_id" xml:"session_id"`
 	// Harness the session was moved to (e.g. cursor, codex, claude-code).
 	TargetHarness string `form:"target_harness" json:"target_harness" xml:"target_harness"`
 	// Native session id minted for the continuation, when the daemon knows it at
 	// launch time (claude-code targets today; Cursor mints ids server-side so
-	// moves there omit it). Lets Gram link the original session and its
+	// moves there omit it). Lets Speakeasy link the original session and its
 	// continuation.
 	TargetSessionID *string `form:"target_session_id,omitempty" json:"target_session_id,omitempty" xml:"target_session_id,omitempty"`
 	// Harness the session originated in, as detected by the agent (e.g.
@@ -94,7 +94,7 @@ type ReportAIScanRequestBody struct {
 // CreateSessionHandoffRequestBody is the type of the "agent" service
 // "createSessionHandoff" endpoint HTTP request body.
 type CreateSessionHandoffRequestBody struct {
-	// Native harness session identifier the handoff was rendered from. Gram
+	// Native harness session identifier the handoff was rendered from. Speakeasy
 	// derives its chat id from this the same way hook ingest does; a
 	// not-yet-captured session can still mint a link.
 	SessionID string `form:"session_id" json:"session_id" xml:"session_id"`
@@ -119,8 +119,11 @@ type GetPluginsResponseBody struct {
 	// Plugin marketplaces the agent should register with the tools it manages.
 	// Sorted by name.
 	Marketplaces []*AgentMarketplaceResponseBody `form:"marketplaces,omitempty" json:"marketplaces,omitempty" xml:"marketplaces,omitempty"`
-	// Plugins the agent should enable. Each entry references one of the
-	// marketplaces above by name.
+	// Plugins for the caller: the observability plugin of each listed marketplace,
+	// when enabled, and the plugins assigned to the caller. Each entry's
+	// install_mode says whether the agent installs it (`required`, `default`) or
+	// only offers it for the user to turn on (`available`). Each entry references
+	// one of the marketplaces above by name.
 	Plugins []*AgentPluginResponseBody `form:"plugins,omitempty" json:"plugins,omitempty" xml:"plugins,omitempty"`
 	// Organization-wide remote configuration. Absent until an administrator saves
 	// a configuration, allowing an agent with no cached remote layer to keep using
@@ -2248,12 +2251,21 @@ type AgentMarketplaceResponseBody struct {
 
 // AgentPluginResponseBody is used to define fields on response body types.
 type AgentPluginResponseBody struct {
-	// Plugin slug. Combined with marketplace_name, this identifies the plugin the
-	// agent enables in the managed tool.
+	// Plugin slug. Combined with marketplace_name, this identifies the plugin in
+	// the managed tool.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Name of the marketplace this plugin lives in. Always equals the `name` of
 	// one of the marketplaces in the same response.
 	MarketplaceName *string `form:"marketplace_name,omitempty" json:"marketplace_name,omitempty" xml:"marketplace_name,omitempty"`
+	// How the agent installs the plugin. `required`: installed, and the user can't
+	// turn it off. `default`: installed, and the user can turn it off.
+	// `available`: not installed until the user turns it on. Agents that predate
+	// this field install every listed plugin.
+	InstallMode *string `form:"install_mode,omitempty" json:"install_mode,omitempty" xml:"install_mode,omitempty"`
+	// Display name of the plugin. Absent for the synthesized observability plugin.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Short description of the plugin, when one is set.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 }
 
 // DeviceAgentConfigurationResponseBody is used to define fields on response
@@ -2342,8 +2354,9 @@ type AiScanTargetSignaturesResponseBody struct {
 // AiScanTargetGatewayClientResponseBody is used to define fields on response
 // body types.
 type AiScanTargetGatewayClientResponseBody struct {
-	// Vendor keys from Gram's CIMD client catalog. Vendor-grained: no two targets
-	// may claim the same key, or a block on either would silently cover the other.
+	// Vendor keys from Speakeasy's CIMD client catalog. Vendor-grained: no two
+	// targets may claim the same key, or a block on either would silently cover
+	// the other.
 	CimdVendorKeys []string `form:"cimd_vendor_keys,omitempty" json:"cimd_vendor_keys,omitempty" xml:"cimd_vendor_keys,omitempty"`
 	// Client ids matched literally against the caller's verified client_id, or
 	// CIMD catalog URLs — including the wildcard patterns — matched against the
@@ -2376,8 +2389,9 @@ type AiScanTargetSignaturesRequestBody struct {
 // AiScanTargetGatewayClientRequestBody is used to define fields on request
 // body types.
 type AiScanTargetGatewayClientRequestBody struct {
-	// Vendor keys from Gram's CIMD client catalog. Vendor-grained: no two targets
-	// may claim the same key, or a block on either would silently cover the other.
+	// Vendor keys from Speakeasy's CIMD client catalog. Vendor-grained: no two
+	// targets may claim the same key, or a block on either would silently cover
+	// the other.
 	CimdVendorKeys []string `form:"cimd_vendor_keys" json:"cimd_vendor_keys" xml:"cimd_vendor_keys"`
 	// Client ids matched literally against the caller's verified client_id, or
 	// CIMD catalog URLs — including the wildcard patterns — matched against the
@@ -2395,7 +2409,7 @@ type AgentSessionMetaResponseBody struct {
 	// The native harness session identifier this entry resolves, echoed from the
 	// request.
 	SessionID *string `form:"session_id,omitempty" json:"session_id,omitempty" xml:"session_id,omitempty"`
-	// Gram chat id for the captured session.
+	// Speakeasy chat id for the captured session.
 	ChatID *string `form:"chat_id,omitempty" json:"chat_id,omitempty" xml:"chat_id,omitempty"`
 	// Generated (or manually set) chat title. Absent when no title has been
 	// generated yet.
@@ -7160,6 +7174,14 @@ func ValidateAgentPluginResponseBody(body *AgentPluginResponseBody) (err error) 
 	}
 	if body.MarketplaceName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("marketplace_name", "body"))
+	}
+	if body.InstallMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("install_mode", "body"))
+	}
+	if body.InstallMode != nil {
+		if !(*body.InstallMode == "required" || *body.InstallMode == "default" || *body.InstallMode == "available") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.install_mode", *body.InstallMode, []any{"required", "default", "available"}))
+		}
 	}
 	return
 }

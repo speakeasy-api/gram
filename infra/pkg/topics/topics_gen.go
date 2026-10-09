@@ -17,6 +17,7 @@ import (
 	pluginsv1 "github.com/speakeasy-api/gram/infra/gen/gram/plugins/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	roledistributionv1 "github.com/speakeasy-api/gram/infra/gen/gram/role_distribution/v1"
+	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -77,6 +78,8 @@ const (
 	GramRiskV1PromptPolicyAnalysis Topic = "gram.risk.v1.PromptPolicyAnalysis"
 	// GramRole_distributionV1RoleDistributionSetupRequestedV1 publishes to gram-role-distribution-v1-role-distribution-setup-requested-v1.
 	GramRole_distributionV1RoleDistributionSetupRequestedV1 Topic = "gram.role_distribution.v1.RoleDistributionSetupRequestedV1"
+	// GramSigintV1Reading publishes to gram-sigint-v1-reading.
+	GramSigintV1Reading Topic = "gram.sigint.v1.Reading"
 	// GramTelemetryV1LogRecord publishes to gram-telemetry-v1-log-record.
 	GramTelemetryV1LogRecord Topic = "gram.telemetry.v1.LogRecord"
 	// GramTelemetryV1SessionObserved publishes to gram-telemetry-v1-session-observed.
@@ -112,6 +115,7 @@ func All() []Topic {
 		GramRiskV1PromptInjectionAnalysis,
 		GramRiskV1PromptPolicyAnalysis,
 		GramRole_distributionV1RoleDistributionSetupRequestedV1,
+		GramSigintV1Reading,
 		GramTelemetryV1LogRecord,
 		GramTelemetryV1SessionObserved,
 		GramWebhooksV1Event,
@@ -169,6 +173,8 @@ func Lookup(name string) (Topic, bool) {
 		return GramRiskV1PromptPolicyAnalysis, true
 	case GramRole_distributionV1RoleDistributionSetupRequestedV1:
 		return GramRole_distributionV1RoleDistributionSetupRequestedV1, true
+	case GramSigintV1Reading:
+		return GramSigintV1Reading, true
 	case GramTelemetryV1LogRecord:
 		return GramTelemetryV1LogRecord, true
 	case GramTelemetryV1SessionObserved:
@@ -234,6 +240,8 @@ func newPublisher(ctx context.Context, broker gcp.PublisherBroker, topic Topic, 
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &riskv1.PromptPolicyAnalysis{}, gcp.WithEncodedPublishSettings(settings))
 	case GramRole_distributionV1RoleDistributionSetupRequestedV1:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &roledistributionv1.RoleDistributionSetupRequestedV1{}, gcp.WithEncodedPublishSettings(settings))
+	case GramSigintV1Reading:
+		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &sigintv1.Reading{}, gcp.WithEncodedPublishSettings(settings))
 	case GramTelemetryV1LogRecord:
 		return gcp.PubSubEncodedPublisherForMessage(ctx, broker, &telemetryv1.LogRecord{}, gcp.WithEncodedPublishSettings(settings))
 	case GramTelemetryV1SessionObserved:

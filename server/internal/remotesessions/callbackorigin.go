@@ -9,7 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
-// remoteLoginCallbackPath is the path of the redirect_uri Gram registers with
+// remoteLoginCallbackPath is the path of the redirect_uri Speakeasy registers with
 // every upstream provider. It is served on every platform host.
 const remoteLoginCallbackPath = "/" + canonicalCallbackRouteBase + "/remote_login_callback"
 

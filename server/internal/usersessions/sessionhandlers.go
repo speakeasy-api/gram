@@ -304,7 +304,7 @@ func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUser
 
 	// Strictly after the jti push, and attempted even when it failed. The
 	// upstream call is a synchronous round trip to a third party, so running it
-	// first would hold Gram's own access token valid for the length of someone
+	// first would hold Speakeasy's own access token valid for the length of someone
 	// else's timeout — trading a prompt local revocation for a best-effort
 	// remote one. The two are independent controls, so a cache outage must not
 	// also cost the upstream revocation.

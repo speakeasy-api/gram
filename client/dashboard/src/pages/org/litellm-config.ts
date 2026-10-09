@@ -26,20 +26,25 @@ export function buildLiteLLMGuardrailConfig(
       mode: [pre_call, post_call]
       api_base: ${apiBase(serverURL)}/rpc/litellm.ingest
       headers:
-        Gram-Key: os.environ/GRAM_LITELLM_INGEST_KEY
-        Gram-Project: os.environ/GRAM_PROJECT_SLUG
+        Speakeasy-AI-Key: os.environ/SPEAKEASY_AI_LITELLM_INGEST_KEY
+        Speakeasy-AI-Project: os.environ/SPEAKEASY_AI_PROJECT
       extra_headers:
-        - x-gram-session-id
+        - speakeasy-ai-session-id
         - x-claude-code-session-id
         - session-id
         - thread-id
         - x-session-id
-        - x-gram-agent-provider
-        - x-gram-agent-session-id
-        - x-gram-agent-turn-id
+        - speakeasy-ai-agent-provider
+        - speakeasy-ai-agent-session-id
+        - speakeasy-ai-agent-turn-id
         - x-codex-turn-metadata
         - x-opencode-session
         - x-opencode-request
+        # Deprecated names that clients set up before the rename still send.
+        - x-gram-session-id
+        - x-gram-agent-provider
+        - x-gram-agent-session-id
+        - x-gram-agent-turn-id
       default_on: true
       streaming_end_of_stream_only: true
       fail_on_error: true
@@ -50,12 +55,12 @@ export function buildLiteLLMEnvironment(
   serverURL: string,
   projectSlug: string,
 ): string {
-  return `export GRAM_LITELLM_INGEST_KEY="<PASTE_KEY_SHOWN_ABOVE>"
-export GRAM_PROJECT_SLUG="${projectSlug}"
+  return `export SPEAKEASY_AI_LITELLM_INGEST_KEY="<PASTE_KEY_SHOWN_ABOVE>"
+export SPEAKEASY_AI_PROJECT="${projectSlug}"
 export LITELLM_OTEL_V2=true
 export OTEL_EXPORTER=otlp_http
 export OTEL_ENDPOINT="${apiBase(serverURL)}/rpc/hooks.otel"
-export OTEL_HEADERS="Gram-Key=\${GRAM_LITELLM_INGEST_KEY},Gram-Project=\${GRAM_PROJECT_SLUG}"
+export OTEL_HEADERS="Speakeasy-AI-Key=\${SPEAKEASY_AI_LITELLM_INGEST_KEY},Speakeasy-AI-Project=\${SPEAKEASY_AI_PROJECT}"
 export OTEL_SERVICE_NAME=litellm
 export OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=no_content
 export LITELLM_OTEL_INTEGRATION_ENABLE_METRICS=true

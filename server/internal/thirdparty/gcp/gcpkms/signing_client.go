@@ -16,7 +16,7 @@ import (
 // PublicKey is the public half of a KMS signing key.
 type PublicKey struct {
 	// Algorithm is the JOSE algorithm the key version actually signs with,
-	// derived from the provider rather than from anything Gram stored. Comparing
+	// derived from the provider rather than from anything Speakeasy stored. Comparing
 	// it against the stored algorithm is what catches a key pointed at the wrong
 	// row.
 	Algorithm jose.SignatureAlgorithm

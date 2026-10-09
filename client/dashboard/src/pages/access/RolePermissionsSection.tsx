@@ -1,3 +1,4 @@
+import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import {
@@ -34,10 +35,32 @@ export interface ScopeGroup {
 }
 
 /**
+ * MCP permissions for administering servers rather than using them. They sit
+ * under Platform access, but each still lets its holder connect to the servers
+ * it covers with every tool (scopeExpansions in server/internal/authz/scopes.go).
+ */
+const MCP_ADMIN_SCOPES: ReadonlySet<string> = new Set([
+  "mcp:read",
+  "mcp:write",
+]);
+
+function isMcpAccessScope(scope: ScopeDefinition): boolean {
+  return scope.resourceType === "mcp" && !MCP_ADMIN_SCOPES.has(scope.slug);
+}
+
+function mcpTabLabel(
+  serverCount: number | null | undefined,
+  permissionCount: number,
+): string {
+  if (serverCount === null) return "MCP access";
+  return `MCP access (${serverCount ?? permissionCount})`;
+}
+
+/**
  * The permissions a role carries, as a list you build rather than a tree you
  * walk: pick permissions from one searchable menu, then narrow each one on its
- * own row. MCP permissions are separated from the rest because they are the
- * ones with something to narrow — a server, and inside it, particular tools.
+ * own row. Connecting to MCP servers is separated from the rest because it is
+ * the one with something to narrow — a server, and inside it, particular tools.
  */
 export function RolePermissionsSection({
   groups,
@@ -47,6 +70,8 @@ export function RolePermissionsSection({
   renderScopeRule,
   subjectLabel = "this role",
   markAgentIneligible = false,
+  renderMcpAccess,
+  mcpAccessCount,
 }: {
   groups: ScopeGroup[];
   selectedScopes: Set<string>;
@@ -63,14 +88,31 @@ export function RolePermissionsSection({
    * its agent members rather than granted. Set once the role has any.
    */
   markAgentIneligible?: boolean;
+  /**
+   * Replaces the MCP access tab's permission list with a server picker. Given
+   * a way back to Platform access, where the admin permissions that also
+   * connect are managed.
+   */
+  renderMcpAccess?: (controls: { showPlatformAccess: () => void }) => ReactNode;
+  /**
+   * What the MCP access tab counts when it shows servers, not permissions.
+   * Null while that count is still loading.
+   */
+  mcpAccessCount?: number | null;
 }): JSX.Element {
   const [tab, setTab] = useState("mcp");
   const [pickerOpen, setPickerOpen] = useState(false);
   // A pick from the empty state waits here until the picker has closed.
   const pendingScope = useRef<Scope | null>(null);
 
-  const mcpGroups = groups.filter((group) => group.resourceType === "mcp");
-  const otherGroups = groups.filter((group) => group.resourceType !== "mcp");
+  // Split by permission, not by group: the MCP group's admin permissions
+  // belong with the platform ones.
+  const groupsWith = (keep: (scope: ScopeDefinition) => boolean) =>
+    groups
+      .map((group) => ({ ...group, scopes: group.scopes.filter(keep) }))
+      .filter((group) => group.scopes.length > 0);
+  const mcpGroups = groupsWith(isMcpAccessScope);
+  const otherGroups = groupsWith((scope) => !isMcpAccessScope(scope));
 
   const selectedIn = (list: ScopeGroup[]) =>
     list.flatMap((group) =>
@@ -81,6 +123,7 @@ export function RolePermissionsSection({
   const otherSelected = selectedIn(otherGroups);
   const activeGroups = tab === "mcp" ? mcpGroups : otherGroups;
   const activeSelected = tab === "mcp" ? mcpSelected : otherSelected;
+  const showsMcpAccess = tab === "mcp" && !!renderMcpAccess;
 
   const addButton = (
     <PopoverTrigger asChild>
@@ -111,14 +154,14 @@ export function RolePermissionsSection({
           <div className="border-border bg-muted/30 flex items-center justify-between gap-3 border-b px-4">
             <PageTabsList>
               <PageTabsTrigger value="mcp">
-                MCP access ({mcpSelected.length})
+                {mcpTabLabel(mcpAccessCount, mcpSelected.length)}
               </PageTabsTrigger>
               <PageTabsTrigger value="organization">
                 Platform access ({otherSelected.length})
               </PageTabsTrigger>
             </PageTabsList>
 
-            {activeSelected.length > 0 && addButton}
+            {activeSelected.length > 0 && !showsMcpAccess && addButton}
             <PopoverContent
               align="end"
               className="w-[min(24rem,calc(100vw-2rem))] p-0"
@@ -185,7 +228,11 @@ export function RolePermissionsSection({
               directly under a popover trigger, so a box that grew or shrank as
               permissions came and went would shift the page under the cursor. */}
           <TabsContent value={tab} forceMount className="min-h-[13.5rem]">
-            {activeSelected.length === 0 ? (
+            {showsMcpAccess ? (
+              renderMcpAccess?.({
+                showPlatformAccess: () => setTab("organization"),
+              })
+            ) : activeSelected.length === 0 ? (
               <div className="flex min-h-[13.5rem] flex-col items-center justify-center px-4 text-center">
                 <Text variant="body" className="font-medium">
                   {tab === "mcp"
@@ -195,7 +242,7 @@ export function RolePermissionsSection({
                 <Text muted small className="mt-1">
                   {tab === "mcp"
                     ? `Add a permission to let ${subjectLabel} reach MCP servers and their tools.`
-                    : `Add a permission to let ${subjectLabel} work with projects, environments and skills.`}
+                    : `Add a permission to let ${subjectLabel} work with projects, environments, skills and MCP servers.`}
                 </Text>
                 <div className="mt-4">{addButton}</div>
               </div>
@@ -233,6 +280,18 @@ export function RolePermissionsSection({
                           <div className="mt-2 flex flex-wrap items-center gap-1.5">
                             {rule}
                           </div>
+                        )}
+                        {MCP_ADMIN_SCOPES.has(scope.slug) && (
+                          <Alert
+                            iconName="lock"
+                            alignTop
+                            className="mt-2 text-xs"
+                          >
+                            Also allows connecting to these servers with every
+                            tool.
+                            {renderMcpAccess &&
+                              " They show as locked on the MCP access tab."}
+                          </Alert>
                         )}
                       </div>
                       <Button

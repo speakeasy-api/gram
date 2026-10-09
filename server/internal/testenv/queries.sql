@@ -546,6 +546,21 @@ UPDATE platform_mcp_setup_handoffs
 SET expires_at = clock_timestamp() - interval '1 second'
 WHERE id = @id;
 
+-- name: ExpirePlatformMCPOperationReceiptFixture :one
+-- Test-only fixture expiring an idempotency receipt by the database clock,
+-- the clock both the replay pre-check and the locked path judge expiry with.
+UPDATE platform_mcp_operation_receipts
+SET expires_at = clock_timestamp() - interval '1 second'
+WHERE id = @id
+RETURNING expires_at;
+
+-- name: ListPlatformMCPOperationReceiptIDsFixture :many
+-- Test-only inspection of which receipts an organization still holds.
+SELECT id
+FROM platform_mcp_operation_receipts
+WHERE organization_id = @organization_id
+ORDER BY id;
+
 -- name: GetPlatformMCPReadinessFingerprintFixture :one
 -- Test-only inspection of the non-secret identity fingerprint persisted by Platform MCP.
 SELECT provider_authorization_fingerprint
@@ -1125,6 +1140,14 @@ RETURNING id;
 INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject)
 VALUES (@organization_id, sqlc.narg(project_id), @workload_issuer_id, @subject);
 
+-- name: CreateWorkloadIdentityRuleFixture :exec
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind)
+VALUES (@organization_id, sqlc.narg(project_id), @workload_issuer_id, @subject, @match_kind);
+
+-- name: CreateWorkloadAgentAssignmentFixture :exec
+INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, match_kind, agent_id)
+VALUES (@organization_id, @workload_issuer_id, @subject, @match_kind, @agent_id);
+
 -- name: SoftDeleteWorkloadIssuerFixture :execrows
 UPDATE workload_issuers
 SET deleted_at = clock_timestamp()
@@ -1487,6 +1510,21 @@ WHERE id = @id
 UPDATE remote_session_clients
 SET client_secret_expires_at = sqlc.narg('client_secret_expires_at'),
     upstream_rejected_at = sqlc.narg('upstream_rejected_at'),
+    updated_at = clock_timestamp()
+WHERE remote_session_clients.id = @id
+  AND remote_session_clients.deleted IS FALSE
+  AND remote_session_clients.project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid
+  AND (remote_session_clients.organization_id IS NULL OR remote_session_clients.organization_id = @organization_id)
+  AND (remote_session_clients.organization_id = @organization_id AND remote_session_clients.project_id IS NULL
+    OR EXISTS (SELECT 1 FROM projects p WHERE p.id = remote_session_clients.project_id AND p.organization_id = @organization_id));
+
+-- name: ForceRemoteSessionClientCredentialOwnerFixture :execrows
+-- Test fixture: sets who owns a client's upstream credential, which no
+-- application query changes after creation. A 'self' owner must satisfy
+-- remote_session_clients_credential_owner_check, so the client needs a
+-- confidential token endpoint auth method first.
+UPDATE remote_session_clients
+SET credential_owner = @credential_owner,
     updated_at = clock_timestamp()
 WHERE remote_session_clients.id = @id
   AND remote_session_clients.deleted IS FALSE
@@ -1868,3 +1906,11 @@ DELETE FROM mcp_registries;
 
 -- name: InsertRetainedLegacyCatalogSourceFixture :exec
 INSERT INTO mcp_registries (id,name,url,source_type,auth_profile,enabled,certification_state,source_key) VALUES ($1,'Legacy catalog','https://legacy.example.test','pulse_v0_1','pulse_server_credentials',true,'certified','pulse');
+
+-- name: SetRemoteSessionIssuerOmitScopeFallbackFixture :execrows
+-- Scoped to the issuer's own tier: NULL project and organization name a global issuer.
+UPDATE remote_session_issuers
+SET omit_scope_fallback = @omit_scope_fallback
+WHERE id = @id
+  AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid
+  AND organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text;

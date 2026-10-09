@@ -866,14 +866,15 @@ func (q *Queries) GetAssistantThreadAssistantIDByChatID(ctx context.Context, arg
 
 const getChat = `-- name: GetChat :one
 SELECT c.session_surface, c.slack_team_id, c.slack_channel_id, c.slack_channel_name, c.id, c.project_id, c.organization_id, c.user_id, c.external_user_id, c.external_chat_id, c.title, c.title_manually_set, c.pinned_at, c.summary, c.summary_generated_at, c.inference_accepted_checkpoint, c.inference_actor_key, c.user_account_id, c.litellm_proxied, c.cwd, c.created_at, c.updated_at, c.deleted_at, c.deleted, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
-  at.assistant_id, a.name AS assistant_name,
+  a.id AS assistant_id, a.name AS assistant_name, b.original_agent_id AS assistant_agent_id,
   coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links l
     WHERE l.project_id = c.project_id AND l.child_chat_id = c.id AND l.kind = 'subagent'
       AND l.source_surface = 'claude-tag') THEN 'claude-tag' END, '')::text AS captured_surface
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
-LEFT JOIN assistant_threads at ON at.chat_id = c.id AND at.deleted IS FALSE
-LEFT JOIN assistants a ON a.id = at.assistant_id AND a.deleted IS FALSE
+LEFT JOIN assistant_threads at ON at.chat_id = c.id AND at.project_id = c.project_id AND at.deleted IS FALSE
+LEFT JOIN assistants a ON a.id = at.assistant_id AND a.project_id = c.project_id AND a.deleted IS FALSE
+LEFT JOIN assistant_agent_bindings b ON b.original_assistant_id = a.id AND b.project_id = c.project_id AND b.deleted IS FALSE
 WHERE c.id = $1 AND c.project_id = $2 AND c.deleted IS FALSE
 `
 
@@ -911,6 +912,7 @@ type GetChatRow struct {
 	AccountEmail                string
 	AssistantID                 uuid.NullUUID
 	AssistantName               pgtype.Text
+	AssistantAgentID            uuid.NullUUID
 	CapturedSurface             string
 }
 
@@ -950,6 +952,7 @@ func (q *Queries) GetChat(ctx context.Context, arg GetChatParams) (GetChatRow, e
 		&i.AccountEmail,
 		&i.AssistantID,
 		&i.AssistantName,
+		&i.AssistantAgentID,
 		&i.CapturedSurface,
 	)
 	return i, err
@@ -974,6 +977,20 @@ WITH ordered AS (
   WHERE cm.chat_id = $2
     AND cm.project_id = $1::uuid
     AND cm.generation = $3::integer
+),
+attachment_risk_prompts AS (
+  SELECT ccp.parent_chat_message_id AS id
+  FROM chat_content_parts ccp
+  JOIN risk_results rr ON rr.chat_content_part_id = ccp.id
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+  WHERE ccp.chat_id = $2
+    AND ccp.project_id = $1::uuid
+    AND ccp.deleted IS FALSE
+    AND ccp.parent_chat_message_id IS NOT NULL
+    AND rr.project_id = $1::uuid
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.false_positive_at IS NULL
 )
 SELECT
   COUNT(*) FILTER (WHERE has_tool_calls OR role IN ('user', 'assistant', 'tool'))::bigint AS total,
@@ -994,6 +1011,7 @@ SELECT
         AND rr.excluded_at IS NULL
         AND rr.false_positive_at IS NULL
     )
+    OR o.id IN (SELECT id FROM attachment_risk_prompts)
   )::bigint AS risk_findings
 FROM ordered
 `
@@ -1019,7 +1037,10 @@ type GetChatEntryTotalsRow struct {
 // is in view. Each message maps to exactly one entry, mirroring the client's
 // getTraceEntryType precedence: a message carrying a non-empty tool_calls array
 // is a tool call regardless of role, otherwise the role decides. risk_findings
-// counts messages with an active (found, non-suppressed) risk result.
+// counts messages with an active (found, non-suppressed) risk result on the
+// message or on an attachment hanging off it.
+// Prompts whose attachments hold an active finding. Such a finding has no
+// chat_message_id, so it flags the prompt the attachment hangs off.
 func (q *Queries) GetChatEntryTotals(ctx context.Context, arg GetChatEntryTotalsParams) (GetChatEntryTotalsRow, error) {
 	row := q.db.QueryRow(ctx, getChatEntryTotals, arg.ProjectID, arg.ChatID, arg.Generation)
 	var i GetChatEntryTotalsRow
@@ -1337,6 +1358,39 @@ func (q *Queries) GetLatestChatUserPromptSource(ctx context.Context, arg GetLate
 	var source pgtype.Text
 	err := row.Scan(&source)
 	return source, err
+}
+
+const getLatestExternalChatMessageClient = `-- name: GetLatestExternalChatMessageClient :one
+SELECT source, user_agent, ip_address
+FROM chat_messages
+WHERE chat_id = $1
+  AND project_id = $2::uuid
+  AND external_message_id IS NOT NULL
+ORDER BY created_at DESC, seq DESC
+LIMIT 1
+`
+
+type GetLatestExternalChatMessageClientParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetLatestExternalChatMessageClientRow struct {
+	Source    pgtype.Text
+	UserAgent pgtype.Text
+	IpAddress pgtype.Text
+}
+
+// Imported chat messages carry the capturing client's identity (source, user
+// agent, ip address). A later import of the same chat that learns nothing
+// about the client inherits it from the newest stored message so one chat
+// does not split across sources. The chat_id/created_at index serves this
+// backward LIMIT 1 scan.
+func (q *Queries) GetLatestExternalChatMessageClient(ctx context.Context, arg GetLatestExternalChatMessageClientParams) (GetLatestExternalChatMessageClientRow, error) {
+	row := q.db.QueryRow(ctx, getLatestExternalChatMessageClient, arg.ChatID, arg.ProjectID)
+	var i GetLatestExternalChatMessageClientRow
+	err := row.Scan(&i.Source, &i.UserAgent, &i.IpAddress)
+	return i, err
 }
 
 const getMaxGenerationForChat = `-- name: GetMaxGenerationForChat :one
@@ -3103,6 +3157,9 @@ page_chats AS (
     -- assistant_id) key to rule that row out.
     a.id AS assistant_id,
     a.name AS assistant_name,
+    -- The agent identity the assistant acts as, when it has one. At most one
+    -- live binding exists per assistant, so this join adds no rows.
+    b.original_agent_id AS assistant_agent_id,
     lc.total_count,
     lc.page_position
   FROM limited_chats lc
@@ -3122,10 +3179,11 @@ page_chats AS (
   ) picked ON TRUE
   LEFT JOIN assistant_threads thread ON thread.id = picked.thread_id AND thread.project_id = $1
   LEFT JOIN assistants a ON a.id = thread.assistant_id AND a.project_id = $1 AND a.deleted IS FALSE
+  LEFT JOIN assistant_agent_bindings b ON b.original_assistant_id = a.id AND b.project_id = $1 AND b.deleted IS FALSE
 ),
 chat_attribution AS (
   SELECT
-    lc.id, lc.title, lc.user_id, lc.external_user_id, lc.created_at, lc.updated_at, lc.pinned_at, lc.litellm_proxied, lc.num_messages, lc.source, lc.last_message_timestamp, lc.account_type, lc.account_email, lc.assistant_id, lc.assistant_name, lc.total_count, lc.page_position,
+    lc.id, lc.title, lc.user_id, lc.external_user_id, lc.created_at, lc.updated_at, lc.pinned_at, lc.litellm_proxied, lc.num_messages, lc.source, lc.last_message_timestamp, lc.account_type, lc.account_email, lc.assistant_id, lc.assistant_name, lc.assistant_agent_id, lc.total_count, lc.page_position,
     COALESCE(CASE WHEN lc.source = 'litellm' THEN (
       SELECT CASE
         WHEN user_agent = ANY (ARRAY['claude-code', 'codex', 'opencode']::text[]) THEN user_agent
@@ -3170,6 +3228,7 @@ SELECT
   lc.account_email,
   lc.assistant_id,
   lc.assistant_name,
+  lc.assistant_agent_id,
   lc.total_count
 FROM chat_attribution lc
 ORDER BY lc.page_position
@@ -3215,6 +3274,7 @@ type ListChatsRow struct {
 	AccountEmail         string
 	AssistantID          uuid.NullUUID
 	AssistantName        pgtype.Text
+	AssistantAgentID     uuid.NullUUID
 	TotalCount           int64
 }
 
@@ -3274,6 +3334,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 			&i.AccountEmail,
 			&i.AssistantID,
 			&i.AssistantName,
+			&i.AssistantAgentID,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err
@@ -3500,6 +3561,20 @@ WITH ordered AS (
     AND cm.project_id = $3::uuid
     AND cm.generation = $4::integer
 ),
+attachment_risk_prompts AS (
+  SELECT ccp.parent_chat_message_id AS id
+  FROM chat_content_parts ccp
+  JOIN risk_results rr ON rr.chat_content_part_id = ccp.id
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+  WHERE ccp.chat_id = $2
+    AND ccp.project_id = $3::uuid
+    AND ccp.deleted IS FALSE
+    AND ccp.parent_chat_message_id IS NOT NULL
+    AND rr.project_id = $3::uuid
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.false_positive_at IS NULL
+),
 risk_rns AS (
   SELECT o.rn FROM ordered o
   WHERE EXISTS (
@@ -3514,6 +3589,7 @@ risk_rns AS (
       AND rr.excluded_at IS NULL
       AND rr.false_positive_at IS NULL
   )
+  OR o.id IN (SELECT id FROM attachment_risk_prompts)
 )
 SELECT
   o.id, o.seq, o.chat_id, o.project_id, o.role, o.content, o.content_raw, o.content_asset_url, o.model, o.message_id, o.finish_reason, o.tool_calls, o.prompt_tokens, o.completion_tokens, o.total_tokens, o.storage_error, o.user_id, o.external_user_id, o.external_message_id, o.origin, o.user_agent, o.ip_address, o.source, o.tool_call_id, o.tool_urn, o.tool_outcome, o.tool_outcome_notes, o.tool_call_summaries, o.content_hash, o.generation, o.replayed, o.created_at, o.risk_analyzed_at, o.rn, o.total,
@@ -3581,6 +3657,8 @@ type ListRiskWindowedMessagesRow struct {
 // membership. is_risk flags the seed rows (the flagged messages themselves) so
 // the caller can return the explicit risk seq list (context rows are
 // is_risk = false).
+// Prompts whose attachments hold an active finding. Such a finding has no
+// chat_message_id, so it flags the prompt the attachment hangs off.
 func (q *Queries) ListRiskWindowedMessages(ctx context.Context, arg ListRiskWindowedMessagesParams) ([]ListRiskWindowedMessagesRow, error) {
 	rows, err := q.db.Query(ctx, listRiskWindowedMessages,
 		arg.ContextSize,
@@ -4171,6 +4249,35 @@ func (q *Queries) SeedChatTranscriptMessage(ctx context.Context, arg SeedChatTra
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const seedContentPartRiskResult = `-- name: SeedContentPartRiskResult :exec
+INSERT INTO risk_results (
+    project_id, organization_id, risk_policy_id, risk_policy_version,
+    chat_content_part_id, source, found
+)
+VALUES (
+    $1, $2, $3, 1,
+    $4, 'test', TRUE
+)
+`
+
+type SeedContentPartRiskResultParams struct {
+	ProjectID         uuid.UUID
+	OrganizationID    string
+	RiskPolicyID      uuid.UUID
+	ChatContentPartID uuid.NullUUID
+}
+
+// Test fixture: insert a risk result linking a chat content part to a risk policy.
+func (q *Queries) SeedContentPartRiskResult(ctx context.Context, arg SeedContentPartRiskResultParams) error {
+	_, err := q.db.Exec(ctx, seedContentPartRiskResult,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.RiskPolicyID,
+		arg.ChatContentPartID,
+	)
+	return err
 }
 
 const seedDisabledRiskPolicy = `-- name: SeedDisabledRiskPolicy :one

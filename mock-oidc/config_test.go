@@ -19,7 +19,7 @@ const configTemplate = `provider:
   oauth_clients:
     - client_id: gram-local.apps.googleusercontent.com
       client_secret: GOCSPX-example_secret
-      name: Gram (Google)
+      name: Speakeasy (Google)
       redirect_uris:
         - "${GRAM_ADMIN_SERVER_URL}/admin/auth.callback"
 `

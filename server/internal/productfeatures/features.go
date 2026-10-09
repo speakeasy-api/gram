@@ -33,7 +33,7 @@ const (
 	FeaturePlatformMCP Feature = "platform_mcp"
 
 	// FeatureCustomerManagedEncryptionKeys gates the organization's ability to bring its
-	// own cloud KMS keys: the external credentials Gram uses to reach them and,
+	// own cloud KMS keys: the external credentials Speakeasy uses to reach them and,
 	// later, the keys themselves. Distinct from FeatureCustomModelKeys, which
 	// covers model provider API keys.
 	FeatureCustomerManagedEncryptionKeys Feature = "customer_managed_encryption_keys"
@@ -54,6 +54,8 @@ const (
 	// FeatureNetworkIngress is the durable staff-managed entitlement for private
 	// network ingress. It is never included in default bundles or demo seed data.
 	FeatureNetworkIngress Feature = "network_ingress"
+	// FeatureSignalsIntelligence gates signals intelligence configuration access.
+	FeatureSignalsIntelligence Feature = "signals_intelligence"
 )
 
 // RequiresPlatformAdmin reports whether toggling f through productFeatures.set

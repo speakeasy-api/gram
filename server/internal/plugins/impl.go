@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
@@ -89,7 +90,7 @@ type GitHubPublisher interface {
 	GetFileContent(ctx context.Context, installationID int64, owner, repo, branch, path string) ([]byte, error)
 }
 
-// GitHubConfig holds the configured GitHub client and the Gram-owned org
+// GitHubConfig holds the configured GitHub client and the Speakeasy-owned org
 // where plugin repos are created. Nil means GitHub publishing is disabled.
 type GitHubConfig struct {
 	Client         GitHubPublisher
@@ -1235,6 +1236,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		ProjectID:        *ac.ProjectID,
 		PluginID:         pluginID,
 		PrincipalURNs:    payload.PrincipalUrns,
+		InstallModes:     payload.InstallModes,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		ActorDisplayName: ac.Email,
 		ActorSlug:        nil,
@@ -2029,7 +2031,7 @@ func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput)
 		return nil, fmt.Errorf("github publishing is not configured")
 	}
 
-	actorDisplayName := "Gram"
+	actorDisplayName := "Speakeasy"
 	result, err := s.publishProject(ctx, publishProjectInput{
 		ProjectID:        project.ProjectID,
 		ProjectName:      project.ProjectName,
@@ -3315,7 +3317,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 		// only checks project ownership, not backend type), and mcp_servers'
 		// own backend-exclusivity check doesn't cover mcp_endpoints either.
 		// An unproxied-backed server's URL always wins so it's never routed
-		// through a Gram endpoint it can't actually be served from.
+		// through a Speakeasy endpoint it can't actually be served from.
 		mcpURL := ""
 		isOAuth := m.McpServerIsOauth
 		isUnproxied := false
@@ -3635,6 +3637,7 @@ func pluginAssignmentToGen(a repo.PluginAssignment) *gen.PluginAssignment {
 	return &gen.PluginAssignment{
 		ID:           a.ID.String(),
 		PrincipalUrn: a.PrincipalUrn,
+		InstallMode:  string(installmode.FromStored(a.InstallMode)),
 		CreatedAt:    formatTime(a.CreatedAt),
 	}
 }

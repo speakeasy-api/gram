@@ -61,10 +61,10 @@ func listManagedLeftovers(t *testing.T, ctx context.Context, si *serviceInstance
 		out.client = out.client || row.RemoteSessionClient.ID == managed.ClientRowID
 	}
 	for _, row := range sets {
-		out.set = out.set || row.ID == managed.JSONWebKeySetID
+		out.set = out.set || row.ID == managed.JSONWebKeySetID.UUID
 	}
 	for _, row := range keys {
-		out.key = out.key || row.ID == managed.ExternalKeyID
+		out.key = out.key || row.ID == managed.ExternalKeyID.UUID
 	}
 	return out
 }

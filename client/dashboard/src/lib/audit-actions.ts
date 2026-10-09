@@ -93,6 +93,8 @@ export const AUDIT_ACTIONS = [
   "gcp_kms_key:update",
   "identity-provider-connection:create",
   "identity-provider-connection:record-agent",
+  "identity-provider-connection:replace-client-secret",
+  "identity-provider-connection:set-setup-method",
   "identity-provider-connection:revoke",
   "identity-provider-connection:submit-client-id",
   "identity-provider-connection:sync-applications",
@@ -118,6 +120,7 @@ export const AUDIT_ACTIONS = [
   "mcp-server:create",
   "mcp-server:delete",
   "mcp-server:update",
+  "mcp-server:update-scope-pin",
   "mcp-server:update-tool-metadata",
   "mcp_approval_request:approve",
   "mcp_approval_request:create",
@@ -239,6 +242,12 @@ export const AUDIT_ACTIONS = [
   "risk_result:unmask",
   "session_quarantine:open",
   "session_quarantine:release",
+  "sigint-sensor:create",
+  "sigint-sensor:delete",
+  "sigint-sensor:update",
+  "sigint-signal:create",
+  "sigint-signal:delete",
+  "sigint-signal:update",
   "skill:add_version",
   "skill:archive",
   "skill:create",
@@ -425,6 +434,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "connected identity provider";
     case "identity-provider-connection:submit-client-id":
       return "submitted client ID for identity provider";
+    case "identity-provider-connection:replace-client-secret":
+      return "replaced client secret for identity provider";
+    case "identity-provider-connection:set-setup-method":
+      return "changed setup method for identity provider";
     case "identity-provider-connection:verify":
       return "verified identity provider connection to";
     case "identity-provider-connection:record-agent":
@@ -584,6 +597,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated MCP server";
     case "mcp-server:delete":
       return "deleted MCP server";
+    case "mcp-server:update-scope-pin":
+      return "updated pinned scopes on MCP server";
     case "mcp-server:update-tool-metadata":
       return "updated tool metadata on MCP server";
 
@@ -830,6 +845,19 @@ export function staticActionPhrase(action: AuditAction): string {
       return "quarantined agent session";
     case "session_quarantine:release":
       return "released quarantined agent session";
+
+    case "sigint-sensor:create":
+      return "created signals intelligence sensor";
+    case "sigint-sensor:update":
+      return "updated signals intelligence sensor";
+    case "sigint-sensor:delete":
+      return "deleted signals intelligence sensor";
+    case "sigint-signal:create":
+      return "created signals intelligence signal";
+    case "sigint-signal:update":
+      return "updated signals intelligence signal";
+    case "sigint-signal:delete":
+      return "deleted signals intelligence signal";
 
     case "skill:create":
       return "created skill";

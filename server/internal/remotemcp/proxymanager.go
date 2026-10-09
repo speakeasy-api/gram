@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -40,6 +41,7 @@ import (
 type proxyBuildOptions struct {
 	recordIdentityCoverage bool
 	metaMCPServerID        string
+	headerPolicy           proxy.HeaderPolicy
 }
 
 // BuildOption customizes one proxy without changing the defaults used by
@@ -61,6 +63,14 @@ func WithoutToolsCallIdentityCoverage() BuildOption {
 func WithMetaMCPServerID(metaMCPServerID string) BuildOption {
 	return BuildOption{apply: func(options *proxyBuildOptions) {
 		options.metaMCPServerID = metaMCPServerID
+	}}
+}
+
+// WithHeaderPolicy selects how configured and copied client headers are
+// filtered. Without it the proxy uses [proxy.HeaderPolicyRemote].
+func WithHeaderPolicy(policy proxy.HeaderPolicy) BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) {
+		options.headerPolicy = policy
 	}}
 }
 
@@ -102,11 +112,9 @@ type ProxyManager struct {
 	// afterChallengeScopes runs when a challenge-scope observation is handled; tests only.
 	afterChallengeScopes func()
 
-	protectedResourceProbes *protectedResourceProbeState
-	// beforeProtectedResourceProbe runs synchronously before detached work starts; tests only.
-	beforeProtectedResourceProbe func()
-	// afterProtectedResourceProbe runs when a detached on-use probe finishes; tests only.
-	afterProtectedResourceProbe func()
+	// protectedResources keeps each proxied server's protected resource row
+	// fresh; shared with the login path so one replica has one writer.
+	protectedResources *protectedresource.Prober
 }
 
 // NewProxyManager wires the MCP-aware proxy stack with its dependencies.
@@ -129,10 +137,14 @@ func NewProxyManager(
 	witnessStore *toolfilter.SessionToolWitnessStore,
 	killswitchCheckpoint *mcptoolexecution.Checkpoint,
 	scanEvaluator *mcpriskscan.Evaluator,
+	protectedResources *protectedresource.Prober,
 ) *ProxyManager {
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/remotemcp")
 	mcpMetrics := NewProxyMetrics(meter, logger)
+	if protectedResources == nil {
+		protectedResources = protectedresource.NewProber(db, guardianPolicy)
+	}
 
 	return &ProxyManager{
 		logger:                                logger,
@@ -157,9 +169,7 @@ func NewProxyManager(
 		witnessStore:                          witnessStore,
 		challengeScopes:                       newChallengeScopesState(),
 		afterChallengeScopes:                  nil,
-		protectedResourceProbes:               newProtectedResourceProbeState(),
-		beforeProtectedResourceProbe:          nil,
-		afterProtectedResourceProbe:           nil,
+		protectedResources:                    protectedResources,
 	}
 }
 
@@ -223,7 +233,7 @@ func (f *ProxyManager) Build(
 	// The server's URL is the resource identifier its protected resource row is keyed by.
 	if parsedProjectID, err := uuid.Parse(projectID); err == nil && f.db != nil {
 		p.UpstreamResponseInterceptor = func(ctx context.Context, resp *http.Response) error {
-			f.probeProtectedResourceOnUse(ctx, logger, parsedProjectID, organizationID, server.Url)
+			f.protectedResources.ProbeOnUse(ctx, logger, parsedProjectID, organizationID, server.Url)
 			f.observeChallengeScopes(ctx, logger, parsedProjectID, server.Url, resp.StatusCode, resp.Header.Values("WWW-Authenticate"))
 			return nil
 		}
@@ -244,7 +254,7 @@ func (f *ProxyManager) BuildTarget(
 	selection *toolfilter.SessionSelection,
 	buildOptions ...BuildOption,
 ) *proxy.Proxy {
-	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: ""}
+	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", headerPolicy: proxy.HeaderPolicyRemote}
 	for _, option := range buildOptions {
 		if option.apply != nil {
 			option.apply(&options)
@@ -275,7 +285,7 @@ func (f *ProxyManager) BuildTarget(
 	// have no grants to consult.
 	//
 	// The x-gram-toolset-id strip is attached unconditionally — public AND
-	// private — because the property is Gram's own envelope rather than
+	// private — because the property is Speakeasy's own envelope rather than
 	// anything scoped to an identity or a risk policy. It is a no-op for
 	// the arguments that don't carry it.
 	toolsCallPreForwardInterceptors := []proxy.ToolsCallRequestInterceptor(nil)
@@ -378,6 +388,7 @@ func (f *ProxyManager) BuildTarget(
 		Identity:                    identity,
 		RemoteURL:                   upstreamURL,
 		Headers:                     headers,
+		HeaderPolicy:                options.headerPolicy,
 		AuthorizationOverride:       upstreamAuth,
 		CallerAssertion:             nil,
 		UpstreamResponseRetryer:     nil,

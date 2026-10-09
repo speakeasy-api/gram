@@ -748,6 +748,7 @@ WHERE p.organization_id = $2
   AND s.deleted IS FALSE
   AND s.visibility <> 'disabled'
   AND (COALESCE(s.slug, '') <> '' OR e.id IS NOT NULL)
+  AND (s.toolset_id IS DISTINCT FROM s.id OR e.id IS NOT NULL)
 ORDER BY p.name, s.name NULLS LAST, s.id
 `
 
@@ -772,7 +773,8 @@ type ListEligibleRootMcpServersForOrganizationRow struct {
 // can carry several endpoints on a domain: prefer the root one, then the
 // oldest) so callers can distinguish attach-and-set from set. Slugless
 // servers are omitted unless already attached: the by-server path needs a
-// slug to name the endpoint it creates.
+// slug to name the endpoint it creates. A hosted server's canonical wrapper
+// (id = toolset id) is offered only when its one endpoint is on this domain.
 func (q *Queries) ListEligibleRootMcpServersForOrganization(ctx context.Context, arg ListEligibleRootMcpServersForOrganizationParams) ([]ListEligibleRootMcpServersForOrganizationRow, error) {
 	rows, err := q.db.Query(ctx, listEligibleRootMcpServersForOrganization, arg.CustomDomainID, arg.OrganizationID)
 	if err != nil {

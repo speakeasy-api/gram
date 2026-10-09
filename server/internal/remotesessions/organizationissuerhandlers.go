@@ -170,6 +170,7 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
 		ScopeOverride:                              scopeOverride(payload.ScopeOverride),
+		OmitScopeFallback:                          conv.PtrToPGBool(payload.OmitScopeFallback),
 		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
 		Metadata:                                   nil,
 		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
@@ -586,6 +587,7 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
 		ScopeOverride:                              payload.ScopeOverride,
+		OmitScopeFallback:                          conv.PtrToPGBool(payload.OmitScopeFallback),
 		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
 		Oidc:                                       conv.PtrToPGBool(payload.Oidc),
 		Passthrough:                                conv.PtrToPGBool(payload.Passthrough),
@@ -602,6 +604,10 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, existing.ProjectID.UUID, issuerID); err != nil {
 			return nil, err
 		}
+	}
+
+	if err := requireIssuerTokenEndpointForSelfClients(ctx, logger, txRepo, updated); err != nil {
+		return nil, err
 	}
 
 	if err := validateTrustedIdentityProviderIssuerClients(ctx, txRepo, updated); err != nil {

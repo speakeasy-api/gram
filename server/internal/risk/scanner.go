@@ -132,8 +132,8 @@ func (p *ShadowMCPPolicy) IsAllowAll() bool {
 // (Claude permissionDecisionReason/SystemMessage; Cursor/Codex UserMessage/
 // AgentMessage) and therefore the local agent transcript. That is by design -
 // the human needs to see what tripped the challenge - but it means the
-// "never leaves the server" invariant is scoped to Gram's own persistence, not
-// the agent host. Any Gram-side ingestion that captures permission-prompt or
+// "never leaves the server" invariant is scoped to Speakeasy's own persistence, not
+// the agent host. Any Speakeasy-side ingestion that captures permission-prompt or
 // transcript content (e.g. a future session-replay path) MUST scrub %{match}
 // before persisting, or the invariant breaks silently.
 type ScanResult struct {

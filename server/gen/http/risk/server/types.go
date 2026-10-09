@@ -64,8 +64,8 @@ type CreateRiskPolicyRequestBody struct {
 	// to create no URL-specific allow decisions.
 	ShadowMcpAllowedUrls []string `json:"shadow_mcp_allowed_urls"`
 	// Default disposition for shadow MCP blocking policies: block_all (default)
-	// blocks every non-Gram-hosted server unless allowed, allow_all permits every
-	// server unless blocked. Only valid with the shadow_mcp source and block
+	// blocks every non-Speakeasy-hosted server unless allowed, allow_all permits
+	// every server unless blocked. Only valid with the shadow_mcp source and block
 	// action. Immutable after create — switching requires delete + recreate.
 	ShadowMcpDisposition *string `form:"shadow_mcp_disposition,omitempty" json:"shadow_mcp_disposition,omitempty" xml:"shadow_mcp_disposition,omitempty"`
 	// For allow_all policies: complete desired canonical URL block set. Omit or
@@ -487,10 +487,10 @@ type CreateRiskPolicyResponseBody struct {
 	// MCP server. When set, the action must be flag or block.
 	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
-	// non-Gram-hosted server unless allowed, allow_all permits every server unless
-	// blocked. Blocked URLs are stored as risk_policy:block grants, not on the
-	// policy. Immutable after create. Only present on policies with the shadow_mcp
-	// source and block action.
+	// non-Speakeasy-hosted server unless allowed, allow_all permits every server
+	// unless blocked. Blocked URLs are stored as risk_policy:block grants, not on
+	// the policy. Immutable after create. Only present on policies with the
+	// shadow_mcp source and block action.
 	ShadowMcpDisposition *string `form:"shadow_mcp_disposition,omitempty" json:"shadow_mcp_disposition,omitempty" xml:"shadow_mcp_disposition,omitempty"`
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
@@ -607,10 +607,10 @@ type GetRiskPolicyResponseBody struct {
 	// MCP server. When set, the action must be flag or block.
 	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
-	// non-Gram-hosted server unless allowed, allow_all permits every server unless
-	// blocked. Blocked URLs are stored as risk_policy:block grants, not on the
-	// policy. Immutable after create. Only present on policies with the shadow_mcp
-	// source and block action.
+	// non-Speakeasy-hosted server unless allowed, allow_all permits every server
+	// unless blocked. Blocked URLs are stored as risk_policy:block grants, not on
+	// the policy. Immutable after create. Only present on policies with the
+	// shadow_mcp source and block action.
 	ShadowMcpDisposition *string `form:"shadow_mcp_disposition,omitempty" json:"shadow_mcp_disposition,omitempty" xml:"shadow_mcp_disposition,omitempty"`
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
@@ -697,10 +697,10 @@ type UpdateRiskPolicyResponseBody struct {
 	// MCP server. When set, the action must be flag or block.
 	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
-	// non-Gram-hosted server unless allowed, allow_all permits every server unless
-	// blocked. Blocked URLs are stored as risk_policy:block grants, not on the
-	// policy. Immutable after create. Only present on policies with the shadow_mcp
-	// source and block action.
+	// non-Speakeasy-hosted server unless allowed, allow_all permits every server
+	// unless blocked. Blocked URLs are stored as risk_policy:block grants, not on
+	// the policy. Immutable after create. Only present on policies with the
+	// shadow_mcp source and block action.
 	ShadowMcpDisposition *string `form:"shadow_mcp_disposition,omitempty" json:"shadow_mcp_disposition,omitempty" xml:"shadow_mcp_disposition,omitempty"`
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
@@ -11635,10 +11635,10 @@ type RiskPolicyResponseBody struct {
 	// MCP server. When set, the action must be flag or block.
 	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
-	// non-Gram-hosted server unless allowed, allow_all permits every server unless
-	// blocked. Blocked URLs are stored as risk_policy:block grants, not on the
-	// policy. Immutable after create. Only present on policies with the shadow_mcp
-	// source and block action.
+	// non-Speakeasy-hosted server unless allowed, allow_all permits every server
+	// unless blocked. Blocked URLs are stored as risk_policy:block grants, not on
+	// the policy. Immutable after create. Only present on policies with the
+	// shadow_mcp source and block action.
 	ShadowMcpDisposition *string `form:"shadow_mcp_disposition,omitempty" json:"shadow_mcp_disposition,omitempty" xml:"shadow_mcp_disposition,omitempty"`
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.

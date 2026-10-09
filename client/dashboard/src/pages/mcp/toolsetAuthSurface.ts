@@ -83,7 +83,7 @@ export function mustConvertOAuthBeforePrivate({
   return mcpIsPublic && !userSessionIssuerWired && oauthParadigm !== null;
 }
 
-/** Issuer worth migrating from Gram-hosted to provider-hosted metadata. */
+/** Issuer worth migrating from Speakeasy-hosted to provider-hosted metadata. */
 export function externalOauthMetadataUpdateIssuer(
   toolset: Toolset,
   gramResourceIssuer: string | undefined,

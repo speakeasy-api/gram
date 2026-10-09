@@ -135,9 +135,14 @@ func (f healthFixture) seedUserSessionIssuer(t *testing.T, slug string) uuid.UUI
 // leaves it without a slug.
 func (f healthFixture) seedServerWithIssuer(t *testing.T, toolsetID, issuerID uuid.UUID, slug string) uuid.UUID {
 	t.Helper()
+	return f.seedServerWithID(t, uuid.New(), toolsetID, issuerID, slug)
+}
+
+func (f healthFixture) seedServerWithID(t *testing.T, id, toolsetID, issuerID uuid.UUID, slug string) uuid.UUID {
+	t.Helper()
 
 	srv, err := mcpserversRepo.New(f.conn).CreateMCPServer(t.Context(), mcpserversRepo.CreateMCPServerParams{
-		ID:                    uuid.New(),
+		ID:                    id,
 		ProjectID:             f.projectID,
 		Name:                  conv.ToPGTextEmpty(slug),
 		Slug:                  conv.ToPGTextEmpty(slug),
@@ -168,6 +173,7 @@ func (f healthFixture) seedGlobalRemoteSessionIssuer(t *testing.T, slug string) 
 		TokenEndpointAuthMethodsSupported:   []string{},
 		CodeChallengeMethodsSupported:       []string{"S256"},
 		ClientIDMetadataDocumentSupported:   true,
+		OmitScopeFallback:                   pgtype.Bool{Bool: true, Valid: true},
 		Oidc:                                true,
 		MetadataFetchedAt:                   conv.ToPGTimestamptz(time.Now()),
 		MetadataLastError:                   "upstream said no",
@@ -389,6 +395,8 @@ func TestDescribeMcpServerHealth_IssuerWithTwoClients(t *testing.T) {
 	require.Equal(t, "public", dcr.Issuer.Networking)
 	require.Equal(t, "supported", dcr.Issuer.Pkce)
 	require.True(t, dcr.Issuer.CimdSupported)
+	require.NotNil(t, dcr.Issuer.OmitScopeFallback)
+	require.True(t, *dcr.Issuer.OmitScopeFallback)
 	require.True(t, dcr.Issuer.Oidc)
 	require.NotNil(t, dcr.Issuer.MetadataFetchedAt)
 	require.NotNil(t, dcr.Issuer.MetadataLastErrorAt)
@@ -453,6 +461,24 @@ func TestDescribeMcpServerHealth_SharedIssuerAndToolset(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, f.reader.targets[0].ToolsetSlug)
 	require.Equal(t, []time.Duration{24 * time.Hour}, f.reader.buckets)
+}
+
+func TestDescribeMcpServerHealth_CanonicalWrapperOwnsToolsetSlug(t *testing.T) {
+	t.Parallel()
+
+	f := newHealthFixture(t, true)
+	toolsetID := seedToolset(t, t.Context(), f.conn, f.orgID, f.projectID, "hosted", false)
+	member := f.seedServerWithIssuer(t, toolsetID, uuid.Nil, "member")
+	canonical := f.seedServerWithID(t, toolsetID, toolsetID, uuid.Nil, "canonical")
+
+	got, err := f.describe(t, canonical, 30)
+	require.NoError(t, err)
+	require.NotNil(t, got.Correlation.ToolsetSlug, "legacy calls to the toolset slug are the canonical wrapper's")
+	require.Equal(t, "hosted", *got.Correlation.ToolsetSlug)
+
+	got, err = f.describe(t, member, 30)
+	require.NoError(t, err)
+	require.Nil(t, got.Correlation.ToolsetSlug, "another server over the toolset must not claim its legacy calls")
 }
 
 func TestDescribeMcpServerHealth_LegacyModes(t *testing.T) {

@@ -68,7 +68,7 @@ type CreateMCPAccessRoleInput struct {
 	ProjectID      string              `json:"project_id" jsonschema:"explicit project ID that owns every configured MCP in rules"`
 	Name           string              `json:"name" jsonschema:"display name for the new custom role"`
 	Description    string              `json:"description,omitempty" jsonschema:"optional description for the new custom role"`
-	Rules          []MCPAccessRoleRule `json:"rules" jsonschema:"MCP access rules generated only for configured MCP IDs in this project"`
+	Rules          []MCPAccessRoleRule `json:"rules" jsonschema:"MCP access rules generated only for configured MCP IDs in this project; an empty list creates a role with no grants"`
 	IdempotencyKey string              `json:"idempotency_key" jsonschema:"stable unique key for safely retrying this exact write"`
 	Confirmed      bool                `json:"confirmed" jsonschema:"set true only after the user confirms this exact project, role, and MCP access delta"`
 }
@@ -93,7 +93,7 @@ type AccessRoleMutationSummary struct {
 
 type CreateMCPAccessRoleOutput struct {
 	Role           AccessRoleMutationSummary `json:"role"`
-	Reconciliation string                    `json:"reconciliation"`
+	Reconciliation string                    `json:"reconciliation" jsonschema:"pending: provider sync was requested after the commit; rate_limited or unavailable: this replay did not request provider sync again because the retry allowance is spent or could not be checked"`
 	Receipt        RiskMutationToolReceipt   `json:"receipt"`
 }
 
@@ -180,11 +180,8 @@ func (s *AccessRoleMutationService) Create(ctx context.Context, principal Princi
 	if err != nil {
 		return CreateMCPAccessRoleOutput{}, err
 	}
-	if len(rules) == 0 {
-		return CreateMCPAccessRoleOutput{}, accessRoleMutationInvalid("At least one MCP access rule is required to create an MCP access role.")
-	}
 	normalized := normalizedCreateMCPAccessRole{ProjectID: project.ID.String(), Name: name, Description: description, Rules: rules}
-	receipt, err := s.receipts.ExecuteCreate(ctx, principal, project, idempotencyKey, normalized, func(ctx context.Context, tx pgx.Tx) (AccessRoleMutationReceiptResult, error) {
+	receipt, err := s.receipts.ExecuteCreate(ctx, principal, project, idempotencyKey, normalized, s.charge(principal), func(ctx context.Context, tx pgx.Tx) (AccessRoleMutationReceiptResult, error) {
 		result, _, err := s.backend.CreateRoleTx(ctx, tx, principal.OrganizationID, workosOrgID, access.RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), DisplayName: nil}, &accessgen.CreateRolePayload{ApikeyToken: nil, SessionToken: nil, Name: name, Description: conv.PtrEmpty(description), Grants: accessRoleRulesToGenGrants(rules, project.ID), MemberIds: nil, AgentIds: nil})
 		if err != nil {
 			return AccessRoleMutationReceiptResult{}, classifyAccessRoleBackendError(err)
@@ -198,7 +195,11 @@ func (s *AccessRoleMutationService) Create(ctx context.Context, principal Princi
 	if err != nil {
 		return CreateMCPAccessRoleOutput{}, err
 	}
-	s.backend.ReconcileRoleIdentity(ctx, workosOrgID, result.RoleSlug, result.Name, result.Description, true)
+	if err := chargeRerun(ctx, receipt, s.charge(principal)); err != nil {
+		result.Reconciliation = skippedRerun(ctx, s.reads.logger, err)
+	} else {
+		s.backend.ReconcileRoleIdentity(ctx, workosOrgID, result.RoleSlug, result.Name, result.Description, true)
+	}
 	summary, err := s.outputSummary(principal, result)
 	if err != nil {
 		return CreateMCPAccessRoleOutput{}, err
@@ -254,7 +255,7 @@ func (s *AccessRoleMutationService) Update(ctx context.Context, principal Princi
 	if err != nil {
 		return UpdateMCPAccessRoleOutput{}, classifyAccessRoleBackendError(err)
 	}
-	receipt, err := s.receipts.ExecuteUpdate(ctx, principal, project, input.IdempotencyKey, normalized, func(ctx context.Context, tx pgx.Tx) (AccessRoleMutationReceiptResult, error) {
+	receipt, err := s.receipts.ExecuteUpdate(ctx, principal, project, input.IdempotencyKey, normalized, s.charge(principal), func(ctx context.Context, tx pgx.Tx) (AccessRoleMutationReceiptResult, error) {
 		roleUUID, parseErr := uuid.Parse(roleID)
 		if parseErr != nil || roleUUID == uuid.Nil {
 			return AccessRoleMutationReceiptResult{}, accessRoleMutationNotFound()
@@ -325,13 +326,22 @@ func (s *AccessRoleMutationService) admit(ctx context.Context, principal Princip
 	if err != nil || evaluation != feature.EvaluationEnabled {
 		return ResolvedProject{}, "", accessRoleMutationUnavailable(err)
 	}
-	if err := s.budget.AllowConnectionOrOrganization(ctx, principal); err != nil {
-		if errors.Is(err, ErrOperationRateLimited) {
-			return ResolvedProject{}, "", &AccessRoleMutationError{Code: "rate_limited", Message: "The access role mutation rate limit was reached.", Cause: err}
-		}
-		return ResolvedProject{}, "", accessRoleMutationUnavailable(err)
-	}
 	return project, organization.WorkosID.String, nil
+}
+
+// charge returns the budget charge for one access role write. The receipt
+// executor runs it only when no completed receipt answers the request, and
+// outside any transaction; see executeChargedMutationReceipt.
+func (s *AccessRoleMutationService) charge(principal Principal) func(context.Context) error {
+	return func(ctx context.Context) error {
+		if err := s.budget.AllowConnectionOrOrganization(ctx, principal); err != nil {
+			if errors.Is(err, ErrOperationRateLimited) {
+				return &AccessRoleMutationError{Code: "rate_limited", Message: "The access role mutation rate limit was reached.", Cause: err}
+			}
+			return accessRoleMutationUnavailable(err)
+		}
+		return nil
+	}
 }
 
 type accessRoleRuleTarget struct {
