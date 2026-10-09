@@ -2508,7 +2508,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     expect(
       screen
-        .getByRole("link", { name: "Remote Identity Providers" })
+        .getByRole("link", { name: "Authorization Servers" })
         .getAttribute("href"),
     ).toBe("/remote-identity-providers");
   });

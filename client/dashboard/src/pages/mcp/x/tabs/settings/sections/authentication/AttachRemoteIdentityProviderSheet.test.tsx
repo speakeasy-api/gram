@@ -190,7 +190,7 @@ async function submitManualClient(): Promise<void> {
     target: { value: "client-1" },
   });
   fireEvent.click(
-    screen.getByRole("button", { name: "Attach Identity Provider" }),
+    screen.getByRole("button", { name: "Attach Authorization Server" }),
   );
 }
 
@@ -370,9 +370,9 @@ describe("AttachRemoteIdentityProviderSheet", () => {
     );
     renderSheet([attached.id]);
 
-    fireEvent.click(screen.getByText("Choose an identity provider…"));
+    fireEvent.click(screen.getByText("Choose an authorization server…"));
     fireEvent.change(
-      screen.getByPlaceholderText("Search identity providers…"),
+      screen.getByPlaceholderText("Search authorization servers…"),
       { target: { value: "catalog" } },
     );
     await waitFor(() =>
@@ -393,7 +393,7 @@ describe("AttachRemoteIdentityProviderSheet", () => {
     mocks.issuersPage.mockReturnValue([]);
     fireEvent.click(screen.getAllByRole("combobox")[0] as HTMLElement);
     fireEvent.change(
-      screen.getByPlaceholderText("Search identity providers…"),
+      screen.getByPlaceholderText("Search authorization servers…"),
       { target: { value: "nothing" } },
     );
     await waitFor(() =>

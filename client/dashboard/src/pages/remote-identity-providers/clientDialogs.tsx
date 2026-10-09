@@ -161,7 +161,7 @@ export function RotateClientDialog({
           refetchType: "all",
         }),
       ]);
-      toast.success("Client re-registered with the identity provider");
+      toast.success("Client re-registered with the authorization server");
       onClose();
     },
     onError: (error) => {
@@ -178,7 +178,7 @@ export function RotateClientDialog({
         if (!open) onClose();
       }}
       title={`Rotate client "${clientLabel}"?`}
-      description="Speakeasy registers a new client with the identity provider and replaces this client's ID and secret in place. Its attachments are kept, but every session minted against the old client is revoked, so users reconnect once."
+      description="Speakeasy registers a new client with the authorization server and replaces this client's ID and secret in place. Its attachments are kept, but every session minted against the old client is revoked, so users reconnect once."
       confirmLabel="Rotate client"
       isPending={rotate.isPending}
       impact={{

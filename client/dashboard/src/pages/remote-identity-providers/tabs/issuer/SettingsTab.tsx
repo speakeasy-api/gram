@@ -145,7 +145,7 @@ export function SettingsTab({
       toast.success("Provider updated");
     },
     onError: (error) => {
-      console.error("Update remote identity provider failed", error);
+      console.error("Update authorization server failed", error);
     },
   });
 
@@ -259,7 +259,7 @@ export function SettingsTab({
     <div className="flex max-w-2xl flex-col gap-6">
       <SettingsSection
         title="Provider"
-        description="How this identity provider is labelled in the dashboard."
+        description="How this authorization server is labelled in the dashboard."
       >
         <SettingsField label="Display name" value={name} onChange={setName} />
         <SettingsField label="Slug" value={slug} onChange={setSlug} />
@@ -387,7 +387,7 @@ export function SettingsTab({
             disabled={!hasOrgAdminScope}
           />
           <Text small muted>
-            Choose from the scopes this identity provider advertises, or type
+            Choose from the scopes this authorization server advertises, or type
             one to add it.
           </Text>
         </div>

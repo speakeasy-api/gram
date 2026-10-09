@@ -168,7 +168,7 @@ it("preserves tenant actions and read-only platform browsing without platform ma
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  expect(screen.getByText("Platform Remote Identity Providers")).toBeTruthy();
+  expect(screen.getByText("Platform Authorization Servers")).toBeTruthy();
   for (const [name, slug, id] of [
     ["Platform Example", "active", "platform-provider"],
     ["Organization Example", "active", "org-provider"],
@@ -176,7 +176,7 @@ it("preserves tenant actions and read-only platform browsing without platform ma
   ]) {
     expect(
       screen
-        .getByRole("link", { name: `View remote identity provider ${name}` })
+        .getByRole("link", { name: `View authorization server ${name}` })
         .getAttribute("href"),
     ).toBe(`/example/projects/${slug}/remote-identity-providers/${id}`);
   }
@@ -195,7 +195,7 @@ it("preserves tenant actions and read-only platform browsing without platform ma
   );
   expect(screen.getByText("Add client to Platform Example")).toBeTruthy();
   fireEvent.click(
-    screen.getByRole("button", { name: "New Remote Identity Provider" }),
+    screen.getByRole("button", { name: "New Authorization Server" }),
   );
   expect(screen.getByText("Create tenant provider")).toBeTruthy();
 });

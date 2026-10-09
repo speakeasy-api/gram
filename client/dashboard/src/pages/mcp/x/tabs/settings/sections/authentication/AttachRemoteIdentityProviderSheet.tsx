@@ -517,10 +517,10 @@ export function AttachRemoteIdentityProviderSheet({
         target.invalidate(queryClient),
       ]);
 
-      toast.success("Identity provider attached");
+      toast.success("Authorization server attached");
       if (unsupportedDcrAuthMethod) {
         toast.warning(
-          `Upstream issuer reported token endpoint auth method "${unsupportedDcrAuthMethod}", which the platform doesn't model. The client falls back to ${tokenEndpointAuthMethod || "client_secret_basic"} — adjust on the identity provider's Modify sheet if needed.`,
+          `Upstream issuer reported token endpoint auth method "${unsupportedDcrAuthMethod}", which the platform doesn't model. The client falls back to ${tokenEndpointAuthMethod || "client_secret_basic"} — adjust on the authorization server's Modify sheet if needed.`,
         );
       }
       onOpenChange(false);
@@ -531,7 +531,7 @@ export function AttachRemoteIdentityProviderSheet({
       // "an identity provider with slug already exists" or 4xx validation
       // errors absolutely are — useMutation surfaces error.message via
       // attachMutation.error so we only need to log here.
-      console.error("Attach identity provider failed", error);
+      console.error("Attach authorization server failed", error);
     },
   });
 
@@ -761,14 +761,14 @@ export function AttachRemoteIdentityProviderSheet({
         >
           <SheetHeader className="px-6 pt-6 pb-0">
             <SheetTitle className="text-lg font-semibold">
-              Attach Remote Identity Provider
+              Attach Authorization Server
             </SheetTitle>
           </SheetHeader>
 
           <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
             <Stack gap={4}>
               <SectionHeading
-                title="Identity Provider"
+                title="Authorization Server"
                 description="The upstream OAuth authorization server Speakeasy delegates to."
               />
               {hasSelectable && <ModeSwitch mode={mode} onChange={setMode} />}
@@ -850,10 +850,10 @@ export function AttachRemoteIdentityProviderSheet({
                         setSlug(value);
                         setSlugDirty(true);
                       }}
-                      placeholder="my-identity-provider"
+                      placeholder="my-authorization-server"
                     />
                     <Text muted small>
-                      Project-unique identifier for this identity provider.
+                      Project-unique identifier for this authorization server.
                       Auto-derived from the Issuer URL until you edit it.
                     </Text>
                   </Stack>
@@ -868,7 +868,7 @@ export function AttachRemoteIdentityProviderSheet({
                         setName(value);
                         setNameDirty(true);
                       }}
-                      placeholder="My Identity Provider"
+                      placeholder="My Authorization Server"
                     />
                     <Text muted small>
                       Friendly label shown in the dashboard. Auto-derived from
@@ -943,7 +943,7 @@ export function AttachRemoteIdentityProviderSheet({
               onClick={handleSubmit}
             >
               <Button.Text>
-                {submitting ? "Attaching…" : "Attach Identity Provider"}
+                {submitting ? "Attaching…" : "Attach Authorization Server"}
               </Button.Text>
             </Button>
           </SheetFooter>
@@ -980,7 +980,7 @@ export function AttachRemoteIdentityProviderSheet({
                 attachMutation.mutate();
               }}
             >
-              <Button.Text>Attach Identity Provider</Button.Text>
+              <Button.Text>Attach Authorization Server</Button.Text>
             </Button>
           </Dialog.Footer>
         </Dialog.Content>
@@ -1081,8 +1081,8 @@ function SelectExistingFields({
     [data, excludedIssuerIds],
   );
 
-  let emptyMessage = "No identity providers match.";
-  if (isError) emptyMessage = "Failed to load identity providers.";
+  let emptyMessage = "No authorization servers match.";
+  if (isError) emptyMessage = "Failed to load authorization servers.";
   else if (isFetching) emptyMessage = "Searching…";
 
   const loadMore = hasNextPage ? (
@@ -1098,7 +1098,7 @@ function SelectExistingFields({
 
   return (
     <Stack gap={2}>
-      <Label className="text-muted-foreground text-xs">Identity Provider</Label>
+      <Label className="text-muted-foreground text-xs">Authorization Server</Label>
       <Combobox
         items={issuerOptions}
         selected={selectedIssuerId}
@@ -1106,22 +1106,22 @@ function SelectExistingFields({
         onSearchChange={setSearch}
         emptyMessage={emptyMessage}
         listFooter={loadMore}
-        searchPlaceholder="Search identity providers…"
+        searchPlaceholder="Search authorization servers…"
         className="w-full justify-between"
         contentClassName="w-[min(500px,calc(100vw-2rem))]"
       >
         {selectedIssuer
           ? issuerOptionLabel(selectedIssuer)
-          : "Choose an identity provider…"}
+          : "Choose an authorization server…"}
       </Combobox>
       {pickFailed ? (
         <FieldError>
-          Failed to load this identity provider. Pick it again, or refresh the
+          Failed to load this authorization server. Pick it again, or refresh the
           page.
         </FieldError>
       ) : (
         <Text muted small>
-          Pick an identity provider this project already has: its own, its
+          Pick an authorization server this project already has: its own, its
           organization&apos;s, or one from the platform catalog.
         </Text>
       )}
