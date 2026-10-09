@@ -79,6 +79,10 @@ type labeledCase struct {
 	// WellKnown names the classic phrase of a well-known attack, such as
 	// "Ignore previous instructions"; empty for every other case.
 	WellKnown string `json:"well_known,omitempty"`
+
+	// raw is the fixture line the case was read from. Hashing it identifies
+	// the case the same way across versions of this tool.
+	raw string
 }
 
 func (c labeledCase) trajectory() judgemessage.Trajectory {
@@ -340,6 +344,10 @@ type options struct {
 	maxFalsePositives int
 	minRecall         float64
 
+	// production evaluates the detector this commit ships, with its
+	// production model and settings.
+	production bool
+
 	// runDir, when set, keeps per-case records there: the run resumes from
 	// them and evaluates only cases without a current record.
 	runDir string
@@ -405,6 +413,7 @@ func parseFlags() options {
 		maxFalsePositives: 0,
 		minRecall:         0,
 
+		production: false,
 		runDir:     "",
 		label:      "",
 		ref:        "",
@@ -428,6 +437,7 @@ func parseFlags() options {
 	flag.StringVar(&opts.excludeSources, "exclude-sources", "", "comma-separated source substrings to drop after -sources (empty = none)")
 	flag.IntVar(&opts.maxFalsePositives, "max-false-positives", gateDisabledFalsePositives, "fail when any trial flags more benign cases than this, deepset included (-1 = unenforced)")
 	flag.Float64Var(&opts.minRecall, "min-recall", 0, "fail when any trial catches a smaller share of all attacks, deepset included (0 = unenforced)")
+	flag.BoolVar(&opts.production, "production", false, "evaluate the detector this commit ships, with its production model and settings")
 	flag.StringVar(&opts.runDir, "run-dir", "", "with -cascade, keep per-case records in this directory and run only cases without a current record")
 	flag.StringVar(&opts.label, "label", "this change", "name of the run in progress lines and the viewer")
 	flag.StringVar(&opts.ref, "ref", "", "code the run evaluates, such as \"branch @ sha\"")
@@ -475,6 +485,10 @@ func selectSources(corpus []labeledCase, spec string, keepMatches bool) []labele
 }
 
 func run(ctx context.Context, opts options) error {
+	// The detector this commit ships is the Jev to confirmer cascade.
+	if opts.production {
+		opts.cascade = true
+	}
 	if opts.cascade {
 		if opts.reasoning != piopenrouter.ReasoningEffort {
 			return fmt.Errorf("cascade requires --reasoning=%s", piopenrouter.ReasoningEffort)
@@ -501,7 +515,7 @@ func run(ctx context.Context, opts options) error {
 	}
 	if opts.runDir != "" {
 		if !opts.cascade {
-			return fmt.Errorf("-run-dir requires -cascade")
+			return fmt.Errorf("-run-dir requires -production")
 		}
 		return runRecords(ctx, opts, corpus)
 	}
@@ -971,6 +985,7 @@ func loadCorpus(dir, extraCorpus string) ([]labeledCase, error) {
 			if err := json.Unmarshal([]byte(raw), &c); err != nil {
 				return fmt.Errorf("%s line %d unmarshal: %w", name, line, err)
 			}
+			c.raw = raw
 			if c.ID == "" {
 				return fmt.Errorf("%s line %d missing id", name, line)
 			}

@@ -356,6 +356,10 @@ func summaryMarkdown(data viewData) string {
 		if m.RefusalFallbackModel != "" {
 			fallback = " (refusal fallback: " + m.RefusalFallbackModel + ")"
 		}
+		if m.PrefilterModel == "" {
+			fmt.Fprintf(&b, "- %s: %s%s · prompt `%s`\n", s.Manifest.Label, m.ConfirmationModel, fallback, prefix(m.ConfirmationPromptSHA256))
+			continue
+		}
 		fmt.Fprintf(&b, "- %s: %s ≥ %.2f → %s%s · confirmation prompt `%s` · questions `%s`\n",
 			s.Manifest.Label, m.PrefilterModel, m.PrefilterThreshold, m.ConfirmationModel, fallback, prefix(m.ConfirmationPromptSHA256), prefix(m.PrefilterQuestionsSHA256))
 	}

@@ -197,11 +197,14 @@ func caseKey(c labeledCase) string {
 
 // caseHash fingerprints a case's content, so an edited fixture runs again.
 func caseHash(c labeledCase) string {
-	raw, err := json.Marshal(c)
-	if err != nil {
-		// labeledCase holds only strings, bools and slices of them, which
-		// always marshal; fall back to the key so a case still has a hash.
-		raw = []byte(caseKey(c))
+	raw := []byte(c.raw)
+	if c.raw == "" {
+		// A case built in code has no fixture line, so hash its fields.
+		marshalled, err := json.Marshal(c)
+		if err != nil {
+			marshalled = []byte(caseKey(c))
+		}
+		raw = marshalled
 	}
 	sum := sha256.Sum256(raw)
 	return fmt.Sprintf("%x", sum)[:caseHashHexLen]

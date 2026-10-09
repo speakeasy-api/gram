@@ -1,8 +1,10 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -20,6 +22,27 @@ import (
 
 func recordsCase(id, label, wellKnown string) labeledCase {
 	return labeledCase{ID: id, Label: label, Text: "text " + id, Source: "s", WellKnown: wellKnown}
+}
+
+// main's risk-pi-report hashes cases the same way, so a run of main's
+// detector and a run of this change key the same case alike.
+func TestCaseHashUsesTheFixtureLine(t *testing.T) {
+	t.Parallel()
+
+	corpus := loadReportCorpus(t)
+	raw, err := os.ReadFile(filepath.Join("..", "..", "internal", "scanners", "promptinjection", "testdata", "prompt_injection", "gram_benigns.jsonl"))
+	require.NoError(t, err)
+	line := strings.TrimSpace(strings.SplitN(string(raw), "\n", 2)[0])
+	var first labeledCase
+	require.NoError(t, json.Unmarshal([]byte(line), &first))
+	for _, c := range corpus {
+		if caseKey(c) == caseKey(first) {
+			sum := sha256.Sum256([]byte(line))
+			require.Equal(t, fmt.Sprintf("%x", sum)[:caseHashHexLen], caseHash(c))
+			return
+		}
+	}
+	t.Fatalf("%s is not in the corpus", caseKey(first))
 }
 
 func TestRecordFromOutcomeStatuses(t *testing.T) {

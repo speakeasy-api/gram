@@ -9,8 +9,10 @@
 #USAGE flag "--view" help="Open the viewer for cached results without running"
 #USAGE flag "--summary-md" help="Print the summary table as Markdown from cached results without running"
 
-# Runs the production Jev -> confirmer cascade on the labelled corpus for this
-# change and for main (the merge-base with origin/main), side by side. A full
+# Runs the detector each commit ships (risk-pi-report -production: the Jev ->
+# confirmer cascade here, the Gemini judge before it) on the labelled corpus
+# for this change and for main (the merge-base with origin/main), side by
+# side. A full
 # run costs about $2.30 per side in OpenRouter calls and fails unless this
 # change has no false positives and catches at least 80% of all attacks.
 #
@@ -67,7 +69,7 @@ change_dir="$cache/runs/$change_key"
 change_bin="$cache/bin/risk-pi-$change_key"
 build "$root" "$change_bin"
 
-common=(-cascade -corpus-dir "$corpus" -exclude-sources=cascade_context -check-floors=false)
+common=(-production -corpus-dir "$corpus" -exclude-sources=cascade_context -check-floors=false)
 view_args=("${common[@]}" -view -run-dir "$change_dir")
 if [ -n "$sources" ]; then
   common+=(-sources "$sources")
@@ -101,7 +103,7 @@ if [ "$no_main" != "true" ]; then
     git worktree add -q --detach "$base_tree" "$base_sha"
   fi
   git -C "$base_tree" checkout -q --detach "$base_sha"
-  if grep -q '"run-dir"' "$base_tree/server/cmd/risk-pi-report/main.go"; then
+  if grep -q '"production"' "$base_tree/server/cmd/risk-pi-report/main.go" && grep -q '"run-dir"' "$base_tree/server/cmd/risk-pi-report/main.go"; then
     run_main=true
     view_args+=(-base-run-dir "$base_dir")
   else
