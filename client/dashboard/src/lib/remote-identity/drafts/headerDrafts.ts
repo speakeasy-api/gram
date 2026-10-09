@@ -2,6 +2,7 @@ import type { ExternalMCPRemoteHeader } from "@gram/client/models/components/ext
 import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader.js";
 import {
   authorizationHeaderGuard,
+  headerKey,
   remoteHeaderPolicyIssue,
   remoteHeaderPolicyReasonMessage,
   type RemoteHeaderPolicyIssue,
@@ -108,32 +109,26 @@ function isUnchangedSavedDraft(draft: HeaderDraft): boolean {
 export function savedHeaderPolicyIssue(
   draft: HeaderDraft,
 ): RemoteHeaderPolicyIssue | null {
-  const saved = draft.saved;
-  if (!draft.id || !saved) return null;
-  return remoteHeaderPolicyIssue(
-    {
-      name: saved.name,
-      valueFromRequestHeader:
-        saved.source === "request" ? saved.valueFromRequestHeader : undefined,
-      isRequired: saved.isRequired,
-    },
-    "stored",
-  );
+  if (!draft.id || !draft.saved) return null;
+  return fieldsPolicyIssue(draft.saved, "stored");
 }
 
 /**
- * The header policy's verdict on a draft as it would be written. An unsaved
- * source counts only when the row reads from a request header.
+ * The header policy's verdict on a row's fields. A source counts only when
+ * the row reads from a request header.
  */
-function draftPolicyIssue(draft: HeaderDraft): RemoteHeaderPolicyIssue | null {
+function fieldsPolicyIssue(
+  fields: SavedHeaderFields,
+  mode: "stored" | "write",
+): RemoteHeaderPolicyIssue | null {
   return remoteHeaderPolicyIssue(
     {
-      name: draft.name,
+      name: fields.name,
       valueFromRequestHeader:
-        draft.source === "request" ? draft.valueFromRequestHeader : undefined,
-      isRequired: draft.isRequired,
+        fields.source === "request" ? fields.valueFromRequestHeader : undefined,
+      isRequired: fields.isRequired,
     },
-    "write",
+    mode,
   );
 }
 
@@ -165,14 +160,6 @@ export function draftsEqual(a: HeaderDraft[], b: HeaderDraft[]): boolean {
   return true;
 }
 
-/**
- * Header names compared the way the server compares them for duplicates:
- * case-insensitive, with underscores read as dashes.
- */
-function duplicateKey(name: string): string {
-  return name.trim().toLowerCase().replaceAll("_", "-");
-}
-
 /** Which field a problem belongs to, so the row can point at the right one. */
 export type HeaderDraftError = {
   readonly field: "name" | "value";
@@ -199,7 +186,7 @@ export function headerDraftErrors(
   const savedNames = new Set(
     drafts
       .filter(isUnchangedSavedDraft)
-      .map((draft) => duplicateKey(draft.name))
+      .map((draft) => headerKey(draft.name))
       .filter((key) => key !== ""),
   );
   const names = new Set<string>();
@@ -236,7 +223,7 @@ export function headerDraftErrors(
       continue;
     }
 
-    const key = duplicateKey(name);
+    const key = headerKey(name);
     if (names.has(key) || savedNames.has(key)) {
       errors.set(draft.key, {
         field: "name",
@@ -258,7 +245,7 @@ export function headerDraftErrors(
       }
     }
 
-    const policyIssue = draftPolicyIssue(draft);
+    const policyIssue = fieldsPolicyIssue(draft, "write");
     if (policyIssue) {
       errors.set(draft.key, {
         field: policyIssue.field === "source" ? "value" : "name",

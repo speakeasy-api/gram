@@ -91,7 +91,7 @@ export function managedAuthorizationHeader(
  * with underscores read as dashes because some upstreams treat `X_Foo` as
  * `X-Foo`.
  */
-function headerKey(name: string): string {
+export function headerKey(name: string): string {
   return name.trim().toLowerCase().replaceAll("_", "-");
 }
 
