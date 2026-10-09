@@ -122,7 +122,7 @@ describe("TunneledMcpSetupTabs per-user credentials", () => {
     expect(snippet()).toContain('value: "http://localhost:8090"');
     expect(snippet()).toContain("name: TUNNEL_IDENTITY_ALLOW_INSECURE");
     expect(snippet()).toContain(
-      'value: "http://host.docker.internal:8090/.well-known/jwks.json"',
+      'value: "<JWKS URL reachable from the pod>/.well-known/jwks.json"',
     );
     expect(
       screen.getByText(/usually does not resolve in a cluster/),
@@ -131,11 +131,24 @@ describe("TunneledMcpSetupTabs per-user credentials", () => {
     expect(
       screen.getByText(/host.docker.internal reaches your machine/),
     ).toBeTruthy();
+    expect(snippet()).toContain(
+      "TUNNEL_IDENTITY_JWKS_URL='http://host.docker.internal:8090/.well-known/jwks.json'",
+    );
     choose("Kubernetes");
 
     fireEvent.change(screen.getByLabelText("Assertion issuer"), {
       target: { value: "http://tunnel.example.test" },
     });
     expect(snippet()).not.toContain("TUNNEL_IDENTITY_ALLOW_INSECURE");
+  });
+
+  it("treats .localhost issuers as local", () => {
+    render(<TunneledMcpSetupTabs serverName="okta" />);
+    choose("Stdio");
+    choose("Per user");
+    fireEvent.change(screen.getByLabelText("Assertion issuer"), {
+      target: { value: "http://tunnel.localhost:8090" },
+    });
+    expect(snippet()).toContain("name: TUNNEL_IDENTITY_ALLOW_INSECURE");
   });
 });

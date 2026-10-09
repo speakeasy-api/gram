@@ -16,6 +16,10 @@ const DEFAULT_MCP_COMMAND = "npx -y @modelcontextprotocol/server-everything";
 // SPEAKEASY_ACCESS_TOKEN_FILE; exec keeps it in the agent's process group.
 const DEFAULT_CREDENTIALS_MCP_COMMAND = "exec /opt/mcp/bin/your-mcp-server";
 const PRODUCTION_ASSERTION_ISSUER = "https://tunnel.speakeasy.com";
+// No address reaches a developer's machine from every cluster, so the
+// Kubernetes snippet asks for one; the agent refuses to start until it is set.
+const KUBERNETES_LOCAL_JWKS_PLACEHOLDER =
+  "<JWKS URL reachable from the pod>/.well-known/jwks.json";
 const DEFAULT_SERVICE_VERSION = "1.0.0";
 const TUNNEL_AGENT_IMAGE = `ghcr.io/speakeasy-api/gram-tunnel-agent:${__GRAM_TUNNEL_AGENT_VERSION__}`;
 
@@ -291,14 +295,19 @@ function localJWKSURL(issuer: string): string | undefined {
     return undefined;
   }
   if (url.protocol !== "http:") return undefined;
-  if (
-    !["localhost", "127.0.0.1", "host.docker.internal"].includes(url.hostname)
-  ) {
-    return undefined;
-  }
+  if (!isLocalHostname(url.hostname)) return undefined;
   url.hostname = "host.docker.internal";
   url.pathname = "/.well-known/jwks.json";
   return url.toString();
+}
+
+// Names the agent accepts for local development over http: loopback,
+// Docker Desktop's host alias, and RFC 6761 .localhost names.
+function isLocalHostname(hostname: string): boolean {
+  return (
+    ["localhost", "127.0.0.1", "host.docker.internal"].includes(hostname) ||
+    hostname.endsWith(".localhost")
+  );
 }
 
 function assertionAudienceFor(
@@ -460,7 +469,7 @@ DOCKERFILE`;
             - name: TUNNEL_IDENTITY_ALLOW_INSECURE
               value: "true"
             - name: TUNNEL_IDENTITY_JWKS_URL
-              value: ${yamlQuote(localJWKS)}`
+              value: ${yamlQuote(KUBERNETES_LOCAL_JWKS_PLACEHOLDER)}`
     : "";
   const dockerCredentialFlags = credentials
     ? `  -e TUNNEL_IDENTITY_ISSUER='${ISSUER_SENTINEL}' \\
