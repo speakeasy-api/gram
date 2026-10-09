@@ -494,7 +494,9 @@ func TestServePublic_PrivatePassthrough_DynamicDiscoveryIsUnsupported(t *testing
 			names, listErr := dynamicListOutcome(t, ti, f)
 			require.Empty(t, names, "no dynamic facade is listed for a passthrough catalog")
 			if tc.listErrors {
-				require.NotEmpty(t, listErr, "an authorized materialized tool leaves main's discovery error in place")
+				// The fixture has no search index, so main's facade build stops
+				// at the index check before reaching the proxy rejection.
+				require.Equal(t, "tool search is temporarily unavailable; try again later", listErr, "an authorized materialized tool leaves main's discovery error in place")
 			} else {
 				require.Empty(t, listErr)
 			}
