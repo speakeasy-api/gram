@@ -37,6 +37,7 @@ import {
   MIN_TRIAL_START_DAYS,
   resumeStripeSubscription,
   setInferenceKeyMonthlyLimit,
+  repairInferenceKey,
   setStripeCustomer,
   toSearchParams,
   omitUnset,
@@ -316,6 +317,49 @@ describe("getProject", () => {
 });
 
 describe("organization billing endpoints", () => {
+  it("posts exact removal-only repair payload without inventing usage", async () => {
+    const fetch = stubFetch();
+    const response = {
+      key: {
+        key_type: "internal",
+        monthly_credits: 100,
+        disabled: false,
+        disable_causes: [],
+        disable_causes_classified: true,
+        cause_diagnostics: [],
+      },
+      reconciliation_pending: true,
+    };
+    fetch.mockResolvedValueOnce(
+      new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const result = await repairInferenceKey({
+      organizationID: "org_1",
+      keyType: "internal",
+      removeCauses: ["admin_lock"],
+      confirmation: "I know what I'm doing",
+      reason: "BUG-123",
+    });
+    expect(result).toEqual(response);
+    expect(result.key).not.toHaveProperty("credits_used");
+    expect(fetch).toHaveBeenCalledWith(
+      "/admin/organization.repairInferenceKey",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          organization_id: "org_1",
+          key_type: "internal",
+          remove_causes: ["admin_lock"],
+          confirmation: "I know what I'm doing",
+          reason: "BUG-123",
+        }),
+      }),
+    );
+  });
+
   afterEach(() => vi.unstubAllGlobals());
 
   function stubFetch(): ReturnType<typeof vi.fn> {

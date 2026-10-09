@@ -620,6 +620,13 @@ export function listOrganizationMembers(
   );
 }
 
+export type AdminInferenceKeyCause = {
+  cause: string;
+  description: string;
+  removable: boolean;
+  blocked_reason?: string;
+};
+
 type AdminInferenceKeyResponse = {
   key_type: string;
   credits_used: number;
@@ -627,6 +634,7 @@ type AdminInferenceKeyResponse = {
   disabled: boolean;
   disable_causes?: string[];
   disable_causes_classified: boolean;
+  cause_diagnostics?: AdminInferenceKeyCause[];
 };
 
 export type AdminInferenceKey = Omit<
@@ -710,6 +718,37 @@ export async function getInferenceKeys(
 }
 
 export type AdminInferenceKeyType = "chat" | "internal";
+
+export type AdminInferenceKeyRepairResult = {
+  key: Omit<
+    AdminInferenceKey,
+    "credits_used" | "disable_causes" | "cause_diagnostics"
+  > & {
+    disable_causes: string[];
+    cause_diagnostics: AdminInferenceKeyCause[];
+  };
+  reconciliation_pending: boolean;
+};
+
+export function repairInferenceKey(input: {
+  organizationID: string;
+  keyType: AdminInferenceKeyType;
+  removeCauses: string[];
+  confirmation: string;
+  reason: string;
+}): Promise<AdminInferenceKeyRepairResult> {
+  return gramAdminMutation("/admin/organization.repairInferenceKey", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      organization_id: input.organizationID,
+      key_type: input.keyType,
+      remove_causes: input.removeCauses,
+      confirmation: input.confirmation,
+      reason: input.reason,
+    }),
+  });
+}
 
 export type AdminInferenceKeyLimit = Pick<
   AdminInferenceKey,

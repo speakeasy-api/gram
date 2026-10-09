@@ -1,10 +1,11 @@
-import { QueryClient } from "@tanstack/react-query";
+import { onlineManager, QueryClient } from "@tanstack/react-query";
 import {
   act,
   cleanup,
   fireEvent,
   screen,
   within,
+  waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -24,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   cancelStripeSubscription: vi.fn(),
   resumeStripeSubscription: vi.fn(),
   setInferenceKeyMonthlyLimit: vi.fn(),
+  repairInferenceKey: vi.fn(),
 }));
 
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
@@ -434,4 +436,188 @@ describe("Billing", () => {
       expect(mocks.resumeStripeSubscription).toHaveBeenCalledWith(ORG.id);
     });
   });
+});
+
+const REPAIR_KEY = {
+  key_type: "chat",
+  credits_used: 42.75,
+  monthly_credits: 100,
+  disabled: true,
+  disable_causes: ["trial_demotion", "billing_inactive"],
+  disable_causes_classified: true,
+  cause_diagnostics: [
+    {
+      cause: "trial_demotion",
+      description: "Trial access ended automatically.",
+      removable: true,
+    },
+    {
+      cause: "billing_inactive",
+      description: "Billing needs attention.",
+      removable: false,
+      blocked_reason: "Verified eligible billing is required.",
+    },
+  ],
+};
+async function openRepair() {
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Repair key locks" }),
+  );
+  fireEvent.click(screen.getByRole("checkbox", { name: "Trial demotion" }));
+  fireEvent.change(screen.getByLabelText("Reason or bug ticket"), {
+    target: { value: "BUG-123" },
+  });
+  fireEvent.change(screen.getByLabelText("Type I know what I'm doing"), {
+    target: { value: "I know what I'm doing" },
+  });
+}
+it("repairs the canonical key, preserves usage and concurrent locks when the accepted write refresh fails", async () => {
+  mocks.getInferenceKeys
+    .mockResolvedValueOnce([REPAIR_KEY])
+    .mockRejectedValue(new Error("Refresh unavailable"));
+  mocks.repairInferenceKey.mockResolvedValue({
+    key: {
+      ...REPAIR_KEY,
+      credits_used: undefined,
+      disable_causes: ["billing_inactive", "admin_lock"],
+      cause_diagnostics: [
+        REPAIR_KEY.cause_diagnostics[1],
+        {
+          cause: "admin_lock",
+          description: "Concurrent staff lock",
+          removable: true,
+        },
+      ],
+    },
+    reconciliation_pending: true,
+  });
+  const qc = await renderBilling();
+  await openRepair();
+  expect(
+    (
+      screen.getByRole("checkbox", {
+        name: "Billing inactive",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Remove selected locks" }),
+  );
+  await waitFor(() =>
+    expect(mocks.repairInferenceKey).toHaveBeenCalledWith({
+      organizationID: ORG.id,
+      keyType: "chat",
+      removeCauses: ["trial_demotion"],
+      confirmation: "I know what I'm doing",
+      reason: "BUG-123",
+    }),
+  );
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(
+    await screen.findByText(
+      /Could not load OpenRouter keys: Refresh unavailable/,
+    ),
+  ).toBeTruthy();
+  expect(
+    await screen.findByText(/Diagnostics refresh failed; reload to verify/),
+  ).toBeTruthy();
+  expect(screen.getByText("Billing inactive, Admin lock")).toBeTruthy();
+  expect(screen.getByText("$42.75 of $100.00")).toBeTruthy();
+  expect(
+    screen.getAllByText(/upstream reconciliation pending/i).length,
+  ).toBeGreaterThan(0);
+  expect(qc.getQueryData(["gram-admin-inference-keys", ORG.id])).toMatchObject([
+    { credits_used: 42.75, disable_causes: ["billing_inactive", "admin_lock"] },
+  ]);
+});
+it("reports rejected writes without closing", async () => {
+  mocks.getInferenceKeys.mockResolvedValue([REPAIR_KEY]);
+  mocks.repairInferenceKey.mockRejectedValue(
+    new Error("Billing verification failed"),
+  );
+  await renderBilling();
+  await openRepair();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Remove selected locks" }),
+  );
+  expect(await screen.findByText("Billing verification failed")).toBeTruthy();
+  expect(screen.getByRole("dialog")).toBeTruthy();
+});
+it("blocks repair when lifecycle metadata is absent", async () => {
+  mocks.getInferenceKeys.mockResolvedValue([
+    { ...REPAIR_KEY, cause_diagnostics: undefined },
+  ]);
+  await renderBilling();
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Repair key locks" }),
+  );
+  expect(
+    (
+      screen.getByRole("checkbox", {
+        name: "Trial demotion",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Remove selected locks",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+});
+
+it("blocks removal with outdated cause metadata", async () => {
+  mocks.getInferenceKeys.mockResolvedValue([
+    { ...REPAIR_KEY, cause_diagnostics: [REPAIR_KEY.cause_diagnostics[0]] },
+  ]);
+  await renderBilling();
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Repair key locks" }),
+  );
+  for (const checkbox of screen.getAllByRole("checkbox"))
+    expect((checkbox as HTMLButtonElement).disabled).toBe(true);
+  expect(
+    screen.getAllByText(
+      "Current lock diagnostics are unavailable. Refresh before repairing this key.",
+    ).length,
+  ).toBeGreaterThan(0);
+  expect(mocks.repairInferenceKey).not.toHaveBeenCalled();
+});
+
+it("blocks cached removable billing locks while diagnostics refetch is paused", async () => {
+  mocks.getInferenceKeys.mockResolvedValue([
+    {
+      ...REPAIR_KEY,
+      cause_diagnostics: REPAIR_KEY.cause_diagnostics.map((cause) => ({
+        ...cause,
+        removable: true,
+      })),
+    },
+  ]);
+  const qc = await renderBilling();
+  await openRepair();
+  const checkbox = screen.getByRole("checkbox", {
+    name: "Billing inactive",
+  }) as HTMLButtonElement;
+  expect(checkbox.disabled).toBe(false);
+  try {
+    onlineManager.setOnline(false);
+    act(() => {
+      void qc.invalidateQueries({
+        queryKey: ["gram-admin-inference-keys", ORG.id],
+      });
+    });
+    await waitFor(() =>
+      expect(
+        qc.getQueryState(["gram-admin-inference-keys", ORG.id])?.fetchStatus,
+      ).toBe("paused"),
+    );
+    await waitFor(() => expect(checkbox.disabled).toBe(true));
+    fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
+    expect(mocks.repairInferenceKey).not.toHaveBeenCalled();
+  } finally {
+    await qc.cancelQueries();
+    onlineManager.setOnline(true);
+  }
 });

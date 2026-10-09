@@ -19,6 +19,7 @@ import {
   errorMessage,
   GramAdminError,
   resumeStripeSubscription,
+  repairInferenceKey,
   setInferenceKeyMonthlyLimit,
   type AdminInferenceKey,
   type AdminInferenceKeyType,
@@ -36,6 +37,10 @@ import {
   formatRecordedThrough,
   formatTokenCount,
 } from "./billingState";
+import {
+  RepairInferenceKey,
+  type RepairKeySubmission,
+} from "./RepairInferenceKey";
 import { MeterUsage } from "./MeterUsage";
 import { SpendBreakdown } from "./SpendBreakdown";
 
@@ -276,12 +281,89 @@ function InferenceKeyLimitEditor({
   );
 }
 
+function InferenceKeyRepair({
+  organizationID,
+  inferenceKey,
+  diagnosticsFresh,
+}: {
+  organizationID: string;
+  inferenceKey: AdminInferenceKey & { key_type: AdminInferenceKeyType };
+  diagnosticsFresh: boolean;
+}): JSX.Element {
+  const qc = useQueryClient();
+  const { announce } = useWriteReport();
+  const queryKey = inferenceKeysQuery(organizationID).queryKey;
+  const mutation = useMutation({
+    mutationFn: (submission: RepairKeySubmission) =>
+      repairInferenceKey({
+        organizationID,
+        keyType: inferenceKey.key_type,
+        ...submission,
+      }),
+    onSuccess: async (result) => {
+      await qc.cancelQueries({ queryKey });
+      qc.setQueryData<AdminInferenceKey[]>(queryKey, (current) =>
+        current?.map((key) =>
+          key.key_type === result.key.key_type
+            ? { ...key, ...result.key, credits_used: key.credits_used }
+            : key,
+        ),
+      );
+      announce(
+        `${inferenceKey.key_type} repair accepted; upstream reconciliation pending. Refresh diagnostics to verify application.`,
+      );
+      // A refresh failure is a read failure, never a failed write. Keep the accepted cache result.
+      void qc
+        .invalidateQueries({ queryKey }, { throwOnError: true })
+        .catch(() => {
+          announce(
+            "Repair accepted; upstream reconciliation pending. Diagnostics refresh failed; reload to verify.",
+          );
+        });
+    },
+  });
+  const causes = inferenceKey.disable_causes ?? [];
+  const diagnostics = inferenceKey.cause_diagnostics ?? [];
+  const metadataValid =
+    diagnosticsFresh &&
+    diagnostics.length === causes.length &&
+    causes.every(
+      (cause) =>
+        diagnostics.filter(
+          (item) => item.cause === cause && item.description.trim() !== "",
+        ).length === 1,
+    );
+  return (
+    <RepairInferenceKey
+      keyType={inferenceKey.key_type}
+      keyName={inferenceKeyPurpose(inferenceKey.key_type)}
+      disabled={inferenceKey.disabled}
+      classified={inferenceKey.disable_causes_classified}
+      causes={causes.map((cause) => {
+        const diagnostic = diagnostics.find((item) => item.cause === cause);
+        return {
+          cause,
+          label: inferenceKeyDisableCauseLabel(cause),
+          description: diagnostic?.description,
+          removable: metadataValid && diagnostic?.removable === true,
+          blockedReason: !metadataValid
+            ? "Current lock diagnostics are unavailable. Refresh before repairing this key."
+            : diagnostic?.blocked_reason,
+        };
+      })}
+      onSubmit={(submission) => mutation.mutateAsync(submission)}
+    />
+  );
+}
+
 function InferenceKeys({
   organizationID,
   keys,
+  diagnosticsFresh,
 }: {
   organizationID: string;
   keys: AdminInferenceKey[];
+  diagnosticsFresh: boolean;
 }): JSX.Element {
   return (
     <Group title="Platform-managed OpenRouter keys">
@@ -310,6 +392,31 @@ function InferenceKeys({
           </Row>
           <Row label="State">{key.disabled ? "Disabled" : "Enabled"}</Row>
           <Row label="Disable causes">{inferenceKeyDisableCauses(key)}</Row>
+          {key.cause_diagnostics?.map((diagnostic) => (
+            <p
+              key={diagnostic.cause}
+              className="mt-2 text-sm text-muted-foreground [overflow-wrap:anywhere]"
+            >
+              <span className="font-medium">
+                {inferenceKeyDisableCauseLabel(diagnostic.cause)}:{" "}
+              </span>
+              {diagnostic.description}
+              {diagnostic.blocked_reason && (
+                <span className="block text-xs">
+                  {diagnostic.blocked_reason}
+                </span>
+              )}
+            </p>
+          ))}
+          {isWritableInferenceKey(key) && (
+            <div className="my-3">
+              <InferenceKeyRepair
+                organizationID={organizationID}
+                inferenceKey={key}
+                diagnosticsFresh={diagnosticsFresh}
+              />
+            </div>
+          )}
           {isWritableInferenceKey(key) && (
             <InferenceKeyLimitEditor
               organizationID={organizationID}
@@ -600,6 +707,10 @@ export function Billing({ org }: { org: AdminOrganization }): JSX.Element {
         <InferenceKeys
           organizationID={org.id}
           keys={inferenceKeysResult.data}
+          diagnosticsFresh={
+            !inferenceKeysResult.isError &&
+            inferenceKeysResult.fetchStatus === "idle"
+          }
         />
       )}
       {inferenceKeysResult.isPending && (
