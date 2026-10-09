@@ -1134,6 +1134,9 @@ filtered AS (
         om.name,
         om.slug,
         om.gram_account_type AS account_type,
+        -- Ranks by what the account pays rather than by how its type is spelled:
+        -- enterprise, then pro and payg, then free, then any type off the list.
+        CASE om.gram_account_type WHEN 'enterprise' THEN 0 WHEN 'pro' THEN 1 WHEN 'payg' THEN 1 WHEN 'free' THEN 2 ELSE 3 END AS account_tier,
         om.workos_id,
         bm.stripe_customer_id,
         bm.stripe_subscription_id,
@@ -1207,7 +1210,7 @@ filtered AS (
         )
 ),
 paged AS MATERIALIZED (
-SELECT id, name, slug, account_type, workos_id, stripe_customer_id, stripe_subscription_id, whitelisted, disabled_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
+SELECT id, name, slug, account_type, account_tier, workos_id, stripe_customer_id, stripe_subscription_id, whitelisted, disabled_at, trial_state, trial_ends_at, created_at, updated_at, member_count FROM filtered
 WHERE coalesce(cardinality($11::text[]), 0) = 0 OR trial_state = ANY($11::text[])
 ORDER BY
     CASE WHEN $1::text = 'name' AND $2::text = 'asc' THEN name END ASC NULLS LAST,
@@ -1216,6 +1219,8 @@ ORDER BY
     CASE WHEN $1::text = 'slug' AND $2::text = 'desc' THEN slug END DESC NULLS LAST,
     CASE WHEN $1::text = 'account_type' AND $2::text = 'asc' THEN account_type END ASC NULLS LAST,
     CASE WHEN $1::text = 'account_type' AND $2::text = 'desc' THEN account_type END DESC NULLS LAST,
+    CASE WHEN $1::text = 'account_tier' AND $2::text = 'asc' THEN account_tier END ASC NULLS LAST,
+    CASE WHEN $1::text = 'account_tier' AND $2::text = 'desc' THEN account_tier END DESC NULLS LAST,
     CASE WHEN $1::text = 'member_count' AND $2::text = 'asc' THEN member_count END ASC NULLS LAST,
     CASE WHEN $1::text = 'member_count' AND $2::text = 'desc' THEN member_count END DESC NULLS LAST,
     CASE WHEN $1::text = 'created_at' AND $2::text = 'asc' THEN created_at END ASC NULLS LAST,
@@ -1247,6 +1252,8 @@ ORDER BY
     CASE WHEN $1::text = 'slug' AND $2::text = 'desc' THEN slug END DESC NULLS LAST,
     CASE WHEN $1::text = 'account_type' AND $2::text = 'asc' THEN account_type END ASC NULLS LAST,
     CASE WHEN $1::text = 'account_type' AND $2::text = 'desc' THEN account_type END DESC NULLS LAST,
+    CASE WHEN $1::text = 'account_tier' AND $2::text = 'asc' THEN account_tier END ASC NULLS LAST,
+    CASE WHEN $1::text = 'account_tier' AND $2::text = 'desc' THEN account_tier END DESC NULLS LAST,
     CASE WHEN $1::text = 'member_count' AND $2::text = 'asc' THEN member_count END ASC NULLS LAST,
     CASE WHEN $1::text = 'member_count' AND $2::text = 'desc' THEN member_count END DESC NULLS LAST,
     CASE WHEN $1::text = 'created_at' AND $2::text = 'asc' THEN created_at END ASC NULLS LAST,

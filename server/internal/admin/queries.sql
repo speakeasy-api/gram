@@ -144,6 +144,9 @@ filtered AS (
         om.name,
         om.slug,
         om.gram_account_type AS account_type,
+        -- Ranks by what the account pays rather than by how its type is spelled:
+        -- enterprise, then pro and payg, then free, then any type off the list.
+        CASE om.gram_account_type WHEN 'enterprise' THEN 0 WHEN 'pro' THEN 1 WHEN 'payg' THEN 1 WHEN 'free' THEN 2 ELSE 3 END AS account_tier,
         om.workos_id,
         bm.stripe_customer_id,
         bm.stripe_subscription_id,
@@ -233,6 +236,8 @@ ORDER BY
     CASE WHEN sqlc.arg('sort_by')::text = 'slug' AND sqlc.arg('sort_dir')::text = 'desc' THEN slug END DESC NULLS LAST,
     CASE WHEN sqlc.arg('sort_by')::text = 'account_type' AND sqlc.arg('sort_dir')::text = 'asc' THEN account_type END ASC NULLS LAST,
     CASE WHEN sqlc.arg('sort_by')::text = 'account_type' AND sqlc.arg('sort_dir')::text = 'desc' THEN account_type END DESC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'account_tier' AND sqlc.arg('sort_dir')::text = 'asc' THEN account_tier END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'account_tier' AND sqlc.arg('sort_dir')::text = 'desc' THEN account_tier END DESC NULLS LAST,
     CASE WHEN sqlc.arg('sort_by')::text = 'member_count' AND sqlc.arg('sort_dir')::text = 'asc' THEN member_count END ASC NULLS LAST,
     CASE WHEN sqlc.arg('sort_by')::text = 'member_count' AND sqlc.arg('sort_dir')::text = 'desc' THEN member_count END DESC NULLS LAST,
     CASE WHEN sqlc.arg('sort_by')::text = 'created_at' AND sqlc.arg('sort_dir')::text = 'asc' THEN created_at END ASC NULLS LAST,
@@ -265,6 +270,8 @@ ORDER BY
     CASE WHEN sqlc.arg('sort_by')::text = 'slug' AND sqlc.arg('sort_dir')::text = 'desc' THEN slug END DESC NULLS LAST,
     CASE WHEN sqlc.arg('sort_by')::text = 'account_type' AND sqlc.arg('sort_dir')::text = 'asc' THEN account_type END ASC NULLS LAST,
     CASE WHEN sqlc.arg('sort_by')::text = 'account_type' AND sqlc.arg('sort_dir')::text = 'desc' THEN account_type END DESC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'account_tier' AND sqlc.arg('sort_dir')::text = 'asc' THEN account_tier END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by')::text = 'account_tier' AND sqlc.arg('sort_dir')::text = 'desc' THEN account_tier END DESC NULLS LAST,
     CASE WHEN sqlc.arg('sort_by')::text = 'member_count' AND sqlc.arg('sort_dir')::text = 'asc' THEN member_count END ASC NULLS LAST,
     CASE WHEN sqlc.arg('sort_by')::text = 'member_count' AND sqlc.arg('sort_dir')::text = 'desc' THEN member_count END DESC NULLS LAST,
     CASE WHEN sqlc.arg('sort_by')::text = 'created_at' AND sqlc.arg('sort_dir')::text = 'asc' THEN created_at END ASC NULLS LAST,

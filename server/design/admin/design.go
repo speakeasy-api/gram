@@ -885,7 +885,7 @@ var _ = Service("admin", func() {
 			Attribute("created_to", String, "Inclusive creation date in strict YYYY-MM-DD UTC calendar format. Includes the entire UTC day, implemented as an exclusive bound at the following midnight.")
 			Attribute("cursor", String, "Pagination cursor: id of the last item from the previous page in created_at descending, id ascending order. The anchor is resolved regardless of filters; a deleted or unknown id returns an empty page. Ignored when sort or page is supplied.")
 			Attribute("limit", Int, "Page size (default 50, max 100).")
-			Attribute("sort", String, "Column to sort by: name, slug, account_type, member_count, created_at, disabled_at or trial_ends_at. Omitted or unknown values use created_at descending. Ties always sort by id ascending. Supplying it selects offset paging.")
+			Attribute("sort", String, "Column to sort by: name, slug, account_type, account_tier, member_count, created_at, disabled_at or trial_ends_at. account_tier ranks enterprise first, then pro and payg, then free, then any other account type; desc reverses that order. Omitted or unknown values use created_at descending. Ties always sort by id ascending. Supplying it selects offset paging.")
 			Attribute("direction", String, "Sort direction, asc or desc, applied to the column named by sort. Any other value sorts ascending. Ignored when sort is omitted or unknown, preserving the newest-first default. On its own it does not select offset paging.")
 			Attribute("page", Int, "1-based page number for offset paging (default 1). Supplying it selects offset paging.")
 		})
