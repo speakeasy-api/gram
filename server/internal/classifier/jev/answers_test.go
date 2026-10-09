@@ -9,17 +9,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestScoreDerivesExpectedIndexFromDistribution(t *testing.T) {
+func TestScorePreservesProviderExpectedIndex(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name          string
 		score         float64
 		probabilities string
-		expected      float64
 	}{
-		{name: "concentrated", score: 2.99, probabilities: `{"0":0,"1":0,"2":0,"3":1,"4":0}`, expected: 3},
-		{name: "near_upper_bound", score: 3.97, probabilities: `{"0":0.01,"1":0,"2":0,"3":0.01,"4":0.98}`, expected: 3.95},
-		{name: "spread", score: 2.66, probabilities: `{"0":0.02,"1":0.06,"2":0.19,"3":0.69,"4":0.04}`, expected: 2.67},
+		{name: "concentrated", score: 2.99, probabilities: `{"0":0,"1":0,"2":0,"3":1,"4":0}`},
+		{name: "near_upper_bound", score: 3.97, probabilities: `{"0":0.01,"1":0,"2":0,"3":0.01,"4":0.98}`},
+		{name: "spread", score: 2.66, probabilities: `{"0":0.02,"1":0.06,"2":0.19,"3":0.69,"4":0.04}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -39,7 +38,7 @@ func TestScoreDerivesExpectedIndexFromDistribution(t *testing.T) {
 			require.Nil(t, result.Outcomes[0].Failure)
 			require.NotNil(t, result.Outcomes[0].Answer)
 			require.NotNil(t, result.Outcomes[0].Answer.Score)
-			require.InDelta(t, tc.expected, result.Outcomes[0].Answer.Score.ExpectedIndex, 1e-9)
+			require.InDelta(t, tc.score, result.Outcomes[0].Answer.Score.ExpectedIndex, 0)
 		})
 	}
 }

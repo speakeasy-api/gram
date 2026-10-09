@@ -47,14 +47,13 @@ func decodeAnswer(q plannedQuestion, wire wireAnswer) *classifier.Answer {
 		return nil
 	}
 	distribution := make([]classifier.Probability, 0, len(options))
-	sum, expected, maximum := 0.0, 0.0, 0.0
+	sum, maximum := 0.0, 0.0
 	for i, option := range options {
 		p := wire.Probabilities[strconv.Itoa(i)]
 		if !probability(p) {
 			return nil
 		}
 		sum += *p
-		expected += float64(i) * *p
 		maximum = max(maximum, *p)
 		distribution = append(distribution, classifier.Probability{Option: option.Key, Value: *p})
 	}
@@ -76,9 +75,9 @@ func decodeAnswer(q plannedQuestion, wire wireAnswer) *classifier.Answer {
 		if wire.Score == nil || math.IsNaN(*wire.Score) || math.IsInf(*wire.Score, 0) || *wire.Score < 0 || *wire.Score > float64(len(options)-1) {
 			return nil
 		}
-		// The provider's score and probabilities can be rounded independently.
-		// Derive our expected index from the validated distribution so they agree.
-		answer.Score = &classifier.ScoreAnswer{ExpectedIndex: expected, Distribution: distribution, Confidence: wire.Confidence}
+		// Preserve the provider's score; reconstructing it from the returned
+		// probabilities can lose precision when the fields differ in rounding.
+		answer.Score = &classifier.ScoreAnswer{ExpectedIndex: *wire.Score, Distribution: distribution, Confidence: wire.Confidence}
 	}
 	return &answer
 }
