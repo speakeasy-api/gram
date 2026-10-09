@@ -73,6 +73,11 @@ const (
 	refreshTokenReplayMaxPollWait     = 1 * time.Second
 )
 
+// errRefreshTokenClaimConflict means the transaction lost a concurrent update
+// before minting a successor. Its caller must wait for the winner's replay,
+// never publish a terminal failure over a potentially unpublished outcome.
+var errRefreshTokenClaimConflict = errors.New("refresh token claim conflicted with a concurrent update")
+
 // userSessionRefreshReplay is the encrypted result of a recent refresh-token
 // rotation. Redis never holds tokens or session identity in plaintext.
 type userSessionRefreshReplay struct {
@@ -910,6 +915,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 	pollWait := refreshTokenReplayInitialPollWait
 	poll := time.NewTimer(pollWait)
 	defer poll.Stop()
+	waitForWinner := false
 
 	for {
 		// A completed outcome is authoritative and avoids renewing a coordination
@@ -918,9 +924,9 @@ func (s *Service) handleTokenRefreshTokenGrant(
 			return s.writeRefreshTokenReplay(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, replayKey, replay, logger)
 		}
 
-		rotationWinner := true
+		rotationWinner := !waitForWinner
 		ownsLock := false
-		if s.userSessionRefreshReplayCoordination != nil {
+		if !waitForWinner && s.userSessionRefreshReplayCoordination != nil {
 			var coordinationErr error
 			if leases, ok := s.userSessionRefreshReplayCoordination.(cache.LeaseCache); ok {
 				rotationWinner, coordinationErr = leases.AcquireLease(ctx, lockKey, lockOwner, refreshTokenReplayGracePeriod)
@@ -950,13 +956,27 @@ func (s *Service) handleTokenRefreshTokenGrant(
 				ownsLock,
 				logger,
 			)
-			if ownsLock && releaseLease {
+			claimConflict := errors.Is(rotationErr, errRefreshTokenClaimConflict)
+			if ownsLock && claimConflict {
+				// Protect the unpublished winner from a third request claiming the
+				// lease and caching invalid_grant. Release when this bounded replay
+				// wait ends so a missing outcome does not hold retries for the TTL.
+				defer s.releaseRefreshTokenReplayLock(ctx, lockKey, lockOwner, logger)
+			} else if ownsLock && releaseLease {
 				// Safe rollback paths and published outcomes release immediately.
 				// Ambiguous commits and post-commit publication failures retain the
 				// lease until its TTL so retries cannot misclassify a consumed token.
 				s.releaseRefreshTokenReplayLock(ctx, lockKey, lockOwner, logger)
 			}
-			return rotationErr
+			if !claimConflict {
+				return rotationErr
+			}
+			// A serialization failure aborts the losing transaction. The winner
+			// may have committed without publishing yet, so only poll for replay
+			// with a fresh bounded wait rather than claiming again. Time spent
+			// blocked in the database must not consume the publication budget.
+			waitForWinner = true
+			timeout.Reset(refreshTokenReplayWait)
 		}
 
 		replay, replayErr := s.userSessionRefreshReplayCache.Get(ctx, replayKey)
@@ -1086,6 +1106,15 @@ func (s *Service) rotateRefreshToken(
 		RefreshTokenHash:    refreshTokenHash,
 	})
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.SerializationFailure {
+			// Release the aborted transaction's connection before replay can
+			// perform live admission checks through the pool.
+			if rollbackErr := dbtx.Rollback(ctx); rollbackErr != nil {
+				return true, oops.E(oops.CodeUnexpected, rollbackErr, "rollback conflicted refresh token claim").LogError(ctx, logger)
+			}
+			return false, errRefreshTokenClaimConflict
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Replay performs live agent admission through the pool. Release the
 			// losing claim's connection before either replay fallback can run.
