@@ -24,9 +24,9 @@ const (
 
 	platformMCPReceiptGCBatchSize int32 = 2000
 
-	// A run deletes at most this many batches (50,000 rows) and then
-	// continues as new, so a large backlog drains within one tick in bounded
-	// runs instead of being cut off by the run timeout.
+	// A run deletes at most this many batches and then continues as new, so a
+	// large backlog drains within one tick in bounded runs instead of being
+	// cut off by the run timeout.
 	platformMCPReceiptGCMaxBatchesPerRun = 25
 
 	// Covers a full run of batches with headroom for activity retries.
@@ -40,8 +40,9 @@ const (
 // enforced at read time, so a late or missed tick only delays reclamation.
 //
 // Temporal actions/month ≈ 720 starts + ~720 activities ≈ 1,440 per namespace
-// (more only while a backlog drains: one activity per 2,000 rows and one
-// continue-as-new per 50,000). Fixed: one fleet-wide schedule, not per tenant.
+// (more only while a backlog drains: one activity per batch and one
+// continue-as-new per platformMCPReceiptGCMaxBatchesPerRun batches). Fixed:
+// one fleet-wide schedule, not per tenant.
 func PlatformMCPReceiptGCWorkflow(ctx workflow.Context) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: time.Minute,

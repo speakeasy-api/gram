@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 )
@@ -77,15 +79,32 @@ func executeChargedMutationReceipt[T any](ctx context.Context, charge func(conte
 // reconciliation, a publish or index signal. A first attempt already paid for
 // it with its own charge, so it returns nil at once. A replay answers free, but
 // re-running that work is real provider or Temporal traffic, so it is charged
-// here and the caller skips or refuses the work when this fails. A retry loop
-// then cannot send unbounded work, while a retry within the allowance still
-// recovers a sync that failed after the commit. Like the main charge, it must
-// run outside any transaction.
+// here. A retry loop then cannot send unbounded work, while a retry within the
+// allowance still recovers a sync that failed after the commit. Like the main
+// charge, it must run outside any transaction, and only when there is work to
+// redo.
+//
+// When it fails the caller still returns the stored result — a replay is
+// never refused over the allowance — skips the work, and reports skippedRerun
+// in place of that work's outcome.
 func chargeRerun(ctx context.Context, receipt OperationReceipt, charge func(context.Context) error) error {
 	if !receipt.Replayed {
 		return nil
 	}
 	return charge(ctx)
+}
+
+// skippedRerun is the outcome a replay reports for work chargeRerun refused:
+// rate_limited when the allowance is spent, otherwise unavailable, logged
+// because the budget check itself failed.
+func skippedRerun(ctx context.Context, logger *slog.Logger, err error) string {
+	if errors.Is(err, ErrOperationRateLimited) {
+		return "rate_limited"
+	}
+	if logger != nil {
+		logger.WarnContext(ctx, "charge platform mcp replay rerun", attr.SlogError(err))
+	}
+	return "unavailable"
 }
 
 // receiptCheck is what a pre-check lookup found under a request's key. Every

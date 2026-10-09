@@ -128,13 +128,13 @@ func TestAssignMCPAccessRolePreservesRolesAndReplays(t *testing.T) {
 
 	// Once the allowance is spent the replay still answers, but its provider
 	// reconciliation is not sent again.
-	budget := roles.budget
-	roles.budget = denyBudget()
+	restore := withSpentBudget(t, &roles.budget)
 	spent, err := service.Assign(ctx, principal, input)
 	require.NoError(t, err, "a replay must not be refused over a spent allowance")
 	require.True(t, spent.Receipt.Replayed)
 	require.Equal(t, 2, backend.memberReconciles, "a replay over a spent allowance must not reconcile again")
-	roles.budget = budget
+	require.Equal(t, "rate_limited", spent.Reconciliation, "the skipped reconciliation is reported")
+	restore()
 	afterAudit, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionAccessMemberRoleUpdate)
 	require.NoError(t, err)
 	require.Equal(t, beforeAudit+1, afterAudit)
@@ -282,4 +282,11 @@ func TestAssignMCPAccessRolePreservesRolesAndReplays(t *testing.T) {
 	require.True(t, replayed.Receipt.Replayed)
 	require.Equal(t, first.Receipt.ID, replayed.Receipt.ID)
 	require.Equal(t, "not_applicable", replayed.Reconciliation)
+
+	// A member with nothing left to reconcile costs nothing to replay, so a
+	// spent allowance does not turn not_applicable into rate_limited.
+	withSpentBudget(t, &roles.budget)
+	replayed, err = service.Assign(ctx, principal, input)
+	require.NoError(t, err)
+	require.Equal(t, "not_applicable", replayed.Reconciliation, "nothing to reconcile is not charged")
 }

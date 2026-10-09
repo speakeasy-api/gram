@@ -349,7 +349,15 @@ func TestAddToolsToMCPReplaysWithASpentAllowance(t *testing.T) {
 	first, err := fixture.service.AddTools(ctx, fixture.principal, input)
 	require.NoError(t, err)
 
-	fixture.service.changes = OperationBudget{Connection: denyOperationLimiter{}, Organization: denyOperationLimiter{}}
+	// A budget store that cannot be reached is not throttling: the skipped
+	// rebuild is reported as unavailable, not rate_limited.
+	fixture.service.changes = OperationBudget{Connection: failingOperationLimiter{}, Organization: failingOperationLimiter{}}
+	outage, err := fixture.service.AddTools(ctx, fixture.principal, input)
+	require.NoError(t, err, "a replay must not be refused when the budget cannot be checked")
+	require.True(t, outage.Receipt.Replayed)
+	require.Equal(t, "unavailable", outage.IndexSignal)
+
+	withSpentBudget(t, &fixture.service.changes)
 	replay, err := fixture.service.AddTools(ctx, fixture.principal, input)
 	require.NoError(t, err, "a replay must not be charged against a spent allowance")
 	require.True(t, replay.Receipt.Replayed)

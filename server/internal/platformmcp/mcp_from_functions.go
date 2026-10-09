@@ -299,7 +299,15 @@ func (s *MCPToolExposureService) finishMCPFromFunctions(ctx context.Context, pri
 	// repository, exactly as the dashboard's first-server path does.
 	rerunErr := chargeRerun(ctx, receipt, charge)
 	if stored.AddedToDefaultPlugin && stored.Publication != string(plugins.ProjectPublicationEnqueued) {
-		output.PublishSignal = s.publishSignal(ctx, principal, project.ID, stored.Publication, rerunErr)
+		if rerunErr != nil {
+			output.PublishSignal = skippedRerun(ctx, s.logger, rerunErr)
+		} else if s.publisher == nil {
+			output.PublishSignal = "unavailable"
+		} else if err := plugins.SignalPluginPublishAfterRequest(ctx, s.publisher, plugins.ProjectPublicationRequestOutcome(stored.Publication), project.ID, principal.UserID); err != nil {
+			output.PublishSignal = "request_failed"
+		} else {
+			output.PublishSignal = "best_effort_requested"
+		}
 	}
 	output.PublicationRequested = stored.AddedToDefaultPlugin &&
 		(stored.Publication == string(plugins.ProjectPublicationEnqueued) || output.PublishSignal == "best_effort_requested")
@@ -307,7 +315,11 @@ func (s *MCPToolExposureService) finishMCPFromFunctions(ctx context.Context, pri
 	// a dynamic-mode server refuses tools/list outright until one exists. The
 	// target is the toolset recorded in the receipt, so a replay schedules the
 	// toolset the original wrote.
-	output.IndexSignal = s.indexSignal(ctx, project.ID, stored.ToolsetID, rerunErr)
+	if rerunErr != nil {
+		output.IndexSignal = skippedRerun(ctx, s.logger, rerunErr)
+	} else {
+		output.IndexSignal = s.scheduleIndex(ctx, project.ID, stored.ToolsetID)
+	}
 
 	mcpID, err := uuid.Parse(stored.MCPID)
 	if err != nil {

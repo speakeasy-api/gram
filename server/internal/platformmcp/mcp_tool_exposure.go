@@ -159,7 +159,16 @@ type MCPToolExposureMutationOutput struct {
 	// reported separately in RemovedPluginIDs.
 	Distributions      []MCPDistribution `json:"distributions"`
 	PublicationRequest string            `json:"publication_request"`
-	PublishSignal      string            `json:"publish_signal"`
+	// PublishSignal reports the best-effort publish signal sent after the
+	// commit, when the publication request was not already durably enqueued.
+	//   not_requested         — no signal was needed
+	//   best_effort_requested — the publish was signalled
+	//   unavailable           — nothing could signal on this deployment, or a
+	//                           replay could not check the retry allowance
+	//   request_failed        — signalling was attempted and failed
+	//   rate_limited          — a replay of a committed change found the
+	//                           allowance spent, so it did not signal again
+	PublishSignal string `json:"publish_signal"`
 	// IndexSignal reports whether the tool-search index rebuild this change
 	// needs was scheduled. It matters beyond bookkeeping: a dynamic-mode server
 	// refuses tools/list outright while its current version has no index, so
@@ -169,7 +178,8 @@ type MCPToolExposureMutationOutput struct {
 	//   not_required   — this version needs no index (it exposes no tools, or
 	//                    nothing serves it from the index), and dynamic mode
 	//                    serves it without one
-	//   unavailable    — nothing could schedule a rebuild on this deployment
+	//   unavailable    — nothing could schedule a rebuild on this deployment,
+	//                    or a replay could not check the retry allowance
 	//   request_failed — scheduling was attempted and failed
 	//   rate_limited   — a replay of a committed change found the allowance
 	//                    spent, so the rebuild was not scheduled again
@@ -605,7 +615,15 @@ func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal
 		rerunErr = chargeRerun(ctx, receipt, charge)
 	}
 	if applied && stored.Publication != string(plugins.ProjectPublicationEnqueued) {
-		output.PublishSignal = s.publishSignal(ctx, principal, project.ID, stored.Publication, rerunErr)
+		if rerunErr != nil {
+			output.PublishSignal = skippedRerun(ctx, s.logger, rerunErr)
+		} else if s.publisher == nil {
+			output.PublishSignal = "unavailable"
+		} else if err := plugins.SignalPluginPublishAfterRequest(ctx, s.publisher, plugins.ProjectPublicationRequestOutcome(stored.Publication), project.ID, principal.UserID); err != nil {
+			output.PublishSignal = "request_failed"
+		} else {
+			output.PublishSignal = "best_effort_requested"
+		}
 	}
 	if memberships, err := s.queries.ListPlatformMCPInventoryPluginMemberships(ctx, platformrepo.ListPlatformMCPInventoryPluginMembershipsParams{
 		OrganizationID: principal.OrganizationID,
@@ -628,8 +646,10 @@ func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal
 	// concurrent repoint lands, which would rebuild one this change never
 	// touched and leave the one it did touch unindexed. Only a real change
 	// needs it — a no-op created no version.
-	if applied {
-		output.IndexSignal = s.indexSignal(ctx, project.ID, stored.ToolsetID, rerunErr)
+	if applied && rerunErr != nil {
+		output.IndexSignal = skippedRerun(ctx, s.logger, rerunErr)
+	} else if applied {
+		output.IndexSignal = s.scheduleIndex(ctx, project.ID, stored.ToolsetID)
 	}
 	exposure, err := s.Exposure(ctx, principal, project.ID, mcpID)
 	if err != nil {
@@ -644,37 +664,6 @@ func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal
 // scheduleIndex reports what happened rather than swallowing it, because a
 // rebuild that never started leaves a dynamic-mode server unable to list its
 // tools until the sweep, and the caller is the only one who can tell the user.
-// A replay re-sends a committed change's publish and index signals only when
-// chargeRerun admitted it; rerunErr is that charge's result. A charge refused
-// over the allowance reports rate_limited, any other charge failure
-// unavailable, and neither re-sends anything.
-func skippedSignal(rerunErr error) string {
-	if errors.Is(rerunErr, ErrOperationRateLimited) {
-		return "rate_limited"
-	}
-	return "unavailable"
-}
-
-func (s *MCPToolExposureService) publishSignal(ctx context.Context, principal Principal, projectID uuid.UUID, publication string, rerunErr error) string {
-	switch {
-	case rerunErr != nil:
-		return skippedSignal(rerunErr)
-	case s.publisher == nil:
-		return "unavailable"
-	case plugins.SignalPluginPublishAfterRequest(ctx, s.publisher, plugins.ProjectPublicationRequestOutcome(publication), projectID, principal.UserID) != nil:
-		return "request_failed"
-	default:
-		return "best_effort_requested"
-	}
-}
-
-func (s *MCPToolExposureService) indexSignal(ctx context.Context, projectID uuid.UUID, toolsetID string, rerunErr error) string {
-	if rerunErr != nil {
-		return skippedSignal(rerunErr)
-	}
-	return s.scheduleIndex(ctx, projectID, toolsetID)
-}
-
 func (s *MCPToolExposureService) scheduleIndex(ctx context.Context, projectID uuid.UUID, toolsetID string) string {
 	if s.index == nil {
 		return "unavailable"

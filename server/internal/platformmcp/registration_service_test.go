@@ -635,6 +635,29 @@ func denyBudget() OperationBudget {
 	return OperationBudget{Connection: denyOperationLimiter{}, Organization: denyOperationLimiter{}}
 }
 
+// withSpentBudget swaps *budget for one that refuses every charge and returns
+// the restore, which also runs when the test ends, so a failed assertion
+// cannot leave the budget spent for the rest of the test.
+func withSpentBudget(t *testing.T, budget *OperationBudget) (restore func()) {
+	t.Helper()
+	saved := *budget
+	*budget = denyBudget()
+	restore = func() { *budget = saved }
+	t.Cleanup(restore)
+	return restore
+}
+
+// failingOperationLimiter models a budget store that cannot be reached.
+type failingOperationLimiter struct{}
+
+func (failingOperationLimiter) Allow(context.Context, string) (ratelimit.Result, error) {
+	return ratelimit.Result{}, errors.New("budget store unreachable")
+}
+
+func (failingOperationLimiter) AllowN(context.Context, string, int) (ratelimit.Result, error) {
+	return ratelimit.Result{}, errors.New("budget store unreachable")
+}
+
 func newRegistrationService(catalog Catalog, gate CatalogRegistrationGateChecker, store RegistrationPersistence) *RegistrationService {
 	budget := allowBudget()
 	return NewRegistrationService(catalog, gate, store).WithOperationBudgets(OperationBudgets{

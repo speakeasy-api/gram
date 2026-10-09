@@ -196,13 +196,13 @@ func TestAccessRoleMutationsCommitReplayAndPreserveOtherGrants(t *testing.T) {
 	// The replay itself stays free once the allowance is spent, but its
 	// provider reconciliation is charged, so a retry loop cannot send
 	// unbounded provider work.
-	budget := service.budget
-	service.budget = denyBudget()
+	restore := withSpentBudget(t, &service.budget)
 	spent, err := service.Create(ctx, principal, createInput)
 	require.NoError(t, err, "a replay must not be refused over a spent allowance")
 	require.True(t, spent.Receipt.Replayed)
 	require.Equal(t, 2, backend.identityReconciles, "a replay over a spent allowance must not reconcile again")
-	service.budget = budget
+	require.Equal(t, "rate_limited", spent.Reconciliation, "the skipped reconciliation is reported")
+	restore()
 
 	projectSelector := authz.NewSelector(authz.ScopeProjectRead, project.ID.String())
 	encodedProjectSelector, err := projectSelector.MarshalJSON()

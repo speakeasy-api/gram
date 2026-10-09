@@ -32,6 +32,11 @@ const (
 // the asynchronous publish honestly.
 const pluginRepublishNote = "Publishing runs in the background, so a requested publish is not yet a published package. Call get_plugin again later: publication_evidence.fresh=true confirms the package caught up. Installed clients are not inspected."
 
+// pluginRepublishSignalSkippedNote is returned for a retry of an enqueued
+// republish that did not signal the publish again, because the retry
+// allowance is spent or could not be checked.
+const pluginRepublishSignalSkippedNote = "This repeats a republish that was already requested. The publish was not signalled again because the retry allowance is spent or could not be checked; the original request still stands. Call get_plugin again later: publication_evidence.fresh=true confirms the package caught up. Installed clients are not inspected."
+
 // pluginAlreadyCurrentNote is returned when nothing was requested.
 const pluginAlreadyCurrentNote = "The plugin's published package already matches its current inputs, so no publish was requested. Installed clients are not inspected."
 
@@ -230,19 +235,20 @@ func (s *PluginsService) RepublishPlugin(ctx context.Context, principal Principa
 	// A durable outbox request already covers the publish. Otherwise signal
 	// the debounced publish now that the receipt committed; a replay signals
 	// again, which the debounce collapses, so a retry after a failed signal
-	// recovers. That repeat signal is charged, so a retry loop over the spent
-	// allowance is refused instead of signalling without bound.
-	if stored.Outcome == PluginRepublishEnqueued && stored.Publication != string(plugindelivery.ProjectPublicationEnqueued) {
-		if err := chargeRerun(ctx, receipt, charge); err != nil {
-			return RepublishPluginOutput{}, err
-		}
-		if err := plugindelivery.SignalPluginPublishAfterRequest(ctx, s.publisher, plugindelivery.ProjectPublicationRequestOutcome(stored.Publication), project.ID, principal.UserID); err != nil {
-			return RepublishPluginOutput{}, pluginRepublishUnavailable(err)
-		}
-	}
+	// recovers. That repeat signal is charged (see chargeRerun); when the charge
+	// fails the stored result still answers, with a note that the publish was
+	// not signalled again.
 	note := pluginRepublishNote
 	if stored.Outcome == PluginRepublishAlreadyCurrent {
 		note = pluginAlreadyCurrentNote
+	}
+	if stored.Outcome == PluginRepublishEnqueued && stored.Publication != string(plugindelivery.ProjectPublicationEnqueued) {
+		if err := chargeRerun(ctx, receipt, charge); err != nil {
+			skippedRerun(ctx, s.metadataLogger, err)
+			note = pluginRepublishSignalSkippedNote
+		} else if err := plugindelivery.SignalPluginPublishAfterRequest(ctx, s.publisher, plugindelivery.ProjectPublicationRequestOutcome(stored.Publication), project.ID, principal.UserID); err != nil {
+			return RepublishPluginOutput{}, pluginRepublishUnavailable(err)
+		}
 	}
 	return RepublishPluginOutput{
 		ProjectID:           project.ID.String(),

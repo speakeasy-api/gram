@@ -93,7 +93,7 @@ type AccessRoleMutationSummary struct {
 
 type CreateMCPAccessRoleOutput struct {
 	Role           AccessRoleMutationSummary `json:"role"`
-	Reconciliation string                    `json:"reconciliation"`
+	Reconciliation string                    `json:"reconciliation" jsonschema:"pending: provider sync was requested after the commit; rate_limited or unavailable: this replay did not request provider sync again because the retry allowance is spent or could not be checked"`
 	Receipt        RiskMutationToolReceipt   `json:"receipt"`
 }
 
@@ -195,7 +195,9 @@ func (s *AccessRoleMutationService) Create(ctx context.Context, principal Princi
 	if err != nil {
 		return CreateMCPAccessRoleOutput{}, err
 	}
-	if chargeRerun(ctx, receipt, s.charge(principal)) == nil {
+	if err := chargeRerun(ctx, receipt, s.charge(principal)); err != nil {
+		result.Reconciliation = skippedRerun(ctx, s.reads.logger, err)
+	} else {
 		s.backend.ReconcileRoleIdentity(ctx, workosOrgID, result.RoleSlug, result.Name, result.Description, true)
 	}
 	summary, err := s.outputSummary(principal, result)
