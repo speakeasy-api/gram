@@ -549,7 +549,9 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 		return oops.E(oops.CodeUnexpected, err, "count mcp servers using tunneled mcp server").LogError(ctx, logger)
 	}
 	if liveMcpServers > 0 {
-		return oops.E(oops.CodeConflict, fmt.Errorf("tunneled mcp server %s has %d live mcp servers", serverID, liveMcpServers), "this tunnel is still used by MCP servers (%d); delete them before deleting the tunnel", liveMcpServers).LogWarn(ctx, logger)
+		// The count covers servers the caller may not be able to read, so it
+		// stays in the logged error and out of the response.
+		return oops.E(oops.CodeConflict, fmt.Errorf("tunneled mcp server %s has %d live mcp servers", serverID, liveMcpServers), "this tunnel is still used by MCP servers; delete them before deleting the tunnel").LogWarn(ctx, logger)
 	}
 
 	deleted, err := txRepo.DeleteServer(ctx, repo.DeleteServerParams{
