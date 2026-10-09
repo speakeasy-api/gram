@@ -454,10 +454,6 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 	if err := s.budget.Allow(ctx, principal); err != nil {
 		return GetMCPDiagnosticsOutput{}, err
 	}
-	var tunnel *MCPTunnel
-	if tunnels, ok := s.reader.(tunnelStatusReader); ok {
-		tunnel = tunnels.TunnelStatus(ctx, principal, mcp)
-	}
 	identity, err := s.serverIdentity(ctx, principal.OrganizationID, input.ProjectID, input.MCPID)
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, err
@@ -504,6 +500,12 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 		// The organization comparison covered a subset, so it cannot support a
 		// claim either way about where the pattern lives.
 		attribution.Scope = FaultScopeUnknown
+	}
+
+	// Read last, so a diagnosis that fails earlier never pays for it.
+	var tunnel *MCPTunnel
+	if tunnels, ok := s.reader.(tunnelStatusReader); ok {
+		tunnel = tunnels.TunnelStatus(ctx, principal, mcp)
 	}
 
 	return GetMCPDiagnosticsOutput{

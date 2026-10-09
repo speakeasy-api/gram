@@ -325,3 +325,24 @@ func TestTunnelStatusReportsInactiveForSeenSourceWithoutLiveConnections(t *testi
 	require.True(t, source.EverSeen)
 	require.Equal(t, "active", source.Status)
 }
+
+// get_mcp_diagnostics adds the tunnel block itself, after its budget, from
+// the same reader; the shared diagnostics read never carries it.
+func TestGetMCPDiagnosticsReportsTunnelConnection(t *testing.T) {
+	t.Parallel()
+
+	fixture := seedTunnelStatusFixture(t, "platform_mcp_tunnel_status_diagnostics_service")
+	fixture.grantProjectSourceRead(t)
+	connections := &recordingTunnelConnections{}
+	reader, ctx := fixture.reader(t, connections)
+	limiter := allowingLimiter()
+	service := NewDiagnosticsService(fixture.conn, stubUsageSummaryTelemetry{}, func(context.Context, string) (bool, error) { return false, nil }, reader, nil,
+		OperationBudget{Connection: limiter, Organization: limiter})
+
+	output, err := service.GetMCPDiagnostics(ctx, fixture.principal, GetMCPDiagnosticsInput{ProjectID: fixture.project.ID.String(), MCPID: fixture.wrapperID.String(), Window: ""})
+	require.NoError(t, err)
+
+	require.Equal(t, &MCPTunnel{ConnectionStatus: TunnelConnectionNeverConnected}, output.Tunnel)
+	require.Equal(t, int32(1), connections.calls.Load())
+	require.NotEmpty(t, limiter.keys, "the diagnosis is metered before the tunnel read")
+}

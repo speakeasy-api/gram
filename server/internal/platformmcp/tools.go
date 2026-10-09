@@ -160,8 +160,8 @@ type MCP struct {
 	ToolExposure *MCPToolExposure `json:"tool_exposure,omitempty"`
 
 	// Tunnel is the agent connection state of a tunneled MCP server's tunnel.
-	// The get_mcp tool fills it in for callers who can read the project's
-	// tunneled sources; find_mcp and internal reads never do. Absent means "not read
+	// The get_mcp and get_mcp_diagnostics tools fill it in for callers who can
+	// read the project's tunneled sources; find_mcp and internal reads never do. Absent means "not read
 	// here", never "offline".
 	Tunnel *MCPTunnel `json:"tunnel,omitempty"`
 }
