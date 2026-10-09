@@ -13,6 +13,11 @@ import type { TunneledMcpServer } from "@gram/client/models/components/tunneledm
 import { KeyRound, Loader2, RotateCcw } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { useRBAC } from "@/hooks/useRBAC";
+import { isForbidden, sourceDestinationLock } from "./sourceDestinationLock";
+import { invalidateTunneledMcpSourceViews } from "./sourceInvalidation";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { useQueryClient } from "@tanstack/react-query";
 
 export const MCP_TUNNEL_KEY_SECTION_ID = "tunnel-key";
 
@@ -59,6 +64,23 @@ function RotatedKeyDialogBody({
   );
 }
 
+function RotateKeyButton({
+  onClick,
+  disabled = false,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Button variant="secondary" size="md" onClick={onClick} disabled={disabled}>
+      <Button.LeftIcon>
+        <RotateCcw className="h-4 w-4" />
+      </Button.LeftIcon>
+      <Button.Text>Rotate key</Button.Text>
+    </Button>
+  );
+}
+
 // Ported from the retired tunneled source page: the key is issued to the
 // source, so its rotation is managed from the MCP server that fronts it.
 export function TunnelKeySection({
@@ -74,11 +96,27 @@ export function TunnelKeySection({
     useState<RotateTunneledMcpServerKeyData>();
   const [rotateError, setRotateError] = useState<string>();
   const rotate = useRotateTunneledMcpServerKey();
+  // Whoever holds the new key operates the tunnel's destination, so the
+  // server refuses rotation without environment authority while any MCP
+  // server on the tunnel has a linked environment.
+  // The confirmation lives in a portal, outside the trigger's scope gates, so
+  // it re-checks both before offering the destructive action.
+  const { hasScope, isLoading: rbacLoading } = useRBAC();
+  const canWrite =
+    !rbacLoading &&
+    hasScope(
+      "mcp:write",
+      tunneledMcpServer.projectId,
+      tunneledMcpServer.projectId,
+    );
+  const lock = sourceDestinationLock(tunneledMcpServer);
+  const queryClient = useQueryClient();
   // Tracks the open dialog so a rotation that resolves after Cancel is
   // dropped instead of repopulating the cleared state.
   const dialogOpenRef = useRef(false);
 
   const handleOpenChange = (open: boolean) => {
+    if (open && lock.reason !== null) return;
     dialogOpenRef.current = open;
     setRotateDialogOpen(open);
     if (!open) {
@@ -89,6 +127,9 @@ export function TunnelKeySection({
   };
 
   const handleRotate = async () => {
+    // The dialog can stay open while the lock appears (a refetch reported a
+    // linked server, or grants changed); refuse rather than submit.
+    if (!canWrite || lock.reason !== null) return;
     setRotateError(undefined);
     try {
       const result = await rotate.mutateAsync({
@@ -98,6 +139,10 @@ export function TunnelKeySection({
       setRotatedKey(result);
       toast.success("Tunnel key rotated");
     } catch (error) {
+      // The cached lock said yes; refresh it so the reason appears.
+      if (isForbidden(error)) {
+        void invalidateTunneledMcpSourceViews(queryClient);
+      }
       const message =
         error instanceof Error ? error.message : "Failed to rotate tunnel key";
       toast.error(message);
@@ -137,18 +182,20 @@ export function TunnelKeySection({
             <RequireScope
               scope="mcp:write"
               resourceId={tunneledMcpServer.projectId}
+              projectId={tunneledMcpServer.projectId}
               level="component"
             >
-              <Button
-                variant="secondary"
-                size="md"
-                onClick={() => handleOpenChange(true)}
-              >
-                <Button.LeftIcon>
-                  <RotateCcw className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Rotate key</Button.Text>
-              </Button>
+              {lock.reason !== null ? (
+                <SimpleTooltip tooltip={lock.reason}>
+                  {/* A disabled button fires no pointer events; the span
+                      carries the tooltip. */}
+                  <span tabIndex={0} aria-label={lock.reason}>
+                    <RotateKeyButton disabled onClick={() => {}} />
+                  </span>
+                </SimpleTooltip>
+              ) : (
+                <RotateKeyButton onClick={() => handleOpenChange(true)} />
+              )}
             </RequireScope>
           </SettingsSection.FooterActions>
         </SettingsSection.Footer>
@@ -173,6 +220,16 @@ export function TunnelKeySection({
                 Running agents using the old key will be disconnected shortly
                 and must be restarted with the replacement key.
               </Alert>
+              {!rbacLoading && !canWrite && (
+                <Alert variant="error" dismissible={false}>
+                  Rotating the key needs mcp:write on this project.
+                </Alert>
+              )}
+              {lock.reason !== null && (
+                <Alert variant="error" dismissible={false}>
+                  {lock.reason}
+                </Alert>
+              )}
               {rotateError !== undefined && (
                 <Alert variant="error" dismissible={false}>
                   {rotateError}
@@ -189,7 +246,9 @@ export function TunnelKeySection({
                 <Button
                   variant="destructive-primary"
                   onClick={() => void handleRotate()}
-                  disabled={rotate.isPending}
+                  disabled={
+                    rotate.isPending || !canWrite || lock.reason !== null
+                  }
                 >
                   {rotate.isPending ? (
                     <Button.LeftIcon>

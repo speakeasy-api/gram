@@ -260,7 +260,25 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 		return nil, oops.E(oops.CodeUnexpected, err, "get remote mcp server").LogError(ctx, s.logger)
 	}
 
-	return mv.BuildRemoteMcpServerView(server), nil
+	// Lets the dashboard explain up front why a URL change will be refused.
+	// Only booleans: they name no server or environment the caller may not be
+	// able to read.
+	// The answer is advisory: if it cannot be worked out, leave it unset (the
+	// dashboard treats that as unknown and locks) rather than fail the read.
+	view := mv.BuildRemoteMcpServerView(server)
+	linked, err := mcpservers.RemoteLinkedEnvironmentIDs(ctx, s.db, *authCtx.ProjectID, server.ID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "check environment-linked mcp servers", attr.SlogError(err))
+		return view, nil
+	}
+	eligibility, err := mcpservers.EvaluateDestinationChange(ctx, s.authz, *authCtx.ProjectID, linked)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "evaluate environment link authority", attr.SlogError(err))
+		return view, nil
+	}
+	view.EnvironmentLinked = &eligibility.Linked
+	view.EnvironmentLinkAuthorized = &eligibility.Authorized
+	return view, nil
 }
 
 func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPayload) (*types.RemoteMcpServer, error) {
@@ -326,6 +344,18 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	// even when the URL didn't change (idempotent).
 	finalURL := conv.PtrValOr(payload.URL, existingServer.Url)
 	if payload.URL != nil && finalURL != existingServer.Url {
+		// Repointing a source moves every server on it, environment links
+		// included, so a linked server needs the same authority as linking.
+		// The project lock taken above orders this against concurrent links.
+		linked, err := mcpservers.RemoteLinkedEnvironmentIDs(ctx, dbtx, *authCtx.ProjectID, serverID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check environment-linked mcp servers").LogError(ctx, logger)
+		}
+		if len(linked) > 0 {
+			if err := s.authz.Require(ctx, mcpservers.EnvironmentLinkChecks(*authCtx.ProjectID, linked)...); err != nil {
+				return nil, err
+			}
+		}
 		if err := s.checkRemoteDistributionAdmission(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, finalURL); err != nil {
 			return nil, err
 		}

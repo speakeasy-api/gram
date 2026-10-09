@@ -1,4 +1,9 @@
-import { Field, FieldError, FieldLabel } from "@/components/ui/Field";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+} from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { VerifyRemoteMcpUrlAlert } from "@/pages/sources/remote-mcp/VerifyRemoteMcpUrlButton";
 import type { UpstreamUrlDraft } from "./useUpstreamUrlDraft";
@@ -20,12 +25,22 @@ export function UpstreamUrlField({
         onChange={upstream.setDraft}
         onBlur={upstream.touch}
         placeholder="https://example.com/mcp"
-        disabled={upstream.pending}
+        disabled={upstream.pending || upstream.lockedReason !== null}
         aria-invalid={upstream.fieldError ? true : undefined}
         aria-describedby={
-          upstream.fieldError ? "mcp-upstream-url-error" : undefined
+          [
+            upstream.fieldError && "mcp-upstream-url-error",
+            upstream.lockedReason && "mcp-upstream-url-locked",
+          ]
+            .filter(Boolean)
+            .join(" ") || undefined
         }
       />
+      {upstream.lockedReason && (
+        <FieldDescription id="mcp-upstream-url-locked">
+          {upstream.lockedReason}
+        </FieldDescription>
+      )}
       {upstream.fieldError && (
         <FieldError id="mcp-upstream-url-error">
           {upstream.fieldError}

@@ -172,6 +172,11 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	if err := requireStaffForUnproxiedBackend(ctx, authCtx, ids.UnproxiedMcpServerID, logger); err != nil {
 		return nil, err
 	}
+	if needed, affected := environmentLinkAffected(nil, ids); needed {
+		if err := s.authz.Require(ctx, EnvironmentLinkChecks(*authCtx.ProjectID, affected)...); err != nil {
+			return nil, err
+		}
+	}
 
 	mode, err := networkaccess.ParseRequested(payload.NetworkAccessMode, networkaccess.Storage(networkaccess.ModePublicOnly))
 	if err != nil {
@@ -189,6 +194,13 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 
 	if err := finalizeNetworkAccess.Finalize(ctx, dbtx); err != nil {
 		return nil, fmt.Errorf("finalize network access admission: %w", err)
+	}
+	// A linked create joins the project lock that destination changes take
+	// before checking for linked servers (see environment_link.go).
+	if ids.EnvironmentID.Valid {
+		if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock project").LogError(ctx, logger)
+		}
 	}
 	if err := verifyTunneledPublicConsent(ctx, dbtx, *authCtx.ProjectID, ids.TunneledMcpServerID, string(payload.Visibility)); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp server").LogWarn(ctx, logger)
@@ -717,6 +729,23 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, grantResourceID(existing.ID, existing.ToolsetID), authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
+	// Decided against the locked row under the project lock taken above, before
+	// the reference checks so a refused caller learns nothing about the
+	// environment it named.
+	if needed, affected := environmentLinkAffected(&existing, ids); needed {
+		if err := s.authz.Require(ctx, EnvironmentLinkChecks(*authCtx.ProjectID, affected)...); err != nil {
+			return nil, err
+		}
+		fallback, err := resolveHostedFallbackEnvironment(ctx, dbtx, *authCtx.ProjectID, existing, ids)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve hosted fallback environment").LogError(ctx, logger)
+		}
+		if fallback.Valid {
+			if err := s.authz.Require(ctx, authz.EnvironmentReadCheck(fallback.UUID.String(), authCtx.ProjectID.String())); err != nil {
+				return nil, err
+			}
+		}
+	}
 
 	// Only gate on staff when the unproxied backend reference is actually
 	// changing: a non-staff project member with write access must still be
@@ -754,7 +783,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 			}
 		}
 	}
-	backendChanged := ids.RemoteMcpServerID != existing.RemoteMcpServerID || ids.TunneledMcpServerID != existing.TunneledMcpServerID || ids.ToolsetID != existing.ToolsetID || ids.UnproxiedMcpServerID != existing.UnproxiedMcpServerID
+	backendChanged := serverBackendChanged(existing, ids)
 	if payload.Visibility != VisibilityDisabled && (backendChanged || existing.Visibility == VisibilityDisabled) {
 		proposedURL := ""
 		if ids.RemoteMcpServerID.Valid {

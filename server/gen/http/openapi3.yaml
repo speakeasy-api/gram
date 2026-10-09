@@ -105919,6 +105919,12 @@ components:
                     type: string
                     description: When the remote MCP server was created
                     format: date-time
+                environment_link_authorized:
+                    type: boolean
+                    description: 'Returned by getServer only. True when the caller holds the environment authority changing the URL needs: always when nothing is linked; otherwise project-wide environment:read plus read access to every linked environment. It does not cover the source''s own mcp:write check.'
+                environment_linked:
+                    type: boolean
+                    description: Returned by getServer only. True when a non-deleted MCP server on this source, disabled ones included, has a linked environment. Names no server or environment.
                 id:
                     type: string
                     description: The ID of the remote MCP server
@@ -115898,6 +115904,12 @@ components:
                     type: integer
                     description: 'The sustained anonymous MCP request rate actually applied to this tunnel: the stored value, or the deployment default when no rate is stored.'
                     format: int64
+                environment_link_authorized:
+                    type: boolean
+                    description: 'Returned by getServer only. True when the caller holds the environment authority rotating the key needs: always when nothing is linked; otherwise project-wide environment:read plus read access to every linked environment. It does not cover the source''s own mcp:write check.'
+                environment_linked:
+                    type: boolean
+                    description: Returned by getServer only. True when a non-deleted MCP server on this tunnel, disabled ones included, has a linked environment. Names no server or environment.
                 id:
                     type: string
                     description: The ID of the tunneled MCP server

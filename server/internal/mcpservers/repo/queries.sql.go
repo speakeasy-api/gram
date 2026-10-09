@@ -467,6 +467,32 @@ func (q *Queries) GetMCPServerByToolsetID(ctx context.Context, arg GetMCPServerB
 	return i, err
 }
 
+const getToolsetDefaultEnvironmentID = `-- name: GetToolsetDefaultEnvironmentID :one
+SELECT e.id
+FROM toolsets t
+JOIN environments e
+  ON e.project_id = t.project_id
+ AND e.slug = t.default_environment_slug
+ AND e.deleted IS FALSE
+WHERE t.id = $1
+  AND t.project_id = $2
+  AND t.deleted IS FALSE
+`
+
+type GetToolsetDefaultEnvironmentIDParams struct {
+	ToolsetID uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// The live environment a hosted MCP server on this toolset uses when it has
+// no environment of its own.
+func (q *Queries) GetToolsetDefaultEnvironmentID(ctx context.Context, arg GetToolsetDefaultEnvironmentIDParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getToolsetDefaultEnvironmentID, arg.ToolsetID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const hasLiveMCPServerInOrganization = `-- name: HasLiveMCPServerInOrganization :one
 SELECT EXISTS(
   SELECT 1
@@ -760,6 +786,81 @@ func (q *Queries) ListEnabledMCPServersByToolsetID(ctx context.Context, arg List
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEnvironmentIDsLinkedToRemote = `-- name: ListEnvironmentIDsLinkedToRemote :many
+SELECT DISTINCT environment_id::uuid AS environment_id
+FROM mcp_servers
+WHERE project_id = $1
+  AND remote_mcp_server_id = $2
+  AND environment_id IS NOT NULL
+  AND deleted IS FALSE
+ORDER BY environment_id
+`
+
+type ListEnvironmentIDsLinkedToRemoteParams struct {
+	ProjectID         uuid.UUID
+	RemoteMcpServerID uuid.NullUUID
+}
+
+// The distinct environments linked to live MCP servers fronting this remote
+// source, whatever their visibility: a disabled server can be enabled later
+// without touching its link or backend. A link to a since-deleted environment
+// still counts.
+func (q *Queries) ListEnvironmentIDsLinkedToRemote(ctx context.Context, arg ListEnvironmentIDsLinkedToRemoteParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listEnvironmentIDsLinkedToRemote, arg.ProjectID, arg.RemoteMcpServerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var environment_id uuid.UUID
+		if err := rows.Scan(&environment_id); err != nil {
+			return nil, err
+		}
+		items = append(items, environment_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEnvironmentIDsLinkedToTunnel = `-- name: ListEnvironmentIDsLinkedToTunnel :many
+SELECT DISTINCT environment_id::uuid AS environment_id
+FROM mcp_servers
+WHERE project_id = $1
+  AND tunneled_mcp_server_id = $2
+  AND environment_id IS NOT NULL
+  AND deleted IS FALSE
+ORDER BY environment_id
+`
+
+type ListEnvironmentIDsLinkedToTunnelParams struct {
+	ProjectID           uuid.UUID
+	TunneledMcpServerID uuid.NullUUID
+}
+
+// The tunneled counterpart of ListEnvironmentIDsLinkedToRemote.
+func (q *Queries) ListEnvironmentIDsLinkedToTunnel(ctx context.Context, arg ListEnvironmentIDsLinkedToTunnelParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listEnvironmentIDsLinkedToTunnel, arg.ProjectID, arg.TunneledMcpServerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var environment_id uuid.UUID
+		if err := rows.Scan(&environment_id); err != nil {
+			return nil, err
+		}
+		items = append(items, environment_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

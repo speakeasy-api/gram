@@ -696,3 +696,39 @@ WHERE p.organization_id = @organization_id
   AND s.visibility <> 'disabled'
   AND s.slug IS NOT NULL
 ORDER BY s.project_id, s.slug;
+
+-- name: ListEnvironmentIDsLinkedToRemote :many
+-- The distinct environments linked to live MCP servers fronting this remote
+-- source, whatever their visibility: a disabled server can be enabled later
+-- without touching its link or backend. A link to a since-deleted environment
+-- still counts.
+SELECT DISTINCT environment_id::uuid AS environment_id
+FROM mcp_servers
+WHERE project_id = @project_id
+  AND remote_mcp_server_id = @remote_mcp_server_id
+  AND environment_id IS NOT NULL
+  AND deleted IS FALSE
+ORDER BY environment_id;
+
+-- name: ListEnvironmentIDsLinkedToTunnel :many
+-- The tunneled counterpart of ListEnvironmentIDsLinkedToRemote.
+SELECT DISTINCT environment_id::uuid AS environment_id
+FROM mcp_servers
+WHERE project_id = @project_id
+  AND tunneled_mcp_server_id = @tunneled_mcp_server_id
+  AND environment_id IS NOT NULL
+  AND deleted IS FALSE
+ORDER BY environment_id;
+
+-- name: GetToolsetDefaultEnvironmentID :one
+-- The live environment a hosted MCP server on this toolset uses when it has
+-- no environment of its own.
+SELECT e.id
+FROM toolsets t
+JOIN environments e
+  ON e.project_id = t.project_id
+ AND e.slug = t.default_environment_slug
+ AND e.deleted IS FALSE
+WHERE t.id = @toolset_id
+  AND t.project_id = @project_id
+  AND t.deleted IS FALSE;

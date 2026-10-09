@@ -26,6 +26,13 @@ const (
 
 	// ActionMcpServerScopePinUpdate records a change to the scope pin on a remote-backed server's protected resource.
 	ActionMcpServerScopePinUpdate Action = "mcp-server:update-scope-pin"
+
+	// ActionMcpServerEnvironmentLink records an environment becoming linked to
+	// an MCP server, either newly or in place of another environment.
+	ActionMcpServerEnvironmentLink Action = "mcp-server:link-environment"
+	// ActionMcpServerEnvironmentUnlink records an MCP server's environment link
+	// being removed.
+	ActionMcpServerEnvironmentUnlink Action = "mcp-server:unlink-environment"
 )
 
 type LogMcpServerCreateEvent struct {
@@ -273,4 +280,93 @@ func (l *Logger) LogMcpServerScopePinUpdate(ctx context.Context, dbtx repo.DBTX,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.McpServerV1})
+}
+
+type LogMcpServerEnvironmentLinkEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	McpServerURN  urn.McpServer
+	McpServerName string
+	McpServerSlug string
+
+	// EnvironmentURN is the environment now linked to the server.
+	EnvironmentURN urn.Environment
+	// PreviousEnvironmentURN is the environment it replaced, nil when the
+	// server had none.
+	PreviousEnvironmentURN *urn.Environment
+}
+
+// LogMcpServerEnvironmentLink records an environment being linked to an MCP
+// server. Linking hands the environment's values to whatever the server
+// fronts, so the event names both the environment and any one it replaced.
+func (l *Logger) LogMcpServerEnvironmentLink(ctx context.Context, dbtx repo.DBTX, event LogMcpServerEnvironmentLinkEvent) error {
+	action := ActionMcpServerEnvironmentLink
+
+	fields := map[string]any{"environment_id": event.EnvironmentURN.ID.String()}
+	if event.PreviousEnvironmentURN != nil {
+		fields["previous_environment_id"] = event.PreviousEnvironmentURN.ID.String()
+	}
+	metadata, err := marshalAuditPayload(fields)
+	if err != nil {
+		return fmt.Errorf("build %s metadata: %w", action, err)
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: mcpServerEnvironmentEntry(action, event.OrganizationID, event.ProjectID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.McpServerURN, event.McpServerName, event.McpServerSlug, metadata), OutboxEvent: events.McpServerV1})
+}
+
+type LogMcpServerEnvironmentUnlinkEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	McpServerURN  urn.McpServer
+	McpServerName string
+	McpServerSlug string
+
+	// EnvironmentURN is the environment that was unlinked.
+	EnvironmentURN urn.Environment
+}
+
+// LogMcpServerEnvironmentUnlink records an MCP server's environment link being
+// removed.
+func (l *Logger) LogMcpServerEnvironmentUnlink(ctx context.Context, dbtx repo.DBTX, event LogMcpServerEnvironmentUnlinkEvent) error {
+	action := ActionMcpServerEnvironmentUnlink
+
+	metadata, err := marshalAuditPayload(map[string]any{"environment_id": event.EnvironmentURN.ID.String()})
+	if err != nil {
+		return fmt.Errorf("build %s metadata: %w", action, err)
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: mcpServerEnvironmentEntry(action, event.OrganizationID, event.ProjectID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.McpServerURN, event.McpServerName, event.McpServerSlug, metadata), OutboxEvent: events.McpServerV1})
+}
+
+func mcpServerEnvironmentEntry(action Action, organizationID string, projectID uuid.UUID, actor urn.Principal, actorDisplayName, actorSlug *string, server urn.McpServer, name, slug string, metadata []byte) repo.InsertAuditLogParams {
+	return repo.InsertAuditLogParams{
+		OrganizationID: organizationID,
+		ProjectID:      uuid.NullUUID{UUID: projectID, Valid: projectID != uuid.Nil},
+
+		ActorID:          actor.ID,
+		ActorType:        string(actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(actorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(actorSlug),
+
+		Action: string(action),
+
+		SubjectID:          server.ID.String(),
+		SubjectType:        string(subjectTypeMcpServer),
+		SubjectDisplayName: conv.ToPGTextEmpty(name),
+		SubjectSlug:        conv.ToPGTextEmpty(slug),
+
+		BeforeSnapshot: nil,
+		AfterSnapshot:  nil,
+		Metadata:       metadata,
+	}
 }

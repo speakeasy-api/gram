@@ -156,6 +156,15 @@ type CreateServerResponseBody struct {
 	URL string `form:"url" json:"url" xml:"url"`
 	// The transport type for the remote MCP server
 	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
+	// Returned by getServer only. True when a non-deleted MCP server on this
+	// source, disabled ones included, has a linked environment. Names no server or
+	// environment.
+	EnvironmentLinked *bool `form:"environment_linked,omitempty" json:"environment_linked,omitempty" xml:"environment_linked,omitempty"`
+	// Returned by getServer only. True when the caller holds the environment
+	// authority changing the URL needs: always when nothing is linked; otherwise
+	// project-wide environment:read plus read access to every linked environment.
+	// It does not cover the source's own mcp:write check.
+	EnvironmentLinkAuthorized *bool `form:"environment_link_authorized,omitempty" json:"environment_link_authorized,omitempty" xml:"environment_link_authorized,omitempty"`
 	// When the remote MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the remote MCP server was last updated
@@ -190,6 +199,15 @@ type GetServerResponseBody struct {
 	URL string `form:"url" json:"url" xml:"url"`
 	// The transport type for the remote MCP server
 	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
+	// Returned by getServer only. True when a non-deleted MCP server on this
+	// source, disabled ones included, has a linked environment. Names no server or
+	// environment.
+	EnvironmentLinked *bool `form:"environment_linked,omitempty" json:"environment_linked,omitempty" xml:"environment_linked,omitempty"`
+	// Returned by getServer only. True when the caller holds the environment
+	// authority changing the URL needs: always when nothing is linked; otherwise
+	// project-wide environment:read plus read access to every linked environment.
+	// It does not cover the source's own mcp:write check.
+	EnvironmentLinkAuthorized *bool `form:"environment_link_authorized,omitempty" json:"environment_link_authorized,omitempty" xml:"environment_link_authorized,omitempty"`
 	// When the remote MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the remote MCP server was last updated
@@ -211,6 +229,15 @@ type UpdateServerResponseBody struct {
 	URL string `form:"url" json:"url" xml:"url"`
 	// The transport type for the remote MCP server
 	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
+	// Returned by getServer only. True when a non-deleted MCP server on this
+	// source, disabled ones included, has a linked environment. Names no server or
+	// environment.
+	EnvironmentLinked *bool `form:"environment_linked,omitempty" json:"environment_linked,omitempty" xml:"environment_linked,omitempty"`
+	// Returned by getServer only. True when the caller holds the environment
+	// authority changing the URL needs: always when nothing is linked; otherwise
+	// project-wide environment:read plus read access to every linked environment.
+	// It does not cover the source's own mcp:write check.
+	EnvironmentLinkAuthorized *bool `form:"environment_link_authorized,omitempty" json:"environment_link_authorized,omitempty" xml:"environment_link_authorized,omitempty"`
 	// When the remote MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the remote MCP server was last updated
@@ -3371,6 +3398,15 @@ type RemoteMcpServerResponseBody struct {
 	URL string `form:"url" json:"url" xml:"url"`
 	// The transport type for the remote MCP server
 	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
+	// Returned by getServer only. True when a non-deleted MCP server on this
+	// source, disabled ones included, has a linked environment. Names no server or
+	// environment.
+	EnvironmentLinked *bool `form:"environment_linked,omitempty" json:"environment_linked,omitempty" xml:"environment_linked,omitempty"`
+	// Returned by getServer only. True when the caller holds the environment
+	// authority changing the URL needs: always when nothing is linked; otherwise
+	// project-wide environment:read plus read access to every linked environment.
+	// It does not cover the source's own mcp:write check.
+	EnvironmentLinkAuthorized *bool `form:"environment_link_authorized,omitempty" json:"environment_link_authorized,omitempty" xml:"environment_link_authorized,omitempty"`
 	// When the remote MCP server was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the remote MCP server was last updated
@@ -3497,14 +3533,16 @@ type RemoteMcpServerHeaderResponseBody struct {
 // the "createServer" endpoint of the "remoteMcp" service.
 func NewCreateServerResponseBody(res *types.RemoteMcpServer) *CreateServerResponseBody {
 	body := &CreateServerResponseBody{
-		ID:            res.ID,
-		ProjectID:     res.ProjectID,
-		Name:          res.Name,
-		Slug:          res.Slug,
-		URL:           res.URL,
-		TransportType: res.TransportType,
-		CreatedAt:     res.CreatedAt,
-		UpdatedAt:     res.UpdatedAt,
+		ID:                        res.ID,
+		ProjectID:                 res.ProjectID,
+		Name:                      res.Name,
+		Slug:                      res.Slug,
+		URL:                       res.URL,
+		TransportType:             res.TransportType,
+		EnvironmentLinked:         res.EnvironmentLinked,
+		EnvironmentLinkAuthorized: res.EnvironmentLinkAuthorized,
+		CreatedAt:                 res.CreatedAt,
+		UpdatedAt:                 res.UpdatedAt,
 	}
 	return body
 }
@@ -3546,14 +3584,16 @@ func NewListServersResponseBody(res *remotemcp.ListServersResult) *ListServersRe
 // the "getServer" endpoint of the "remoteMcp" service.
 func NewGetServerResponseBody(res *types.RemoteMcpServer) *GetServerResponseBody {
 	body := &GetServerResponseBody{
-		ID:            res.ID,
-		ProjectID:     res.ProjectID,
-		Name:          res.Name,
-		Slug:          res.Slug,
-		URL:           res.URL,
-		TransportType: res.TransportType,
-		CreatedAt:     res.CreatedAt,
-		UpdatedAt:     res.UpdatedAt,
+		ID:                        res.ID,
+		ProjectID:                 res.ProjectID,
+		Name:                      res.Name,
+		Slug:                      res.Slug,
+		URL:                       res.URL,
+		TransportType:             res.TransportType,
+		EnvironmentLinked:         res.EnvironmentLinked,
+		EnvironmentLinkAuthorized: res.EnvironmentLinkAuthorized,
+		CreatedAt:                 res.CreatedAt,
+		UpdatedAt:                 res.UpdatedAt,
 	}
 	return body
 }
@@ -3562,14 +3602,16 @@ func NewGetServerResponseBody(res *types.RemoteMcpServer) *GetServerResponseBody
 // the "updateServer" endpoint of the "remoteMcp" service.
 func NewUpdateServerResponseBody(res *types.RemoteMcpServer) *UpdateServerResponseBody {
 	body := &UpdateServerResponseBody{
-		ID:            res.ID,
-		ProjectID:     res.ProjectID,
-		Name:          res.Name,
-		Slug:          res.Slug,
-		URL:           res.URL,
-		TransportType: res.TransportType,
-		CreatedAt:     res.CreatedAt,
-		UpdatedAt:     res.UpdatedAt,
+		ID:                        res.ID,
+		ProjectID:                 res.ProjectID,
+		Name:                      res.Name,
+		Slug:                      res.Slug,
+		URL:                       res.URL,
+		TransportType:             res.TransportType,
+		EnvironmentLinked:         res.EnvironmentLinked,
+		EnvironmentLinkAuthorized: res.EnvironmentLinkAuthorized,
+		CreatedAt:                 res.CreatedAt,
+		UpdatedAt:                 res.UpdatedAt,
 	}
 	return body
 }

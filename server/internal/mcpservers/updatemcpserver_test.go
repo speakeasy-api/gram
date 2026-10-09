@@ -36,8 +36,9 @@ func TestUpdateMcpServer_NetworkModeOnlyTransaction(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	remoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	envID := seedEnvironment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID).String()
 	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
-		Name: "network mode only", RemoteMcpServerID: &remoteID,
+		Name: "network mode only", RemoteMcpServerID: &remoteID, EnvironmentID: &envID,
 		Visibility: types.McpServerVisibility("disabled"),
 	})
 	require.NoError(t, err)
@@ -46,6 +47,8 @@ func TestUpdateMcpServer_NetworkModeOnlyTransaction(t *testing.T) {
 
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerUpdate)
 	require.NoError(t, err)
+	beforeLinks := auditCount(t, ctx, ti.conn, audit.ActionMcpServerEnvironmentLink)
+	beforeUnlinks := auditCount(t, ctx, ti.conn, audit.ActionMcpServerEnvironmentUnlink)
 	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction exercises the network-mode-only write
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
@@ -60,6 +63,10 @@ func TestUpdateMcpServer_NetworkModeOnlyTransaction(t *testing.T) {
 	require.Equal(t, *created.Name, conv.FromPGTextOrEmpty[string](updated.Name))
 	require.Equal(t, *issuerBefore, updated.UserSessionIssuerID.UUID.String())
 	require.Equal(t, "dual", updated.NetworkAccessMode.String)
+	// The network-only write Platform MCP uses keeps the environment link.
+	require.Equal(t, envID, updated.EnvironmentID.UUID.String())
+	require.Equal(t, beforeLinks, auditCount(t, ctx, ti.conn, audit.ActionMcpServerEnvironmentLink))
+	require.Equal(t, beforeUnlinks, auditCount(t, ctx, ti.conn, audit.ActionMcpServerEnvironmentUnlink))
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerUpdate)
 	require.NoError(t, err)

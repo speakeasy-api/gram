@@ -153,6 +153,30 @@ describe("AUDIT_ACTIONS", () => {
     );
   });
 
+  it("names source and toolset environment bindings", () => {
+    expect(staticActionPhrase("environment:link-source")).toBe(
+      "linked a source to environment",
+    );
+    expect(staticActionPhrase("environment:unlink-source")).toBe(
+      "unlinked a source from environment",
+    );
+    expect(staticActionPhrase("environment:link-toolset")).toBe(
+      "linked a toolset to environment",
+    );
+    expect(staticActionPhrase("environment:unlink-toolset")).toBe(
+      "unlinked a toolset from environment",
+    );
+  });
+
+  it("names environment link changes on an MCP server", () => {
+    expect(staticActionPhrase("mcp-server:link-environment")).toBe(
+      "linked an environment to MCP server",
+    );
+    expect(staticActionPhrase("mcp-server:unlink-environment")).toBe(
+      "unlinked the environment from MCP server",
+    );
+  });
+
   it("rejects actions it doesn't know", () => {
     expect(isAuditAction("risk_policy:delete")).toBe(true);
     expect(isAuditAction("not_a_resource:not_a_verb")).toBe(false);
