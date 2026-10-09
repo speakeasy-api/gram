@@ -147,9 +147,11 @@ A session ends at the earlier of its token's stated expiry plus 30 seconds and
 token, unless a newer token arrives first. When the user unlinks or
 reauthorizes the account, the session ends at the next POST that reaches the
 agent, or at that deadline if Speakeasy stops forwarding requests; GET and
-DELETE check only the caller, not the grant. Stopping
-the session can take up to about 40 seconds more (an in-flight stdin write,
-then stdin close, SIGTERM and SIGKILL to the process group).
+DELETE check only the caller, not the grant. In normal operation, stopping
+the session takes up to about 40 seconds more (an in-flight stdin write, then
+stdin close, SIGTERM and SIGKILL to the process group). Removing its files also
+waits for any token write already in progress, which a stalled filesystem can
+delay further.
 
 ### Configuration
 
@@ -172,8 +174,8 @@ minutes, and rejects every assertion when it cannot revalidate expired keys.
 
 ### Server process contract
 
-The agent sets `SPEAKEASY_ACCESS_TOKEN_FILE`, `HOME`, `XDG_CONFIG_HOME` and
-`XDG_DATA_HOME` for each process to paths inside a private session directory,
+The agent sets `SPEAKEASY_ACCESS_TOKEN_FILE`, `HOME`, `XDG_CONFIG_HOME`,
+`XDG_DATA_HOME` and `XDG_STATE_HOME` for each process to paths inside a private session directory,
 replacing inherited values, and removes `OKTA_ACCESS_TOKEN_FILE`. The server
 must read the token file when it calls the upstream API rather than caching it
 at startup; the file is written before the process starts and replaced
