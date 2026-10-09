@@ -131,18 +131,20 @@ export function ExistingTunnelPicker({
                 projectId={tunnel.projectId}
                 level="component"
               >
-                <Button
-                  type="button"
-                  variant="tertiary"
-                  size="sm"
-                  disabled={disabled}
-                  onClick={() => onDeleteUnused(tunnel)}
-                >
-                  <Button.LeftIcon>
-                    <Trash2 className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Delete tunnel</Button.Text>
-                </Button>
+                {({ disabled: denied }) => (
+                  <Button
+                    type="button"
+                    variant="tertiary"
+                    size="sm"
+                    disabled={disabled || denied}
+                    onClick={() => onDeleteUnused(tunnel)}
+                  >
+                    <Button.LeftIcon>
+                      <Trash2 className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Delete tunnel</Button.Text>
+                  </Button>
+                )}
               </RequireScope>
             ) : undefined
           }
