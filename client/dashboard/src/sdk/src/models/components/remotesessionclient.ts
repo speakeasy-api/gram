@@ -10,6 +10,18 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
+ * Who the upstream access credential belongs to. subject means each caller connects their own upstream account; self means the client holds one credential for itself, obtained with the client_credentials grant, that every caller shares.
+ */
+export const CredentialOwner = {
+  Subject: "subject",
+  Self: "self",
+} as const;
+/**
+ * Who the upstream access credential belongs to. subject means each caller connects their own upstream account; self means the client holds one credential for itself, obtained with the client_credentials grant, that every caller shares.
+ */
+export type CredentialOwner = ClosedEnum<typeof CredentialOwner>;
+
+/**
  * Identifier used as the aud claim in private_key_jwt assertions. Null resolves to issuer.
  */
 export const TokenEndpointAuthAudienceFormat = {
@@ -48,7 +60,7 @@ export type RemoteSessionClient = {
    */
   audience?: string | undefined;
   /**
-   * The redirect URI this client registers with its upstream provider. It never changes after the client is created. Absent on global clients.
+   * The redirect URI this client registers with its upstream provider. It never changes after the client is created. Absent on global clients and on clients with credential_owner self, which have no callback.
    */
   callbackUrl?: string | undefined;
   /**
@@ -66,6 +78,10 @@ export type RemoteSessionClient = {
   clientSecretExpiresAt?: Date | undefined;
   createdAt: Date;
   /**
+   * Who the upstream access credential belongs to. subject means each caller connects their own upstream account; self means the client holds one credential for itself, obtained with the client_credentials grant, that every caller shares.
+   */
+  credentialOwner: CredentialOwner;
+  /**
    * The redirect URI to register in the customer identity provider's app when this client is a user session issuer's trusted sign-in client. Present only on organization-owned clients outside any project and not managed by an identity provider connection, the only clients a user session issuer can trust.
    */
   federatedCallbackUrl?: string | undefined;
@@ -78,7 +94,7 @@ export type RemoteSessionClient = {
    */
   id: string;
   /**
-   * The organization JSON Web Key Set attached to this client, managed through attachKeySet and detachKeySet. Null when no key set is attached.
+   * The organization JSON Web Key Set attached to this client, set on create or through attachKeySet and detachKeySet. Null when no key set is attached.
    */
   jsonWebKeySetId?: string | undefined;
   /**
@@ -123,6 +139,11 @@ export type RemoteSessionClient = {
 };
 
 /** @internal */
+export const CredentialOwner$inboundSchema: z.ZodMiniEnum<
+  typeof CredentialOwner
+> = z.enum(CredentialOwner);
+
+/** @internal */
 export const TokenEndpointAuthAudienceFormat$inboundSchema: z.ZodMiniEnum<
   typeof TokenEndpointAuthAudienceFormat
 > = z.enum(TokenEndpointAuthAudienceFormat);
@@ -153,6 +174,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    credential_owner: CredentialOwner$inboundSchema,
     federated_callback_url: z.optional(z.string()),
     grant_types: z.nullable(z.array(z.string())),
     id: z.string(),
@@ -185,6 +207,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       "client_id_metadata_uri": "clientIdMetadataUri",
       "client_secret_expires_at": "clientSecretExpiresAt",
       "created_at": "createdAt",
+      "credential_owner": "credentialOwner",
       "federated_callback_url": "federatedCallbackUrl",
       "grant_types": "grantTypes",
       "json_web_key_set_id": "jsonWebKeySetId",

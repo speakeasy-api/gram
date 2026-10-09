@@ -174,6 +174,9 @@ type FindMCPOutput struct {
 type GetMCPInput struct {
 	ProjectID string `json:"project_id" jsonschema:"project ID that owns the MCP"`
 	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID"`
+	// ToolCursor continues a paged tool_exposure read. The other fields of
+	// the result are re-read in full on every page.
+	ToolCursor string `json:"tool_cursor,omitempty" jsonschema:"tool_exposure.next_tool_cursor from the previous get_mcp read of this same server; omit for the first page"`
 }
 
 type featureUnavailableResult struct {
@@ -195,10 +198,10 @@ type operationBudgetResult struct {
 // assistant — can be composed from the same registration pass rather than from
 // a second list that would drift.
 func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, workflowRun *WorkflowRunService, plugins *PluginsService, sessionRecall *SessionRecallService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
-	return newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, workflowRun, plugins, sessionRecall, nil, candidate, nil, nil, nil)
+	return newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, workflowRun, plugins, sessionRecall, nil, candidate, nil, nil, nil, nil)
 }
 
-func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, workflowRun *WorkflowRunService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessRead *AccessReadService, accessRoleMutations *AccessRoleMutationService, assistantIdentity *AssistantIdentityService, connectionMutations ...*MCPConnectionMutationService) (*mcp.Server, *Registrar) {
+func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, workflowRun *WorkflowRunService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessRead *AccessReadService, accessRoleMutations *AccessRoleMutationService, assistantIdentity *AssistantIdentityService, signalAuthoring *SignalAuthoringService, connectionMutations ...*MCPConnectionMutationService) (*mcp.Server, *Registrar) {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "platform-mcp",
 		Title:   "Platform MCP",
@@ -213,6 +216,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			"Do not volunteer an ID either. The exception is telling two things apart: when a name matches more than one plugin, assistant, or skill, show the IDs, because they are the only thing that distinguishes the candidates and the user cannot choose without them.",
 			"Keep the words that collide apart. \"Connect\" is linking an MCP server to its OAuth provider; \"add to a plugin\" is plugin membership; do not call either one attaching. Say an MCP server was \"added to the project\" rather than \"registered\", so it is not mistaken for OAuth dynamic client registration. When a diagnosis blames the calling MCP client, say \"the app making the calls\", never bare \"client\".",
 			"# Rules",
+			"For signals intelligence, discover the exact project and reusable signals before authoring a sensor. Sensors are classifiers, not enforcement policies. Choose multi_label for independent labels, exclusive for one choice, or ordered_score for two to ten ordered levels with criteria. Only message.role is available to matching predicates. Use create_sensor or create_signal with confirmed:false, show the normalized configuration, and obtain explicit confirmation before resending the identical proposal with its preview token, expected version and a stable idempotency key. Preview creation IDs are provisional. Update shared signals only after showing every affected sensor. A configuration version covers the whole project, so any concurrent configuration change requires a new preview. Re-read the committed target; configuration readiness does not prove inference is active. Receipt replay reports a historical write and a separate live target. If snapshot_scope is verification_unavailable, the write committed but the fresh read failed; preserve all retry inputs and the key, and do not interpret target_available:false as deletion. Only a current_configuration snapshot can establish target absence. Matching examples use caller-supplied metadata, never stored transcripts or inference. These tools currently admit external users only; never infer a human from assistant attribution.",
 			"Risk policy audiences are positive user/role grants, not exclusions. Read the exact policy and obtain confirmation before changing its audience. Self-removal and effective exclusion are unavailable pending organization-scoped coordination of audience grants; remove_self_from_risk_policy always refuses before database transactions or receipt replay. Never infer a human from managed-assistant attribution. For self-removal requests, do not bypass the refusal with an audience replacement, policy disablement, role change, or risk exclusion. For approved incremental user/ROLE audience changes, external organization admins can use change_risk_policy_audience with confirmed bounded add_principals/remove_principals, a fresh expected_version and a stable idempotency_key. It refuses Everyone deltas and empty resulting audiences and only changes exact positive grants; it does not prove effective exclusion. Managed assistants cannot invoke it or read exact audiences. General audience replacements require confirmation of the complete desired audience and must not be presented as Everyone-except-one or role exceptions. Re-read the policy after a write; receipt replay is historical evidence, not proof of current state.",
 			"Use this server to inspect the selected organization and manage reviewed MCP servers in an explicit project. List reviewed catalogue options and eligible projects, then ask the user to choose one of each before mutating. When no listed project fits, or there is none yet, an organization administrator can create one here instead of leaving for the dashboard: ask for the exact name, confirm it, and create the project, which starts empty. Its slug is derived from the name and cannot be chosen; a rename changes only the display name and keeps the slug. Renaming a project needs only write access to that project, as in the dashboard, not organization administrator access. Inspect the chosen candidate and collect only its declared non-secret configuration values. Normal non-secret URLs may be discussed and returned. Register it privately.",
 			"Use get_mcp_readiness with the returned registration ID to inspect persisted readiness. If readiness says an upstream identity provider is missing, ask the user to explicitly confirm and then call attach_platform_mcp_identity_provider; the server derives the provider from the persisted reviewed MCP source and returns its non-secret provider_url plus an Inspect authorization_url for the user to use Connect or Authorize. Immediately present authorization_url as the exact clickable link—never say a link is above or ask the user to confirm an unspecified authorization action.",
@@ -228,6 +232,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			"Pausing or resuming a data export changes only whether one route sends data; nothing about its destination or data source changes, and editing or deleting a destination or route stays in the dashboard. Name the exact project and route from the current data export list and wait for explicit confirmation. Before pausing, tell the user that data produced while the route is paused is dropped, not held back for later — resuming sends only new data — and that either change takes up to about a minute to reach every relay. Before resuming, show the user the route's data source and destination from the current data export list and pass exactly those back; if the route changed since that read the resume is refused, so read it again and confirm what it points at now. A route with no destination, a deleted destination, or a destination whose stored configuration can no longer be used cannot be resumed; say which and send the user to the dashboard. Speakeasy does not record when a route last delivered, so do not state one.",
 			"Dismissing Watchdog findings as false positives, or restoring them, is a mutation: name the exact project and the exact findings, wait for explicit confirmation, then report which findings changed, which were already in that state, and which were not found in the project. A dismissal suppresses only the findings named; a risk exclusion is the tool for a whole class of findings.",
 			"Project-wide chat listings are metadata only: when a conversation was active, how long it ran, which app produced it, whether risk analysis found anything, and a masked participant. Never present a listed chat's title or what was said as known, and send the administrator to the dashboard to read a transcript. Personal session recall is separate: it may present the caller's own sessions by title and their own redacted handoff digest.",
+			"Explore's analytics catalog answers questions about a project's agent sessions and tool calls through three tools, used in order. describe_analytics_catalog says which datasets exist, what one row of each is, which fields can group, filter and aggregate, the time grains, and the limits. list_analytics_dimension_values says what a dimension actually holds inside a window, so a filter names a value that exists. run_analytics_query then asks the question in exactly those names. Every call names the exact project. Never invent a dataset, field or value; when a query is refused as invalid, correct the field the refusal names from the catalog rather than retrying the same request. Report a window as dates and a count as what it counts (sessions, tool calls, people), never as a plan or table name. When these tools say analytics is not switched on for the organization, say so and stop.",
 		}, "\n\n"),
 		PageSize: 32,
 		// Declared rather than inferred. Left unset, the SDK advertises
@@ -251,6 +256,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	reg := newRegistrar(server)
 
 	registerAssistantIdentityTool(reg, assistantIdentity)
+	registerSignalTools(reg, signalAuthoring)
 
 	registerReadTools(reg, reader, cursorKeyMaterial)
 	var xaaReadiness *xaaReadinessService
@@ -310,6 +316,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerShadowInventoryTools(reg, postgresReader.shadowInventory)
 		registerShadowDecisionTool(reg, postgresReader.shadowDecisions)
 		registerShadowAITools(reg, postgresReader.shadowAI)
+		registerAnalyticsTools(reg, postgresReader.analytics)
 	} else {
 		registerUnavailableMCPConnectionSettingsTool(reg)
 		registerMCPConnectionMutationTools(reg, nil)
@@ -331,6 +338,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerUnavailableShadowInventoryTools(reg)
 		registerShadowDecisionTool(reg, nil)
 		registerUnavailableShadowAITools(reg)
+		registerAnalyticsTools(reg, nil)
 	}
 	registerSetupResources(reg, setupResources, time.Now)
 	if registrations == nil || !registrations.budgets.Docs.valid() {

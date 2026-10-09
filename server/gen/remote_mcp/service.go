@@ -41,8 +41,8 @@ type Service interface {
 	// resource and so is shared by every server in the project with the same
 	// upstream URL, the scopes the resource advertises and last challenged with,
 	// the organization's resource scope discovery flag, and what a login through
-	// each bound client would request now. Reads cached state only; never contacts
-	// the resource.
+	// each bound client would request now. Requires read access to the server
+	// only. Reads cached state only; never contacts the resource.
 	GetServerScopes(context.Context, *GetServerScopesPayload) (res *RemoteMcpServerScopes, err error)
 	// Pin the scopes logins to a remote-backed MCP server's protected resource
 	// request, or clear the pin with an empty list. The pin belongs to the
@@ -339,6 +339,11 @@ type ProtectedResourceMetadataUnavailable struct {
 type RemoteMcpServerClientScopes struct {
 	// The remote session client's ID.
 	ClientID string
+	// The configured name of the client's authorization server; absent when it has
+	// none.
+	IssuerName *string
+	// The issuer URL of the client's authorization server.
+	IssuerURL *string
 	// The precedence step that decided the request.
 	ScopeSource string
 	// The scope parameter the login would send; empty sends none.
@@ -377,6 +382,9 @@ type RemoteMcpServerScopes struct {
 	// How many other live MCP servers in the project share this upstream URL, and
 	// so this pin.
 	SharedServerCount int
+	// Whether the caller may change the pin: write access to this server and every
+	// server in the project with the same upstream URL.
+	CanPin bool
 }
 
 // SetServerScopePinPayload is the payload type of the remoteMcp service

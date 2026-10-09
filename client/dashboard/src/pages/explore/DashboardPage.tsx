@@ -1,75 +1,65 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
+import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { formatRelativeTime } from "@/lib/dates";
 import type { Dashboard } from "@gram/client/models/components/dashboard.js";
 import type { Widget } from "@gram/client/models/components/widget.js";
+import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
 import { useDashboard } from "@gram/client/react-query/dashboard.js";
-import { useState, type JSX } from "react";
+import { useEffect, useMemo, useState, type JSX } from "react";
 import { Link } from "react-router";
 import {
   AddWidgetDialog,
   DashboardDetailsDialog,
   DeleteDashboardDialog,
 } from "./DashboardDialogs";
+import {
+  barValuesFromSaved,
+  sameFilters,
+  savedFromContext,
+  savedPreset,
+} from "./dashboardFilters";
 import { DashboardGrid } from "./DashboardGrid";
+import { longestWindow } from "./exploreModel";
 import { useCanEditDashboard } from "./useCanEditDashboard";
 import { useCreatorName } from "./useCreatorName";
 import { useDashboardMutations } from "./useDashboardMutations";
-import type { OpenInExplore } from "./WidgetView";
+import { pageFieldsFor, usePageFilters } from "./usePageFilters";
 
-/**
- * One dashboard, open: its name and who made it, then its cards on the
- * grid. Someone who may edit it adds widgets, moves cards, and renames or
- * deletes it here; anyone else reads it, or duplicates it to get their own.
- */
-export function DashboardPage({
-  id,
-  widgets,
-  widgetsFailed,
-  onRetryWidgets,
-  backHref,
-  backState,
-  onOpen,
-  onDeleted,
-  onOpenQuery,
-}: {
-  id: string;
+/** What the dashboard page is told about the project around it. */
+interface DashboardPageProps {
   /** The project's widgets, which the cards link to. */
   widgets: Widget[];
+  /** Whether the widget list has answered; until then no card can be read. */
+  widgetsLoaded: boolean;
   /** The widget list could not be fetched, so no card can be drawn. */
   widgetsFailed: boolean;
   onRetryWidgets: () => void;
   /** Where the list of dashboards is. */
   backHref: string;
-  backState: unknown;
   /** Open another dashboard: the copy, after duplicating. */
   onOpen: (dashboard: Dashboard) => void;
   /** This dashboard was deleted. */
   onDeleted: () => void;
-  /** Open a card's question in the Explore tab. */
-  onOpenQuery: OpenInExplore;
-}): JSX.Element {
-  const query = useDashboard({ id });
-  const creator = useCreatorName();
-  const canEdit = useCanEditDashboard();
-  const mutations = useDashboardMutations();
-  const [renaming, setRenaming] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [adding, setAdding] = useState(false);
+}
 
-  const back = (
-    <Link
-      to={backHref}
-      state={backState}
-      className="text-muted-foreground hover:text-foreground inline-flex w-max items-center gap-1 text-xs no-underline hover:underline"
-    >
-      <Icon name="arrow-left" className="size-3" aria-hidden />
-      All dashboards
-    </Link>
-  );
+/**
+ * One dashboard, open: its name and who made it, its filter bar, then its
+ * cards on the grid. Someone who may edit it adds widgets, moves cards,
+ * saves the filters it opens on, and renames or deletes it here; anyone
+ * else reads it, or duplicates it to get their own.
+ */
+export function DashboardPage({
+  id,
+  ...props
+}: DashboardPageProps & { id: string }): JSX.Element {
+  const gramProject = useProjectSlugForRequests();
+  const query = useDashboard({ id, gramProject });
+  const back = <BackLink href={props.backHref} />;
 
   if (query.isPending) {
     return (
@@ -102,9 +92,90 @@ export function DashboardPage({
       </div>
     );
   }
+  return <DashboardView dashboard={query.data} {...props} />;
+}
 
-  const dashboard = query.data;
+function BackLink({ href }: { href: string }): JSX.Element {
+  return (
+    <Link
+      to={href}
+      className="text-muted-foreground hover:text-foreground inline-flex w-max items-center gap-1 text-xs no-underline hover:underline"
+    >
+      <Icon name="arrow-left" className="size-3" aria-hidden />
+      All dashboards
+    </Link>
+  );
+}
+
+function DashboardView({
+  dashboard,
+  widgets,
+  widgetsLoaded,
+  widgetsFailed,
+  onRetryWidgets,
+  backHref,
+  onOpen,
+  onDeleted,
+}: DashboardPageProps & { dashboard: Dashboard }): JSX.Element {
+  const creator = useCreatorName();
+  const canEdit = useCanEditDashboard();
+  const mutations = useDashboardMutations();
+  const [renaming, setRenaming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [adding, setAdding] = useState(false);
   const editable = canEdit(dashboard);
+
+  // The bar offers the fields some card can be filtered by, and reads its
+  // options over the datasets and the longest window the cards ask.
+  const catalog = useAnalyticsDescribe().data?.datasets;
+  const placed = useMemo(() => {
+    const ids = new Set(dashboard.widgets.map((card) => card.widgetId));
+    return widgets.filter((widget) => ids.has(widget.id));
+  }, [dashboard.widgets, widgets]);
+  const datasets = useMemo(
+    () => [...new Set(placed.map((widget) => widget.dataset))].sort(),
+    [placed],
+  );
+  const optionsWindow = useMemo(
+    () => longestWindow(placed.map((widget) => widget.query.window)),
+    [placed],
+  );
+  const fields = useMemo(
+    () => pageFieldsFor(catalog, datasets),
+    [catalog, datasets],
+  );
+  const bar = usePageFilters({
+    fields,
+    defaultPreset: savedPreset(dashboard.filters),
+    optionsWindow,
+    optionsDatasets: datasets,
+  });
+  // A dashboard opens on its saved filters, unless the link already says
+  // what to show. Once per dashboard, after the bar knows its fields; until
+  // then the bar is not compared with what is saved, or the defaults it
+  // shows meanwhile could be offered as a save.
+  const [seededFor, setSeededFor] = useState<string | null>(null);
+  const { touched, apply } = bar;
+  useEffect(() => {
+    if (seededFor === dashboard.id || !catalog || !widgetsLoaded) return;
+    if (!touched) apply(barValuesFromSaved(dashboard.filters, fields));
+    setSeededFor(dashboard.id);
+  }, [
+    dashboard.id,
+    dashboard.filters,
+    fields,
+    catalog,
+    widgetsLoaded,
+    touched,
+    apply,
+    seededFor,
+  ]);
+  // What the bar holds is the viewer's own until it is saved for everyone.
+  const current = savedFromContext(bar.context, fields);
+  const changed =
+    seededFor === dashboard.id &&
+    !sameFilters(current, dashboard.filters, fields);
+
   const actions: Action[] = [
     ...(editable
       ? [
@@ -148,12 +219,15 @@ export function DashboardPage({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
-        {back}
+        <BackLink href={backHref} />
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 flex-col gap-1">
-            <h2 className="text-heading-lg truncate" title={dashboard.name}>
+            <h1
+              className="text-display-sm truncate font-thin"
+              title={dashboard.name}
+            >
               {dashboard.name}
-            </h2>
+            </h1>
             {dashboard.description ? (
               <p className="text-muted-foreground text-sm">
                 {dashboard.description}
@@ -197,19 +271,55 @@ export function DashboardPage({
           }
         />
       ) : (
-        <DashboardGrid
-          dashboard={dashboard}
-          widgets={widgets}
-          canEdit={editable}
-          saving={mutations.saving}
-          onSave={(placements) =>
-            mutations.saveLayout(dashboard.id, placements)
-          }
-          onRemove={(placementId) =>
-            mutations.removeWidget(dashboard.id, placementId)
-          }
-          onOpen={onOpenQuery}
-        />
+        <>
+          {/* The shared filter bar every card answers within. Picking in
+              it is the viewer's own view; Save filters makes it what the
+              dashboard opens on, for everyone. */}
+          <Page.Toolbar>
+            <Page.Toolbar.Row>
+              <Page.Toolbar.Filters {...bar.toolbar} />
+              {changed ? (
+                <Page.Toolbar.Actions>
+                  {editable ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon="save"
+                      disabled={mutations.pending}
+                      onClick={() =>
+                        mutations.saveFilters(dashboard.id, current)
+                      }
+                    >
+                      Save filters
+                    </Button>
+                  ) : null}
+                  <Button
+                    variant="tertiary"
+                    size="sm"
+                    onClick={() =>
+                      apply(barValuesFromSaved(dashboard.filters, fields))
+                    }
+                  >
+                    Reset filters
+                  </Button>
+                </Page.Toolbar.Actions>
+              ) : null}
+            </Page.Toolbar.Row>
+          </Page.Toolbar>
+          <DashboardGrid
+            dashboard={dashboard}
+            widgets={widgets}
+            page={bar.context}
+            canEdit={editable}
+            saving={mutations.saving}
+            onSave={(placements) =>
+              mutations.saveLayout(dashboard.id, placements)
+            }
+            onRemove={(placementId) =>
+              mutations.removeWidget(dashboard.id, placementId)
+            }
+          />
+        </>
       )}
 
       <AddWidgetDialog

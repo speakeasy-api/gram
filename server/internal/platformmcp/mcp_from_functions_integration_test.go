@@ -98,7 +98,7 @@ func TestCreateMCPFromFunctionsCreatesAServerExposingExactlyTheRequestedTools(t 
 	read, err := fixture.service.Exposure(ctx, fixture.principal, fixture.project.ID, mcpID)
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{fixture.tools[0], fixture.tools[2]}, read.ToolURNs)
-	require.Equal(t, 0, read.SharedWithOther)
+	require.Equal(t, 1, read.SharedWithOther, "the new toolset's canonical hosted wrapper offers the same tools")
 
 	// The server and the toolset behind it are in the same project.
 	server, err := mcpserversrepo.New(fixture.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: mcpID, ProjectID: fixture.project.ID})
@@ -117,14 +117,14 @@ func TestCreateMCPFromFunctionsCreatesAServerExposingExactlyTheRequestedTools(t 
 	require.Equal(t, "not_required", created.IndexSignal)
 	require.Equal(t, []uuid.UUID{toolsetID}, *fixture.indexed)
 
-	// The audit trail is the dashboard's: one toolset create and one server
-	// create, attributed to the caller.
+	// The audit trail is the dashboard's: one toolset create, plus the
+	// toolset's canonical wrapper and the new server, attributed to the caller.
 	toolsetsAfter, err := audittest.AuditLogCountByAction(ctx, fixture.conn, audit.ActionToolsetCreate)
 	require.NoError(t, err)
 	serversAfter, err := audittest.AuditLogCountByAction(ctx, fixture.conn, audit.ActionMcpServerCreate)
 	require.NoError(t, err)
 	require.Equal(t, toolsetsBefore+1, toolsetsAfter)
-	require.Equal(t, serversBefore+1, serversAfter)
+	require.Equal(t, serversBefore+2, serversAfter)
 	record, err := audittest.LatestAuditLogByAction(ctx, fixture.conn, audit.ActionMcpServerCreate)
 	require.NoError(t, err)
 	require.Equal(t, created.MCPID, record.SubjectID)
@@ -198,7 +198,7 @@ func TestCreateMCPFromFunctionsReplaysOneIdempotencyKeyWithoutASecondServer(t *t
 
 	toolsetsAfter, serversAfter := fixture.projectServerCounts(t, ctx)
 	require.Equal(t, toolsetsBefore+1, toolsetsAfter, "one toolset, not two")
-	require.Equal(t, serversBefore+1, serversAfter, "one server, not two")
+	require.Equal(t, serversBefore+2, serversAfter, "one server plus the toolset's canonical wrapper, not a second pair")
 
 	// Once the write allowance is spent, a retry of the creation that already
 	// committed still returns its stored result: the charge is only taken when
@@ -451,7 +451,7 @@ func TestCreateMCPFromFunctionsPreviewAndConfirmShareOneKey(t *testing.T) {
 
 	toolsetsAfter, serversAfter := fixture.projectServerCounts(t, ctx)
 	require.Equal(t, toolsetsBefore+1, toolsetsAfter, "exactly one toolset")
-	require.Equal(t, serversBefore+1, serversAfter, "exactly one server")
+	require.Equal(t, serversBefore+2, serversAfter, "exactly one server plus the toolset's canonical wrapper")
 }
 
 // poolCheckingLimiter records how many connections the service's pool had
@@ -491,7 +491,13 @@ func TestCreateMCPFromFunctionsChargesOutsideAnyTransaction(t *testing.T) {
 	charges := len(*acquired)
 	_, err = fixture.service.CreateMCPFromFunctions(ctx, fixture.principal, input)
 	require.NoError(t, err)
-	require.Len(t, *acquired, charges, "a replay is not charged")
+	// The replay itself is free, but re-sending its publish and index signals
+	// is charged once (see chargeRerun), and that charge is outside any
+	// transaction too.
+	require.Len(t, *acquired, 2*charges, "a replay is charged only for the signals it re-sends")
+	for _, held := range *acquired {
+		require.Zero(t, held, "the replay's charge is never consulted while a connection, transaction, or receipt lock is held")
+	}
 }
 
 // The tool is a second caller of the dashboard's authoring path, so what it

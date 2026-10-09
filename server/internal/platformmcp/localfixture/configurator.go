@@ -298,6 +298,8 @@ func (c *ClientConfigurator) createOrReuseClient(ctx context.Context, request pl
 			JsonWebKeySetID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			IdentityProviderConnectionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			CallbackBaseUrl:                 pgtype.Text{String: "", Valid: false},
+			GrantTypes:                      nil,
+			CredentialOwner:                 pgtype.Text{String: "", Valid: false},
 		})
 		if err != nil {
 			return fmt.Errorf("create local fixture client: %w", err)

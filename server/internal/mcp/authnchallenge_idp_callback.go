@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -95,7 +96,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	}
 	if federation := challengeState.Federation; federation != nil {
 		// Validate before GETDEL so a misrouted callback cannot burn the single-use state.
-		if reason := federatedCallbackMisrouted(r, federation, routeClientID); reason != "" {
+		if reason := federatedCallbackMisrouted(r, federation, routeClientID, requestorigin.BaseURL(ctx, s.serverURL.String())); reason != "" {
 			logger.InfoContext(ctx, "federated callback rejected", attr.SlogOAuthFederatedCallbackRejectReason(reason))
 			return oops.E(oops.CodeUnauthorized, nil, "authn challenge state does not match this callback")
 		}
@@ -179,7 +180,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 				return finishFederation(oops.CodeUnauthorized, remotesessions.ErrFederatedIdentity, "Invalid login response", false)
 			}
 		}
-		if reason := federatedCallbackRejectReason(r, &challengeState, routeClientID, endpoint.OrganizationID, trustedIssuerID, trustedClientID, configuration); reason != "" {
+		if reason := s.federatedCallbackRejectReason(r, &challengeState, routeClientID, endpoint.OrganizationID, trustedIssuerID, trustedClientID, configuration); reason != "" {
 			logger.InfoContext(ctx, "federated callback rejected", attr.SlogOAuthFederatedCallbackRejectReason(reason))
 			return finishFederation(oops.CodeFailedPrecondition, remotesessions.ErrFederatedConfiguration, "Login configuration changed or expired. Restart login", false)
 		}
@@ -449,9 +450,9 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 }
 
 // federatedCallbackRejectReason names why a federated callback cannot complete, or "" when it can.
-func federatedCallbackRejectReason(r *http.Request, state *AuthnChallengeState, routeClientID, organizationID string, trustedIssuerID, trustedClientID uuid.UUID, configuration string) string {
+func (s *Service) federatedCallbackRejectReason(r *http.Request, state *AuthnChallengeState, routeClientID, organizationID string, trustedIssuerID, trustedClientID uuid.UUID, configuration string) string {
 	federation := state.Federation
-	if reason := federatedCallbackMisrouted(r, federation, routeClientID); reason != "" {
+	if reason := federatedCallbackMisrouted(r, federation, routeClientID, requestorigin.BaseURL(r.Context(), s.serverURL.String())); reason != "" {
 		return reason
 	}
 	switch {

@@ -3165,6 +3165,7 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		JSONWebKeySetID:                 v.JSONWebKeySetID,
 		Audience:                        v.Audience,
 		LegacyCallbackURL:               *v.LegacyCallbackURL,
+		CredentialOwner:                 *v.CredentialOwner,
 		CallbackURL:                     v.CallbackURL,
 		FederatedCallbackURL:            v.FederatedCallbackURL,
 		CreatedAt:                       *v.CreatedAt,

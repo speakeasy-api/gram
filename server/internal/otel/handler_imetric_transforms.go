@@ -3,6 +3,7 @@ package otel
 import (
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"log/slog"
 	"slices"
 
@@ -18,9 +19,9 @@ import (
 
 type MetricTransformHandler struct {
 	logger          *slog.Logger
-	metrics         *metrics
+	instruments     *enrich.Instruments
 	metricPublisher gcp.Publisher[*otelv1.Metric]
-	enrichers       []MetricEnricher
+	enrichers       []enrich.MetricEnricher
 }
 
 func NewMetricTransformHandler(
@@ -32,7 +33,7 @@ func NewMetricTransformHandler(
 
 	return &MetricTransformHandler{
 		logger:          logger,
-		metrics:         newMetrics(logger, meterProvider),
+		instruments:     enrich.NewInstruments(logger, meterProvider),
 		metricPublisher: metricPublisher,
 		enrichers:       nil,
 	}
@@ -44,7 +45,7 @@ func (h *MetricTransformHandler) Handle(ctx context.Context, item *otelv1.Inboun
 		return fmt.Errorf("convert inbound metric: %w", o11y.LogError(ctx, h.logger, err, "failed to convert inbound metric"))
 	}
 
-	enrichments, err := enrichMetric(ctx, h.metrics, item, h.enrichers)
+	enrichments, err := enrich.Metric(ctx, h.instruments, item, h.enrichers)
 	if err != nil {
 		return fmt.Errorf("enrich metric: %w", o11y.LogError(ctx, h.logger, err, "failed to enrich metric"))
 	}

@@ -34,25 +34,15 @@ import { useMemo, useState, type JSX } from "react";
 import { useLocation, useSearchParams } from "react-router";
 import { Page } from "@/components/page-layout";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
+import { AddToDashboard } from "./AddToDashboard";
 import { WidgetCards } from "./WidgetCards";
-import { findDataset, longestWindow, type ExploreSpec } from "./exploreModel";
-import { pageCanFilter } from "./pageContext";
-import { usePageFilters, type PageFilterField } from "./usePageFilters";
+import { longestWindow, type ExploreSpec } from "./exploreModel";
+import { pageFieldsFor, usePageFilters } from "./usePageFilters";
 import { useCanEditWidget } from "./useCanEditWidget";
 import { useCreatorName } from "./useCreatorName";
 import { useWidgetMutations } from "./useWidgetMutations";
 import { describeDashboards } from "./widgetUsage";
 import { DeleteWidgetDialog, WidgetDetailsDialog } from "./WidgetDialogs";
-
-// The fields the cards' filter bar may offer, in order: the dimensions most
-// questions about agent activity are cut by.
-const CARD_FILTER_FIELDS: readonly PageFilterField[] = [
-  { field: "user", label: "User" },
-  { field: "surface", label: "Agent" },
-  { field: "model", label: "Model" },
-  { field: "mcp_server", label: "MCP server" },
-  { field: "status", label: "Status" },
-];
 
 // The sort the list opens on: the server's own order, most recently updated
 // first.
@@ -85,6 +75,7 @@ export function WidgetList({
   confirmLeave,
   onDeleted,
   onExplore,
+  onOpenDashboard,
   onRetry,
 }: {
   widgets: Widget[];
@@ -103,6 +94,8 @@ export function WidgetList({
   onDeleted: (id: string) => void;
   /** Switch to the Explore tab with nothing open. */
   onExplore: () => void;
+  /** Open a dashboard, once a widget is placed on it. */
+  onOpenDashboard: (dashboardId: string) => void;
   onRetry: () => void;
 }): JSX.Element {
   const user = useUser();
@@ -117,6 +110,7 @@ export function WidgetList({
   const [sort, setSort] = useState<SortDescriptor | null>(DEFAULT_SORT);
   const [renaming, setRenaming] = useState<Widget | null>(null);
   const [deleting, setDeleting] = useState<Widget | null>(null);
+  const [placing, setPlacing] = useState<Widget | null>(null);
 
   const datasets = useMemo(
     () => [...new Set(widgets.map((widget) => widget.dataset))].sort(),
@@ -134,12 +128,7 @@ export function WidgetList({
   // only, and asks for its options only there.
   const catalog = useAnalyticsDescribe().data?.datasets;
   const cardFields = useMemo(
-    () =>
-      CARD_FILTER_FIELDS.filter(({ field }) =>
-        datasets.some((name) =>
-          pageCanFilter(findDataset(catalog ?? [], name), field),
-        ),
-      ),
+    () => pageFieldsFor(catalog, datasets),
     [catalog, datasets],
   );
   const cardFilters = usePageFilters({
@@ -165,6 +154,11 @@ export function WidgetList({
           },
         ]
       : []),
+    {
+      label: "Add to dashboard",
+      icon: "layout-dashboard",
+      onClick: () => setPlacing(widget),
+    },
     {
       label: "Duplicate",
       icon: "copy",
@@ -415,6 +409,11 @@ export function WidgetList({
             () => setRenaming(null),
           );
         }}
+      />
+      <AddToDashboard
+        widget={placing}
+        onClose={() => setPlacing(null)}
+        onOpenDashboard={onOpenDashboard}
       />
       <DeleteWidgetDialog
         name={deleting?.name ?? ""}

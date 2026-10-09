@@ -2922,7 +2922,14 @@ type ListChatsParams struct {
 	ExternalUserID   string
 	SortOrder        string
 	Cursor           string // gram_chat_id to paginate from
-	Limit            int
+
+	// CursorStartTimeUnixNano is the start_time_unix_nano the cursor's chat was
+	// shown with on the previous page. When set, the page boundary is compared
+	// against it directly. Zero re-derives the boundary from the table, which
+	// ignores this query's time window and row filters.
+	CursorStartTimeUnixNano int64
+
+	Limit int
 }
 
 // ListChats retrieves aggregated chat summaries grouped by gram_chat_id.
@@ -2977,7 +2984,11 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 	sb = sb.GroupBy("gram_chat_id")
 
 	// HAVING clause for cursor pagination with tuple comparison for tie-breaking
-	sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, "gram_chat_id", "min(time_unix_nano)", "", nil)
+	if arg.CursorStartTimeUnixNano != 0 {
+		sb = withHavingTupleValuePagination(sb, arg.Cursor, arg.CursorStartTimeUnixNano, arg.SortOrder, "gram_chat_id", "min(time_unix_nano)")
+	} else {
+		sb = withHavingTuplePagination(sb, arg.Cursor, arg.SortOrder, arg.GramProjectID, "gram_chat_id", "min(time_unix_nano)", "", nil)
+	}
 
 	// Ordering - include gram_chat_id as secondary for stable ordering
 	sb = withOrdering(sb, arg.SortOrder, "start_time_unix_nano", "gram_chat_id")

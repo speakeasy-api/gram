@@ -69,7 +69,8 @@ func (r *PostgresOrganizationSlugResolver) OrganizationSlug(ctx context.Context,
 
 // RiskMutationControls owns the checks shared by every risk write. Admission is
 // intentionally separate from receipt execution so callers can prove the flag
-// and budget fail before opening a write transaction.
+// fails before opening a write transaction; the budget is charged, also before
+// any transaction, only when no completed receipt answers the request.
 type RiskMutationControls struct {
 	flags         feature.Provider
 	organizations OrganizationSlugResolver
@@ -99,7 +100,8 @@ func NewRiskMutationControls(db *pgxpool.Pool, flags feature.Provider, organizat
 
 // Admit resolves an explicit project and checks its exact rollout cohort at
 // invocation time. Missing providers, errors, and indeterminate evaluations all
-// fail closed. The mutation budget is consumed only after the kill switch is on.
+// fail closed. The mutation budget is charged later, by Charge, and only when
+// the write is not a replay.
 func (c *RiskMutationControls) Admit(ctx context.Context, principal Principal, projectSlug string) (ResolvedProject, error) {
 	if c == nil || c.flags == nil || c.organizations == nil || c.projects == nil || !c.budget.valid() || c.receipts == nil || c.versions == nil {
 		return ResolvedProject{}, riskMutationUnavailable()
@@ -128,15 +130,22 @@ func (c *RiskMutationControls) Admit(ctx context.Context, principal Principal, p
 	if evaluation != feature.EvaluationEnabled {
 		return ResolvedProject{}, riskMutationUnavailable()
 	}
-	if err := c.budget.AllowConnectionOrOrganization(ctx, principal); err != nil {
-		switch {
-		case errors.Is(err, ErrOperationRateLimited):
-			return ResolvedProject{}, &RiskMutationError{Code: "rate_limited", Message: "The risk mutation rate limit was reached.", Cause: err}
-		default:
-			return ResolvedProject{}, riskMutationUnavailableWithCause(err)
-		}
-	}
 	return project, nil
+}
+
+// Charge returns the mutation budget charge for one risk write. The receipt
+// store runs it only when no completed receipt answers the request, and
+// outside any transaction; see executeChargedMutationReceipt.
+func (c *RiskMutationControls) Charge(principal Principal) func(context.Context) error {
+	return func(ctx context.Context) error {
+		if err := c.budget.AllowConnectionOrOrganization(ctx, principal); err != nil {
+			if errors.Is(err, ErrOperationRateLimited) {
+				return &RiskMutationError{Code: "rate_limited", Message: "The risk mutation rate limit was reached.", Cause: err}
+			}
+			return riskMutationUnavailableWithCause(err)
+		}
+		return nil
+	}
 }
 
 func riskMutationUnavailable() error {

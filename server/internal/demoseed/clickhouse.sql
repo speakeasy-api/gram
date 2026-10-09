@@ -2434,7 +2434,9 @@ FROM (
 WHERE t < turns;
 
 -- Tool rows: 0-3 calls per turn. A Claude call is a decision then a result
--- (or the rejecting decision alone); a Codex call is its result.
+-- (or the rejecting decision alone); a Codex call is its result. A share of
+-- the Claude calls are Skill invocations naming one of three skills, which
+-- is what fills the skills dataset; Codex reports no skills.
 INSERT INTO agent_events
   (organization_id, project_id, occurred_at_unix_nano, observed_at_unix_nano,
    record_id, session_id, turn_id, event_id, event_type, raw_event_name,
@@ -2461,7 +2463,7 @@ SELECT
   '', '', '', device_v,
   department_v, division_v, title_v, emp_type_v, cost_center_v,
   roles_v, groups_v,
-  model_v, '', '', '',
+  model_v, '', if(tool_v = 'Skill', skill_v, ''), '',
   if(tool_v = 'mcp_tool', 'acme-crm', ''),
   if(tool_v = 'mcp_tool', arrayElement(['lookup_customer', 'process_refund', 'list_invoices'], 1 + toUInt32((i + k) % 3)), ''),
   tool_v,
@@ -2514,7 +2516,9 @@ FROM (
     [arrayElement(['Frontline Support', 'Frontline Support', 'Infra', 'Reliability', 'Billing Ops', 'Leadership'], uidx)] AS groups_v,
     session_start + toInt64(t) * 95000000000 AS turn_start,
     (i + t) % 4 AS tools,
-    arrayElement(['Bash', 'Read', 'Grep', 'Glob', 'Edit', 'mcp_tool'], 1 + toUInt32((i * 3 + t * 5 + k * 7) % 6)) AS tool_v,
+    if(on_claude AND (i * 3 + t * 5 + k * 7) % 7 = 6, 'Skill',
+       arrayElement(['Bash', 'Read', 'Grep', 'Glob', 'Edit', 'mcp_tool'], 1 + toUInt32((i * 3 + t * 5 + k * 7) % 6))) AS tool_v,
+    arrayElement(['review-pr', 'write-tests', 'release-notes'], 1 + toUInt32((i + t + k) % 3)) AS skill_v,
     (i * 5 + t + k) % 25 = 0 AS rejected,
     (i * 3 + t * 7 + k) % 17 = 0 AS errored,
     toInt64(200 + (i * 37 + t * 11 + k * 5) % 5800) * 1000000 AS tool_nano,
@@ -2587,3 +2591,10 @@ SELECT throwIf(
   (SELECT countIf(cost_usd > 0) FROM agent_events
    WHERE organization_id = 'org_gram_demo_workspace' AND surface = 'codex') != 0,
   'demo seed postflight: Codex states no cost, so no Codex demo row may carry one');
+
+SELECT throwIf(
+  (SELECT uniqExact(skill_name) FROM agent_events
+   WHERE organization_id = 'org_gram_demo_workspace' AND skill_name != '') != 3
+  OR (SELECT countIf(skill_name != '') FROM agent_events
+      WHERE organization_id = 'org_gram_demo_workspace' AND surface = 'codex') != 0,
+  'demo seed postflight: Claude tool rows name the three demo skills and Codex rows name none');

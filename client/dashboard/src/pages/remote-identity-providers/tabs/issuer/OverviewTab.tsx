@@ -4,7 +4,14 @@ import type { RemoteSessionIssuer } from "@gram/client/models/components/remotes
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
-import { InfoField, InfoSection, InfoText } from "../../detailFields";
+import {
+  InfoField,
+  InfoList,
+  InfoSection,
+  InfoSupported,
+  InfoText,
+  InfoUrl,
+} from "../../detailFields";
 import { isAbsoluteHttpUrl } from "../../issuerDocumentationLinks";
 
 // ProjectValue renders the owning project for an issuer: "—" for an
@@ -82,17 +89,6 @@ export function OverviewTab({
 }: {
   issuer: RemoteSessionIssuer;
 }): JSX.Element {
-  const endpoint = (value: string | undefined): ReactNode => (
-    <InfoText mono>{value || "—"}</InfoText>
-  );
-  const list = (values: string[] | undefined): ReactNode => (
-    <InfoText mono>
-      {values && values.length > 0 ? values.join(", ") : "—"}
-    </InfoText>
-  );
-  const supported = (value: boolean): ReactNode => (
-    <InfoText>{value ? "Supported" : "Not supported"}</InfoText>
-  );
   // Unlike the other metadata arrays, absent and empty mean different things
   // here (mirroring the nullable column): absent is "discovery has not
   // captured this yet", empty is "the issuer advertises no methods".
@@ -126,38 +122,44 @@ export function OverviewTab({
 
         <InfoSection title="Endpoints">
           <InfoField label="Authorization">
-            {endpoint(issuer.authorizationEndpoint)}
+            <InfoUrl value={issuer.authorizationEndpoint} />
           </InfoField>
-          <InfoField label="Token">{endpoint(issuer.tokenEndpoint)}</InfoField>
+          <InfoField label="Token">
+            <InfoUrl value={issuer.tokenEndpoint} />
+          </InfoField>
           <InfoField label="Registration">
-            {endpoint(issuer.registrationEndpoint)}
+            <InfoUrl value={issuer.registrationEndpoint} />
           </InfoField>
-          <InfoField label="JWKS">{endpoint(issuer.jwksUri)}</InfoField>
+          <InfoField label="JWKS">
+            <InfoUrl value={issuer.jwksUri} />
+          </InfoField>
         </InfoSection>
       </div>
 
       <InfoSection title="Identity Provider Details">
-        <InfoField label="Scopes">{list(issuer.scopesSupported)}</InfoField>
+        <InfoField label="Scopes">
+          <InfoList values={issuer.scopesSupported} />
+        </InfoField>
         <InfoField label="Scope Override">
-          {list(issuer.scopeOverride ?? undefined)}
+          <InfoList values={issuer.scopeOverride} />
         </InfoField>
         <InfoField label="Scope fallback">
           <InfoText>{scopeFallbackLabel(issuer.omitScopeFallback)}</InfoText>
         </InfoField>
         <InfoField label="Grant Types">
-          {list(issuer.grantTypesSupported)}
+          <InfoList values={issuer.grantTypesSupported} />
         </InfoField>
         <InfoField label="Response Types">
-          {list(issuer.responseTypesSupported)}
+          <InfoList values={issuer.responseTypesSupported} />
         </InfoField>
         <InfoField label="Token Endpoint Authentication Methods">
-          {list(issuer.tokenEndpointAuthMethodsSupported)}
+          <InfoList values={issuer.tokenEndpointAuthMethodsSupported} />
         </InfoField>
         <InfoField label="PKCE Code Challenge Methods">
           {pkceMethods(issuer.codeChallengeMethodsSupported)}
         </InfoField>
         <InfoField label="Client ID Metadata Document">
-          {supported(issuer.clientIdMetadataDocumentSupported)}
+          <InfoSupported value={issuer.clientIdMetadataDocumentSupported} />
         </InfoField>
         <InfoField label="Client Setup Documentation">
           <DocumentationUrlValue value={issuer.clientSetupDocumentationUrl} />

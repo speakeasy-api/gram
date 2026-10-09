@@ -1,4 +1,5 @@
 import type { Dashboard } from "@gram/client/models/components/dashboard.js";
+import type { DashboardFilters } from "@gram/client/models/components/dashboardfilters.js";
 import type { PlacementInput } from "@gram/client/models/components/placementinput.js";
 import { useAddDashboardWidgetMutation } from "@gram/client/react-query/addDashboardWidget.js";
 import { useCreateDashboardMutation } from "@gram/client/react-query/createDashboard.js";
@@ -7,6 +8,7 @@ import { invalidateAllDashboards } from "@gram/client/react-query/dashboards.js"
 import { useDeleteDashboardMutation } from "@gram/client/react-query/deleteDashboard.js";
 import { useDuplicateDashboardMutation } from "@gram/client/react-query/duplicateDashboard.js";
 import { useRemoveDashboardWidgetMutation } from "@gram/client/react-query/removeDashboardWidget.js";
+import { useSaveDashboardFiltersMutation } from "@gram/client/react-query/saveDashboardFilters.js";
 import { useSaveDashboardLayoutMutation } from "@gram/client/react-query/saveDashboardLayout.js";
 import { useUpdateDashboardMutation } from "@gram/client/react-query/updateDashboard.js";
 import { invalidateAllWidget } from "@gram/client/react-query/widget.js";
@@ -26,6 +28,12 @@ export function useDashboardMutations(): {
   update: (id: string, details: Details, then?: () => void) => void;
   /** Replace the layout; the grid autosaves, so there is no follow-up. */
   saveLayout: (id: string, placements: PlacementInput[]) => void;
+  /** Store the filters the dashboard opens on, for everyone. */
+  saveFilters: (
+    id: string,
+    filters: DashboardFilters,
+    then?: () => void,
+  ) => void;
   addWidget: (id: string, widgetId: string, then?: () => void) => void;
   removeWidget: (id: string, placementId: string, then?: () => void) => void;
   duplicate: (id: string, then?: (copy: Dashboard) => void) => void;
@@ -53,6 +61,12 @@ export function useDashboardMutations(): {
   const updateMutation = useUpdateDashboardMutation({ onError: fail("save") });
   const layoutMutation = useSaveDashboardLayoutMutation({
     onError: fail("save the layout of"),
+  });
+  const filtersMutation = useSaveDashboardFiltersMutation({
+    // The save stays pending until the dashboard is read back, so a Reset
+    // meanwhile cannot return the bar to the filters just replaced.
+    onSuccess: () => refresh(),
+    onError: fail("save the filters of"),
   });
   const addMutation = useAddDashboardWidgetMutation({
     onError: fail("add the widget to"),
@@ -94,6 +108,11 @@ export function useDashboardMutations(): {
         // A failed save is reported, and the grid snaps back to what is
         // saved once the refetch answers.
         { onSettled: () => void refresh() },
+      ),
+    saveFilters: (id, filters, then) =>
+      filtersMutation.mutate(
+        { request: { saveDashboardFiltersRequestBody: { id, filters } } },
+        { onSuccess: () => then?.() },
       ),
     addWidget: (id, widgetId, then) =>
       addMutation.mutate(
@@ -140,6 +159,7 @@ export function useDashboardMutations(): {
     pending:
       createMutation.isPending ||
       updateMutation.isPending ||
+      filtersMutation.isPending ||
       addMutation.isPending ||
       removeMutation.isPending ||
       duplicateMutation.isPending ||

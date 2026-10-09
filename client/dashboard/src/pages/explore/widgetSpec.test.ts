@@ -106,6 +106,15 @@ describe("specFromWidget", () => {
     ["a ranking", { ...spec, chartType: "ranked" }],
     ["the server's default limit", { ...spec, chartType: "table", limit: 0 }],
     ["a timeseries", { ...spec, orderBy: "", limit: 0 }],
+    [
+      "a distinct count over a dimension",
+      {
+        ...spec,
+        chartType: "table",
+        measures: [{ op: "count_distinct", field: "user" }],
+        orderBy: "count_distinct_user",
+      },
+    ],
   ])("restores %s exactly as it was saved", (_, value) => {
     expect(roundTrip(value)).toEqual(value);
   });

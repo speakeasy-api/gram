@@ -1,3 +1,4 @@
+import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { RoleLink } from "@/components/role-link";
 import { Badge } from "@/components/ui/Badge";
@@ -84,6 +85,7 @@ export function GrantAccessDialog({
       await Promise.all([
         invalidateAllMembers(queryClient),
         invalidateAllRoles(queryClient),
+        invalidateAllResourceAudience(queryClient),
       ]);
     },
   });

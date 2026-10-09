@@ -147,6 +147,9 @@ func TestRiskMutationAdmissionConnectionlessAssistantUsesOrganizationBudget(t *t
 
 	require.NoError(t, err)
 	require.Equal(t, project, resolved)
+	require.Empty(t, organization.keys, "admission alone never charges: a replay must stay free")
+
+	require.NoError(t, controls.Charge(principal)(t.Context()))
 	require.Equal(t, []string{"organization"}, organization.keys)
 }
 

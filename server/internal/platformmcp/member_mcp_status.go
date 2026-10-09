@@ -178,6 +178,14 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 		output.NextAction = "ask_administrator"
 		return output, nil
 	}
+	if clients[0].CredentialOwner == remotesessions.CredentialOwnerSelf {
+		// The MCP server presents its own upstream credential for every
+		// caller, so the member has nothing to connect.
+		output.State = MCPConnectionStateNotApplicable
+		output.Reason = "upstream_credential_managed"
+		output.NextAction = "use_mcp"
+		return output, nil
+	}
 	clientID := clients[0].ID
 	statuses, err := s.remoteSessions.RemoteSessionStatuses(ctx, urn.NewUserSubject(principal.UserID), target.projectID, principal.OrganizationID, target.userSessionIssuerID)
 	if err != nil {

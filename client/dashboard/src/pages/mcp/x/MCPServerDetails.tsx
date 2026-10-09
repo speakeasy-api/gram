@@ -1,3 +1,4 @@
+import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { AttachedUserSessions } from "@/components/sessions/AttachedUserSessions";
@@ -477,6 +478,7 @@ function useMcpServerVisibilityUpdate(server: McpServer): {
       await Promise.all([
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        invalidateAllResourceAudience(queryClient, { refetchType: "all" }),
         // Enabling a disabled server (e.g. disabled -> private) auto-attaches
         // it to the Default plugin server-side, which the plugin banner's
         // membership check and publish-freshness state need to pick up.

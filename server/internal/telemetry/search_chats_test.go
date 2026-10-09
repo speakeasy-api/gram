@@ -591,6 +591,145 @@ func TestSearchChats_PaginationCursorScopedByProject(t *testing.T) {
 	require.Len(t, seen, 3)
 }
 
+// maxChatPages caps collectChatPages. The pagination tests seed at most four
+// chats, so a traversal that repeats a chat runs into this cap well before it
+// would otherwise end, and the repeat shows up in the returned ids.
+const maxChatPages = 8
+
+// collectChatPages pages through SearchChats one chat at a time from cursor
+// until the server stops returning a next cursor or maxChatPages is reached,
+// and returns every chat id it saw in order.
+func collectChatPages(t *testing.T, ctx context.Context, ti *testInstance, filter *gen.SearchChatsFilter, sort string, cursor *string) []string {
+	t.Helper()
+
+	var ids []string
+	for range maxChatPages {
+		res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+			Filter: filter,
+			Cursor: cursor,
+			Limit:  1,
+			Sort:   sort,
+		})
+		require.NoError(t, err)
+		for _, chat := range res.Chats {
+			ids = append(ids, chat.GramChatID)
+		}
+		if res.NextCursor == nil {
+			return ids
+		}
+		cursor = res.NextCursor
+	}
+	return ids
+}
+
+// waitForChats blocks until SearchChats sees want chats under filter.
+func waitForChats(t *testing.T, ctx context.Context, ti *testInstance, filter *gen.SearchChatsFilter, want int) {
+	t.Helper()
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := ti.service.SearchChats(ctx, &gen.SearchChatsPayload{
+			Filter: filter,
+			Cursor: nil,
+			Limit:  100,
+			Sort:   "asc",
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		assert.Len(c, res.Chats, want)
+	}, 10*time.Second, 200*time.Millisecond)
+}
+
+// windowFilter is a search window from two hours before now to an hour after.
+func windowFilter(now time.Time) *gen.SearchChatsFilter {
+	return &gen.SearchChatsFilter{
+		From: new(now.Add(-2 * time.Hour).Format(time.RFC3339)),
+		To:   new(now.Add(time.Hour).Format(time.RFC3339)),
+	}
+}
+
+// insertWindowedChats inserts one chat per minute offset (minutes before now)
+// and returns their ids in the same order.
+func insertWindowedChats(t *testing.T, ctx context.Context, projectID, deploymentID string, now time.Time, minutesAgo ...int) []string {
+	t.Helper()
+
+	chatIDs := make([]string, len(minutesAgo))
+	for i, m := range minutesAgo {
+		chatIDs[i] = uuid.New().String()
+		insertChatLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-time.Duration(m)*time.Minute), chatIDs[i], 100, 50, 150, 1.0, "stop", "gpt-4", "openai")
+	}
+	return chatIDs
+}
+
+// A chat whose earliest row falls before the search window must not come back
+// on page two of an ascending traversal. Re-deriving the page boundary from the
+// chat id alone ignores the window, finds that earlier row, and compares
+// against a start time smaller than the one the chat was shown with, so the
+// chat satisfies the cursor again on every page and the later chats are never
+// reached.
+func TestSearchChats_AscPaginationIgnoresRowsOutsideWindow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+	now := time.Now().UTC()
+
+	chatIDs := insertWindowedChats(t, ctx, projectID, deploymentID, now, 30, 20, 10)
+	insertChatLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-5*time.Hour), chatIDs[0], 100, 50, 150, 1.0, "stop", "gpt-4", "openai")
+
+	filter := windowFilter(now)
+	waitForChats(t, ctx, ti, filter, len(chatIDs))
+
+	require.Equal(t, chatIDs, collectChatPages(t, ctx, ti, filter, "asc", nil))
+}
+
+// A chat whose earliest row falls before the search window must not cut a
+// descending traversal short: the re-derived start time sits below every chat
+// still to come, so none of them satisfied the cursor.
+func TestSearchChats_DescPaginationIgnoresRowsOutsideWindow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+	now := time.Now().UTC()
+
+	chatIDs := insertWindowedChats(t, ctx, projectID, deploymentID, now, 10, 20, 30)
+	insertChatLogWithChatID(t, ctx, projectID, deploymentID, now.Add(-5*time.Hour), chatIDs[0], 100, 50, 150, 1.0, "stop", "gpt-4", "openai")
+
+	filter := windowFilter(now)
+	waitForChats(t, ctx, ti, filter, len(chatIDs))
+
+	require.Equal(t, chatIDs, collectChatPages(t, ctx, ti, filter, "desc", nil))
+}
+
+// A bare chat-id cursor, the shape handed out before the page boundary was
+// sealed, still resumes the traversal and pages through to the end in either
+// direction.
+func TestSearchChats_BareChatIDCursorPagesToTheEnd(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+	now := time.Now().UTC()
+
+	chatIDs := insertWindowedChats(t, ctx, projectID, deploymentID, now, 40, 30, 20, 10)
+
+	filter := windowFilter(now)
+	waitForChats(t, ctx, ti, filter, len(chatIDs))
+
+	require.Equal(t, chatIDs[1:], collectChatPages(t, ctx, ti, filter, "asc", new(chatIDs[0])))
+	require.Equal(t, []string{chatIDs[2], chatIDs[1], chatIDs[0]}, collectChatPages(t, ctx, ti, filter, "desc", new(chatIDs[3])))
+}
+
 func TestSearchLogs_FilterByGramChatID(t *testing.T) {
 	t.Parallel()
 

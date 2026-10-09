@@ -53,14 +53,14 @@ func TestAuthorize_PinnedOutboundOriginIDPCallback(t *testing.T) {
 // outbound origin for its IdP callback.
 func TestFederatedLoginPinnedOutboundCallbackOrigin(t *testing.T) {
 	t.Parallel()
-	runPinnedFederatedLogin(t, "", "https://app.example.test")
+	runPinnedFederatedLogin(t, "", "https://app.example.test", false)
 }
 
 // A trusted client with a recorded callback_base_url gets its IdP callback on
 // that host, next to its remote_login_callback, not on the outbound origin.
 func TestFederatedLoginTrustedClientCallbackOrigin(t *testing.T) {
 	t.Parallel()
-	runPinnedFederatedLogin(t, "https://reg.example.test", "https://reg.example.test")
+	runPinnedFederatedLogin(t, "https://reg.example.test", "https://reg.example.test", false)
 }
 
 // The per-client callback is checked on the trusted client's own origin, not the outbound origin, before discovery.
@@ -102,15 +102,30 @@ func TestFederatedLoginChecksClientCallbackOrigin(t *testing.T) {
 	}
 }
 
+func TestFederatedLoginPlatformCallbackWithPort(t *testing.T) {
+	t.Parallel()
+	origin := "https://" + platformHostChecklistExtraHost + ":8443"
+	runPinnedFederatedLogin(t, origin, origin, true)
+}
+
 // runPinnedFederatedLogin runs a federated login whose IdP callback is on a
 // host other than the server URL: the browser binds a cookie on the callback
 // host, proves the original cookie on the server URL host, then logs in
 // upstream. recorded is the trusted client's callback_base_url ("" for NULL).
-func runPinnedFederatedLogin(t *testing.T, recorded, wantOrigin string) {
+func runPinnedFederatedLogin(t *testing.T, recorded, wantOrigin string, throughRouter bool) {
 	t.Helper()
 	ctx, f := newFederationLoginFixture(t, true)
 	wantCallback := wantOrigin + f.callbackPath()
 	ti, provider := f.ti, f.provider
+	callbackHandler := ti.service.HandleIDPCallback
+	var router http.Handler
+	if throughRouter {
+		router, _, _ = newPlatformHostMux(t, ti)
+		callbackHandler = func(w http.ResponseWriter, r *http.Request) error {
+			router.ServeHTTP(w, r)
+			return nil
+		}
+	}
 	require.NotEqual(t, pinnedOutbound.Host, ti.serverURL.Host)
 	ti.service.SetCallbackOrigins(remotesessions.CallbackOrigins{Outbound: pinnedOutbound, Registration: nil})
 	if recorded != "" {
@@ -137,7 +152,7 @@ func runPinnedFederatedLogin(t *testing.T, recorded, wantOrigin string) {
 	// The pinned callback host holds no cookie yet, so it binds one and sends
 	// the browser back to the server URL host.
 	handoff := httptest.NewRecorder()
-	require.NoError(t, ti.service.HandleIDPCallback(handoff, routeIDPCallback(httptest.NewRequest(http.MethodGet, bootstrap.String(), nil).WithContext(ctx))))
+	require.NoError(t, callbackHandler(handoff, routeIDPCallback(httptest.NewRequest(http.MethodGet, bootstrap.String(), nil).WithContext(ctx))))
 	require.Equal(t, http.StatusFound, handoff.Code)
 	consent, err := url.Parse(handoff.Header().Get("Location"))
 	require.NoError(t, err)
@@ -159,7 +174,7 @@ func runPinnedFederatedLogin(t *testing.T, recorded, wantOrigin string) {
 	begin := httptest.NewRecorder()
 	beginRequest := httptest.NewRequest(http.MethodGet, readyURL.String(), nil).WithContext(ctx)
 	beginRequest.AddCookie(callbackCookies[0])
-	require.NoError(t, ti.service.HandleIDPCallback(begin, routeIDPCallback(beginRequest)))
+	require.NoError(t, callbackHandler(begin, routeIDPCallback(beginRequest)))
 	upstream, err := url.Parse(begin.Header().Get("Location"))
 	require.NoError(t, err)
 	require.Equal(t, provider.URL+"/authorize", upstream.Scheme+"://"+upstream.Host+upstream.Path)
@@ -169,8 +184,18 @@ func runPinnedFederatedLogin(t *testing.T, recorded, wantOrigin string) {
 	provider.issueCode(t, "pinned-one-use-code", federationToken{challenge: upstream.Query().Get("code_challenge"), nonce: nonce, email: mockidp.MockUserEmail, issuer: provider.URL, verified: true, secret: "selected-secret"})
 	callback := httptest.NewRequest(http.MethodGet, wantCallback+"?"+url.Values{"state": {id}, "code": {"pinned-one-use-code"}, "iss": {provider.URL}}.Encode(), nil).WithContext(ctx)
 	callback.AddCookie(callbackCookies[0])
+	if throughRouter {
+		for _, host := range []string{ti.serverURL.Host, platformHostChecklistExtraHost, platformHostChecklistExtraHost + ":9443"} {
+			headers := http.Header{"X-Forwarded-Host": {callback.Host}, "X-Forwarded-Proto": {"https"}, "Cookie": {callback.Header.Get("Cookie")}}
+			rejected := serveOnHost(t, router, http.MethodGet, host, callback.URL.RequestURI(), nil, headers)
+			require.Equal(t, http.StatusUnauthorized, rejected.Code, host)
+			_, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+id)
+			require.NoError(t, err, "misrouted callback must preserve state on %s", host)
+			require.Zero(t, provider.exchangeCount())
+		}
+	}
 	result := httptest.NewRecorder()
-	require.NoError(t, ti.service.HandleIDPCallback(result, routeIDPCallback(callback)))
+	require.NoError(t, callbackHandler(result, routeIDPCallback(callback)))
 	require.Equal(t, http.StatusFound, result.Code)
 	connect, err := url.Parse(result.Header().Get("Location"))
 	require.NoError(t, err)
