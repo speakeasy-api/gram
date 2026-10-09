@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -191,6 +192,22 @@ func TestEvidenceCandidates(t *testing.T) {
 
 	require.Equal(t, []testKey{flaky}, ev.candidates(),
 		"a test failing repeatedly on one PR is that PR's bug, not a flake")
+}
+
+func TestClosedTicketsPredates(t *testing.T) {
+	t.Parallel()
+
+	fixed := testKey{Package: "server/internal/mcp", Test: "TestFixed"}
+	untracked := testKey{Package: "server/internal/mcp", Test: "TestOther"}
+	closedAt := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	closed := closedTickets{fixed: closedAt}
+
+	require.True(t, closed.predates(fixed, closedAt.Add(-time.Hour)),
+		"a failure from before the ticket closed is settled and must not reopen it")
+	require.False(t, closed.predates(fixed, closedAt.Add(time.Hour)),
+		"a failure after the ticket closed is new evidence")
+	require.False(t, closed.predates(untracked, closedAt.Add(-time.Hour)),
+		"a test without a closed ticket keeps all its failures")
 }
 
 func TestAnnotateEscapesWorkflowCommands(t *testing.T) {

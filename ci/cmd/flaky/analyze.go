@@ -27,10 +27,11 @@ const scanConcurrency = 8
 
 // failedRun is one failed workflow run, reduced to what the analyser needs.
 type failedRun struct {
-	ID           int64  `json:"id"`
-	Event        string `json:"event"`
-	HeadBranch   string `json:"head_branch"`
-	HTMLURL      string `json:"html_url"`
+	ID           int64     `json:"id"`
+	Event        string    `json:"event"`
+	HeadBranch   string    `json:"head_branch"`
+	HTMLURL      string    `json:"html_url"`
+	CreatedAt    time.Time `json:"created_at"`
 	PullRequests []struct {
 		Number int `json:"number"`
 	} `json:"pull_requests"`
@@ -51,6 +52,17 @@ func (r failedRun) changeKey() string {
 		return "branch-" + r.HeadBranch
 	}
 	return "run-" + strconv.FormatInt(r.ID, 10)
+}
+
+// closedTickets maps a test to when its most recent flaky ticket was closed.
+type closedTickets map[testKey]time.Time
+
+// predates reports whether a run started before the test's ticket was closed.
+// Closing a ticket settles every failure before it (a fix merged, or the
+// candidate was wrong), so such a run no longer counts toward a new ticket.
+func (c closedTickets) predates(k testKey, ranAt time.Time) bool {
+	closedAt, ok := c[k]
+	return ok && ranAt.Before(closedAt)
 }
 
 // evidence records, per failing test, the run URLs grouped by change.
@@ -234,9 +246,17 @@ type analyzeOptions struct {
 // runAnalyze opens a candidate ticket for every test that failed across enough
 // changes and is not already tracked.
 func runAnalyze(ctx context.Context, gh *githubClient, linear *linearClient, opts analyzeOptions, stdout io.Writer) error {
-	runs, err := gh.failedRuns(ctx, opts.Workflow, time.Now().Add(-opts.Window))
+	since := time.Now().Add(-opts.Window)
+	runs, err := gh.failedRuns(ctx, opts.Workflow, since)
 	if err != nil {
 		return err
+	}
+
+	closed := closedTickets{}
+	if linear != nil {
+		if closed, err = linear.closedFlakyIssues(ctx, since); err != nil {
+			return err
+		}
 	}
 	runs = slices.DeleteFunc(runs, func(r failedRun) bool { return !slices.Contains(opts.Events, r.Event) })
 
@@ -261,6 +281,9 @@ func runAnalyze(ctx context.Context, gh *githubClient, linear *linearClient, opt
 				mu.Lock()
 				defer mu.Unlock()
 				for _, k := range failures {
+					if closed.predates(k, run.CreatedAt) {
+						continue
+					}
 					ev.add(k, run.changeKey(), run.HTMLURL)
 				}
 				return nil
