@@ -47,8 +47,11 @@ func (c *Config) AccessTokenLifetime() (time.Duration, error) {
 		return tokenTTL, nil
 	}
 	ttl, err := time.ParseDuration(c.Provider.AccessTokenTTL)
-	if err != nil || ttl <= 0 {
-		return 0, fmt.Errorf("access_token_ttl must be a positive duration such as 2m")
+	if err != nil {
+		return 0, fmt.Errorf("access_token_ttl %q must be a positive duration such as 2m: %w", c.Provider.AccessTokenTTL, err)
+	}
+	if ttl <= 0 {
+		return 0, fmt.Errorf("access_token_ttl %q must be a positive duration such as 2m", c.Provider.AccessTokenTTL)
 	}
 	return ttl, nil
 }
