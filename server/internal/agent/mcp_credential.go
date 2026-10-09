@@ -87,14 +87,13 @@ func (s *Service) MintMcpCredential(ctx context.Context, payload *gen.MintMcpCre
 		expiresAt = parent.ExpiresAt.Time.UTC()
 	}
 
-	version := runtimepolicy.DelegatedPolicyVersion(parent.DelegatedGrantsVersion.Int32)
-	childPolicy, err := mcpConnectPolicy(version, parent.DelegatedGrants)
+	enrollment, err := runtimepolicy.DecodeDelegatedPolicy(runtimepolicy.DelegatedPolicyVersion(parent.DelegatedGrantsVersion.Int32), parent.DelegatedGrants)
 	if err != nil {
-		return nil, err
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	childPolicyJSON, err := runtimepolicy.EncodeDelegatedPolicy(version, childPolicy)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "encode MCP credential policy").LogError(ctx, s.logger)
+	// Device sync marks an enrollment key; other agent keys cannot mint.
+	if !authz.GrantsContainSelector(enrollment.RuntimeGrants(), authz.ScopeOrgDeviceAgentSync, authz.NewSelector(authz.ScopeOrgDeviceAgentSync, authCtx.ActiveOrganizationID)) {
+		return nil, oops.E(oops.CodeForbidden, nil, "only an enrollment key can mint an MCP credential")
 	}
 
 	agent, err := agents.ResolvePrincipal(ctx, tx, authCtx.ActiveOrganizationID, actor)
@@ -103,6 +102,15 @@ func (s *Service) MintMcpCredential(ctx context.Context, payload *gen.MintMcpCre
 	}
 	if agents.DeriveLifecycle(agent) != agents.LifecycleActive {
 		return nil, oops.C(oops.CodeForbidden)
+	}
+
+	childPolicy, err := s.mcpConnectPolicy(ctx, tx, authCtx.ActiveOrganizationID, actor, agent.OwnerUserID, parent.CreatedByUserID)
+	if err != nil {
+		return nil, err
+	}
+	childPolicyJSON, err := runtimepolicy.EncodeDelegatedPolicy(runtimepolicy.CurrentDelegatedPolicyVersion, childPolicy)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "encode MCP credential policy").LogError(ctx, s.logger)
 	}
 
 	revoked, err := kr.RevokeChildAPIKeys(ctx, keysrepo.RevokeChildAPIKeysParams{OrganizationID: authCtx.ActiveOrganizationID, ParentApiKeyID: uuid.NullUUID{UUID: parent.ID, Valid: true}})
@@ -137,7 +145,7 @@ func (s *Service) MintMcpCredential(ctx context.Context, payload *gen.MintMcpCre
 		KeyHash:                keyHash,
 		SubjectUrn:             parent.SubjectUrn,
 		DelegatedGrants:        childPolicyJSON,
-		DelegatedGrantsVersion: parent.DelegatedGrantsVersion,
+		DelegatedGrantsVersion: pgtype.Int4{Int32: int32(runtimepolicy.CurrentDelegatedPolicyVersion), Valid: true},
 		ExpiresAt:              pgtype.Timestamptz{Time: expiresAt, InfinityModifier: pgtype.Finite, Valid: true},
 		ParentApiKeyID:         uuid.NullUUID{UUID: parent.ID, Valid: true},
 	})
@@ -169,16 +177,30 @@ func (s *Service) MintMcpCredential(ctx context.Context, payload *gen.MintMcpCre
 	}, nil
 }
 
-// mcpConnectPolicy keeps only the parent's mcp:connect grants and their
-// exclusions, so the child can never reach more than the parent could.
-func mcpConnectPolicy(version runtimepolicy.DelegatedPolicyVersion, parentRaw []byte) (runtimepolicy.DelegatedPolicy, error) {
-	parentPolicy, err := runtimepolicy.DecodeDelegatedPolicy(version, parentRaw)
+// mcpConnectPolicy delegates the agent's live mcp:connect access, with its
+// exclusions, bounded by its owner and by the human who authorized the
+// enrollment key. The enrollment key's own grants play no part.
+func (s *Service) mcpConnectPolicy(ctx context.Context, tx pgx.Tx, organizationID string, actor urn.Principal, ownerUserID, authorizerUserID string) (runtimepolicy.DelegatedPolicy, error) {
+	agentPolicy, err := runtimepolicy.LoadAgentPolicy(ctx, tx, organizationID, actor)
 	if err != nil {
-		return runtimepolicy.DelegatedPolicy{}, oops.C(oops.CodeUnauthorized)
+		return runtimepolicy.DelegatedPolicy{}, oops.E(oops.CodeUnexpected, err, "load live agent policy").LogError(ctx, s.logger)
 	}
-	var grants []authz.Grant
+	ownerPolicy, err := loadUserPolicy(ctx, tx, organizationID, ownerUserID)
+	if err != nil {
+		return runtimepolicy.DelegatedPolicy{}, err
+	}
+	authorizerPolicy, err := loadUserPolicy(ctx, tx, organizationID, authorizerUserID)
+	if err != nil {
+		return runtimepolicy.DelegatedPolicy{}, err
+	}
+
+	delegable, err := runtimepolicy.DelegableGrantsWithExclusions(agentPolicy, ownerPolicy, authorizerPolicy)
+	if err != nil {
+		return runtimepolicy.DelegatedPolicy{}, oops.E(oops.CodeUnexpected, err, "derive delegable MCP access").LogError(ctx, s.logger)
+	}
+	grants := make([]authz.Grant, 0, len(delegable))
 	hasConnect := false
-	for _, grant := range parentPolicy.Effective {
+	for _, grant := range delegable {
 		switch grant.Scope {
 		case authz.ScopeMCPConnect:
 			hasConnect = true
@@ -186,16 +208,32 @@ func mcpConnectPolicy(version runtimepolicy.DelegatedPolicyVersion, parentRaw []
 		default:
 			continue
 		}
-		grants = append(grants, authz.NewGrantWithSelector(grant.Scope, grant.Selector))
+		grants = append(grants, grant)
 	}
 	if !hasConnect {
-		return runtimepolicy.DelegatedPolicy{}, oops.E(oops.CodeForbidden, nil, "this agent key is not allowed to connect to MCP servers")
+		return runtimepolicy.DelegatedPolicy{}, oops.E(oops.CodeForbidden, nil, "this agent has no MCP access to delegate")
 	}
-	policy, err := runtimepolicy.NewDelegatedPolicy(version, grants)
+	policy, err := runtimepolicy.NewDelegatedPolicy(runtimepolicy.CurrentDelegatedPolicyVersion, grants)
 	if err != nil {
-		return runtimepolicy.DelegatedPolicy{}, oops.E(oops.CodeForbidden, err, "build MCP credential policy")
+		return runtimepolicy.DelegatedPolicy{}, oops.E(oops.CodeUnexpected, err, "build MCP credential policy").LogError(ctx, s.logger)
 	}
 	return policy, nil
+}
+
+// loadUserPolicy loads a member's live grants; a departed member delegates nothing.
+func loadUserPolicy(ctx context.Context, tx pgx.Tx, organizationID, userID string) ([]authz.Grant, error) {
+	principals, err := authz.ResolveUserPrincipals(ctx, tx, organizationID, userID)
+	if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve live member principals")
+	}
+	grants, err := authz.LoadGrants(ctx, tx, organizationID, principals)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load live member policy")
+	}
+	return grants, nil
 }
 
 func mcpCredentialAuditMetadata(key keysrepo.ApiKey) *audit.AgentKeyCredentialMetadata {
