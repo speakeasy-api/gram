@@ -180,8 +180,8 @@ type consentTemplateData struct {
 	ConsentToolsPrefill string
 	// ValidationDeadlineMS is the callback probe's absolute deadline. Only first-party pages poll because reloading interactive consent would discard unsaved tool choices.
 	ValidationDeadlineMS int64
-	// ConnectedCardCount is the number of RemoteSessionCards already linked,
-	// rendered as the "n of m connected" summary above the service list.
+	// ConnectedCardCount is the number of RemoteSessionCards already linked or
+	// chained, rendered as the "n of m connected" summary above the service list.
 	ConnectedCardCount int
 	// Styles is the compiled design-system stylesheet inlined into the
 	// document head. A build artifact, never user input.
@@ -575,7 +575,8 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	// stored preference, so the page value is on only when none of them is off.
 	everyCardAutoRefreshes := true
 	for _, c := range cards {
-		if c.Connected {
+		// The summary counts chained services as connected; access rules use chainedCardCount.
+		if c.Connected || c.Chained {
 			connectedCardCount++
 		}
 		if c.Chained {

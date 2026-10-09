@@ -77,7 +77,7 @@ func TestConsentPagePreview(t *testing.T) {
 	withCards := func(d consentTemplateData, cards ...remoteSessionCard) consentTemplateData {
 		d.RemoteSessionCards = cards
 		for _, c := range cards {
-			if c.Connected {
+			if c.Connected || c.Chained {
 				d.ConnectedCardCount++
 			}
 		}

@@ -149,15 +149,18 @@ func TestConsentTemplateRendersIdentityChainedServiceWithFallback(t *testing.T) 
 			Chained:       true,
 		}},
 		ConsentEnabled:     true,
-		ConnectedCardCount: 0,
+		ConnectedCardCount: 1,
 	})
 	require.NoError(t, err)
 
 	html := normalizeWhitespace(page.String())
 	require.Contains(t, html, "Managed by your identity provider")
+	require.Regexp(t, `<span class="text-xs text-default-success" data-card-status data-identity-chained`, html)
 	require.Contains(t, html, "data-connect-fallback")
-	require.Contains(t, html, "Connect manually")
-	require.Contains(t, html, "0 of 1 connected")
+	require.Contains(t, html, "Use a separate sign-in instead")
+	require.Regexp(t, `<button type="submit" name="action" value="connect" class="[^"]*\btext-muted-foreground\b[^"]*" data-connect-link data-connect-fallback`, html)
+	require.NotRegexp(t, `value="connect" class="[^"]*\b(border|bg-primary)\b[^"]*" data-connect-link data-connect-fallback`, html, "the fallback is a quiet text control")
+	require.Contains(t, html, "1 of 1 connected")
 	require.NotContains(t, html, `aria-label="Disconnect`)
 	require.NotContains(t, html, "Not connected")
 }
