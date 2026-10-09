@@ -159,6 +159,8 @@ export function EditableSourceFieldSection({
               if (!open && !saving) setConfirmOpen(false);
             },
             onConfirm: () => {
+              // Dismissed: the dialog may still be animating out.
+              if (!confirmOpen) return;
               // The setting changed underneath the confirmation, e.g. from
               // another tab: saving now would overwrite a value never shown.
               if (stored !== pending.base) {

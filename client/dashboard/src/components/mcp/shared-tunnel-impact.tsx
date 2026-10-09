@@ -88,6 +88,15 @@ function ServerList({
 }
 
 /**
+ * How the impact opens: the default sentence names the tunnel, or `intro`
+ * replaces it, for a control that changes one server but whose effect reaches
+ * the shared upstream.
+ */
+type TunnelHeading =
+  | { tunnelName: string; intro?: ReactNode }
+  | { tunnelName?: undefined; intro: ReactNode };
+
+/**
  * Explains that a control acts on the tunnel rather than one MCP server, and
  * lists the MCP servers it reaches. Every tunnel-wide setting and action
  * renders this so the shared effect is stated the same way everywhere.
@@ -99,10 +108,8 @@ export function SharedTunnelImpact({
   effect,
   publicWarning = false,
   intro,
-}: {
+}: TunnelHeading & {
   impact: SharedTunnelImpactState;
-  /** Named in the default intro; required unless `intro` replaces it. */
-  tunnelName?: string;
   currentMcpServerId?: string;
   /** What this particular control changes for every server on the tunnel. */
   effect?: ReactNode;
@@ -112,11 +119,6 @@ export function SharedTunnelImpact({
    * cannot view, and without public access none can serve anonymous callers.
    */
   publicWarning?: boolean;
-  /**
-   * Replaces the default "this belongs to the tunnel" sentence, for a control
-   * that changes one server but whose effect reaches the shared upstream.
-   */
-  intro?: ReactNode;
 }): JSX.Element {
   const showPublicWarning =
     publicWarning ||
@@ -155,30 +157,27 @@ export function SharedTunnelConfirmDialog({
   open,
   onOpenChange,
   tunneledMcpServerId,
-  tunnelName,
   currentMcpServerId,
   title,
   description,
   effect,
   publicWarning,
-  intro,
   children,
   confirmLabel,
   pendingLabel,
   isPending,
   errorMessage,
   onConfirm,
-}: {
+  ...heading
+}: TunnelHeading & {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tunneledMcpServerId: string;
-  tunnelName?: string;
   currentMcpServerId?: string;
   title: string;
   description: ReactNode;
   effect?: ReactNode;
   publicWarning?: boolean;
-  intro?: ReactNode;
   /** Extra content above the impact, such as the value being saved. */
   children?: ReactNode;
   confirmLabel: string;
@@ -204,11 +203,10 @@ export function SharedTunnelConfirmDialog({
         {children}
         <SharedTunnelImpact
           impact={impact}
-          tunnelName={tunnelName}
           currentMcpServerId={currentMcpServerId}
           effect={effect}
           publicWarning={publicWarning}
-          intro={intro}
+          {...heading}
         />
         {errorMessage !== undefined ? (
           <Alert variant="error" dismissible={false}>
@@ -226,7 +224,10 @@ export function SharedTunnelConfirmDialog({
           <Button
             variant="primary"
             disabled={!impact.isReady || isPending}
-            onClick={onConfirm}
+            // Ignored once dismissed, while the dialog animates out.
+            onClick={() => {
+              if (open) onConfirm();
+            }}
           >
             {isPending ? (
               <Button.LeftIcon>
