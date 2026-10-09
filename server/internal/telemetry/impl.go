@@ -2114,6 +2114,9 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	projectID := authCtx.ProjectID.String()
 	userID := conv.PtrValOr(payload.UserID, "")
 	externalUserID := conv.PtrValOr(payload.ExternalUserID, "")
+	if userID != "" && externalUserID != "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "only one of user_id or external_user_id can be provided")
+	}
 	apiKeyID := conv.PtrValOr(payload.APIKeyID, "")
 	toolsetSlug := conv.PtrValOr(payload.ToolsetSlug, "")
 	remoteMCPServerID := conv.PtrValOr(payload.RemoteMcpServerID, "")
@@ -2132,10 +2135,6 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	hookSource := conv.PtrValOr(payload.HookSource, "")
 	accountType := conv.PtrValOr(payload.AccountType, "")
 	externalOrgID := conv.PtrValOr(payload.ExternalOrgID, "")
-
-	if userID != "" && externalUserID != "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "only one of user_id or external_user_id can be provided")
-	}
 
 	// Resolved once and shared by every query below so the summary, its
 	// comparison period, the time series and the tool breakdowns all scope to
