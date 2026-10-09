@@ -17,6 +17,8 @@ const state = vi.hoisted(() => ({
   servers: [] as McpServer[],
   members: [] as { mcpServerId: string }[],
   membersError: false,
+  tunnelsError: false,
+  tunnelsFetching: false,
   refetchMembers: vi.fn(),
   gatewayId: null as string | null,
   mutateAsync: vi.fn(),
@@ -109,12 +111,22 @@ vi.mock("./hooks", () => ({
   }),
 }));
 vi.mock("@gram/client/react-query/tunneledMcpServers.js", () => ({
-  useTunneledMcpServers: () => ({
-    data: { tunneledMcpServers: state.tunnels },
-    isSuccess: true,
-    isPending: false,
-    isError: false,
-  }),
+  useTunneledMcpServers: () =>
+    state.tunnelsError
+      ? {
+          data: undefined,
+          isSuccess: false,
+          isPending: false,
+          isError: true,
+          isFetching: state.tunnelsFetching,
+        }
+      : {
+          data: { tunneledMcpServers: state.tunnels },
+          isSuccess: true,
+          isPending: false,
+          isError: false,
+          isFetching: false,
+        },
 }));
 vi.mock("@gram/client/react-query/mcpServers.js", () => ({
   useMcpServers: () => ({
@@ -183,6 +195,8 @@ beforeEach(() => {
   ];
   state.members = [];
   state.membersError = false;
+  state.tunnelsError = false;
+  state.tunnelsFetching = false;
   state.gatewayId = null;
   state.mutateAsync.mockReset();
   state.refetchMembers.mockReset();
@@ -271,6 +285,17 @@ describe("ExistingTunnelFlow", () => {
     expect(screen.getByText(/Could not load the gateway/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(state.refetchMembers).toHaveBeenCalledOnce();
+  });
+
+  it("disables the tunnel list Retry while it is reloading", () => {
+    state.tunnelsError = true;
+    state.tunnelsFetching = true;
+    renderFlow();
+    expect(screen.getByText(/Could not load this project/)).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Retry" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
   });
 
   it("offers deleting only tunnels no visible server uses", () => {
