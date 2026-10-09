@@ -28,7 +28,7 @@ func memoryRoot(t *testing.T) string {
 	t.Helper()
 	var st unix.Statfs_t
 	require.NoError(t, unix.Statfs("/dev/shm", &st), "credentials tests need /dev/shm")
-	require.Contains(t, []int64{unix.TMPFS_MAGIC, unix.RAMFS_MAGIC}, int64(st.Type), "credentials tests need /dev/shm on tmpfs")
+	require.Equal(t, int64(unix.TMPFS_MAGIC), int64(st.Type), "credentials tests need /dev/shm on tmpfs")
 	root, err := os.MkdirTemp("/dev/shm", "tunnel-agent-test-")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(root) })
@@ -125,7 +125,7 @@ func diskDir(t *testing.T) string {
 		}
 		t.Cleanup(func() { _ = os.RemoveAll(dir) })
 		var st unix.Statfs_t
-		if unix.Statfs(dir, &st) == nil && st.Type != unix.TMPFS_MAGIC && st.Type != unix.RAMFS_MAGIC {
+		if unix.Statfs(dir, &st) == nil && st.Type != unix.TMPFS_MAGIC {
 			return dir
 		}
 	}
@@ -308,6 +308,17 @@ func TestCredentialsModeEndToEndOnLinux(t *testing.T) {
 
 	call := credentialCall{token: testTokenA}
 	call.sid = c.initialize(t, call)
+	var escapedPID int
+	require.Eventually(t, func() bool {
+		pid, err := os.ReadFile(escaped)
+		if err != nil {
+			return false
+		}
+		_, err = fmt.Sscan(string(pid), &escapedPID)
+		return err == nil && escapedPID > 0
+	}, 10*time.Second, 20*time.Millisecond, "the server must start an escaped descendant")
+	t.Cleanup(func() { _ = unix.Kill(escapedPID, unix.SIGKILL) })
+	require.NoError(t, unix.Kill(escapedPID, 0), "the escaped descendant is running")
 	require.Equal(t, identity.TokenSHA256(testTokenA), c.toolText(t, call, "token-sha"))
 	tokenPath := a.stdio.session(call.sid).cred.dir.tokenPath()
 	require.Equal(t, root, tokenPath[:len(root)])
@@ -322,13 +333,6 @@ func TestCredentialsModeEndToEndOnLinux(t *testing.T) {
 	entries, err := os.ReadDir(filepath.Join(root, credentialBaseName))
 	require.NoError(t, err)
 	require.Len(t, entries, 1, "only the maintenance lock remains after shutdown")
-
-	if pid, err := os.ReadFile(escaped); err == nil {
-		var n int
-		if _, err := fmt.Sscan(string(pid), &n); err == nil && n > 0 {
-			_ = unix.Kill(n, unix.SIGKILL)
-		}
-	}
 }
 
 func TestCredentialTokenFollowsTheOpenedDirectory(t *testing.T) {

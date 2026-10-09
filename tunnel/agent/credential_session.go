@@ -282,6 +282,13 @@ func (s *stdioSession) expireCredential(generation uint64) {
 	s.close()
 }
 
+// beginTerminate stops admitting requests at once, then ends the session in
+// the background after any write already admitted finishes.
+func (s *stdioSession) beginTerminate() {
+	s.closing.Store(true)
+	go s.terminate()
+}
+
 // terminate ends the session after any admitted write finishes.
 func (s *stdioSession) terminate() {
 	if s.cred == nil {
