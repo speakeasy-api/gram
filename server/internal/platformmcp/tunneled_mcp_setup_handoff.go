@@ -117,10 +117,12 @@ func (s *TunneledMCPSetupHandoffService) Handoff(ctx context.Context, principal 
 	if err != nil {
 		return GetTunneledMCPSetupHandoffOutput{}, ErrTunneledMCPSetupInvalid
 	}
+	// Only an omitted mcp_id selects the add form. A supplied one names an
+	// existing server, so even the nil UUID is a target, never a fallback.
 	var mcpID uuid.UUID
 	if input.MCPID != "" {
 		mcpID, err = uuid.Parse(input.MCPID)
-		if err != nil {
+		if err != nil || mcpID == uuid.Nil {
 			return GetTunneledMCPSetupHandoffOutput{}, ErrTunneledMCPSetupInvalid
 		}
 	}
