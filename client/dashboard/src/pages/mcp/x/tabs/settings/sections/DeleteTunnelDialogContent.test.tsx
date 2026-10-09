@@ -273,13 +273,21 @@ describe("DeleteTunnelDialogContent", () => {
   });
 
   it("stays open for a retry when nothing was deleted", async () => {
-    state.mutateAsync.mockRejectedValue(
-      new TunnelDeleteIncompleteError("could not be confirmed deleted", false),
+    const failure = new TunnelDeleteIncompleteError(
+      "Deleted 0 MCP servers, but the tunnel could not be confirmed deleted.",
+      false,
     );
-    const { onLeave } = renderDialog();
+    state.mutateAsync.mockRejectedValue(failure);
+    const { onLeave, rerender } = renderDialog();
     typeName();
     await clickDelete();
     expect(onLeave).not.toHaveBeenCalled();
     expect(state.remaining).not.toHaveBeenCalled();
+
+    // The mutation now reports the failure, which the dialog shows.
+    state.isError = true;
+    state.error = failure;
+    rerender();
+    expect(screen.getByText(failure.message)).toBeTruthy();
   });
 });
