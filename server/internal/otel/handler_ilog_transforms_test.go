@@ -140,7 +140,7 @@ func TestMaxSizeLogRecordFitsRelayExportAfterFullEnrichment(t *testing.T) {
 	}).Build()
 	padInboundLogRecordToSize(t, inbound, maxOTLPLogRecordBytes)
 	require.Equal(t, maxOTLPLogRecordBytes, proto.Size(inbound))
-	require.NoError(t, ValidateLogRecord(inbound))
+	require.NoError(t, ValidateInboundLogRecord(inbound))
 
 	var published *otelv1.LogRecord
 	publisher := gcp.NewMockPublisher[*otelv1.LogRecord]()
@@ -371,7 +371,7 @@ func TestNearLimitPromptStillFitsRelayExportAfterEnrichment(t *testing.T) {
 		},
 	}).Build()
 	require.LessOrEqual(t, proto.Size(inbound), maxOTLPLogRecordBytes)
-	require.NoError(t, ValidateLogRecord(inbound))
+	require.NoError(t, ValidateInboundLogRecord(inbound))
 
 	var published *otelv1.LogRecord
 	publisher := gcp.NewMockPublisher[*otelv1.LogRecord]()

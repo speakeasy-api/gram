@@ -64,7 +64,7 @@ func (s *Service) teeOTELLogsToEventFeed(ctx context.Context, payload *gen.LogsP
 
 	results := make([]gcp.PublishResult, 0, len(records))
 	for _, record := range records {
-		if err := otelsvc.ValidateLogRecord(record); err != nil {
+		if err := otelsvc.ValidateInboundLogRecord(record); err != nil {
 			s.logger.WarnContext(ctx, "skipping hooks OTEL log record in event feed tee", attr.SlogError(err))
 			continue
 		}

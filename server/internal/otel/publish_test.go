@@ -38,22 +38,22 @@ func TestPublishReturnsAPublishFailure(t *testing.T) {
 	require.NotErrorIs(t, err, ErrInvalid, "a publish failure is not the producer's fault")
 }
 
-func TestValidateLogRecordEnforcesTheIngestContract(t *testing.T) {
+func TestValidateInboundLogRecordEnforcesTheIngestContract(t *testing.T) {
 	t.Parallel()
 
-	require.NoError(t, ValidateLogRecord(publishTestLogRecord("a")))
-	require.ErrorContains(t, ValidateLogRecord(nil), "required")
-	require.ErrorContains(t, ValidateLogRecord(publishTestLogRecord("")), "ID is required")
+	require.NoError(t, ValidateInboundLogRecord(publishTestLogRecord("a")))
+	require.ErrorContains(t, ValidateInboundLogRecord(nil), "required")
+	require.ErrorContains(t, ValidateInboundLogRecord(publishTestLogRecord("")), "ID is required")
 
 	oversized := publishTestLogRecord("a")
 	oversized.SetSeverityText(strings.Repeat("x", maxOTLPLogRecordBytes))
-	require.ErrorContains(t, ValidateLogRecord(oversized), "exceeds maximum size")
+	require.ErrorContains(t, ValidateInboundLogRecord(oversized), "exceeds maximum size")
 
 	badTrace := publishTestLogRecord("a")
 	badTrace.SetTraceId(make([]byte, 3))
-	require.ErrorContains(t, ValidateLogRecord(badTrace), "trace ID")
+	require.ErrorContains(t, ValidateInboundLogRecord(badTrace), "trace ID")
 
 	badSpan := publishTestLogRecord("a")
 	badSpan.SetSpanId(make([]byte, 3))
-	require.ErrorContains(t, ValidateLogRecord(badSpan), "span ID")
+	require.ErrorContains(t, ValidateInboundLogRecord(badSpan), "span ID")
 }

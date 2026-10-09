@@ -34,7 +34,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload, body io.Re
 			export = request
 			return inboundLogRecordsFromExport(request, provenance)
 		},
-		validate:  ValidateLogRecord,
+		validate:  ValidateInboundLogRecord,
 		publisher: s.logPublisher,
 	})
 	if err != nil {
@@ -119,12 +119,12 @@ func inboundLogRecordsFromExport(request *collectorlogsv1.ExportLogsServiceReque
 	return records, nil
 }
 
-// ValidateLogRecord enforces the ingest-edge contract on a log record
+// ValidateInboundLogRecord enforces the ingest-edge contract on a log record
 // before it is published to the inbound pipeline topic: a record id must be
 // assigned, the record must fit the relay export budget, and trace/span ids
 // must be empty or exactly OTLP-sized. Exported so the hooks OTLP tee can
 // apply the same contract when it republishes records into this pipeline.
-func ValidateLogRecord(record *otelv1.InboundLogRecord) error {
+func ValidateInboundLogRecord(record *otelv1.InboundLogRecord) error {
 	if record == nil {
 		return errors.New("log record is required")
 	}

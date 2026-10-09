@@ -241,7 +241,7 @@ func TestValidateLogRecordAcceptsRecordBelowMaximumSize(t *testing.T) {
 	}).Build()
 
 	require.LessOrEqual(t, proto.Size(record), maxOTLPLogRecordBytes)
-	require.NoError(t, ValidateLogRecord(record))
+	require.NoError(t, ValidateInboundLogRecord(record))
 }
 
 func testOTELAuthContext(projectID uuid.UUID) *contextvalues.AuthContext {

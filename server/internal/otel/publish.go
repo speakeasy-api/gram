@@ -52,5 +52,5 @@ func Publish[M any](ctx context.Context, signal Signal, publisher gcp.Publisher[
 
 // PublishLogs is Publish for log records under the log ingest contract.
 func PublishLogs(ctx context.Context, publisher gcp.Publisher[*otelv1.InboundLogRecord], records []*otelv1.InboundLogRecord) error {
-	return Publish(ctx, SignalLog, publisher, ValidateLogRecord, records)
+	return Publish(ctx, SignalLog, publisher, ValidateInboundLogRecord, records)
 }
