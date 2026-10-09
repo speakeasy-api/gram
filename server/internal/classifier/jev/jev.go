@@ -89,7 +89,7 @@ func (c *Classifier) Classify(ctx context.Context, req *classifier.Request) clas
 
 func (c *Classifier) classify(ctx context.Context, req *classifier.Request) (classifier.Result, error) {
 	var result classifier.Result
-	result.Metadata = classifier.Metadata{Provider: "typesafe", Model: model, CompilerVersion: "1", AccountingVersion: "provider-usage-v1"}
+	result.Metadata = classifier.Metadata{Provider: "openrouter", Model: model, CompilerVersion: "1", AccountingVersion: "provider-usage-v1"}
 	result.Usage.Complete = true
 
 	if err := ctx.Err(); err != nil {

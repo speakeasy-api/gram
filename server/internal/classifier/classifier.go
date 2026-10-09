@@ -62,7 +62,8 @@ type Request struct {
 
 // Metadata identifies the implementation contract used for a run.
 type Metadata struct {
-	// Provider identifies the classifier implementation's provider.
+	// Provider identifies the inference transport (for example, openrouter),
+	// independently of the model's vendor or family.
 	Provider string
 
 	// Model is the configured model identifier. Concrete versions are preferred

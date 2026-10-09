@@ -97,6 +97,9 @@ func TestClassifyAllVariants(t *testing.T) {
 	result := c.Classify(t.Context(), req)
 	require.NoError(t, result.Err())
 	require.Len(t, result.Outcomes, 3)
+	require.Equal(t, "openrouter", result.Metadata.Provider)
+	require.Equal(t, "jev-latest", result.Metadata.Model)
+	require.Equal(t, []string{"jev-1.13.0"}, result.Models)
 	for _, outcome := range result.Outcomes {
 		require.Nil(t, outcome.Failure)
 		require.NotNil(t, outcome.Answer)
