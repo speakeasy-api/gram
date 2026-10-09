@@ -748,4 +748,10 @@ func TestEnvironmentHeaders_StandaloneValidationTunneled(t *testing.T) {
 	for _, forwarded := range headers {
 		require.Equal(t, []string{envSandboxInstance}, forwarded.Values("X-Instance-Url"))
 	}
+
+	bad := seedEnvironment(t, ctx, ti, projectID, envEntry{name: "MCP_HEADER_Mcp-Session-Id", value: envSecretValue, secret: true})
+	linkEnvironment(t, ctx, ti, projectID, server.ID, linkTo(bad))
+	before := gateway.forwardCount()
+	_, _ = postValidate(t, fx, fx.clientID)
+	require.Equal(t, before, gateway.forwardCount(), "a misconfigured environment makes no probe")
 }

@@ -435,4 +435,44 @@ describe("EnvironmentHeadersSection", () => {
     ).toBe("__none__");
     expect(screen.getByText(/changed elsewhere/i)).toBeTruthy();
   });
+
+  it("treats its own saved link as the new baseline", () => {
+    grantAll();
+    const view = renderSection(server());
+
+    fireEvent.change(screen.getByLabelText("Environment"), {
+      target: { value: sandbox.id },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    rerenderWith(view, server({ environmentId: sandbox.id }));
+    expect(screen.queryByText(/changed elsewhere/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /save/i })).toBeNull();
+
+    // A later change elsewhere is followed, not undone by a stale draft.
+    rerenderWith(view, server({ environmentId: undefined }));
+    expect(
+      (screen.getByLabelText("Environment") as HTMLSelectElement).value,
+    ).toBe("__none__");
+    expect(screen.queryByRole("button", { name: /save/i })).toBeNull();
+    expect(screen.queryByText(/changed elsewhere/i)).toBeNull();
+  });
+
+  it("treats a saved unlink as the new baseline", () => {
+    grantAll();
+    const view = renderSection(server());
+
+    fireEvent.change(screen.getByLabelText("Environment"), {
+      target: { value: "__none__" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    rerenderWith(view, server({ environmentId: undefined }));
+    expect(screen.queryByText(/changed elsewhere/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /save/i })).toBeNull();
+
+    rerenderWith(view, server({ environmentId: sandbox.id }));
+    expect(
+      (screen.getByLabelText("Environment") as HTMLSelectElement).value,
+    ).toBe(sandbox.id);
+    expect(screen.queryByRole("button", { name: /save/i })).toBeNull();
+  });
 });

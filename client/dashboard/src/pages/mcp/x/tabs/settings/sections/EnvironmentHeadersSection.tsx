@@ -151,11 +151,15 @@ function EnvironmentHeadersEditor({
   const queryClient = useQueryClient();
   const linked = mcpServer.environmentId ?? NO_ENVIRONMENT;
   // The draft remembers the link it was started from. When the stored link
-  // changes underneath it (another tab, another operator), an untouched draft
-  // follows the new link; an edited one is kept and flagged so Save never
-  // silently restores a link the user did not choose.
+  // changes (a save landing, another tab, another operator), a draft that is
+  // untouched or already equals the new link follows it; a divergent edit is
+  // kept and flagged so Save never silently restores a link the user did not
+  // choose.
   const [editing, setEditing] = useState({ base: linked, draft: linked });
-  if (editing.base !== linked && editing.draft === editing.base) {
+  if (
+    editing.base !== linked &&
+    (editing.draft === editing.base || editing.draft === linked)
+  ) {
     setEditing({ base: linked, draft: linked });
   }
   const draft = editing.draft;
