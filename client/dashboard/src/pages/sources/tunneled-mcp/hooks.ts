@@ -20,7 +20,10 @@ import {
   type UseMutationResult,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { deleteTunnelAndConfirmedServers } from "./existingTunnel";
+import {
+  deleteTunnelAndConfirmedServers,
+  isTunnelInUseError,
+} from "./existingTunnel";
 
 export type CreateTunneledMcpSourceVariables = {
   name: string;
@@ -68,12 +71,19 @@ export function useCreateTunneledMcpSource(): UseMutationResult<
         } catch (rollbackError) {
           const linkMsg =
             linkError instanceof Error ? linkError.message : String(linkError);
+          if (isTunnelInUseError(rollbackError)) {
+            // The link failed from here, yet an MCP server now uses the
+            // tunnel: the create committed before its response was lost.
+            throw new Error(
+              `The MCP server for tunnel ${formatTunneledMcpDisplay(tunneledMcpServer)} may have been created even though the request failed (${linkMsg}), so the tunnel was kept. Check your MCP servers before retrying. The tunnel key is shown only once; rotate it from that server's settings to get a new one.`,
+            );
+          }
           const rollbackMsg =
             rollbackError instanceof Error
               ? rollbackError.message
               : String(rollbackError);
           throw new Error(
-            `Created tunneled MCP server ${tunneledMcpServer.id} but failed to link an MCP server, and the rollback also failed. Delete it manually before retrying. Cause: ${linkMsg}. Rollback: ${rollbackMsg}.`,
+            `Created tunneled MCP server ${tunneledMcpServer.id} but failed to link an MCP server, and the rollback also failed. Delete the unused tunnel from Add MCP server, Existing tunnel before retrying. Cause: ${linkMsg}. Rollback: ${rollbackMsg}.`,
           );
         }
         throw linkError instanceof Error
@@ -93,7 +103,9 @@ export function useCreateTunneledMcpSource(): UseMutationResult<
         mcpServer,
       };
     },
-    onSuccess: async () => {
+    // Also after an error: a partly failed run may have left a tunnel or a
+    // server behind, and the lists must show it.
+    onSettled: async () => {
       await Promise.all([
         invalidateAllTunneledMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
