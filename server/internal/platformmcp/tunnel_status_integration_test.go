@@ -306,4 +306,14 @@ func TestTunnelStatusReportsInactiveForSeenSourceWithoutLiveConnections(t *testi
 	mcp := fixture.getMCP(t, reader, ctx, fixture.wrapperID)
 
 	require.Equal(t, &MCPTunnel{ConnectionStatus: TunnelConnectionInactive}, mcp.Tunnel)
+	// An active source classifies as inactive whatever ever_seen says, so the
+	// projection the classifier depends on is checked directly.
+	source, err := platformrepo.New(fixture.conn).GetPlatformMCPTunneledSourceForMCP(t.Context(), platformrepo.GetPlatformMCPTunneledSourceForMCPParams{
+		OrganizationID: fixture.principal.OrganizationID,
+		McpServerID:    fixture.wrapperID,
+		ProjectID:      fixture.project.ID,
+	})
+	require.NoError(t, err)
+	require.True(t, source.EverSeen)
+	require.Equal(t, "active", source.Status)
 }
