@@ -65,6 +65,12 @@ function submit() {
   }) as HTMLButtonElement;
 }
 
+it("emphasizes the exact confirmation phrase without changing the input label", () => {
+  setup();
+  expect(screen.getByText(phrase, { selector: "strong" })).toBeTruthy();
+  expect(screen.getByRole("textbox", { name: `Type ${phrase}` })).toBeTruthy();
+});
+
 it("starts with no removals and previews only explicit selections including staff locks", () => {
   setup();
   for (const checkbox of screen.getAllByRole("checkbox"))

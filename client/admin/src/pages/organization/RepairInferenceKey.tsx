@@ -345,7 +345,7 @@ export function RepairInferenceKey({
                   htmlFor={`${id}-confirmation`}
                   className="text-sm font-medium"
                 >
-                  Type {CONFIRMATION}
+                  Type <strong className="font-bold">{CONFIRMATION}</strong>
                 </label>
                 <Input
                   id={`${id}-confirmation`}
