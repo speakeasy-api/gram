@@ -133,9 +133,11 @@ export function toolsetTabForServerPath(
     case "sessions":
       return "sessions";
     case "settings":
-      return hash === `#${LEGACY_AUTHENTICATION_TAB}`
-        ? "authentication"
-        : "settings";
+      if (hash === `#${LEGACY_AUTHENTICATION_TAB}`) return "authentication";
+      // Other settings sections have no anchor on the toolset page. Keep their
+      // deep links on the server page, where the section can render and scroll.
+      if (hash && hash !== "#settings") return undefined;
+      return "settings";
     // The toolset page has no guardrails tab.
     case "guardrails":
       return undefined;

@@ -172,6 +172,13 @@ describe("toolsetTabForServerPath", () => {
     ["/sessions", "", "sessions"],
     ["/settings", "", "settings"],
     ["/settings", "#authentication", "authentication"],
+    ["/settings", "#agent-setup", undefined],
+    ["/settings", "#server-url", undefined],
+    ["/settings", "#public-access", undefined],
+    ["/settings", "#resource-identifier", undefined],
+    ["/settings", "#tunnel-key", undefined],
+    ["/settings", "#unknown-section", undefined],
+    ["", "#settings", "settings"],
     ["", "#authentication", "authentication"],
     ["", "#tools", "tools"],
   ] as const)("maps %s%s to toolset tab %s", (suffix, hash, expected) => {
