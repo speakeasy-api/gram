@@ -415,3 +415,109 @@ func TestServePublic_PrivatePassthrough_DynamicExecuteAuthorizesTheTarget(t *tes
 		require.Equal(t, before, f.upstream.toolCalls("read_data"))
 	})
 }
+
+// dynamicListOutcome lists tools in dynamic mode and returns the listed names
+// and the JSON-RPC error message, if any.
+func dynamicListOutcome(t *testing.T, ti *testInstance, f passthroughFixture) ([]string, string) {
+	t.Helper()
+
+	w, err := servePublicHTTP(t, context.Background(), ti, f.toolset.McpSlug.String, makeToolsListBody(), f.bearer, dynamicModeHeaders)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var resp struct {
+		Result *struct {
+			Tools []struct {
+				Name string `json:"name"`
+			} `json:"tools"`
+		} `json:"result"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp), w.Body.String())
+	if resp.Error != nil {
+		return nil, resp.Error.Message
+	}
+	require.NotNil(t, resp.Result, w.Body.String())
+	names := make([]string, 0, len(resp.Result.Tools))
+	for _, tool := range resp.Result.Tools {
+		names = append(names, tool.Name)
+	}
+	return names, ""
+}
+
+// Dynamic discovery does not support catalogs that still hold external-MCP
+// passthrough tools, as on main: main's facade build rejects a passthrough
+// placeholder (or reports the search index unavailable first), so no dynamic
+// facade is ever listed for them. Under private per-tool enforcement the list
+// is empty when no materialized tool is authorized; otherwise the same
+// discovery error as main remains. execute_tool still authorizes its target
+// like a direct call, so list and call deliberately disagree here, exactly as
+// they did on main.
+func TestServePublic_PrivatePassthrough_DynamicDiscoveryIsUnsupported(t *testing.T) {
+	t.Parallel()
+
+	type role struct {
+		name      string
+		narrowing func(f passthroughFixture) map[string]string
+	}
+	wholeServer := role{"whole server", func(passthroughFixture) map[string]string { return nil }}
+	named := role{"named passthrough tool", func(f passthroughFixture) map[string]string {
+		return map[string]string{authz.SelectorKeyTool: passthroughName(f, "read_data")}
+	}}
+	readOnly := role{"read-only annotation", func(passthroughFixture) map[string]string {
+		return map[string]string{authz.SelectorKeyDisposition: authz.DispositionReadOnly}
+	}}
+
+	for _, tc := range []struct {
+		catalog     string
+		withLookup  bool
+		role        role
+		listErrors  bool
+		readAllowed bool
+	}{
+		{"proxy-only", false, wholeServer, false, true},
+		{"proxy-only", false, named, false, true},
+		{"proxy-only", false, readOnly, false, false},
+		// lookup is authorized, so discovery is attempted and fails on the
+		// passthrough placeholder as on main.
+		{"mixed", true, wholeServer, true, true},
+		{"mixed", true, named, false, true},
+		{"mixed", true, readOnly, true, false},
+	} {
+		t.Run(tc.catalog+", "+tc.role.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti, f := newPassthroughFixtureWith(t, tc.withLookup)
+			seedMockUserToolsetGrant(t, ctx, ti, f.toolset.ID, tc.role.narrowing(f))
+
+			names, listErr := dynamicListOutcome(t, ti, f)
+			require.Empty(t, names, "no dynamic facade is listed for a passthrough catalog")
+			if tc.listErrors {
+				require.NotEmpty(t, listErr, "an authorized materialized tool leaves main's discovery error in place")
+			} else {
+				require.Empty(t, listErr)
+			}
+
+			before := f.upstream.toolCalls("read_data")
+			out := dynamicExecute(t, ti, f, "read_data")
+			if tc.readAllowed {
+				require.Contains(t, out, "read_data result")
+				require.Equal(t, before+1, f.upstream.toolCalls("read_data"))
+			} else {
+				require.Contains(t, out, "permission")
+				require.Equal(t, before, f.upstream.toolCalls("read_data"), "a refused call must never reach the upstream")
+			}
+
+			beforeDrop := f.upstream.toolCalls("drop_data")
+			drop := dynamicExecute(t, ti, f, "drop_data")
+			if tc.role.name == wholeServer.name {
+				require.Contains(t, drop, "drop_data result")
+				require.Equal(t, beforeDrop+1, f.upstream.toolCalls("drop_data"))
+			} else {
+				require.Contains(t, drop, "permission")
+				require.Equal(t, beforeDrop, f.upstream.toolCalls("drop_data"), "a refused call must never reach the upstream")
+			}
+		})
+	}
+}
