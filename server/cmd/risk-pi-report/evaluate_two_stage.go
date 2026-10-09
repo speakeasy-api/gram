@@ -47,8 +47,9 @@ const (
 // scanCascade exercises the production orchestration and payloads. The worker
 // pool bounds the number of in-flight cases. Refused or malformed
 // confirmations are asked again, and a case that failed open on a transient
-// provider error runs again, before it is scored.
-func scanCascade(ctx context.Context, opts options, key string, corpus []labeledCase) ([][]scanners.Finding, evaluationStats, error) {
+// provider error runs again, before it is scored. onCase, when set, receives
+// each case as it finishes; cancelling ctx stops new cases from starting.
+func scanCascade(ctx context.Context, opts options, key string, corpus []labeledCase, onCase func(int, caseOutcome)) ([][]scanners.Finding, evaluationStats, error) {
 	tracer, meter := tracenoop.NewTracerProvider(), meternoop.NewMeterProvider()
 	logger := slog.New(slog.DiscardHandler)
 	policy := guardian.NewDefaultPolicy(tracer)
@@ -66,6 +67,9 @@ func scanCascade(ctx context.Context, opts options, key string, corpus []labeled
 	sem := make(chan struct{}, opts.judgeConcurrency)
 	var wg sync.WaitGroup
 	for i, row := range corpus {
+		if ctx.Err() != nil {
+			break
+		}
 		sem <- struct{}{}
 		wg.Go(func() {
 			defer func() { <-sem }()
@@ -97,6 +101,9 @@ func scanCascade(ctx context.Context, opts options, key string, corpus []labeled
 			results[i] = result.Findings
 			missed[i] = row.Label == "malicious" && (verdict.Model == typesafe.Model || strings.HasPrefix(verdict.Model, typesafe.Model+"-")) && verdict.Completed && verdict.Label == promptinjection.LabelSafe
 			failed[i] = err != nil || verdict.Label == promptinjection.LabelUnavailable
+			if onCase != nil {
+				onCase(i, caseOutcome{findings: result.Findings, verdict: verdict, err: err, observation: *observation, refused: refused[i]})
+			}
 		})
 	}
 	wg.Wait()

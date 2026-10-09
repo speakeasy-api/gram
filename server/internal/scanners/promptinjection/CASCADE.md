@@ -125,19 +125,29 @@ smoke cases. These check transport and composition, not representative accuracy.
 Evaluate the complete labeled corpus and real conversation examples to measure
 precision, recall, and provider failures.
 
-`mise run risk:pi-gate` is the merge gate. Run it locally before merging any
-change to this package or risk-pi-report that can change a verdict, and paste its
-`merge gate` lines in the PR description. No CI job runs it, because it calls paid
-models. It runs the cascade on the 2,046 cases
-the evaluation report scored (every fixture except `cascade_context`), deepset
-included, and fails unless no benign case is flagged and at least 80% of all
-attacks are caught (780 of 975). A unit test pins the corpus size. Before scoring, a
-refused or malformed confirmation is asked again, up to three calls as the report's
-harness did, and a case that failed open on throttling, a server error or a timeout
-runs again after 5, 10 and 20 seconds. A confirmation still refused is a miss. The
-`floors.json` recall floors describe the single-call Gemini judge, so the gate
-does not check them. A run costs about $2.30. `--no-refusal-fallback` scores
-refusals without calling Opus 4.8, as the report scored the confirmer-only options.
+`mise run risk:pi` is the merge gate and the way to compare a change with main.
+Run it locally before merging any change that can alter a verdict, and paste the
+summary table it prints in the PR description. No CI job runs it, because it
+calls paid models: a full run costs about $2.30 per side.
+
+It runs the cascade for this change and for main (the merge-base with
+`origin/main`, built from a detached worktree) on the 2,046 cases the evaluation
+report scored: every fixture except `cascade_context`, deepset included. This
+change fails unless no benign case is flagged and at least 80% of all attacks
+are caught (780 of 975). A unit test pins the corpus size and the 175 fixtures
+tagged `well_known`. Before scoring, a refused or malformed confirmation is
+asked again, up to three calls as the report's harness did, and a case that
+failed open on throttling, a server error or a timeout runs again after 5, 10
+and 20 seconds. A confirmation still refused is a miss. The `floors.json`
+recall floors describe the single-call Gemini judge, so the gate does not check
+them.
+
+Each case's result is written to `~/.cache/gram-pi-eval` as it finishes, keyed
+by the code and the case's content. A rerun resumes, runs only new or edited
+fixtures, and redoes cases OpenRouter rejected for lack of credit once the
+balance covers them. `--sources` runs a cheap slice without the gate, `--watch`
+serves a live viewer during the run, and `--view` and `--summary-md` read
+cached results. The viewer shows both runs side by side, case by case.
 
 ## Research and rollout evidence
 

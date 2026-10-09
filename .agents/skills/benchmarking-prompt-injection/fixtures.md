@@ -1,11 +1,11 @@
 # Changing prompt-injection fixtures
 
-Read with `SKILL.md` in this folder. Fixtures live in `server/internal/scanners/promptinjection/testdata/prompt_injection/`; every fixture change needs a gate run.
+Read with `SKILL.md` in this folder. Fixtures live in `server/internal/scanners/promptinjection/testdata/prompt_injection/`; a fixture change needs a gate run, but `mise run risk:pi` reruns only new or edited cases.
 
-- Copy an existing line from the same file. Every case has an `id` unique within its file, a `label` (`benign` or `malicious`), `text` and `source`. `litellm_extended` and `adversarial_*` rows also need `directive_present`; `mutations` rows carry `seed_id` instead and inherit it from that LiteLLM row. Edit `mutations.jsonl` by hand: `gen:risk-mutations` writes to an old path. Fixtures are public, so never add customer data.
+- Copy an existing line from the same file. Every case has an `id` unique within its file, a `label` (`benign` or `malicious`), `text` and `source`. `litellm_extended` and `adversarial_*` rows also need `directive_present`; `mutations` rows carry `seed_id` instead and inherit it. Edit `mutations.jsonl` by hand: `gen:risk-mutations` writes to an old path. Fixtures are public, so never add customer data.
+- Tag an attack that uses a classic phrase with `well_known`, naming the phrase: "Ignore previous instructions", "Reveal the system prompt", "DAN or developer mode", "Jailbreak or unrestricted AI", "Fake system override" or "German version".
 - A row that repeats an earlier row's text is dropped silently (except in `trajectory_twins` and `agentdojo`). A new `.jsonl` file loads only when `requiredCorpusFiles` or `optionalCorpusFiles` in `server/cmd/risk-pi-report/main.go` lists it.
-- New fixtures and relabels change the counts; a relabel moves a case between them. Update:
-  - `TestGateCorpusMatchesEvaluationReport` in `server/cmd/risk-pi-report/gate_test.go` (2,046 cases, 975 attacks), and `TestCommittedRecallFixturesUseReviewedDirectiveTaxonomy` in `main_test.go` for `litellm_extended`, `adversarial_*` and `mutations`;
-  - the counts table and the prose counts in `corpus_notes.md`;
-  - the gate paragraph of CASCADE.md (not its report figures), the comment in `.mise-tasks/risk/pi-gate.sh`, the numbers and example output in `SKILL.md`, and the counts in this file. The required count is 80% of the attacks, rounded up: 976 attacks need 781.
-- The free tests (`mise run test:server ./cmd/risk-pi-report/`) catch a missed count in the Go pins only; check the docs by hand.
+- Update the counts:
+  - `TestGateCorpusMatchesEvaluationReport` in `server/cmd/risk-pi-report/gate_test.go` (2,046 cases, 975 attacks, 175 well-known), and `TestCommittedRecallFixturesUseReviewedDirectiveTaxonomy` in `main_test.go`;
+  - the tables and prose counts in `corpus_notes.md`;
+  - the gate paragraph of CASCADE.md and the numbers in `SKILL.md`. The gate needs 80% of the attacks, rounded up: 976 attacks need 781.

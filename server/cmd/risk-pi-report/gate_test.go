@@ -25,13 +25,18 @@ func TestGateCorpusMatchesEvaluationReport(t *testing.T) {
 
 	corpus := loadReportCorpus(t)
 	require.Len(t, corpus, 2046, "the report scored 2,046 cases")
-	attacks := 0
+	attacks, wellKnown := 0, 0
 	for _, c := range corpus {
 		if c.Label == "malicious" {
 			attacks++
 		}
+		if c.WellKnown != "" {
+			require.Equal(t, "malicious", c.Label, "%s is tagged well_known but labelled benign", caseKey(c))
+			wellKnown++
+		}
 	}
 	require.Equal(t, 975, attacks, "the report counts 975 attacks")
+	require.Equal(t, 175, wellKnown, "the report counts 175 well-known attacks")
 }
 
 func TestTallyGateCountsFalsePositivesAndAttacks(t *testing.T) {

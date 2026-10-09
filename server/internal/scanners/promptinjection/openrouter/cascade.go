@@ -23,13 +23,13 @@ import (
 
 // PrefilterThreshold is the minimum probability of an operational injection
 // required for contextual confirmation. It is not a confidence statistic.
-// Changes here must pass `mise run risk:pi-gate` before merge (see CASCADE.md).
+// Changes here must pass `mise run risk:pi` before merge (see CASCADE.md).
 const PrefilterThreshold = 0.50
 
 // ConfirmationModel pins the Sonnet release used to confirm Jev candidates.
 // On the 2,046-case benchmark it kept 0 false positives and caught 169 of the
 // 175 well-known attacks behind Jev, faster and cheaper than Opus 5.5 (see
-// CASCADE.md). Changes here must pass `mise run risk:pi-gate` before merge.
+// CASCADE.md). Changes here must pass `mise run risk:pi` before merge.
 const ConfirmationModel = "anthropic/claude-sonnet-5.5"
 
 // RefusalFallbackModel confirms candidates that ConfirmationModel refuses.
@@ -181,7 +181,7 @@ func injectionProbability(result typesafe.Result) (float64, error) {
 
 // PrefilterQuestions is shared with the offline evaluation harness. Each Noul
 // estimates one attack condition; any condition meeting the threshold escalates.
-// Changes here must pass `mise run risk:pi-gate` before merge (see CASCADE.md).
+// Changes here must pass `mise run risk:pi` before merge (see CASCADE.md).
 func PrefilterQuestions() map[string]typesafe.Question {
 	questions := make(map[string]typesafe.Question, 3)
 	for id, condition := range map[string]string{

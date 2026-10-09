@@ -1,10 +1,11 @@
 # Reviewing a prompt-injection PR
 
-Read with `SKILL.md` in this folder, which says what the author must paste.
+Check the pasted `mise run risk:pi` summary against `SKILL.md` in this folder.
 
-- The pasted commit is the PR head, or later commits change no "Yes" row.
-- `model`, `refusal_fallback_model` (`anthropic/claude-opus-4.8` today) and `prefilter_threshold` match the code, and each run has its own metrics.
-- For changes to production window or trajectory assembly, the PR shows unit tests or windowed fixtures, not only a gate run.
-- Every run is shown with the summary lines for both modes, at most one rerun per version, every false positive is answered by a code change or a relabel, and every `fail_open` has a named cause.
-- The confirmation hash changes only with `SystemPrompt` or `WindowInstructions`, the questions hash only with `PrefilterQuestions`, the corpus hash only with fixtures or the loader. Compare each with the last PR that ran the gate (`gh pr list --state merged --search '"merge gate run" in:body' --limit 1`; until one exists, compare with a smoke check on main). With a key, the smoke check writes the current prompt hashes for about $0.01; never compare its corpus hash, which covers only the smoke cases.
-- For `PI gate not run: <reason>`, check that the PR diff changes no "Yes" row; for a move, inspect the base-to-head diff with explicit refs (`git diff --color=always --color-moved=zebra <base>...<head>`) and verify that strings and constants are byte-identical. Replace `<base>` and `<head>` with the PR's base and head refs; without `--color=always`, piped output shows no moves.
+- The Run column names the PR head commit, without `+ uncommitted`, or later commits change nothing that needs the gate.
+- The merge gate says `Pass` for this change, and the run covered every case: no `Incomplete`.
+- The model line matches the code: `ConfirmationModel`, the `anthropic/claude-opus-4.8` fallback and `PrefilterThreshold`. A run without the fallback does not count.
+- The confirmation prompt hash changes only with `SystemPrompt` or `WindowInstructions`, and the questions hash only with `PrefilterQuestions`; compare them with main's line.
+- Every newly missed attack and new false positive in the "Compared with main" line is explained, and every no-verdict case has a named cause.
+- Changes to production window or trajectory assembly, or skill-upload hook handling, come with tests that run that code; a gate run does not cover them.
+- For `PI gate not run`, check that strings and constants are unchanged (`git diff --color=always --color-moved=zebra <base>...<head>`).

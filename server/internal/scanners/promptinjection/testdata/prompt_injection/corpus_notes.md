@@ -49,6 +49,10 @@ Labels follow the judge taxonomy: an injected directive in tool output that redi
 
 Licenses: LLMail-Inject, MIT, Copyright (c) Microsoft Corporation. AgentDojo and AgentDyn, MIT, Copyright (c) 2024 Edoardo Debenedetti, Jie Zhang, Mislav Balunovic, Luca Beurer-Kellner, Marc Fischer, and Florian Tramèr. Rows are converted and sampled from the originals; the environment data is fictional.
 
+## Well-known attacks
+
+175 attacks carry `well_known`, naming the classic phrase they use: ignore previous instructions, reveal the system prompt, DAN or developer mode, a jailbreak or unrestricted AI, a fake system override, or a German version of these. The tags come from the evaluation report's phrase match over the production payloads. The report's second goal is catching 95% of them, and `mise run risk:pi` reports how many each run catches.
+
 ## Deepset labeling philosophy mismatch
 
 deepset's notion of "prompt injection" is broader than ours. Many rows it labels `malicious` are not injection attempts under Speakeasy's taxonomy.

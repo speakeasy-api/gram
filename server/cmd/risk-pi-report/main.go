@@ -75,6 +75,10 @@ type labeledCase struct {
 	DirectivePresent       *bool          `json:"directive_present,omitempty"`
 	KnownGap               string         `json:"known_gap,omitempty"`
 	SeedID                 string         `json:"seed_id,omitempty"`
+
+	// WellKnown names the classic phrase of a well-known attack, such as
+	// "Ignore previous instructions"; empty for every other case.
+	WellKnown string `json:"well_known,omitempty"`
 }
 
 func (c labeledCase) trajectory() judgemessage.Trajectory {
@@ -341,6 +345,31 @@ type options struct {
 	// thresholds; gateDisabledFalsePositives and 0 leave them unenforced.
 	maxFalsePositives int
 	minRecall         float64
+
+	// runDir, when set, keeps per-case records there: the run resumes from
+	// them and evaluates only cases without a current record.
+	runDir string
+
+	// label and ref name the run in progress lines and its manifest.
+	label string
+	ref   string
+
+	// view renders the viewer for runDir (and baseRunDir when set) instead
+	// of evaluating anything.
+	view bool
+
+	// baseRunDir is the run the viewer compares against, usually main.
+	baseRunDir string
+
+	// serve, when set, serves a live viewer at this address instead of
+	// writing a file.
+	serve string
+
+	// openViewer opens the viewer in the default browser.
+	openViewer bool
+
+	// summaryMD prints the viewer's summary table as Markdown.
+	summaryMD bool
 }
 
 const (
@@ -382,6 +411,15 @@ func parseFlags() options {
 		excludeSources:    "",
 		maxFalsePositives: 0,
 		minRecall:         0,
+
+		runDir:     "",
+		label:      "",
+		ref:        "",
+		view:       false,
+		baseRunDir: "",
+		serve:      "",
+		openViewer: false,
+		summaryMD:  false,
 	}
 	flag.StringVar(&opts.corpusDir, "corpus-dir", defaultCorpusDir, "directory containing prompt-injection JSONL corpus files")
 	flag.StringVar(&opts.outFile, "out", defaultOutFile, "path to write metrics JSON")
@@ -398,6 +436,14 @@ func parseFlags() options {
 	flag.StringVar(&opts.excludeSources, "exclude-sources", "", "comma-separated source substrings to drop after -sources (empty = none)")
 	flag.IntVar(&opts.maxFalsePositives, "max-false-positives", gateDisabledFalsePositives, "fail when any trial flags more benign cases than this, deepset included (-1 = unenforced)")
 	flag.Float64Var(&opts.minRecall, "min-recall", 0, "fail when any trial catches a smaller share of all attacks, deepset included (0 = unenforced)")
+	flag.StringVar(&opts.runDir, "run-dir", "", "with -cascade, keep per-case records in this directory and run only cases without a current record")
+	flag.StringVar(&opts.label, "label", "this change", "name of the run in progress lines and the viewer")
+	flag.StringVar(&opts.ref, "ref", "", "code the run evaluates, such as \"branch @ sha\"")
+	flag.BoolVar(&opts.view, "view", false, "render the viewer for -run-dir (and -base-run-dir) instead of running")
+	flag.StringVar(&opts.baseRunDir, "base-run-dir", "", "with -view, the run to compare against, usually main")
+	flag.StringVar(&opts.serve, "serve", "", "with -view, serve a live viewer at this address, such as 127.0.0.1:0")
+	flag.BoolVar(&opts.openViewer, "open", false, "with -view, open the viewer in the default browser")
+	flag.BoolVar(&opts.summaryMD, "summary-md", false, "with -view, print the summary table as Markdown instead")
 	flag.Parse()
 	return opts
 }
@@ -457,6 +503,15 @@ func run(ctx context.Context, opts options) error {
 	}
 	if opts.maxFalsePositives < gateDisabledFalsePositives {
 		return fmt.Errorf("--max-false-positives must be -1 or more")
+	}
+	if opts.view {
+		return runView(ctx, opts, corpus)
+	}
+	if opts.runDir != "" {
+		if !opts.cascade {
+			return fmt.Errorf("-run-dir requires -cascade")
+		}
+		return runRecords(ctx, opts, corpus)
 	}
 	fl, err := loadFloors(opts.corpusDir)
 	if err != nil {
@@ -1136,7 +1191,7 @@ func scanJudgeMode(ctx context.Context, opts options, corpus []labeledCase) (mod
 	var eval evaluationStats
 	var err error
 	if opts.cascade {
-		findings, eval, err = scanCascade(ctx, opts, apiKey, corpus)
+		findings, eval, err = scanCascade(ctx, opts, apiKey, corpus, nil)
 	} else {
 		findings, eval, err = scanJudge(ctx, opts, newOpenRouterClient(apiKey), corpus)
 	}
