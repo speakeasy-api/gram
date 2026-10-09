@@ -220,7 +220,14 @@ func (a *Adapter) ProbeReadiness(ctx context.Context, request platformmcp.Provid
 	)
 	if errors.Is(err, remotesessions.ErrNoRemoteSessionClientBinding) {
 		if chained, ok := platformmcp.ResolveIdentityChainingReadiness(ctx, a.chaining, request.OrganizationID, request.UserID, request.ProjectID, request.UserSessionIssuerID, descriptor.StreamableHTTPURL); ok {
-			return a.readinessResult(chained.State, chained.EvidenceCode, request, remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: chained.RemoteSessionIssuerID}, chained.Absence), nil
+			return a.readinessResult(chained.State, chained.EvidenceCode, request, remotesessions.ResolvedAuthorization{
+				AccessToken:            "",
+				RemoteSessionID:        uuid.Nil,
+				RemoteSessionUpdatedAt: time.Time{},
+				RemoteSessionClientID:  uuid.Nil,
+				RemoteSessionIssuerID:  chained.RemoteSessionIssuerID,
+				CredentialOwner:        remotesessions.CredentialOwnerSubject,
+			}, chained.Absence), nil
 		}
 		return a.readinessResult(platformmcp.ReadinessNeedsConfiguration, "no_reviewed_client", request, remotesessions.ResolvedAuthorization{
 			AccessToken:            "",
