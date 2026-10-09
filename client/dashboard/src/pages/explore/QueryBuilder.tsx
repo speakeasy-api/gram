@@ -18,7 +18,7 @@ import {
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import { Info } from "lucide-react";
 import type { JSX, ReactNode } from "react";
-import { AddRowButton, BuilderField, ClauseRow } from "./ClauseRow";
+import { AddRowButton, ClauseRow } from "./ClauseRow";
 import {
   CHART_TYPE_OPTIONS,
   completeMeasures,
@@ -130,214 +130,224 @@ export function QueryBuilder({
       filters: [...spec.filters, { field: "", operator: "in", values: [] }],
     });
 
+  // Laid out as Datadog's query editor is: what is asked of, and over
+  // when, on one line; then a line per clause, read as a sentence (where,
+  // show, group by); then how it is drawn, beside Run.
   return (
-    <div className="border-border bg-card flex flex-col gap-5 border p-5">
-      <ClauseRow label="Dataset">
-        <div className="flex flex-wrap items-center gap-2">
-          <Select value={spec.dataset} onValueChange={changeDataset}>
-            <SelectTrigger className="w-64" aria-label="Dataset">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {datasets.map((candidate) => (
-                <SelectItem key={candidate.name} value={candidate.name}>
-                  {candidate.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {dataset ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="About this dataset"
-                  className="text-muted-foreground hover:text-foreground focus-visible:ring-ring flex size-6 shrink-0 items-center justify-center rounded-sm focus-visible:ring-2 focus-visible:outline-none"
-                >
-                  <Info className="size-3.5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right" align="start">
-                <DatasetSummary dataset={dataset} />
-              </TooltipContent>
-            </Tooltip>
-          ) : null}
-          {actions ? (
-            <div className="ml-auto flex min-w-0 items-center gap-2">
-              {actions}
-            </div>
-          ) : null}
-        </div>
-      </ClauseRow>
-
-      <ClauseRow label="Where">
-        <div className="flex flex-col gap-2">
-          {spec.filters.map((filter, index) => (
-            <FilterRow
-              key={index}
-              dataset={dataset}
-              span={spec}
-              filter={filter}
-              onChange={(next) => setFilter(index, next)}
-              onRemove={() => patch({ filters: removeAt(spec.filters, index) })}
-              trailing={
-                index === spec.filters.length - 1 ? (
-                  <AddRowButton
-                    label="Add another filter"
-                    onClick={addFilter}
-                  />
-                ) : undefined
-              }
-            />
-          ))}
-          {spec.filters.length === 0 ? (
-            <div>
-              <Button
-                variant="tertiary"
-                size="sm"
-                icon="plus"
-                onClick={addFilter}
+    <div className="border-border bg-card flex flex-col border">
+      <div className="border-border flex flex-wrap items-center gap-2 border-b px-3 py-2">
+        <Select value={spec.dataset} onValueChange={changeDataset}>
+          <SelectTrigger size="sm" className="w-52" aria-label="Dataset">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {datasets.map((candidate) => (
+              <SelectItem key={candidate.name} value={candidate.name}>
+                {candidate.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {dataset ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="About this dataset"
+                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring flex size-6 shrink-0 items-center justify-center rounded-sm focus-visible:ring-2 focus-visible:outline-none"
               >
-                Add filter
-              </Button>
-            </div>
-          ) : null}
-        </div>
-      </ClauseRow>
-
-      <ClauseRow label="Visualize">
-        <div className="flex flex-col gap-2">
-          {spec.measures.map((measure, index) => (
-            <MeasureRow
-              key={index}
-              dataset={dataset}
-              measure={measure}
-              onChange={(next) => setMeasure(index, next)}
-              onRemove={() =>
-                patch(withMeasures(removeAt(spec.measures, index)))
-              }
-              trailing={
-                index === spec.measures.length - 1 ? (
-                  <AddRowButton
-                    label="Add another measure"
-                    onClick={addMeasure}
-                  />
-                ) : undefined
-              }
-            />
-          ))}
-          {spec.measures.length === 0 ? (
-            // Nothing measured is still a question: the rows themselves.
-            <div className="flex flex-wrap items-center gap-3">
-              <Button
-                variant="tertiary"
-                size="sm"
-                icon="plus"
-                onClick={addMeasure}
-              >
-                Add measure
-              </Button>
-              <span className="text-muted-foreground text-xs">
-                Nothing measured, so the results are rows at the dataset's
-                grain.
-              </span>
-            </div>
-          ) : null}
-        </div>
-      </ClauseRow>
-
-      <ClauseRow label="Group by">
-        <MultiSelect
-          key={spec.dataset}
-          options={dimensionOptions}
-          value={spec.dimensions}
-          onValueChange={(dimensions) =>
-            patch({ dimensions: dimensions.slice(0, MAX_DIMENSIONS) })
-          }
-          placeholder={groupByPlaceholder(grouped, needsBreakdown)}
-          disabled={!grouped}
-          className="max-w-3xl"
-        />
-      </ClauseRow>
-
-      <div className="border-border flex flex-wrap items-end gap-x-6 gap-y-3 border-t pt-5">
-        <BuilderField label="Chart">
-          <SegmentedControl<ChartType>
-            value={spec.chartType}
-            onChange={(chartType) => patch({ chartType })}
-            options={chartOptions}
+                <Info className="size-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right" align="start">
+              <DatasetSummary dataset={dataset} />
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
+        <InlineLabel>over</InlineLabel>
+        {/* The dashboard's own date picker: its presets, and a custom range
+            typed, picked on the calendar, or brought by a page or a dragged
+            chart. Picking a preset drops the range. The picker has no name
+            of its own, so the group carries it. */}
+        <div role="group" aria-label="Window">
+          <TimeRangePicker
+            className="h-8 py-1"
+            preset={spec.range ? null : spec.window}
+            customRange={
+              spec.range
+                ? {
+                    from: new Date(spec.range.from),
+                    to: new Date(spec.range.to),
+                  }
+                : null
+            }
+            customRangeLabel={spec.range?.label ?? null}
+            availablePresets={WINDOW_PRESETS}
+            onPresetChange={(window) => patch({ window, range: undefined })}
+            onCustomRangeChange={(from, to, label) =>
+              patch({
+                range: {
+                  from: from.getTime(),
+                  to: to.getTime(),
+                  ...(label ? { label } : {}),
+                },
+              })
+            }
+            onClearCustomRange={() => patch({ range: undefined })}
           />
-        </BuilderField>
-        <BuilderField label="Window">
-          {/* The dashboard's own date picker: its presets, and a custom
-              range typed, picked on the calendar, or brought by a page or a
-              dragged chart. Picking a preset drops the range. The picker
-              has no name of its own, so the group carries it. */}
-          <div role="group" aria-label="Window">
-            <TimeRangePicker
-              preset={spec.range ? null : spec.window}
-              customRange={
-                spec.range
-                  ? {
-                      from: new Date(spec.range.from),
-                      to: new Date(spec.range.to),
-                    }
-                  : null
-              }
-              customRangeLabel={spec.range?.label ?? null}
-              availablePresets={WINDOW_PRESETS}
-              onPresetChange={(window) => patch({ window, range: undefined })}
-              onCustomRangeChange={(from, to, label) =>
-                patch({
-                  range: {
-                    from: from.getTime(),
-                    to: to.getTime(),
-                    ...(label ? { label } : {}),
-                  },
-                })
-              }
-              onClearCustomRange={() => patch({ range: undefined })}
-            />
+        </div>
+        {actions ? (
+          <div className="ml-auto flex min-w-0 items-center gap-2">
+            {actions}
           </div>
-        </BuilderField>
-        {/* A timeseries is drawn in time order up to the server's cap, so
-            order and limit only apply to whole-window charts. */}
-        {timeseries ? null : (
-          <>
-            <BuilderField label="Order by">
-              <Select
-                value={spec.orderBy === "" ? GROUP_ORDER : spec.orderBy}
-                onValueChange={(value) =>
-                  patch({ orderBy: value === GROUP_ORDER ? "" : value })
+        ) : null}
+      </div>
+
+      <div className="flex flex-col gap-2 px-3 py-3">
+        <ClauseRow label="Where">
+          <div className="flex flex-col gap-1.5">
+            {spec.filters.map((filter, index) => (
+              <FilterRow
+                key={index}
+                dataset={dataset}
+                span={spec}
+                filter={filter}
+                onChange={(next) => setFilter(index, next)}
+                onRemove={() =>
+                  patch({ filters: removeAt(spec.filters, index) })
                 }
-              >
-                <SelectTrigger className="w-52" aria-label="Order by">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={GROUP_ORDER}>Group order</SelectItem>
-                  {orderOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label} (desc)
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </BuilderField>
-            <BuilderField label="Limit">
-              <Input
-                type="number"
-                min={1}
-                max={MAX_LIMIT}
-                value={spec.limit === 0 ? "" : String(spec.limit)}
-                onChange={(raw) => patch({ limit: parseLimit(raw) })}
-                placeholder={`${DEFAULT_LIMIT} rows`}
-                aria-label="Limit"
-                className="w-32"
+                trailing={
+                  index === spec.filters.length - 1 ? (
+                    <AddRowButton
+                      label="Add another filter"
+                      onClick={addFilter}
+                    />
+                  ) : undefined
+                }
               />
-            </BuilderField>
-          </>
-        )}
+            ))}
+            {spec.filters.length === 0 ? (
+              <div>
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  icon="plus"
+                  onClick={addFilter}
+                >
+                  Add filter
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        </ClauseRow>
+
+        <ClauseRow label="Show">
+          <div className="flex flex-col gap-1.5">
+            {spec.measures.map((measure, index) => (
+              <MeasureRow
+                key={index}
+                dataset={dataset}
+                measure={measure}
+                onChange={(next) => setMeasure(index, next)}
+                onRemove={() =>
+                  patch(withMeasures(removeAt(spec.measures, index)))
+                }
+                trailing={
+                  index === spec.measures.length - 1 ? (
+                    <AddRowButton
+                      label="Add another measure"
+                      onClick={addMeasure}
+                    />
+                  ) : undefined
+                }
+              />
+            ))}
+            {spec.measures.length === 0 ? (
+              // Nothing measured is still a question: the rows themselves.
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  icon="plus"
+                  onClick={addMeasure}
+                >
+                  Add measure
+                </Button>
+                <span className="text-muted-foreground text-xs">
+                  Nothing measured, so the results are rows at the dataset's
+                  grain.
+                </span>
+              </div>
+            ) : null}
+          </div>
+        </ClauseRow>
+
+        <ClauseRow label="Group by">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="w-full max-w-md min-w-64 flex-1">
+              <MultiSelect
+                key={spec.dataset}
+                options={dimensionOptions}
+                value={spec.dimensions}
+                onValueChange={(dimensions) =>
+                  patch({ dimensions: dimensions.slice(0, MAX_DIMENSIONS) })
+                }
+                placeholder={groupByPlaceholder(grouped, needsBreakdown)}
+                disabled={!grouped}
+                className="min-h-8 py-0 text-sm"
+              />
+            </div>
+            {/* A timeseries is drawn in time order up to the server's cap,
+                so order and limit only apply to whole-window charts. */}
+            {timeseries ? null : (
+              <>
+                <InlineLabel>order by</InlineLabel>
+                <Select
+                  value={spec.orderBy === "" ? GROUP_ORDER : spec.orderBy}
+                  onValueChange={(value) =>
+                    patch({ orderBy: value === GROUP_ORDER ? "" : value })
+                  }
+                >
+                  <SelectTrigger
+                    size="sm"
+                    className="w-44"
+                    aria-label="Order by"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={GROUP_ORDER}>Group order</SelectItem>
+                    {orderOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label} (desc)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <InlineLabel>limit</InlineLabel>
+                <Input
+                  type="number"
+                  min={1}
+                  max={MAX_LIMIT}
+                  value={spec.limit === 0 ? "" : String(spec.limit)}
+                  onChange={(raw) => patch({ limit: parseLimit(raw) })}
+                  placeholder={`${DEFAULT_LIMIT} rows`}
+                  aria-label="Limit"
+                  className="h-8 w-28"
+                />
+              </>
+            )}
+          </div>
+        </ClauseRow>
+      </div>
+
+      <div className="border-border flex flex-wrap items-center gap-3 border-t px-3 py-2">
+        <SegmentedControl<ChartType>
+          value={spec.chartType}
+          onChange={(chartType) => patch({ chartType })}
+          options={chartOptions}
+          className="h-8"
+        />
         <div className="ml-auto flex items-center gap-3">
           {changed ? (
             <span className="text-muted-foreground text-xs">
@@ -351,6 +361,11 @@ export function QueryBuilder({
       </div>
     </div>
   );
+}
+
+/** A word joining two controls on one line: "over", "order by", "limit". */
+function InlineLabel({ children }: { children: ReactNode }): JSX.Element {
+  return <span className="text-muted-foreground text-xs">{children}</span>;
 }
 
 // The dataset's one-line description with its grain, behind an info icon

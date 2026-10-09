@@ -39,13 +39,14 @@ export function MeasureRow({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-1.5">
       <Select
         value={measure.op}
         onValueChange={(value) => changeOp(value as MeasureOp)}
       >
         <SelectTrigger
-          className="w-44 font-mono uppercase"
+          size="sm"
+          className="w-32 font-mono uppercase"
           aria-label="Aggregation"
         >
           <SelectValue />
@@ -59,15 +60,19 @@ export function MeasureRow({
         </SelectContent>
       </Select>
       {measure.op === "count" ? (
-        <span className="text-muted-foreground text-sm">of all rows</span>
+        <span className="text-muted-foreground text-xs">of all rows</span>
       ) : (
         <>
-          <span className="text-muted-foreground text-sm">of</span>
+          <span className="text-muted-foreground text-xs">of</span>
           <Select
             value={measure.field}
             onValueChange={(field) => onChange({ ...measure, field })}
           >
-            <SelectTrigger className="w-56" aria-label="Measure field">
+            <SelectTrigger
+              size="sm"
+              className="w-48"
+              aria-label="Measure field"
+            >
               <SelectValue placeholder="Pick a field" />
             </SelectTrigger>
             <SelectContent>
