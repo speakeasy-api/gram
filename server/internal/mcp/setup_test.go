@@ -70,7 +70,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
+	"github.com/speakeasy-api/gram/server/internal/otel/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
@@ -579,7 +579,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	toolCallRecords := &toolCallRecorder{}
 	// The resource names the server the way production does, so the source
 	// the pipeline derives for gateway records is the same here.
-	toolCallLogs := gramotel.NewLoggerProvider(logger, nil, toolCallRecords, resource.NewSchemaless(semconv.ServiceNameKey.String("gram-server")))
+	toolCallLogs := otelpub.NewLoggerProvider(logger, toolCallRecords, resource.NewSchemaless(semconv.ServiceNameKey.String("gram-server")))
 	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, toolCallLogs, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime)
 	require.NoError(t, err)
 	// Identity chaining runs as in production, so gate tests without bindings
