@@ -14,6 +14,7 @@ export {
   findPassThroughAuthorizationHeader,
   findStaticAuthorizationHeader,
   managedAuthorizationHeader,
+  passThroughAuthorizationProblem,
   remoteHeaderPolicyEffectMessage,
   remoteHeaderPolicyReasonMessage,
 } from "./model/headers";

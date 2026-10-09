@@ -1801,7 +1801,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
     // One alert above the choice, not a second copy under it.
     expect(
-      screen.getAllByText(/legacy pass-through Authorization header/i),
+      screen.getAllByText(
+        /pass-through Authorization header is still configured/i,
+      ),
     ).toHaveLength(1);
     expect(
       (

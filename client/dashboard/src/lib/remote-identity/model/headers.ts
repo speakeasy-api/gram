@@ -262,3 +262,21 @@ export function remoteHeaderPolicyReasonMessage(
       return "This row's header name or request header is not a valid HTTP header name, for example because of a space. Change it or remove this row.";
   }
 }
+
+/**
+ * Describes a pass-through Authorization row, which competes with the identity
+ * for the credential. When the header policy refuses its source, it also says
+ * what that now does to requests. Callers add what to do about it.
+ */
+export function passThroughAuthorizationProblem(
+  header: RemoteMcpServerHeader,
+): string {
+  const configured = "A pass-through Authorization header is still configured.";
+  const issue = remoteHeaderPolicyIssue({
+    name: header.name,
+    valueFromRequestHeader: header.valueFromRequestHeader ?? undefined,
+    isRequired: header.isRequired,
+  });
+  if (!issue) return configured;
+  return `${configured} ${remoteHeaderPolicyEffectMessage(issue.effect)}`;
+}

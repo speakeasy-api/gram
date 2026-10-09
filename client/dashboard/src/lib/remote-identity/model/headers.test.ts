@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isProtectedInboundHeader,
+  passThroughAuthorizationProblem,
   remoteHeaderPolicyIssue,
   remoteHeaderPolicyReasonMessage,
 } from "./headers";
@@ -226,5 +227,37 @@ describe("remoteHeaderPolicyReasonMessage", () => {
     });
     expect(custom).not.toContain("connect the server's upstream OAuth");
     expect(custom).toContain("does not replace this header");
+  });
+});
+
+describe("passThroughAuthorizationProblem", () => {
+  function row(valueFromRequestHeader: string, isRequired: boolean) {
+    return {
+      id: "header-authorization",
+      name: "Authorization",
+      valueFromRequestHeader,
+      isRequired,
+      isSecret: false,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    } as Parameters<typeof passThroughAuthorizationProblem>[0];
+  }
+
+  it("says a required row reading Authorization fails without an upstream account", () => {
+    expect(passThroughAuthorizationProblem(row("Authorization", true))).toBe(
+      "A pass-through Authorization header is still configured. Requests to this server fail unless a connected upstream account supplies Authorization.",
+    );
+  });
+
+  it("says an optional row reading Authorization is not sent", () => {
+    expect(
+      passThroughAuthorizationProblem(row("Authorization", false)),
+    ).toContain("Speakeasy does not send this header.");
+  });
+
+  it("only describes a row reading an allowed header", () => {
+    expect(passThroughAuthorizationProblem(row("X-Service-Token", true))).toBe(
+      "A pass-through Authorization header is still configured.",
+    );
   });
 });
