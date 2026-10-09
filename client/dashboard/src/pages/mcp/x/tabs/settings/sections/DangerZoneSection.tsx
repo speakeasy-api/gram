@@ -463,6 +463,7 @@ function DeleteDialogBody({
         linkedMcpServers={linkedMcpServers}
         onClose={onClose}
         onSuccess={() => onLeave()}
+        onBusyChange={onBusyChange}
       />
     );
   }
