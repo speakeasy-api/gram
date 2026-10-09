@@ -148,8 +148,12 @@ export function ExistingTunnelFlow({
     defaultCreationUserSessionIssuerValue(issuerQuery.organizationIssuers);
   const nameError = name.trim() ? null : "Display name is required";
   const locked = create.isPending || flow.isAttaching;
+  // The gateway's members decide which tunnels it can still take; until they
+  // are read, a tunnel it already fronts would look available.
+  const membersUnknown = !!flow.gatewayId && !membersQuery.isSuccess;
   const submitDisabled =
     locked ||
+    membersUnknown ||
     !selected ||
     nameError !== null ||
     !newGuardrail.validation.ok ||
@@ -226,11 +230,20 @@ export function ExistingTunnelFlow({
               Tunnel
             </Text>
             <TunnelChoice
-              isLoading={tunnelsQuery.isPending || serversQuery.isPending}
-              isError={tunnelsQuery.isError || serversQuery.isError}
+              isLoading={
+                tunnelsQuery.isPending ||
+                serversQuery.isPending ||
+                (!!flow.gatewayId && membersQuery.isPending)
+              }
+              isError={
+                tunnelsQuery.isError ||
+                serversQuery.isError ||
+                membersQuery.isError
+              }
               onRetry={() => {
                 void tunnelsQuery.refetch();
                 void serversQuery.refetch();
+                if (flow.gatewayId) void membersQuery.refetch();
               }}
             >
               {options.length === 0 ? (

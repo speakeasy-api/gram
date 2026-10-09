@@ -16,6 +16,7 @@ const state = vi.hoisted(() => ({
   tunnels: [] as TunneledMcpServer[],
   servers: [] as McpServer[],
   members: [] as { mcpServerId: string }[],
+  membersError: false,
   gatewayId: null as string | null,
   mutateAsync: vi.fn(),
   createError: undefined as Error | undefined,
@@ -123,7 +124,15 @@ vi.mock("@gram/client/react-query/mcpServers.js", () => ({
   }),
 }));
 vi.mock("@gram/client/react-query/metaMcpMembers.js", () => ({
-  useMetaMcpMembers: () => ({ data: { members: state.members } }),
+  useMetaMcpMembers: () =>
+    state.membersError
+      ? { data: undefined, isSuccess: false, isPending: false, isError: true }
+      : {
+          data: { members: state.members },
+          isSuccess: true,
+          isPending: false,
+          isError: false,
+        },
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -165,6 +174,7 @@ beforeEach(() => {
     } as McpServer,
   ];
   state.members = [];
+  state.membersError = false;
   state.gatewayId = null;
   state.mutateAsync.mockReset();
   state.createError = undefined;
@@ -237,6 +247,17 @@ describe("ExistingTunnelFlow", () => {
       target: { value: "Name" },
     });
     expect(submitButton().disabled).toBe(true);
+  });
+
+  it("waits for the gateway's members before creating for a gateway", () => {
+    state.gatewayId = "gateway-1";
+    state.membersError = true;
+    renderFlow("t2");
+    fireEvent.change(screen.getByLabelText("Display name"), {
+      target: { value: "Name" },
+    });
+    expect(submitButton().disabled).toBe(true);
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
   });
 
   it("offers deleting only tunnels no visible server uses", () => {
