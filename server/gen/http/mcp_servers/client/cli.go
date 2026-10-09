@@ -102,7 +102,7 @@ func BuildCreateMcpServerPayload(mcpServersCreateMcpServerBody string, mcpServer
 
 // BuildGetMcpServerPayload builds the payload for the mcpServers getMcpServer
 // endpoint from CLI flags.
-func BuildGetMcpServerPayload(mcpServersGetMcpServerID string, mcpServersGetMcpServerSlug string, mcpServersGetMcpServerSessionToken string, mcpServersGetMcpServerApikeyToken string, mcpServersGetMcpServerProjectSlugInput string) (*mcpservers.GetMcpServerPayload, error) {
+func BuildGetMcpServerPayload(mcpServersGetMcpServerID string, mcpServersGetMcpServerSlug string, mcpServersGetMcpServerToolsetID string, mcpServersGetMcpServerSessionToken string, mcpServersGetMcpServerApikeyToken string, mcpServersGetMcpServerProjectSlugInput string) (*mcpservers.GetMcpServerPayload, error) {
 	var err error
 	var id *string
 	{
@@ -118,6 +118,16 @@ func BuildGetMcpServerPayload(mcpServersGetMcpServerID string, mcpServersGetMcpS
 	{
 		if mcpServersGetMcpServerSlug != "" {
 			slug = &mcpServersGetMcpServerSlug
+		}
+	}
+	var toolsetID *string
+	{
+		if mcpServersGetMcpServerToolsetID != "" {
+			toolsetID = &mcpServersGetMcpServerToolsetID
+			err = goa.MergeErrors(err, goa.ValidateFormat("toolset_id", *toolsetID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var sessionToken *string
@@ -141,6 +151,7 @@ func BuildGetMcpServerPayload(mcpServersGetMcpServerID string, mcpServersGetMcpS
 	v := &mcpservers.GetMcpServerPayload{}
 	v.ID = id
 	v.Slug = slug
+	v.ToolsetID = toolsetID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

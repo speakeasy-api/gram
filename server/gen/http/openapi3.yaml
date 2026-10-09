@@ -39062,7 +39062,7 @@ paths:
                 name: DeleteMcpServerToolMetadata
     /rpc/mcpServers.get:
         get:
-            description: Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
+            description: Get an MCP server by ID, slug, or backing toolset ID. Exactly one selector must be provided. Toolset lookup prefers enabled servers, then the canonical wrapper, then the oldest server.
             operationId: getMcpServer
             parameters:
                 - allowEmptyValue: true
@@ -39079,6 +39079,14 @@ paths:
                   name: slug
                   schema:
                     description: The slug of the MCP server. Mutually exclusive with id.
+                    type: string
+                - allowEmptyValue: true
+                  description: Resolve the preferred MCP server for this toolset. Mutually exclusive with id and slug.
+                  in: query
+                  name: toolset_id
+                  schema:
+                    description: Resolve the preferred MCP server for this toolset. Mutually exclusive with id and slug.
+                    format: uuid
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -102344,6 +102352,9 @@ components:
                         - public_only
                         - dual
                         - private_only
+                platform_endpoint_slug:
+                    type: string
+                    description: An addressable platform endpoint slug for this server, populated only when getting by toolset ID. Absent when no platform endpoint exists; never a custom-domain slug.
                 project_id:
                     type: string
                     description: The project ID this MCP server belongs to

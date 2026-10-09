@@ -5,7 +5,11 @@ import type { DomainDNSConfig } from "@gram/client/models/components/domaindnsco
 import { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useListDomains } from "@gram/client/react-query/listDomains.js";
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { buildGetMcpServerQuery } from "@gram/client/react-query/getMcpServer.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useQuery } from "@tanstack/react-query";
+import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 
 export function useCustomDomain(enabled = true): {
   domain: CustomDomain | undefined;
@@ -197,23 +201,103 @@ export function useMcpUrl(
   };
 }
 
-/**
- * Returns an MCP URL that always uses the Speakeasy domain, ignoring any custom domain.
- * Use this for internal tools like the playground where we want consistent routing.
+type ToolsetConnectionSource = Pick<
+  ToolsetEntry,
+  "id" | "slug" | "mcpSlug" | "defaultEnvironmentSlug"
+> & { userSessionIssuerId?: string };
+
+/** Resolve identity before deriving URLs or minting. Never choose from an
+ * authorization-filtered list, or alias a disabled canonical route to a sibling.
+ * A 404 means no wrapper exists; only that case can retain the legacy route.
  */
-export function useInternalMcpUrl(
-  toolset:
-    | Pick<ToolsetEntry, "slug" | "mcpSlug" | "defaultEnvironmentSlug">
-    | undefined,
-): string | undefined {
+export function useToolsetMcpTarget(
+  toolset: ToolsetConnectionSource | undefined,
+): {
+  url: string | undefined;
+  serverId: string | undefined;
+  userSessionIssuerId: string | undefined;
+  legacy: boolean;
+  status: "idle" | "loading" | "error" | "unavailable" | "ready";
+  isLoading: boolean;
+  refetch: () => void;
+} {
   const project = useProject();
-  if (!toolset) return undefined;
-  return internalMcpUrl({ slug: project.slug }, toolset);
+  const sdk = useGramContext();
+  const lookup = buildGetMcpServerQuery(sdk, { toolsetId: toolset?.id });
+  const server = useQuery({
+    // Keep the nullable result separate from the generated SDK's server cache,
+    // while retaining its key prefix for normal server invalidation.
+    queryKey: [...lookup.queryKey, "connectionTarget"],
+    queryFn: async (context) => {
+      try {
+        return await lookup.queryFn(context);
+      } catch (error) {
+        // Absence is a settled result, not a transient error. Caching it gives
+        // every observer the same legacy classification throughout refetches.
+        if (error instanceof ServiceError && error.statusCode === 404)
+          return null;
+        throw error;
+      }
+    },
+    enabled: !!toolset?.id,
+    retry: false,
+    throwOnError: false,
+  });
+  // Refetch failures may retain stale data; it must not supply a former issuer.
+  const selected = toolset && !server.isError ? server.data : undefined;
+  const enabledServer =
+    selected?.visibility !== "disabled" ? selected : undefined;
+  const [retrying, setRetrying] = useState<{ id: string }>();
+  const legacy = !!toolset && !server.isError && server.data === null;
+  const status = !toolset
+    ? "idle"
+    : server.isLoading ||
+        retrying?.id === toolset.id ||
+        (server.isFetching && server.isError)
+      ? "loading"
+      : server.isError
+        ? "error"
+        : selected?.visibility === "disabled"
+          ? "unavailable"
+          : enabledServer || legacy
+            ? "ready"
+            : "loading";
+  const refetchServer = server.refetch;
+  const refetch = useCallback(() => {
+    if (!toolset?.id) return;
+    const retry = { id: toolset.id };
+    setRetrying(retry);
+    void refetchServer({ throwOnError: false, cancelRefetch: false }).finally(
+      () => {
+        setRetrying((current) => (current === retry ? undefined : current));
+      },
+    );
+  }, [toolset?.id, refetchServer]);
+  const platformSlug = enabledServer?.platformEndpointSlug;
+  // Playground/connect require the platform origin (session cookie and CSP).
+  // Custom-only servers remain unavailable here; never reuse their slug there.
+  const url =
+    enabledServer && platformSlug
+      ? `${getServerURL()}/mcp/${platformSlug}`
+      : legacy
+        ? internalMcpUrl(project, toolset)
+        : undefined;
+  return {
+    url,
+    serverId: enabledServer?.id,
+    userSessionIssuerId:
+      enabledServer?.userSessionIssuerId ??
+      (legacy ? toolset.userSessionIssuerId : undefined),
+    legacy,
+    status,
+    isLoading: status === "loading",
+    refetch,
+  };
 }
 
 /**
- * Non-hook variant of {@link useInternalMcpUrl}. Use this when the project and
- * toolset are already in scope (e.g. when mapping over an array of toolsets).
+ * Formats the legacy toolset address without resolving a server identity.
+ * Live playground connections use useToolsetMcpTarget instead.
  * Returns undefined when the toolset has no routable MCP URL (no mcpSlug and
  * no default environment).
  */

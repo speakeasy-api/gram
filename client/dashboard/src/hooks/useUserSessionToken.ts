@@ -21,6 +21,10 @@ export interface UseUserSessionTokenResult {
   /** The minted user-session JWT, or undefined while loading / not gated. */
   accessToken: string | undefined;
   isLoading: boolean;
+  /** Whether minting failed (when the caller handles errors inline). */
+  isError: boolean;
+  /** Retry minting only when the target is issuer-gated and available. */
+  refetch: () => void;
 }
 
 function mintRequestBody(
@@ -62,6 +66,7 @@ export function useUserSessionToken({
   target,
   userSessionIssuerId,
   project: projectOverride,
+  throwOnError,
 }: {
   target: UserSessionTokenTarget;
   userSessionIssuerId: string | undefined;
@@ -70,6 +75,8 @@ export function useUserSessionToken({
    * (the role editor lists servers from every project).
    */
   project?: { id: string; slug: string };
+  /** Opt out of the QueryClient error boundary for inline error handling. */
+  throwOnError?: false;
 }): UseUserSessionTokenResult {
   const session = useSession();
   const ambientProject = useProject();
@@ -90,7 +97,7 @@ export function useUserSessionToken({
       session.user.id,
     ],
     queryFn: async () => {
-      if (!id) return null;
+      if (!enabled) return null;
       const result = await mintMutation.mutateAsync({
         request: {
           gramProject: project.id,
@@ -110,6 +117,7 @@ export function useUserSessionToken({
     refetchInterval: 1000 * 60 * 45,
     refetchOnWindowFocus: false,
     retry: false,
+    ...(throwOnError === false ? { throwOnError: false } : {}),
   });
 
   return {
@@ -117,6 +125,11 @@ export function useUserSessionToken({
     // (stale or otherwise) that would get attached to an unauthenticated
     // connection.
     accessToken: enabled ? query.data?.accessToken : undefined,
-    isLoading: enabled && query.isLoading,
+    isLoading:
+      enabled && (query.isLoading || (query.isError && query.isFetching)),
+    isError: enabled && query.isError,
+    refetch: () => {
+      if (enabled) void query.refetch({ cancelRefetch: false });
+    },
   };
 }
