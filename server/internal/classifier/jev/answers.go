@@ -73,10 +73,12 @@ func decodeAnswer(q plannedQuestion, wire wireAnswer) *classifier.Answer {
 
 		answer.Choice = &classifier.ChoiceAnswer{Selected: options[index].Key, Distribution: distribution, Confidence: wire.Confidence}
 	} else {
-		if wire.Score == nil || math.IsNaN(*wire.Score) || math.IsInf(*wire.Score, 0) || *wire.Score < 0 || *wire.Score > float64(len(options)-1) || math.Abs(*wire.Score-expected) > probabilityTolerance*float64(len(options)) {
+		if wire.Score == nil || math.IsNaN(*wire.Score) || math.IsInf(*wire.Score, 0) || *wire.Score < 0 || *wire.Score > float64(len(options)-1) {
 			return nil
 		}
-		answer.Score = &classifier.ScoreAnswer{ExpectedIndex: *wire.Score, Distribution: distribution, Confidence: wire.Confidence}
+		// The provider's score and probabilities can be rounded independently.
+		// Derive our expected index from the validated distribution so they agree.
+		answer.Score = &classifier.ScoreAnswer{ExpectedIndex: expected, Distribution: distribution, Confidence: wire.Confidence}
 	}
 	return &answer
 }
