@@ -174,7 +174,8 @@ the pin has unsaved edits. Members with only `mcp:read` on the server see no
 picker; instead a read-only "Requested at sign-in" summary lists what the
 connected client requests (`read`, with "Pinned for this MCP server's URL."
 with the flag on, or "Set by the identity provider's override." with it off).
-Browser verification: `[~]`.
+With the flag off, a server with nothing pinned shows writers no picker either,
+only the same summary. Browser verification: `[~]`.
 
 ### Upstream session validation outcomes
 

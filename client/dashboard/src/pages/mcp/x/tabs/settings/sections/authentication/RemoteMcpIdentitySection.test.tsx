@@ -2203,6 +2203,38 @@ describe("RemoteMcpIdentitySectionBody", () => {
       ).toBeDefined();
     });
 
+    it("hides the unusable pin picker and shows a writer the summary", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({
+        data: serverScopes({
+          discoveryEnabled: false,
+          pinnedScopes: [],
+          clients: [
+            {
+              clientId: "client-1",
+              scopeSource: "issuer_omitted",
+              requestedScopes: [],
+              unadvertisedPinnedScopes: [],
+              pinWouldDecide: false,
+            },
+          ],
+        }),
+        isError: false,
+      });
+
+      renderIdentity();
+
+      expect(
+        screen.queryByRole("combobox", { name: "Pinned scopes" }),
+      ).toBeNull();
+      expect(screen.queryByText("Loading pinned scopes…")).toBeNull();
+      expect(
+        screen.getByText(
+          /^No scopes are requested; .+ applies its defaults\.$/,
+        ),
+      ).toBeDefined();
+    });
+
     it("shows a reader the summary without the pin picker", () => {
       connectClient();
       mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });

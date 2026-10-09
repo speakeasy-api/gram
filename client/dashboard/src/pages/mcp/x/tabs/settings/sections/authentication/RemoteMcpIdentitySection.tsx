@@ -230,15 +230,20 @@ export function RemoteMcpIdentitySectionBody({
   });
   const scopePinSlot =
     canWrite && selectedMode === "user" && userDraft.connected;
-  const showScopePin = scopePinSlot && !!scopePin.data;
+  // Pinning off and nothing pinned: the picker can do nothing, so hide it.
+  const scopePinUnusable =
+    !!scopePin.data &&
+    !scopePin.data.discoveryEnabled &&
+    scopePin.data.pinnedScopes.length === 0;
+  const showScopePin = scopePinSlot && !!scopePin.data && !scopePinUnusable;
   const scopePinDirty = showScopePin && scopePin.dirty;
-  // Readers only: writers get the same answer in the pin's status line.
+  // Writers get the same answer in the pin's status line when the pin shows.
   // mcp:write satisfies mcp:read, but a read block applies independently.
   const canRead =
     !rbacLoading && hasScope("mcp:read", target.permissionResourceId);
   const showScopesSummary =
     canRead &&
-    !scopePinSlot &&
+    (!scopePinSlot || scopePinUnusable) &&
     identityResolved &&
     actualMode === "user" &&
     selectedMode === "user" &&
@@ -624,7 +629,7 @@ export function RemoteMcpIdentitySectionBody({
                 <Text muted small className="mt-4 block pl-[52px]">
                   Couldn't load pinned scopes.
                 </Text>
-              ) : scopePinSlot ? (
+              ) : scopePinSlot && !scopePin.data ? (
                 <Text muted small className="mt-4 block pl-[52px]">
                   Loading pinned scopes…
                 </Text>
