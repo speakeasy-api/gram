@@ -10,6 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import { ANNOTATION_OPTIONS, type ToolAnnotation } from "./annotations";
+import { unavailableTooltip } from "./unavailableTooltip";
 
 export type { ToolAnnotation };
 
@@ -766,19 +767,4 @@ function HighlightMatch({
       {text.slice(idx + query.length)}
     </span>
   );
-}
-
-const unproxiedTooltip =
-  "Speakeasy doesn't proxy this server's traffic, so its tools can't be permissioned individually.";
-
-/**
- * The unproxied explanation belongs only to rows using the default unproxied
- * label; a row unavailable for another reason (say, no catalog on this
- * surface) keeps just its own label unless it brings its own tooltip.
- */
-export function unavailableTooltip(
-  server: Pick<ToolSelectionServer, "unavailableLabel" | "unavailableTooltip">,
-): React.ReactNode {
-  if (server.unavailableTooltip) return server.unavailableTooltip;
-  return server.unavailableLabel ? undefined : unproxiedTooltip;
 }
