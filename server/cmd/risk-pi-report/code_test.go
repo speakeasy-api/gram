@@ -117,9 +117,16 @@ func TestMeasuredCodeHashesAnUntrackedSymlinkByItsTarget(t *testing.T) {
 	require.NotEqual(t, clean.key, linked.key)
 
 	require.NoError(t, os.WriteFile(secret, []byte("v2"), 0o600))
+	edited, err := measuredCode(t.Context(), dir)
+	require.NoError(t, err)
+	require.Equal(t, linked.key, edited.key, "a symlink counts by its target path, not the file it points to")
+
+	link := filepath.Join(dir, "server", "file-link")
+	require.NoError(t, os.Remove(link))
+	require.NoError(t, os.Symlink(filepath.Join(outside, "other"), link))
 	retargeted, err := measuredCode(t.Context(), dir)
 	require.NoError(t, err)
-	require.Equal(t, linked.key, retargeted.key, "a symlink counts by its target path, not the file it points to")
+	require.NotEqual(t, linked.key, retargeted.key, "a new target path changes the key")
 }
 
 func TestRunCommitName(t *testing.T) {
