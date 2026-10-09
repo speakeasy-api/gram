@@ -20,9 +20,10 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { fetchLinkedMcpServers } from "./sourceDelete";
+import { useReportBusy } from "./useReportBusy";
 
 // How long the outcome of a partly completed delete stays on screen after the
 // dialog navigates away: it carries the next step.
@@ -61,7 +62,7 @@ export function DeleteTunnelDialogContent({
   // Spans the delete and the recovery after a partial one, which
   // remove.isPending does not: recovery may still navigate away.
   const [running, setRunning] = useState(false);
-  useEffect(() => onBusyChange?.(running), [running, onBusyChange]);
+  useReportBusy(running, onBusyChange);
   const [confirmation, setConfirmation] = useState<Confirmation>({
     text: "",
     servers: [],
