@@ -4047,11 +4047,11 @@ paths:
             format: int64
             type: integer
         - allowEmptyValue: true
-          description: 'Column to sort by: name, slug, account_type, account_tier, member_count, created_at, disabled_at or trial_ends_at. account_tier ranks enterprise first, then pro and payg, then free, then any other account type. Omitted or unknown values use created_at descending. Ties always sort by id ascending. Supplying it selects offset paging.'
+          description: 'Column to sort by: name, slug, account_type, account_tier, member_count, created_at, disabled_at or trial_ends_at. account_tier ranks enterprise first, then pro and payg, then free, then any other account type; desc reverses that order. Omitted or unknown values use created_at descending. Ties always sort by id ascending. Supplying it selects offset paging.'
           in: query
           name: sort
           schema:
-            description: 'Column to sort by: name, slug, account_type, account_tier, member_count, created_at, disabled_at or trial_ends_at. account_tier ranks enterprise first, then pro and payg, then free, then any other account type. Omitted or unknown values use created_at descending. Ties always sort by id ascending. Supplying it selects offset paging.'
+            description: 'Column to sort by: name, slug, account_type, account_tier, member_count, created_at, disabled_at or trial_ends_at. account_tier ranks enterprise first, then pro and payg, then free, then any other account type; desc reverses that order. Omitted or unknown values use created_at descending. Ties always sort by id ascending. Supplying it selects offset paging.'
             type: string
         - allowEmptyValue: true
           description: Sort direction, asc or desc, applied to the column named by sort. Any other value sorts ascending. Ignored when sort is omitted or unknown, preserving the newest-first default. On its own it does not select offset paging.

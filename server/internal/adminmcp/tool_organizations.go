@@ -42,7 +42,7 @@ type FindOrganizationsInput struct {
 	CreatedTo string `json:"created_to,omitempty" jsonschema:"Inclusive creation date, YYYY-MM-DD UTC"`
 
 	// Sort selects explicit offset paging instead of cursor paging.
-	Sort string `json:"sort,omitempty" jsonschema:"Sort by name, slug, account_type, account_tier (enterprise, then pro and payg, then free), member_count, created_at, disabled_at or trial_ends_at"`
+	Sort string `json:"sort,omitempty" jsonschema:"Sort by name, slug, account_type, account_tier (asc: enterprise, then pro and payg, then free, then other types; desc reverses that order), member_count, created_at, disabled_at or trial_ends_at"`
 
 	// Direction applies only when Sort is present.
 	Direction string `json:"direction,omitempty" jsonschema:"Sort direction: asc or desc; requires sort"`
