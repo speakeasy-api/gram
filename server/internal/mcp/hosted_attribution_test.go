@@ -2,18 +2,28 @@ package mcp_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	posthoggo "github.com/posthog/posthog-go"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -120,4 +130,48 @@ func TestServePublic_HostedEndpoint_AttributesServerAndEndpoint(t *testing.T) {
 	require.EqualValues(t, toolset.Slug, listed["toolset_slug"])
 
 	requireHostedAttributionRow(t, telemetry.EventSourceToolCall, server.ID, endpointID)
+}
+
+// Fail only attribution, after the toolset reads needed to count an attempt.
+type attributionLookupFailureTracer struct {
+	hits atomic.Int32
+}
+
+func (tr *attributionLookupFailureTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	if strings.HasPrefix(data.SQL, "-- name: ListEnabledMCPServersByToolsetID ") {
+		tr.hits.Add(1)
+		canceled, cancel := context.WithCancel(ctx)
+		cancel()
+		return canceled
+	}
+	return ctx
+}
+
+func (*attributionLookupFailureTracer) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {
+}
+
+func TestHandleToolsCall_AttributionLookupFailureStillCountsAttempt(t *testing.T) {
+	t.Parallel()
+	reader := sdkmetric.NewManualReader()
+	tracer := &attributionLookupFailureTracer{}
+	ctx, ti := newTestMCPServiceWithPoolConfig(t, testenv.NewLogger(t),
+		sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)),
+		&mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil,
+		func(config *pgxpool.Config) { config.ConnConfig.Tracer = tracer }, mcp.MetaRuntimeConfig{})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, "failed-attribution-"+uuid.NewString()[:8])
+	reqCtx := contextvalues.SetRequestContext(ctx, &contextvalues.RequestContext{
+		Host: "mcp.example.test", ReqURL: "/mcp/lookup-failure", Method: http.MethodPost,
+	})
+	_, err := ti.service.HandleToolsCall(reqCtx, &mcp.McpInputs{
+		ProjectID: *authCtx.ProjectID, Toolset: toolset.Slug, Mode: mcp.ToolModeStatic,
+	}, "missing_tool", json.RawMessage(`{}`))
+	require.ErrorContains(t, err, "resolve MCP server for toolset")
+	require.EqualValues(t, 1, tracer.hits.Load())
+	points := collectCounterPoints(t, reader, "mcp.tool.call")
+	require.Equal(t, map[attribute.Set]int64{
+		attribute.NewSet(attr.OrganizationID(authCtx.ActiveOrganizationID),
+			attr.McpURL("mcp.example.test/mcp/lookup-failure"), attr.ToolName("missing_tool")): 1,
+	}, points)
 }

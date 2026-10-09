@@ -182,9 +182,15 @@ func handleToolsCall(
 	}
 	params.Arguments = stripped
 
+	attributedMCPServerID := payload.mcpServerID
 	var mcpURL string
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		mcpURL = requestContext.Host + requestContext.ReqURL
+		// Count attempts even when legacy server attribution fails. Resolve the
+		// optional metric identity before recording, without changing authorization.
+		defer func() {
+			metrics.RecordMCPToolCall(ctx, toolset.OrganizationID, mcpURL, conv.PtrValOr(optionalUUIDString(attributedMCPServerID), ""), params.Name)
+		}()
 	}
 
 	toolsetHelpers := toolsets.NewToolsets(db, platformExtras...)
@@ -201,7 +207,6 @@ func handleToolsCall(
 	// server's policy and telemetry identity.
 	// Keep the payload unchanged because its nil server id still identifies the
 	// legacy authorization path.
-	attributedMCPServerID := payload.mcpServerID
 	if attributedMCPServerID == nil {
 		servers, lookupErr := mcpservers_repo.New(db).ListEnabledMCPServersByToolsetID(ctx, mcpservers_repo.ListEnabledMCPServersByToolsetIDParams{
 			ToolsetID: toolsetID,
@@ -219,10 +224,6 @@ func handleToolsCall(
 			// Ambiguous wrappers leave the call unattributed rather than failing it.
 			logger.WarnContext(ctx, "multiple enabled MCP servers wrap the legacy toolset; skipping server attribution", attr.SlogToolsetID(toolsetID.String()))
 		}
-	}
-
-	if mcpURL != "" {
-		metrics.RecordMCPToolCall(ctx, toolset.OrganizationID, mcpURL, conv.PtrValOr(optionalUUIDString(attributedMCPServerID), ""), params.Name)
 	}
 
 	executor := externalmcp.BuildProxyToolExecutor(logger, guardianPolicy, toolset.Tools)

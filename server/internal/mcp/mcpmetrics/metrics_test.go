@@ -334,8 +334,21 @@ func TestRecordMCPServerID_OnlyWhenKnown(t *testing.T) {
 	m.RecordMCPToolCall(t.Context(), "org-123", "mcp.example.com/mcp/demo", serverID, "test-tool")
 	m.RecordMCPRequestDuration(t.Context(), "tools/call", "mcp.example.com/mcp/demo", serverID, 100*time.Millisecond)
 	m.RecordMCPToolCall(t.Context(), "org-123", "mcp.example.com/mcp/legacy", "", "test-tool")
+	m.RecordMCPRequestDuration(t.Context(), "tools/call", "mcp.example.com/mcp/legacy", "", 100*time.Millisecond)
 
-	metricdatatest.AssertHasAttributes(t, collectMetric(t, reader, "mcp.request.duration"), attr.McpServerID(serverID))
+	durations, ok := collectMetric(t, reader, "mcp.request.duration").Data.(metricdata.Histogram[float64])
+	require.True(t, ok)
+	require.Len(t, durations.DataPoints, 2)
+	for _, dp := range durations.DataPoints {
+		url, _ := dp.Attributes.Value(attr.McpURLKey)
+		got, has := dp.Attributes.Value(attr.McpServerIDKey)
+		if url.AsString() == "mcp.example.com/mcp/legacy" {
+			require.False(t, has)
+			continue
+		}
+		require.True(t, has)
+		require.Equal(t, serverID, got.AsString())
+	}
 
 	toolCalls, ok := collectMetric(t, reader, "mcp.tool.call").Data.(metricdata.Sum[int64])
 	require.True(t, ok)
