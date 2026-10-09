@@ -17,8 +17,10 @@ Use the reserved dev ILB address from the internal deployment configuration.
 The equivalent flag is `--remote-mcp-catalog-ilb-cidr`. It is also accepted by
 admin, streams, and private-ingress runtime commands that share these policy
 constructors. Set it on any such deployment that executes catalog MCP requests.
-Invalid values fail startup; only one private IPv4 `/32` is accepted. Leave the
-variable unset in production. No committed environment default enables it.
+Invalid values fail startup; only one private IPv4 `/32` is accepted. A nonempty
+value also fails startup unless `GRAM_ENVIRONMENT=dev` exactly. Leave the variable
+unset in production, local, staging, and preview environments. No committed
+environment default enables it.
 
 The infrastructure follow-up must pass this non-secret value into the relevant
 dev deployment environment blocks in gram-infra. It must also finish DNS/TLS
