@@ -36,7 +36,6 @@ import { useAllRemoteSessionClients } from "@/lib/remote-identity";
 import {
   deriveIdentityMode,
   findPassThroughAuthorizationHeader,
-  passThroughAuthorizationProblem,
   type IdentityMode,
 } from "@/lib/remote-identity";
 import { IdentityExplainerDialog } from "@/lib/remote-identity";
@@ -101,8 +100,7 @@ export function RemoteIdentitySummary({
   settingsHref,
 }: {
   mode: IdentityMode;
-  /** What is wrong with a pass-through Authorization row, or null. */
-  passThroughAuthorization: string | null;
+  passThroughAuthorization: boolean;
   /** None is configured but the upstream answered the probe with a challenge. */
   authenticationRequired: boolean;
   unavailable: boolean;
@@ -110,7 +108,7 @@ export function RemoteIdentitySummary({
   settingsHref: string;
 }): React.JSX.Element {
   const [explainerOpen, setExplainerOpen] = React.useState(false);
-  const warn = !!passThroughAuthorization || authenticationRequired;
+  const warn = passThroughAuthorization || authenticationRequired;
   const label = passThroughAuthorization
     ? "Needs cleanup"
     : remoteIdentityLabel(mode);
@@ -119,7 +117,8 @@ export function RemoteIdentitySummary({
   // fully described by the pill itself.
   let problem: string | null = null;
   if (passThroughAuthorization) {
-    problem = `${passThroughAuthorization} Remove it under Custom Headers so this server's identity is the only thing sending a credential.`;
+    problem =
+      "A legacy pass-through Authorization header is still configured. Remove it under Custom Headers so this server's identity is the only thing sending a credential.";
   } else if (authenticationRequired) {
     problem =
       "This server answers with an authentication challenge, but no identity is configured. Requests will keep failing until User Identity or a Service Account is set up.";
@@ -625,11 +624,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       {isRemoteBacked ? (
         <RemoteIdentitySummary
           mode={remoteIdentityMode}
-          passThroughAuthorization={
-            passThroughAuthorization
-              ? passThroughAuthorizationProblem(passThroughAuthorization)
-              : null
-          }
+          passThroughAuthorization={!!passThroughAuthorization}
           authenticationRequired={
             identityProbeStatus === "authentication-required"
           }

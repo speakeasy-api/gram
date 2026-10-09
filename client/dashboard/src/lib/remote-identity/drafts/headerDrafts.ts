@@ -1,12 +1,6 @@
 import type { ExternalMCPRemoteHeader } from "@gram/client/models/components/externalmcpremoteheader.js";
 import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader.js";
-import {
-  authorizationHeaderGuard,
-  headerKey,
-  remoteHeaderPolicyIssue,
-  remoteHeaderPolicyReasonMessage,
-  type RemoteHeaderPolicyIssue,
-} from "../model/headers";
+import { authorizationHeaderGuard } from "../model/headers";
 import type { IdentityMode } from "../model/identity";
 import { REDACTED_SECRET } from "../model/secret";
 
@@ -33,24 +27,7 @@ export type HeaderDraft = {
   hadSecret: boolean;
   /** Row was seeded from the endpoint's catalog entry (and is unsaved). */
   fromCatalog?: boolean;
-  /**
-   * The editable fields as the server last returned them, for a saved row.
-   * A saved row the header policy now refuses stays as it is until the
-   * operator edits it, so it never blocks saving the other rows.
-   */
-  saved?: SavedHeaderFields;
 };
-
-/** A saved row's editable fields, compared to tell an untouched row apart. */
-type SavedHeaderFields = Pick<
-  HeaderDraft,
-  | "name"
-  | "source"
-  | "staticValue"
-  | "valueFromRequestHeader"
-  | "isRequired"
-  | "isSecret"
->;
 
 function headerSourceFromServer(header: RemoteMcpServerHeader): HeaderSource {
   if (header.valueFromRequestHeader) {
@@ -65,7 +42,9 @@ export function headerDraftFromServer(
   const source = headerSourceFromServer(header);
   const isRedactedSecret = header.isSecret && header.value === REDACTED_SECRET;
 
-  const fields: SavedHeaderFields = {
+  return {
+    key: header.id,
+    id: header.id,
     name: header.name,
     source,
     staticValue:
@@ -77,60 +56,18 @@ export function headerDraftFromServer(
     valueFromRequestHeader: header.valueFromRequestHeader ?? "",
     isRequired: header.isRequired,
     isSecret: header.isSecret,
-  };
-
-  return {
-    key: header.id,
-    id: header.id,
-    ...fields,
     hadSecret: header.isSecret,
-    saved: fields,
   };
 }
 
-/** Whether a saved row still holds exactly what the server returned. */
-function isUnchangedSavedDraft(draft: HeaderDraft): boolean {
-  const saved = draft.saved;
-  if (!draft.id || !saved) return false;
-  return (
-    draft.name === saved.name &&
-    draft.source === saved.source &&
-    draft.staticValue === saved.staticValue &&
-    draft.valueFromRequestHeader === saved.valueFromRequestHeader &&
-    draft.isRequired === saved.isRequired &&
-    draft.isSecret === saved.isSecret
-  );
-}
-
-/**
- * The header policy's verdict on the row the server holds, for warning about
- * a saved row that predates the policy. Null for an unsaved row.
- */
-export function savedHeaderPolicyIssue(
-  draft: HeaderDraft,
-): RemoteHeaderPolicyIssue | null {
-  if (!draft.id || !draft.saved) return null;
-  return fieldsPolicyIssue(draft.saved, "stored");
-}
-
-/**
- * The header policy's verdict on a row's fields. A source counts only when
- * the row reads from a request header.
- */
-function fieldsPolicyIssue(
-  fields: SavedHeaderFields,
-  mode: "stored" | "write",
-): RemoteHeaderPolicyIssue | null {
-  return remoteHeaderPolicyIssue(
-    {
-      name: fields.name,
-      valueFromRequestHeader:
-        fields.source === "request" ? fields.valueFromRequestHeader : undefined,
-      isRequired: fields.isRequired,
-    },
-    mode,
-  );
-}
+// Inbound headers a pass-through row may not read from; mirrors the proxy.
+// Authorization is deliberately absent: forwarding the caller's own upstream
+// credential is what pass-through identity is for.
+const DENIED_PASS_THROUGH_SOURCES = new Set([
+  "cookie",
+  "set-cookie",
+  "proxy-authorization",
+]);
 
 // A saved secret shows its redacted placeholder (`***`) in the value field. As
 // long as the user leaves that placeholder untouched, we keep the existing
@@ -180,41 +117,10 @@ export function headerDraftErrors(
   managedAuthorizationHeaderId?: string,
 ): ReadonlyMap<string, HeaderDraftError> {
   const errors = new Map<string, HeaderDraftError>();
-  // Untouched saved rows are never written, so they cannot conflict with each
-  // other here, even when legacy rows already collide or are malformed; a new
-  // or edited row still may not take a name one of them holds.
-  const savedNames = new Set(
-    drafts
-      .filter(isUnchangedSavedDraft)
-      .map((draft) => headerKey(draft.name))
-      .filter((key) => key !== ""),
-  );
   const names = new Set<string>();
 
   for (const draft of drafts) {
     const name = draft.name.trim();
-
-    if (isUnchangedSavedDraft(draft)) {
-      // The identity still owns Authorization, so an untouched saved row
-      // claiming it has to go, unless the header policy already refuses the
-      // row: then its own warning explains it and it must not block other
-      // edits. A Service Account writes its own static Authorization row, so
-      // there even a refused row has to go first.
-      const authorizationError =
-        identityMode &&
-        (identityMode === "agent" || !savedHeaderPolicyIssue(draft))
-          ? authorizationHeaderGuard(
-              identityMode,
-              name,
-              !!draft.id && draft.id === managedAuthorizationHeaderId,
-            )
-          : null;
-      if (authorizationError) {
-        errors.set(draft.key, { field: "name", message: authorizationError });
-      }
-      continue;
-    }
-
     if (!name) {
       errors.set(draft.key, {
         field: "name",
@@ -223,15 +129,15 @@ export function headerDraftErrors(
       continue;
     }
 
-    const key = headerKey(name);
-    if (names.has(key) || savedNames.has(key)) {
+    const normalized = name.toLowerCase();
+    if (names.has(normalized)) {
       errors.set(draft.key, {
         field: "name",
         message: `Duplicate header name "${name}".`,
       });
       continue;
     }
-    names.add(key);
+    names.add(normalized);
 
     if (identityMode) {
       const authorizationError = authorizationHeaderGuard(
@@ -245,21 +151,23 @@ export function headerDraftErrors(
       }
     }
 
-    const policyIssue = fieldsPolicyIssue(draft, "write");
-    if (policyIssue) {
-      errors.set(draft.key, {
-        field: policyIssue.field === "source" ? "value" : "name",
-        message: remoteHeaderPolicyReasonMessage(policyIssue.reason, draft),
-      });
-      continue;
-    }
-
     if (draft.source === "request") {
       const source = draft.valueFromRequestHeader.trim();
       if (!source) {
         errors.set(draft.key, {
           field: "value",
           message: `Header "${name}" needs an inbound request header name.`,
+        });
+        continue;
+      }
+      // Mirrors the proxy, which is the control that actually holds: these
+      // carry the dashboard's own session rather than anything meant for the
+      // upstream. Checked here so the refusal arrives while editing instead of
+      // as a failed request later.
+      if (DENIED_PASS_THROUGH_SOURCES.has(source.toLowerCase())) {
+        errors.set(draft.key, {
+          field: "value",
+          message: `"${source}" cannot be forwarded upstream.`,
         });
         continue;
       }

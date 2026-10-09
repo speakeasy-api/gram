@@ -16,9 +16,6 @@ import { cn } from "@/lib/utils";
 import { Text } from "@/components/ui/Text";
 import {
   REDACTED_SECRET,
-  remoteHeaderPolicyEffectMessage,
-  remoteHeaderPolicyReasonMessage,
-  savedHeaderPolicyIssue,
   type HeaderDraft,
   type HeaderDraftError,
   type HeaderDraftsState,
@@ -284,23 +281,11 @@ function HeaderDraftRow({
   // A saved secret arrives as its redacted placeholder. There is nothing to
   // reveal until the operator replaces it, so the field is plain text.
   const reveal = draft.isSecret && draft.staticValue !== REDACTED_SECRET;
-  // A saved row the header policy refuses, warned about as the server holds
-  // it so the warning stays put while the operator edits the fix.
-  const policyIssue = savedHeaderPolicyIssue(draft);
 
   return (
     <div className="p-3">
       <Stack gap={2}>
-        {policyIssue ? (
-          <Alert variant="warning" dismissible={false}>
-            {remoteHeaderPolicyEffectMessage(policyIssue.effect)}{" "}
-            {remoteHeaderPolicyReasonMessage(
-              policyIssue.reason,
-              draft.saved ?? draft,
-            )}
-          </Alert>
-        ) : null}
-        {legacyPassThroughAuthorization && !policyIssue ? (
+        {legacyPassThroughAuthorization ? (
           <Alert variant="warning" dismissible={false}>
             Legacy pass-through Authorization. Remove this row before using
             Service Account or relying on Manual.
@@ -367,7 +352,7 @@ function HeaderDraftRow({
                 onChange={(value) =>
                   onChange({ ...draft, valueFromRequestHeader: value })
                 }
-                placeholder="X-Upstream-Token"
+                placeholder="X-Forwarded-Authorization"
                 aria-label="Inbound request header"
                 className={error?.field === "value" ? WARN_BORDER : undefined}
               />

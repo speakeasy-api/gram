@@ -54,7 +54,6 @@ import {
   managedAuthorizationHeader,
   findPassThroughAuthorizationHeader,
   findStaticAuthorizationHeader,
-  passThroughAuthorizationProblem,
   type IdentityMode,
 } from "@/lib/remote-identity";
 import { useAllRemoteSessionClients } from "@/lib/remote-identity";
@@ -474,7 +473,7 @@ export function RemoteMcpIdentitySectionBody({
 
             {passThroughAuthorization ? (
               <Alert variant="warning" dismissible={false}>
-                {passThroughAuthorizationProblem(passThroughAuthorization)}{" "}
+                A legacy pass-through Authorization header is still configured.
                 Remove it in Custom Headers before selecting Service Account or
                 relying on Manual.
               </Alert>

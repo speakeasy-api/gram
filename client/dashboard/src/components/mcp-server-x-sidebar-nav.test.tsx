@@ -68,7 +68,7 @@ describe("RemoteIdentitySummary", () => {
       <MemoryRouter>
         <RemoteIdentitySummary
           mode={props.mode ?? "user"}
-          passThroughAuthorization={props.passThroughAuthorization ?? null}
+          passThroughAuthorization={props.passThroughAuthorization ?? false}
           authenticationRequired={props.authenticationRequired ?? false}
           unavailable={props.unavailable ?? false}
           loading={props.loading ?? false}
