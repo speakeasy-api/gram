@@ -37,12 +37,11 @@ FROM mcp_servers
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: GetMCPServerByToolsetID :one
--- The toolset's canonical wrapper (id = toolset id) when it has one, else the
--- oldest toolset-backed server.
+-- Enabled first, then the canonical wrapper (id = toolset id), then oldest.
 SELECT *
 FROM mcp_servers
 WHERE toolset_id = @toolset_id::uuid AND project_id = @project_id AND deleted IS FALSE
-ORDER BY (id = toolset_id) DESC, created_at, id
+ORDER BY (visibility = 'disabled'), (id = toolset_id) DESC, created_at, id
 LIMIT 1;
 
 -- name: ListEnabledMCPServersByToolsetID :many

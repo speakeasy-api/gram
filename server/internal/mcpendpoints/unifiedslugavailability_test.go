@@ -63,16 +63,16 @@ func seedToolsetBackedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool
 
 	mcpServerID, err := uuid.NewV7()
 	require.NoError(t, err)
-	return seedToolsetBackedMcpServerWithID(t, ctx, conn, projectID, toolsetID, mcpServerID)
+	return seedToolsetBackedMcpServerWithID(t, ctx, conn, projectID, toolsetID, mcpServerID, "private")
 }
 
 // seedCanonicalToolsetWrapper creates the toolset's canonical wrapper, whose id is the toolset id.
 func seedCanonicalToolsetWrapper(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, toolsetID uuid.UUID) uuid.UUID {
 	t.Helper()
-	return seedToolsetBackedMcpServerWithID(t, ctx, conn, projectID, toolsetID, toolsetID)
+	return seedToolsetBackedMcpServerWithID(t, ctx, conn, projectID, toolsetID, toolsetID, "private")
 }
 
-func seedToolsetBackedMcpServerWithID(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, toolsetID, mcpServerID uuid.UUID) uuid.UUID {
+func seedToolsetBackedMcpServerWithID(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, toolsetID, mcpServerID uuid.UUID, visibility string) uuid.UUID {
 	t.Helper()
 
 	server, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
@@ -84,7 +84,7 @@ func seedToolsetBackedMcpServerWithID(t *testing.T, ctx context.Context, conn *p
 		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		RemoteMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ToolsetID:           uuid.NullUUID{UUID: toolsetID, Valid: true},
-		Visibility:          "private",
+		Visibility:          visibility,
 	})
 	require.NoError(t, err)
 
@@ -457,4 +457,32 @@ func TestUpdateMcpEndpoint_ConflictsWithToolsetMcpSlug(t *testing.T) {
 		Slug:             types.McpEndpointSlug(takenSlug),
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
+}
+
+func TestGetMCPServerByToolsetID_PrefersEnabledServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	servers := mcpserversrepo.New(ti.conn)
+	seedDisabled := func(toolsetID, id uuid.UUID) uuid.UUID {
+		return seedToolsetBackedMcpServerWithID(t, ctx, ti.conn, projectID, toolsetID, id, "disabled")
+	}
+	lookup := func(toolsetID uuid.UUID) uuid.UUID {
+		got, err := servers.GetMCPServerByToolsetID(ctx, mcpserversrepo.GetMCPServerByToolsetIDParams{ToolsetID: toolsetID, ProjectID: projectID})
+		require.NoError(t, err)
+		return got.ID
+	}
+
+	shadowed := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, projectID, authCtx.OrganizationSlug+"-shadowed")
+	seedDisabled(shadowed.ID, shadowed.ID)
+	fresh := seedToolsetBackedMcpServer(t, ctx, ti.conn, projectID, shadowed.ID)
+	require.Equal(t, fresh, lookup(shadowed.ID), "a disabled canonical wrapper must not hide an enabled server")
+
+	allOff := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, projectID, authCtx.OrganizationSlug+"-all-off")
+	allOffCanonical := seedDisabled(allOff.ID, allOff.ID)
+	seedDisabled(allOff.ID, uuid.Must(uuid.NewV7()))
+	require.Equal(t, allOffCanonical, lookup(allOff.ID), "among disabled servers the canonical wrapper still wins")
 }
