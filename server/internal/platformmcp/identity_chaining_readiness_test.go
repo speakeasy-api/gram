@@ -221,6 +221,7 @@ func TestRemoteMCPReadinessChainingWithoutInteractiveClient(t *testing.T) {
 	require.Equal(t, "no_session", result.AuthorizationIdentity.Absence)
 }
 
+//nolint:paralleltest,tparallel // Subtests restamp the same MCP server's issuer; sequencing is intentional.
 func TestMemberMCPConnectionStatusReportsIdentityChaining(t *testing.T) {
 	t.Parallel()
 
