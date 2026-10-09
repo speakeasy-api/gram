@@ -93,6 +93,21 @@ func TestCasesToRunSkipsCurrentRecords(t *testing.T) {
 	require.Equal(t, []labeledCase{edited, unfunded, fresh}, casesToRun([]labeledCase{done, edited, unfunded, fresh}, records))
 }
 
+func TestTallyRunCountsEveryFinishedCase(t *testing.T) {
+	t.Parallel()
+
+	caught, falsePositive, missed, failed, unfunded, fresh := recordsCase("caught", "malicious"), recordsCase("fp", "benign"), recordsCase("missed", "malicious"), recordsCase("failed", "malicious"), recordsCase("unfunded", "benign"), recordsCase("fresh", "benign")
+	records := map[string]caseRecord{
+		caseKey(caught):        {Key: caseKey(caught), Hash: caseHash(caught), Status: statusFlagged, CostUSD: 0.5},
+		caseKey(falsePositive): {Key: caseKey(falsePositive), Hash: caseHash(falsePositive), Status: statusFlagged, CostUSD: 0.25},
+		caseKey(missed):        {Key: caseKey(missed), Hash: caseHash(missed), Status: statusClear},
+		caseKey(failed):        {Key: caseKey(failed), Hash: caseHash(failed), Status: statusNoVerdict},
+		caseKey(unfunded):      {Key: caseKey(unfunded), Hash: caseHash(unfunded), Status: statusOutOfCredit},
+	}
+	got := tallyRun([]labeledCase{caught, falsePositive, missed, failed, unfunded, fresh}, records)
+	require.Equal(t, runTally{cases: 6, done: 4, falsePositives: 1, attacks: 3, caught: 1, noVerdict: 1, outOfCredit: 1, costUSD: 0.75}, got)
+}
+
 func TestLoadRecordsKeepsLastLineAndSkipsPartialLine(t *testing.T) {
 	t.Parallel()
 
