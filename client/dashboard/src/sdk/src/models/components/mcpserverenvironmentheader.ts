@@ -10,7 +10,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * mapped: sent upstream. overrides_source: sent upstream in place of the source header of the same name. invalid_name, reserved, empty_value, invalid_value, duplicate, undecryptable: the entry cannot be sent, and requests to the server are refused until it is fixed or removed. not_mapped: the name resembles the MCP_HEADER_ prefix without matching it exactly, so the entry is ignored.
+ * mapped: maps to a header that is sent upstream while every entry is valid. overrides_source: maps to a header that replaces the source header of the same name while every entry is valid. A resolved upstream token still replaces an Authorization entry. invalid_name, reserved, empty_value, invalid_value, duplicate, undecryptable: the entry cannot be sent, and a server linked to this environment refuses requests until it is fixed or removed. not_mapped: the name resembles the MCP_HEADER_ prefix without matching it exactly, so the entry is ignored.
  */
 export const McpServerEnvironmentHeaderStatus = {
   Mapped: "mapped",
@@ -24,7 +24,7 @@ export const McpServerEnvironmentHeaderStatus = {
   NotMapped: "not_mapped",
 } as const;
 /**
- * mapped: sent upstream. overrides_source: sent upstream in place of the source header of the same name. invalid_name, reserved, empty_value, invalid_value, duplicate, undecryptable: the entry cannot be sent, and requests to the server are refused until it is fixed or removed. not_mapped: the name resembles the MCP_HEADER_ prefix without matching it exactly, so the entry is ignored.
+ * mapped: maps to a header that is sent upstream while every entry is valid. overrides_source: maps to a header that replaces the source header of the same name while every entry is valid. A resolved upstream token still replaces an Authorization entry. invalid_name, reserved, empty_value, invalid_value, duplicate, undecryptable: the entry cannot be sent, and a server linked to this environment refuses requests until it is fixed or removed. not_mapped: the name resembles the MCP_HEADER_ prefix without matching it exactly, so the entry is ignored.
  */
 export type McpServerEnvironmentHeaderStatus = ClosedEnum<
   typeof McpServerEnvironmentHeaderStatus
@@ -43,7 +43,7 @@ export type McpServerEnvironmentHeader = {
    */
   headerName?: string | undefined;
   /**
-   * mapped: sent upstream. overrides_source: sent upstream in place of the source header of the same name. invalid_name, reserved, empty_value, invalid_value, duplicate, undecryptable: the entry cannot be sent, and requests to the server are refused until it is fixed or removed. not_mapped: the name resembles the MCP_HEADER_ prefix without matching it exactly, so the entry is ignored.
+   * mapped: maps to a header that is sent upstream while every entry is valid. overrides_source: maps to a header that replaces the source header of the same name while every entry is valid. A resolved upstream token still replaces an Authorization entry. invalid_name, reserved, empty_value, invalid_value, duplicate, undecryptable: the entry cannot be sent, and a server linked to this environment refuses requests until it is fixed or removed. not_mapped: the name resembles the MCP_HEADER_ prefix without matching it exactly, so the entry is ignored.
    */
   status: McpServerEnvironmentHeaderStatus;
 };

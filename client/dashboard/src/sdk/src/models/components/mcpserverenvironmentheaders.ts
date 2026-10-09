@@ -43,7 +43,7 @@ export type McpServerEnvironmentHeaders = {
    */
   environment?: McpServerEnvironmentSummary | undefined;
   /**
-   * Whether requests to the server would be refused because of the previewed environment. It reports only on the environment, not on the server's overall readiness.
+   * Whether a server linked to the previewed environment refuses requests because of it. For an unsaved selection this is what would happen after saving. It reports only on the environment, not on the server's overall readiness.
    */
   environmentConfigurationInvalid: boolean;
   /**

@@ -327,4 +327,112 @@ describe("EnvironmentHeadersSection", () => {
     ).toBe(prod.id);
     expect(screen.queryByRole("button", { name: /save/i })).toBeNull();
   });
+
+  it("describes an invalid unsaved selection as what saving would do", () => {
+    grantAll();
+    mocks.preview.mockImplementation((request) => {
+      if (request.selection === "none")
+        return { data: result(), isError: false };
+      if (request.selection === "linked") {
+        return {
+          data: result({
+            environment: prod,
+            environmentStatus: "ok",
+            entries: [
+              {
+                entryName: "MCP_HEADER_X-Ok",
+                headerName: "X-Ok",
+                status: "mapped",
+              },
+            ],
+          }),
+          isError: false,
+        };
+      }
+      return {
+        data: result({
+          environment: sandbox,
+          environmentStatus: "ok",
+          environmentConfigurationInvalid: true,
+          entries: [
+            {
+              entryName: "MCP_HEADER_Gram-Key",
+              headerName: "Gram-Key",
+              status: "reserved",
+            },
+            {
+              entryName: "MCP_HEADER_X-Ok",
+              headerName: "X-Ok",
+              status: "mapped",
+            },
+          ],
+        }),
+        isError: false,
+      };
+    });
+    renderSection(server());
+    expect(screen.queryByText(/refused/i)).toBeNull();
+    expect(screen.getByText("Mapped")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Environment"), {
+      target: { value: sandbox.id },
+    });
+    expect(
+      screen.getByText(/would be refused if you save this environment/i),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(/requests to this server are refused while/i),
+    ).toBeNull();
+    expect(screen.queryByText("Sent")).toBeNull();
+  });
+
+  function rerenderWith(
+    view: ReturnType<typeof render>,
+    mcpServer: McpServer,
+  ): void {
+    view.rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <TooltipProvider>
+            <EnvironmentHeadersSection
+              key={mcpServer.id}
+              mcpServer={mcpServer}
+            />
+          </TooltipProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  it("follows a link changed elsewhere while the picker is untouched", () => {
+    grantAll();
+    const view = renderSection(server());
+
+    rerenderWith(view, server({ environmentId: sandbox.id }));
+    expect(
+      (screen.getByLabelText("Environment") as HTMLSelectElement).value,
+    ).toBe(sandbox.id);
+    expect(screen.queryByRole("button", { name: /save/i })).toBeNull();
+
+    rerenderWith(view, server({ environmentId: undefined }));
+    expect(
+      (screen.getByLabelText("Environment") as HTMLSelectElement).value,
+    ).toBe("__none__");
+    expect(screen.queryByRole("button", { name: /save/i })).toBeNull();
+    expect(screen.queryByText(/changed elsewhere/i)).toBeNull();
+  });
+
+  it("keeps an edited selection and flags a link changed elsewhere", () => {
+    grantAll();
+    const view = renderSection(server());
+    fireEvent.change(screen.getByLabelText("Environment"), {
+      target: { value: "__none__" },
+    });
+
+    rerenderWith(view, server({ environmentId: sandbox.id }));
+    expect(
+      (screen.getByLabelText("Environment") as HTMLSelectElement).value,
+    ).toBe("__none__");
+    expect(screen.getByText(/changed elsewhere/i)).toBeTruthy();
+  });
 });

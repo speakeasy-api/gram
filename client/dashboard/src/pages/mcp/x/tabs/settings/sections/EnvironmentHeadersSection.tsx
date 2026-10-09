@@ -42,7 +42,7 @@ const STATUS_LABELS: Record<
   McpServerEnvironmentHeader["status"],
   { label: string; variant: BadgeVariant }
 > = {
-  mapped: { label: "Sent", variant: "success" },
+  mapped: { label: "Mapped", variant: "success" },
   overrides_source: {
     label: "Overrides source header",
     variant: "information",
@@ -150,7 +150,18 @@ function EnvironmentHeadersEditor({
 }): JSX.Element {
   const queryClient = useQueryClient();
   const linked = mcpServer.environmentId ?? NO_ENVIRONMENT;
-  const [draft, setDraft] = useState(linked);
+  // The draft remembers the link it was started from. When the stored link
+  // changes underneath it (another tab, another operator), an untouched draft
+  // follows the new link; an edited one is kept and flagged so Save never
+  // silently restores a link the user did not choose.
+  const [editing, setEditing] = useState({ base: linked, draft: linked });
+  if (editing.base !== linked && editing.draft === editing.base) {
+    setEditing({ base: linked, draft: linked });
+  }
+  const draft = editing.draft;
+  const linkChangedElsewhere = editing.base !== linked;
+  const setDraft = (value: string) =>
+    setEditing({ base: linked, draft: value });
 
   const options = useGetMcpServerEnvironmentHeaders(
     { id: mcpServer.id, selection: "none" },
@@ -245,7 +256,15 @@ function EnvironmentHeadersEditor({
             </Select>
           </RequireScope>
         </Field>
-        {result ? <EnvironmentHeadersPreview result={result} /> : null}
+        {linkChangedElsewhere ? (
+          <Alert variant="warning" dismissible={false}>
+            This server's environment was changed elsewhere while you were
+            editing. Review your selection before saving.
+          </Alert>
+        ) : null}
+        {result ? (
+          <EnvironmentHeadersPreview result={result} isCandidate={dirty} />
+        ) : null}
         <Text muted small>
           A signed-in user's upstream token replaces an environment
           Authorization header. Environments do not give MCP servers on one
@@ -278,19 +297,26 @@ function EnvironmentHeadersEditor({
   );
 }
 
+/**
+ * The preview for the linked environment describes what the server does now;
+ * the preview for an unsaved selection describes what saving it would do.
+ */
 function EnvironmentHeadersPreview({
   result,
+  isCandidate,
 }: {
   result: NonNullable<
     ReturnType<typeof useGetMcpServerEnvironmentHeaders>["data"]
   >;
+  isCandidate: boolean;
 }): JSX.Element | null {
   if (result.environmentStatus === "none") return null;
   if (result.environmentStatus === "unavailable") {
     return (
       <Alert variant="error" dismissible={false}>
-        This environment is deleted or unavailable. Requests to a server linked
-        to it are refused. Choose another environment or None and save.
+        {isCandidate
+          ? "This environment is deleted or unavailable, so it cannot be linked."
+          : "The linked environment is deleted or unavailable, so requests to this server are refused. Choose another environment or None and save."}
       </Alert>
     );
   }
@@ -298,8 +324,9 @@ function EnvironmentHeadersPreview({
     <>
       {result.environmentConfigurationInvalid ? (
         <Alert variant="error" dismissible={false}>
-          Requests to this server are refused while an MCP_HEADER_ entry cannot
-          be sent. Fix or remove the entries marked below in the environment.
+          {isCandidate
+            ? "Requests to this server would be refused if you save this environment, because an MCP_HEADER_ entry cannot be sent. Fix or remove the marked entries first, or choose another environment."
+            : "Requests to this server are refused while an MCP_HEADER_ entry cannot be sent. Fix or remove the entries marked below in the environment."}
         </Alert>
       ) : null}
       <Table
@@ -308,8 +335,7 @@ function EnvironmentHeadersPreview({
         rowKey={(row) => row.entryName}
         noResultsMessage={
           <Text muted small>
-            This environment has no MCP_HEADER_ entries, so no headers are sent
-            from it.
+            This environment has no MCP_HEADER_ entries, so it adds no headers.
           </Text>
         }
       />

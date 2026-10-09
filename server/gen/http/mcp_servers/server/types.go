@@ -198,8 +198,9 @@ type GetEnvironmentHeadersResponseBody struct {
 	// the environment is deleted, missing or in another project; requests to a
 	// server linked to it are refused.
 	EnvironmentStatus string `form:"environment_status" json:"environment_status" xml:"environment_status"`
-	// Whether requests to the server would be refused because of the previewed
-	// environment. It reports only on the environment, not on the server's overall
+	// Whether a server linked to the previewed environment refuses requests
+	// because of it. For an unsaved selection this is what would happen after
+	// saving. It reports only on the environment, not on the server's overall
 	// readiness.
 	EnvironmentConfigurationInvalid bool `form:"environment_configuration_invalid" json:"environment_configuration_invalid" xml:"environment_configuration_invalid"`
 	// Entries named with the MCP_HEADER_ prefix, plus near-miss names that are
@@ -3028,12 +3029,14 @@ type McpServerEnvironmentHeaderResponseBody struct {
 	// The canonical header the entry targets. Absent when the entry is not mapped
 	// or its name is not a valid header name.
 	HeaderName *string `form:"header_name,omitempty" json:"header_name,omitempty" xml:"header_name,omitempty"`
-	// mapped: sent upstream. overrides_source: sent upstream in place of the
-	// source header of the same name. invalid_name, reserved, empty_value,
-	// invalid_value, duplicate, undecryptable: the entry cannot be sent, and
-	// requests to the server are refused until it is fixed or removed. not_mapped:
-	// the name resembles the MCP_HEADER_ prefix without matching it exactly, so
-	// the entry is ignored.
+	// mapped: maps to a header that is sent upstream while every entry is valid.
+	// overrides_source: maps to a header that replaces the source header of the
+	// same name while every entry is valid. A resolved upstream token still
+	// replaces an Authorization entry. invalid_name, reserved, empty_value,
+	// invalid_value, duplicate, undecryptable: the entry cannot be sent, and a
+	// server linked to this environment refuses requests until it is fixed or
+	// removed. not_mapped: the name resembles the MCP_HEADER_ prefix without
+	// matching it exactly, so the entry is ignored.
 	Status string `form:"status" json:"status" xml:"status"`
 }
 
