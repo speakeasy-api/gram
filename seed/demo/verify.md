@@ -511,7 +511,8 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     `X-Jamf-Tenant` (Static value `demo-tenant`, Required) and
     `X-Jamf-Region` (From request header `X-Region`). The tunnel has never
     connected and the section still renders from stored rows. In the shared
-    demo the controls are read-only; locally, saving a reserved name such as
+    demo the controls are editable (visitor edits revert on the daily reseed);
+    saving a reserved name such as
     `Gram-Key` is refused. Plugin compatibility for a plugin using JAMF is
     false because of the request-derived row.
 

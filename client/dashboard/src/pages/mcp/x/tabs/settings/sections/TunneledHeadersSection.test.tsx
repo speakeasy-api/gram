@@ -2,7 +2,13 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { HeaderDraftsState } from "@/lib/remote-identity";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TunneledHeadersSection } from "./TunneledHeadersSection";
@@ -10,8 +16,11 @@ import { TunneledHeadersSection } from "./TunneledHeadersSection";
 const PROJECT = "project-1";
 
 const mocks = vi.hoisted(() => ({
-  // Whether the caller holds mcp:write for (resourceId, projectId).
+  // Whether the caller holds mcp:write for (resourceId, projectId). Any other
+  // scope is refused, so a gate asking for the wrong scope fails these tests.
   canWrite: vi.fn<(resourceId?: string, projectId?: string) => boolean>(),
+  invalidatePlugins: vi.fn(),
+  invalidatePlugin: vi.fn(),
   draftsArgs: vi.fn(),
   state: undefined as unknown as HeaderDraftsState,
   siblings: [] as Array<{
@@ -23,17 +32,22 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
-    hasScope: (_scope: string, resourceId?: string, projectId?: string) =>
+    hasScope: (scope: string, resourceId?: string, projectId?: string) =>
+      scope === "mcp:write" && mocks.canWrite(resourceId, projectId),
+    hasAnyScope: (scopes: string[], resourceId?: string, projectId?: string) =>
+      scopes.includes("mcp:write") && mocks.canWrite(resourceId, projectId),
+    hasAllScopes: (scopes: string[], resourceId?: string, projectId?: string) =>
+      scopes.every((scope) => scope === "mcp:write") &&
       mocks.canWrite(resourceId, projectId),
-    hasAnyScope: (_scopes: string[], resourceId?: string, projectId?: string) =>
-      mocks.canWrite(resourceId, projectId),
-    hasAllScopes: (
-      _scopes: string[],
-      resourceId?: string,
-      projectId?: string,
-    ) => mocks.canWrite(resourceId, projectId),
     isLoading: false,
   }),
+}));
+
+vi.mock("@gram/client/react-query/plugins.js", () => ({
+  invalidateAllPlugins: () => mocks.invalidatePlugins(),
+}));
+vi.mock("@gram/client/react-query/plugin.js", () => ({
+  invalidateAllPlugin: () => mocks.invalidatePlugin(),
 }));
 
 vi.mock("@/lib/remote-identity", async (importOriginal) => ({
@@ -120,6 +134,41 @@ describe("TunneledHeadersSection", () => {
       }),
     );
     expect(saveButton().disabled).toBe(false);
+  });
+
+  it("saves and refreshes plugin readiness when Save is clicked", async () => {
+    mocks.canWrite.mockReturnValue(true);
+    renderSection();
+
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(mocks.state.save).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(mocks.invalidatePlugins).toHaveBeenCalledTimes(1),
+    );
+    expect(mocks.invalidatePlugin).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes plugin readiness even when a save fails part way", async () => {
+    mocks.canWrite.mockReturnValue(true);
+    mocks.state = state({
+      save: vi.fn(async () => {
+        throw new Error("unavailable");
+      }),
+    });
+    renderSection();
+
+    fireEvent.click(saveButton());
+    await waitFor(() =>
+      expect(mocks.invalidatePlugins).toHaveBeenCalledTimes(1),
+    );
+  });
+
+  it("discards unsaved rows when Discard is clicked", () => {
+    mocks.canWrite.mockReturnValue(true);
+    renderSection();
+
+    fireEvent.click(screen.getByRole("button", { name: /discard/i }));
+    expect(mocks.state.discard).toHaveBeenCalledTimes(1);
   });
 
   it("checks the project dimension, not only the resource", () => {

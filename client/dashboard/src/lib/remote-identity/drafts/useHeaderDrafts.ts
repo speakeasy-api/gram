@@ -495,6 +495,9 @@ function useHeaderDraftsFor({
         current.filter((_, rowIndex) => rowIndex !== index),
       ),
     save,
-    discard: () => setDrafts(syncedRef.current),
+    discard: () => {
+      setDrafts(syncedRef.current);
+      setWriteError(null);
+    },
   };
 }

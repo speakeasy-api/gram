@@ -929,11 +929,11 @@ export function staticActionPhrase(action: AuditAction): string {
     case "tunneled-mcp:rotate-key":
       return "rotated the key for tunneled MCP server";
     case "tunneled-mcp-server-header:create":
-      return "added a header to tunneled MCP server";
+      return "added tunneled MCP server header";
     case "tunneled-mcp-server-header:update":
-      return "updated a header on tunneled MCP server";
+      return "updated tunneled MCP server header";
     case "tunneled-mcp-server-header:delete":
-      return "removed a header from tunneled MCP server";
+      return "removed tunneled MCP server header";
     case "unproxied-mcp:create":
       return "added unproxied MCP server";
     case "unproxied-mcp:delete":
