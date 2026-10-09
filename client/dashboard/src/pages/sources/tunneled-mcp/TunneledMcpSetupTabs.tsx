@@ -446,6 +446,9 @@ ENV TUNNEL_LOCAL_MCP_COMMAND="${MCP_COMMAND_SENTINEL}"
 ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/tunnel-agent"]
 DOCKERFILE`;
   const localJWKS = credentials ? localJWKSURL(credentials.issuer) : undefined;
+  const localHint = localJWKS
+    ? " Local development: host.docker.internal reaches your machine on Docker Desktop; elsewhere, point TUNNEL_IDENTITY_JWKS_URL at an address the agent can reach and leave the issuer as it is."
+    : "";
   const dockerLocalFlags = localJWKS
     ? `  -e TUNNEL_IDENTITY_ALLOW_INSECURE=true \\
   -e TUNNEL_IDENTITY_JWKS_URL=${shellQuote(localJWKS)} \\
@@ -542,7 +545,7 @@ spec:
       value: "kubernetes",
       label: "Kubernetes",
       language: "yaml",
-      hint: "Build the image from the Docker tab, push it to a registry your cluster can pull from, and replace the image below.",
+      hint: `Build the image from the Docker tab, push it to a registry your cluster can pull from, and replace the image below.${localHint}`,
       code: kubernetes,
       slots: {
         [SERVICE_VERSION_SENTINEL]: yamlSlot(serviceVersion),
@@ -553,7 +556,7 @@ spec:
       value: "docker",
       label: "Docker",
       language: "bash",
-      hint: "Build an image that adds the tunnel agent and your server command to a base image with your server's runtime, then run it.",
+      hint: `Build an image that adds the tunnel agent and your server command to a base image with your server's runtime, then run it.${localHint}`,
       code: docker,
       slots: {
         [MCP_COMMAND_SENTINEL]: dockerfileEnvSlot(
