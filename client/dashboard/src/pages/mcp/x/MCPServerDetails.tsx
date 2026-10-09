@@ -25,6 +25,7 @@ import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
 import { getTunneledMcpServerArgs } from "@/lib/sources";
+import { SharedTunnelConfirmDialog } from "@/components/mcp/shared-tunnel-impact";
 import { invalidateAllPlugins } from "@gram/client/react-query/plugins";
 import { invalidateAllPublishStatus } from "@gram/client/react-query/publishStatus";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
@@ -37,6 +38,7 @@ import {
 import { Switch } from "@/components/ui/Switch";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Check, ChevronDown } from "lucide-react";
+import { useState } from "react";
 import { Link, Navigate, useLocation, useParams } from "react-router";
 import { toast } from "sonner";
 import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
@@ -333,6 +335,9 @@ export function MCPServerStatusDropdown({
   const publicBlocked = isTunneled && !sourceAllowsPublic;
   const routes = useRoutes();
   const publicAccessHref = `${mcpServerTabHref(routes, mcpServerRouteParam(server), "settings")}#${MCP_PUBLIC_ACCESS_SECTION_ID}`;
+  // Making a tunneled server public exposes the upstream every server on the
+  // tunnel shares, so it is confirmed against the tunnel's servers first.
+  const [confirmPublic, setConfirmPublic] = useState(false);
 
   // Unproxied servers have no Speakeasy-hosted endpoint for disabled/private to
   // gate — the vendor's own server is reachable regardless of this setting —
@@ -374,6 +379,14 @@ export function MCPServerStatusDropdown({
               disabled={optionBlocked}
               onSelect={() => {
                 if (optionBlocked) return;
+                if (
+                  isTunneled &&
+                  option.value === "public" &&
+                  server.visibility !== "public"
+                ) {
+                  setConfirmPublic(true);
+                  return;
+                }
                 updateVisibility(option.value);
               }}
               className="group flex cursor-pointer items-start gap-2.5 p-2 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
@@ -424,6 +437,34 @@ export function MCPServerStatusDropdown({
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>
+      {isTunneled && server.tunneledMcpServerId ? (
+        <SharedTunnelConfirmDialog
+          open={confirmPublic}
+          onOpenChange={setConfirmPublic}
+          tunneledMcpServerId={server.tunneledMcpServerId}
+          currentMcpServerId={server.id}
+          title="Make this MCP server public?"
+          description="Anyone who can reach its URL can call every tool it exposes, with no login."
+          intro={
+            <>
+              Only this MCP server becomes public. It reaches the same upstream
+              service, through the same tunnel agent and credentials, as every
+              MCP server on the tunnel, including any you cannot view.
+            </>
+          }
+          publicWarning
+          confirmLabel="Make public"
+          pendingLabel="Saving"
+          isPending={updating}
+          onConfirm={() => {
+            // Stays open, showing Saving, until the change lands; a failure
+            // keeps it open next to the error toast.
+            updateVisibility("public", {
+              onSuccess: () => setConfirmPublic(false),
+            });
+          }}
+        />
+      ) : null}
     </DropdownMenu>
   );
 }
@@ -473,7 +514,10 @@ function visibilityToast(visibility: McpServerVisibility): string {
 
 function useMcpServerVisibilityUpdate(server: McpServer): {
   canWrite: boolean;
-  updateVisibility: (visibility: McpServerVisibility) => void;
+  updateVisibility: (
+    visibility: McpServerVisibility,
+    options?: { onSuccess?: () => void },
+  ) => void;
   updating: boolean;
 } {
   const { hasScope } = useRBAC();
@@ -503,26 +547,36 @@ function useMcpServerVisibilityUpdate(server: McpServer): {
     },
   });
 
-  const updateVisibility = (next: McpServerVisibility) => {
-    if (next === server.visibility) return;
-    update.mutate({
-      request: {
-        updateMcpServerForm: {
-          id: server.id,
-          name: server.name ?? undefined,
-          remoteMcpServerId: server.remoteMcpServerId ?? undefined,
-          tunneledMcpServerId: server.tunneledMcpServerId ?? undefined,
-          toolsetId: server.toolsetId ?? undefined,
-          unproxiedMcpServerId: server.unproxiedMcpServerId ?? undefined,
-          environmentId: server.environmentId ?? undefined,
-          // updateMcpServer is a full-record replace for the optional UUID
-          // references. Forwarding them keeps stored values intact across a
-          // visibility-only update.
-          toolVariationsGroupId: server.toolVariationsGroupId ?? undefined,
-          visibility: next,
+  const updateVisibility = (
+    next: McpServerVisibility,
+    options?: { onSuccess?: () => void },
+  ) => {
+    if (next === server.visibility) {
+      // Already applied, e.g. from another tab while a confirmation was open.
+      options?.onSuccess?.();
+      return;
+    }
+    update.mutate(
+      {
+        request: {
+          updateMcpServerForm: {
+            id: server.id,
+            name: server.name ?? undefined,
+            remoteMcpServerId: server.remoteMcpServerId ?? undefined,
+            tunneledMcpServerId: server.tunneledMcpServerId ?? undefined,
+            toolsetId: server.toolsetId ?? undefined,
+            unproxiedMcpServerId: server.unproxiedMcpServerId ?? undefined,
+            environmentId: server.environmentId ?? undefined,
+            // updateMcpServer is a full-record replace for the optional UUID
+            // references. Forwarding them keeps stored values intact across a
+            // visibility-only update.
+            toolVariationsGroupId: server.toolVariationsGroupId ?? undefined,
+            visibility: next,
+          },
         },
       },
-    });
+      { onSuccess: () => options?.onSuccess?.() },
+    );
   };
 
   return { canWrite, updateVisibility, updating: update.isPending };

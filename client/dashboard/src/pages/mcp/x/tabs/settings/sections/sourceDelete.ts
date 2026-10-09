@@ -1,5 +1,4 @@
 import { isNotFoundError } from "@/lib/route-errors";
-import { formatTunneledMcpDisplay } from "@/lib/sources";
 import type { Gram } from "@gram/client";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
@@ -15,6 +14,13 @@ export type SourceBackedDeleteTarget =
   | { kind: "tunneled"; source: TunneledMcpServer }
   | { kind: "unproxied"; source: UnproxiedMcpServer };
 
+// Sources whose delete runs the generic cascade below. A tunnel is deleted
+// through its own flow, which deletes only the MCP servers the user reviewed.
+export type CascadeDeleteTarget = Exclude<
+  SourceBackedDeleteTarget,
+  { kind: "tunneled" }
+>;
+
 export type SourceDeleteSpec = {
   title: string;
   entityDescription: string;
@@ -25,10 +31,9 @@ export type SourceDeleteSpec = {
 };
 
 // Copy and the typed-confirmation value for the cascade dialog. Remote and
-// unproxied sources have no slugified name, so the URL is what gets typed;
-// a tunneled source has nothing but its name.
+// unproxied sources have no slugified name, so the URL is what gets typed.
 export function sourceDeleteSpec(
-  target: SourceBackedDeleteTarget,
+  target: CascadeDeleteTarget,
 ): SourceDeleteSpec {
   switch (target.kind) {
     case "remote":
@@ -39,15 +44,6 @@ export function sourceDeleteSpec(
         confirmValue: target.source.url,
         successMessage: "Remote MCP server deleted",
         failureMessage: "Failed to delete remote MCP server",
-      };
-    case "tunneled":
-      return {
-        title: "Delete Tunneled MCP Server",
-        entityDescription: "the tunneled MCP source",
-        confirmLabel: "the source name",
-        confirmValue: formatTunneledMcpDisplay(target.source),
-        successMessage: "Tunneled MCP server deleted",
-        failureMessage: "Failed to delete tunneled MCP server",
       };
     case "unproxied":
       return {

@@ -34,12 +34,15 @@ import {
   mcpServerVisibilityUpdateForm,
 } from "@/lib/mcp-server-visibility";
 import { DeleteSourceBackedServerDialogContent } from "./DeleteSourceBackedServerDialogContent";
+import { DeleteTunnelDialogContent } from "./DeleteTunnelDialogContent";
 import {
   linkedMcpServersFilter,
   serversBackedBySameSource,
+  type CascadeDeleteTarget,
   type SourceBackedDeleteTarget,
 } from "./sourceDelete";
 import { invalidateWrapperDeleteAuthViews } from "./sourceInvalidation";
+import { useReportBusy } from "./useReportBusy";
 
 function ServerControlRow({
   title,
@@ -65,14 +68,21 @@ function ServerControlRow({
   );
 }
 
-const SOURCE_KIND_LABEL: Record<SourceBackedDeleteTarget["kind"], string> = {
+const SOURCE_KIND_LABEL: Record<CascadeDeleteTarget["kind"], string> = {
   remote: "remote MCP source",
-  tunneled: "tunneled MCP source",
   unproxied: "unproxied MCP source",
 };
 
+const DELETE_SERVER_ON_TUNNEL_DESCRIPTION =
+  "Permanently remove this MCP server and its endpoints. The tunnel and any other MCP servers on it keep working. A tunnel no MCP server uses still counts toward your tunnel limit; reuse or delete it from Add MCP server, Existing tunnel.";
+
+const DELETE_TUNNEL_DESCRIPTION =
+  "Permanently remove the tunnel behind this server and the MCP servers on it that you review and confirm, with their endpoints. Running tunnel agents are disconnected.";
+
+type DeleteDialogKind = "server" | "tunnel";
+
 function deleteRowCopy(
-  deleteTarget: SourceBackedDeleteTarget | undefined,
+  deleteTarget: CascadeDeleteTarget | undefined,
   sourceUnavailable: boolean,
   staffOnly: boolean,
 ): {
@@ -130,8 +140,30 @@ export function DangerZoneSection({
   const navigate = useNavigate();
   const routes = useRoutes();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  // The dialog last opened, kept after it closes so its content stays put
+  // while it animates out.
+  const [deleteDialog, setDeleteDialog] = useState<DeleteDialogKind>("server");
+  const openDeleteDialog = (kind: DeleteDialogKind) => {
+    setDeleteDialog(kind);
+    setDeleteDialogOpen(true);
+  };
+  // A delete in flight keeps the dialog open, so its outcome is never lost.
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const closeDeleteDialog = () => setDeleteDialogOpen(false);
+  const leavePage = (href: string = routes.mcp.href()) => {
+    setDeleteDialogOpen(false);
+    void navigate(href);
+  };
 
-  const linkedFilter = linkedMcpServersFilter(mcpServer);
+  // A tunnel is shared on purpose: its MCP servers are deleted one at a time,
+  // and the tunnel through its own reviewed flow. Every other source deletes
+  // its siblings along with the server, through the cascade below.
+  const isTunneled = !!mcpServer.tunneledMcpServerId;
+  const tunnelTarget =
+    deleteTarget?.kind === "tunneled" ? deleteTarget : undefined;
+  const cascadeTarget =
+    deleteTarget?.kind === "tunneled" ? undefined : deleteTarget;
+  const linkedFilter = isTunneled ? null : linkedMcpServersFilter(mcpServer);
   const isSourceBacked = linkedFilter !== null;
   const linkedQuery = useMcpServers(linkedFilter ?? undefined, undefined, {
     enabled: isSourceBacked,
@@ -143,15 +175,15 @@ export function DangerZoneSection({
   // The unproxied source delete is staff-only server-side. Refuse up front
   // rather than let the cascade delete the wrappers and then be turned away.
   const isSpeakeasyStaff = useIsSpeakeasyStaff();
-  const staffOnly = deleteTarget?.kind === "unproxied" && !isSpeakeasyStaff;
+  const staffOnly = cascadeTarget?.kind === "unproxied" && !isSpeakeasyStaff;
   // A refetch in flight means the sibling list may be about to change; wait
   // for it so the dialog opens on the current set.
   const deleteReady =
     !staffOnly &&
     (!isSourceBacked ||
-      (!!deleteTarget && linkedQuery.isSuccess && !linkedQuery.isFetching) ||
+      (!!cascadeTarget && linkedQuery.isSuccess && !linkedQuery.isFetching) ||
       sourceUnavailable);
-  const deleteRow = deleteRowCopy(deleteTarget, sourceUnavailable, staffOnly);
+  const deleteRow = deleteRowCopy(cascadeTarget, sourceUnavailable, staffOnly);
   const [pendingAvailability, setPendingAvailability] =
     useState<McpServerVisibility | null>(null);
   const queryClient = useQueryClient();
@@ -249,28 +281,79 @@ export function DangerZoneSection({
                 </RequireScope>
               </ServerControlRow>
 
-              <ServerControlRow
-                title={deleteRow.title}
-                description={deleteRow.description}
-              >
-                <RequireScope
-                  scope="mcp:write"
-                  resourceId={mcpServer.projectId}
-                  level="component"
-                >
-                  <Button
-                    variant="destructive-primary"
-                    size="md"
-                    disabled={!deleteReady}
-                    onClick={() => setDeleteDialogOpen(true)}
+              {isTunneled ? (
+                <>
+                  <ServerControlRow
+                    title="Delete this MCP server"
+                    description={DELETE_SERVER_ON_TUNNEL_DESCRIPTION}
                   >
-                    <Button.LeftIcon>
-                      <Trash2 className="h-4 w-4" />
-                    </Button.LeftIcon>
-                    <Button.Text>Delete MCP server</Button.Text>
-                  </Button>
-                </RequireScope>
-              </ServerControlRow>
+                    <RequireScope
+                      scope="mcp:write"
+                      resourceId={mcpServer.id}
+                      projectId={mcpServer.projectId}
+                      level="component"
+                    >
+                      <Button
+                        variant="destructive-primary"
+                        size="md"
+                        onClick={() => openDeleteDialog("server")}
+                      >
+                        <Button.LeftIcon>
+                          <Trash2 className="h-4 w-4" />
+                        </Button.LeftIcon>
+                        <Button.Text>Delete MCP server</Button.Text>
+                      </Button>
+                    </RequireScope>
+                  </ServerControlRow>
+                  {tunnelTarget ? (
+                    <ServerControlRow
+                      title="Delete tunnel and its MCP servers"
+                      description={DELETE_TUNNEL_DESCRIPTION}
+                    >
+                      <RequireScope
+                        scope="mcp:write"
+                        resourceId={tunnelTarget.source.projectId}
+                        projectId={tunnelTarget.source.projectId}
+                        level="component"
+                      >
+                        <Button
+                          variant="destructive-primary"
+                          size="md"
+                          onClick={() => openDeleteDialog("tunnel")}
+                        >
+                          <Button.LeftIcon>
+                            <Trash2 className="h-4 w-4" />
+                          </Button.LeftIcon>
+                          <Button.Text>Delete tunnel</Button.Text>
+                        </Button>
+                      </RequireScope>
+                    </ServerControlRow>
+                  ) : null}
+                </>
+              ) : (
+                <ServerControlRow
+                  title={deleteRow.title}
+                  description={deleteRow.description}
+                >
+                  <RequireScope
+                    scope="mcp:write"
+                    resourceId={mcpServer.projectId}
+                    level="component"
+                  >
+                    <Button
+                      variant="destructive-primary"
+                      size="md"
+                      disabled={!deleteReady}
+                      onClick={() => openDeleteDialog("server")}
+                    >
+                      <Button.LeftIcon>
+                        <Trash2 className="h-4 w-4" />
+                      </Button.LeftIcon>
+                      <Button.Text>Delete MCP server</Button.Text>
+                    </Button>
+                  </RequireScope>
+                </ServerControlRow>
+              )}
             </div>
             {linkedQuery.isError && (
               // The delete stays disabled until the sibling list loads, since
@@ -303,29 +386,24 @@ export function DangerZoneSection({
           </DangerSettingsSection.Body>
         </DangerSettingsSection.Panel>
       </DangerSettingsSection>
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <Dialog.Content className="max-w-2xl!">
-          {deleteTarget ? (
-            <DeleteSourceBackedServerDialogContent
-              target={deleteTarget}
-              linkedMcpServers={linkedMcpServers}
-              onClose={() => setDeleteDialogOpen(false)}
-              onSuccess={() => {
-                setDeleteDialogOpen(false);
-                void navigate(routes.mcp.href());
-              }}
-            />
-          ) : (
-            <DeleteMcpServerDialogContent
-              mcpServer={mcpServer}
-              endpoints={endpoints}
-              onClose={() => setDeleteDialogOpen(false)}
-              onSuccess={() => {
-                setDeleteDialogOpen(false);
-                void navigate(routes.mcp.href());
-              }}
-            />
-          )}
+      <Dialog
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && !deleteBusy) closeDeleteDialog();
+        }}
+      >
+        <Dialog.Content className="max-w-2xl!" closeable={!deleteBusy}>
+          <DeleteDialogBody
+            dialog={deleteDialog}
+            mcpServer={mcpServer}
+            endpoints={endpoints}
+            tunnelTarget={tunnelTarget}
+            cascadeTarget={cascadeTarget}
+            linkedMcpServers={linkedMcpServers}
+            onClose={closeDeleteDialog}
+            onLeave={leavePage}
+            onBusyChange={setDeleteBusy}
+          />
         </Dialog.Content>
       </Dialog>
       <ServerAvailabilityDialog
@@ -334,6 +412,87 @@ export function DangerZoneSection({
         onClose={() => setPendingAvailability(null)}
         onConfirm={confirmAvailabilityChange}
       />
+    </>
+  );
+}
+
+function DeleteDialogBody({
+  dialog,
+  mcpServer,
+  endpoints,
+  tunnelTarget,
+  cascadeTarget,
+  linkedMcpServers,
+  onClose,
+  onLeave,
+  onBusyChange,
+}: {
+  dialog: DeleteDialogKind;
+  mcpServer: McpServer;
+  endpoints: McpEndpoint[];
+  tunnelTarget:
+    | Extract<SourceBackedDeleteTarget, { kind: "tunneled" }>
+    | undefined;
+  cascadeTarget: CascadeDeleteTarget | undefined;
+  linkedMcpServers: McpServer[];
+  onClose: () => void;
+  onLeave: (href?: string) => void;
+  onBusyChange: (busy: boolean) => void;
+}): JSX.Element {
+  if (dialog === "tunnel") {
+    // Never fall through to another delete: the user asked to delete the
+    // tunnel, and the server-only delete would keep it.
+    if (!tunnelTarget) return <TunnelUnavailable onClose={onClose} />;
+    return (
+      <DeleteTunnelDialogContent
+        tunnel={tunnelTarget.source}
+        mcpServerId={mcpServer.id}
+        onClose={onClose}
+        onLeave={onLeave}
+        onBusyChange={onBusyChange}
+      />
+    );
+  }
+  if (cascadeTarget) {
+    return (
+      <DeleteSourceBackedServerDialogContent
+        target={cascadeTarget}
+        linkedMcpServers={linkedMcpServers}
+        onClose={onClose}
+        onSuccess={() => onLeave()}
+        onBusyChange={onBusyChange}
+      />
+    );
+  }
+  return (
+    <DeleteMcpServerDialogContent
+      mcpServer={mcpServer}
+      endpoints={endpoints}
+      keepsTunnel={!!mcpServer.tunneledMcpServerId}
+      onBusyChange={onBusyChange}
+      onClose={onClose}
+      onSuccess={() => onLeave()}
+    />
+  );
+}
+
+// The tunnel row went away while its delete dialog was open, for example
+// because it was deleted in another tab or could no longer be read.
+function TunnelUnavailable({ onClose }: { onClose: () => void }) {
+  return (
+    <>
+      <Dialog.Header>
+        <Dialog.Title>Tunnel unavailable</Dialog.Title>
+        <Dialog.Description>
+          The tunnel behind this server could not be loaded, so it cannot be
+          deleted from here. Nothing was deleted.
+        </Dialog.Description>
+      </Dialog.Header>
+      <Dialog.Footer>
+        <Button variant="secondary" onClick={onClose}>
+          <Button.Text>Close</Button.Text>
+        </Button>
+      </Dialog.Footer>
     </>
   );
 }
@@ -393,11 +552,16 @@ function ServerAvailabilityDialog({
 function DeleteMcpServerDialogContent({
   mcpServer,
   endpoints,
+  keepsTunnel,
+  onBusyChange,
   onClose,
   onSuccess,
 }: {
   mcpServer: McpServer;
   endpoints: McpEndpoint[];
+  /** The server is on a tunnel, which this delete leaves in place. */
+  keepsTunnel: boolean;
+  onBusyChange: (busy: boolean) => void;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -418,6 +582,8 @@ function DeleteMcpServerDialogContent({
       );
     },
   });
+
+  useReportBusy(remove.isPending, onBusyChange);
 
   const handleConfirm = () => {
     remove.mutate({ request: { id: mcpServer.id } });
@@ -463,6 +629,14 @@ function DeleteMcpServerDialogContent({
             No endpoints are currently associated with this MCP server.
           </Text>
         )}
+        {keepsTunnel ? (
+          <Text small muted>
+            The tunnel and any other MCP servers on it are not affected. If no
+            MCP server uses the tunnel afterwards, it still counts toward your
+            tunnel limit until you reuse or delete it from Add MCP server,
+            Existing tunnel.
+          </Text>
+        ) : null}
         {remove.isError && (
           <Alert variant="error" dismissible={false}>
             {remove.error.message}

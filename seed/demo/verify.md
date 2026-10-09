@@ -332,6 +332,18 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     client) sits under that same provider, so the stamp matches what
     `ResyncMCPServerRemoteSessionIssuers` would derive.
 
+19a. **Shared tunnel** — open MCP → Add MCP server → Reachable through a
+tunnel, choose **Existing tunnel**: `JAMF Inventory` is listed with its
+`gram_tun_DEMO` key prefix, "Agent never connected", and "2 MCP servers
+you can view", and no key is shown. Open the settings of either JAMF
+Inventory server: Agent Setup lists both servers inline. Open the
+confirmations behind Resource Identifier (Save), Public Access, the
+Anonymous Rate Limit (Save limit) and Tunnel Key (Rotate key): each lists both
+servers, with the public-sibling warning, and keeps its confirm button
+disabled until that list loads. Cancel each one. The Danger Zone offers
+both **Delete this MCP server** and **Delete tunnel and its MCP
+servers**. The agent is offline, so nothing here needs a live tools/list.
+
 20. **Billing meter usage** — select a custom trailing 14-day window. Storage
     shows s-tokens of stored content, bandwidth shows ingress and egress bytes,
     and risk content shows all six scanners. Department breakdown includes

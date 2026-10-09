@@ -29,7 +29,10 @@ type Service interface {
 	UpdateServer(context.Context, *UpdateServerPayload) (res *types.TunneledMcpServer, err error)
 	// Rotate a tunneled MCP server source key. Returns the new tunnel key once.
 	RotateServerKey(context.Context, *RotateServerKeyPayload) (res *RotateTunneledMcpServerKeyResult, err error)
-	// Delete a tunneled MCP server source
+	// Delete a tunneled MCP server source. Refused with a conflict while any MCP
+	// server still uses the tunnel: delete those MCP servers first. Deleting a
+	// tunnel that does not exist or is already deleted succeeds without changing
+	// anything.
 	DeleteServer(context.Context, *DeleteServerPayload) (err error)
 }
 
