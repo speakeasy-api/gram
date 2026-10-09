@@ -79,6 +79,8 @@ var All = []outbox.EventRegistration{
 	RiskResultV1,
 	ShadowMCPAccessRuleV1,
 	ShadowMCPApprovalV1,
+	SigintSensorV1,
+	SigintSignalV1,
 	SkillEfficacySettingsV1,
 	SkillV1,
 	SlackDirectoryConnectionV1,
