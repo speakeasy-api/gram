@@ -917,6 +917,11 @@ func TestRouteReconcilerValidatesEachSessionKey(t *testing.T) {
 	require.Equal(t, "new", string(body))
 }
 
+// reconcilerTestWait bounds waits on the reconciler's real ticker. Eventually
+// returns as soon as the condition holds, so a long bound costs nothing when
+// the ticker keeps up.
+const reconcilerTestWait = 15 * time.Second
+
 func TestRouteReconcilerRetriesFailedCleanupOnTicker(t *testing.T) {
 	t.Parallel()
 
@@ -934,20 +939,22 @@ func TestRouteReconcilerRetriesFailedCleanupOnTicker(t *testing.T) {
 	agent, _, err := dialTestAgent(t.Context(), harness.public.URL, key, http.HandlerFunc(successfulAgentHandler))
 	require.NoError(t, err)
 	t.Cleanup(agent.Close)
+	// Generous windows: these wait on real timers, and the race detector plus
+	// parallel packages can delay them well past their nominal period.
 	require.Eventually(t, func() bool {
 		candidates, _ := store.Candidates(t.Context(), tunnelID)
 		return len(candidates) == 1
-	}, time.Second, 5*time.Millisecond)
+	}, reconcilerTestWait, 5*time.Millisecond)
 
 	store.failNextUnpublish()
 	agent.Close()
 	require.Eventually(t, func() bool {
 		return harness.gateway.ActiveSessions() == 0 && store.operationCount(tunnelID, "unpublish_failed") == 1
-	}, time.Second, 5*time.Millisecond)
+	}, reconcilerTestWait, 5*time.Millisecond)
 	require.Eventually(t, func() bool {
 		candidates, candidatesErr := store.Candidates(t.Context(), tunnelID)
 		return candidatesErr == nil && len(candidates) == 0 && store.operationCount(tunnelID, "unpublish") == 1
-	}, time.Second, 5*time.Millisecond)
+	}, reconcilerTestWait, 5*time.Millisecond)
 
 	writesAfterRetry := store.writeCount()
 	harness.gateway.Drain(t.Context())
