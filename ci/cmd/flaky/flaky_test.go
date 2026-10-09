@@ -210,6 +210,28 @@ func TestClosedTicketsPredates(t *testing.T) {
 		"a test without a closed ticket keeps all its failures")
 }
 
+func TestClosedTicketsRecord(t *testing.T) {
+	t.Parallel()
+
+	key := testKey{Package: "server/internal/mcp", Test: "TestFixed"}
+	early := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	late := early.Add(48 * time.Hour)
+	closed := closedTickets{}
+
+	closed.record(issueTitle(key), &late, &early)
+	require.Equal(t, late, closed[key], "the later of completedAt and canceledAt wins")
+
+	closed.record(issueTitle(key), &early, nil)
+	require.Equal(t, late, closed[key], "an older ticket for the same test must not move the cutoff back")
+
+	closed.record("Unrelated ticket", &late)
+	require.Len(t, closed, 1, "a title that names no flaky test is ignored")
+
+	other := testKey{Package: "server/internal/mcp", Test: "TestOther"}
+	closed.record(issueTitle(other), nil, nil)
+	require.NotContains(t, closed, other, "a ticket with no close time records nothing")
+}
+
 func TestAnnotateEscapesWorkflowCommands(t *testing.T) {
 	t.Parallel()
 

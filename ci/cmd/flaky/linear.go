@@ -207,15 +207,7 @@ func (c *linearClient) closedFlakyIssues(ctx context.Context, since time.Time) (
 		}
 
 		for _, n := range out.Issues.Nodes {
-			key, ok := keyFromTitle(n.Title)
-			if !ok {
-				continue
-			}
-			for _, at := range []*time.Time{n.CompletedAt, n.CanceledAt} {
-				if at != nil && at.After(closed[key]) {
-					closed[key] = *at
-				}
-			}
+			closed.record(n.Title, n.CompletedAt, n.CanceledAt)
 		}
 
 		if !out.Issues.PageInfo.HasNextPage {

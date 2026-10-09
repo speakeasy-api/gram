@@ -31,7 +31,7 @@ type failedRun struct {
 	Event        string    `json:"event"`
 	HeadBranch   string    `json:"head_branch"`
 	HTMLURL      string    `json:"html_url"`
-	CreatedAt    time.Time `json:"created_at"`
+	RunStartedAt time.Time `json:"run_started_at"`
 	PullRequests []struct {
 		Number int `json:"number"`
 	} `json:"pull_requests"`
@@ -63,6 +63,20 @@ type closedTickets map[testKey]time.Time
 func (c closedTickets) predates(k testKey, ranAt time.Time) bool {
 	closedAt, ok := c[k]
 	return ok && ranAt.Before(closedAt)
+}
+
+// record notes a closed ticket's close times, keeping the latest per test.
+// Titles that do not name a flaky test are ignored.
+func (c closedTickets) record(title string, closedAt ...*time.Time) {
+	key, ok := keyFromTitle(title)
+	if !ok {
+		return
+	}
+	for _, at := range closedAt {
+		if at != nil && at.After(c[key]) {
+			c[key] = *at
+		}
+	}
 }
 
 // evidence records, per failing test, the run URLs grouped by change.
@@ -181,9 +195,11 @@ func (c *githubClient) getJSON(ctx context.Context, path string, out any) error 
 func (c *githubClient) failedRuns(ctx context.Context, workflow string, since time.Time) ([]failedRun, error) {
 	var runs []failedRun
 	for page := 1; ; page++ {
+		// Filter by the exact instant, not the day, so the scan matches the
+		// span closedFlakyIssues covers.
 		q := url.Values{
 			"status":   {"failure"},
-			"created":  {">=" + since.Format("2006-01-02")},
+			"created":  {">=" + since.UTC().Format(time.RFC3339)},
 			"per_page": {"100"},
 			"page":     {strconv.Itoa(page)},
 		}
@@ -281,7 +297,7 @@ func runAnalyze(ctx context.Context, gh *githubClient, linear *linearClient, opt
 				mu.Lock()
 				defer mu.Unlock()
 				for _, k := range failures {
-					if closed.predates(k, run.CreatedAt) {
+					if closed.predates(k, run.RunStartedAt) {
 						continue
 					}
 					ev.add(k, run.changeKey(), run.HTMLURL)
