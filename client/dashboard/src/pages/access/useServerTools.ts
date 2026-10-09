@@ -106,14 +106,11 @@ export function useServerTools(
     project: projectRef,
     enabled: needsLive && !!mcpServer.data && !!platformSlug,
   });
-  // A cached listing can surface while the session token is still minting;
-  // only a settled, successful listing counts.
-  const liveListed = live.listed && !live.loading;
   const tunnel = useTunnelAgentStatus({
     tunneledSourceId: server?.tunneledSourceId,
     projectSlug: project?.slug,
     enabled: needsLive,
-    poll: needsLive && !liveListed,
+    poll: needsLive && !live.listed,
     onReconnect: live.refetch,
   });
   const liveTools = useMemo(

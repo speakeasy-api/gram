@@ -339,9 +339,6 @@ function ToolNarrowing({
               : server.dynamicTools
                 ? "unavailable"
                 : "ready",
-            unavailableLabel: "not proxied",
-            unavailableTooltip:
-              "Speakeasy doesn't proxy this server's traffic, so its tools can't be permissioned individually.",
             emptyLabel: "No tools recorded",
             emptyContent:
               "No tools are recorded for this server. A disposition limit only reaches tools whose annotations are recorded, so it reaches none of this server's tools until they are.",

@@ -1041,9 +1041,6 @@ function RoleToolSelectionPanel({
             namePrefix,
             tools: [],
             status: "unavailable",
-            unavailableLabel: "not proxied",
-            unavailableTooltip:
-              "Speakeasy doesn't proxy this server's traffic, so its tools can't be permissioned individually.",
           };
         }
         if (hasStoredInventory) {

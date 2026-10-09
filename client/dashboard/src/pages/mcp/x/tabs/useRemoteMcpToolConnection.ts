@@ -47,8 +47,9 @@ export interface RemoteMcpToolConnection {
   /** What the live session advertises; undefined until it has listed. */
   tools: Record<string, ProxiedMcpTool> | undefined;
   /**
-   * The latest listing succeeded. After a failed refetch `tools` still holds
-   * the earlier listing, which says nothing about the server now.
+   * The latest listing succeeded and the session has settled. After a failed
+   * refetch, or while the session token is still minting, `tools` may hold an
+   * earlier listing, which says nothing about the server now.
    */
   listed: boolean;
   /** The server stores tool metadata (it is remote- or tunneled-backed). */
@@ -162,13 +163,13 @@ export function useRemoteMcpToolConnection({
   // reconcile until both the session and the stored set have loaded. A tunnel
   // may answer each caller with a different listing, so its listing only ever
   // adds to the stored set.
-  const listed = !!tools && !isError;
+  const listed = !!tools && !isError && !loading;
   const { sync, isSyncing, toolActions } = useSyncToolMetadata({
     mcpServerId,
     live: listed ? tools : undefined,
     listedAt,
     stored: metadataByTool,
-    enabled: tracksMetadata && !loading && listed,
+    enabled: tracksMetadata && listed,
     mode: tunneledMcpServerId ? "additive" : "mirror",
     project,
   });
