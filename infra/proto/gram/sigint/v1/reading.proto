@@ -1,0 +1,182 @@
+edition = "2024";
+
+package gram.sigint.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1;sigintv1";
+
+// Reading is one successful sensor evaluation of one source event.
+// Delivery and evaluation are at-least-once: the same id can carry different
+// answers from different attempts. Storage consumers choose the winning attempt.
+message Reading {
+  // Actor attribution copied from the consumed source event.
+  // Independent of billing_user_id and account; missing fields remain unknown.
+  message Actor {
+    // Speakeasy user ID attributed to the source event, not necessarily its author:
+    // assistant responses can carry the requesting user's ID. Does not allocate
+    // billing usage.
+    string user_id = 1;
+    // Opaque user ID reported by the source system, not a Speakeasy user/account ID.
+    // Interpret within organization_id and source. Can exist without user_id
+    // when ingestion has not resolved the external identity to a Speakeasy user.
+    string external_user_id = 2;
+    // Actor email explicitly observed by ingestion. Not a current Speakeasy
+    // directory lookup, a billing-user email, or an inferred provider-account email.
+    string user_email = 3;
+  }
+  // The external AI account/credentials used for the source workload, as resolved
+  // by ingestion. Not the Speakeasy user allocated usage or the organization's Speakeasy
+  // billing plan. Classification may be known without a persisted account ID.
+  message Account {
+    // UUID of Speakeasy's user_accounts record representing the external AI account.
+    // Not a Speakeasy user ID, provider-issued account ID, or billing-user selection.
+    string user_account_id = 1;
+    // Speakeasy's ingestion-time classification: "team" for company-associated
+    // accounts/credentials, "personal" for personal accounts. May be inferred
+    // from provider organization and identity evidence or assigned by an import
+    // adapter; not necessarily a provider-reported plan or verified ownership.
+    // Absence means no classification was supplied.
+    string account_type = 2;
+    // How the external AI account is billed: "metered" for usage-based billing,
+    // "flat_rate" for subscription/seat billing; "unknown" may be supplied when
+    // undetermined. Resolved from account/provider-organization configuration;
+    // absence means no mode was resolved or supplied. Does not determine Speakeasy
+    // pricing or select a billing user.
+    string billing_mode = 3;
+  }
+  // Stable reference to the evaluated source event. Source-specific context is
+  // optional; new event kinds need not manufacture conversation identifiers.
+  message Event {
+    // Stable source namespace, e.g. "conversation.message" or "mcp.tool_call".
+    // Distinct from Reading.source, which namespaces external actor identities.
+    string kind = 1;
+    // Producer-assigned immutable logical event identity, unique within tenant
+    // and kind. Opaque: it need not be a UUID. Not a Pub/Sub delivery ID.
+    string id = 2;
+    // UTC RFC3339Nano event time, independent of evaluation completion time.
+    string occurred_at = 3;
+    oneof context {
+      ConversationMessage conversation_message = 4;
+      ToolCall tool_call = 5;
+    }
+  }
+  // Context supplied by the conversation adapter. Event.id is the message UUID.
+  message ConversationMessage {
+    enum Role {
+      ROLE_UNSPECIFIED = 0;
+      ROLE_USER = 1;
+      ROLE_ASSISTANT = 2;
+    }
+    // Speakeasy conversation UUID, not the source system's session identifier.
+    string conversation_id = 1;
+    // Independent of human attribution; only user/assistant messages are evaluated.
+    Role role = 2;
+  }
+  // Optional execution context for a tool-call source adapter. Event.id is the
+  // producer's stable execution identity, not necessarily the protocol call ID.
+  message ToolCall {
+    string tool_name = 1;
+    // Protocol call ID, scoped to its originating session/connection.
+    string tool_call_id = 2;
+    // Speakeasy MCP server UUID when the execution belongs to an MCP server.
+    string mcp_server_id = 3;
+  }
+  // One signal's classification probability. In MultiLabel it is independent
+  // of other signals; in Choice/Score it is an entry in the option distribution.
+  message Probability {
+    // Speakeasy custom-signal UUID from the configuration used for this evaluation.
+    string signal_id = 1;
+    // Classifier probability in [0, 1], not a usage quantity or billing weight.
+    double probability = 2;
+    // Always populated with the signal slug observed during evaluation.
+    string signal_slug = 3;
+  }
+  // Independent yes/no classifications; probabilities need not sum to one.
+  message MultiLabel {
+    // One entry for every sensor member, in configured order. Published only
+    // when every constituent classification succeeded; not just positive matches.
+    repeated Probability signals = 1;
+  }
+  // Exclusive classification choosing one signal from the sensor's members.
+  message Choice {
+    // Speakeasy custom-signal UUID selected by the classifier.
+    string selected_signal_id = 1;
+    // Probabilities across the configured signal options, including unselected ones.
+    repeated Probability distribution = 2;
+    // Optional classifier-reported confidence; absence means not supplied.
+    // Distinct from the selected signal's probability in distribution.
+    double confidence = 3;
+    // Always populated, matching the selected signal's distribution entry.
+    string selected_signal_slug = 4;
+  }
+  // Classification over ordered signal levels, from lowest to highest.
+  message Score {
+    // Probability-weighted zero-based level index, not a selected signal ID.
+    // May be fractional; interpret against this reading's distribution order.
+    double expected_index = 1;
+    // Low-to-high level order; index defines the level score.
+    repeated Probability distribution = 2;
+    // Optional classifier-reported confidence; absence means not supplied.
+    double confidence = 3;
+  }
+
+  // UUIDv5 identity of tenant, event kind, immutable event ID, and sensor ID.
+  // Configuration changes between attempts do not change this identity.
+  string id = 1;
+  // Fresh UUID for a logical event evaluation, shared by its sensor readings.
+  // A retry gets a new attempt ID even when the logical reading ID is unchanged.
+  string evaluation_attempt_id = 2;
+  // Speakeasy organization owning the source event and evaluation.
+  string organization_id = 3;
+  // Speakeasy project UUID owning the source event and sensor configuration.
+  string project_id = 4;
+  Event event = 5;
+  // Speakeasy sensor UUID; stable across display-name, slug and definition edits.
+  string sensor_id = 6;
+  // Always populated with the sensor slug observed during evaluation.
+  string sensor_slug = 7;
+  string evaluated_at = 8; // UTC RFC3339Nano completion time.
+  // Hash of mode, instructions and ordered signal IDs/criteria. Excludes display
+  // names, slugs and actor/account attribution. Traceability metadata, not an
+  // immutable configuration revision or part of reading identity.
+  string definition_hash = 9;
+  // Model requested for classification, not the model that produced the source event.
+  string configured_model = 10;
+  // A logical evaluation may span multiple provider requests/model versions.
+  // Reported models for the whole logical event evaluation, not per-sensor
+  // attribution when questions were split across provider requests.
+  repeated string models = 11;
+  // Version of the sigint and classifier compilation logic used for this attempt.
+  string compiler_version = 12;
+  // Identity associated with the source event, preserved as observed at ingestion.
+  Actor actor = 13;
+  // Speakeasy user ID to which the source producer explicitly allocates usage. For
+  // conversations this matches agent-session storage metering. May differ
+  // from actor.user_id or exist without an actor (e.g. generated compaction
+  // messages allocated to the chat owner). Interpret with organization_id.
+  // This is usage attribution, not proof that a charge occurred. Absence means
+  // unassigned; consumers must not fall back to actor or an account owner.
+  string billing_user_id = 14;
+  // Canonical ingestion source; namespaces the external actor identity.
+  string source = 15;
+  // Source-session AI account context, preserved from the ingestion snapshot.
+  Account account = 16;
+  // Speakeasy assistant UUID associated with the workload, supplied by the producer.
+  // Identifies an assistant resource, not a human user or provider account.
+  string assistant_id = 17;
+  // Historical ingestion marker, not Pub/Sub redelivery.
+  bool replayed = 18;
+  oneof result {
+    MultiLabel multi_label = 19;
+    Choice choice = 20;
+    Score score = 21;
+  }
+  // Inference transport used for classification, e.g. "openrouter". Independent
+  // of configured_model and models, which identify the model rather than routing.
+  string provider = 22;
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: { seconds: 345600 /* 4 days */ }
+  };
+}

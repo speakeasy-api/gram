@@ -12,6 +12,15 @@ import (
 type Key = attribute.Key
 
 const (
+	// SigintSensorIDKey identifies the sensor configuration responsible for an evaluation.
+	SigintSensorIDKey = attribute.Key("gram.sigint.sensor.id")
+
+	// SigintEventIDKey identifies the logical event independently of transport delivery.
+	SigintEventIDKey = attribute.Key("gram.sigint.event.id")
+
+	// SigintEventKindKey namespaces the event identity within its tenant.
+	SigintEventKindKey = attribute.Key("gram.sigint.event.kind")
+
 	RegistryEntryIDKey               = attribute.Key("gram.registry.entry.id")
 	RegistryUpdatedAtKey             = attribute.Key("gram.registry.entry.updated_at")
 	RegistryInvalidPathsKey          = attribute.Key("gram.registry.entry.invalid_paths") // JSON Pointers to the record fields that failed validation
@@ -950,7 +959,17 @@ const (
 )
 
 func WideEvent() attribute.KeyValue { return WideEventKey.Bool(true) }
-func SlogWideEvent() slog.Attr      { return slog.Bool(string(WideEventKey), true) }
+
+// SlogSigintSensorID identifies the sensor configuration responsible for an evaluation.
+func SlogSigintSensorID(v string) slog.Attr { return slog.String(string(SigintSensorIDKey), v) }
+
+// SlogSigintEventID identifies the logical event independently of transport delivery.
+func SlogSigintEventID(v string) slog.Attr { return slog.String(string(SigintEventIDKey), v) }
+
+// SlogSigintEventKind namespaces the event identity within its tenant.
+func SlogSigintEventKind(v string) slog.Attr { return slog.String(string(SigintEventKindKey), v) }
+
+func SlogWideEvent() slog.Attr { return slog.Bool(string(WideEventKey), true) }
 
 func Error(v error) attribute.KeyValue { return ErrorMessageKey.String(v.Error()) }
 func SlogError(v error) slog.Attr      { return slog.String(string(ErrorMessageKey), v.Error()) }
