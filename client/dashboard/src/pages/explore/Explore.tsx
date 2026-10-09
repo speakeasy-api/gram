@@ -6,13 +6,20 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { PageTabsList, PageTabsTrigger, Tabs } from "@/components/ui/Tabs";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import type { Widget } from "@gram/client/models/components/widget.js";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
 import { useWidgets } from "@gram/client/react-query/widgets.js";
 import { useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
+import {
+  Link,
+  Navigate,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from "react-router";
 import {
   findDataset,
   initialSpec,
@@ -38,6 +45,19 @@ import { useRunQuery } from "./useRunQuery";
 // strictly project-scoped — the active project is the only one queried — and
 // the builder it shows is generated from the analytics catalog.
 export default function Explore(): JSX.Element {
+  const [params] = useSearchParams();
+  const routes = useRoutes();
+  // Dashboards were once a tab of Explore, so links shared from then still
+  // say ?tab=dashboards: they go on to the page dashboards have now.
+  if (params.get(TAB_PARAM) === "dashboards") {
+    const id = params.get("dashboard");
+    return (
+      <Navigate
+        replace
+        to={id ? routes.dashboards.detail.href(id) : routes.dashboards.href()}
+      />
+    );
+  }
   return (
     <WorkbenchPage scope="project:read">
       {/* WorkbenchPage owns overflow-hidden; the builder and results scroll
@@ -128,7 +148,8 @@ function ExploreWorkbench({
   const broken = url.widgetId !== null ? url.stale : null;
   const spec = url.spec ?? broken?.spec ?? opening;
 
-  const list = useWidgets();
+  const gramProject = useProjectSlugForRequests();
+  const list = useWidgets({ gramProject });
   const widgets = list.data?.widgets ?? [];
   const openWidget = url.widgetId
     ? widgets.find((widget) => widget.id === url.widgetId)

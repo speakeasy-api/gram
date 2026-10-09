@@ -2,6 +2,7 @@ import { Page } from "@/components/page-layout";
 import { WorkbenchPage } from "@/components/page-templates";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import type { Dashboard } from "@gram/client/models/components/dashboard.js";
 import { useDashboards } from "@gram/client/react-query/dashboards.js";
@@ -33,7 +34,8 @@ export function DashboardsRoot(): JSX.Element {
 
 /** The list of the project's dashboards. */
 export function DashboardsIndex(): JSX.Element {
-  const list = useDashboards();
+  const gramProject = useProjectSlugForRequests();
+  const list = useDashboards({ gramProject });
   const open = useOpenDashboard();
   return (
     <>
@@ -60,7 +62,8 @@ export function DashboardsIndex(): JSX.Element {
 /** One of the project's dashboards, open. */
 export function DashboardRoute(): JSX.Element {
   const { dashboardId = "" } = useParams<{ dashboardId: string }>();
-  const widgets = useWidgets();
+  const gramProject = useProjectSlugForRequests();
+  const widgets = useWidgets({ gramProject });
   const open = useOpenDashboard();
   const routes = useRoutes();
   return (

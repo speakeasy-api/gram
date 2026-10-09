@@ -578,26 +578,21 @@ function SearchField({
       </span>
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1 px-1.5 py-0.5">
         {filters.map((filter, index) => (
-          <Popover
+          <FilterPill
             key={index}
+            filter={filter}
             open={open === index}
             onOpenChange={(next) => setOpen(next ? index : null)}
+            onRemove={() => remove(index)}
           >
-            <PopoverTrigger asChild>
-              <span className="inline-flex">
-                <FilterPill filter={filter} onRemove={() => remove(index)} />
-              </span>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto max-w-[44rem] p-2" align="start">
-              <FilterRow
-                dataset={dataset}
-                span={spec}
-                filter={filter}
-                onChange={(next) => onChange(replaceAt(filters, index, next))}
-                onRemove={() => remove(index)}
-              />
-            </PopoverContent>
-          </Popover>
+            <FilterRow
+              dataset={dataset}
+              span={spec}
+              filter={filter}
+              onChange={(next) => onChange(replaceAt(filters, index, next))}
+              onRemove={() => remove(index)}
+            />
+          </FilterPill>
         ))}
         <button
           type="button"
@@ -617,41 +612,56 @@ function SearchField({
   );
 }
 
-/** A filter as a search term: field:value, or field:a,b for any of. */
+/**
+ * A filter as a search term: field:value, or field:a,b for any of. The term
+ * opens the filter's editor and the × beside it removes the filter: two
+ * buttons side by side, since a control nested in another cannot be reached
+ * by keyboard on its own.
+ */
 function FilterPill({
   filter,
+  open,
+  onOpenChange,
   onRemove,
+  children,
 }: {
   filter: FilterDraft;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onRemove: () => void;
+  /** The filter's editor, shown under the pill while it is open. */
+  children: ReactNode;
 }): JSX.Element {
-  const text =
-    filter.field === ""
-      ? "new filter"
-      : `${filter.field}:${filter.values.length > 0 ? filter.values.join(",") : "…"}`;
+  const values = filter.values.length > 0 ? filter.values.join(",") : "…";
+  const text = filter.field === "" ? "new filter" : `${filter.field}:${values}`;
   return (
-    <Badge
-      variant="neutral"
-      size="lg"
-      className="max-w-80 cursor-pointer normal-case"
-    >
-      <Badge.Text className="min-w-0 truncate font-mono text-xs [text-box-trim:none]">
-        {text}
-      </Badge.Text>
-      <Badge.RightIcon>
-        <button
-          type="button"
-          aria-label={`Remove ${filter.field || "new"} filter`}
-          onClick={(event) => {
-            event.stopPropagation();
-            onRemove();
-          }}
-          className="flex size-3 cursor-pointer items-center justify-center hover:opacity-70 focus:outline-none focus-visible:ring-1"
-        >
-          <XIcon className="size-3" />
-        </button>
-      </Badge.RightIcon>
-    </Badge>
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <Badge variant="neutral" size="lg" className="max-w-80 normal-case">
+        <Badge.Text className="min-w-0 truncate font-mono text-xs [text-box-trim:none]">
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="w-full cursor-pointer truncate text-left focus:outline-none focus-visible:ring-1"
+            >
+              {text}
+            </button>
+          </PopoverTrigger>
+        </Badge.Text>
+        <Badge.RightIcon>
+          <button
+            type="button"
+            aria-label={`Remove ${filter.field || "new"} filter`}
+            onClick={onRemove}
+            className="flex size-3 cursor-pointer items-center justify-center hover:opacity-70 focus:outline-none focus-visible:ring-1"
+          >
+            <XIcon className="size-3" />
+          </button>
+        </Badge.RightIcon>
+      </Badge>
+      <PopoverContent className="w-auto max-w-[44rem] p-2" align="start">
+        {children}
+      </PopoverContent>
+    </Popover>
   );
 }
 

@@ -1,3 +1,4 @@
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import type { Dashboard } from "@gram/client/models/components/dashboard.js";
 import { useDashboards } from "@gram/client/react-query/dashboards.js";
 import { toast } from "sonner";
@@ -28,7 +29,8 @@ export function useAddToDashboard(onOpenDashboard: (id: string) => void): {
    */
   create: (details: Details, widgetId: string, then?: () => void) => void;
 } {
-  const list = useDashboards();
+  const gramProject = useProjectSlugForRequests();
+  const list = useDashboards({ gramProject });
   const canEdit = useCanEditDashboard();
   const mutations = useDashboardMutations();
   const dashboards = (list.data?.dashboards ?? []).filter(canEdit);

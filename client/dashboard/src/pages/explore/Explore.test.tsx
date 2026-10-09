@@ -875,6 +875,32 @@ describe("Explore", () => {
     expect(screen.getByRole("button", { name: "Add filter" })).toBeTruthy();
   });
 
+  it("sends links to the old Dashboards tab on to the Dashboards page", () => {
+    renderExplore("/explore?tab=dashboards&dashboard=d-1");
+    expect(nav.pathname).toBe("/dashboards/d-1");
+
+    cleanup();
+    renderExplore("/explore?tab=dashboards");
+    expect(nav.pathname).toBe("/dashboards");
+  });
+
+  it("opens a filter's editor from its pill and removes it from the pill's ×", () => {
+    renderExplore();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add filter" }));
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Filter field" }), {
+      key: "Escape",
+    });
+    expect(screen.queryByRole("combobox", { name: "Filter field" })).toBeNull();
+
+    // The pill and its × are separate buttons, so each takes focus.
+    fireEvent.click(screen.getByRole("button", { name: "new filter" }));
+    expect(screen.getByRole("combobox", { name: "Filter field" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove new filter" }));
+    expect(screen.queryByRole("button", { name: "new filter" })).toBeNull();
+  });
+
   it("adds and removes measure rows, and no measure means rows", () => {
     renderExplore();
 
@@ -2246,6 +2272,44 @@ describe("Explore", () => {
       ]);
       expect(param("widget")).toBe("created-1");
       expect(testState.toasts[0]?.text).toBe("Added to “Agent activity”");
+    });
+
+    it("drops a dashboard pick once that dashboard leaves the list, and saves without placing", async () => {
+      const user = userEvent.setup();
+      testState.dashboards = [
+        dashboard("d-1", "Agent activity"),
+        dashboard("d-2", "Tool usage"),
+      ];
+      renderExplore();
+      fireEvent.click(screen.getByRole("button", { name: "Save widget" }));
+      fireEvent.change(screen.getByRole("textbox", { name: "Widget name" }), {
+        target: { value: "Sessions by user" },
+      });
+      await user.click(screen.getByRole("button", { name: "Advanced" }));
+      const pick = screen.getByRole("combobox", { name: "Dashboard" });
+      fireEvent.keyDown(pick, { key: "ArrowDown" });
+      fireEvent.keyDown(screen.getByRole("option", { name: "No dashboard" }), {
+        key: "ArrowDown",
+      });
+      fireEvent.keyDown(
+        screen.getByRole("option", { name: "Agent activity" }),
+        { key: "Enter" },
+      );
+      expect(pick.textContent).toBe("Agent activity");
+
+      act(() => {
+        testState.dashboards = testState.dashboards.filter(
+          (d) => d.id !== "d-1",
+        );
+        for (const listener of testState.dashboardListeners) listener();
+      });
+      expect(
+        screen.getByRole("combobox", { name: "Dashboard" }).textContent,
+      ).toBe("No dashboard");
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      expect(testState.writes[0]?.kind).toBe("create");
+      expect(testState.dashboardWrites).toEqual([]);
     });
 
     it("deletes a dashboard from its page and returns to the list", async () => {

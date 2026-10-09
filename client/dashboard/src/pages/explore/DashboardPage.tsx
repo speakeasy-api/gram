@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { formatRelativeTime } from "@/lib/dates";
 import type { Dashboard } from "@gram/client/models/components/dashboard.js";
 import type { Widget } from "@gram/client/models/components/widget.js";
@@ -56,7 +57,8 @@ export function DashboardPage({
   id,
   ...props
 }: DashboardPageProps & { id: string }): JSX.Element {
-  const query = useDashboard({ id });
+  const gramProject = useProjectSlugForRequests();
+  const query = useDashboard({ id, gramProject });
   const back = <BackLink href={props.backHref} />;
 
   if (query.isPending) {

@@ -85,6 +85,11 @@ export function WidgetBar({
   // Saving as new can put the widget straight onto a dashboard.
   const placement = useAddToDashboard(onOpenDashboard);
   const [dashboardId, setDashboardId] = useState<string | null>(null);
+  // The pick is read against the dashboards as listed now: one deleted, or no
+  // longer editable, since it was picked falls back to "No dashboard" rather
+  // than showing a blank choice and quietly saving without placing.
+  const target = placement.dashboards.find((d) => d.id === dashboardId);
+  if (dashboardId !== null && !target) setDashboardId(null);
   const openNaming = (kind: Naming) => {
     setDashboardId(null);
     setNaming(kind);
@@ -111,7 +116,6 @@ export function WidgetBar({
       );
       return;
     }
-    const target = placement.dashboards.find((d) => d.id === dashboardId);
     mutations.create(draft(details), (created) => {
       setNaming(null);
       onWidgetIdChange(created.id);
@@ -264,7 +268,7 @@ export function WidgetBar({
             <label className="flex flex-col gap-1.5 text-sm">
               Add to dashboard
               <Select
-                value={dashboardId ?? NO_DASHBOARD}
+                value={target?.id ?? NO_DASHBOARD}
                 onValueChange={(next) =>
                   setDashboardId(next === NO_DASHBOARD ? null : next)
                 }
