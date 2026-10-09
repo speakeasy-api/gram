@@ -3826,3 +3826,24 @@ WHERE m.id = @mcp_server_id
   AND m.project_id = @project_id
   AND m.deleted IS FALSE
   AND m.toolset_id IS NOT NULL;
+
+-- name: GetPlatformMCPTunneledSourceForMCP :one
+-- The live tunneled source behind one exact organization/project-scoped MCP
+-- server. Returns only what classifies the agent connection: never the key
+-- hash or prefix, headers, resource identifier, or agent details.
+SELECT
+    source.id,
+    source.status,
+    (source.last_seen_at IS NOT NULL)::boolean AS ever_seen
+FROM mcp_servers server
+JOIN projects project
+  ON project.id = server.project_id
+ AND project.organization_id = @organization_id
+ AND project.deleted IS FALSE
+JOIN tunneled_mcp_servers source
+  ON source.id = server.tunneled_mcp_server_id
+ AND source.project_id = server.project_id
+ AND source.deleted IS FALSE
+WHERE server.id = @mcp_server_id
+  AND server.project_id = @project_id
+  AND server.deleted IS FALSE;

@@ -158,6 +158,12 @@ type MCP struct {
 	// absent on a server whose tools come from an upstream rather than from
 	// this project.
 	ToolExposure *MCPToolExposure `json:"tool_exposure,omitempty"`
+
+	// Tunnel is the agent connection state of a tunneled MCP server's tunnel.
+	// get_mcp and get_mcp_diagnostics fill it in for callers who can read the
+	// project's tunneled sources; find_mcp never does. Absent means "not read
+	// here", never "offline".
+	Tunnel *MCPTunnel `json:"tunnel,omitempty"`
 }
 
 type MCPRegistration struct {

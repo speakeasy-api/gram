@@ -32,7 +32,7 @@ func BuildTunneledMcpServerView(server repo.TunneledMcpServer, connections []Tun
 		Name:                                server.Name,
 		KeyPrefix:                           server.KeyPrefix,
 		Status:                              types.TunneledMcpLifecycleStatus(server.Status),
-		ConnectionStatus:                    tunneledMcpConnectionStatus(server, connections),
+		ConnectionStatus:                    ClassifyTunneledMcpConnection(server.Status, server.LastSeenAt.Valid, len(connections)),
 		AllowPublic:                         server.AllowPublic,
 		AgentVersion:                        agentVersion,
 		ResourceIdentifier:                  conv.FromPGText[string](server.ResourceIdentifier),
@@ -97,11 +97,16 @@ func BuildTunneledMcpServerConnectionsView(connections []TunneledMcpConnectionCa
 	}
 }
 
-func tunneledMcpConnectionStatus(server repo.TunneledMcpServer, connections []TunneledMcpConnectionCache) types.TunneledMcpConnectionStatus {
-	if len(connections) > 0 {
+// ClassifyTunneledMcpConnection derives a tunnel's agent connection state from
+// its durable lifecycle status, whether an agent has ever been seen, and the
+// number of unexpired live connections in the runtime store. Any live
+// connection wins; otherwise a source that has never reported in is
+// never_connected and every other source is inactive.
+func ClassifyTunneledMcpConnection(sourceStatus string, everSeen bool, liveConnections int) types.TunneledMcpConnectionStatus {
+	if liveConnections > 0 {
 		return types.TunneledMcpConnectionStatus("connected")
 	}
-	if server.Status == "created" && !server.LastSeenAt.Valid {
+	if sourceStatus == "created" && !everSeen {
 		return types.TunneledMcpConnectionStatus("never_connected")
 	}
 	return types.TunneledMcpConnectionStatus("inactive")

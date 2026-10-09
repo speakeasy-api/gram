@@ -3832,6 +3832,47 @@ func (q *Queries) GetPlatformMCPSubjectConnectionAuthState(ctx context.Context, 
 	return i, err
 }
 
+const getPlatformMCPTunneledSourceForMCP = `-- name: GetPlatformMCPTunneledSourceForMCP :one
+SELECT
+    source.id,
+    source.status,
+    (source.last_seen_at IS NOT NULL)::boolean AS ever_seen
+FROM mcp_servers server
+JOIN projects project
+  ON project.id = server.project_id
+ AND project.organization_id = $1
+ AND project.deleted IS FALSE
+JOIN tunneled_mcp_servers source
+  ON source.id = server.tunneled_mcp_server_id
+ AND source.project_id = server.project_id
+ AND source.deleted IS FALSE
+WHERE server.id = $2
+  AND server.project_id = $3
+  AND server.deleted IS FALSE
+`
+
+type GetPlatformMCPTunneledSourceForMCPParams struct {
+	OrganizationID string
+	McpServerID    uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+type GetPlatformMCPTunneledSourceForMCPRow struct {
+	ID       uuid.UUID
+	Status   string
+	EverSeen bool
+}
+
+// The live tunneled source behind one exact organization/project-scoped MCP
+// server. Returns only what classifies the agent connection: never the key
+// hash or prefix, headers, resource identifier, or agent details.
+func (q *Queries) GetPlatformMCPTunneledSourceForMCP(ctx context.Context, arg GetPlatformMCPTunneledSourceForMCPParams) (GetPlatformMCPTunneledSourceForMCPRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPTunneledSourceForMCP, arg.OrganizationID, arg.McpServerID, arg.ProjectID)
+	var i GetPlatformMCPTunneledSourceForMCPRow
+	err := row.Scan(&i.ID, &i.Status, &i.EverSeen)
+	return i, err
+}
+
 const hasAttachedPlatformMCPOnboardingDistributionForProject = `-- name: HasAttachedPlatformMCPOnboardingDistributionForProject :one
 SELECT EXISTS (
     SELECT 1

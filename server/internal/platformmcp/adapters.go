@@ -379,6 +379,7 @@ type PostgresReader struct {
 	reviewRequests            MCPReviewRequestService
 	reviewRequestBudget       OperationBudget
 	toolExposure              *MCPToolExposureService
+	tunnelStatus              *TunnelStatusService
 	projectLifecycle          *ProjectLifecycleService
 	analytics                 *AnalyticsService
 }
@@ -412,6 +413,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		reviewRequests:            nil,
 		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
 		toolExposure:              nil,
+		tunnelStatus:              nil,
 		projectLifecycle:          nil,
 		analytics:                 nil,
 	}
@@ -830,6 +832,12 @@ func (r *PostgresReader) getMCPInventory(ctx context.Context, principal Principa
 	}
 	mcp := mcpFromInventoryItem(row, byMCPServer)
 	r.setInventoryVersion(&mcp)
+	// The tunnel's connection state is source detail: TunnelStatusService
+	// applies its own project-level source-read check, so a caller admitted
+	// on the wrapper or on project read alone gets the read without it.
+	if mcp.BackendKind == MCPBackendTunneled && row.McpServerID != uuid.Nil {
+		mcp.Tunnel = r.tunnelStatus.Status(ctx, principal, projectID, row.McpServerID)
+	}
 	// The exposure read rides the same mcp:read boundary as the rest of the
 	// detail, so it is filled in only where plugin membership is: a caller
 	// admitted on project read alone gets the operational projection, not the
