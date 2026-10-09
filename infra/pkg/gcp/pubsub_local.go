@@ -137,7 +137,7 @@ func (e *EmulatedPubSubBroker) SubscriberForMessage(ctx context.Context, msg pro
 	return sub, nil
 }
 
-func (e *EmulatedPubSubBroker) reconcileSubscriptions(ctx context.Context, subName string, topicName string, options *pubsubv1.SubscriptionOptions) error {
+func (e *EmulatedPubSubBroker) reconcileSubscriptions(ctx context.Context, subName string, topicName string, options subscriptionTransportOptions) error {
 	qname := fmt.Sprintf("projects/%s/subscriptions/%s", e.projectID, subName)
 	topicName = fmt.Sprintf("projects/%s/topics/%s", e.projectID, topicName)
 
