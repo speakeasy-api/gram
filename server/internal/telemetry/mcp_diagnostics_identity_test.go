@@ -28,7 +28,7 @@ type proxiedToolEventParams struct {
 // insertProxiedToolEvent inserts the row the remote MCP proxy records for one
 // tools/call it forwarded: an event_source of tool_call, the configured
 // server's id, a tools: URN, a status code, a duration, and a trace id. It
-// carries no toolset slug, which is what distinguishes it from a hosted call.
+// optionally carries a toolset slug to model hosted calls, including gateway members.
 func insertProxiedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, p proxiedToolEventParams) {
 	t.Helper()
 

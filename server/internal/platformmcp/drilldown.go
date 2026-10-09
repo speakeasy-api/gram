@@ -427,7 +427,7 @@ func traceCursorScope(target drilldownTarget, outcome string) string {
 	)
 }
 
-// summaryIdentityParams scopes the summary read to exactly one identity filter.
+// summaryIdentityParams scopes the summary read to one configured server.
 //
 // Older hosted calls carry gram.toolset.slug and no mcp_server id, so ANDing
 // both would drop them; the slug read instead leaves out rows stamped with
