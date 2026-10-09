@@ -174,7 +174,7 @@ func corpusFiles(dir string) ([]string, error) {
 	}
 	var paths []string
 	for _, entry := range entries {
-		if entry.Type().IsRegular() && strings.HasSuffix(entry.Name(), ".jsonl") {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".jsonl") {
 			paths = append(paths, filepath.Join(dir, entry.Name()))
 		}
 	}
