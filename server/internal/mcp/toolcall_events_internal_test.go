@@ -1,8 +1,11 @@
 package mcp
 
 import (
+	"bytes"
 	"errors"
+	"log/slog"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otel/otelpub"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // toolCallEventsFixture is a toolCallEvents over a publisher that keeps
@@ -25,6 +27,7 @@ import (
 type toolCallEventsFixture struct {
 	events    *toolCallEvents
 	published *[]*otelv1.InboundLogRecord
+	warnings  *bytes.Buffer
 	at        *time.Time
 }
 
@@ -39,12 +42,11 @@ func newToolCallEventsFixture(t *testing.T, result gcp.PublishResult, identity t
 		published = append(published, record)
 	}).Return(result).Maybe()
 
-	logger := testenv.NewLogger(t)
-	emitter := otelpub.NewLoggerProvider(logger, publisher, resource.NewSchemaless(semconv.ServiceNameKey.String("gram-server"))).
-		Logger(dialect.GramGatewayLogScope)
+	var warnings bytes.Buffer
+	records := otelpub.NewLogger(publisher, resource.NewSchemaless(semconv.ServiceNameKey.String("gram-server")), dialect.GramGatewayLogScope)
 	at := time.Unix(1_700_000_000, 0)
-	events := newToolCallEvents(emitter, toolCallTenant{organizationID: "org-1", projectID: "project-1"}, identity, func() time.Time { return at })
-	return toolCallEventsFixture{events: events, published: &published, at: &at}
+	events := newToolCallEvents(records, slog.New(slog.NewTextHandler(&warnings, nil)), toolCallTenant{organizationID: "org-1", projectID: "project-1"}, identity, func() time.Time { return at })
+	return toolCallEventsFixture{events: events, published: &published, warnings: &warnings, at: &at}
 }
 
 func recordStringAttribute(record *otelv1.InboundLogRecord, key string) string {
@@ -137,11 +139,13 @@ func TestToolCallEventsNeverFailTheCall(t *testing.T) {
 
 	fixture := newToolCallEventsFixture(t, gcp.NewErrPublishResult(errors.New("pubsub unavailable")), toolCallIdentity{callID: "call-3"})
 
-	// The publisher refuses both acks. Both emits still return normally:
-	// otelpub logs the loss, and the caller sees no error to fail the call with.
+	// The publisher refuses both acks; each loss is a warning, never an error for the call.
 	fixture.events.started(t.Context())
 	fixture.events.completed(t.Context(), http.StatusOK, false, nil)
 	require.Len(t, *fixture.published, 2, "both records were handed to the publisher before it refused them")
+	require.Equal(t, 2, strings.Count(fixture.warnings.String(), "tool call record was not published"))
+	require.Contains(t, fixture.warnings.String(), "pubsub unavailable")
+	require.Contains(t, fixture.warnings.String(), "call-3")
 }
 
 func TestToolCallEventsCompletedFollowsAPassthroughResultsOwnVerdict(t *testing.T) {

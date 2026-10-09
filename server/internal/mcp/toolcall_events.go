@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -72,32 +73,34 @@ func (id toolCallIdentity) attributes() []attribute.KeyValue {
 // the tool call id as their record id, so they pair up in agent_events as
 // the tool_call and the tool_call_result of one event.
 //
-// Each Emit publishes synchronously and waits for the Pub/Sub ack, so a
-// call pays one publish before the tool runs and one more before its
-// response is written. A publish that fails is logged by otelpub, and the
-// tool call is never failed over it.
+// Each record waits for the Pub/Sub ack, so a call pays one publish before
+// the tool runs and one more before its response is written. A record that
+// is not published is logged as a warning; the tool call never fails over it.
 type toolCallEvents struct {
-	emitter log.Logger
-	tenant  toolCallTenant
-	callID  string
-	base    []log.KeyValue
-	start   time.Time
-	now     func() time.Time
+	logger *otelpub.Logger
+	log    *slog.Logger
+	tenant toolCallTenant
+	callID string
+	base   []log.KeyValue
+	start  time.Time
+	now    func() time.Time
 }
 
 func newToolCallEvents(
-	emitter log.Logger,
+	logger *otelpub.Logger,
+	slogger *slog.Logger,
 	tenant toolCallTenant,
 	identity toolCallIdentity,
 	now func() time.Time,
 ) *toolCallEvents {
 	return &toolCallEvents{
-		emitter: emitter,
-		tenant:  tenant,
-		callID:  identity.callID,
-		base:    logAttributes(identity.attributes()...),
-		start:   now(),
-		now:     now,
+		logger: logger,
+		log:    slogger,
+		tenant: tenant,
+		callID: identity.callID,
+		base:   logAttributes(identity.attributes()...),
+		start:  now(),
+		now:    now,
 	}
 }
 
@@ -128,13 +131,11 @@ func (e *toolCallEvents) completed(ctx context.Context, statusCode int, resultIs
 	e.emit(ctx, record)
 }
 
-// emit publishes one record under the call's tenant and id. The context is
-// detached from the request's cancellation so a client that goes away
-// mid-call still gets its completed record.
+// emit publishes one record under the call's tenant and id.
 func (e *toolCallEvents) emit(ctx context.Context, record log.Record) {
-	ctx = otelpub.WithTenant(context.WithoutCancel(ctx), e.tenant.organizationID, e.tenant.projectID)
-	ctx = otelpub.WithRecordID(ctx, e.callID)
-	e.emitter.Emit(ctx, record)
+	if err := e.logger.Log(otelpub.WithRecordID(otelpub.WithTenant(ctx, e.tenant.organizationID, e.tenant.projectID), e.callID), record); err != nil {
+		e.log.WarnContext(ctx, "tool call record was not published", attr.SlogToolCallID(e.callID), attr.SlogError(err))
+	}
 }
 
 func toolCallCompletedAttributes(statusCode int, resultIsError bool, duration time.Duration, failure *oops.ShareableError) []attribute.KeyValue {
