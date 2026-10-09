@@ -352,9 +352,12 @@ function QueryBlock({
 
       {/* Line two hangs off the letter: the sentence of joined segments. */}
       <div className="flex">
+        {/* Hangs from the search icon (letter 32px + dataset 144px + half
+            the icon's 32px cell), so the sentence starts where the filter
+            text does. */}
         <span
           aria-hidden
-          className="border-border ml-4 h-6 w-4 shrink-0 border-b border-l"
+          className="border-border ml-[192px] h-6 w-4 shrink-0 border-b border-l"
         />
         <div className="flex flex-wrap items-center pt-2">
           <Segments>
