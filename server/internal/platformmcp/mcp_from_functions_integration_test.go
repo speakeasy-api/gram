@@ -105,6 +105,8 @@ func TestCreateMCPFromFunctionsCreatesAServerExposingExactlyTheRequestedTools(t 
 	require.NoError(t, err)
 	toolsetID := uuid.MustParse(read.ToolsetID)
 	require.Equal(t, uuid.NullUUID{UUID: toolsetID, Valid: true}, server.ToolsetID)
+	// Platform MCP has no environment input; its servers are never linked.
+	require.False(t, server.EnvironmentID.Valid)
 	toolset, err := toolsetsrepo.New(fixture.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: toolsetID, ProjectID: fixture.project.ID})
 	require.NoError(t, err)
 	require.Equal(t, fixture.project.ID, toolset.ProjectID)

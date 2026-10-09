@@ -1,0 +1,223 @@
+package remotemcp_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
+
+	gen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+)
+
+type remoteLinkFixture struct {
+	ctx       context.Context //nolint:containedctx // the fixture's authenticated request context, shared by every call it makes
+	ti        *testInstance
+	projectID uuid.UUID
+	remoteID  uuid.UUID
+	envID     uuid.UUID
+}
+
+func newRemoteLinkFixture(t *testing.T) remoteLinkFixture {
+	t.Helper()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	slug := "env-" + uuid.NewString()[:8]
+	env, err := environmentsrepo.New(ti.conn).CreateEnvironment(ctx, environmentsrepo.CreateEnvironmentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		Name:           slug,
+		Slug:           slug,
+		Description:    pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	return remoteLinkFixture{
+		ctx:       ctx,
+		ti:        ti,
+		projectID: *authCtx.ProjectID,
+		remoteID:  uuid.MustParse(createTestServer(t, ctx, ti).ID),
+		envID:     env.ID,
+	}
+}
+
+func (f remoteLinkFixture) wrapper(t *testing.T, remoteID uuid.UUID, linked bool, visibility string) mcpserversrepo.McpServer {
+	t.Helper()
+
+	id := uuid.New()
+	server, err := mcpserversrepo.New(f.ti.conn).CreateMCPServer(f.ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                id,
+		ProjectID:         f.projectID,
+		Name:              conv.ToPGText("wrapper " + id.String()[:8]),
+		Slug:              conv.ToPGText("wrapper-" + id.String()[:8]),
+		EnvironmentID:     uuid.NullUUID{UUID: f.envID, Valid: linked},
+		RemoteMcpServerID: uuid.NullUUID{UUID: remoteID, Valid: true},
+		Visibility:        visibility,
+		NetworkAccessMode: conv.ToPGText("public_only"),
+	})
+	require.NoError(t, err)
+	return server
+}
+
+func (f remoteLinkFixture) mcpWriteOnly(t *testing.T) context.Context {
+	t.Helper()
+	return withExactAccessGrants(t, f.ctx, f.ti.conn, authz.NewGrant(authz.ScopeMCPWrite, f.projectID.String()))
+}
+
+func (f remoteLinkFixture) withEnvironmentAuthority(t *testing.T) context.Context {
+	t.Helper()
+	return withExactAccessGrants(t, f.ctx, f.ti.conn, authz.NewGrant(authz.ScopeMCPWrite, f.projectID.String()), authz.NewGrantWithSelector(authz.ScopeEnvironmentRead, authz.Selector{
+		authz.SelectorKeyResourceKind: "environment",
+		authz.SelectorKeyResourceID:   authz.WildcardResource,
+		authz.SelectorKeyProjectID:    f.projectID.String(),
+	}))
+}
+
+func (f remoteLinkFixture) storedURL(t *testing.T) string {
+	t.Helper()
+
+	row, err := repo.New(f.ti.conn).GetServerByID(f.ctx, repo.GetServerByIDParams{ID: f.remoteID, ProjectID: f.projectID})
+	require.NoError(t, err)
+	return row.Url
+}
+
+func urlUpdate(id uuid.UUID, url string) *gen.UpdateServerPayload {
+	return &gen.UpdateServerPayload{ID: id.String(), URL: &url}
+}
+
+func remoteUpdateAudits(t *testing.T, ctx context.Context, conn *pgxpool.Pool) int64 {
+	t.Helper()
+
+	count, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionRemoteMcpServerUpdate)
+	require.NoError(t, err)
+	return count
+}
+
+func TestUpdateServer_URLChangeWithEnvironmentLinkedServerRequiresEnvironmentAuthority(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]func(t *testing.T, f remoteLinkFixture){
+		"linked private server": func(t *testing.T, f remoteLinkFixture) {
+			t.Helper()
+			f.wrapper(t, f.remoteID, true, "private")
+		},
+		"linked disabled server": func(t *testing.T, f remoteLinkFixture) {
+			t.Helper()
+			f.wrapper(t, f.remoteID, true, "disabled")
+		},
+		"one of two servers linked": func(t *testing.T, f remoteLinkFixture) {
+			t.Helper()
+			f.wrapper(t, f.remoteID, false, "private")
+			f.wrapper(t, f.remoteID, true, "private")
+		},
+	}
+	for name, seed := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newRemoteLinkFixture(t)
+			seed(t, f)
+			originalURL := f.storedURL(t)
+			beforeAudits := remoteUpdateAudits(t, f.ctx, f.ti.conn)
+
+			_, err := f.ti.service.UpdateServer(f.mcpWriteOnly(t), urlUpdate(f.remoteID, "https://moved.example.com/mcp"))
+			requireOopsCode(t, err, oops.CodeForbidden)
+			require.Equal(t, originalURL, f.storedURL(t))
+			require.Equal(t, beforeAudits, remoteUpdateAudits(t, f.ctx, f.ti.conn))
+
+			updated, err := f.ti.service.UpdateServer(f.withEnvironmentAuthority(t), urlUpdate(f.remoteID, "https://moved.example.com/mcp"))
+			require.NoError(t, err)
+			require.Equal(t, "https://moved.example.com/mcp", updated.URL)
+		})
+	}
+}
+
+func TestUpdateServer_WithoutURLChangeNeedsNoEnvironmentAuthority(t *testing.T) {
+	t.Parallel()
+
+	f := newRemoteLinkFixture(t)
+	f.wrapper(t, f.remoteID, true, "private")
+	writeOnly := f.mcpWriteOnly(t)
+
+	// Same URL and a name-only edit both leave the destination alone.
+	_, err := f.ti.service.UpdateServer(writeOnly, urlUpdate(f.remoteID, f.storedURL(t)))
+	require.NoError(t, err)
+	name := "renamed"
+	_, err = f.ti.service.UpdateServer(writeOnly, &gen.UpdateServerPayload{ID: f.remoteID.String(), Name: &name})
+	require.NoError(t, err)
+}
+
+func TestUpdateServer_URLChangeWithUnlinkedOrDeletedServersNeedsNoEnvironmentAuthority(t *testing.T) {
+	t.Parallel()
+
+	f := newRemoteLinkFixture(t)
+	f.wrapper(t, f.remoteID, false, "private")
+	deleted := f.wrapper(t, f.remoteID, true, "private")
+	_, err := mcpserversrepo.New(f.ti.conn).DeleteMCPServer(f.ctx, mcpserversrepo.DeleteMCPServerParams{ID: deleted.ID, ProjectID: f.projectID})
+	require.NoError(t, err)
+	// A linked server on another remote source does not count.
+	f.wrapper(t, uuid.MustParse(createTestServer(t, f.ctx, f.ti).ID), true, "private")
+
+	updated, err := f.ti.service.UpdateServer(f.mcpWriteOnly(t), urlUpdate(f.remoteID, "https://moved.example.com/mcp"))
+	require.NoError(t, err)
+	require.Equal(t, "https://moved.example.com/mcp", updated.URL)
+}
+
+// A URL change that waits behind an uncommitted link must see that link once
+// it commits.
+func TestUpdateServer_URLChangeWaitsForConcurrentEnvironmentLink(t *testing.T) {
+	t.Parallel()
+
+	f := newRemoteLinkFixture(t)
+	wrapper := f.wrapper(t, f.remoteID, false, "private")
+	originalURL := f.storedURL(t)
+
+	// The linking writer, as UpdateMcpServer runs it: project lock, then row.
+	tx, err := f.ti.conn.Begin(f.ctx) //nolint:glint // notestingrawsql: a held transaction stands in for a concurrent environment link
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(f.ctx)) })
+	require.NoError(t, admission.LockProject(f.ctx, tx, f.projectID))
+	_, err = mcpserversrepo.New(tx).UpdateMCPServer(f.ctx, mcpserversrepo.UpdateMCPServerParams{
+		Name:              wrapper.Name,
+		Slug:              wrapper.Slug,
+		EnvironmentID:     uuid.NullUUID{UUID: f.envID, Valid: true},
+		RemoteMcpServerID: wrapper.RemoteMcpServerID,
+		Visibility:        wrapper.Visibility,
+		ID:                wrapper.ID,
+		ProjectID:         f.projectID,
+	})
+	require.NoError(t, err)
+
+	writeOnly := f.mcpWriteOnly(t)
+	done := make(chan error, 1)
+	go func() {
+		_, err := f.ti.service.UpdateServer(writeOnly, urlUpdate(f.remoteID, "https://moved.example.com/mcp"))
+		done <- err
+	}()
+
+	testenv.WaitForQueryBlockedBy(t, f.ctx, f.ti.conn, testenv.BackendPID(tx), "%LockProjectEnforcementState :exec%")
+	require.Empty(t, done, "URL change must wait for the project lock")
+	require.NoError(t, tx.Commit(f.ctx))
+
+	select {
+	case err := <-done:
+		requireOopsCode(t, err, oops.CodeForbidden)
+	case <-f.ctx.Done():
+		t.Fatal("URL change did not finish after the link committed")
+	}
+	require.Equal(t, originalURL, f.storedURL(t))
+}

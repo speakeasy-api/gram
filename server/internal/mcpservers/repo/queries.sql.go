@@ -467,6 +467,56 @@ func (q *Queries) GetMCPServerByToolsetID(ctx context.Context, arg GetMCPServerB
 	return i, err
 }
 
+const hasEnvironmentLinkedMCPServerForRemote = `-- name: HasEnvironmentLinkedMCPServerForRemote :one
+SELECT EXISTS (
+    SELECT 1
+    FROM mcp_servers
+    WHERE project_id = $1
+      AND remote_mcp_server_id = $2
+      AND environment_id IS NOT NULL
+      AND deleted IS FALSE
+)
+`
+
+type HasEnvironmentLinkedMCPServerForRemoteParams struct {
+	ProjectID         uuid.UUID
+	RemoteMcpServerID uuid.NullUUID
+}
+
+// Reports whether any live MCP server fronting this remote source carries an
+// environment link, whatever its visibility: a disabled server can be enabled
+// later without touching its link or backend.
+func (q *Queries) HasEnvironmentLinkedMCPServerForRemote(ctx context.Context, arg HasEnvironmentLinkedMCPServerForRemoteParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasEnvironmentLinkedMCPServerForRemote, arg.ProjectID, arg.RemoteMcpServerID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const hasEnvironmentLinkedMCPServerForTunnel = `-- name: HasEnvironmentLinkedMCPServerForTunnel :one
+SELECT EXISTS (
+    SELECT 1
+    FROM mcp_servers
+    WHERE project_id = $1
+      AND tunneled_mcp_server_id = $2
+      AND environment_id IS NOT NULL
+      AND deleted IS FALSE
+)
+`
+
+type HasEnvironmentLinkedMCPServerForTunnelParams struct {
+	ProjectID           uuid.UUID
+	TunneledMcpServerID uuid.NullUUID
+}
+
+// The tunneled counterpart of HasEnvironmentLinkedMCPServerForRemote.
+func (q *Queries) HasEnvironmentLinkedMCPServerForTunnel(ctx context.Context, arg HasEnvironmentLinkedMCPServerForTunnelParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasEnvironmentLinkedMCPServerForTunnel, arg.ProjectID, arg.TunneledMcpServerID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const hasLiveMCPServerInOrganization = `-- name: HasLiveMCPServerInOrganization :one
 SELECT EXISTS(
   SELECT 1

@@ -326,6 +326,18 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 	// even when the URL didn't change (idempotent).
 	finalURL := conv.PtrValOr(payload.URL, existingServer.Url)
 	if payload.URL != nil && finalURL != existingServer.Url {
+		// Repointing a source moves every server on it, environment links
+		// included, so a linked server needs the same authority as linking.
+		// The project lock taken above orders this against concurrent links.
+		linked, err := mcpservers.RemoteHasEnvironmentLinkedServers(ctx, dbtx, *authCtx.ProjectID, serverID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check environment-linked mcp servers").LogError(ctx, logger)
+		}
+		if linked {
+			if err := s.authz.Require(ctx, authz.EnvironmentLinkCheck(authCtx.ProjectID.String())); err != nil {
+				return nil, err
+			}
+		}
 		if err := s.checkRemoteDistributionAdmission(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, serverID, finalURL); err != nil {
 			return nil, err
 		}

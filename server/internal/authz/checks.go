@@ -33,6 +33,17 @@ func MCPCheck(scope Scope, resourceID, projectID string) Check {
 	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal}
 }
 
+// EnvironmentLinkCheck builds the project-wide environment:read check that
+// guards binding an environment to something a caller can invoke (a source, a
+// toolset, an MCP server) or redirecting where a bound environment's values
+// are sent. The grant must cover every environment in the project: a wildcard
+// grant confined by the project_id dimension (or, by scope expansion,
+// environment:write) satisfies it; a grant naming a single environment does
+// not.
+func EnvironmentLinkCheck(projectID string) Check {
+	return Check{Scope: ScopeEnvironmentRead, ResourceKind: "environment", ResourceID: projectID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal}
+}
+
 // AssistantCheck builds a Check for an assistant scope. resourceID is the
 // assistant ID for operations on one assistant, or the project ID for
 // project-level operations such as creating an assistant. projectID is injected

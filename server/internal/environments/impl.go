@@ -97,12 +97,7 @@ func (s *Service) requireProjectEnvironmentWrite(ctx context.Context, projectID 
 // on project:write instead would let a caller without environment:read
 // exfiltrate secrets by linking an environment to a resource they can run.
 func (s *Service) requireProjectEnvironmentRead(ctx context.Context, projectID uuid.UUID) error {
-	return s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeEnvironmentRead,
-		ResourceKind: "environment",
-		ResourceID:   projectID.String(),
-		Dimensions:   map[string]string{"project_id": projectID.String()},
-	})
+	return s.authz.Require(ctx, authz.EnvironmentLinkCheck(projectID.String()))
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {

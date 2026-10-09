@@ -34,9 +34,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelsessions"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/tunnel/route"
@@ -458,8 +460,13 @@ func (s *Service) RotateServerKey(ctx context.Context, payload *gen.RotateServer
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	// The project lock orders rotation against concurrent environment links
+	// (see mcpservers/environment_link.go); it is taken before the tunnel row.
+	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock project").LogError(ctx, logger)
+	}
 	txRepo := repo.New(dbtx)
-	existing, err := txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
+	existing, err := txRepo.GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -468,6 +475,19 @@ func (s *Service) RotateServerKey(ctx context.Context, payload *gen.RotateServer
 			return nil, oops.E(oops.CodeNotFound, err, "tunneled mcp server not found").LogWarn(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get tunneled mcp server").LogError(ctx, logger)
+	}
+
+	// Whoever holds the new key operates the tunnel's destination, so a
+	// tunnel fronting an environment-linked server needs the same authority
+	// as linking that environment.
+	linked, err := mcpservers.TunnelHasEnvironmentLinkedServers(ctx, dbtx, *authCtx.ProjectID, serverID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check environment-linked mcp servers").LogError(ctx, logger)
+	}
+	if linked {
+		if err := s.authz.Require(ctx, authz.EnvironmentLinkCheck(authCtx.ProjectID.String())); err != nil {
+			return nil, err
+		}
 	}
 
 	beforeView := s.tunnelManager.serverView(ctx, s.logger, existing)

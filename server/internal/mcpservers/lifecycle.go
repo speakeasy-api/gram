@@ -24,10 +24,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// LifecycleUpdateInput describes the narrow MCP-server fields shared by
-// dashboard management and Platform MCP lifecycle operations. Backend references
-// are deliberately inherited from the locked server; callers cannot use this
-// command to rewire a server.
+// LifecycleUpdateInput describes the MCP-server fields shared by dashboard
+// management and Platform MCP lifecycle operations.
+// UpdateMCPServerNetworkAccessModeInTransaction reads only the identity fields
+// and keeps the stored environment and backend references.
+// UpdateMCPServerLifecycleInTransaction writes the environment and backend
+// references as given, so its callers must authorize those values first.
 type LifecycleUpdateInput struct {
 	OrganizationID    string
 	ProjectID         uuid.UUID
@@ -159,10 +161,14 @@ func UpdateMCPServerVisibilityInTransaction(ctx context.Context, tx pgx.Tx, audi
 	return MCPServerVisibilityResult{Server: updated, ClearedRootDomainIDs: tombstone.RootDomainIDs(cleared)}, nil
 }
 
-// UpdateMCPServerLifecycleInTransaction updates only the name-derived slug and
-// visibility of a locked MCP server. It synchronizes auto-derived plugin display
-// names and writes the normal MCP update audit event, but it never creates,
-// removes, or selects a plugin attachment.
+// UpdateMCPServerLifecycleInTransaction replaces the name, slug, visibility,
+// environment and backend references of a locked MCP server. It synchronizes
+// auto-derived plugin display names and writes the normal MCP update audit
+// event plus a link or unlink event when the environment changes, but it never
+// creates, removes, or selects a plugin attachment. It does not authorize: a
+// caller changing the environment, or keeping one while changing the backend,
+// must already have required authz.EnvironmentLinkCheck under
+// admission.LockProject (see environment_link.go).
 func UpdateMCPServerLifecycleInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, existing repo.McpServer, input LifecycleUpdateInput) (repo.McpServer, error) {
 	if tx == nil || auditLogger == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || input.ActorUserID == "" || input.ServerID == uuid.Nil || existing.ID != input.ServerID || existing.ProjectID != input.ProjectID || input.Visibility == "" {
 		return repo.McpServer{}, fmt.Errorf("invalid MCP server lifecycle update input")
@@ -239,6 +245,9 @@ func UpdateMCPServerLifecycleInTransaction(ctx context.Context, tx pgx.Tx, audit
 		McpServerSnapshotAfter:  mv.BuildMcpServerView(updated),
 	}); err != nil {
 		return repo.McpServer{}, fmt.Errorf("audit MCP server lifecycle update: %w", err)
+	}
+	if err := logEnvironmentLinkChange(ctx, tx, auditLogger, input.OrganizationID, input.ProjectID, input.ActorUserID, input.ActorEmail, existing.EnvironmentID, updated); err != nil {
+		return repo.McpServer{}, err
 	}
 	return updated, nil
 }

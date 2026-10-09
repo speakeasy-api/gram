@@ -696,3 +696,27 @@ WHERE p.organization_id = @organization_id
   AND s.visibility <> 'disabled'
   AND s.slug IS NOT NULL
 ORDER BY s.project_id, s.slug;
+
+-- name: HasEnvironmentLinkedMCPServerForRemote :one
+-- Reports whether any live MCP server fronting this remote source carries an
+-- environment link, whatever its visibility: a disabled server can be enabled
+-- later without touching its link or backend.
+SELECT EXISTS (
+    SELECT 1
+    FROM mcp_servers
+    WHERE project_id = @project_id
+      AND remote_mcp_server_id = @remote_mcp_server_id
+      AND environment_id IS NOT NULL
+      AND deleted IS FALSE
+);
+
+-- name: HasEnvironmentLinkedMCPServerForTunnel :one
+-- The tunneled counterpart of HasEnvironmentLinkedMCPServerForRemote.
+SELECT EXISTS (
+    SELECT 1
+    FROM mcp_servers
+    WHERE project_id = @project_id
+      AND tunneled_mcp_server_id = @tunneled_mcp_server_id
+      AND environment_id IS NOT NULL
+      AND deleted IS FALSE
+);
