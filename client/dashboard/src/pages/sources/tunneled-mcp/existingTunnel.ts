@@ -126,7 +126,7 @@ export async function deleteTunnelAndConfirmedServers({
     }
     if (uncertain > 0) {
       parts.push(
-        `The outcome for ${plural(uncertain, "MCP server")} is unknown because the connection failed.`,
+        `The outcome for ${plural(uncertain, "MCP server")} is unknown because no definite response was received.`,
       );
     }
     parts.push("The tunnel was kept.");

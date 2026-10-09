@@ -43,7 +43,6 @@ vi.mock("@/routes", () => ({
     mcp: {
       add: { goTo: vi.fn() },
       x: {
-        overview: { href: (id: string) => `/mcp/x/${id}` },
         settings: { href: (id: string) => `/mcp/x/${id}/settings` },
       },
     },
@@ -259,8 +258,12 @@ describe("ExistingTunnelFlow", () => {
     });
 
     expect(screen.getByText(/may have succeeded/)).toBeTruthy();
-    // Once in the picker, once in the outcome notice.
-    expect(screen.getAllByRole("link", { name: "JAMF prod" })).toHaveLength(2);
+    // Once in the picker, once in the outcome notice, both to its settings.
+    const links = screen.getAllByRole("link", { name: "JAMF prod" });
+    expect(links.map((link) => link.getAttribute("href"))).toEqual([
+      "/mcp/x/s1/settings",
+      "/mcp/x/s1/settings",
+    ]);
     expect(submitButton("Create anyway")).toBeTruthy();
   });
 });

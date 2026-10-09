@@ -97,9 +97,16 @@ function CreateTunneledMcpPage() {
     throwOnError: false,
   });
   const hasTunnels = (tunnelsQuery.data?.tunneledMcpServers.length ?? 0) > 0;
+  // A failed list read is not an empty project: the existing-tunnel flow
+  // shows the failure with a retry.
+  const offerExisting =
+    hasTunnels ||
+    tunnelsQuery.isError ||
+    !!requestedTunnelId ||
+    mode === "existing";
 
   const modeSwitch = (disabled: boolean): ReactNode =>
-    hasTunnels || requestedTunnelId || mode === "existing" ? (
+    offerExisting ? (
       <SegmentedControl<CreateMode>
         value={mode}
         onChange={setMode}

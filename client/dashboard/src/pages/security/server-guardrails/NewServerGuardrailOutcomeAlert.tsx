@@ -18,7 +18,7 @@ export function NewServerGuardrailOutcomeAlert({
   if (outcome?.status === "failed") {
     return (
       <Stack gap={2}>
-        <Alert variant="error" dismissible={false}>
+        <Alert variant="error" dismissible={false} alignTop>
           {guardrailFailureMessage(outcome)}
         </Alert>
         <div>

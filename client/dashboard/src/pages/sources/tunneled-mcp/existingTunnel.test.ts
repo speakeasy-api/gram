@@ -141,7 +141,7 @@ describe("deleteTunnelAndConfirmedServers", () => {
     expect(d.deleteTunnel).toHaveBeenCalledOnce();
   });
 
-  it("keeps a server added after the re-read: the tunnel delete is refused", async () => {
+  it("reports the tunnel as kept when the tunnel delete is refused as in use", async () => {
     const d = deps(["a"]);
     d.deleteTunnel.mockRejectedValue(serviceError(409));
     const error = await deleteTunnelAndConfirmedServers({

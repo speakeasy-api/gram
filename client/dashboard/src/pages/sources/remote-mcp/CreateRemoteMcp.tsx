@@ -212,7 +212,9 @@ function CreateRemoteMcpForm() {
           : "MCP server added and identity configured",
       );
       if (flow.gatewayId) {
-        await flow.complete(mcpServer.id);
+        // GatewayAttachmentStatus reports an attach failure; repeating it as
+        // a toast would add the raw backend message next to it.
+        await flow.complete(mcpServer.id).catch(() => undefined);
       } else if (guardrailFailed) {
         routes.mcp.x.guardrails.goTo(mcpServerRouteParam(mcpServer));
       } else {

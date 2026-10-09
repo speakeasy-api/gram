@@ -315,7 +315,7 @@ export function ExistingTunnelFlow({
             <UncertainCreateAlert
               servers={selected.servers}
               serverHref={(server) =>
-                routes.mcp.x.overview.href(mcpServerRouteParam(server))
+                routes.mcp.x.settings.href(mcpServerRouteParam(server))
               }
             />
           ) : null}
