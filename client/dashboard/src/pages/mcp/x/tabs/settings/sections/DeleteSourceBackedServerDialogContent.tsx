@@ -2,6 +2,7 @@ import { RemoveMcpSourceDialogContent } from "@/components/mcp/RemoveMcpSourceDi
 import { useDeleteRemoteMcpSource } from "@/pages/sources/remote-mcp/hooks";
 import { useDeleteUnproxiedMcpSource } from "@/pages/sources/unproxied-mcp/hooks";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import { useEffect } from "react";
 import { sourceDeleteSpec, type CascadeDeleteTarget } from "./sourceDelete";
 
 // Deleting a remote- or unproxied-backed MCP server deletes the source row
@@ -14,11 +15,14 @@ export function DeleteSourceBackedServerDialogContent({
   linkedMcpServers,
   onClose,
   onSuccess,
+  onBusyChange,
 }: {
   target: CascadeDeleteTarget;
   linkedMcpServers: McpServer[];
   onClose: () => void;
   onSuccess: () => void;
+  /** Told while the delete runs, so the dialog can refuse to close. */
+  onBusyChange?: (busy: boolean) => void;
 }): JSX.Element {
   const deleteRemote = useDeleteRemoteMcpSource();
   const deleteUnproxied = useDeleteUnproxiedMcpSource();
@@ -27,6 +31,10 @@ export function DeleteSourceBackedServerDialogContent({
     remote: deleteRemote,
     unproxied: deleteUnproxied,
   }[target.kind];
+  useEffect(
+    () => onBusyChange?.(mutation.isPending),
+    [mutation.isPending, onBusyChange],
+  );
 
   const confirm = async () => {
     switch (target.kind) {

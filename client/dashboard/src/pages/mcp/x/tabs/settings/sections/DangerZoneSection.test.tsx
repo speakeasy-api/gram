@@ -145,10 +145,19 @@ describe("DangerZoneSection on a tunneled server", () => {
 
   it("keeps the delete dialog open while the delete runs", () => {
     grants.writable = new Set(["server-a", "project-1"]);
-    deleteState.isPending = true;
-    renderSection({ kind: "tunneled", source: tunnel });
+    const target = { kind: "tunneled", source: tunnel } as const;
+    const { rerender } = renderSection(target);
     fireEvent.click(screen.getByRole("button", { name: "Delete MCP server" }));
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Delete MCP server",
+      }),
+    );
+    expect(deleteMcpServer).toHaveBeenCalledOnce();
 
+    // The mutation is now in flight.
+    deleteState.isPending = true;
+    rerender(target);
     expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(screen.getByText("Delete this MCP server?")).toBeTruthy();

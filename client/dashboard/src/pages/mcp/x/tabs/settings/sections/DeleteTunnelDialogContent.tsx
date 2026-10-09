@@ -58,10 +58,10 @@ export function DeleteTunnelDialogContent({
   const queryClient = useQueryClient();
   const impact = useSharedTunnelImpact(tunnel.id, { active: true });
   const remove = useDeleteTunneledMcpSource();
-  useEffect(
-    () => onBusyChange?.(remove.isPending),
-    [remove.isPending, onBusyChange],
-  );
+  // Spans the delete and the recovery after a partial one, which
+  // remove.isPending does not: recovery may still navigate away.
+  const [running, setRunning] = useState(false);
+  useEffect(() => onBusyChange?.(running), [running, onBusyChange]);
   const [confirmation, setConfirmation] = useState<Confirmation>({
     text: "",
     servers: [],
@@ -75,7 +75,7 @@ export function DeleteTunnelDialogContent({
     impact.isReady &&
     serverSetKey(confirmation.servers) !== serverSetKey(impact.servers);
   const typed = listChanged ? "" : confirmation.text;
-  const armed = typed === tunnelName && impact.isReady && !remove.isPending;
+  const armed = typed === tunnelName && impact.isReady && !running;
 
   // Works out what is left after a delete that stopped partway and sends the
   // user to wherever it can be finished.
@@ -125,6 +125,7 @@ export function DeleteTunnelDialogContent({
   };
 
   const handleConfirm = async () => {
+    setRunning(true);
     try {
       await remove.mutateAsync({
         tunneledMcpServerId: tunnel.id,
@@ -143,6 +144,8 @@ export function DeleteTunnelDialogContent({
         await recover(error);
       }
       // Otherwise nothing changed: the error stays in the dialog for a retry.
+    } finally {
+      setRunning(false);
     }
   };
 
@@ -181,7 +184,7 @@ export function DeleteTunnelDialogContent({
             setConfirmation({ text, servers: impact.servers })
           }
           placeholder={tunnelName}
-          disabled={remove.isPending || !impact.isReady}
+          disabled={running || !impact.isReady}
           aria-label="Type the tunnel name to confirm"
         />
       </div>
@@ -193,11 +196,7 @@ export function DeleteTunnelDialogContent({
       ) : null}
 
       <Dialog.Footer>
-        <Button
-          variant="secondary"
-          onClick={onClose}
-          disabled={remove.isPending}
-        >
+        <Button variant="secondary" onClick={onClose} disabled={running}>
           <Button.Text>Cancel</Button.Text>
         </Button>
         <Button
@@ -205,12 +204,12 @@ export function DeleteTunnelDialogContent({
           disabled={!armed}
           onClick={() => void handleConfirm()}
         >
-          {remove.isPending ? (
+          {running ? (
             <Button.LeftIcon>
               <Loader2 className="size-4 animate-spin" />
             </Button.LeftIcon>
           ) : null}
-          <Button.Text>{remove.isPending ? "Deleting" : "Delete"}</Button.Text>
+          <Button.Text>{running ? "Deleting" : "Delete"}</Button.Text>
         </Button>
       </Dialog.Footer>
     </>
