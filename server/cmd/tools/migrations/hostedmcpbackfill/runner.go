@@ -309,6 +309,9 @@ func (r *Runner) processOne(ctx context.Context, candidate ListCandidateToolsets
 	if err != nil {
 		return row, err
 	}
+	if before.server == nil && after.server == nil {
+		return blocked(row, OutcomeBlockedSlugCollision, "sync left the toolset legacy: address or project server slug held by another server"), nil
+	}
 	row.LiveEndpoints = len(after.endpoints)
 	row.DomainsToReconcile = domains
 	row.Wrote = !reflect.DeepEqual(before, after)
