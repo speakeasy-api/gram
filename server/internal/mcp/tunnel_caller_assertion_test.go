@@ -390,7 +390,7 @@ func TestCallerProfileLookupFailureIsOperational(t *testing.T) {
 	t.Parallel()
 	issuer, _ := callerIssuerForTest(t)
 	reader := sdkmetric.NewManualReader()
-	ctx, ti := newTestMCPServiceWithPoolConfigAndTemporal(t, testenv.NewLogger(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, issuer)
+	ctx, ti := newTestMCPServiceWithPoolConfigAndTemporal(t, testenv.NewLogger(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, issuer, nil)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	shared := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)

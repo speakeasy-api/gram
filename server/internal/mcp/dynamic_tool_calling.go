@@ -59,6 +59,7 @@ func buildDynamicSessionTools(
 	logger *slog.Logger,
 	toolset *types.Toolset,
 	vectorToolStore *rag.ToolsetVectorStore,
+	includeTags bool,
 ) ([]*toolListEntry, error) {
 	if err := requireToolSearchIndex(ctx, toolset, vectorToolStore); err != nil {
 		return nil, fmt.Errorf("check tool search index: %w", err)
@@ -67,7 +68,13 @@ func buildDynamicSessionTools(
 	findDescription := "Search through the available tools in this MCP server using a search query. The result will be a list of tools that could help you complete your task."
 	executeDescription := "Execute one tool. Pass its exact name as `name` and its JSON payload, matching the schema from describe_tools, as `arguments`. Do not call a tool without first describing it to get the input schema."
 
-	availableTags, _ := vectorToolStore.GetToolsetAvailableTags(ctx, *toolset)
+	// Tags are read from the whole toolset's index, not from toolset.Tools,
+	// so a caller seeing only some tools gets no tag suggestions rather than
+	// tags of tools withheld from them.
+	var availableTags []string
+	if includeTags {
+		availableTags, _ = vectorToolStore.GetToolsetAvailableTags(ctx, *toolset)
+	}
 	if len(availableTags) > 0 {
 		findDescription += fmt.Sprintf(" The available tools fall under the following categories: %s.", strings.Join(availableTags, ", "))
 	}
