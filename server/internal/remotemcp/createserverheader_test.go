@@ -250,10 +250,14 @@ func TestCreateServerHeader_RejectsProtectedPassThroughSources(t *testing.T) {
 	server := createTestServer(t, ctx, ti)
 
 	for _, source := range []string{"Gram-Key", "gRaM-cHaT-sEsSiOn", "Gram_Session", "Gram-Project", "Gram-Consent-State", "X-Gram-Tunnel-Id", "X-Gram-Agent-Version", "X_Speakeasy_Identity", "Proxy-Authorization", "Set-Cookie", "Speakeasy-AI-Key", "speakeasy-ai-chat-session"} {
-		_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Upstream-Token", func(p *gen.CreateServerHeaderPayload) {
-			p.ValueFromRequestHeader = new(source)
-		}))
-		requireOopsCode(t, err, oops.CodeBadRequest)
+		t.Run(source, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Upstream-Token", func(p *gen.CreateServerHeaderPayload) {
+				p.ValueFromRequestHeader = new(source)
+			}))
+			requireOopsCode(t, err, oops.CodeBadRequest)
+		})
 	}
 
 	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Upstream-Token", func(p *gen.CreateServerHeaderPayload) {
@@ -271,16 +275,28 @@ func TestCreateServerHeader_RejectsReservedDestinations(t *testing.T) {
 	server := createTestServer(t, ctx, ti)
 
 	for _, name := range []string{"Set-Cookie", "set-cookie", "Proxy-Authorization", "Mcp-Method", "Mcp_Method", "MCP-Protocol-Version"} {
-		_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, name, func(p *gen.CreateServerHeaderPayload) {
-			p.Value = new("v")
-		}))
-		requireOopsCode(t, err, oops.CodeBadRequest)
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, name, func(p *gen.CreateServerHeaderPayload) {
+				p.Value = new("v")
+			}))
+			requireOopsCode(t, err, oops.CodeBadRequest)
+		})
 	}
 
-	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "Cookie", func(p *gen.CreateServerHeaderPayload) {
-		p.ValueFromRequestHeader = new("X-Upstream-Cookie")
-	}))
-	requireOopsCode(t, err, oops.CodeBadRequest)
+	// Request-sourced values may not be sent under a Speakeasy name; a static
+	// Gram-Key stays allowed as an operator credential.
+	for _, name := range []string{"Cookie", "Gram-Key", "gram_key", "Speakeasy-AI-Key"} {
+		t.Run(name+" from request", func(t *testing.T) {
+			t.Parallel()
+
+			_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, name, func(p *gen.CreateServerHeaderPayload) {
+				p.ValueFromRequestHeader = new("X-Client-Token")
+			}))
+			requireOopsCode(t, err, oops.CodeBadRequest)
+		})
+	}
 }
 
 func TestCreateServerHeader_AllowsOperatorCredentials(t *testing.T) {
@@ -319,10 +335,14 @@ func TestCreateServerHeader_RejectsInvalidNamesAndValues(t *testing.T) {
 	server := createTestServer(t, ctx, ti)
 
 	for _, name := range []string{"X Bad", "X-Bad\r\nX-Injected", "X-Bad:", "X-Bad\t"} {
-		_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, name, func(p *gen.CreateServerHeaderPayload) {
-			p.Value = new("v")
-		}))
-		requireOopsCode(t, err, oops.CodeBadRequest)
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, name, func(p *gen.CreateServerHeaderPayload) {
+				p.Value = new("v")
+			}))
+			requireOopsCode(t, err, oops.CodeBadRequest)
+		})
 	}
 
 	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Upstream-Token", func(p *gen.CreateServerHeaderPayload) {
@@ -331,11 +351,15 @@ func TestCreateServerHeader_RejectsInvalidNamesAndValues(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
 	for _, value := range []string{"line1\r\nX-Injected: 1", "line1\nline2", "nul\x00"} {
-		_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
-			p.IsSecret = new(true)
-			p.Value = new(value)
-		}))
-		requireOopsCode(t, err, oops.CodeBadRequest)
+		t.Run(value, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
+				p.IsSecret = new(true)
+				p.Value = new(value)
+			}))
+			requireOopsCode(t, err, oops.CodeBadRequest)
+		})
 	}
 
 	header, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Tabbed", func(p *gen.CreateServerHeaderPayload) {
@@ -507,6 +531,7 @@ func TestCreateServerHeader_RefusalsExplainTheFix(t *testing.T) {
 	}{
 		{name: "X-Upstream-Token", opts: func(p *gen.CreateServerHeaderPayload) { p.ValueFromRequestHeader = new("gram-key") }, code: oops.CodeBadRequest, want: []string{`header "X-Upstream-Token" cannot read request header "gram-key": Speakeasy headers are never forwarded to remote MCP servers`}},
 		{name: "set-cookie", opts: func(p *gen.CreateServerHeaderPayload) { p.Value = new("v") }, code: oops.CodeBadRequest, want: []string{`header "set-cookie" cannot be configured on a remote MCP server`, "Cookie can only hold a static value"}},
+		{name: "Gram-Key", opts: func(p *gen.CreateServerHeaderPayload) { p.ValueFromRequestHeader = new("X-Client-Token") }, code: oops.CodeBadRequest, want: []string{`header "Gram-Key" cannot be populated from a request header: it is a Speakeasy header`}},
 		{name: "X Bad", opts: func(p *gen.CreateServerHeaderPayload) { p.Value = new("v") }, code: oops.CodeBadRequest, want: []string{`header name "X Bad" is not a valid HTTP header name`}},
 		{name: "X-Forwarded", opts: func(p *gen.CreateServerHeaderPayload) { p.ValueFromRequestHeader = new("X Bad") }, code: oops.CodeBadRequest, want: []string{`header "X-Forwarded" reads request header "X Bad", which is not a valid HTTP header name`}},
 		{name: "X-Api-Key", opts: func(p *gen.CreateServerHeaderPayload) { p.Value = new("line1\nline2") }, code: oops.CodeBadRequest, want: []string{`the value of header "X-Api-Key" contains a character an HTTP header cannot carry`}},

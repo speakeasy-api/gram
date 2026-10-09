@@ -904,6 +904,7 @@ const (
 	GenAIEvaluationExplanationKey = attribute.Key("gen_ai.evaluation.explanation") // Free-form explanation
 
 	RemoteMCPProxyInterceptorKey       = attribute.Key("gram.remote_mcp.proxy.interceptor")
+	RemoteMCPConfiguredHeaderNameKey   = attribute.Key("gram.remote_mcp.configured_header.name")
 	RemoteMCPProxyRemoteStatusCodeKey  = attribute.Key("gram.remote_mcp.proxy.remote_status_code")
 	RemoteMCPProxyRemoteStatusClassKey = attribute.Key("gram.remote_mcp.proxy.remote_status_class")
 	RemoteMCPServerIDKey               = attribute.Key("gram.remote_mcp_server.id")
@@ -2455,6 +2456,13 @@ func UserSessionClientMigratedCount(v int64) attribute.KeyValue {
 
 func SlogUserSessionClientMigratedCount(v int64) slog.Attr {
 	return slog.Int64(string(UserSessionClientMigratedCountKey), v)
+}
+
+func RemoteMCPConfiguredHeaderName(v string) attribute.KeyValue {
+	return RemoteMCPConfiguredHeaderNameKey.String(v)
+}
+func SlogRemoteMCPConfiguredHeaderName(v string) slog.Attr {
+	return slog.String(string(RemoteMCPConfiguredHeaderNameKey), v)
 }
 
 func RemoteMCPServerID(v string) attribute.KeyValue { return RemoteMCPServerIDKey.String(v) }

@@ -1353,8 +1353,12 @@ func (p *Proxy) requestSpanAttributes(r *http.Request, method string) []attribut
 }
 
 func (p *Proxy) infoContextWithIdentity(ctx context.Context, msg string, attrs ...slog.Attr) {
+	p.logWithIdentity(ctx, slog.LevelInfo, msg, attrs...)
+}
+
+func (p *Proxy) logWithIdentity(ctx context.Context, level slog.Level, msg string, attrs ...slog.Attr) {
 	attrs = append(attrs, p.Identity.SlogAttrs()...)
-	p.Logger.LogAttrs(ctx, slog.LevelInfo, msg, attrs...)
+	p.Logger.LogAttrs(ctx, level, msg, attrs...)
 }
 
 // wrapInterceptorRejection logs the rejection at error level and returns an

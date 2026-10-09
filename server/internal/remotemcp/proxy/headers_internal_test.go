@@ -267,6 +267,58 @@ func TestApplyRequestHeadersRemoteRejectsRequiredProtectedSource(t *testing.T) {
 	require.NotContains(t, message, "synthetic-api-key")
 }
 
+// A stored row that fills a Speakeasy header from the caller's request is
+// refused at request time too, while a static operator Gram-Key is sent.
+func TestApplyRequestHeadersRemoteRefusesRequestSourcedSpeakeasyDestination(t *testing.T) {
+	t.Parallel()
+
+	t.Run("required", func(t *testing.T) {
+		t.Parallel()
+
+		userReq, remoteReq := newRemotePolicyRequests(t)
+		userReq.Header.Set("X-Client-Token", "synthetic-client-value")
+		p := &Proxy{
+			Logger: testenv.NewLogger(t),
+			Headers: []ConfiguredHeader{
+				{Name: "Gram-Key", StaticValue: "", ValueFromRequestHeader: "X-Client-Token", IsRequired: true},
+			},
+		}
+		err := p.applyRequestHeaders(t.Context(), userReq, remoteReq)
+		message := requireBadRequest(t, err)
+		require.Contains(t, message, `required header "Gram-Key" cannot be populated from a request header: it is a Speakeasy header`)
+		require.NotContains(t, message, "synthetic-client-value")
+	})
+
+	t.Run("optional", func(t *testing.T) {
+		t.Parallel()
+
+		userReq, remoteReq := newRemotePolicyRequests(t)
+		userReq.Header.Set("X-Client-Token", "synthetic-client-value")
+		p := &Proxy{
+			Logger: testenv.NewLogger(t),
+			Headers: []ConfiguredHeader{
+				{Name: "Gram-Key", StaticValue: "", ValueFromRequestHeader: "X-Client-Token", IsRequired: false},
+			},
+		}
+		require.NoError(t, p.applyRequestHeaders(t.Context(), userReq, remoteReq))
+		require.Empty(t, remoteReq.Header.Values("Gram-Key"))
+	})
+
+	t.Run("static", func(t *testing.T) {
+		t.Parallel()
+
+		userReq, remoteReq := newRemotePolicyRequests(t)
+		p := &Proxy{
+			Logger: testenv.NewLogger(t),
+			Headers: []ConfiguredHeader{
+				{Name: "Gram-Key", StaticValue: "operator-credential", ValueFromRequestHeader: "", IsRequired: true},
+			},
+		}
+		require.NoError(t, p.applyRequestHeaders(t.Context(), userReq, remoteReq))
+		require.Equal(t, "operator-credential", remoteReq.Header.Get("Gram-Key"))
+	})
+}
+
 func TestApplyRequestHeadersRemoteAuthorizationOverrideShadowsRequiredPassThrough(t *testing.T) {
 	t.Parallel()
 
@@ -485,6 +537,9 @@ func TestCheckRemoteHeader(t *testing.T) {
 		{name: "assertion alias source", header: ConfiguredHeader{Name: "X-Upstream-Token", ValueFromRequestHeader: "X_Speakeasy_Identity"}, wantErr: ErrProtectedSource},
 		{name: "set-cookie destination", header: ConfiguredHeader{Name: "Set-Cookie", StaticValue: "a=b"}, wantErr: ErrReservedHeader},
 		{name: "proxy-authorization destination", header: ConfiguredHeader{Name: "proxy-authorization", StaticValue: "Basic x"}, wantErr: ErrReservedHeader},
+		{name: "gram key from source", header: ConfiguredHeader{Name: "Gram-Key", ValueFromRequestHeader: "X-Client-Token"}, wantErr: ErrProtectedDestination},
+		{name: "speakeasy-ai alias from source", header: ConfiguredHeader{Name: "speakeasy_ai_key", ValueFromRequestHeader: "X-Client-Token"}, wantErr: ErrProtectedDestination},
+		{name: "authorization from source", header: ConfiguredHeader{Name: "Authorization", ValueFromRequestHeader: "X-Client-Token"}, wantErr: nil},
 		{name: "cookie from source", header: ConfiguredHeader{Name: "Cookie", ValueFromRequestHeader: "X-Upstream-Cookie"}, wantErr: ErrReservedHeader},
 		{name: "assertion destination", header: ConfiguredHeader{Name: "x-speakeasy-identity", StaticValue: "v"}, wantErr: ErrReservedHeader},
 		{name: "mcp destination alias", header: ConfiguredHeader{Name: "Mcp_Method", StaticValue: "v"}, wantErr: ErrReservedHeader},

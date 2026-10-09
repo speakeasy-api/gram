@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -60,6 +61,11 @@ var ErrReservedHeader = errors.New("reserved header")
 // ErrProtectedSource reports a configured header that reads a protected inbound
 // header. It always accompanies [ErrReservedHeader].
 var ErrProtectedSource = errors.New("protected source")
+
+// ErrProtectedDestination reports a configured header that would send a
+// request-sourced value under a protected name. It always accompanies
+// [ErrReservedHeader].
+var ErrProtectedDestination = errors.New("protected destination")
 
 // NormalizeHeaderName validates raw as an HTTP field name and returns its
 // canonical form. Control bytes anywhere in raw are rejected before any
@@ -408,7 +414,7 @@ func (p *Proxy) applyRemoteConfiguredHeaders(ctx context.Context, userReq *http.
 			if h.IsRequired {
 				return oops.E(oops.CodeBadRequest, err, "%s", remoteHeaderFailureMessage(h, err)).LogWarn(ctx, p.Logger)
 			}
-			p.Logger.WarnContext(ctx, "skip invalid configured header for remote mcp server", attr.SlogError(err))
+			p.logWithIdentity(ctx, slog.LevelWarn, "skip invalid configured header for remote mcp server", attr.SlogRemoteMCPConfiguredHeaderName(h.Name), attr.SlogError(err))
 		}
 		if value == "" {
 			clearSuppressedRemoteDestination(remoteReq.Header, h.Name)
@@ -455,6 +461,9 @@ func CheckRemoteHeader(h ConfiguredHeader) error {
 	}
 	if isReservedRemoteDestination(h) {
 		return fmt.Errorf("%w: %q cannot be configured on a remote MCP server", ErrReservedHeader, h.Name)
+	}
+	if h.ValueFromRequestHeader != "" && IsProtectedInboundHeader(h.Name) {
+		return fmt.Errorf("%w: %w: %q cannot be populated from a request header", ErrReservedHeader, ErrProtectedDestination, h.Name)
 	}
 	if h.StaticValue != "" {
 		if err := ValidateHeaderValue(h.StaticValue); err != nil {
@@ -521,6 +530,8 @@ func remoteHeaderFailureMessage(h ConfiguredHeader, err error) string {
 	switch {
 	case errors.Is(err, ErrProtectedSource):
 		return fmt.Sprintf("required header %q cannot read request header %q: Speakeasy headers are never forwarded to remote MCP servers", h.Name, h.ValueFromRequestHeader)
+	case errors.Is(err, ErrProtectedDestination):
+		return fmt.Sprintf("required header %q cannot be populated from a request header: it is a Speakeasy header", h.Name)
 	case errors.Is(err, ErrReservedHeader):
 		return fmt.Sprintf("required header %q cannot be configured on a remote mcp server: change or remove it in the server's settings", h.Name)
 	case errors.Is(err, ErrInvalidHeaderName), errors.Is(err, ErrInvalidHeaderValue):
