@@ -1899,3 +1899,14 @@ SET omit_scope_fallback = @omit_scope_fallback
 WHERE id = @id
   AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid
   AND organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text;
+
+-- name: MarkTunneledMCPServerSeenFixture :exec
+-- Test fixture: records an agent sighting on a live tunneled source the way
+-- the tunnel gateway does, so tests can reach the "seen before, not connected
+-- now" state.
+UPDATE tunneled_mcp_servers
+SET status = 'active',
+    last_seen_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;

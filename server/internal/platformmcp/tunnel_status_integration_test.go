@@ -17,6 +17,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -300,7 +301,7 @@ func TestTunnelStatusReportsInactiveForSeenSourceWithoutLiveConnections(t *testi
 
 	fixture := seedTunnelStatusFixture(t, "platform_mcp_tunnel_status_inactive")
 	fixture.grantProjectSourceRead(t)
-	require.NoError(t, tunneledmcprepo.New(fixture.conn).MarkServerSeenFixture(t.Context(), tunneledmcprepo.MarkServerSeenFixtureParams{ID: fixture.tunnelID, ProjectID: fixture.project.ID}))
+	require.NoError(t, testrepo.New(fixture.conn).MarkTunneledMCPServerSeenFixture(t.Context(), testrepo.MarkTunneledMCPServerSeenFixtureParams{ID: fixture.tunnelID, ProjectID: fixture.project.ID}))
 	reader, ctx := fixture.reader(t, &recordingTunnelConnections{})
 
 	mcp := fixture.getMCP(t, reader, ctx, fixture.wrapperID)

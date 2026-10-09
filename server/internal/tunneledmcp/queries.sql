@@ -222,12 +222,3 @@ RETURNING tunneled_mcp_server_headers.*;
 SELECT COUNT(*)
 FROM tunneled_mcp_server_headers
 WHERE tunneled_mcp_server_id = @tunneled_mcp_server_id AND deleted IS FALSE;
-
--- name: MarkServerSeenFixture :exec
--- Test fixture: records an agent sighting the way the tunnel gateway does, so
--- tests can reach the "seen before, not connected now" state.
-UPDATE tunneled_mcp_servers
-SET status = 'active',
-    last_seen_at = clock_timestamp()
-WHERE id = @id
-  AND project_id = @project_id;
