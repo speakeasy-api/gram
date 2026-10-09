@@ -382,7 +382,11 @@ export function MCPServerStatusDropdown({
               disabled={optionBlocked}
               onSelect={() => {
                 if (optionBlocked) return;
-                if (isTunneled && option.value === "public") {
+                if (
+                  isTunneled &&
+                  option.value === "public" &&
+                  server.visibility !== "public"
+                ) {
                   setConfirmPublic(true);
                   return;
                 }
@@ -461,8 +465,11 @@ export function MCPServerStatusDropdown({
           pendingLabel="Saving"
           isPending={updating}
           onConfirm={() => {
-            updateVisibility("public");
-            setConfirmPublic(false);
+            // Stays open, showing Saving, until the change lands; a failure
+            // keeps it open next to the error toast.
+            updateVisibility("public", {
+              onSuccess: () => setConfirmPublic(false),
+            });
           }}
         />
       ) : null}
@@ -515,7 +522,10 @@ function visibilityToast(visibility: McpServerVisibility): string {
 
 function useMcpServerVisibilityUpdate(server: McpServer): {
   canWrite: boolean;
-  updateVisibility: (visibility: McpServerVisibility) => void;
+  updateVisibility: (
+    visibility: McpServerVisibility,
+    options?: { onSuccess?: () => void },
+  ) => void;
   updating: boolean;
 } {
   const { hasScope } = useRBAC();
@@ -545,26 +555,32 @@ function useMcpServerVisibilityUpdate(server: McpServer): {
     },
   });
 
-  const updateVisibility = (next: McpServerVisibility) => {
+  const updateVisibility = (
+    next: McpServerVisibility,
+    options?: { onSuccess?: () => void },
+  ) => {
     if (next === server.visibility) return;
-    update.mutate({
-      request: {
-        updateMcpServerForm: {
-          id: server.id,
-          name: server.name ?? undefined,
-          remoteMcpServerId: server.remoteMcpServerId ?? undefined,
-          tunneledMcpServerId: server.tunneledMcpServerId ?? undefined,
-          toolsetId: server.toolsetId ?? undefined,
-          unproxiedMcpServerId: server.unproxiedMcpServerId ?? undefined,
-          environmentId: server.environmentId ?? undefined,
-          // updateMcpServer is a full-record replace for the optional UUID
-          // references. Forwarding them keeps stored values intact across a
-          // visibility-only update.
-          toolVariationsGroupId: server.toolVariationsGroupId ?? undefined,
-          visibility: next,
+    update.mutate(
+      {
+        request: {
+          updateMcpServerForm: {
+            id: server.id,
+            name: server.name ?? undefined,
+            remoteMcpServerId: server.remoteMcpServerId ?? undefined,
+            tunneledMcpServerId: server.tunneledMcpServerId ?? undefined,
+            toolsetId: server.toolsetId ?? undefined,
+            unproxiedMcpServerId: server.unproxiedMcpServerId ?? undefined,
+            environmentId: server.environmentId ?? undefined,
+            // updateMcpServer is a full-record replace for the optional UUID
+            // references. Forwarding them keeps stored values intact across a
+            // visibility-only update.
+            toolVariationsGroupId: server.toolVariationsGroupId ?? undefined,
+            visibility: next,
+          },
         },
       },
-    });
+      { onSuccess: () => options?.onSuccess?.() },
+    );
   };
 
   return { canWrite, updateVisibility, updating: update.isPending };

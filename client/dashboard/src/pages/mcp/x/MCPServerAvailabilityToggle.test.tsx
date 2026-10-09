@@ -1,6 +1,12 @@
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -117,21 +123,24 @@ describe("MCPServerAvailabilityToggle", () => {
 
     fireEvent.click(screen.getByRole("switch", { name: "Disable MCP server" }));
 
-    expect(mocks.mutate).toHaveBeenCalledWith({
-      request: {
-        updateMcpServerForm: {
-          id: "mcp-server-1",
-          name: "Example server",
-          remoteMcpServerId: "remote-source-1",
-          tunneledMcpServerId: undefined,
-          toolsetId: undefined,
-          unproxiedMcpServerId: undefined,
-          environmentId: undefined,
-          toolVariationsGroupId: "tool-filter-1",
-          visibility: "disabled",
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      {
+        request: {
+          updateMcpServerForm: {
+            id: "mcp-server-1",
+            name: "Example server",
+            remoteMcpServerId: "remote-source-1",
+            tunneledMcpServerId: undefined,
+            toolsetId: undefined,
+            unproxiedMcpServerId: undefined,
+            environmentId: undefined,
+            toolVariationsGroupId: "tool-filter-1",
+            visibility: "disabled",
+          },
         },
       },
-    });
+      expect.anything(),
+    );
   });
 
   it("enables a disabled server as private", () => {
@@ -147,6 +156,7 @@ describe("MCPServerAvailabilityToggle", () => {
           }),
         }),
       }),
+      expect.anything(),
     );
   });
 
@@ -224,13 +234,43 @@ describe("MCPServerAvailabilityToggle", () => {
     expect(screen.getByText(/bypass per-tool access control/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Make public" }));
 
-    expect(mocks.mutate).toHaveBeenCalledWith({
-      request: {
-        updateMcpServerForm: expect.objectContaining({
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      {
+        request: {
+          updateMcpServerForm: expect.objectContaining({
+            tunneledMcpServerId: "tunneled-source-1",
+            visibility: "public",
+          }),
+        },
+      },
+      expect.anything(),
+    );
+
+    // The dialog stays open, showing Saving, until the change lands.
+    expect(screen.getByText("Make this MCP server public?")).toBeTruthy();
+    const options = mocks.mutate.mock.calls[0]?.[1] as {
+      onSuccess: () => void;
+    };
+    act(() => options.onSuccess());
+    expect(screen.queryByText("Make this MCP server public?")).toBeNull();
+  });
+
+  it("skips the confirmation when a tunneled server is already public", () => {
+    mocks.tunneledSource.mockReturnValue({ data: { allowPublic: true } });
+    renderInApp(
+      <MCPServerStatusDropdown
+        server={{
+          ...server,
+          remoteMcpServerId: undefined,
           tunneledMcpServerId: "tunneled-source-1",
           visibility: "public",
-        }),
-      },
-    });
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Public/ }));
+
+    expect(screen.queryByText("Make this MCP server public?")).toBeNull();
+    expect(mocks.mutate).not.toHaveBeenCalled();
   });
 });
