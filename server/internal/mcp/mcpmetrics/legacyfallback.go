@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -85,15 +86,60 @@ func NewLegacyFallbackCounter(meter metric.Meter, logger *slog.Logger) *LegacyFa
 	return &LegacyFallbackCounter{slugFallback: slugFallback, audienceAccepted: audienceAccepted}
 }
 
-// RecordToolsetSlugFallback counts one request served through the legacy
-// toolsets.mcp_slug lookup. Call it only after the legacy lookup resolved a
-// live toolset — counting bare address misses would keep the series nonzero
-// forever on scanner probes of nonexistent slugs.
-func (c *LegacyFallbackCounter) RecordToolsetSlugFallback(ctx context.Context, entryPoint LegacyFallbackEntryPoint) {
+// ToolsetCustomDomainState is a fallback-served toolset's custom domain binding.
+type ToolsetCustomDomainState string
+
+const (
+	ToolsetCustomDomainNone     ToolsetCustomDomainState = "none"
+	ToolsetCustomDomainLive     ToolsetCustomDomainState = "live"
+	ToolsetCustomDomainInactive ToolsetCustomDomainState = "inactive"
+	ToolsetCustomDomainDeleted  ToolsetCustomDomainState = "deleted"
+	ToolsetCustomDomainUnknown  ToolsetCustomDomainState = "unknown"
+)
+
+// FallbackRequestHost is the host kind a legacy fallback request arrived on.
+type FallbackRequestHost string
+
+const (
+	FallbackRequestHostPlatform     FallbackRequestHost = "platform"
+	FallbackRequestHostCustomDomain FallbackRequestHost = "custom_domain"
+)
+
+// ToolsetSlugFallback attributes one legacy fallback hit; logged, never a metric dimension.
+type ToolsetSlugFallback struct {
+	EntryPoint          LegacyFallbackEntryPoint
+	Slug                string
+	ToolsetID           uuid.UUID
+	ProjectID           uuid.UUID
+	CustomDomainHost    bool
+	CanonicalWrapper    bool
+	ToolsetCustomDomain ToolsetCustomDomainState
+}
+
+// RecordToolsetSlugFallback logs and counts one request served through the
+// legacy toolsets.mcp_slug lookup. Call it only after the legacy lookup
+// resolved a live toolset — counting bare address misses would keep the series
+// nonzero forever on scanner probes of nonexistent slugs.
+func (c *LegacyFallbackCounter) RecordToolsetSlugFallback(ctx context.Context, logger *slog.Logger, hit ToolsetSlugFallback) {
+	if logger != nil {
+		requestHost := FallbackRequestHostPlatform
+		if hit.CustomDomainHost {
+			requestHost = FallbackRequestHostCustomDomain
+		}
+		logger.InfoContext(ctx, "mcp request served via legacy toolset slug fallback",
+			attr.SlogMcpEntryPoint(hit.EntryPoint),
+			attr.SlogToolsetMCPSlug(hit.Slug),
+			attr.SlogToolsetID(hit.ToolsetID.String()),
+			attr.SlogProjectID(hit.ProjectID.String()),
+			attr.SlogMcpFallbackRequestHost(requestHost),
+			attr.SlogMcpFallbackCanonicalWrapper(hit.CanonicalWrapper),
+			attr.SlogMcpFallbackToolsetCustomDomain(hit.ToolsetCustomDomain),
+		)
+	}
 	if c == nil || c.slugFallback == nil {
 		return
 	}
-	c.slugFallback.Add(ctx, 1, metric.WithAttributes(attr.McpEntryPoint(entryPoint)))
+	c.slugFallback.Add(ctx, 1, metric.WithAttributes(attr.McpEntryPoint(hit.EntryPoint)))
 }
 
 // RecordLegacyAudienceAccepted counts one bearer accepted via the legacy

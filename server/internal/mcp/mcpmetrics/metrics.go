@@ -362,14 +362,15 @@ func (m *Metrics) RecordKillswitchIdentityCoverage(ctx context.Context, surface 
 	m.identityCoverage.Record(ctx, surface, identity, resource)
 }
 
-// RecordToolsetSlugFallback counts one request served through the legacy
-// toolsets.mcp_slug lookup after an mcp_endpoints address miss. Semantics on
+// RecordToolsetSlugFallback logs and counts one request served through the
+// legacy toolsets.mcp_slug lookup after an mcp_endpoints address miss. Semantics on
 // [LegacyFallbackCounter.RecordToolsetSlugFallback].
-func (m *Metrics) RecordToolsetSlugFallback(ctx context.Context, entryPoint LegacyFallbackEntryPoint) {
-	if m == nil {
-		return
+func (m *Metrics) RecordToolsetSlugFallback(ctx context.Context, logger *slog.Logger, hit ToolsetSlugFallback) {
+	var counter *LegacyFallbackCounter
+	if m != nil {
+		counter = m.legacyFallback
 	}
-	m.legacyFallback.RecordToolsetSlugFallback(ctx, entryPoint)
+	counter.RecordToolsetSlugFallback(ctx, logger, hit)
 }
 
 // RecordLegacyAudienceAccepted counts one bearer accepted via the legacy
