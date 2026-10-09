@@ -3534,6 +3534,7 @@ func TestGeneratePlatformMCPExistingServersClientsLocalServersAndPrivacy(t *test
 			"## 8. Optionally set up a local server behind a Speakeasy tunnel",
 			"only if the user chooses it; that is never an import",
 			"Call `get_tunneled_mcp_setup_handoff`",
+			"no inbound firewall port is needed, but the selected server does become reachable through its AICP MCP endpoint",
 			"Present the returned `setup_url` as a clickable link",
 			"follows the agent setup panel for the transport the panel offers",
 			"do not invent commands or flags",
@@ -3588,6 +3589,8 @@ func TestGeneratePlatformMCPExistingServersClientsLocalServersAndPrivacy(t *test
 	require.Less(t, strings.Index(workflow, "call `get_mcp_network_traffic`"), strings.Index(workflow, "Present the choice per server"))
 	require.Less(t, strings.Index(workflow, "## 9. Optionally restrict"), strings.Index(workflow, "## 10. Record diagnostics only when the user asks"))
 	require.NotContains(t, workflow, "do not offer to")
+	require.NotContains(t, workflow, "nothing on that network is exposed")
+	require.Contains(t, workflow, "it only decides whether step 9 can finish in this session")
 	require.NotContains(t, workflow, "Claude Code session")
 	for _, forbidden := range []string{"codex mcp add", "codex mcp remove", "tailscale up", "OAuth client secret:"} {
 		require.NotContains(t, workflow, forbidden)
