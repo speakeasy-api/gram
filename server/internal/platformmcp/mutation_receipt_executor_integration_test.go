@@ -184,16 +184,34 @@ func TestDeleteExpiredPlatformMCPOperationReceiptsBatch(t *testing.T) {
 	require.Equal(t, []uuid.UUID{live.ID}, remaining)
 }
 
-// A failed pre-check read cannot tell a replay from a first attempt, so it is
-// refused as unavailable before the charge rather than spending the allowance
-// on what may have been a free replay.
-func TestChargedMutationReceiptFailedPreCheckIsNotCharged(t *testing.T) {
+// The pre-check is only an optimisation, so a failed read must not refuse the
+// request: it falls through to the charge and the locked path, which decides.
+func TestChargedMutationReceiptFailedPreCheckFallsThrough(t *testing.T) {
 	t.Parallel()
 	probe := newReceiptProbe(t, "platform_mcp_receipt_failed_precheck")
 	probe.conn.Close()
 
 	_, err := probe.execute(t.Context(), "failed-read", "input")
-	require.Error(t, err)
-	require.Zero(t, probe.charges, "a failed pre-check read must not be charged")
+	require.ErrorContains(t, err, "begin receipt probe receipt", "the locked path, not the pre-check, decides the request")
+	require.Equal(t, 1, probe.charges)
 	require.Zero(t, probe.writes)
+}
+
+// A key that can only be refused is refused by the pre-check, with the locked
+// path's own refusal, and costs nothing: a different input under a used key
+// is a conflict however often it is retried.
+func TestChargedMutationReceiptDeterministicRefusalIsFree(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	probe := newReceiptProbe(t, "platform_mcp_receipt_refusal_free")
+
+	_, err := probe.execute(ctx, "reused", "input-a")
+	require.NoError(t, err)
+	require.Equal(t, 1, probe.charges)
+
+	probe.exhausted = true
+	_, err = probe.execute(ctx, "reused", "input-b")
+	require.EqualError(t, err, receiptKeyReusedMessage, "the refusal is the conflict, not rate_limited")
+	require.Equal(t, 1, probe.charges, "a refusal the stored receipt decides is not charged")
+	require.Equal(t, 1, probe.writes)
 }

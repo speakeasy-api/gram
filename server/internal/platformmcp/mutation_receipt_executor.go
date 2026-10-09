@@ -37,11 +37,14 @@ type mutationReceiptExecution[T any] struct {
 // budget is a Redis round-trip, so it must never be charged while a
 // PostgreSQL connection or the receipt lock is held. The order is therefore:
 //
-//  1. an unlocked, read-only lookup of a completed, unexpired receipt for
-//     exactly this request, answered without charging. A failed lookup is
-//     refused as unavailable rather than charged, since it may have been a
-//     replay;
-//  2. on a miss, charge, still outside any transaction;
+//  1. an unlocked, read-only lookup of an unexpired receipt for this key. A
+//     completed receipt for exactly this input is answered without charging,
+//     and a receipt that can only be refused — a different input under the
+//     key, no completed result, or an unreadable one — is refused without
+//     charging, with the same refusal the locked path gives;
+//  2. otherwise, including when the lookup itself fails, charge, still
+//     outside any transaction. The pre-check is only an optimisation, so a
+//     failed read must not refuse a request the locked path could serve;
 //  3. executeMutationReceipt, whose locked re-check still replays a duplicate
 //     that committed concurrently. Two racing first attempts may then both be
 //     charged, which errs on the side of the budget.
@@ -52,12 +55,17 @@ func executeChargedMutationReceipt[T any](ctx context.Context, charge func(conte
 	if charge == nil {
 		return OperationReceipt{}, execution.Unavailable(errors.New("mutation receipt charge is missing"))
 	}
-	replay, ok, err := completedMutationReceipt(ctx, execution)
-	if err != nil {
-		return OperationReceipt{}, execution.Unavailable(err)
-	}
-	if ok {
+	replay, check := completedMutationReceipt(ctx, execution)
+	switch check {
+	case receiptReplay:
 		return replay, nil
+	case receiptKeyReused:
+		return OperationReceipt{}, execution.Conflict(receiptKeyReusedMessage)
+	case receiptIncomplete:
+		return OperationReceipt{}, execution.Conflict(receiptIncompleteMessage)
+	case receiptUnreadable:
+		return OperationReceipt{}, execution.Unavailable(errStoredReceiptInvalid)
+	case receiptMiss:
 	}
 	if err := charge(ctx); err != nil {
 		return OperationReceipt{}, err
@@ -80,46 +88,72 @@ func chargeRerun(ctx context.Context, receipt OperationReceipt, charge func(cont
 	return charge(ctx)
 }
 
-// noReplay is the empty receipt a pre-check returns beside false.
+// receiptCheck is what a pre-check lookup found under a request's key. Every
+// answer but receiptMiss is final: receipts are written and completed in one
+// transaction and expire on the database clock, so a stored row cannot change
+// before the locked path would read it.
+type receiptCheck int
+
+const (
+	// receiptMiss is no unexpired receipt, or a failed read; the locked path
+	// decides.
+	receiptMiss receiptCheck = iota
+	// receiptReplay is a completed receipt for exactly this input.
+	receiptReplay
+	// receiptKeyReused is a receipt for a different input under the key.
+	receiptKeyReused
+	// receiptIncomplete is a receipt with no completed result.
+	receiptIncomplete
+	// receiptUnreadable is a completed result the caller cannot decode.
+	receiptUnreadable
+)
+
+const (
+	receiptKeyReusedMessage  = "The idempotency key was already used with different input."
+	receiptIncompleteMessage = "The matching mutation has no completed replay result."
+)
+
+var errStoredReceiptInvalid = errors.New("stored receipt payload is invalid")
+
+// noReplay is the empty receipt a pre-check returns beside anything but
+// receiptReplay.
 var noReplay OperationReceipt
 
-// completedMutationReceipt is the unlocked pre-check. Anything but a completed,
-// unexpired receipt for exactly this input — no receipt, a pending one, a
-// different input under the same key, or an invalid payload — is a miss, and
-// executeMutationReceipt decides it under its lock. A failed read is returned
-// as an error instead: it cannot tell a replay from a first attempt, so the
-// caller must not charge on it.
-func completedMutationReceipt[T any](ctx context.Context, execution mutationReceiptExecution[T]) (OperationReceipt, bool, error) {
+// completedMutationReceipt is the unlocked pre-check; see receiptCheck.
+func completedMutationReceipt[T any](ctx context.Context, execution mutationReceiptExecution[T]) (OperationReceipt, receiptCheck) {
 	if execution.DB == nil || execution.ValidateReplay == nil {
-		return noReplay, false, nil
+		return noReplay, receiptMiss
 	}
-	// A caller the locked path would refuse as malformed gets no replay here
+	// A caller the locked path would refuse as malformed gets no answer here
 	// either; it falls through to that refusal.
 	if _, _, err := principalConnection(execution.Principal); err != nil {
-		return noReplay, false, nil
+		return noReplay, receiptMiss
 	}
 	row, err := platformrepo.New(execution.DB).GetUnexpiredPlatformMCPOperationReceipt(ctx, platformrepo.GetUnexpiredPlatformMCPOperationReceiptParams{
 		OrganizationID: execution.Principal.OrganizationID, ProjectID: execution.Project.ID, Operation: execution.Operation, IdempotencyKey: execution.IdempotencyKey,
 		UserID: conv.ToPGText(execution.Principal.UserID), SubjectUrn: userSubjectURN(execution.Principal.UserID),
 	})
-	return replayableReceipt(row, err, execution.InputHash, execution.ValidateReplay)
+	if err != nil {
+		return noReplay, receiptMiss
+	}
+	return replayableReceipt(row, execution.InputHash, execution.ValidateReplay)
 }
 
-// replayableReceipt judges a pre-check lookup: whether the stored receipt
-// answers this exact request, a plain miss, or a failed read, which is
-// returned. Expiry is not judged here: the query that loaded the row already
-// filtered it with the database clock, the same clock the locked path uses.
-func replayableReceipt(row platformrepo.PlatformMcpOperationReceipt, lookupErr error, inputHash string, valid func([]byte) bool) (OperationReceipt, bool, error) {
-	if errors.Is(lookupErr, pgx.ErrNoRows) {
-		return noReplay, false, nil
+// replayableReceipt judges a stored receipt against this request, in the same
+// order the locked path does. Expiry is not judged here: the query that loaded
+// the row already filtered it with the database clock, the same clock the
+// locked path uses.
+func replayableReceipt(row platformrepo.PlatformMcpOperationReceipt, inputHash string, valid func([]byte) bool) (OperationReceipt, receiptCheck) {
+	switch {
+	case row.InputHash != inputHash:
+		return noReplay, receiptKeyReused
+	case row.Status != receiptStatusSucceeded || len(row.ResultPayload) == 0:
+		return noReplay, receiptIncomplete
+	case !valid(row.ResultPayload):
+		return noReplay, receiptUnreadable
+	default:
+		return operationReceiptFromRow(row, true), receiptReplay
 	}
-	if lookupErr != nil {
-		return noReplay, false, fmt.Errorf("look up replay receipt: %w", lookupErr)
-	}
-	if row.InputHash != inputHash || row.Status != receiptStatusSucceeded || len(row.ResultPayload) == 0 || !valid(row.ResultPayload) {
-		return noReplay, false, nil
-	}
-	return operationReceiptFromRow(row, true), true, nil
 }
 
 // executeMutationReceipt owns the common idempotency transaction used by
@@ -151,13 +185,13 @@ func executeMutationReceipt[T any](ctx context.Context, execution mutationReceip
 	switch {
 	case err == nil:
 		if stored.InputHash != execution.InputHash {
-			return OperationReceipt{}, execution.Conflict("The idempotency key was already used with different input.")
+			return OperationReceipt{}, execution.Conflict(receiptKeyReusedMessage)
 		}
 		if stored.Status != receiptStatusSucceeded || len(stored.ResultPayload) == 0 {
-			return OperationReceipt{}, execution.Conflict("The matching mutation has no completed replay result.")
+			return OperationReceipt{}, execution.Conflict(receiptIncompleteMessage)
 		}
 		if !execution.ValidateReplay(stored.ResultPayload) {
-			return OperationReceipt{}, execution.Unavailable(errors.New("stored receipt payload is invalid"))
+			return OperationReceipt{}, execution.Unavailable(errStoredReceiptInvalid)
 		}
 		if err := tx.Commit(ctx); err != nil {
 			return OperationReceipt{}, fmt.Errorf("commit %s replay: %w", execution.Label, err)
