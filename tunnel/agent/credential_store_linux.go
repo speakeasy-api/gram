@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -67,9 +68,9 @@ type linuxCredentialStore struct {
 // openCredentialStore validates root, publishes this agent's instance
 // directory and scavenges the directories of agents that are gone.
 func openCredentialStore(ctx context.Context, root string, logger *slog.Logger) (credentialStore, error) {
-	rootFD, err := unix.Open(root, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	rootFD, err := openTrustedRoot(root)
 	if err != nil {
-		return nil, fmt.Errorf("open credentials root: %w", err)
+		return nil, fmt.Errorf("credentials root %s: %w", root, err)
 	}
 	defer func() { _ = unix.Close(rootFD) }()
 	if err := requireMemoryBacked(rootFD); err != nil {
@@ -129,6 +130,56 @@ func requireMemoryBacked(fd int) error {
 	default:
 		return errors.New("must be on a memory-backed filesystem (tmpfs or ramfs)")
 	}
+}
+
+// openTrustedRoot opens root one component at a time from "/", without
+// following symlinks, and checks that no other user can rename or replace
+// anything on the way: server processes reopen the token file by pathname,
+// so a path another user could redirect would hand them a different file.
+// Every directory must belong to root or the agent's user and be writable
+// only by its owner, unless it is sticky (like /dev/shm), where others
+// cannot rename entries they do not own.
+func openTrustedRoot(root string) (int, error) {
+	fd, err := unix.Open("/", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return -1, fmt.Errorf("open /: %w", err)
+	}
+	if err := requireTrustedDir(fd); err != nil {
+		_ = unix.Close(fd)
+		return -1, fmt.Errorf("/: %w", err)
+	}
+	for _, name := range strings.Split(strings.TrimPrefix(root, "/"), "/") {
+		if name == "" {
+			continue
+		}
+		next, err := unix.Openat(fd, name, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+		_ = unix.Close(fd)
+		if err != nil {
+			return -1, fmt.Errorf("open %s: %w", name, err)
+		}
+		fd = next
+		if err := requireTrustedDir(fd); err != nil {
+			_ = unix.Close(fd)
+			return -1, fmt.Errorf("%s: %w", name, err)
+		}
+	}
+	return fd, nil
+}
+
+// requireTrustedDir checks that only root or the agent's user can change
+// the directory's entries, short of a sticky directory's own entries.
+func requireTrustedDir(fd int) error {
+	var st unix.Stat_t
+	if err := unix.Fstat(fd, &st); err != nil {
+		return fmt.Errorf("stat: %w", err)
+	}
+	if st.Uid != 0 && int(st.Uid) != unix.Geteuid() {
+		return errors.New("owned by another user")
+	}
+	if st.Mode&0o022 != 0 && st.Mode&unix.S_ISVTX == 0 {
+		return errors.New("writable by other users without the sticky bit")
+	}
+	return nil
 }
 
 // requireSameObject checks that path, which is handed to server processes,
@@ -334,7 +385,20 @@ func (s *linuxCredentialStore) scavengeOne(name string, temp bool) error {
 	if temp && time.Since(time.Unix(st.Mtim.Unix())) < tempInstanceGrace {
 		return nil
 	}
+	sameInstance := func() bool {
+		var now unix.Stat_t
+		return unix.Fstatat(s.baseFD, name, &now, unix.AT_SYMLINK_NOFOLLOW) == nil && now.Dev == st.Dev && now.Ino == st.Ino
+	}
 	lockFD, err := openLockFile(fd, instanceLockName, temp)
+	if errors.Is(err, unix.ENOENT) {
+		// Cleanup removes the lock last, so a finalized instance without
+		// one was interrupted just before its own removal. Remove it only
+		// if it is empty; anything else is left alone.
+		if sameInstance() && unix.Unlinkat(s.baseFD, name, unix.AT_REMOVEDIR) == nil {
+			return nil
+		}
+		return fmt.Errorf("instance %s has no lock and is not empty", name)
+	}
 	if err != nil {
 		return err
 	}
@@ -342,17 +406,29 @@ func (s *linuxCredentialStore) scavengeOne(name string, temp bool) error {
 	if !tryLock(lockFD) {
 		return nil
 	}
-	var now unix.Stat_t
-	if err := unix.Fstatat(s.baseFD, name, &now, unix.AT_SYMLINK_NOFOLLOW); err != nil || now.Dev != st.Dev || now.Ino != st.Ino {
+	if !sameInstance() {
 		return fmt.Errorf("instance %s changed while scavenging", name)
 	}
-	if err := removeAllAt(fd); err != nil {
-		return fmt.Errorf("remove stale instance contents: %w", err)
-	}
-	if err := unix.Unlinkat(s.baseFD, name, unix.AT_REMOVEDIR); err != nil {
+	if err := removeInstance(s.baseFD, name, fd); err != nil {
 		return fmt.Errorf("remove stale instance: %w", err)
 	}
 	s.logger.Info("tunnel credentials removed a stale agent's files")
+	return nil
+}
+
+// removeInstance deletes an instance directory whose lock the caller holds.
+// The lock goes last: if anything else cannot be removed, the lock stays so
+// a later scavenger can recognize the instance and finish the job.
+func removeInstance(baseFD int, name string, instFD int) error {
+	if err := removeAllExcept(instFD, instanceLockName); err != nil {
+		return fmt.Errorf("remove contents: %w", err)
+	}
+	if err := unix.Unlinkat(instFD, instanceLockName, 0); err != nil && !errors.Is(err, unix.ENOENT) {
+		return fmt.Errorf("remove lock: %w", err)
+	}
+	if err := unix.Unlinkat(baseFD, name, unix.AT_REMOVEDIR); err != nil {
+		return fmt.Errorf("remove directory: %w", err)
+	}
 	return nil
 }
 
@@ -381,6 +457,11 @@ func readDirNames(dirFD int) ([]string, error) {
 // removeAllAt deletes everything inside dirFD without following symlinks or
 // crossing into another filesystem.
 func removeAllAt(dirFD int) error {
+	return removeAllExcept(dirFD, "")
+}
+
+// removeAllExcept is removeAllAt that keeps the top-level entry keep.
+func removeAllExcept(dirFD int, keep string) error {
 	var parent unix.Stat_t
 	if err := unix.Fstat(dirFD, &parent); err != nil {
 		return fmt.Errorf("stat directory: %w", err)
@@ -391,6 +472,9 @@ func removeAllAt(dirFD int) error {
 	}
 	var errs []error
 	for _, name := range names {
+		if keep != "" && name == keep {
+			continue
+		}
 		var st unix.Stat_t
 		if err := unix.Fstatat(dirFD, name, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 			if !errors.Is(err, unix.ENOENT) {
@@ -444,15 +528,24 @@ func (s *linuxCredentialStore) createSession() (credentialDir, error) {
 	return d, nil
 }
 
+// Close removes the instance while holding its lock. Final removal of the
+// lock and directory happens under the maintenance lock, like scavenging; if
+// that lock cannot be had, or anything else cannot be removed, the lock file
+// stays for a later agent's scavenger.
 func (s *linuxCredentialStore) Close() error {
-	err := removeAllAt(s.instFD)
-	if uerr := unix.Unlinkat(s.baseFD, s.instName, unix.AT_REMOVEDIR); uerr != nil {
-		err = errors.Join(err, uerr)
+	defer func() {
+		_ = unix.Close(s.instFD)
+		_ = unix.Close(s.lockFD)
+		_ = unix.Close(s.baseFD)
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), maintenanceLockTimeout)
+	defer cancel()
+	unlock, err := s.lockMaintenance(ctx)
+	if err != nil {
+		return errors.Join(err, removeAllExcept(s.instFD, instanceLockName))
 	}
-	_ = unix.Close(s.instFD)
-	_ = unix.Close(s.lockFD)
-	_ = unix.Close(s.baseFD)
-	return err
+	defer unlock()
+	return removeInstance(s.baseFD, s.instName, s.instFD)
 }
 
 type linuxCredentialDir struct {

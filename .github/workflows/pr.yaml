@@ -2574,6 +2574,12 @@ jobs:
       - name: Test
         run: mise exec -- go test -race -count=1 ./tunnel/...
 
+      # Switching to another user needs root; the job itself runs unprivileged.
+      - name: Test credential paths against another user
+        run: |
+          mise exec -- go test -c -race -o "$RUNNER_TEMP/tunnel-agent.test" ./tunnel/agent
+          sudo TUNNEL_TEST_REQUIRE_OTHER_USER=1 "$RUNNER_TEMP/tunnel-agent.test" -test.v -test.run 'TestCredentialTokenPathCannotBeRedirectedByAnotherUser'
+
       - name: Vet for Windows
         run: GOOS=windows mise exec -- go vet ./tunnel/...
 
