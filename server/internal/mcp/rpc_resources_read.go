@@ -163,6 +163,8 @@ func handleResourcesRead(
 			ToolsetID:             &toolset.ID,
 			MCPURL:                &mcpURL,
 			MCPSessionID:          &payload.sessionID,
+			MCPServerID:           optionalUUIDString(payload.mcpServerID),
+			MCPEndpointID:         optionalUUIDString(payload.mcpEndpointID),
 			MetaMCPServerID:       nil,
 			ChatID:                nil,
 			Type:                  plan.BillingType,
@@ -186,6 +188,7 @@ func handleResourcesRead(
 		}
 
 		logAttrs.RecordToolsetSlug(payload.toolset)
+		recordServingLogAttrs(logAttrs, payload.mcpServerID, payload.mcpEndpointID)
 		logAttrs.RecordMCPURL(mcpURL)
 		params := tm.LogParams{
 			Timestamp: time.Now(),

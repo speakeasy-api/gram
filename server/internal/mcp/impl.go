@@ -95,6 +95,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+	"github.com/speakeasy-api/gram/server/internal/wide"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
@@ -345,6 +346,8 @@ type mcpInputs struct {
 	// via an mcp_endpoint. Nil on the legacy toolset-by-slug path and for
 	// internal (agent-workflow) callers, which have no fronting server.
 	mcpServerID *uuid.UUID
+	// mcpEndpointID: nil off the endpoint path and for gateway member dispatch.
+	mcpEndpointID *uuid.UUID
 	// wrapperRBACResourceID overrides the resource id for per-tool mcp:connect
 	// checks: the fronting mcp_servers id when the request is wrapper-governed
 	// (AIS-633). Empty falls back to the described toolset's own id, which is
@@ -389,6 +392,33 @@ type mcpInputs struct {
 	// session row by the issuer gate. Nil means all tools; non-nil is always
 	// restrictive and intersects with the live toolset, ?tags=, and RBAC.
 	toolSelection *toolfilter.SessionSelection
+}
+
+// recordServingAnalytics adds the known serving ids to product event properties.
+func (p *mcpInputs) recordServingAnalytics(props map[string]any) {
+	if id := optionalUUIDString(p.mcpServerID); id != nil {
+		props["mcp_server_id"] = *id
+	}
+	if id := optionalUUIDString(p.mcpEndpointID); id != nil {
+		props["mcp_endpoint_id"] = *id
+	}
+}
+
+// recordServingLogAttrs adds the known serving ids to a telemetry row.
+func recordServingLogAttrs(logAttrs tm.HTTPLogAttributes, serverID, endpointID *uuid.UUID) {
+	if id := optionalUUIDString(serverID); id != nil {
+		logAttrs[attr.McpServerIDKey] = *id
+	}
+	if id := optionalUUIDString(endpointID); id != nil {
+		logAttrs[attr.McpEndpointIDKey] = *id
+	}
+}
+
+func optionalUUIDString(id *uuid.UUID) *string {
+	if id == nil || *id == uuid.Nil {
+		return nil
+	}
+	return new(id.String())
 }
 
 func NewService(
@@ -1098,6 +1128,9 @@ type hostedServing struct {
 	// mcpServerID for telemetry and the hosted kill switch; nil on the legacy
 	// path.
 	mcpServerID *uuid.UUID
+
+	// mcpEndpointID for telemetry; nil on the legacy path.
+	mcpEndpointID *uuid.UUID
 }
 
 // hostedServingFromToolset derives the hosting configuration for the legacy
@@ -1110,6 +1143,7 @@ func hostedServingFromToolset(toolset *toolsets_repo.Toolset) *hostedServing {
 		rbacResourceID:        toolset.ID,
 		toolVariationsGroupID: nil,
 		mcpServerID:           nil,
+		mcpEndpointID:         nil,
 	}
 }
 
@@ -1403,6 +1437,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		apiKeyID:                 apiKeyID,
 		toolVariationsGroupID:    toolVariationsGroupID,
 		mcpServerID:              cfg.mcpServerID,
+		mcpEndpointID:            cfg.mcpEndpointID,
 		wrapperRBACResourceID:    wrapperRBACResourceID,
 		wrapperIsPublic:          wrapperIsPublic,
 		metaMcpServerID:          "",
@@ -1429,6 +1464,15 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		if cfg.mcpServerID != nil {
 			span.SetAttributes(attr.McpServerID(cfg.mcpServerID.String()))
 		}
+		if cfg.mcpEndpointID != nil {
+			span.SetAttributes(attr.McpEndpointID(cfg.mcpEndpointID.String()))
+		}
+	}
+	if cfg.mcpServerID != nil {
+		wide.Push(ctx, attr.SlogMcpServerID(cfg.mcpServerID.String()))
+	}
+	if cfg.mcpEndpointID != nil {
+		wide.Push(ctx, attr.SlogMcpEndpointID(cfg.mcpEndpointID.String()))
 	}
 
 	// Check security schemes before dispatching any RPC — including initialize.
@@ -1762,7 +1806,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		start := time.Now()
 		defer func() {
-			s.metrics.RecordMCPRequestDuration(ctx, req.Method, requestContext.Host+requestContext.ReqURL, time.Since(start))
+			s.metrics.RecordMCPRequestDuration(ctx, req.Method, requestContext.Host+requestContext.ReqURL, conv.PtrValOr(optionalUUIDString(payload.mcpServerID), ""), time.Since(start))
 		}()
 	}
 

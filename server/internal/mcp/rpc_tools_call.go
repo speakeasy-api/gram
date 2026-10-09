@@ -185,7 +185,6 @@ func handleToolsCall(
 	var mcpURL string
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		mcpURL = requestContext.Host + requestContext.ReqURL
-		metrics.RecordMCPToolCall(ctx, toolset.OrganizationID, mcpURL, params.Name)
 	}
 
 	toolsetHelpers := toolsets.NewToolsets(db, platformExtras...)
@@ -220,6 +219,10 @@ func handleToolsCall(
 			// Ambiguous wrappers leave the call unattributed rather than failing it.
 			logger.WarnContext(ctx, "multiple enabled MCP servers wrap the legacy toolset; skipping server attribution", attr.SlogToolsetID(toolsetID.String()))
 		}
+	}
+
+	if mcpURL != "" {
+		metrics.RecordMCPToolCall(ctx, toolset.OrganizationID, mcpURL, conv.PtrValOr(optionalUUIDString(attributedMCPServerID), ""), params.Name)
 	}
 
 	executor := externalmcp.BuildProxyToolExecutor(logger, guardianPolicy, toolset.Tools)
@@ -411,6 +414,8 @@ func handleToolsCall(
 			MCPURL:                &mcpURL,
 			MCPSessionID:          &payload.sessionID,
 			ChatID:                conv.PtrEmpty(payload.chatID),
+			MCPServerID:           optionalUUIDString(attributedMCPServerID),
+			MCPEndpointID:         optionalUUIDString(payload.mcpEndpointID),
 			MetaMCPServerID:       conv.PtrEmpty(payload.metaMcpServerID),
 			Type:                  plan.BillingType,
 			ResourceURI:           "",
@@ -442,9 +447,7 @@ func handleToolsCall(
 			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
 		}
 		logAttrs.RecordToolsetSlug(payload.toolset)
-		if attributedMCPServerID != nil {
-			logAttrs[attr.McpServerIDKey] = attributedMCPServerID.String()
-		}
+		recordServingLogAttrs(logAttrs, attributedMCPServerID, payload.mcpEndpointID)
 		if payload.metaMcpServerID != "" {
 			logAttrs[attr.MetaMcpServerIDKey] = payload.metaMcpServerID
 		}

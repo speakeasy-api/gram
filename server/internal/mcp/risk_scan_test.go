@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	templatesrepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -707,4 +708,6 @@ func TestRiskScan_ResourceReadKeepsIdentityAndSyntheticBody(t *testing.T) {
 	require.Equal(t, mcpriskscan.MethodResourcesRead, events[0]["gram.mcp.risk.scan.method"])
 	require.Equal(t, mcpriskscan.PhaseRequest, events[0]["gram.mcp.risk.scan.phase"])
 	require.Equal(t, mcpriskscan.PhaseResponse, events[1]["gram.mcp.risk.scan.phase"])
+
+	requireHostedAttributionRow(t, telemetry.EventSourceResourceRead, server.ID, mcpEndpointIDForServer(t, ctx, ti, projectID, server.ID))
 }

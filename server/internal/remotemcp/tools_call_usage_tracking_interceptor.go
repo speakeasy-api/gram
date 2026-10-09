@@ -105,6 +105,8 @@ func (i *ToolsCallUsageTrackingInterceptor) InterceptToolsCallResponse(ctx conte
 		ResponseStatusCode:    statusCode,
 		ToolsetID:             nil,
 		MCPSessionID:          sessionID,
+		MCPServerID:           nil,
+		MCPEndpointID:         nil,
 		MetaMCPServerID:       conv.PtrEmpty(i.metaMCPServerID),
 		FunctionCPUUsage:      nil,
 		FunctionMemUsage:      nil,

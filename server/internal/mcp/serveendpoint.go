@@ -288,7 +288,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 		if mcpServer.ID == mcpServer.ToolsetID.UUID && !toolset.McpEnabled {
 			return oops.E(oops.CodeNotFound, nil, "mcp server not found")
 		}
-		if err := s.serveToolsetResolved(w, r, &toolset, slug, mcpRouteBase, hostedServingFromWrapper(mcpServer, issuerGated), nil, sessionToolSelection, pendingIssuerGate, prepared); err != nil {
+		if err := s.serveToolsetResolved(w, r, &toolset, slug, mcpRouteBase, hostedServingFromWrapper(mcpEndpoint.ID, mcpServer, issuerGated), nil, sessionToolSelection, pendingIssuerGate, prepared); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
 		}
 		return nil
@@ -305,7 +305,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 // callerGated reports whether the caller already ran the issuer gate keyed on
 // mcp_servers.user_session_issuer_id; the in-toolset gate never runs on this
 // path regardless.
-func hostedServingFromWrapper(mcpServer *mcpserversrepo.McpServer, callerGated bool) *hostedServing {
+func hostedServingFromWrapper(endpointID uuid.UUID, mcpServer *mcpserversrepo.McpServer, callerGated bool) *hostedServing {
 	var groupID *uuid.UUID
 	if mcpServer.ToolVariationsGroupID.Valid {
 		id := mcpServer.ToolVariationsGroupID.UUID
@@ -319,6 +319,7 @@ func hostedServingFromWrapper(mcpServer *mcpserversrepo.McpServer, callerGated b
 		rbacResourceID:        mcpServer.ID,
 		toolVariationsGroupID: groupID,
 		mcpServerID:           &serverID,
+		mcpEndpointID:         &endpointID,
 	}
 }
 
