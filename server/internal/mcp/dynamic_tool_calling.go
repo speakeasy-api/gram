@@ -68,9 +68,10 @@ func buildDynamicSessionTools(
 	findDescription := "Search through the available tools in this MCP server using a search query. The result will be a list of tools that could help you complete your task."
 	executeDescription := "Execute one tool. Pass its exact name as `name` and its JSON payload, matching the schema from describe_tools, as `arguments`. Do not call a tool without first describing it to get the input schema."
 
-	// Tags are read from the whole toolset's index, not from toolset.Tools,
-	// so callers whose catalog was narrowed pass includeTags=false and get no
-	// tag suggestions rather than tags of tools withheld from them.
+	// Tags are read from the whole toolset's index, not from toolset.Tools.
+	// Callers subject to per-tool checks whose catalog was narrowed pass
+	// includeTags=false and get no tag suggestions rather than tags of tools
+	// withheld from them.
 	var availableTags []string
 	if includeTags {
 		availableTags, _ = vectorToolStore.GetToolsetAvailableTags(ctx, *toolset)
