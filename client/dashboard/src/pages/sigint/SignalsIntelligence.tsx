@@ -11,7 +11,7 @@ export default function SignalsIntelligence(): JSX.Element {
   return (
     <TabbedPage
       title="Signals intelligence"
-      description="Create reusable signals and organize them into sensors. Classification is not active in this preview."
+      description="Create reusable signals, organize them into sensors, and enable or pause evaluation."
       stage="preview"
       activeTab={activeTab}
       tabs={[
