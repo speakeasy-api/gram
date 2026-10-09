@@ -2913,6 +2913,7 @@ func unmarshalTunneledMcpServerResponseBodyToTypesTunneledMcpServer(v *TunneledM
 		ActiveConnectionCount:               *v.ActiveConnectionCount,
 		ActiveConsumerSessionCount:          *v.ActiveConsumerSessionCount,
 		EnvironmentLinked:                   v.EnvironmentLinked,
+		EnvironmentLinkAuthorized:           v.EnvironmentLinkAuthorized,
 		CreatedAt:                           *v.CreatedAt,
 		UpdatedAt:                           *v.UpdatedAt,
 	}

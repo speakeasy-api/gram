@@ -21,9 +21,10 @@ func BuildRemoteMcpServerView(server repo.RemoteMcpServer) *types.RemoteMcpServe
 		TransportType: server.TransportType,
 		// Set by getServer, which is the only response that checks the
 		// source's MCP servers for environment links.
-		EnvironmentLinked: nil,
-		CreatedAt:         server.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:         server.UpdatedAt.Time.Format(time.RFC3339),
+		EnvironmentLinked:         nil,
+		EnvironmentLinkAuthorized: nil,
+		CreatedAt:                 server.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                 server.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 

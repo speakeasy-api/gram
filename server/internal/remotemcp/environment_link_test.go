@@ -2,6 +2,7 @@ package remotemcp_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -269,4 +270,110 @@ func TestGetServer_EnvironmentLinkedIsFalseForUnlinkedSources(t *testing.T) {
 	linked := getServer(t, f.ctx, f, f.remoteID).EnvironmentLinked
 	require.NotNil(t, linked)
 	require.False(t, *linked)
+}
+
+func (f remoteLinkFixture) secondEnvironment(t *testing.T) uuid.UUID {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(f.ctx)
+	require.True(t, ok)
+	slug := "env-" + uuid.NewString()[:8]
+	env, err := environmentsrepo.New(f.ti.conn).CreateEnvironment(f.ctx, environmentsrepo.CreateEnvironmentParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      f.projectID,
+		Name:           slug,
+		Slug:           slug,
+		Description:    pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	return env.ID
+}
+
+// linkedTo seeds a server on the remote linked to environmentID.
+func (f remoteLinkFixture) linkedTo(t *testing.T, environmentID uuid.UUID, visibility string) mcpserversrepo.McpServer {
+	t.Helper()
+
+	id := uuid.New()
+	server, err := mcpserversrepo.New(f.ti.conn).CreateMCPServer(f.ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                id,
+		ProjectID:         f.projectID,
+		Name:              conv.ToPGText("wrapper " + id.String()[:8]),
+		Slug:              conv.ToPGText("wrapper-" + id.String()[:8]),
+		EnvironmentID:     uuid.NullUUID{UUID: environmentID, Valid: true},
+		RemoteMcpServerID: uuid.NullUUID{UUID: f.remoteID, Valid: true},
+		Visibility:        visibility,
+		NetworkAccessMode: conv.ToPGText("public_only"),
+	})
+	require.NoError(t, err)
+	return server
+}
+
+func (f remoteLinkFixture) excludedFrom(t *testing.T, environmentID uuid.UUID, extra ...authz.Grant) context.Context {
+	t.Helper()
+	grants := append([]authz.Grant{
+		authz.NewGrant(authz.ScopeMCPWrite, f.projectID.String()),
+		authz.NewGrantWithSelector(authz.ScopeEnvironmentRead, authz.Selector{
+			authz.SelectorKeyResourceKind: "environment",
+			authz.SelectorKeyResourceID:   authz.WildcardResource,
+			authz.SelectorKeyProjectID:    f.projectID.String(),
+		}),
+		authz.NewGrantWithSelector(authz.ScopeEnvironmentBlockedRead, authz.Selector{
+			authz.SelectorKeyResourceKind: "environment",
+			authz.SelectorKeyResourceID:   environmentID.String(),
+			authz.SelectorKeyProjectID:    f.projectID.String(),
+		}),
+	}, extra...)
+	return withExactAccessGrants(t, f.ctx, f.ti.conn, grants...)
+}
+
+// Every environment linked on the source counts, including one reached only
+// through a disabled server the caller cannot list.
+func TestUpdateServer_URLChangeRefusedWhenAnyLinkedEnvironmentIsExcluded(t *testing.T) {
+	t.Parallel()
+
+	f := newRemoteLinkFixture(t)
+	readable := f.secondEnvironment(t)
+	f.linkedTo(t, readable, "private")
+	hidden := f.linkedTo(t, f.envID, "disabled")
+	originalURL := f.storedURL(t)
+
+	caller := f.excludedFrom(t, f.envID, authz.NewGrantWithSelector(authz.ScopeMCPBlockedRead, authz.Selector{
+		authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+		authz.SelectorKeyResourceID:   hidden.ID.String(),
+	}))
+	got := getServer(t, caller, f, f.remoteID)
+	require.True(t, conv.PtrValOr(got.EnvironmentLinked, false))
+	require.False(t, conv.PtrValOr(got.EnvironmentLinkAuthorized, true))
+
+	_, err := f.ti.service.UpdateServer(caller, urlUpdate(f.remoteID, "https://moved.example.com/mcp"))
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Equal(t, originalURL, f.storedURL(t))
+
+	// Excluded from an environment the source does not use: allowed.
+	other := f.excludedFrom(t, f.secondEnvironment(t))
+	got = getServer(t, other, f, f.remoteID)
+	require.True(t, conv.PtrValOr(got.EnvironmentLinkAuthorized, false))
+	_, err = f.ti.service.UpdateServer(other, urlUpdate(f.remoteID, "https://moved.example.com/mcp"))
+	require.NoError(t, err)
+}
+
+func TestGetServer_EnvironmentLinkAuthorizedNamesNoEnvironment(t *testing.T) {
+	t.Parallel()
+
+	f := newRemoteLinkFixture(t)
+	f.linkedTo(t, f.envID, "private")
+
+	got := getServer(t, f.mcpWriteOnly(t), f, f.remoteID)
+	require.True(t, conv.PtrValOr(got.EnvironmentLinked, false))
+	require.False(t, conv.PtrValOr(got.EnvironmentLinkAuthorized, true))
+	require.NotContains(t, fmt.Sprintf("%#v", *got), f.envID.String())
+
+	got = getServer(t, f.withEnvironmentAuthority(t), f, f.remoteID)
+	require.True(t, conv.PtrValOr(got.EnvironmentLinkAuthorized, false))
+
+	// Unlinked source: nothing to authorize.
+	unlinked := uuid.MustParse(createTestServer(t, f.ctx, f.ti).ID)
+	got = getServer(t, f.mcpWriteOnly(t), f, unlinked)
+	require.False(t, conv.PtrValOr(got.EnvironmentLinked, true))
+	require.True(t, conv.PtrValOr(got.EnvironmentLinkAuthorized, false))
 }

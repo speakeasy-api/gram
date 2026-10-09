@@ -55,9 +55,14 @@ type TunneledMcpServer struct {
 	// Total MCP consumer sessions currently pinned across active tunnel connections
 	ActiveConsumerSessionCount int
 	// Returned by getServer only. True when a non-deleted MCP server on this
-	// tunnel, disabled ones included, has a linked environment; rotating the key
-	// then also requires environment:read across the project.
+	// tunnel, disabled ones included, has a linked environment. Names no server or
+	// environment.
 	EnvironmentLinked *bool
+	// Returned by getServer only. True when the caller holds the environment
+	// authority rotating the key needs: always when nothing is linked; otherwise
+	// project-wide environment:read plus read access to every linked environment.
+	// It does not cover the source's own mcp:write check.
+	EnvironmentLinkAuthorized *bool
 	// When the tunneled MCP server source was created
 	CreatedAt string
 	// When the tunneled MCP server source was last updated

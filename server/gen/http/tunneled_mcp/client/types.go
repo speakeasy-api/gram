@@ -171,9 +171,14 @@ type GetServerResponseBody struct {
 	// Total MCP consumer sessions currently pinned across active tunnel connections
 	ActiveConsumerSessionCount *int `form:"active_consumer_session_count,omitempty" json:"active_consumer_session_count,omitempty" xml:"active_consumer_session_count,omitempty"`
 	// Returned by getServer only. True when a non-deleted MCP server on this
-	// tunnel, disabled ones included, has a linked environment; rotating the key
-	// then also requires environment:read across the project.
+	// tunnel, disabled ones included, has a linked environment. Names no server or
+	// environment.
 	EnvironmentLinked *bool `form:"environment_linked,omitempty" json:"environment_linked,omitempty" xml:"environment_linked,omitempty"`
+	// Returned by getServer only. True when the caller holds the environment
+	// authority rotating the key needs: always when nothing is linked; otherwise
+	// project-wide environment:read plus read access to every linked environment.
+	// It does not cover the source's own mcp:write check.
+	EnvironmentLinkAuthorized *bool `form:"environment_link_authorized,omitempty" json:"environment_link_authorized,omitempty" xml:"environment_link_authorized,omitempty"`
 	// When the tunneled MCP server source was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the tunneled MCP server source was last updated
@@ -239,9 +244,14 @@ type UpdateServerResponseBody struct {
 	// Total MCP consumer sessions currently pinned across active tunnel connections
 	ActiveConsumerSessionCount *int `form:"active_consumer_session_count,omitempty" json:"active_consumer_session_count,omitempty" xml:"active_consumer_session_count,omitempty"`
 	// Returned by getServer only. True when a non-deleted MCP server on this
-	// tunnel, disabled ones included, has a linked environment; rotating the key
-	// then also requires environment:read across the project.
+	// tunnel, disabled ones included, has a linked environment. Names no server or
+	// environment.
 	EnvironmentLinked *bool `form:"environment_linked,omitempty" json:"environment_linked,omitempty" xml:"environment_linked,omitempty"`
+	// Returned by getServer only. True when the caller holds the environment
+	// authority rotating the key needs: always when nothing is linked; otherwise
+	// project-wide environment:read plus read access to every linked environment.
+	// It does not cover the source's own mcp:write check.
+	EnvironmentLinkAuthorized *bool `form:"environment_link_authorized,omitempty" json:"environment_link_authorized,omitempty" xml:"environment_link_authorized,omitempty"`
 	// When the tunneled MCP server source was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the tunneled MCP server source was last updated
@@ -2619,9 +2629,14 @@ type TunneledMcpServerResponseBody struct {
 	// Total MCP consumer sessions currently pinned across active tunnel connections
 	ActiveConsumerSessionCount *int `form:"active_consumer_session_count,omitempty" json:"active_consumer_session_count,omitempty" xml:"active_consumer_session_count,omitempty"`
 	// Returned by getServer only. True when a non-deleted MCP server on this
-	// tunnel, disabled ones included, has a linked environment; rotating the key
-	// then also requires environment:read across the project.
+	// tunnel, disabled ones included, has a linked environment. Names no server or
+	// environment.
 	EnvironmentLinked *bool `form:"environment_linked,omitempty" json:"environment_linked,omitempty" xml:"environment_linked,omitempty"`
+	// Returned by getServer only. True when the caller holds the environment
+	// authority rotating the key needs: always when nothing is linked; otherwise
+	// project-wide environment:read plus read access to every linked environment.
+	// It does not cover the source's own mcp:write check.
+	EnvironmentLinkAuthorized *bool `form:"environment_link_authorized,omitempty" json:"environment_link_authorized,omitempty" xml:"environment_link_authorized,omitempty"`
 	// When the tunneled MCP server source was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the tunneled MCP server source was last updated
@@ -3085,6 +3100,7 @@ func NewGetServerTunneledMcpServerOK(body *GetServerResponseBody) *types.Tunnele
 		ActiveConnectionCount:               *body.ActiveConnectionCount,
 		ActiveConsumerSessionCount:          *body.ActiveConsumerSessionCount,
 		EnvironmentLinked:                   body.EnvironmentLinked,
+		EnvironmentLinkAuthorized:           body.EnvironmentLinkAuthorized,
 		CreatedAt:                           *body.CreatedAt,
 		UpdatedAt:                           *body.UpdatedAt,
 	}
@@ -3433,6 +3449,7 @@ func NewUpdateServerTunneledMcpServerOK(body *UpdateServerResponseBody) *types.T
 		ActiveConnectionCount:               *body.ActiveConnectionCount,
 		ActiveConsumerSessionCount:          *body.ActiveConsumerSessionCount,
 		EnvironmentLinked:                   body.EnvironmentLinked,
+		EnvironmentLinkAuthorized:           body.EnvironmentLinkAuthorized,
 		CreatedAt:                           *body.CreatedAt,
 		UpdatedAt:                           *body.UpdatedAt,
 	}

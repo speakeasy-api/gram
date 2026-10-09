@@ -17,7 +17,11 @@ export type RemoteMcpServer = {
    */
   createdAt: Date;
   /**
-   * Returned by getServer only. True when a non-deleted MCP server on this source, disabled ones included, has a linked environment; changing the URL then also requires environment:read across the project.
+   * Returned by getServer only. True when the caller holds the environment authority changing the URL needs: always when nothing is linked; otherwise project-wide environment:read plus read access to every linked environment. It does not cover the source's own mcp:write check.
+   */
+  environmentLinkAuthorized?: boolean | undefined;
+  /**
+   * Returned by getServer only. True when a non-deleted MCP server on this source, disabled ones included, has a linked environment. Names no server or environment.
    */
   environmentLinked?: boolean | undefined;
   /**
@@ -60,6 +64,7 @@ export const RemoteMcpServer$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    environment_link_authorized: z.optional(z.boolean()),
     environment_linked: z.optional(z.boolean()),
     id: z.string(),
     name: z.optional(z.string()),
@@ -75,6 +80,7 @@ export const RemoteMcpServer$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "created_at": "createdAt",
+      "environment_link_authorized": "environmentLinkAuthorized",
       "environment_linked": "environmentLinked",
       "project_id": "projectId",
       "transport_type": "transportType",

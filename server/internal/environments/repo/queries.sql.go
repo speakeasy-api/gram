@@ -518,6 +518,51 @@ func (q *Queries) ListEnvironments(ctx context.Context, projectID uuid.UUID) ([]
 	return items, nil
 }
 
+const lockSourceEnvironmentBinding = `-- name: LockSourceEnvironmentBinding :one
+SELECT environment_id
+FROM source_environments
+WHERE source_kind = $1
+  AND source_slug = $2
+  AND project_id = $3
+FOR UPDATE
+`
+
+type LockSourceEnvironmentBindingParams struct {
+	SourceKind string
+	SourceSlug string
+	ProjectID  uuid.UUID
+}
+
+// The environment a source is bound to, as stored (the environment may since
+// have been deleted), locked for the caller's link change.
+func (q *Queries) LockSourceEnvironmentBinding(ctx context.Context, arg LockSourceEnvironmentBindingParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockSourceEnvironmentBinding, arg.SourceKind, arg.SourceSlug, arg.ProjectID)
+	var environment_id uuid.UUID
+	err := row.Scan(&environment_id)
+	return environment_id, err
+}
+
+const lockToolsetEnvironmentBinding = `-- name: LockToolsetEnvironmentBinding :one
+SELECT environment_id
+FROM toolset_environments
+WHERE toolset_id = $1
+  AND project_id = $2
+FOR UPDATE
+`
+
+type LockToolsetEnvironmentBindingParams struct {
+	ToolsetID uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// The toolset counterpart of LockSourceEnvironmentBinding.
+func (q *Queries) LockToolsetEnvironmentBinding(ctx context.Context, arg LockToolsetEnvironmentBindingParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockToolsetEnvironmentBinding, arg.ToolsetID, arg.ProjectID)
+	var environment_id uuid.UUID
+	err := row.Scan(&environment_id)
+	return environment_id, err
+}
+
 const setSourceEnvironment = `-- name: SetSourceEnvironment :one
 INSERT INTO source_environments (
     source_kind,
@@ -569,26 +614,30 @@ INSERT INTO toolset_environments (
     toolset_id,
     project_id,
     environment_id
-) VALUES (
-    $1,
-    $2,
-    $3
 )
+SELECT t.id, t.project_id, $1
+FROM toolsets t
+WHERE t.id = $2
+  AND t.project_id = $3
+  AND t.deleted IS FALSE
 ON CONFLICT (toolset_id)
 DO UPDATE SET
     environment_id = EXCLUDED.environment_id,
     updated_at = now()
+WHERE toolset_environments.project_id = EXCLUDED.project_id
 RETURNING id, toolset_id, project_id, environment_id, created_at, updated_at
 `
 
 type SetToolsetEnvironmentParams struct {
+	EnvironmentID uuid.UUID
 	ToolsetID     uuid.UUID
 	ProjectID     uuid.UUID
-	EnvironmentID uuid.UUID
 }
 
+// Writes nothing (no row returned) unless the toolset is live in this
+// project, and never rewrites a binding that belongs to another project.
 func (q *Queries) SetToolsetEnvironment(ctx context.Context, arg SetToolsetEnvironmentParams) (ToolsetEnvironment, error) {
-	row := q.db.QueryRow(ctx, setToolsetEnvironment, arg.ToolsetID, arg.ProjectID, arg.EnvironmentID)
+	row := q.db.QueryRow(ctx, setToolsetEnvironment, arg.EnvironmentID, arg.ToolsetID, arg.ProjectID)
 	var i ToolsetEnvironment
 	err := row.Scan(
 		&i.ID,

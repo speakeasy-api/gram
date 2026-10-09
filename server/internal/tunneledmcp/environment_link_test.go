@@ -238,3 +238,48 @@ func TestGetServer_EnvironmentLinkedCountsServersTheCallerCannotList(t *testing.
 	require.NotNil(t, got.EnvironmentLinked)
 	require.False(t, *got.EnvironmentLinked)
 }
+
+func TestRotateServerKey_RefusedWhenAnyLinkedEnvironmentIsExcluded(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx := requireAuthContext(t, ctx)
+	projectID := *authCtx.ProjectID
+	tunnel := seedTunneledMcpServer(t, ctx, ti.conn, projectID)
+	excluded := seedLinkEnvironment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, projectID)
+	readable := seedLinkEnvironment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, projectID)
+	seedTunnelWrapper(t, ctx, ti.conn, projectID, tunnel.ID, uuid.NullUUID{UUID: readable, Valid: true}, "private")
+	seedTunnelWrapper(t, ctx, ti.conn, projectID, tunnel.ID, uuid.NullUUID{UUID: excluded, Valid: true}, "disabled")
+
+	excludedFrom := func(environmentID uuid.UUID) context.Context {
+		return authztest.WithExactGrants(t, ctx,
+			projectScopedMCPGrant(authz.ScopeMCPWrite, projectID),
+			projectEnvironmentReadGrant(projectID),
+			authz.NewGrantWithSelector(authz.ScopeEnvironmentBlockedRead, authz.Selector{
+				authz.SelectorKeyResourceKind: "environment",
+				authz.SelectorKeyResourceID:   environmentID.String(),
+				authz.SelectorKeyProjectID:    projectID.String(),
+			}),
+		)
+	}
+
+	caller := excludedFrom(excluded)
+	got, err := ti.service.GetServer(caller, &gen.GetServerPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, ID: tunnel.ID.String()})
+	require.NoError(t, err)
+	require.True(t, conv.PtrValOr(got.EnvironmentLinked, false))
+	require.False(t, conv.PtrValOr(got.EnvironmentLinkAuthorized, true))
+
+	beforeAudits := rotateAudits(t, ctx, ti.conn)
+	_, err = ti.service.RotateServerKey(caller, rotatePayload(tunnel.ID))
+	requireOopsCode(t, err, oops.CodeForbidden)
+	require.Equal(t, tunnel.KeyHash, storedKeyHash(t, ctx, ti.conn, projectID, tunnel.ID))
+	require.Equal(t, beforeAudits, rotateAudits(t, ctx, ti.conn))
+
+	// Excluded only from an environment the tunnel does not use: allowed.
+	other := excludedFrom(seedLinkEnvironment(t, ctx, ti.conn, authCtx.ActiveOrganizationID, projectID))
+	got, err = ti.service.GetServer(other, &gen.GetServerPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, ID: tunnel.ID.String()})
+	require.NoError(t, err)
+	require.True(t, conv.PtrValOr(got.EnvironmentLinkAuthorized, false))
+	_, err = ti.service.RotateServerKey(other, rotatePayload(tunnel.ID))
+	require.NoError(t, err)
+}

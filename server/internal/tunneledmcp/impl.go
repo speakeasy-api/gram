@@ -267,14 +267,19 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 	}
 
 	// Lets the dashboard explain up front why a key rotation will be refused.
-	// Only a boolean: it names no server or environment the caller may not
-	// be able to read.
-	linked, err := mcpservers.TunnelHasEnvironmentLinkedServers(ctx, s.db, *authCtx.ProjectID, server.ID)
+	// Only booleans: they name no server or environment the caller may not be
+	// able to read.
+	linked, err := mcpservers.TunnelLinkedEnvironmentIDs(ctx, s.db, *authCtx.ProjectID, server.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check environment-linked mcp servers").LogError(ctx, s.logger)
 	}
+	eligibility, err := mcpservers.EvaluateDestinationChange(ctx, s.authz, *authCtx.ProjectID, linked)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "evaluate environment link authority").LogError(ctx, s.logger)
+	}
 	view := s.tunnelManager.serverView(ctx, s.logger, server)
-	view.EnvironmentLinked = &linked
+	view.EnvironmentLinked = &eligibility.Linked
+	view.EnvironmentLinkAuthorized = &eligibility.Authorized
 	return view, nil
 }
 
@@ -489,12 +494,12 @@ func (s *Service) RotateServerKey(ctx context.Context, payload *gen.RotateServer
 	// Whoever holds the new key operates the tunnel's destination, so a
 	// tunnel fronting an environment-linked server needs the same authority
 	// as linking that environment.
-	linked, err := mcpservers.TunnelHasEnvironmentLinkedServers(ctx, dbtx, *authCtx.ProjectID, serverID)
+	linked, err := mcpservers.TunnelLinkedEnvironmentIDs(ctx, dbtx, *authCtx.ProjectID, serverID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check environment-linked mcp servers").LogError(ctx, logger)
 	}
-	if linked {
-		if err := s.authz.Require(ctx, authz.EnvironmentLinkCheck(authCtx.ProjectID.String())); err != nil {
+	if len(linked) > 0 {
+		if err := s.authz.Require(ctx, mcpservers.EnvironmentLinkChecks(*authCtx.ProjectID, linked)...); err != nil {
 			return nil, err
 		}
 	}

@@ -261,14 +261,19 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 	}
 
 	// Lets the dashboard explain up front why a URL change will be refused.
-	// Only a boolean: it names no server or environment the caller may not
-	// be able to read.
-	linked, err := mcpservers.RemoteHasEnvironmentLinkedServers(ctx, s.db, *authCtx.ProjectID, server.ID)
+	// Only booleans: they name no server or environment the caller may not be
+	// able to read.
+	linked, err := mcpservers.RemoteLinkedEnvironmentIDs(ctx, s.db, *authCtx.ProjectID, server.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check environment-linked mcp servers").LogError(ctx, s.logger)
 	}
+	eligibility, err := mcpservers.EvaluateDestinationChange(ctx, s.authz, *authCtx.ProjectID, linked)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "evaluate environment link authority").LogError(ctx, s.logger)
+	}
 	view := mv.BuildRemoteMcpServerView(server)
-	view.EnvironmentLinked = &linked
+	view.EnvironmentLinked = &eligibility.Linked
+	view.EnvironmentLinkAuthorized = &eligibility.Authorized
 	return view, nil
 }
 
@@ -338,12 +343,12 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		// Repointing a source moves every server on it, environment links
 		// included, so a linked server needs the same authority as linking.
 		// The project lock taken above orders this against concurrent links.
-		linked, err := mcpservers.RemoteHasEnvironmentLinkedServers(ctx, dbtx, *authCtx.ProjectID, serverID)
+		linked, err := mcpservers.RemoteLinkedEnvironmentIDs(ctx, dbtx, *authCtx.ProjectID, serverID)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "check environment-linked mcp servers").LogError(ctx, logger)
 		}
-		if linked {
-			if err := s.authz.Require(ctx, authz.EnvironmentLinkCheck(authCtx.ProjectID.String())); err != nil {
+		if len(linked) > 0 {
+			if err := s.authz.Require(ctx, mcpservers.EnvironmentLinkChecks(*authCtx.ProjectID, linked)...); err != nil {
 				return nil, err
 			}
 		}

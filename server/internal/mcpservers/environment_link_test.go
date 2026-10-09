@@ -581,3 +581,152 @@ func TestListMcpServers_ReadExclusionHidesLinkedServer(t *testing.T) {
 	}
 	require.Equal(t, []string{visible.ID}, ids)
 }
+
+// excludedFrom is a caller with MCP write and project-wide environment:read
+// who is nonetheless blocked from reading one environment.
+func (f linkFixture) excludedFrom(t *testing.T, environmentID string) context.Context {
+	t.Helper()
+	return withExactAuthzGrants(t, f.ctx, f.ti.conn,
+		projectMCPWriteGrant(f.projectID),
+		projectEnvironmentGrant(authz.ScopeEnvironmentRead, f.projectID),
+		authz.NewGrantWithSelector(authz.ScopeEnvironmentBlockedRead, authz.Selector{
+			"resource_kind": "environment",
+			"resource_id":   environmentID,
+			"project_id":    f.projectID.String(),
+		}),
+	)
+}
+
+func TestMcpServer_EnvironmentLink_ExclusionOnAnAffectedEnvironmentRefuses(t *testing.T) {
+	t.Parallel()
+
+	// X is excluded; Y is readable.
+	type step struct {
+		name    string
+		initial func(f linkFixture) *string
+		next    func(f linkFixture) *string
+		repoint bool
+		allowed bool
+	}
+	x := func(f linkFixture) *string { return &f.envID }
+	y := func(f linkFixture) *string { return &f.envID2 }
+	none := func(linkFixture) *string { return nil }
+	steps := []step{
+		{name: "link to excluded", initial: none, next: x},
+		{name: "relink onto excluded", initial: y, next: x},
+		{name: "relink away from excluded", initial: x, next: y},
+		{name: "unlink excluded", initial: x, next: none},
+		{name: "repoint keeping excluded", initial: x, next: x, repoint: true},
+		{name: "link to readable", initial: none, next: y, allowed: true},
+		{name: "repoint keeping readable", initial: y, next: y, repoint: true, allowed: true},
+	}
+	for _, tc := range steps {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newLinkFixture(t)
+			server := f.remoteServer(t, tc.initial(f))
+			before := storedEnvironmentID(t, f.ctx, f.ti.conn, server.ID)
+			payload := updatePayload(server, tc.next(f))
+			if tc.repoint {
+				newRemote := seedRemoteMcpServer(t, f.ctx, f.ti.conn, f.projectID).String()
+				payload.RemoteMcpServerID = &newRemote
+			}
+
+			_, err := f.ti.service.UpdateMcpServer(f.excludedFrom(t, f.envID), payload)
+			if tc.allowed {
+				require.NoError(t, err)
+				return
+			}
+			requireOopsCode(t, err, oops.CodeForbidden)
+			require.Equal(t, before, storedEnvironmentID(t, f.ctx, f.ti.conn, server.ID))
+		})
+	}
+
+	t.Run("create linked to excluded", func(t *testing.T) {
+		t.Parallel()
+
+		f := newLinkFixture(t)
+		remoteID := seedRemoteMcpServer(t, f.ctx, f.ti.conn, f.projectID).String()
+		_, err := f.ti.service.CreateMcpServer(f.excludedFrom(t, f.envID), createPayload("excluded", &f.envID, &remoteID, nil))
+		requireOopsCode(t, err, oops.CodeForbidden)
+
+		created, err := f.ti.service.CreateMcpServer(f.excludedFrom(t, f.envID), createPayload("readable", &f.envID2, &remoteID, nil))
+		require.NoError(t, err)
+		require.Equal(t, f.envID2, conv.PtrValOr(created.EnvironmentID, ""))
+	})
+}
+
+// seedToolsetWithDefault creates a toolset whose default environment is the
+// one with environmentID.
+func seedToolsetWithDefault(t *testing.T, f linkFixture, environmentID string) string {
+	t.Helper()
+
+	env, err := environmentsrepo.New(f.ti.conn).GetEnvironmentByID(f.ctx, environmentsrepo.GetEnvironmentByIDParams{
+		ID:        uuid.MustParse(environmentID),
+		ProjectID: f.projectID,
+	})
+	require.NoError(t, err)
+	toolset, err := toolsetsrepo.New(f.ti.conn).CreateToolset(f.ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID:         f.orgID,
+		ProjectID:              f.projectID,
+		Name:                   "defaulted toolset",
+		Slug:                   "defaulted-" + uuid.NewString()[:8],
+		Description:            pgtype.Text{String: "", Valid: false},
+		DefaultEnvironmentSlug: pgtype.Text{String: env.Slug, Valid: true},
+		McpSlug:                pgtype.Text{String: "", Valid: false},
+		McpEnabled:             false,
+	})
+	require.NoError(t, err)
+	return toolset.ID.String()
+}
+
+// A hosted server that drops its own environment falls back to its toolset's
+// default, so unlinking onto an excluded default is refused too.
+func TestUpdateMcpServer_EnvironmentLink_UnlinkOntoExcludedToolsetDefault(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		defaultExcluded bool
+		fromRemote      bool
+	}{
+		"excluded default":                   {defaultExcluded: true},
+		"excluded default with backend swap": {defaultExcluded: true, fromRemote: true},
+		"readable default":                   {defaultExcluded: false},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newLinkFixture(t)
+			third := seedEnvironment(t, f.ctx, f.ti.conn, f.orgID, f.projectID).String()
+			// envID is the excluded environment; envID2 is the server's own,
+			// readable link.
+			defaultEnv := third
+			if tc.defaultExcluded {
+				defaultEnv = f.envID
+			}
+			toolsetID := seedToolsetWithDefault(t, f, defaultEnv)
+
+			var server *types.McpServer
+			if tc.fromRemote {
+				server = f.remoteServer(t, &f.envID2)
+			} else {
+				created, err := f.ti.service.CreateMcpServer(f.ctx, createPayload("hosted", &f.envID2, nil, &toolsetID))
+				require.NoError(t, err)
+				server = created
+			}
+			payload := updatePayload(server, nil)
+			payload.RemoteMcpServerID = nil
+			payload.ToolsetID = &toolsetID
+
+			_, err := f.ti.service.UpdateMcpServer(f.excludedFrom(t, f.envID), payload)
+			if !tc.defaultExcluded {
+				require.NoError(t, err)
+				return
+			}
+			requireOopsCode(t, err, oops.CodeForbidden)
+			require.Equal(t, f.envID2, storedEnvironmentID(t, f.ctx, f.ti.conn, server.ID).UUID.String())
+		})
+	}
+}

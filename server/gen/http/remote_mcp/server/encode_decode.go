@@ -3739,15 +3739,16 @@ func EncodeDeleteServerHeaderError(encoder func(context.Context, http.ResponseWr
 // *types.RemoteMcpServer.
 func marshalTypesRemoteMcpServerToRemoteMcpServerResponseBody(v *types.RemoteMcpServer) *RemoteMcpServerResponseBody {
 	res := &RemoteMcpServerResponseBody{
-		ID:                v.ID,
-		ProjectID:         v.ProjectID,
-		Name:              v.Name,
-		Slug:              v.Slug,
-		URL:               v.URL,
-		TransportType:     v.TransportType,
-		EnvironmentLinked: v.EnvironmentLinked,
-		CreatedAt:         v.CreatedAt,
-		UpdatedAt:         v.UpdatedAt,
+		ID:                        v.ID,
+		ProjectID:                 v.ProjectID,
+		Name:                      v.Name,
+		Slug:                      v.Slug,
+		URL:                       v.URL,
+		TransportType:             v.TransportType,
+		EnvironmentLinked:         v.EnvironmentLinked,
+		EnvironmentLinkAuthorized: v.EnvironmentLinkAuthorized,
+		CreatedAt:                 v.CreatedAt,
+		UpdatedAt:                 v.UpdatedAt,
 	}
 
 	return res

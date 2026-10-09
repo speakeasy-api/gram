@@ -36,12 +36,43 @@ func MCPCheck(scope Scope, resourceID, projectID string) Check {
 // EnvironmentLinkCheck builds the project-wide environment:read check that
 // guards binding an environment to something a caller can invoke (a source, a
 // toolset, an MCP server) or redirecting where a bound environment's values
-// are sent. The grant must cover every environment in the project: a wildcard
-// grant confined by the project_id dimension (or, by scope expansion,
-// environment:write) satisfies it; a grant naming a single environment does
-// not.
+// are sent. The grant must be project-wide: a wildcard grant confined by the
+// project_id dimension (or, by scope expansion, environment:write) satisfies
+// it; a grant naming a single environment does not. It does not see an
+// exclusion naming one environment, so callers pair it with
+// EnvironmentReadCheck for the environments actually involved; see
+// EnvironmentLinkChecks.
 func EnvironmentLinkCheck(projectID string) Check {
 	return Check{Scope: ScopeEnvironmentRead, ResourceKind: "environment", ResourceID: projectID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal}
+}
+
+// EnvironmentReadCheck builds the environment:read check for one environment
+// in projectID. Unlike EnvironmentLinkCheck it is refused by an exclusion
+// naming that environment.
+func EnvironmentReadCheck(environmentID, projectID string) Check {
+	return Check{Scope: ScopeEnvironmentRead, ResourceKind: "environment", ResourceID: environmentID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal}
+}
+
+// EnvironmentLinkChecks builds the checks for linking, unlinking or moving the
+// destination of the given environments: the project-wide EnvironmentLinkCheck
+// plus EnvironmentReadCheck for each distinct environment, all of which must
+// pass. The caller passes every environment the change affects, so an
+// exclusion on any one of them refuses it while a link that involves only
+// readable environments still passes.
+func EnvironmentLinkChecks(projectID string, environmentIDs ...string) []Check {
+	checks := []Check{EnvironmentLinkCheck(projectID)}
+	seen := make(map[string]struct{}, len(environmentIDs))
+	for _, id := range environmentIDs {
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		checks = append(checks, EnvironmentReadCheck(id, projectID))
+	}
+	return checks
 }
 
 // AssistantCheck builds a Check for an assistant scope. resourceID is the

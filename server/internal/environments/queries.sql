@@ -184,21 +184,43 @@ WHERE te.toolset_id = @toolset_id
     AND e.deleted IS FALSE;
 
 -- name: SetToolsetEnvironment :one
+-- Writes nothing (no row returned) unless the toolset is live in this
+-- project, and never rewrites a binding that belongs to another project.
 INSERT INTO toolset_environments (
     toolset_id,
     project_id,
     environment_id
-) VALUES (
-    @toolset_id,
-    @project_id,
-    @environment_id
 )
+SELECT t.id, t.project_id, @environment_id
+FROM toolsets t
+WHERE t.id = @toolset_id
+  AND t.project_id = @project_id
+  AND t.deleted IS FALSE
 ON CONFLICT (toolset_id)
 DO UPDATE SET
     environment_id = EXCLUDED.environment_id,
     updated_at = now()
+WHERE toolset_environments.project_id = EXCLUDED.project_id
 RETURNING *;
 
 -- name: DeleteToolsetEnvironment :exec
 DELETE FROM toolset_environments
 WHERE toolset_id = @toolset_id AND project_id = @project_id;
+
+-- name: LockSourceEnvironmentBinding :one
+-- The environment a source is bound to, as stored (the environment may since
+-- have been deleted), locked for the caller's link change.
+SELECT environment_id
+FROM source_environments
+WHERE source_kind = @source_kind
+  AND source_slug = @source_slug
+  AND project_id = @project_id
+FOR UPDATE;
+
+-- name: LockToolsetEnvironmentBinding :one
+-- The toolset counterpart of LockSourceEnvironmentBinding.
+SELECT environment_id
+FROM toolset_environments
+WHERE toolset_id = @toolset_id
+  AND project_id = @project_id
+FOR UPDATE;

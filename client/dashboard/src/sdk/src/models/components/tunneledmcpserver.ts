@@ -74,7 +74,11 @@ export type TunneledMcpServer = {
    */
   effectivePublicRequestRatePerSecond: number;
   /**
-   * Returned by getServer only. True when a non-deleted MCP server on this tunnel, disabled ones included, has a linked environment; rotating the key then also requires environment:read across the project.
+   * Returned by getServer only. True when the caller holds the environment authority rotating the key needs: always when nothing is linked; otherwise project-wide environment:read plus read access to every linked environment. It does not cover the source's own mcp:write check.
+   */
+  environmentLinkAuthorized?: boolean | undefined;
+  /**
+   * Returned by getServer only. True when a non-deleted MCP server on this tunnel, disabled ones included, has a linked environment. Names no server or environment.
    */
   environmentLinked?: boolean | undefined;
   /**
@@ -146,6 +150,7 @@ export const TunneledMcpServer$inboundSchema: z.ZodMiniType<
     ),
     effective_public_request_burst: z.int(),
     effective_public_request_rate_per_second: z.int(),
+    environment_link_authorized: z.optional(z.boolean()),
     environment_linked: z.optional(z.boolean()),
     id: z.string(),
     key_prefix: z.string(),
@@ -174,6 +179,7 @@ export const TunneledMcpServer$inboundSchema: z.ZodMiniType<
       "effective_public_request_burst": "effectivePublicRequestBurst",
       "effective_public_request_rate_per_second":
         "effectivePublicRequestRatePerSecond",
+      "environment_link_authorized": "environmentLinkAuthorized",
       "environment_linked": "environmentLinked",
       "key_prefix": "keyPrefix",
       "last_seen_at": "lastSeenAt",

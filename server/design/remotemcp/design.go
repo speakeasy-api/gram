@@ -602,7 +602,8 @@ var RemoteMcpServer = Type("RemoteMcpServer", func() {
 		Format(FormatURI)
 	})
 	Attribute("transport_type", String, "The transport type for the remote MCP server")
-	Attribute("environment_linked", Boolean, "Returned by getServer only. True when a non-deleted MCP server on this source, disabled ones included, has a linked environment; changing the URL then also requires environment:read across the project.")
+	Attribute("environment_linked", Boolean, "Returned by getServer only. True when a non-deleted MCP server on this source, disabled ones included, has a linked environment. Names no server or environment.")
+	Attribute("environment_link_authorized", Boolean, "Returned by getServer only. True when the caller holds the environment authority changing the URL needs: always when nothing is linked; otherwise project-wide environment:read plus read access to every linked environment. It does not cover the source's own mcp:write check.")
 	Attribute("created_at", String, func() {
 		Description("When the remote MCP server was created")
 		Format(FormatDateTime)

@@ -23,9 +23,14 @@ type RemoteMcpServer struct {
 	// The transport type for the remote MCP server
 	TransportType string
 	// Returned by getServer only. True when a non-deleted MCP server on this
-	// source, disabled ones included, has a linked environment; changing the URL
-	// then also requires environment:read across the project.
+	// source, disabled ones included, has a linked environment. Names no server or
+	// environment.
 	EnvironmentLinked *bool
+	// Returned by getServer only. True when the caller holds the environment
+	// authority changing the URL needs: always when nothing is linked; otherwise
+	// project-wide environment:read plus read access to every linked environment.
+	// It does not cover the source's own mcp:write check.
+	EnvironmentLinkAuthorized *bool
 	// When the remote MCP server was created
 	CreatedAt string
 	// When the remote MCP server was last updated

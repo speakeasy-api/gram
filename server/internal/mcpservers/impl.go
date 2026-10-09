@@ -172,8 +172,8 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	if err := requireStaffForUnproxiedBackend(ctx, authCtx, ids.UnproxiedMcpServerID, logger); err != nil {
 		return nil, err
 	}
-	if environmentLinkNeedsAuthority(nil, ids) {
-		if err := s.authz.Require(ctx, authz.EnvironmentLinkCheck(authCtx.ProjectID.String())); err != nil {
+	if needed, affected := environmentLinkAffected(nil, ids); needed {
+		if err := s.authz.Require(ctx, EnvironmentLinkChecks(*authCtx.ProjectID, affected)...); err != nil {
 			return nil, err
 		}
 	}
@@ -732,9 +732,18 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 	// Decided against the locked row under the project lock taken above, before
 	// the reference checks so a refused caller learns nothing about the
 	// environment it named.
-	if environmentLinkNeedsAuthority(&existing, ids) {
-		if err := s.authz.Require(ctx, authz.EnvironmentLinkCheck(authCtx.ProjectID.String())); err != nil {
+	if needed, affected := environmentLinkAffected(&existing, ids); needed {
+		if err := s.authz.Require(ctx, EnvironmentLinkChecks(*authCtx.ProjectID, affected)...); err != nil {
 			return nil, err
+		}
+		fallback, err := resolveHostedFallbackEnvironment(ctx, dbtx, *authCtx.ProjectID, existing, ids)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "resolve hosted fallback environment").LogError(ctx, logger)
+		}
+		if fallback.Valid {
+			if err := s.authz.Require(ctx, authz.EnvironmentReadCheck(fallback.UUID.String(), authCtx.ProjectID.String())); err != nil {
+				return nil, err
+			}
 		}
 	}
 
