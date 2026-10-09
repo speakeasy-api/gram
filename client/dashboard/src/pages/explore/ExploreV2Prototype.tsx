@@ -329,12 +329,6 @@ function QueryBlock({
             onChange={(filters) => onChange({ filters })}
           />
         </div>
-        <Button
-          variant="tertiary"
-          size="sm"
-          icon="code"
-          aria-label="Edit as text (not in the prototype)"
-        />
         <AliasInput
           value={query.alias}
           onChange={(alias) => onChange({ alias })}
