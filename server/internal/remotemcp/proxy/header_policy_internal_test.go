@@ -532,3 +532,24 @@ func TestApplyRequestHeadersTunneledConfiguredHeaderOwnsFoldedSpellings(t *testi
 		})
 	}
 }
+
+// A routing header owns every spelling of its name an upstream might fold
+// together, so a caller cannot slip a second session id beside the pinned one.
+func TestApplyRequestHeadersRoutingHeaderOwnsFoldedSpellings(t *testing.T) {
+	t.Parallel()
+
+	for _, policy := range []HeaderPolicy{HeaderPolicyRemote, HeaderPolicyTunneled} {
+		t.Run(string(policy), func(t *testing.T) {
+			t.Parallel()
+			userReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "https://gram.test/mcp", nil)
+			userReq.Header["Mcp_session_id"] = []string{"guessed"}
+			remoteReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "https://upstream.test/mcp", nil)
+			p := policyProxy(t, policy, nil)
+			p.RoutingHeaders = []ConfiguredHeader{{IsRequired: true, Name: McpSessionIDHeader, StaticValue: "backend-session", ValueFromRequestHeader: ""}}
+
+			require.NoError(t, p.applyRequestHeaders(t.Context(), userReq, remoteReq))
+			require.Empty(t, remoteReq.Header["Mcp_session_id"])
+			require.Equal(t, []string{"backend-session"}, remoteReq.Header.Values(McpSessionIDHeader))
+		})
+	}
+}

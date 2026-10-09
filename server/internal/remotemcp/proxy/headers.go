@@ -222,14 +222,17 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 	}
 
 	// Routing headers are Speakeasy's own transport state. They are applied
-	// after configured headers so no configuration can displace them.
+	// after configured headers so no configuration can displace them, and
+	// they own every spelling of their name an upstream might fold together,
+	// so a caller's Mcp_Session_Id cannot sit beside the pinned backend
+	// Mcp-Session-Id.
 	for _, h := range p.RoutingHeaders {
 		value, err := h.Resolve(userReq)
 		if err != nil {
 			return oops.E(oops.CodeBadRequest, err, "missing required header for remote mcp server").LogError(ctx, p.Logger)
 		}
+		deleteFoldedHeader(remoteReq.Header, h.Name)
 		if value == "" {
-			remoteReq.Header.Del(h.Name)
 			continue
 		}
 		remoteReq.Header.Set(h.Name, value)
