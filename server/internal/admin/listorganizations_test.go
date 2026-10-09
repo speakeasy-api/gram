@@ -1128,6 +1128,7 @@ func TestListOrganizations_SortsEveryWhitelistedColumn(t *testing.T) {
 		{sort: "name", wantAsc: []string{sortOrgB, sortOrgD, sortOrgA, sortOrgC}},
 		{sort: "slug", wantAsc: []string{sortOrgC, sortOrgA, sortOrgD, sortOrgB}},
 		{sort: "account_type", wantAsc: []string{sortOrgA, sortOrgC, sortOrgB, sortOrgD}},
+		{sort: "account_tier", wantAsc: []string{sortOrgA, sortOrgB, sortOrgC, sortOrgD}},
 		{sort: "member_count", wantAsc: []string{sortOrgD, sortOrgA, sortOrgC, sortOrgB}},
 		{sort: "created_at", wantAsc: []string{sortOrgC, sortOrgB, sortOrgD, sortOrgA}},
 		{sort: "disabled_at", wantAsc: []string{sortOrgB, sortOrgA, sortOrgC, sortOrgD}},
@@ -1231,7 +1232,7 @@ func TestListOrganizations_TiesBreakOnIDInBothDirections(t *testing.T) {
 	byID := []string{"org_tie_a", "org_tie_b", "org_tie_c", "org_tie_d"}
 
 	for _, direction := range []string{"asc", "desc"} {
-		for _, sort := range []string{"name", "account_type"} {
+		for _, sort := range []string{"name", "account_type", "account_tier"} {
 			label := sort + " " + direction
 			requireOrder(t, ctx, svc, sortPayload(sort, direction), byID, label)
 			// Repeating the call pins the order down: an unordered tie group can come back either way.

@@ -284,6 +284,24 @@ describe("CommandPalette", () => {
     );
   });
 
+  it("asks for paying organizations ahead of free ones", async () => {
+    // The palette shows a handful of rows, so the order is decided where the
+    // cut is made: on the server, before the limit applies.
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    pressTheShortcut();
+    await screen.findByRole("dialog");
+    type("umbrella");
+
+    await within(palette()).findByRole("option", {
+      name: /^Umbrella Freight/,
+    });
+
+    expect(mocks.listOrganizations).toHaveBeenCalledWith(
+      expect.objectContaining({ q: "umbrella", sort: "account_tier" }),
+    );
+  });
+
   it("says a disabled record is disabled", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 

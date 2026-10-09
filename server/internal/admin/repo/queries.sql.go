@@ -1216,6 +1216,8 @@ ORDER BY
     CASE WHEN $1::text = 'slug' AND $2::text = 'desc' THEN slug END DESC NULLS LAST,
     CASE WHEN $1::text = 'account_type' AND $2::text = 'asc' THEN account_type END ASC NULLS LAST,
     CASE WHEN $1::text = 'account_type' AND $2::text = 'desc' THEN account_type END DESC NULLS LAST,
+    CASE WHEN $1::text = 'account_tier' AND $2::text = 'asc' THEN CASE account_type WHEN 'enterprise' THEN 0 WHEN 'pro' THEN 1 WHEN 'payg' THEN 1 WHEN 'free' THEN 2 ELSE 3 END END ASC NULLS LAST,
+    CASE WHEN $1::text = 'account_tier' AND $2::text = 'desc' THEN CASE account_type WHEN 'enterprise' THEN 0 WHEN 'pro' THEN 1 WHEN 'payg' THEN 1 WHEN 'free' THEN 2 ELSE 3 END END DESC NULLS LAST,
     CASE WHEN $1::text = 'member_count' AND $2::text = 'asc' THEN member_count END ASC NULLS LAST,
     CASE WHEN $1::text = 'member_count' AND $2::text = 'desc' THEN member_count END DESC NULLS LAST,
     CASE WHEN $1::text = 'created_at' AND $2::text = 'asc' THEN created_at END ASC NULLS LAST,
@@ -1247,6 +1249,8 @@ ORDER BY
     CASE WHEN $1::text = 'slug' AND $2::text = 'desc' THEN slug END DESC NULLS LAST,
     CASE WHEN $1::text = 'account_type' AND $2::text = 'asc' THEN account_type END ASC NULLS LAST,
     CASE WHEN $1::text = 'account_type' AND $2::text = 'desc' THEN account_type END DESC NULLS LAST,
+    CASE WHEN $1::text = 'account_tier' AND $2::text = 'asc' THEN CASE account_type WHEN 'enterprise' THEN 0 WHEN 'pro' THEN 1 WHEN 'payg' THEN 1 WHEN 'free' THEN 2 ELSE 3 END END ASC NULLS LAST,
+    CASE WHEN $1::text = 'account_tier' AND $2::text = 'desc' THEN CASE account_type WHEN 'enterprise' THEN 0 WHEN 'pro' THEN 1 WHEN 'payg' THEN 1 WHEN 'free' THEN 2 ELSE 3 END END DESC NULLS LAST,
     CASE WHEN $1::text = 'member_count' AND $2::text = 'asc' THEN member_count END ASC NULLS LAST,
     CASE WHEN $1::text = 'member_count' AND $2::text = 'desc' THEN member_count END DESC NULLS LAST,
     CASE WHEN $1::text = 'created_at' AND $2::text = 'asc' THEN created_at END ASC NULLS LAST,
@@ -1301,7 +1305,9 @@ type AdminListOrganizationsRow struct {
 // caller input reaches the parser. NULLS LAST is what keeps empty dates at the
 // bottom under DESC, where Postgres would otherwise put them first; on the ASC
 // arms it only spells out the default. Both are written out so the two arms of a
-// column read alike.
+// column read alike. account_tier ranks by what the account pays rather than by
+// how its type is spelled: enterprise, then pro and payg, then free, then any
+// type off the list.
 // MATERIALIZED keeps display-only membership access after LIMIT and OFFSET.
 func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrganizationsParams) ([]AdminListOrganizationsRow, error) {
 	rows, err := q.db.Query(ctx, adminListOrganizations,
