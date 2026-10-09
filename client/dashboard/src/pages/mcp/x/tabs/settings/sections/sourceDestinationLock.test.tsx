@@ -290,6 +290,25 @@ describe("useUpstreamUrlDraft", () => {
     expect(mocks.updateRemote).toHaveBeenCalledTimes(1);
   });
 
+  it("discards a refused URL even if the follow-up refresh leaves the lock unknown", async () => {
+    mocks.updateRemote.mockRejectedValue(forbidden());
+    const { result, rerender } = renderHook(
+      ({ source }: { source: RemoteMcpServer }) => useUpstreamUrlDraft(source),
+      { wrapper, initialProps: { source: remote } },
+    );
+    act(() => result.current.setDraft("https://example.com/moved"));
+    await act(async () => {
+      await expect(result.current.save()).rejects.toBeInstanceOf(GramError);
+    });
+
+    // The refresh failed: the answer is unknown.
+    rerender({ source: { ...remote, environmentLinkAuthorized: undefined } });
+    // A later grant must not bring the refused URL back as a pending edit.
+    rerender({ source: remote });
+    expect(result.current.draft).toBe(remote.url);
+    expect(result.current.dirty).toBe(false);
+  });
+
   it("shows the canonical URL, not an unsavable draft, while the source is locked", () => {
     const { result, rerender } = renderHook(
       ({ source }: { source: RemoteMcpServer }) => useUpstreamUrlDraft(source),

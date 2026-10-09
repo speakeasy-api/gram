@@ -86,11 +86,14 @@ export function useUpstreamUrlDraft(
           },
         });
       } catch (error) {
-        // The cached lock said yes; refresh it so the reason appears and the
-        // input falls back to the canonical URL. The refusal still reaches
-        // the caller.
-        if (isForbidden(error))
+        // The cached lock said yes; refresh it so the reason appears. A 403
+        // is a refusal of this URL, so discard it now rather than wait for
+        // the refresh, which may fail and leave the draft to reappear after
+        // a later grant. The refusal still reaches the caller.
+        if (isForbidden(error)) {
+          setDraft(initialUrl);
           void invalidateRemoteMcpSourceViews(queryClient);
+        }
         throw error;
       }
       await invalidateRemoteMcpSourceViews(queryClient);
