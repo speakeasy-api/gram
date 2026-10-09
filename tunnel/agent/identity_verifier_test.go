@@ -320,6 +320,7 @@ func TestCredentialsConfigValidation(t *testing.T) {
 		{"relative root", func(c *CredentialsConfig) { c.Root = "dev/shm" }},
 		{"unclean root", func(c *CredentialsConfig) { c.Root = "/dev/shm/../tmp" }},
 		{"negative max age", func(c *CredentialsConfig) { c.MaxAge = -time.Second }},
+		{"max age over a day", func(c *CredentialsConfig) { c.MaxAge = 25 * time.Hour }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -335,6 +336,11 @@ func TestCredentialsConfigValidation(t *testing.T) {
 	local.Issuer, local.JWKSURL, local.AllowInsecure = "http://localhost:8090", "http://host.docker.internal:8090/.well-known/jwks.json", true
 	_, err = local.normalize()
 	require.NoError(t, err)
+
+	reserved := base
+	reserved.Issuer, reserved.AllowInsecure = "http://tunnel.localhost:8090", true
+	_, err = reserved.normalize()
+	require.NoError(t, err, "RFC 6761 .localhost names are loopback")
 }
 
 //nolint:paralleltest // t.Setenv is process-global.
@@ -407,7 +413,7 @@ func TestAdmitCredential(t *testing.T) {
 func TestCredentialChildEnvReplacesInheritedValues(t *testing.T) {
 	t.Parallel()
 	env := credentialChildEnv([]string{"PATH=/bin", "HOME=/root", "OKTA_ACCESS_TOKEN_FILE=/shared/token", AccessTokenFileEnv + "=/shared/other", "XDG_CONFIG_HOME=/etc"}, "/s/token", "/s/home")
-	require.Equal(t, []string{"PATH=/bin", "XDG_CACHE_HOME=/root/.cache", "npm_config_cache=/root/.cache/npm", AccessTokenFileEnv + "=/s/token", "HOME=/s/home", "XDG_CONFIG_HOME=/s/home/.config", "XDG_DATA_HOME=/s/home/.local/share"}, env)
+	require.Equal(t, []string{"PATH=/bin", "XDG_CACHE_HOME=/root/.cache", "npm_config_cache=/root/.cache/npm", AccessTokenFileEnv + "=/s/token", "HOME=/s/home", "XDG_CONFIG_HOME=/s/home/.config", "XDG_DATA_HOME=/s/home/.local/share", "XDG_STATE_HOME=/s/home/.local/state"}, env)
 }
 
 func TestCredentialChildEnvKeepsCachesOutOfTheSession(t *testing.T) {
@@ -427,7 +433,7 @@ func TestCredentialChildEnvKeepsCachesOutOfTheSession(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			env := credentialChildEnv(tc.base, "/s/token", "/s/home")
-			require.Equal(t, tc.want, env[:len(env)-4], "cache settings never point into the session")
+			require.Equal(t, tc.want, env[:len(env)-5], "cache settings never point into the session")
 		})
 	}
 }

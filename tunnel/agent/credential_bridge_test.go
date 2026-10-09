@@ -790,3 +790,27 @@ func TestCredentialsTokenWriteFailureEndsSession(t *testing.T) {
 	require.Equal(t, 2, created)
 	require.Zero(t, live)
 }
+
+func TestCredentialsSessionStopsAdmittingOnceTerminationBegins(t *testing.T) {
+	t.Parallel()
+	c := newCredentialTestServer(t, credentialServerOptions{})
+	call := credentialCall{token: testTokenA}
+	call.sid = c.initialize(t, call)
+	sess := c.bridge.session(call.sid)
+
+	// Hold the gate so termination cannot finish yet.
+	require.True(t, sess.enterGate(t.Context()))
+	changed := call
+	changed.grant = testGrant{clientID: defaultTestGrant.clientID, grantID: defaultTestGrant.grantID, generation: 2}
+	changed.body = `{"jsonrpc":"2.0","id":8,"method":"tools/list"}`
+	require.Equal(t, http.StatusNotFound, c.do(t, changed).StatusCode)
+	require.True(t, sess.closing.Load(), "admission stops before termination runs")
+	_, writes, _ := c.store.counts()
+	sess.leaveGate()
+
+	call.body = `{"jsonrpc":"2.0","id":9,"method":"tools/list"}`
+	require.Equal(t, http.StatusNotFound, c.do(t, call).StatusCode, "the old grant is not admitted meanwhile")
+	_, writesAfter, _ := c.store.counts()
+	require.Equal(t, writes, writesAfter)
+	c.requireSessionEnds(t, call.sid)
+}
