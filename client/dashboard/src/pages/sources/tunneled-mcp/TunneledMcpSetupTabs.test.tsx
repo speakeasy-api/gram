@@ -125,8 +125,13 @@ describe("TunneledMcpSetupTabs per-user credentials", () => {
       'value: "http://host.docker.internal:8090/.well-known/jwks.json"',
     );
     expect(
+      screen.getByText(/usually does not resolve in a cluster/),
+    ).toBeTruthy();
+    choose("Docker");
+    expect(
       screen.getByText(/host.docker.internal reaches your machine/),
     ).toBeTruthy();
+    choose("Kubernetes");
 
     fireEvent.change(screen.getByLabelText("Assertion issuer"), {
       target: { value: "http://tunnel.example.test" },
