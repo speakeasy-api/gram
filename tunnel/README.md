@@ -122,7 +122,10 @@ and carries the SHA-256 of the token it vouches for (see the
   (`owner: "subject"`). An `initialize` without one gets 401 and starts no
   process. For an existing session the principal is proven, so a POST without
   a valid credential (for example after the user unlinks the account) gets 401
-  and ends the session.
+  and ends the session. A request whose token from the session's own grant
+  has already expired, or whose token or assertion expired while it waited,
+  only gets 401: it is a stale request, and the session's deadline (below)
+  still applies.
 - A session is bound to its grant: client, grant row and grant generation. A
   refreshed token for the same grant replaces the file in the running session.
   Reauthorizing, switching upstream account or another client ends the session
@@ -162,7 +165,7 @@ then stdin close, SIGTERM and SIGKILL to the process group).
 
 The agent refuses to start in this mode unless it runs on Linux with a stdio
 command, the verifier settings are valid, the credentials directory is on
-tmpfs or ramfs, and `SPEAKEASY_ACCESS_TOKEN_FILE` is not set in its own
+tmpfs or ramfs and safe from other users (below), and `SPEAKEASY_ACCESS_TOKEN_FILE` is not set in its own
 environment. It fetches verification keys on demand, trusts them for five
 minutes, and rejects every assertion when it cannot revalidate expired keys.
 
@@ -173,8 +176,15 @@ The agent sets `SPEAKEASY_ACCESS_TOKEN_FILE`, `HOME`, `XDG_CONFIG_HOME` and
 replacing inherited values, and removes `OKTA_ACCESS_TOKEN_FILE`. The server
 must read the token file when it calls the upstream API rather than caching it
 at startup; the file is written before the process starts and replaced
-atomically. Package caches such as `XDG_CACHE_HOME` stay shared across
-sessions; keep them free of credentials.
+atomically.
+
+Package caches stay outside the session directory, so a server installed on
+first use is not downloaded again into every session's memory. Unless the
+agent's environment sets them, the agent sets `XDG_CACHE_HOME` to
+`$HOME/.cache` and `npm_config_cache` to `$XDG_CACHE_HOME/npm`, using the
+agent's own home. When the agent has no absolute `HOME`, set both explicitly.
+Caches are shared by every session; keep them free of credentials, and prefer
+a server installed in the image to one fetched at startup.
 
 The server's stderr is not logged in this mode, because SDK errors can print
 credentials. The agent logs only its size.
@@ -186,7 +196,15 @@ agent-owned `speakeasy-tunnel-agent/<instance>/` directory (mode `0700`,
 files `0600`), and removed when the session ends: once its processes have
 stopped, or after a bounded attempt to stop them fails. At startup the agent removes
 files left by agents that crashed, and never touches anything else in the
-directory. Several agents may share a credentials directory.
+directory. An instance's lock file is removed last, so files the agent could
+not remove are recovered by the next agent that starts. Several agents may
+share a credentials directory.
+
+Server processes open the token file by its path, so no other user may be
+able to rename anything along it. The credentials directory and every
+directory above it must belong to root or the agent's user, and must not be
+writable by other users unless it is sticky. Docker's and Kubernetes' default
+`/dev/shm` (a sticky tmpfs) qualifies.
 
 This promises that no credential file is written to a persistent filesystem.
 It does not stop the kernel from writing memory to disk. For that, also:
@@ -202,10 +220,11 @@ its direct child if the agent dies. A server that daemonizes or starts a new
 session escapes its process group; the agent removes its token file anyway
 when the session ends.
 
-On Kubernetes, mount `emptyDir: {medium: Memory}` at the credentials
-directory, and set `securityContext` with `runAsNonRoot`,
+On Kubernetes, use the container's default `/dev/shm`, and set
+`securityContext` with a numeric `runAsUser`, `runAsNonRoot`,
 `allowPrivilegeEscalation: false` and `readOnlyRootFilesystem` where your
-server allows it.
+server allows it. A memory `emptyDir` is writable by every user without the
+sticky bit, so the agent refuses it.
 
 Every server process runs as the agent's user. File permissions do not
 isolate processes of the same user from each other, so run only a trusted,
