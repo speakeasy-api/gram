@@ -21,6 +21,7 @@ import {
 } from "./exploreModel";
 import { encodeSpec, TAB_PARAM } from "./exploreUrl";
 import { ExploreResults } from "./ExploreResults";
+import { ExploreV2Prototype } from "./ExploreV2Prototype";
 import { QueryBuilder } from "./QueryBuilder";
 import { RequireExplore } from "./RequireExplore";
 import { useQueryUrl } from "./useQueryUrl";
@@ -224,9 +225,16 @@ function ExploreWorkbench({
               ) : null}
             </Link>
           </PageTabsTrigger>
+          {/* PROTOTYPE: remove with ExploreV2Prototype.tsx. */}
+          <PageTabsTrigger value="v2" asChild>
+            <Link to={tab.href("v2")} state={tab.state}>
+              Explore v2
+            </Link>
+          </PageTabsTrigger>
         </PageTabsList>
       </div>
 
+      {tab.current === "v2" ? <ExploreV2Prototype /> : null}
       {tab.current === "widgets" ? (
         <WidgetList
           widgets={widgets}
@@ -392,7 +400,7 @@ function widgetProblem(
   return null;
 }
 
-type ExploreTabName = "explore" | "widgets";
+type ExploreTabName = "explore" | "widgets" | "v2";
 
 /**
  * The page's tab, kept in the URL beside the query so a link can open
@@ -408,8 +416,9 @@ function useTab(): {
   const [params] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
+  const named = params.get(TAB_PARAM);
   const current: ExploreTabName =
-    params.get(TAB_PARAM) === "widgets" ? "widgets" : "explore";
+    named === "widgets" || named === "v2" ? named : "explore";
   const href = (to: ExploreTabName) => {
     const out = new URLSearchParams(params);
     if (to === "explore") out.delete(TAB_PARAM);
