@@ -220,6 +220,8 @@ func TestRiskPolicyLifecycleCleanup_ToleratesMalformedMCPScope(t *testing.T) {
 	nullServersPolicy := seedRiskPolicyWithRawMCPScope(t, ctx, ti, "null servers", []byte(`{"servers": null}`))
 	nonBooleanAllServersPolicy := seedRiskPolicyWithRawMCPScope(t, ctx, ti, "non-boolean all servers",
 		[]byte(`{"all_servers": "not-a-boolean", "servers": [{"mcp_server_id": "`+live.ID+`"}]}`))
+	stringAllServersPolicy := seedRiskPolicyWithRawMCPScope(t, ctx, ti, "string all servers",
+		[]byte(`{"all_servers": "true", "servers": [{"mcp_server_id": "`+owner.ID+`"}]}`))
 
 	err := ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{ID: owner.ID})
 	require.NoError(t, err)
@@ -234,7 +236,7 @@ func TestRiskPolicyLifecycleCleanup_ToleratesMalformedMCPScope(t *testing.T) {
 		ProjectID: *authCtx.ProjectID,
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-	for _, policy := range []riskrepo.RiskPolicy{nullServersPolicy, nonBooleanAllServersPolicy} {
+	for _, policy := range []riskrepo.RiskPolicy{nullServersPolicy, nonBooleanAllServersPolicy, stringAllServersPolicy} {
 		_, err = queries.GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{
 			ID:        policy.ID,
 			ProjectID: *authCtx.ProjectID,
