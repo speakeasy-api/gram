@@ -13,7 +13,7 @@ import { useNavigate, useSearchParams } from "react-router";
 const BACKEND_SHARING_REFUSAL = "already fronts the same backend";
 const HTTP_CONFLICT = 409;
 
-export function isGatewayBackendSharingRefusal(error: unknown): boolean {
+function isGatewayBackendSharingRefusal(error: unknown): boolean {
   return (
     getHttpStatusCode(error) === HTTP_CONFLICT &&
     error instanceof Error &&
@@ -21,7 +21,7 @@ export function isGatewayBackendSharingRefusal(error: unknown): boolean {
   );
 }
 
-export const GATEWAY_BACKEND_SHARING_MESSAGE =
+const GATEWAY_BACKEND_SHARING_MESSAGE =
   "Your server was created, but this gateway already includes an MCP server on the same backend (the same tunnel or remote server), and a gateway can include only one. Open the new server, or add a server on a different backend to the gateway.";
 
 /** Keep creation separate from attachment: retrying must never create a server. */
