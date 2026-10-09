@@ -7,35 +7,25 @@ import (
 )
 
 const (
-	// GramGatewayLogScope is the instrumentation scope the MCP gateway emits
-	// its tool call records under: the gateway's own package, as an OTel
-	// instrumentation library names itself.
+	// GramGatewayLogScope is the scope the MCP gateway emits tool call records under.
 	GramGatewayLogScope = "github.com/speakeasy-api/gram/server/internal/mcp"
 
-	// GramToolCallStartedEvent is emitted before the gateway runs a tool,
-	// and GramToolCallCompletedEvent once the call has returned. The two
-	// records of one call share gram.tool_call.id.
+	// The two records of one tool call share gram.tool_call.id.
 	GramToolCallStartedEvent   = "gram.tool_call.started"
 	GramToolCallCompletedEvent = "gram.tool_call.completed"
 
-	// nanosPerSecond converts the seconds the gateway records a duration in
-	// into the nanoseconds agent_events stores.
+	// nanosPerSecond converts the gateway's seconds into agent_events' nanoseconds.
 	nanosPerSecond = 1e9
 )
 
-// GramLog reads the records the MCP gateway emits for the tool calls it
-// runs. A call is two records: the started record is the tool_call, the
-// completed record the tool_call_result, and both name the same subject,
-// the tool call id. No model provider is involved, and the agent surface is
-// whatever MCP client made the call, as it introduced itself.
+// GramLog reads the records the MCP gateway emits for the tool calls it runs.
 type GramLog struct{}
 
 func (GramLog) AppliesTo(record *otelv1.InboundLogRecord) bool {
 	return record.GetScope().GetName() == GramGatewayLogScope
 }
 
-// InputContent and OutputContent: the tool's arguments and result are tool
-// IO, not a conversation, so there are no messages to normalize.
+// InputContent is empty: tool IO is not a conversation.
 func (GramLog) InputContent(*otelv1.InboundLogRecord) (string, genaiconv.InputMessages, error) {
 	return "", nil, nil
 }
@@ -44,8 +34,7 @@ func (GramLog) OutputContent(*otelv1.InboundLogRecord) (string, genaiconv.Output
 	return "", nil, nil
 }
 
-// SessionID is the MCP session the call was made on, else the chat it was
-// made from, else the conversation id the call carried.
+// SessionID is the MCP session, else the chat, else the conversation id.
 func (GramLog) SessionID(record *otelv1.InboundLogRecord) (string, string, error) {
 	key, value := getOneLogAttrAny(record,
 		string(attr.SessionIDKey),
@@ -69,14 +58,12 @@ func (GramLog) ResponseID(*otelv1.InboundLogRecord) (string, string, error) {
 	return "", "", nil
 }
 
-// Provider: a tool call involves no model provider.
+// Provider is empty: a tool call involves no model provider.
 func (GramLog) Provider(*otelv1.InboundLogRecord) (string, string, error) {
 	return "", "", nil
 }
 
-// Surface is the MCP client that made the call, as it introduced itself. The
-// key is the attribute, not the scope, since the surface is read from the
-// record rather than known from recognising the producer.
+// Surface is the MCP client that made the call, as it introduced itself.
 func (GramLog) Surface(record *otelv1.InboundLogRecord) (string, string, error) {
 	key, value := getOneLogAttr(record, string(attr.McpClientNameKey))
 	return key, value, nil
@@ -87,8 +74,7 @@ func (GramLog) EventName(record *otelv1.InboundLogRecord) (string, string, error
 	return key, name, nil
 }
 
-// EventType: the started record is the call, the completed record its
-// result. Anything else on this scope is unclassified.
+// EventType is tool_call for the started record and tool_call_result for the completed one.
 func (GramLog) EventType(record *otelv1.InboundLogRecord) (string, string, error) {
 	key, name := logRawEventName(record)
 	switch name {
@@ -119,10 +105,7 @@ func (GramLog) ToolName(record *otelv1.InboundLogRecord) (string, string, error)
 	return key, value, nil
 }
 
-// Outcome is what the gateway said about the call under gram.outcome, which
-// it derives by the rule that marks the tool result isError for the client.
-// A record without that verdict falls back to the HTTP status it recorded,
-// under the same rule: anything but a 2xx failed.
+// Outcome is gram.outcome, else derived from the HTTP status.
 func (GramLog) Outcome(record *otelv1.InboundLogRecord) (string, string, error) {
 	if key, outcome := getOneLogAttr(record, string(attr.OutcomeKey)); key != "" {
 		return key, outcome, nil
@@ -137,10 +120,7 @@ func (GramLog) Outcome(record *otelv1.InboundLogRecord) (string, string, error) 
 	return key, OutcomeOK, nil
 }
 
-// OutcomeMessage is the message the gateway answered the client with when
-// the call failed before or while running. A tool that returned its own
-// error document carries none: the gateway records the result, not a
-// message about it.
+// OutcomeMessage is the error the gateway answered the client with.
 func (GramLog) OutcomeMessage(record *otelv1.InboundLogRecord) (string, string, error) {
 	key, value := getOneLogAttr(record, string(attr.ErrorMessageKey))
 	return key, value, nil
@@ -150,8 +130,7 @@ func (GramLog) Text(*otelv1.InboundLogRecord) (string, string, error) {
 	return "", "", nil
 }
 
-// DurationNano is how long the call took by the gateway's own timing, which
-// it records in seconds.
+// DurationNano is the gateway's timing of the call, recorded in seconds.
 func (GramLog) DurationNano(record *otelv1.InboundLogRecord) (string, int64, error) {
 	key, seconds := getOneLogFloat64(record, string(attr.ToolCallDurationKey))
 	if key == "" {
@@ -192,15 +171,13 @@ func (GramLog) AgentName(*otelv1.InboundLogRecord) (string, string, error) {
 	return "", "", nil
 }
 
-// MCPServerName is the hosted MCP server the tool belongs to, by its
-// toolset slug. A call dispatched without one is counted.
+// MCPServerName is the hosted MCP server's toolset slug.
 func (GramLog) MCPServerName(record *otelv1.InboundLogRecord) (string, string, error) {
 	key, value := getOneLogAttr(record, string(attr.ToolsetSlugKey))
 	return key, value, nil
 }
 
-// MCPToolName is the tool itself: every tool the gateway runs is served over
-// MCP, so the tool's name is the MCP tool's name.
+// MCPToolName is the tool's name: every tool the gateway runs is served over MCP.
 func (GramLog) MCPToolName(record *otelv1.InboundLogRecord) (string, string, error) {
 	key, value := getOneLogAttr(record, string(attr.ToolNameKey))
 	return key, value, nil

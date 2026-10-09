@@ -53,10 +53,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// gatewayRecordsServiceName is the service.name on the records the gateway
-// emits for the tool calls it runs, whichever process serves the gateway:
-// the pipeline derives the agent_events source from it, and dashboards see
-// one source for hosted tool use rather than one per tier.
+// gatewayRecordsServiceName is the service.name on gateway tool call records,
+// whichever process serves the gateway, so they share one agent_events source.
 const gatewayRecordsServiceName = "gram-server"
 
 // newToolCallLogs is the otelpub logger the gateway writes its tool call records through.
@@ -85,8 +83,7 @@ type mcpServiceDependencies struct {
 	BillingTracker billing.Tracker
 	Billing        billing.Repository
 	Telemetry      *tm.Logger
-	// ToolCallLogs is the otelpub logger the gateway writes its tool call
-	// records through; the service closes it on Shutdown.
+	// ToolCallLogs is closed by the service on Shutdown.
 	ToolCallLogs           *otelpub.Logger
 	TelemetryService       *tm.Service
 	RAG                    *rag.ToolsetVectorStore

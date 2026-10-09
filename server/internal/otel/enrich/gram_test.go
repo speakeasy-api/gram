@@ -8,9 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The gateway's own records: the started and completed halves of one tool
-// call, under the gateway's scope, from the server's own resource.
-
 func gramStartedRecord(attributes ...*otelv1.InboundLogRecord_KeyValue) *otelv1.InboundLogRecord {
 	return inboundTestLog(dialect.GramGatewayLogScope, "gram-server", dialect.GramToolCallStartedEvent, attributes...)
 }
@@ -46,9 +43,7 @@ func TestClassificationForGram(t *testing.T) {
 func TestIdentityForGram(t *testing.T) {
 	t.Parallel()
 
-	// Both halves of a call carry the same identity: the session, the user
-	// and the call id that is the event. The gateway has no turn, and an
-	// external org only when the caller carried one.
+	// Both halves of a call carry the same identity; the gateway has no turn.
 	for name, record := range map[string]*otelv1.InboundLogRecord{
 		"started":   gramStartedRecord(gramIdentity()...),
 		"completed": gramCompletedRecord(gramIdentity()...),

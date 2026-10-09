@@ -14,7 +14,6 @@ func gramTestDoubleKV(key string, value float64) *otelv1.InboundLogRecord_KeyVal
 	}).Build()
 }
 
-// gramRecord is a record the gateway emitted under its scope.
 func gramRecord(eventName string, attributes ...*otelv1.InboundLogRecord_KeyValue) *otelv1.InboundLogRecord {
 	return accessorTestRecord(GramGatewayLogScope, eventName, attributes...)
 }
