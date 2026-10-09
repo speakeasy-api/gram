@@ -11,8 +11,6 @@ import { Link } from "react-router";
  */
 export function DashboardFrame({
   backHref,
-  backState,
-  heading = "section",
   name,
   description,
   badge,
@@ -23,12 +21,6 @@ export function DashboardFrame({
 }: {
   /** Where the list of dashboards is; a page with no list above it has none. */
   backHref?: string | undefined;
-  backState?: unknown;
-  /**
-   * How the name is drawn: as a section under a page's tabs, or as the
-   * page's own title when the dashboard is the page.
-   */
-  heading?: "section" | "page";
   name: string;
   description?: string | undefined;
   /** Drawn beside the name: how the dashboard is marked, when it is. */
@@ -44,21 +36,13 @@ export function DashboardFrame({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
-        {backHref === undefined ? null : (
-          <DashboardBackLink href={backHref} state={backState} />
-        )}
+        {backHref === undefined ? null : <DashboardBackLink href={backHref} />}
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 flex-col gap-1">
             <div className="flex min-w-0 items-center gap-2">
-              {heading === "page" ? (
-                <h1 className="text-display-sm truncate font-thin" title={name}>
-                  {name}
-                </h1>
-              ) : (
-                <h2 className="text-heading-lg truncate" title={name}>
-                  {name}
-                </h2>
-              )}
+              <h1 className="text-display-sm truncate font-thin" title={name}>
+                {name}
+              </h1>
               {badge}
             </div>
             {description ? (
@@ -80,17 +64,10 @@ export function DashboardFrame({
 }
 
 /** The way back to the list of dashboards. */
-export function DashboardBackLink({
-  href,
-  state,
-}: {
-  href: string;
-  state: unknown;
-}): JSX.Element {
+export function DashboardBackLink({ href }: { href: string }): JSX.Element {
   return (
     <Link
       to={href}
-      state={state}
       className="text-muted-foreground hover:text-foreground inline-flex w-max items-center gap-1 text-xs no-underline hover:underline"
     >
       <Icon name="arrow-left" className="size-3" aria-hidden />

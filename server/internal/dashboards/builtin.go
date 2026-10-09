@@ -37,7 +37,7 @@ type builtInCard struct {
 	X, Y, W, H    int
 }
 
-// builtIns is every built-in dashboard, in the order the Dashboards tab
+// builtIns is every built-in dashboard, in the order the Dashboards page
 // lists them.
 var builtIns = []builtIn{mcpTools}
 

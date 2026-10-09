@@ -82,7 +82,6 @@ function renderGrid({
       saving={false}
       onSave={onSave}
       onRemove={onRemove}
-      onOpen={() => {}}
     />,
   );
   return { onRemove, onSave };
@@ -123,7 +122,6 @@ describe("DashboardGrid", () => {
         saving
         onSave={() => {}}
         onRemove={() => {}}
-        onOpen={() => {}}
       />,
     );
     expect(
@@ -150,7 +148,6 @@ describe("DashboardGrid", () => {
         saving={false}
         onSave={() => {}}
         onRemove={() => {}}
-        onOpen={() => {}}
       />,
     );
     expect(screen.getByTestId("placeholder")).toBeTruthy();
@@ -176,7 +173,6 @@ describe("DashboardGrid", () => {
         saving={false}
         onSave={() => {}}
         onRemove={() => {}}
-        onOpen={() => {}}
       />,
     );
     expect(screen.getByRole("region", { name: "Tool calls" })).toBeTruthy();

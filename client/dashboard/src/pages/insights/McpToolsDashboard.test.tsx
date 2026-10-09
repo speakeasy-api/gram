@@ -36,16 +36,21 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-1" }),
 }));
 vi.mock("@/routes", () => ({
-  useRoutes: () => ({ explore: { href: () => "/org/projects/p/explore" } }),
+  useRoutes: () => ({
+    dashboards: {
+      detail: {
+        goTo: (id: string) => {
+          testState.navigated.push(`/org/projects/p/dashboards/${id}`);
+        },
+      },
+    },
+  }),
   useOrgRoutes: () => ({ logs: { href: () => "/org/settings/logs" } }),
 }));
 vi.mock("react-router", () => ({
   Link: ({ to, children }: { to: string; children: ReactNode }) => (
     <a href={to}>{children}</a>
   ),
-  useNavigate: () => (to: string) => {
-    testState.navigated.push(to);
-  },
 }));
 vi.mock("@/components/page-layout", () => ({
   Page: { Eyebrow: () => <div data-testid="eyebrow" /> },
@@ -65,16 +70,14 @@ vi.mock("@/components/EnableLoggingOverlay", () => ({
 vi.mock("../explore/BuiltInDashboardPage", () => ({
   BuiltInDashboardPage: ({
     slug,
-    heading,
     actions,
     onOpen,
   }: {
     slug: string;
-    heading?: string;
     actions?: ReactNode;
     onOpen: (dashboard: Dashboard) => void;
   }) => (
-    <div data-testid="built-in" data-slug={slug} data-heading={heading}>
+    <div data-testid="built-in" data-slug={slug}>
       {actions}
       <button
         type="button"
@@ -103,7 +106,6 @@ describe("McpToolsPage", () => {
 
     const page = screen.getByTestId("built-in");
     expect(page.getAttribute("data-slug")).toBe("mcp-tools");
-    expect(page.getAttribute("data-heading")).toBe("page");
     expect(screen.getByTestId("eyebrow")).toBeTruthy();
     expect(
       screen
@@ -113,13 +115,11 @@ describe("McpToolsPage", () => {
     expect(screen.queryByTestId("legacy-page")).toBeNull();
   });
 
-  it("opens the copy Duplicate makes on the Dashboards tab", () => {
+  it("opens the copy Duplicate makes on its Dashboards page", () => {
     render(<McpToolsPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
-    expect(testState.navigated).toEqual([
-      "/org/projects/p/explore?tab=dashboards&dashboard=copy-1",
-    ]);
+    expect(testState.navigated).toEqual(["/org/projects/p/dashboards/copy-1"]);
   });
 
   it("holds the place while the flag loads, showing neither page", () => {

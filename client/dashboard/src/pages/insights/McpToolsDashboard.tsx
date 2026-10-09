@@ -11,7 +11,7 @@ import { useOrgRoutes, useRoutes } from "@/routes";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { Settings } from "lucide-react";
 import type { JSX } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link } from "react-router";
 import { BuiltInDashboardPage } from "../explore/BuiltInDashboardPage";
 
 /** The slug of the Speakeasy-built dashboard the MCP & Tools page is. */
@@ -47,7 +47,6 @@ export function McpToolsDashboard(): JSX.Element {
   );
   const orgRoutes = useOrgRoutes();
   const routes = useRoutes();
-  const navigate = useNavigate();
 
   let body: JSX.Element;
   if (features.isPending) {
@@ -84,7 +83,6 @@ export function McpToolsDashboard(): JSX.Element {
     body = (
       <BuiltInDashboardPage
         slug={MCP_TOOLS_SLUG}
-        heading="page"
         actions={
           <Button variant="secondary" size="sm" asChild>
             <Link to={orgRoutes.logs.href()}>
@@ -94,11 +92,7 @@ export function McpToolsDashboard(): JSX.Element {
           </Button>
         }
         // The copy is a project dashboard, so it opens where those live.
-        onOpen={(dashboard) =>
-          void navigate(
-            `${routes.explore.href()}?tab=dashboards&dashboard=${dashboard.id}`,
-          )
-        }
+        onOpen={(dashboard) => routes.dashboards.detail.goTo(dashboard.id)}
       />
     );
   }

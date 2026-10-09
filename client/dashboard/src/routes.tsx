@@ -58,6 +58,12 @@ import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
 import Costs from "./pages/costs/Costs";
+import {
+  BuiltInDashboardRoute,
+  DashboardRoute,
+  DashboardsIndex,
+  DashboardsRoot,
+} from "./pages/explore/Dashboards";
 import Explore from "./pages/explore/Explore";
 import IdentitiesIndex, {
   IdentityDetailIndexRedirect,
@@ -825,6 +831,26 @@ const ROUTE_STRUCTURE = {
     icon: "telescope",
     component: Explore,
     stage: "preview",
+  },
+  dashboards: {
+    title: "Dashboards",
+    url: "dashboards",
+    icon: "layout-grid",
+    component: DashboardsRoot,
+    indexComponent: DashboardsIndex,
+    stage: "preview",
+    subPages: {
+      builtIn: {
+        title: "Dashboard",
+        url: "builtin/:slug",
+        component: BuiltInDashboardRoute,
+      },
+      detail: {
+        title: "Dashboard",
+        url: ":dashboardId",
+        component: DashboardRoute,
+      },
+    },
   },
   logs: {
     title: "Tool Logs",

@@ -45,7 +45,7 @@ type Row =
     };
 
 /**
- * The project's dashboards, as the Dashboards tab lists them: the ones
+ * The project's dashboards, as the Dashboards page lists them: the ones
  * Speakeasy ships first, marked as such, then the project's own; searchable
  * by name and opened with a click. Anyone can make one; duplicating a
  * Speakeasy-built dashboard or someone else's makes a copy to change.

@@ -26,30 +26,6 @@ export const WIDGET_PARAM = "widget";
 /** The search parameter naming the page's tab; absent means Explore. */
 export const TAB_PARAM = "tab";
 
-/** The search parameter naming the dashboard the Dashboards tab has open. */
-export const DASHBOARD_PARAM = "dashboard";
-
-/**
- * How the dashboard parameter names a Speakeasy-built dashboard: its slug
- * behind this prefix, which no project dashboard's id (a UUID) starts with.
- */
-export const BUILT_IN_PREFIX = "builtin:";
-
-/** The dashboard parameter that opens a Speakeasy-built dashboard. */
-export function builtInParam(slug: string): string {
-  return BUILT_IN_PREFIX + slug;
-}
-
-/**
- * The slug of the Speakeasy-built dashboard a dashboard parameter names, or
- * null when it names a project dashboard.
- */
-export function builtInSlug(param: string): string | null {
-  return param.startsWith(BUILT_IN_PREFIX)
-    ? param.slice(BUILT_IN_PREFIX.length)
-    : null;
-}
-
 // Bumped when the encoding changes shape; a link in an older shape then
 // falls back to the default view rather than being misread.
 const VERSION = 1;

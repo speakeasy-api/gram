@@ -123,10 +123,8 @@ function renderPage(slug = "mcp-tools", onOpen = vi.fn<() => void>()) {
     <MemoryRouter>
       <BuiltInDashboardPage
         slug={slug}
-        backHref="/explore?tab=dashboards"
-        backState={null}
+        backHref="/dashboards"
         onOpen={onOpen}
-        onOpenQuery={() => {}}
       />
     </MemoryRouter>,
   );

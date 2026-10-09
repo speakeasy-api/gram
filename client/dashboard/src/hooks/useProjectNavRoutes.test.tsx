@@ -37,6 +37,7 @@ const routes = {
   skills: route("Skills", "skills"),
   costs: route("Costs", "costs"),
   explore: route("Explore", "explore"),
+  dashboards: route("Dashboards", "dashboards"),
   deployments: route("Deployments", "deployments"),
   detectionRules: route("Detection Rules", "detection-rules"),
   identities: route("Identities", "identities"),
@@ -221,18 +222,20 @@ describe("useProjectNavRoutes", () => {
     },
   );
 
-  it("keeps Explore out of the nav until its flag is released to the organization", () => {
+  it("keeps Explore and Dashboards out of the nav until their flag is released to the organization", () => {
     const { result: hidden } = renderHook(() => useProjectNavRoutes());
-    expect(hidden.current.map((entry) => entry.route)).not.toContain(
-      routes.explore,
-    );
+    const hiddenRoutes = hidden.current.map((entry) => entry.route);
+    expect(hiddenRoutes).not.toContain(routes.explore);
+    expect(hiddenRoutes).not.toContain(routes.dashboards);
 
     testState.featureFlags = {
       ...testState.featureFlags,
       [FEATURE_FLAGS.explore]: { status: "enabled" },
     };
     const { result: shown } = renderHook(() => useProjectNavRoutes());
-    expect(shown.current.map((entry) => entry.route)).toContain(routes.explore);
+    const shownRoutes = shown.current.map((entry) => entry.route);
+    expect(shownRoutes).toContain(routes.explore);
+    expect(shownRoutes).toContain(routes.dashboards);
   });
 
   it("uses resolved values for feature-gated navigation", () => {

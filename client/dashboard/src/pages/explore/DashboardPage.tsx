@@ -28,7 +28,6 @@ import { useCanEditDashboard } from "./useCanEditDashboard";
 import { useCreatorName } from "./useCreatorName";
 import { useDashboardMutations } from "./useDashboardMutations";
 import { pageFieldsFor, usePageFilters } from "./usePageFilters";
-import type { OpenInExplore } from "./WidgetView";
 
 /** What the dashboard page is told about the project around it. */
 interface DashboardPageProps {
@@ -41,13 +40,10 @@ interface DashboardPageProps {
   onRetryWidgets: () => void;
   /** Where the list of dashboards is. */
   backHref: string;
-  backState: unknown;
   /** Open another dashboard: the copy, after duplicating. */
   onOpen: (dashboard: Dashboard) => void;
   /** This dashboard was deleted. */
   onDeleted: () => void;
-  /** Open a card's question in the Explore tab. */
-  onOpenQuery: OpenInExplore;
 }
 
 /**
@@ -61,9 +57,7 @@ export function DashboardPage({
   ...props
 }: DashboardPageProps & { id: string }): JSX.Element {
   const query = useDashboard({ id });
-  const back = (
-    <DashboardBackLink href={props.backHref} state={props.backState} />
-  );
+  const back = <DashboardBackLink href={props.backHref} />;
 
   if (query.isPending) {
     return (
@@ -106,10 +100,8 @@ function DashboardView({
   widgetsFailed,
   onRetryWidgets,
   backHref,
-  backState,
   onOpen,
   onDeleted,
-  onOpenQuery,
 }: DashboardPageProps & { dashboard: Dashboard }): JSX.Element {
   const creator = useCreatorName();
   const canEdit = useCanEditDashboard();
@@ -262,7 +254,6 @@ function DashboardView({
         onRemove={(placementId) =>
           mutations.removeWidget(dashboard.id, placementId)
         }
-        onOpen={onOpenQuery}
       />
     );
   }
@@ -271,7 +262,6 @@ function DashboardView({
     <>
       <DashboardFrame
         backHref={backHref}
-        backState={backState}
         name={dashboard.name}
         description={dashboard.description}
         byline={

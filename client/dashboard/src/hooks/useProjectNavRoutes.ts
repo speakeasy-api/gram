@@ -124,7 +124,12 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.policyCenter, scope: readWrite },
       { route: routes.shadowAI, scope: readWrite },
       { route: routes.costs, scope: observe },
-      ...(isExploreEnabled ? [{ route: routes.explore, scope: observe }] : []),
+      ...(isExploreEnabled
+        ? [
+            { route: routes.explore, scope: observe },
+            { route: routes.dashboards, scope: observe },
+          ]
+        : []),
       { route: routes.insights, scope: observe },
       { route: routes.agentSessions, scope: observe },
       ...(isOrgMemoryEnabled

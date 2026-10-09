@@ -12,8 +12,20 @@ import {
 } from "@testing-library/react";
 import type { ReactNode } from "react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, useLocation, useNavigate } from "react-router";
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  BuiltInDashboardRoute,
+  DashboardRoute,
+  DashboardsIndex,
+  DashboardsRoot,
+} from "./Dashboards";
 import Explore from "./Explore";
 import { encodeSpec } from "./exploreUrl";
 import { widgetFromSpec } from "./widgetSpec";
@@ -411,6 +423,14 @@ vi.mock("@gram/client/react-query/deleteDashboard.js", () => ({
 // cards only have to be there, openable and removable.
 vi.mock("./DashboardGrid", async () => {
   const { specFromStoredWidget } = await import("./widgetSpec");
+  const { Link } = await import("react-router");
+  const { encodeSpec } = await import("./exploreUrl");
+  const openHref = (spec: ExploreSpec | null | undefined, id?: string) => {
+    const params = new URLSearchParams();
+    if (spec) params.set("q", encodeSpec(spec));
+    if (id) params.set("widget", id);
+    return `/explore?${params.toString()}`;
+  };
   type Placement = { id: string };
   type Card = { id?: string; name: string } & Parameters<
     typeof specFromStoredWidget
@@ -420,13 +440,11 @@ vi.mock("./DashboardGrid", async () => {
       cards,
       page,
       canEdit,
-      onOpen,
       onRemove,
     }: {
       cards: { placement: Placement; widget: Card | undefined }[];
       page?: unknown;
       canEdit: boolean;
-      onOpen: (spec: unknown, widgetId: string | undefined) => void;
       onRemove: (placementId: string) => void;
     }) => (
       <ul
@@ -439,15 +457,15 @@ vi.mock("./DashboardGrid", async () => {
           return (
             <li key={placement.id}>
               {name}
-              <button
-                type="button"
-                onClick={() => {
-                  const spec = widget && specFromStoredWidget(widget);
-                  if (spec && widget) onOpen(spec, widget.id);
-                }}
+              {/* A card links to its question, as WidgetView does. */}
+              <Link
+                to={openHref(
+                  widget && specFromStoredWidget(widget),
+                  widget?.id,
+                )}
               >
                 Open {name} in Explore
-              </button>
+              </Link>
               <button type="button" onClick={() => onRemove(placement.id)}>
                 Remove {name}
               </button>
@@ -588,9 +606,29 @@ vi.mock("./useDimensionValues", () => ({
     isFetching: false,
   }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({ explore: { href: () => "/explore" } }),
-}));
+vi.mock("@/routes", async () => {
+  const { useNavigate } = await import("react-router");
+  return {
+    useRoutes: () => {
+      const navigate = useNavigate();
+      return {
+        explore: { href: () => "/explore" },
+        dashboards: {
+          href: () => "/dashboards",
+          goTo: () => void navigate("/dashboards"),
+          detail: {
+            href: (id: string) => `/dashboards/${id}`,
+            goTo: (id: string) => void navigate(`/dashboards/${id}`),
+          },
+          builtIn: {
+            goTo: (slug: string) =>
+              void navigate(`/dashboards/builtin/${slug}`),
+          },
+        },
+      };
+    },
+  };
+});
 vi.mock("@/components/page-templates", () => ({
   WorkbenchPage: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
@@ -728,7 +766,15 @@ function renderExplore(entry = "/explore") {
     <MemoryRouter initialEntries={["/before", entry]} initialIndex={1}>
       <RouterProbe />
       <TooltipProvider>
-        <Explore />
+        <Routes>
+          <Route path="/explore" element={<Explore />} />
+          <Route path="/dashboards" element={<DashboardsRoot />}>
+            <Route index element={<DashboardsIndex />} />
+            <Route path="builtin/:slug" element={<BuiltInDashboardRoute />} />
+            <Route path=":dashboardId" element={<DashboardRoute />} />
+          </Route>
+          <Route path="*" element={null} />
+        </Routes>
       </TooltipProvider>
     </MemoryRouter>,
   );
@@ -921,7 +967,7 @@ describe("Explore", () => {
     testState.describeCalls = 0;
     renderExplore();
 
-    expect(screen.getByText("Explore is not available yet")).toBeTruthy();
+    expect(screen.getByText("This page is not available yet")).toBeTruthy();
     expect(screen.queryByRole("combobox", { name: "Dataset" })).toBeNull();
     expect(testState.describeCalls, "it never asks for the catalog").toBe(0);
   });
@@ -931,7 +977,7 @@ describe("Explore", () => {
     renderExplore();
 
     expect(screen.getByLabelText("Loading the catalog")).toBeTruthy();
-    expect(screen.queryByText("Explore is not available yet")).toBeNull();
+    expect(screen.queryByText("This page is not available yet")).toBeNull();
   });
 
   describe("the URL", () => {
@@ -1808,10 +1854,6 @@ describe("Explore", () => {
       };
     }
 
-    function dashboardsTab() {
-      return screen.getByRole("tab", { name: /Dashboards/ });
-    }
-
     function param(name: string) {
       return new URLSearchParams(nav.search).get(name);
     }
@@ -1851,9 +1893,8 @@ describe("Explore", () => {
       const user = userEvent.setup();
       testState.builtIn = [builtInPage()];
       testState.dashboards = [dashboard("d-1", "Agent activity")];
-      renderExplore("/explore?tab=dashboards");
+      renderExplore("/dashboards");
 
-      expect(dashboardsTab().textContent).toContain("2");
       expect(screen.getByText("Speakeasy-built")).toBeTruthy();
       const menus = screen.getAllByRole("button", { name: /^Actions for / });
       expect(menus).toHaveLength(2);
@@ -1867,7 +1908,7 @@ describe("Explore", () => {
       await user.keyboard("{Escape}");
 
       fireEvent.click(screen.getByText("MCP & Tools"));
-      expect(param("dashboard")).toBe("builtin:mcp-tools");
+      expect(nav.pathname).toBe("/dashboards/builtin/mcp-tools");
       expect(screen.getByRole("heading", { name: "MCP & Tools" })).toBeTruthy();
       const cards = screen.getByRole("list", { name: "Cards" });
       expect(cards.getAttribute("data-editable")).toBe("false");
@@ -1882,7 +1923,7 @@ describe("Explore", () => {
           duplicateBuiltInDashboardRequestBody: { slug: "mcp-tools" },
         },
       });
-      expect(param("dashboard")).toBe("dashboard-1");
+      expect(nav.pathname).toBe("/dashboards/dashboard-1");
       expect(
         screen.getByRole("heading", { name: "MCP & Tools (copy)" }),
       ).toBeTruthy();
@@ -1891,17 +1932,17 @@ describe("Explore", () => {
 
     it("opens a Speakeasy-built card's question in Explore, never as a widget", () => {
       testState.builtIn = [builtInPage()];
-      renderExplore("/explore?tab=dashboards&dashboard=builtin:mcp-tools");
+      renderExplore("/dashboards/builtin/mcp-tools");
 
       fireEvent.click(
-        screen.getByRole("button", { name: "Open Tool calls in Explore" }),
+        screen.getByRole("link", { name: "Open Tool calls in Explore" }),
       );
-      expect(param("tab")).toBeNull();
+      expect(nav.pathname).toBe("/explore");
       expect(param("widget")).toBeNull();
       expect(urlSpec()?.dataset).toBe("tool_calls");
     });
 
-    it("counts the project's dashboards on the tab, lists them, and opens one into the URL", () => {
+    it("lists the project's dashboards, opens one at its own URL, and goes back to the list", () => {
       testState.widgets = [savedWidget("w-1", "Sessions by user")];
       testState.dashboards = [
         dashboard("d-1", "Agent activity", {
@@ -1909,16 +1950,13 @@ describe("Explore", () => {
           widgets: [{ id: "p-1", widgetId: "w-1", x: 0, y: 0, w: 6, h: 3 }],
         }),
       ];
-      renderExplore();
+      renderExplore("/dashboards");
 
-      expect(dashboardsTab().textContent).toContain("1");
-      fireEvent.click(dashboardsTab());
-      expect(param("tab")).toBe("dashboards");
       expect(screen.getByText("What the agents did")).toBeTruthy();
       expect(screen.getByText("Test Member")).toBeTruthy();
 
       fireEvent.click(screen.getByText("Agent activity"));
-      expect(param("dashboard")).toBe("d-1");
+      expect(nav.pathname).toBe("/dashboards/d-1");
       expect(
         screen.getByRole("heading", { name: "Agent activity" }),
       ).toBeTruthy();
@@ -1928,10 +1966,8 @@ describe("Explore", () => {
         ),
       ).toBeTruthy();
 
-      // Switching tabs leaves the dashboard; coming back lands on the list.
-      fireEvent.click(screen.getByRole("tab", { name: /Widgets/ }));
-      expect(param("dashboard")).toBeNull();
-      fireEvent.click(dashboardsTab());
+      fireEvent.click(screen.getByRole("link", { name: /All dashboards/ }));
+      expect(nav.pathname).toBe("/dashboards");
       expect(
         screen.queryByRole("heading", { name: "Agent activity" }),
       ).toBeNull();
@@ -1940,7 +1976,7 @@ describe("Explore", () => {
 
     it("makes a dashboard and opens it, empty", async () => {
       const user = userEvent.setup();
-      renderExplore("/explore?tab=dashboards");
+      renderExplore("/dashboards");
       expect(screen.getByText("No dashboards yet")).toBeTruthy();
 
       await user.click(screen.getByRole("button", { name: "New dashboard" }));
@@ -1956,7 +1992,7 @@ describe("Explore", () => {
           request: { createDashboardRequestBody: { name: "Agent activity" } },
         },
       ]);
-      expect(param("dashboard")).toBe("dashboard-1");
+      expect(nav.pathname).toBe("/dashboards/dashboard-1");
       expect(
         screen.getByRole("heading", { name: "Agent activity" }),
       ).toBeTruthy();
@@ -1967,7 +2003,7 @@ describe("Explore", () => {
       const user = userEvent.setup();
       testState.widgets = [savedWidget("w-1", "Sessions by user")];
       testState.dashboards = [dashboard("d-1", "Agent activity")];
-      renderExplore("/explore?tab=dashboards&dashboard=d-1");
+      renderExplore("/dashboards/d-1");
 
       await user.click(screen.getByRole("button", { name: "Add widget" }));
       await user.click(
@@ -2003,15 +2039,12 @@ describe("Explore", () => {
           widgets: [{ id: "p-1", widgetId: "w-1", x: 0, y: 0, w: 6, h: 3 }],
         }),
       ];
-      renderExplore("/explore?tab=dashboards&dashboard=d-1");
+      renderExplore("/dashboards/d-1");
 
       fireEvent.click(
-        screen.getByRole("button", {
-          name: "Open Sessions by user in Explore",
-        }),
+        screen.getByRole("link", { name: "Open Sessions by user in Explore" }),
       );
-      expect(param("tab")).toBeNull();
-      expect(param("dashboard")).toBeNull();
+      expect(nav.pathname).toBe("/explore");
       expect(param("widget")).toBe("w-1");
       expect(urlSpec()).toMatchObject({
         dataset: "sessions",
@@ -2025,7 +2058,7 @@ describe("Explore", () => {
       testState.dashboards = [
         dashboard("d-1", "Agent activity", { createdByUserId: "other" }),
       ];
-      renderExplore("/explore?tab=dashboards&dashboard=d-1");
+      renderExplore("/dashboards/d-1");
 
       expect(screen.queryByRole("button", { name: "Add widget" })).toBeNull();
       await user.click(
@@ -2036,7 +2069,7 @@ describe("Explore", () => {
       await user.click(screen.getByRole("menuitem", { name: /Duplicate/ }));
 
       expect(testState.dashboardWrites[0]?.kind).toBe("duplicate");
-      expect(param("dashboard")).toBe("dashboard-1");
+      expect(nav.pathname).toBe("/dashboards/dashboard-1");
       expect(
         screen.getByRole("heading", { name: "Agent activity (copy)" }),
       ).toBeTruthy();
@@ -2055,7 +2088,7 @@ describe("Explore", () => {
         window: { preset: "30d", customRange: null, customLabel: null },
         filters: { user: ["alice"] },
       };
-      renderExplore("/explore?tab=dashboards&dashboard=d-1");
+      renderExplore("/dashboards/d-1");
 
       // The sessions dataset filters by user and surface, not model.
       expect(testState.pageFilterConfig).toMatchObject({
@@ -2097,7 +2130,7 @@ describe("Explore", () => {
         window: { preset: "7d", customRange: null, customLabel: null },
         filters: {},
       };
-      renderExplore("/explore?tab=dashboards&dashboard=d-1");
+      renderExplore("/dashboards/d-1");
 
       expect(testState.pageApplied).toEqual([]);
       expect(screen.queryByRole("button", { name: "Save filters" })).toBeNull();
@@ -2115,7 +2148,7 @@ describe("Explore", () => {
         }),
       ];
       testState.pageTouched = true;
-      renderExplore("/explore?tab=dashboards&dashboard=d-1&range=1d");
+      renderExplore("/dashboards/d-1?range=1d");
 
       expect(testState.pageApplied).toEqual([]);
     });
@@ -2134,9 +2167,7 @@ describe("Explore", () => {
         window: { preset: "30d", customRange: null, customLabel: null },
         filters: { user: ["alice"] },
       };
-      renderExplore(
-        "/explore?tab=dashboards&dashboard=d-1&range=30d&user=alice",
-      );
+      renderExplore("/dashboards/d-1?range=30d&user=alice");
 
       await user.click(screen.getByRole("button", { name: "Reset filters" }));
       expect(testState.pageApplied).toEqual([
@@ -2176,22 +2207,12 @@ describe("Explore", () => {
         window: { preset: "30d", customRange: null, customLabel: null },
         filters: {},
       };
-      renderExplore("/explore?tab=dashboards&dashboard=d-1&range=30d");
+      renderExplore("/dashboards/d-1?range=30d");
 
       expect(screen.queryByRole("button", { name: "Save filters" })).toBeNull();
       expect(
         screen.getByRole("button", { name: "Reset filters" }),
       ).toBeTruthy();
-    });
-
-    it("opens a dashboard without the bar's values from the page before", () => {
-      testState.dashboards = [dashboard("d-1", "Agent activity")];
-      renderExplore("/explore?tab=widgets&view=cards&range=30d&user=alice");
-
-      fireEvent.click(dashboardsTab());
-      expect(param("range")).toBeNull();
-      expect(param("user")).toBeNull();
-      expect(param("view")).toBe("cards");
     });
 
     it("says when the widgets behind the cards did not load, and tries again", () => {
@@ -2201,7 +2222,7 @@ describe("Explore", () => {
           widgets: [{ id: "p-1", widgetId: "w-1", x: 0, y: 0, w: 6, h: 3 }],
         }),
       ];
-      renderExplore("/explore?tab=dashboards&dashboard=d-1");
+      renderExplore("/dashboards/d-1");
 
       expect(screen.getByText("The widgets did not load")).toBeTruthy();
       expect(screen.queryByRole("list", { name: "Cards" })).toBeNull();
@@ -2246,8 +2267,7 @@ describe("Explore", () => {
       const [toast] = testState.toasts;
       expect(toast?.text).toBe("Added to “Agent activity”");
       act(() => toast?.action?.onClick());
-      expect(param("tab")).toBe("dashboards");
-      expect(param("dashboard")).toBe("d-1");
+      expect(nav.pathname).toBe("/dashboards/d-1");
     });
 
     it("says while the dashboards load, and when they did not, rather than offering none", async () => {
@@ -2361,7 +2381,7 @@ describe("Explore", () => {
     it("deletes a dashboard from its page and returns to the list", async () => {
       const user = userEvent.setup();
       testState.dashboards = [dashboard("d-1", "Agent activity")];
-      renderExplore("/explore?tab=dashboards&dashboard=d-1");
+      renderExplore("/dashboards/d-1");
 
       await user.click(
         screen.getByRole("button", { name: "Actions for Agent activity" }),
@@ -2372,8 +2392,7 @@ describe("Explore", () => {
       expect(testState.dashboardWrites).toEqual([
         { kind: "delete", request: { id: "d-1" } },
       ]);
-      expect(param("tab")).toBe("dashboards");
-      expect(param("dashboard")).toBeNull();
+      expect(nav.pathname).toBe("/dashboards");
       expect(screen.getByText("No dashboards yet")).toBeTruthy();
     });
   });

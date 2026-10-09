@@ -6,12 +6,10 @@ import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { PageTabsList, PageTabsTrigger, Tabs } from "@/components/ui/Tabs";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { useRoutes } from "@/routes";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import type { Widget } from "@gram/client/models/components/widget.js";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
-import { useDashboards } from "@gram/client/react-query/dashboards.js";
 import { useWidgets } from "@gram/client/react-query/widgets.js";
 import { useEffect, useMemo, useState, type JSX } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
@@ -21,19 +19,10 @@ import {
   queryBodyFromSpec,
   type ExploreSpec,
 } from "./exploreModel";
-import { BuiltInDashboardPage } from "./BuiltInDashboardPage";
-import { DashboardList } from "./DashboardList";
-import { DashboardPage } from "./DashboardPage";
-import {
-  builtInParam,
-  builtInSlug,
-  DASHBOARD_PARAM,
-  encodeSpec,
-  TAB_PARAM,
-} from "./exploreUrl";
+import { encodeSpec, TAB_PARAM } from "./exploreUrl";
 import { ExploreResults } from "./ExploreResults";
 import { QueryBuilder } from "./QueryBuilder";
-import { clearPageFilterParams } from "./usePageFilters";
+import { RequireExplore } from "./RequireExplore";
 import { useQueryUrl } from "./useQueryUrl";
 import { WidgetBar } from "./WidgetBar";
 import { DiscardChangesDialog } from "./WidgetDialogs";
@@ -79,28 +68,12 @@ function ExploreHeader(): JSX.Element {
   );
 }
 
-/**
- * Explore is dogfooded before it ships, so the page is gated as well as the
- * nav entry: hiding the link alone would leave the URL open to anyone who
- * guessed it. The flag is a rollout control, not authorization — the queries
- * behind this page are scoped by project:read whatever it says.
- */
 function ExploreBody(): JSX.Element {
-  const rollout = useFeatureFlag(FEATURE_FLAGS.explore);
-
-  // PostHog answers after the first paint, so wait rather than telling
-  // someone who does have Explore that they do not.
-  if (rollout.status === "loading") return <BuilderSkeleton />;
-  if (rollout.status !== "enabled") {
-    return (
-      <InlineEmptyState
-        icon="telescope"
-        heading="Explore is not available yet"
-        description="It is in preview with a few organizations. Ask your Speakeasy contact to turn it on."
-      />
-    );
-  }
-  return <ExploreCatalog />;
+  return (
+    <RequireExplore loading={<BuilderSkeleton />}>
+      <ExploreCatalog />
+    </RequireExplore>
+  );
 }
 
 function ExploreCatalog(): JSX.Element {
@@ -157,9 +130,6 @@ function ExploreWorkbench({
 
   const list = useWidgets();
   const widgets = list.data?.widgets ?? [];
-  const dashboardList = useDashboards();
-  const dashboards = dashboardList.data?.dashboards ?? [];
-  const builtIn = dashboardList.data?.builtIn ?? [];
   const openWidget = url.widgetId
     ? widgets.find((widget) => widget.id === url.widgetId)
     : undefined;
@@ -216,51 +186,11 @@ function ExploreWorkbench({
     void result.refetch();
   };
 
-  // The Dashboards tab: the Speakeasy-built or project dashboard the URL
-  // has open, or the list of them.
-  const openQueryFromCard = (next: ExploreSpec, widgetId: string | undefined) =>
-    confirmLeave(() => openQuery(next, widgetId ?? null));
-  const dashboardsTab = (): JSX.Element => {
-    const slug = tab.dashboardId === null ? null : builtInSlug(tab.dashboardId);
-    if (slug !== null) {
-      return (
-        <BuiltInDashboardPage
-          slug={slug}
-          backHref={tab.href("dashboards")}
-          backState={tab.state}
-          onOpen={(dashboard) => tab.go("dashboards", dashboard.id)}
-          onOpenQuery={openQueryFromCard}
-        />
-      );
-    }
-    if (tab.dashboardId) {
-      return (
-        <DashboardPage
-          id={tab.dashboardId}
-          widgets={widgets}
-          widgetsLoaded={list.data !== undefined}
-          widgetsFailed={list.isError && list.data === undefined}
-          onRetryWidgets={() => void list.refetch()}
-          backHref={tab.href("dashboards")}
-          backState={tab.state}
-          onOpen={(dashboard) => tab.go("dashboards", dashboard.id)}
-          onDeleted={() => tab.go("dashboards")}
-          onOpenQuery={openQueryFromCard}
-        />
-      );
-    }
-    return (
-      <DashboardList
-        dashboards={dashboards}
-        builtIn={builtIn}
-        isPending={dashboardList.isPending}
-        isError={dashboardList.isError}
-        onOpen={(dashboard) => tab.go("dashboards", dashboard.id)}
-        onOpenBuiltIn={(page) => tab.go("dashboards", builtInParam(page.slug))}
-        onRetry={() => void dashboardList.refetch()}
-      />
-    );
-  };
+  // A dashboard is a page of its own; leaving for one with edits not yet
+  // saved asks first, as leaving for another widget does.
+  const routes = useRoutes();
+  const openDashboard = (id: string) =>
+    confirmLeave(() => routes.dashboards.detail.goTo(id));
 
   if (!spec) {
     return (
@@ -294,20 +224,6 @@ function ExploreWorkbench({
               ) : null}
             </Link>
           </PageTabsTrigger>
-          <PageTabsTrigger value="dashboards" asChild>
-            <Link
-              to={tab.href("dashboards")}
-              state={tab.state}
-              className="inline-flex items-center gap-2"
-            >
-              Dashboards
-              {dashboardList.data ? (
-                <span className="text-muted-foreground tabular-nums">
-                  {dashboards.length + builtIn.length}
-                </span>
-              ) : null}
-            </Link>
-          </PageTabsTrigger>
         </PageTabsList>
       </div>
 
@@ -324,11 +240,10 @@ function ExploreWorkbench({
             if (id === url.widgetId) url.setWidgetId(null);
           }}
           onExplore={() => tab.go("explore")}
-          onOpenDashboard={(id) => tab.go("dashboards", id)}
+          onOpenDashboard={openDashboard}
           onRetry={() => void list.refetch()}
         />
       ) : null}
-      {tab.current === "dashboards" ? dashboardsTab() : null}
       {/* The builder stays mounted behind the other tabs, so its last
           answer is still there on the way back. */}
       <div hidden={tab.current !== "explore"} className="flex flex-col gap-6">
@@ -345,7 +260,7 @@ function ExploreWorkbench({
           onOpen={open}
           confirmLeave={confirmLeave}
           onWidgetIdChange={url.setWidgetId}
-          onOpenDashboard={(id) => tab.go("dashboards", id)}
+          onOpenDashboard={openDashboard}
           onChange={url.edit}
           onRun={run}
         />
@@ -477,52 +392,36 @@ function widgetProblem(
   return null;
 }
 
-type ExploreTabName = "explore" | "widgets" | "dashboards";
+type ExploreTabName = "explore" | "widgets";
 
 /**
  * The page's tab, kept in the URL beside the query so a link can open
- * straight onto the widget list or a dashboard. Switching tabs keeps the
- * query and the history entry's state, so coming back does not rerun or
- * forget anything. An open dashboard is left behind on switching, so the
- * Dashboards tab opens on its list.
+ * straight onto the widget list. Switching tabs keeps the query and the
+ * history entry's state, so coming back does not rerun or forget anything.
  */
 function useTab(): {
   current: ExploreTabName;
-  /** The dashboard the Dashboards tab has open, when it is the tab. */
-  dashboardId: string | null;
-  href: (to: ExploreTabName, dashboardId?: string) => string;
+  href: (to: ExploreTabName) => string;
   state: unknown;
-  go: (to: ExploreTabName, dashboardId?: string) => void;
+  go: (to: ExploreTabName) => void;
 } {
   const [params] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const named = params.get(TAB_PARAM);
   const current: ExploreTabName =
-    named === "widgets" || named === "dashboards" ? named : "explore";
-  const dashboardId =
-    current === "dashboards" ? params.get(DASHBOARD_PARAM) : null;
-  const href = (to: ExploreTabName, dashboard?: string) => {
+    params.get(TAB_PARAM) === "widgets" ? "widgets" : "explore";
+  const href = (to: ExploreTabName) => {
     const out = new URLSearchParams(params);
     if (to === "explore") out.delete(TAB_PARAM);
     else out.set(TAB_PARAM, to);
-    if (to === "dashboards" && dashboard) out.set(DASHBOARD_PARAM, dashboard);
-    else out.delete(DASHBOARD_PARAM);
-    // A dashboard's filter bar is its own: it opens on its saved filters,
-    // and what was picked on it stays behind.
-    if (to === "dashboards" || current === "dashboards") {
-      clearPageFilterParams(out);
-    }
     const search = out.toString();
     return search === "" ? location.pathname : `?${search}`;
   };
   return {
     current,
-    dashboardId,
     href,
     state: location.state,
-    go: (to, dashboard) =>
-      void navigate(href(to, dashboard), { state: location.state }),
+    go: (to) => void navigate(href(to), { state: location.state }),
   };
 }
 

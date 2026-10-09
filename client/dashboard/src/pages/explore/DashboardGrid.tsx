@@ -18,11 +18,7 @@ import {
 import type { ChartType } from "./exploreModel";
 import type { PageContext } from "./pageContext";
 import { OnceVisible } from "./WidgetCards";
-import {
-  WidgetPlaceholder,
-  WidgetView,
-  type OpenInExplore,
-} from "./WidgetView";
+import { WidgetPlaceholder, WidgetView } from "./WidgetView";
 
 /**
  * A dashboard's cards on its 12-column grid. Someone who may edit the
@@ -38,7 +34,6 @@ export function DashboardGrid({
   saving,
   onSave,
   onRemove,
-  onOpen,
 }: {
   cards: GridCard[];
   /** What the dashboard's filter bar holds, folded into every card. */
@@ -50,8 +45,6 @@ export function DashboardGrid({
   onSave: (placements: PlacementInput[]) => void;
   /** Take a card off the dashboard. */
   onRemove: (placementId: string) => void;
-  /** Open a card's question yourself; without this, the card links to Explore. */
-  onOpen?: OpenInExplore | undefined;
 }): JSX.Element {
   const placements = useMemo(
     () => cards.map((card) => card.placement),
@@ -110,7 +103,6 @@ export function DashboardGrid({
                       widget={widget}
                       page={page}
                       height="fill"
-                      onOpen={onOpen}
                       actions={
                         canEdit ? (
                           <MoreActions
