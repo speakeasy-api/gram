@@ -65,8 +65,8 @@ describe("TunneledMcpSetupTabs per-user credentials", () => {
       'value: "tunneled-mcp-server:00000000-0000-4000-8000-000000000001"',
     );
     expect(kubernetes).toContain('value: "org_example"');
-    expect(kubernetes).toContain("medium: Memory");
-    expect(kubernetes).toContain("mountPath: /dev/shm");
+    expect(kubernetes).not.toContain("emptyDir");
+    expect(kubernetes).not.toContain("TUNNEL_IDENTITY_ALLOW_INSECURE");
     // runAsNonRoot needs a numeric user, matching the image's USER.
     expect(kubernetes).toContain("runAsUser: 1000");
 
@@ -110,5 +110,24 @@ describe("TunneledMcpSetupTabs per-user credentials", () => {
     expect(snippet()).toContain(
       'value: "tunneled-mcp-server:<TUNNELED_MCP_SERVER_ID>"',
     );
+  });
+
+  it("adds local development settings for a local http issuer", () => {
+    render(<TunneledMcpSetupTabs serverName="okta" />);
+    choose("Stdio");
+    choose("Per user");
+    fireEvent.change(screen.getByLabelText("Assertion issuer"), {
+      target: { value: "http://localhost:8090" },
+    });
+    expect(snippet()).toContain('value: "http://localhost:8090"');
+    expect(snippet()).toContain("name: TUNNEL_IDENTITY_ALLOW_INSECURE");
+    expect(snippet()).toContain(
+      'value: "http://host.docker.internal:8090/.well-known/jwks.json"',
+    );
+
+    fireEvent.change(screen.getByLabelText("Assertion issuer"), {
+      target: { value: "http://tunnel.example.test" },
+    });
+    expect(snippet()).not.toContain("TUNNEL_IDENTITY_ALLOW_INSECURE");
   });
 });

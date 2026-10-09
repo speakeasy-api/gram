@@ -279,6 +279,28 @@ function assertionIssuerFor(gateway: string): string {
   return `${url.protocol === "ws:" ? "http" : "https"}://${url.host}`;
 }
 
+// For a local development issuer, the verification keys URL the agent
+// container fetches: the same port on host.docker.internal, which Docker
+// Desktop resolves to the host. Edit it where that name does not resolve.
+// Undefined for any other issuer.
+function localJWKSURL(issuer: string): string | undefined {
+  let url: URL;
+  try {
+    url = new URL(issuer);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== "http:") return undefined;
+  if (
+    !["localhost", "127.0.0.1", "host.docker.internal"].includes(url.hostname)
+  ) {
+    return undefined;
+  }
+  url.hostname = "host.docker.internal";
+  url.pathname = "/.well-known/jwks.json";
+  return url.toString();
+}
+
 function assertionAudienceFor(
   tunneledMcpServerId: string | undefined,
   resourceIdentifier: string | undefined,
@@ -421,11 +443,24 @@ USER node
 ENV TUNNEL_LOCAL_MCP_COMMAND="${MCP_COMMAND_SENTINEL}"
 ENTRYPOINT ["/usr/local/bin/tunnel-agent"]
 DOCKERFILE`;
+  const localJWKS = credentials ? localJWKSURL(credentials.issuer) : undefined;
+  const dockerLocalFlags = localJWKS
+    ? `  -e TUNNEL_IDENTITY_ALLOW_INSECURE=true \\
+  -e TUNNEL_IDENTITY_JWKS_URL=${shellQuote(localJWKS)} \\
+`
+    : "";
+  const kubernetesLocalEnv = localJWKS
+    ? `
+            - name: TUNNEL_IDENTITY_ALLOW_INSECURE
+              value: "true"
+            - name: TUNNEL_IDENTITY_JWKS_URL
+              value: ${yamlQuote(localJWKS)}`
+    : "";
   const dockerCredentialFlags = credentials
     ? `  -e TUNNEL_IDENTITY_ISSUER='${ISSUER_SENTINEL}' \\
   -e TUNNEL_IDENTITY_AUDIENCE=${shellQuote(credentials.audience)} \\
   -e TUNNEL_IDENTITY_ORGANIZATION_ID=${shellQuote(credentials.organizationId)} \\
-`
+${dockerLocalFlags}`
     : "";
   const kubernetesCredentialEnv = credentials
     ? `
@@ -436,20 +471,13 @@ DOCKERFILE`;
             - name: TUNNEL_IDENTITY_AUDIENCE
               value: ${yamlQuote(credentials.audience)}
             - name: TUNNEL_IDENTITY_ORGANIZATION_ID
-              value: ${yamlQuote(credentials.organizationId)}
-          # Token files live only in memory.
-          volumeMounts:
-            - name: credentials
-              mountPath: /dev/shm
+              value: ${yamlQuote(credentials.organizationId)}${kubernetesLocalEnv}
+          # Token files live in the container's /dev/shm, a sticky tmpfs.
           securityContext:
             runAsNonRoot: true
             runAsUser: 1000
             runAsGroup: 1000
-            allowPrivilegeEscalation: false
-      volumes:
-        - name: credentials
-          emptyDir:
-            medium: Memory`
+            allowPrivilegeEscalation: false`
     : "";
 
   const docker = `mkdir -p gram-tunnel-${slug}
