@@ -1,4 +1,4 @@
-import { getHttpStatusCode, isNotFoundError } from "@/lib/route-errors";
+import { isConflictError, isNotFoundError } from "@/lib/route-errors";
 import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 
@@ -14,7 +14,6 @@ export function addMcpServerOnTunnelHref(
 }
 
 const HTTP_REQUEST_TIMEOUT = 408;
-const HTTP_CONFLICT = 409;
 
 // The server answered and refused, so the request changed nothing. Anything
 // else (a network failure, a timeout, a server fault) leaves open whether the
@@ -28,7 +27,7 @@ export function isDefiniteRejection(error: unknown): boolean {
 
 // The tunnel delete refused because MCP servers still use the tunnel.
 export function isTunnelInUseError(error: unknown): boolean {
-  return getHttpStatusCode(error) === HTTP_CONFLICT;
+  return isConflictError(error);
 }
 
 function sameIds(a: readonly string[], b: readonly string[]): boolean {
@@ -138,7 +137,7 @@ export async function deleteTunnelAndConfirmedServers({
   } catch (error) {
     if (isTunnelInUseError(error)) {
       throw new TunnelDeleteIncompleteError(
-        `Deleted ${deleted} of the MCP servers you confirmed, but the tunnel was kept because other MCP servers still use it. Some may not be visible to you.`,
+        `Deleted all ${plural(deleted, "MCP server")} you confirmed, but the tunnel was kept because other MCP servers still use it. Some may not be visible to you.`,
         progressed,
       );
     }

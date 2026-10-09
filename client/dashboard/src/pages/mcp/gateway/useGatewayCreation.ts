@@ -1,5 +1,5 @@
 import { nextSortOrder } from "./memberRows";
-import { getHttpStatusCode } from "@/lib/route-errors";
+import { isConflictError } from "@/lib/route-errors";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers.js";
@@ -11,11 +11,10 @@ import { useNavigate, useSearchParams } from "react-router";
 // same tunnel or remote server (metamcp addMember). Other conflicts, such as
 // approval or disabled distribution, stay retryable and are not matched here.
 const BACKEND_SHARING_REFUSAL = "already fronts the same backend";
-const HTTP_CONFLICT = 409;
 
 function isGatewayBackendSharingRefusal(error: unknown): boolean {
   return (
-    getHttpStatusCode(error) === HTTP_CONFLICT &&
+    isConflictError(error) &&
     error instanceof Error &&
     error.message.includes(BACKEND_SHARING_REFUSAL)
   );
@@ -78,6 +77,9 @@ export function useGatewayCreation(): GatewayCreationFlow {
             },
           });
         } catch (error) {
+          // A refusal is final; re-reading the members could only replace it
+          // with an unrelated error.
+          if (isGatewayBackendSharingRefusal(error)) throw error;
           if (
             !(await listMembers()).some(
               (member) => member.mcpServerId === mcpServerId,
