@@ -319,6 +319,9 @@ func EncodeGetMcpServerRequest(encoder func(*http.Request) goahttp.Encoder) func
 		if p.Slug != nil {
 			values.Add("slug", *p.Slug)
 		}
+		if p.ToolsetID != nil {
+			values.Add("toolset_id", *p.ToolsetID)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -3097,6 +3100,7 @@ func unmarshalMcpServerResponseBodyToTypesMcpServer(v *McpServerResponseBody) *t
 		ProjectID:             *v.ProjectID,
 		Name:                  v.Name,
 		Slug:                  v.Slug,
+		PlatformEndpointSlug:  v.PlatformEndpointSlug,
 		EnvironmentID:         v.EnvironmentID,
 		UserSessionIssuerID:   v.UserSessionIssuerID,
 		RemoteMcpServerID:     v.RemoteMcpServerID,

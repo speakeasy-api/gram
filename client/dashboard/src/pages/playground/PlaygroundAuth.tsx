@@ -18,6 +18,7 @@ import {
 } from "../mcp/environmentVariableUtils";
 import { useEnvironmentVariables } from "../mcp/useEnvironmentVariables";
 import { usePlaygroundIssuerConnection } from "./usePlaygroundIssuerConnection";
+import { useToolsetMcpTarget } from "@/hooks/useToolsetUrl";
 
 interface PlaygroundAuthProps {
   toolset: Toolset;
@@ -104,7 +105,8 @@ export function PlaygroundAuth({
 
   // Issuer-gated toolsets carry a user_session_issuer; interactive auth is the
   // first-party connect flow surfaced by IssuerLoginConnection below.
-  const loginSecured = !!toolset.userSessionIssuerSlug;
+  const target = useToolsetMcpTarget(toolset);
+  const loginSecured = !!target.userSessionIssuerId;
 
   // Use the same environment data fetching as MCPAuthenticationTab
   const { data: environmentsData } = useListEnvironments();

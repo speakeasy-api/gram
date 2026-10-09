@@ -123,6 +123,9 @@ type CreateMcpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// An addressable platform endpoint slug for this server, populated by get.
+	// Absent when no platform endpoint exists; never a custom-domain slug.
+	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the user session issuer that gates OAuth-based MCP client
@@ -161,6 +164,9 @@ type GetMcpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// An addressable platform endpoint slug for this server, populated by get.
+	// Absent when no platform endpoint exists; never a custom-domain slug.
+	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the user session issuer that gates OAuth-based MCP client
@@ -211,6 +217,9 @@ type UpdateMcpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// An addressable platform endpoint slug for this server, populated by get.
+	// Absent when no platform endpoint exists; never a custom-domain slug.
+	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the user session issuer that gates OAuth-based MCP client
@@ -2789,6 +2798,9 @@ type McpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// An addressable platform endpoint slug for this server, populated by get.
+	// Absent when no platform endpoint exists; never a custom-domain slug.
+	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the user session issuer that gates OAuth-based MCP client
@@ -2886,6 +2898,7 @@ func NewCreateMcpServerResponseBody(res *types.McpServer) *CreateMcpServerRespon
 		ProjectID:             res.ProjectID,
 		Name:                  res.Name,
 		Slug:                  res.Slug,
+		PlatformEndpointSlug:  res.PlatformEndpointSlug,
 		EnvironmentID:         res.EnvironmentID,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		RemoteMcpServerID:     res.RemoteMcpServerID,
@@ -2909,6 +2922,7 @@ func NewGetMcpServerResponseBody(res *types.McpServer) *GetMcpServerResponseBody
 		ProjectID:             res.ProjectID,
 		Name:                  res.Name,
 		Slug:                  res.Slug,
+		PlatformEndpointSlug:  res.PlatformEndpointSlug,
 		EnvironmentID:         res.EnvironmentID,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		RemoteMcpServerID:     res.RemoteMcpServerID,
@@ -2970,6 +2984,7 @@ func NewUpdateMcpServerResponseBody(res *types.McpServer) *UpdateMcpServerRespon
 		ProjectID:             res.ProjectID,
 		Name:                  res.Name,
 		Slug:                  res.Slug,
+		PlatformEndpointSlug:  res.PlatformEndpointSlug,
 		EnvironmentID:         res.EnvironmentID,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		RemoteMcpServerID:     res.RemoteMcpServerID,
@@ -5039,10 +5054,11 @@ func NewCreateMcpServerPayload(body *CreateMcpServerRequestBody, sessionToken *s
 
 // NewGetMcpServerPayload builds a mcpServers service getMcpServer endpoint
 // payload.
-func NewGetMcpServerPayload(id *string, slug *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.GetMcpServerPayload {
+func NewGetMcpServerPayload(id *string, slug *string, toolsetID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.GetMcpServerPayload {
 	v := &mcpservers.GetMcpServerPayload{}
 	v.ID = id
 	v.Slug = slug
+	v.ToolsetID = toolsetID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

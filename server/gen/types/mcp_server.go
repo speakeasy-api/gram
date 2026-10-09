@@ -18,6 +18,9 @@ type McpServer struct {
 	Name *string
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string
+	// An addressable platform endpoint slug for this server, populated by get.
+	// Absent when no platform endpoint exists; never a custom-domain slug.
+	PlatformEndpointSlug *string
 	// The ID of the environment associated with the server
 	EnvironmentID *string
 	// The ID of the user session issuer that gates OAuth-based MCP client

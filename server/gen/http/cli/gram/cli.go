@@ -1863,6 +1863,7 @@ func ParseEndpoint(
 		mcpServersGetMcpServerFlags                = flag.NewFlagSet("get-mcp-server", flag.ExitOnError)
 		mcpServersGetMcpServerIDFlag               = mcpServersGetMcpServerFlags.String("id", "", "")
 		mcpServersGetMcpServerSlugFlag             = mcpServersGetMcpServerFlags.String("slug", "", "")
+		mcpServersGetMcpServerToolsetIDFlag        = mcpServersGetMcpServerFlags.String("toolset-id", "", "")
 		mcpServersGetMcpServerSessionTokenFlag     = mcpServersGetMcpServerFlags.String("session-token", "", "")
 		mcpServersGetMcpServerApikeyTokenFlag      = mcpServersGetMcpServerFlags.String("apikey-token", "", "")
 		mcpServersGetMcpServerProjectSlugInputFlag = mcpServersGetMcpServerFlags.String("project-slug-input", "", "")
@@ -10320,7 +10321,7 @@ func ParseEndpoint(
 				data, err = mcpserversc.BuildCreateMcpServerPayload(*mcpServersCreateMcpServerBodyFlag, *mcpServersCreateMcpServerSessionTokenFlag, *mcpServersCreateMcpServerApikeyTokenFlag, *mcpServersCreateMcpServerProjectSlugInputFlag)
 			case "get-mcp-server":
 				endpoint = c.GetMcpServer()
-				data, err = mcpserversc.BuildGetMcpServerPayload(*mcpServersGetMcpServerIDFlag, *mcpServersGetMcpServerSlugFlag, *mcpServersGetMcpServerSessionTokenFlag, *mcpServersGetMcpServerApikeyTokenFlag, *mcpServersGetMcpServerProjectSlugInputFlag)
+				data, err = mcpserversc.BuildGetMcpServerPayload(*mcpServersGetMcpServerIDFlag, *mcpServersGetMcpServerSlugFlag, *mcpServersGetMcpServerToolsetIDFlag, *mcpServersGetMcpServerSessionTokenFlag, *mcpServersGetMcpServerApikeyTokenFlag, *mcpServersGetMcpServerProjectSlugInputFlag)
 			case "list-mcp-servers":
 				endpoint = c.ListMcpServers()
 				data, err = mcpserversc.BuildListMcpServersPayload(*mcpServersListMcpServersRemoteMcpServerIDFlag, *mcpServersListMcpServersTunneledMcpServerIDFlag, *mcpServersListMcpServersToolsetIDFlag, *mcpServersListMcpServersUnproxiedMcpServerIDFlag, *mcpServersListMcpServersSessionTokenFlag, *mcpServersListMcpServersApikeyTokenFlag, *mcpServersListMcpServersProjectSlugInputFlag)
@@ -19613,7 +19614,7 @@ func mcpServersUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] mcp-servers COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-mcp-server: Create a new MCP server`)
-	fmt.Fprintln(os.Stderr, `    get-mcp-server: Get an MCP server by ID or slug. Exactly one of id or slug must be provided.`)
+	fmt.Fprintln(os.Stderr, `    get-mcp-server: Get an MCP server by ID, slug, or backing toolset ID. Exactly one selector must be provided. Toolset lookup prefers enabled servers, then the canonical wrapper, then the oldest server.`)
 	fmt.Fprintln(os.Stderr, `    list-mcp-servers: List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.`)
 	fmt.Fprintln(os.Stderr, `    list-mcp-servers-for-org: List all MCP servers across the organization`)
 	fmt.Fprintln(os.Stderr, `    update-mcp-server: Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.`)
@@ -19657,6 +19658,7 @@ func mcpServersGetMcpServerUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] mcp-servers get-mcp-server", os.Args[0])
 	fmt.Fprint(os.Stderr, " -id STRING")
 	fmt.Fprint(os.Stderr, " -slug STRING")
+	fmt.Fprint(os.Stderr, " -toolset-id STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -19664,18 +19666,19 @@ func mcpServersGetMcpServerUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get an MCP server by ID or slug. Exactly one of id or slug must be provided.`)
+	fmt.Fprintln(os.Stderr, `Get an MCP server by ID, slug, or backing toolset ID. Exactly one selector must be provided. Toolset lookup prefers enabled servers, then the canonical wrapper, then the oldest server.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -toolset-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers get-mcp-server --id \"550e8400-e29b-41d4-a716-446655440000\" --slug \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers get-mcp-server --id \"550e8400-e29b-41d4-a716-446655440000\" --slug \"abc123\" --toolset-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpServersListMcpServersUsage() {

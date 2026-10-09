@@ -6,6 +6,8 @@ import { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useListDomains } from "@gram/client/react-query/listDomains.js";
 import { useMemo } from "react";
+import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 
 export function useCustomDomain(enabled = true): {
   domain: CustomDomain | undefined;
@@ -197,23 +199,68 @@ export function useMcpUrl(
   };
 }
 
-/**
- * Returns an MCP URL that always uses the Speakeasy domain, ignoring any custom domain.
- * Use this for internal tools like the playground where we want consistent routing.
+type ToolsetConnectionSource = Pick<
+  ToolsetEntry,
+  "id" | "slug" | "mcpSlug" | "defaultEnvironmentSlug"
+> & { userSessionIssuerId?: string };
+
+/** Resolve identity before deriving URLs or minting. Never choose from an
+ * authorization-filtered list, or alias a disabled canonical route to a sibling.
+ * A 404 means no wrapper exists; only that case can retain the legacy route.
  */
-export function useInternalMcpUrl(
-  toolset:
-    | Pick<ToolsetEntry, "slug" | "mcpSlug" | "defaultEnvironmentSlug">
-    | undefined,
-): string | undefined {
+export function useToolsetMcpTarget(
+  toolset: ToolsetConnectionSource | undefined,
+): {
+  url: string | undefined;
+  serverId: string | undefined;
+  userSessionIssuerId: string | undefined;
+  legacy: boolean;
+  isLoading: boolean;
+} {
   const project = useProject();
-  if (!toolset) return undefined;
-  return internalMcpUrl({ slug: project.slug }, toolset);
+  const server = useGetMcpServer({ toolsetId: toolset?.id }, undefined, {
+    enabled: !!toolset?.id,
+    retry: false,
+    throwOnError: false,
+  });
+  // Refetch failures may retain stale data; it must not supply a former issuer.
+  const selected = toolset && !server.isError ? server.data : undefined;
+  const enabledServer =
+    selected?.visibility !== "disabled" ? selected : undefined;
+  const legacy =
+    !!toolset &&
+    server.error instanceof ServiceError &&
+    server.error.statusCode === 404;
+  const platformSlug = enabledServer?.platformEndpointSlug;
+  // Playground/connect require the platform origin (session cookie and CSP).
+  // Custom-only servers remain unavailable here; never reuse their slug there.
+  const url =
+    enabledServer && platformSlug
+      ? `${getServerURL()}/mcp/${platformSlug}`
+      : legacy
+        ? internalMcpUrl(project, toolset)
+        : undefined;
+  return {
+    url,
+    serverId: enabledServer?.id,
+    userSessionIssuerId:
+      enabledServer?.userSessionIssuerId ??
+      (legacy ? toolset.userSessionIssuerId : undefined),
+    legacy,
+    isLoading: !!toolset && server.isLoading,
+  };
+}
+
+/** The selected server's platform URL, never a custom-domain slug on that origin. */
+export function useInternalMcpUrl(
+  toolset: ToolsetConnectionSource | undefined,
+): string | undefined {
+  return useToolsetMcpTarget(toolset).url;
 }
 
 /**
- * Non-hook variant of {@link useInternalMcpUrl}. Use this when the project and
- * toolset are already in scope (e.g. when mapping over an array of toolsets).
+ * Formats the legacy toolset address without resolving a server identity.
+ * Live playground connections use useToolsetMcpTarget instead.
  * Returns undefined when the toolset has no routable MCP URL (no mcpSlug and
  * no default environment).
  */

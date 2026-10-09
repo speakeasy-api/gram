@@ -416,11 +416,15 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 
 	idProvided := payload.ID != nil && *payload.ID != ""
 	slugProvided := payload.Slug != nil && *payload.Slug != ""
-	if !idProvided && !slugProvided {
-		return nil, oops.E(oops.CodeBadRequest, nil, "id or slug is required").LogError(ctx, s.logger)
+	toolsetProvided := payload.ToolsetID != nil && *payload.ToolsetID != ""
+	selectors := 0
+	for _, provided := range []bool{idProvided, slugProvided, toolsetProvided} {
+		if provided {
+			selectors++
+		}
 	}
-	if idProvided && slugProvided {
-		return nil, oops.E(oops.CodeBadRequest, nil, "id and slug are mutually exclusive").LogError(ctx, s.logger)
+	if selectors != 1 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "exactly one of id, slug, or toolset_id is required").LogError(ctx, s.logger)
 	}
 
 	r := repo.New(s.db)
@@ -434,6 +438,15 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 		}
 		server, err = r.GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{
 			ID:        serverID,
+			ProjectID: *authCtx.ProjectID,
+		})
+	} else if toolsetProvided {
+		toolsetID, parseErr := uuid.Parse(*payload.ToolsetID)
+		if parseErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, parseErr, "invalid toolset id").LogError(ctx, s.logger)
+		}
+		server, err = r.GetMCPServerByToolsetID(ctx, repo.GetMCPServerByToolsetIDParams{
+			ToolsetID: toolsetID,
 			ProjectID: *authCtx.ProjectID,
 		})
 	} else {
@@ -453,7 +466,23 @@ func (s *Service) GetMcpServer(ctx context.Context, payload *gen.GetMcpServerPay
 		return nil, err
 	}
 
-	return mv.BuildMcpServerView(server), nil
+	// Resolve only this authorized server's platform address. Requiring the
+	// project-wide endpoint-list permission here would reject resource-scoped readers.
+	endpoints, err := mcpendpointsrepo.New(s.db).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{
+		ProjectID:   *authCtx.ProjectID,
+		McpServerID: server.ID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve mcp server platform endpoint").LogError(ctx, s.logger)
+	}
+	view := mv.BuildMcpServerView(server)
+	for _, endpoint := range endpoints {
+		if !endpoint.CustomDomainID.Valid {
+			view.PlatformEndpointSlug = &endpoint.Slug
+			break
+		}
+	}
+	return view, nil
 }
 
 func (s *Service) ListToolFilters(ctx context.Context, payload *gen.ListToolFiltersPayload) (*types.ListToolFiltersResult, error) {

@@ -1,3 +1,4 @@
+import { useToolsetMcpTarget } from "@/hooks/useToolsetUrl";
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
 import { ToolsetAttachedUserSessions } from "@/components/sessions/AttachedUserSessions";
@@ -245,11 +246,7 @@ function renderMcpDetailTabContent(
     case "sessions":
       return (
         <RequireScope scope="project:read" level="page">
-          <ClientsAndSessionsTab
-            issuerId={toolset.userSessionIssuerId}
-            authTabPath="authentication"
-            attachedSessions={<ToolsetAttachedUserSessions toolset={toolset} />}
-          />
+          <ToolsetSessionsTab toolset={toolset} />
         </RequireScope>
       );
     case "team-access":
@@ -1881,3 +1878,15 @@ export function OAuthDetailsModal({
 }
 
 export { ConnectOAuthModal } from "./oauth-wizard";
+
+function ToolsetSessionsTab({ toolset }: { toolset: Toolset }) {
+  const target = useToolsetMcpTarget(toolset);
+  return (
+    <ClientsAndSessionsTab
+      issuerId={target.userSessionIssuerId}
+      originatingMcpServerId={target.serverId}
+      authTabPath="authentication"
+      attachedSessions={<ToolsetAttachedUserSessions toolset={toolset} />}
+    />
+  );
+}

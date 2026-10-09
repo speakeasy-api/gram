@@ -1,6 +1,5 @@
 import { useToolset } from "@/hooks/toolTypes";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
-import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
 import type { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
@@ -34,9 +33,6 @@ export function PlaygroundElements({
 }: PlaygroundElementsProps): JSX.Element {
   // Get toolset data to construct MCP URL
   const { data: toolset } = useToolset(toolsetSlug ?? undefined);
-
-  // Always use the platform domain for the playground to avoid CSP issues
-  const mcpUrl = useInternalMcpUrl(toolset);
 
   // Get environments and MCP metadata for auth status check
   const { data: environmentsData } = useListEnvironments();
@@ -82,9 +78,15 @@ export function PlaygroundElements({
   // a real MCP client would after an OAuth dance — no special-casing in
   // ApplyIssuerGate.
   const gatewayToken = issuerConnection.accessToken;
+  const mcpUrl = issuerConnection.mcpUrl;
 
   // Don't render until we have a valid MCP URL
-  if (!mcpUrl || !toolsetSlug) {
+  if (
+    !mcpUrl ||
+    !toolsetSlug ||
+    issuerConnection.isLoading ||
+    (issuerConnection.isIssuerGated && !gatewayToken)
+  ) {
     return (
       <div className="flex h-full items-center justify-center">
         <Text muted>Select an MCP server to start chatting</Text>

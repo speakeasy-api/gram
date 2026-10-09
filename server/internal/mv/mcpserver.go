@@ -17,6 +17,7 @@ func BuildMcpServerView(server repo.McpServer) *types.McpServer {
 		ProjectID:             server.ProjectID.String(),
 		Name:                  conv.FromPGText[string](server.Name),
 		Slug:                  conv.FromPGText[string](server.Slug),
+		PlatformEndpointSlug:  nil,
 		EnvironmentID:         conv.FromNullableUUID(server.EnvironmentID),
 		UserSessionIssuerID:   conv.FromNullableUUID(server.UserSessionIssuerID),
 		RemoteMcpServerID:     conv.FromNullableUUID(server.RemoteMcpServerID),

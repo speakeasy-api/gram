@@ -1,11 +1,12 @@
 import { useProxiedMcpTools } from "@/hooks/useProxiedMcpTools";
 import { useUserSessionToken } from "@/hooks/useUserSessionToken";
-import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
+import { useToolsetMcpTarget } from "@/hooks/useToolsetUrl";
 import { Toolset } from "@/lib/toolTypes";
 import { firstPartyConnectUrl, mcpConnectionUrl } from "@/lib/utils";
 import { useCallback, useMemo } from "react";
 
 export interface PlaygroundIssuerConnection {
+  mcpUrl: string | undefined;
   /** True when the toolset is issuer-gated (has a user_session_issuer). */
   isIssuerGated: boolean;
   /** The minted user-session JWT for the chat `Authorization: Bearer` header. */
@@ -39,14 +40,17 @@ export interface PlaygroundIssuerConnection {
 export function usePlaygroundIssuerConnection(
   toolset: Toolset | undefined,
 ): PlaygroundIssuerConnection {
-  const isIssuerGated = !!toolset?.userSessionIssuerId;
+  const target = useToolsetMcpTarget(toolset);
+  const isIssuerGated = !!target.userSessionIssuerId;
 
   const { accessToken, isLoading: isTokenLoading } = useUserSessionToken({
-    target: { kind: "toolset", id: toolset?.id },
-    userSessionIssuerId: toolset?.userSessionIssuerId,
+    target: target.legacy
+      ? { kind: "toolset", id: target.url ? toolset?.id : undefined }
+      : { kind: "mcpServer", id: target.url ? target.serverId : undefined },
+    userSessionIssuerId: target.userSessionIssuerId,
   });
 
-  const mcpUrl = useInternalMcpUrl(toolset);
+  const mcpUrl = target.url;
   // Connect through the dev proxy origin (same-origin) so the AI SDK transport
   // carries the gram_session cookie; no-op in prod. Mirrors the remote Tools tab.
   const connectUrl = useMemo(() => mcpConnectionUrl(mcpUrl), [mcpUrl]);
@@ -66,6 +70,7 @@ export function usePlaygroundIssuerConnection(
     {
       headers,
       enabled: probeEnabled,
+      throwOnError: false,
     },
   );
 
@@ -81,11 +86,13 @@ export function usePlaygroundIssuerConnection(
   }, [authUrl]);
 
   return {
+    mcpUrl,
     isIssuerGated,
     accessToken,
     connected: probeEnabled && !!tools && !needsAuth,
     needsAuth,
-    isLoading: isIssuerGated && (isTokenLoading || isLoading),
+    isLoading:
+      target.isLoading || (isIssuerGated && (isTokenLoading || isLoading)),
     refetch,
     connect,
     canConnect: !!authUrl,
