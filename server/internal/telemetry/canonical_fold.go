@@ -238,26 +238,33 @@ func (s *Service) canonicalOrgFor(ctx context.Context, orgID string) string {
 	return ""
 }
 
-// resolveUserScope resolves an employee identifier into either a canonical
-// map-backed identity (fold flag on) or the legacy Postgres-expanded set —
-// exactly one of the two is populated, so the repo's identity filter (which
-// unions whichever are supplied) applies just the one returned here.
+// resolveUserScope resolves an employee identifier into the directory-expanded
+// identity set and, when the fold flag is on, the canonical map-backed
+// identity. The repo's identity filter unions whichever are supplied.
+//
+// In fold mode the directory set contributes its user ids only. They keep an
+// employee whose email has no identity_map entry visible: the fold resolves
+// such an email to no owner id, so its id arm matches nothing, while the
+// directory still knows the user id their rows carry. The directory emails are
+// left to the fold, because the expansion adds every linked-account email
+// without the map's ownership rules — an address the map assigns to another
+// member, or leaves out as shared, would put that person's email-only rows on
+// this page too.
+//
+// With the fold off, or for an org id that fails the SQL-literal allowlist,
+// the full directory set is the whole scope.
 func (s *Service) resolveUserScope(ctx context.Context, orgID, identifier string) (repo.UserIdentity, repo.CanonicalUserIdentity) {
 	none := repo.CanonicalUserIdentity{OrgID: "", UserID: "", EmailLower: ""}
 	if identifier == "" {
 		return repo.UserIdentity{UserIDs: nil, Emails: nil}, none
 	}
+	user := s.resolveEmployeeIdentity(ctx, orgID, identifier)
 	if fold, _ := s.canonicalIdentityMode(ctx, orgID); fold {
 		if ident := s.resolveCanonicalUserIdentity(ctx, orgID, identifier); ident.Enabled() {
-			return repo.UserIdentity{UserIDs: nil, Emails: nil}, ident
+			return repo.UserIdentity{UserIDs: user.UserIDs, Emails: nil}, ident
 		}
-		// The org id failed the SQL-literal allowlist, so the canonical filter
-		// cannot be built for it. Degrade to the legacy expanded scope like
-		// every other fold site does on an unfoldable org id — returning the
-		// disabled identity alongside the empty legacy set would leave the
-		// per-user queries with no user filter at all.
 	}
-	return s.resolveEmployeeIdentity(ctx, orgID, identifier), none
+	return user, none
 }
 
 // resolveCanonicalUserIdentity builds the map-backed identity for one
