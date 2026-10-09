@@ -117,8 +117,8 @@ func (r *PostgresReader) WithTunneledMCPSetupHandoff(dashboardURL *url.URL, budg
 	return r
 }
 
-// Handoff authorizes the caller and resolves the exact target, then charges
-// the handoff budget and returns the dashboard page for the requested setup.
+// Handoff authorizes the caller, charges the handoff budget, then resolves
+// the exact target and returns the dashboard page for the requested setup.
 // Hidden, missing, deleted, and foreign targets are indistinguishable.
 func (s *TunneledMCPSetupHandoffService) Handoff(ctx context.Context, principal Principal, input GetTunneledMCPSetupHandoffInput) (GetTunneledMCPSetupHandoffOutput, error) {
 	if s == nil || s.db == nil || s.authz == nil || s.projects == nil || s.dashboardURL == nil || principal.OrganizationID == "" {
@@ -149,6 +149,7 @@ func (s *TunneledMCPSetupHandoffService) Handoff(ctx context.Context, principal 
 		return GetTunneledMCPSetupHandoffOutput{}, ErrTunneledMCPSetupNotFound
 	}
 	if err != nil {
+		s.logger.ErrorContext(ctx, "resolve tunneled setup project", attr.SlogError(err))
 		return GetTunneledMCPSetupHandoffOutput{}, fmt.Errorf("%w: resolve tunneled setup project: %w", ErrUnavailable, err)
 	}
 	if mcpID != uuid.Nil {
@@ -163,6 +164,13 @@ func (s *TunneledMCPSetupHandoffService) Handoff(ctx context.Context, principal 
 			}
 			return GetTunneledMCPSetupHandoffOutput{}, err
 		}
+	}
+
+	// Charged once the caller is authorized and before any further lookup, so
+	// every authorized request is metered, including refusals, while callers
+	// refused above never spend the organization's budget.
+	if err := s.budget.Allow(ctx, principal); err != nil {
+		return GetTunneledMCPSetupHandoffOutput{}, err
 	}
 
 	organization, err := organizationsrepo.New(s.db).GetOrganizationMetadata(ctx, principal.OrganizationID)
@@ -228,11 +236,6 @@ func (s *TunneledMCPSetupHandoffService) Handoff(ctx context.Context, principal 
 		output.Instructions = slices.Clone(tunneledMCPAgentInstructions)
 	}
 
-	// Charged only for a handoff that is actually issued: every refusal above
-	// is free, so probing for targets cannot drain the organization's budget.
-	if err := s.budget.Allow(ctx, principal); err != nil {
-		return GetTunneledMCPSetupHandoffOutput{}, err
-	}
 	return output, nil
 }
 

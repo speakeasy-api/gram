@@ -60,7 +60,7 @@ func registerTunneledMCPSetupHandoffTool(reg *Registrar, service *TunneledMCPSet
 		case errors.Is(err, ErrTunneledMCPSetupNotEnabled):
 			return nil, zero, tunneledMCPSetupRefusal("not_enabled", "Adding tunneled MCP servers is not available for this organization yet, so the dashboard has no form for it. Existing tunneled MCP servers can still be set up with their mcp_id.")
 		case errors.Is(err, ErrTunneledMCPSetupNotTunneled):
-			return nil, zero, tunneledMCPSetupRefusal("not_tunneled", "That MCP server is not reachable through a tunnel. Omit mcp_id to add a new tunneled MCP server instead.")
+			return nil, zero, tunneledMCPSetupRefusal("not_tunneled", "That MCP server is not reachable through a tunnel.")
 		case errors.Is(err, ErrUnavailable):
 			return nil, zero, tunneledMCPSetupRefusal(unavailableCode, "Tunneled MCP setup handoffs are temporarily unavailable.")
 		default:

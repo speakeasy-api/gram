@@ -259,7 +259,7 @@ func TestTunneledSetupHandoffRefusesAddFormWhenTunnelsAreNotEnabled(t *testing.T
 
 	_, err := harness.invoke(t, ctx, GetTunneledMCPSetupHandoffInput{ProjectID: fixture.project.ID.String()})
 	requireTunneledSetupRefusal(t, err, "not_enabled")
-	require.Empty(t, harness.limiter.keys, "an add form the dashboard would not show is never charged")
+	require.Len(t, harness.limiter.keys, 2, "an authorized request is metered even when the add form is not available")
 
 	// An existing tunneled server's settings page is not behind the rollout.
 	output, err := harness.invoke(t, ctx, GetTunneledMCPSetupHandoffInput{ProjectID: fixture.project.ID.String(), MCPID: fixture.wrapperID.String()})
@@ -277,5 +277,5 @@ func TestTunneledSetupHandoffReportsAddFormUnavailableWhenRolloutIsIndeterminate
 
 	_, err := harness.invoke(t, ctx, GetTunneledMCPSetupHandoffInput{ProjectID: fixture.project.ID.String()})
 	requireTunneledSetupRefusal(t, err, unavailableCode)
-	require.Empty(t, harness.limiter.keys)
+	require.Len(t, harness.limiter.keys, 2)
 }

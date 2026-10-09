@@ -76,7 +76,7 @@ func TestTunneledBoundariesHideOtherProjectsAndOrganizations(t *testing.T) {
 		_, err := harness.invoke(t, ctx, input)
 		requireTunneledSetupRefusal(t, err, "not_found")
 	}
-	require.Empty(t, harness.limiter.keys, "refused targets are never charged")
+	require.Len(t, harness.limiter.keys, 4, "the two in-project targets passed authorization and were metered; the hidden projects were not")
 
 	connections := &recordingTunnelConnections{}
 	reader, readerCtx := fixture.reader(t, connections)
