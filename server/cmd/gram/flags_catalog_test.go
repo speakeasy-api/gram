@@ -1,8 +1,10 @@
 package gram
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
+	"log/slog"
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -25,14 +27,15 @@ func TestInternalCatalogStartupConfiguration(t *testing.T) {
 		{"prod", "", true},
 		{"local", "", true},
 		{"", "", true},
-		{"prod", "10.23.45.67/32", false},
-		{"production", "10.23.45.67/32", false},
-		{"local", "10.23.45.67/32", false},
-		{"staging", "10.23.45.67/32", false},
-		{"preview", "10.23.45.67/32", false},
-		{"development", "10.23.45.67/32", false},
-		{"DEV", "10.23.45.67/32", false},
-		{"", "10.23.45.67/32", false},
+		{"prod", "10.23.45.67/32", true},
+		{"prod", "bad", true},
+		{"production", "10.23.45.67/32", true},
+		{"local", "10.23.45.67/32", true},
+		{"staging", "10.23.45.67/32", true},
+		{"preview", "10.23.45.67/32", true},
+		{"development", "10.23.45.67/32", true},
+		{"DEV", "10.23.45.67/32", true},
+		{"", "10.23.45.67/32", true},
 	} {
 		t.Run(fmt.Sprintf("%s/%s", tc.environment, tc.cidr), func(t *testing.T) {
 			t.Parallel()
@@ -41,12 +44,20 @@ func TestInternalCatalogStartupConfiguration(t *testing.T) {
 			require.NoError(t, internalCatalogFlag().Apply(flags))
 			require.NoError(t, flags.Set("remote-mcp-catalog-ilb-cidr", tc.cidr))
 			ctx := cli.NewContext(cli.NewApp(), flags, nil)
-			policy, err := newGuardianPolicy(ctx, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil)
+			var logs bytes.Buffer
+			logger := slog.New(slog.NewTextHandler(&logs, nil))
+			policy, err := newGuardianPolicy(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil)
+			if tc.environment != "dev" && tc.cidr != "" {
+				require.Contains(t, logs.String(), "level=WARN")
+				require.Contains(t, logs.String(), "ignoring remote MCP catalog CIDR allowance")
+			} else {
+				require.NotContains(t, logs.String(), "ignoring remote MCP catalog CIDR allowance")
+			}
 			if tc.valid {
 				require.NoError(t, err)
 				if tc.environment != "local" {
 					err = policy.ValidateHost(t.Context(), "10.23.45.67", guardian.WithInternalCatalog())
-					if tc.cidr != "" {
+					if tc.environment == "dev" && tc.cidr != "" {
 						require.NoError(t, err)
 					} else {
 						require.ErrorIs(t, err, guardian.ErrBlockedIP)
