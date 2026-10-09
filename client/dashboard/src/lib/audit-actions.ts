@@ -148,6 +148,8 @@ export const AUDIT_ACTIONS = [
   "organization:disabled",
   "organization:enabled",
   "organization:whitelist_updated",
+  "organization:account_type_changed",
+  "organization:inference_key_repaired",
   "organization:enterprise_trial_armed",
   "organization:enterprise_trial_converted",
   "organization:enterprise_trial_demoted",
@@ -646,6 +648,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "disabled fail-open for hooks";
     case "organization:device_agent_configuration_updated":
       return "updated device agent configuration";
+    case "organization:account_type_changed":
+      return "changed account type for";
+    case "organization:inference_key_repaired":
+      return "repaired inference key for";
     case "organization:enterprise_trial_armed":
       return "started enterprise trial";
     case "organization:enterprise_trial_demoted":

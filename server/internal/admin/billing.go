@@ -52,6 +52,10 @@ func (s *Service) GetInferenceKeys(ctx context.Context, payload *gen.GetInferenc
 		return nil, oops.E(oops.CodeUnavailable, ErrOpenRouterUnavailable, "OpenRouter usage is temporarily unavailable").LogWarn(ctx, s.logger)
 	}
 
+	org, err := s.canonicalAdminOrganization(ctx, organizationID)
+	if err != nil {
+		return nil, err
+	}
 	result := make([]*gen.AdminInferenceKey, len(keys))
 	group, groupCtx := errgroup.WithContext(ctx)
 	for index, key := range keys {
@@ -71,6 +75,7 @@ func (s *Service) GetInferenceKeys(ctx context.Context, payload *gen.GetInferenc
 				Disabled:                key.Disabled,
 				DisableCauses:           key.DisableCauses,
 				DisableCausesClassified: key.DisableCausesClassified,
+				CauseDiagnostics:        s.inferenceKeyCauseDiagnostics(groupCtx, org, key.DisableCauses, key.DisableCausesClassified),
 			}
 			return nil
 		})
@@ -462,7 +467,7 @@ func (s *Service) liveStripeSubscriptionForOrganization(ctx context.Context, org
 	if err != nil {
 		return nil, fmt.Errorf("get Stripe subscription: %w", err)
 	}
-	if state.CustomerID != organization.StripeCustomerID.String || state.ID != subscriptionID {
+	if state == nil || state.CustomerID != organization.StripeCustomerID.String || state.ID != subscriptionID {
 		return nil, oops.E(oops.CodeConflict, nil, "Stripe subscription does not belong to the organization's Stripe customer")
 	}
 	if state.BillingCycleAnchor.IsZero() {

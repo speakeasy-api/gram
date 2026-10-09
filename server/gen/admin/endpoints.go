@@ -44,6 +44,7 @@ type Endpoints struct {
 	CreateOrganization                    goa.Endpoint
 	RearmTrial                            goa.Endpoint
 	GetOrganizationStats                  goa.Endpoint
+	RepairInferenceKey                    goa.Endpoint
 	GetInferenceKeys                      goa.Endpoint
 	SetInferenceKeyMonthlyLimit           goa.Endpoint
 	GetInferenceSpendHistory              goa.Endpoint
@@ -153,6 +154,7 @@ func NewEndpoints(s Service) *Endpoints {
 		CreateOrganization:                    NewCreateOrganizationEndpoint(s, a.APIKeyAuth),
 		RearmTrial:                            NewRearmTrialEndpoint(s, a.APIKeyAuth),
 		GetOrganizationStats:                  NewGetOrganizationStatsEndpoint(s, a.APIKeyAuth),
+		RepairInferenceKey:                    NewRepairInferenceKeyEndpoint(s, a.APIKeyAuth),
 		GetInferenceKeys:                      NewGetInferenceKeysEndpoint(s, a.APIKeyAuth),
 		SetInferenceKeyMonthlyLimit:           NewSetInferenceKeyMonthlyLimitEndpoint(s, a.APIKeyAuth),
 		GetInferenceSpendHistory:              NewGetInferenceSpendHistoryEndpoint(s, a.APIKeyAuth),
@@ -242,6 +244,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateOrganization = m(e.CreateOrganization)
 	e.RearmTrial = m(e.RearmTrial)
 	e.GetOrganizationStats = m(e.GetOrganizationStats)
+	e.RepairInferenceKey = m(e.RepairInferenceKey)
 	e.GetInferenceKeys = m(e.GetInferenceKeys)
 	e.SetInferenceKeyMonthlyLimit = m(e.SetInferenceKeyMonthlyLimit)
 	e.GetInferenceSpendHistory = m(e.GetInferenceSpendHistory)
@@ -889,6 +892,29 @@ func NewGetOrganizationStatsEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 			return nil, err
 		}
 		return s.GetOrganizationStats(ctx, p)
+	}
+}
+
+// NewRepairInferenceKeyEndpoint returns an endpoint function that calls the
+// method "repairInferenceKey" of service "admin".
+func NewRepairInferenceKeyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RepairInferenceKeyPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RepairInferenceKey(ctx, p)
 	}
 }
 

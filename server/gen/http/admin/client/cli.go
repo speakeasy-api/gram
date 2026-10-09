@@ -972,6 +972,68 @@ func BuildGetOrganizationStatsPayload(adminGetOrganizationStatsAdminSessionToken
 	return v, nil
 }
 
+// BuildRepairInferenceKeyPayload builds the payload for the admin
+// repairInferenceKey endpoint from CLI flags.
+func BuildRepairInferenceKeyPayload(adminRepairInferenceKeyBody string, adminRepairInferenceKeyAdminSessionToken string) (*admin.RepairInferenceKeyPayload, error) {
+	var err error
+	var body RepairInferenceKeyRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRepairInferenceKeyBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"confirmation\": \"I know what I\\'m doing\",\n      \"key_type\": \"internal\",\n      \"organization_id\": \"abc123\",\n      \"reason\": \"aa\",\n      \"remove_causes\": [\n         \"trial_demotion\",\n         \"trial_demotion\"\n      ]\n   }'")
+		}
+		if body.RemoveCauses == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("remove_causes", "body"))
+		}
+		if !(body.KeyType == "chat" || body.KeyType == "internal") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.key_type", body.KeyType, []any{"chat", "internal"}))
+		}
+		if len(body.RemoveCauses) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.remove_causes", body.RemoveCauses, len(body.RemoveCauses), 1, true))
+		}
+		if len(body.RemoveCauses) > 3 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.remove_causes", body.RemoveCauses, len(body.RemoveCauses), 3, false))
+		}
+		for _, e := range body.RemoveCauses {
+			if !(e == "admin_lock" || e == "trial_demotion" || e == "billing_inactive") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.remove_causes[*]", e, []any{"admin_lock", "trial_demotion", "billing_inactive"}))
+			}
+		}
+		if !(body.Confirmation == "I know what I'm doing") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.confirmation", body.Confirmation, []any{"I know what I'm doing"}))
+		}
+		if utf8.RuneCountInString(body.Reason) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", body.Reason, utf8.RuneCountInString(body.Reason), 1, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminRepairInferenceKeyAdminSessionToken != "" {
+			adminSessionToken = &adminRepairInferenceKeyAdminSessionToken
+		}
+	}
+	v := &admin.RepairInferenceKeyPayload{
+		OrganizationID: body.OrganizationID,
+		KeyType:        body.KeyType,
+		Confirmation:   body.Confirmation,
+		Reason:         body.Reason,
+	}
+	if body.RemoveCauses != nil {
+		v.RemoveCauses = make([]string, len(body.RemoveCauses))
+		for i, val := range body.RemoveCauses {
+			v.RemoveCauses[i] = val
+		}
+	} else {
+		v.RemoveCauses = []string{}
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildGetInferenceKeysPayload builds the payload for the admin
 // getInferenceKeys endpoint from CLI flags.
 func BuildGetInferenceKeysPayload(adminGetInferenceKeysOrganizationID string, adminGetInferenceKeysAdminSessionToken string) (*admin.GetInferenceKeysPayload, error) {

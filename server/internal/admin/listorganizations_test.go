@@ -176,13 +176,13 @@ func TestUpdateOrganization_AccountTypeOnly(t *testing.T) {
 		accountType: "free",
 		whitelisted: true,
 	})
-	newType := "payg"
+	newType := "pro"
 	res, err := svc.UpdateOrganization(ctx, &gen.UpdateOrganizationPayload{
 		ID:          "org_upd_partial",
 		AccountType: &newType,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "payg", res.AccountType)
+	require.Equal(t, "pro", res.AccountType)
 	require.True(t, res.Whitelisted, "whitelisted should be untouched")
 
 }
