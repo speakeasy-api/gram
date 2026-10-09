@@ -56,9 +56,10 @@ const (
 	// Platform MCP's tunneled setup handoff evaluates it server-side for the
 	// add form only, so it never links to a form the dashboard would not show.
 	// The server evaluates it with the organization ID and the organization and
-	// project groups the dashboard also registers, so the two decisions match
-	// only while the flag is targeted by organization group (org slug), never by
-	// person properties. Fails closed. Removed once tunneled MCP servers are GA.
+	// project (slug) groups the dashboard also registers. Rollout conditions
+	// must use those groups only, never person properties or a percentage of
+	// people, or the two decisions can differ. Fails closed. Removed once
+	// tunneled MCP servers are GA.
 	FlagTunneledMCP Flag = "gram-tunneled-mcp"
 
 	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk

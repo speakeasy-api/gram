@@ -117,8 +117,8 @@ func (r *PostgresReader) WithTunneledMCPSetupHandoff(dashboardURL *url.URL, budg
 	return r
 }
 
-// Handoff authorizes the caller and the exact target before spending the
-// handoff budget, then returns the dashboard page for the requested setup.
+// Handoff authorizes the caller and resolves the exact target, then charges
+// the handoff budget and returns the dashboard page for the requested setup.
 // Hidden, missing, deleted, and foreign targets are indistinguishable.
 func (s *TunneledMCPSetupHandoffService) Handoff(ctx context.Context, principal Principal, input GetTunneledMCPSetupHandoffInput) (GetTunneledMCPSetupHandoffOutput, error) {
 	if s == nil || s.db == nil || s.authz == nil || s.projects == nil || s.dashboardURL == nil || principal.OrganizationID == "" {
@@ -149,7 +149,7 @@ func (s *TunneledMCPSetupHandoffService) Handoff(ctx context.Context, principal 
 		return GetTunneledMCPSetupHandoffOutput{}, ErrTunneledMCPSetupNotFound
 	}
 	if err != nil {
-		return GetTunneledMCPSetupHandoffOutput{}, fmt.Errorf("resolve tunneled setup project: %w", err)
+		return GetTunneledMCPSetupHandoffOutput{}, fmt.Errorf("%w: resolve tunneled setup project: %w", ErrUnavailable, err)
 	}
 	if mcpID != uuid.Nil {
 		// The exact server, and the project's tunneled sources, whose setup
@@ -167,7 +167,8 @@ func (s *TunneledMCPSetupHandoffService) Handoff(ctx context.Context, principal 
 
 	organization, err := organizationsrepo.New(s.db).GetOrganizationMetadata(ctx, principal.OrganizationID)
 	if err != nil {
-		return GetTunneledMCPSetupHandoffOutput{}, fmt.Errorf("resolve tunneled setup organization: %w", err)
+		s.logger.ErrorContext(ctx, "resolve tunneled setup organization", attr.SlogError(err))
+		return GetTunneledMCPSetupHandoffOutput{}, fmt.Errorf("%w: resolve tunneled setup organization: %w", ErrUnavailable, err)
 	}
 	if organization.Slug == "" {
 		return GetTunneledMCPSetupHandoffOutput{}, ErrUnavailable
@@ -187,10 +188,6 @@ func (s *TunneledMCPSetupHandoffService) Handoff(ctx context.Context, principal 
 		}
 	}
 
-	if err := s.budget.Allow(ctx, principal); err != nil {
-		return GetTunneledMCPSetupHandoffOutput{}, err
-	}
-
 	output := GetTunneledMCPSetupHandoffOutput{
 		ProjectID:    project.ID.String(),
 		ProjectSlug:  project.Slug,
@@ -199,38 +196,43 @@ func (s *TunneledMCPSetupHandoffService) Handoff(ctx context.Context, principal 
 		SetupURL:     s.dashboardURL.JoinPath(organization.Slug, "projects", project.Slug, "mcp", "add", "tunneled").String(),
 		Instructions: slices.Clone(tunneledMCPAddInstructions),
 	}
-	if mcpID == uuid.Nil {
-		return output, nil
+	if mcpID != uuid.Nil {
+		target, err := platformrepo.New(s.db).GetPlatformMCPTunneledSetupTarget(ctx, platformrepo.GetPlatformMCPTunneledSetupTargetParams{
+			OrganizationID: principal.OrganizationID,
+			McpServerID:    mcpID,
+			ProjectID:      project.ID,
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return GetTunneledMCPSetupHandoffOutput{}, ErrTunneledMCPSetupNotFound
+		}
+		if err != nil {
+			s.logger.ErrorContext(ctx, "get tunneled setup target", attr.SlogError(err))
+			return GetTunneledMCPSetupHandoffOutput{}, fmt.Errorf("%w: get tunneled setup target: %w", ErrUnavailable, err)
+		}
+		if !target.Tunneled {
+			return GetTunneledMCPSetupHandoffOutput{}, ErrTunneledMCPSetupNotTunneled
+		}
+		if !target.SourceLive {
+			return GetTunneledMCPSetupHandoffOutput{}, ErrTunneledMCPSetupNotFound
+		}
+
+		route := target.ID.String()
+		if target.Slug.Valid && target.Slug.String != "" {
+			route = target.Slug.String
+		}
+		setupURL := s.dashboardURL.JoinPath(organization.Slug, "projects", project.Slug, "mcp", "x", route, "settings")
+		setupURL.Fragment = tunneledMCPAgentSetupFragment
+		output.MCPID = target.ID.String()
+		output.Intent = TunneledMCPSetupIntentAgent
+		output.SetupURL = setupURL.String()
+		output.Instructions = slices.Clone(tunneledMCPAgentInstructions)
 	}
 
-	target, err := platformrepo.New(s.db).GetPlatformMCPTunneledSetupTarget(ctx, platformrepo.GetPlatformMCPTunneledSetupTargetParams{
-		OrganizationID: principal.OrganizationID,
-		McpServerID:    mcpID,
-		ProjectID:      project.ID,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return GetTunneledMCPSetupHandoffOutput{}, ErrTunneledMCPSetupNotFound
+	// Charged only for a handoff that is actually issued: every refusal above
+	// is free, so probing for targets cannot drain the organization's budget.
+	if err := s.budget.Allow(ctx, principal); err != nil {
+		return GetTunneledMCPSetupHandoffOutput{}, err
 	}
-	if err != nil {
-		return GetTunneledMCPSetupHandoffOutput{}, fmt.Errorf("get tunneled setup target: %w", err)
-	}
-	if !target.Tunneled {
-		return GetTunneledMCPSetupHandoffOutput{}, ErrTunneledMCPSetupNotTunneled
-	}
-	if !target.SourceLive {
-		return GetTunneledMCPSetupHandoffOutput{}, ErrTunneledMCPSetupNotFound
-	}
-
-	route := target.ID.String()
-	if target.Slug.Valid && target.Slug.String != "" {
-		route = target.Slug.String
-	}
-	setupURL := s.dashboardURL.JoinPath(organization.Slug, "projects", project.Slug, "mcp", "x", route, "settings")
-	setupURL.Fragment = tunneledMCPAgentSetupFragment
-	output.MCPID = target.ID.String()
-	output.Intent = TunneledMCPSetupIntentAgent
-	output.SetupURL = setupURL.String()
-	output.Instructions = slices.Clone(tunneledMCPAgentInstructions)
 	return output, nil
 }
 

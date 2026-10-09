@@ -205,6 +205,14 @@ func TestServePlatformToolset_TunneledSetupHandoffRefusedWithoutOrgAdmin(t *test
 	f := newTunneledAssistantFixture(t, false)
 
 	_, raw := f.call(t, "get_tunneled_mcp_setup_handoff", map[string]any{"mcp_id": f.wrapperID.String()})
+	var refusal struct {
+		Error struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(raw), &refusal))
+	require.Equal(t, "permission denied", refusal.Error.Message, "the live org-admin gate refuses the call")
 	require.NotContains(t, raw, "setup_url")
 	require.NotContains(t, raw, "dashboard.example.test")
 }

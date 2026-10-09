@@ -76,7 +76,7 @@ func TestTunneledBoundariesHideOtherProjectsAndOrganizations(t *testing.T) {
 		_, err := harness.invoke(t, ctx, input)
 		requireTunneledSetupRefusal(t, err, "not_found")
 	}
-	require.Len(t, harness.limiter.keys, 4, "only the two in-project targets that passed authorization were charged")
+	require.Empty(t, harness.limiter.keys, "refused targets are never charged")
 
 	connections := &recordingTunnelConnections{}
 	reader, readerCtx := fixture.reader(t, connections)
@@ -248,8 +248,10 @@ func TestTunnelStatusEnforcesDeadlineOnRedisRuntimeStore(t *testing.T) {
 	connected := fixture.getMCP(t, reader, ctx, fixture.wrapperID)
 	require.Equal(t, &MCPTunnel{ConnectionStatus: TunnelConnectionConnected}, connected.Tunnel, "the real store reports the published agent")
 
+	delayed := make(chan struct{}, 1)
 	server.Server().SetPreHook(func(_ *redisserver.Peer, cmd string, _ ...string) bool {
 		if strings.EqualFold(cmd, "HGETALL") {
+			delayed <- struct{}{}
 			<-time.NewTimer(redisReplyDelay).C
 		}
 		return false
@@ -260,6 +262,11 @@ func TestTunnelStatusEnforcesDeadlineOnRedisRuntimeStore(t *testing.T) {
 
 	status := reader.tunnelStatus.Status(bounded, fixture.principal, fixture.project.ID, fixture.wrapperID)
 
+	select {
+	case <-delayed:
+	default:
+		require.Fail(t, "the read must reach the delayed Redis reply, not stop at authorization or the source lookup")
+	}
 	require.Equal(t, &MCPTunnel{ConnectionStatus: TunnelConnectionUnknown}, status, "a reply after the deadline is never classified")
 	require.Less(t, time.Since(started), redisReplyDelay, "the read is abandoned at the deadline, not when Redis replies")
 }

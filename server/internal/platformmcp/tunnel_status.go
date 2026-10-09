@@ -33,8 +33,9 @@ const (
 	// an unexpired connection to the gateway.
 	TunnelConnectionConnected TunnelConnectionStatus = "connected"
 
-	// TunnelConnectionInactive means no agent is connected now, but the tunnel
-	// has been used before.
+	// TunnelConnectionInactive means no agent is connected now and the tunnel
+	// is past its first-connection state: it has been used before, or its
+	// source is no longer awaiting a first agent.
 	TunnelConnectionInactive TunnelConnectionStatus = "inactive"
 
 	// TunnelConnectionNeverConnected means no agent has ever connected with
@@ -94,10 +95,16 @@ func (s *TunnelStatusService) Status(ctx context.Context, principal Principal, p
 	if s == nil || s.db == nil || s.authz == nil || principal.OrganizationID == "" {
 		return nil
 	}
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, projectID.String(), projectID.String())); err != nil {
-		if !isAuthorizationDenied(err) {
-			s.logger.WarnContext(ctx, "authorize tunnel status", attr.SlogError(err))
-		}
+	// FindMatched asks whether the caller may read the project's tunneled
+	// sources; Require would record every project-read-only diagnostics read
+	// as a denied requirement. The enrichment is optional, so a caller without
+	// it simply gets the read without the tunnel block.
+	matched, err := s.authz.FindMatched(ctx, []authz.Check{authz.MCPCheck(authz.ScopeMCPRead, projectID.String(), projectID.String())})
+	if err != nil {
+		s.logger.WarnContext(ctx, "authorize tunnel status", attr.SlogError(err))
+		return nil
+	}
+	if len(matched) == 0 || !matched[0] {
 		return nil
 	}
 
