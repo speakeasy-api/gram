@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/url"
 	"slices"
 	"sort"
@@ -570,7 +571,7 @@ func (c *IdentityCommit) Register(ctx context.Context) (Registration, error) {
 func (c *IdentityCommit) register(ctx context.Context, reg Registration) (Registration, error) {
 	policy := c.plan.Client.policy
 	capabilities := c.capabilities()
-	if policy.AllowCIMD && capabilities.supportsCIMD() {
+	if policy.AllowCIMD && capabilities.supportsCIMD() && c.committer.cimdFetchableBy(capabilities.issuer) {
 		reg.Method = RegistrationCIMD
 		return reg, nil
 	}
@@ -657,10 +658,36 @@ type providerCapabilities struct {
 	registrationEndpoint              pgtype.Text
 	tokenEndpointAuthMethodsSupported []string
 	clientIDMetadataDocumentSupported bool
+	issuer                            string
 }
 
 func (p providerCapabilities) supportsCIMD() bool {
 	return SupportsClientIDMetadataDocument(p.clientIDMetadataDocumentSupported, p.tokenEndpointAuthMethodsSupported)
+}
+
+// cimdFetchableBy reports whether the provider at issuer can fetch the Client
+// ID Metadata Document Gram would publish. The document is served from Gram's
+// own URL, so when that URL is loopback or private — local development — only
+// a provider on the same kind of network can reach it. A public provider
+// resolves the host to itself or refuses to fetch it, and every sign-in fails,
+// so registration falls back to dynamic registration, which Gram initiates.
+// With no server URL there is nothing to judge, and CIMD stays allowed.
+func (c *IdentityCommitter) cimdFetchableBy(issuer string) bool {
+	if c.serverURL == nil || !isPrivateHost(c.serverURL.Hostname()) {
+		return true
+	}
+	upstream, err := url.Parse(issuer)
+	return err == nil && isPrivateHost(upstream.Hostname())
+}
+
+// isPrivateHost reports whether host names a loopback, private or link-local
+// address, which a provider on the public internet cannot reach.
+func isPrivateHost(host string) bool {
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && (ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsUnspecified())
 }
 
 // capabilities is what registration is chosen from: the new provider's
@@ -671,12 +698,14 @@ func (c *IdentityCommit) capabilities() providerCapabilities {
 			registrationEndpoint:              create.RegistrationEndpoint,
 			tokenEndpointAuthMethodsSupported: create.TokenEndpointAuthMethodsSupported,
 			clientIDMetadataDocumentSupported: create.ClientIDMetadataDocumentSupported,
+			issuer:                            create.Issuer,
 		}
 	}
 	return providerCapabilities{
 		registrationEndpoint:              c.provider.RegistrationEndpoint,
 		tokenEndpointAuthMethodsSupported: c.provider.TokenEndpointAuthMethodsSupported,
 		clientIDMetadataDocumentSupported: c.provider.ClientIDMetadataDocumentSupported,
+		issuer:                            c.provider.Issuer,
 	}
 }
 
