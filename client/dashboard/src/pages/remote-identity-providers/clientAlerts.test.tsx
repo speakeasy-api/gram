@@ -14,7 +14,7 @@ vi.mock("@/routes", () => ({
     remoteIdentityProviders: {
       issuerDetail: {
         settings: {
-          href: (id: string) => `/authorization servers/${id}/settings`,
+          href: (id: string) => `/providers/${id}/settings`,
         },
       },
     },
@@ -75,7 +75,7 @@ describe("IssuerScopeOverrideAlert", () => {
       screen
         .getByRole("link", { name: "authorization server's settings" })
         .getAttribute("href"),
-    ).toBe("/authorization servers/issuer-1/settings");
+    ).toBe("/providers/issuer-1/settings");
     expect(rbac.requested).toContainEqual(["org:read", "org:admin"]);
   });
 
