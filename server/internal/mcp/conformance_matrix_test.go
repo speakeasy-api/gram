@@ -450,6 +450,110 @@ func runConformanceMatrix(t *testing.T, target conformanceTarget) {
 	}
 }
 
+// missingTargetRows are the requests sent to each missing target.
+var missingTargetRows = []conformanceRequest{
+	{name: "request", method: mcpversions.MethodToolsList},
+	{name: "notification", method: mcpversions.MethodToolsList, notification: true},
+}
+
+// Missing targets exercise errors before normal request preparation, through
+// the same attached routes and revision axis as the resolved-target matrix. A
+// policy-denied endpoint must answer exactly as a missing one, so its
+// response cannot reveal that the endpoint exists.
+func TestConformanceMatrix_MissingTargets(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, ti.service, nil)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	disabledToolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, "conformance-disabled-"+uuid.NewString()[:8])
+	disabledSlug := "conformance-disabled-endpoint-" + uuid.NewString()[:8]
+	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, disabledToolset.ID, disabledSlug, "disabled", uuid.NullUUID{}, uuid.Nil)
+
+	missing := conformanceTarget{router: router, path: "/mcp/conformance-missing-target", supported: mcpversions.SupportedHostedToolset()}
+	denied := conformanceTarget{router: router, path: "/mcp/" + disabledSlug, supported: mcpversions.SupportedHostedToolset()}
+
+	for _, target := range []conformanceTarget{
+		missing,
+		denied,
+		{router: router, path: "/platform/mcp/conformance-missing-target", supported: mcpversions.SupportedPlatformToolset()},
+	} {
+		for _, declaration := range declarationsFor(target.supported) {
+			for _, row := range missingTargetRows {
+				t.Run(target.path+"/"+declaration.label+"/"+row.name, func(t *testing.T) {
+					t.Parallel()
+
+					w := httptest.NewRecorder()
+					target.router.ServeHTTP(w, buildConformanceRequest(t, target, row, declaration))
+
+					wantStatus, wantCode, wantID := http.StatusNotFound, oops.MCPCodeResourceNotFound, "null"
+					if declaration.era != eraHandshake {
+						wantStatus, wantCode, wantID = http.StatusBadRequest, oops.MCPCodeInvalidParams, "1"
+						switch {
+						case declaration.era == eraUnsupported:
+							// Encoded under the revision in effect, as a resolved
+							// target answers it.
+							wantCode = oops.MCPCodeUnsupportedProtocolVersion
+							if row.notification {
+								wantID = "null"
+							}
+						case row.notification:
+							wantID = ""
+						}
+					}
+					require.Equal(t, wantStatus, w.Code, "body=%s", w.Body.String())
+					require.Equal(t, "application/json", w.Header().Get("Content-Type"))
+					require.Empty(t, w.Header().Get(mcpversions.HTTPHeader))
+					require.Empty(t, w.Header().Get("Mcp-Session-Id"))
+
+					var response struct {
+						JSONRPC string          `json:"jsonrpc"`
+						ID      json.RawMessage `json:"id"`
+						Error   struct {
+							Code oops.MCPCode `json:"code"`
+							Data struct {
+								Supported []string `json:"supported"`
+								Requested string   `json:"requested"`
+							} `json:"data"`
+						} `json:"error"`
+					}
+					require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+					require.Equal(t, "2.0", response.JSONRPC)
+					require.Equal(t, wantID, string(response.ID))
+					require.Equal(t, wantCode, response.Error.Code)
+					if declaration.era == eraUnsupported {
+						require.Equal(t, target.supported, response.Error.Data.Supported)
+						require.Equal(t, declaration.revision, response.Error.Data.Requested)
+					}
+				})
+			}
+		}
+	}
+
+	// The matrix pins each response's shape. Parity pins the complete
+	// response, message included, so nothing distinguishes a denial.
+	for _, declaration := range declarationsFor(missing.supported) {
+		for _, row := range missingTargetRows {
+			t.Run("parity/"+declaration.label+"/"+row.name, func(t *testing.T) {
+				t.Parallel()
+
+				missingResponse := httptest.NewRecorder()
+				router.ServeHTTP(missingResponse, buildConformanceRequest(t, missing, row, declaration))
+				deniedResponse := httptest.NewRecorder()
+				router.ServeHTTP(deniedResponse, buildConformanceRequest(t, denied, row, declaration))
+
+				require.Equal(t, missingResponse.Code, deniedResponse.Code)
+				require.Equal(t, missingResponse.Header(), deniedResponse.Header())
+				require.Equal(t, missingResponse.Body.String(), deniedResponse.Body.String())
+			})
+		}
+	}
+}
+
 func TestConformanceMatrix_HostedToolset(t *testing.T) {
 	t.Parallel()
 

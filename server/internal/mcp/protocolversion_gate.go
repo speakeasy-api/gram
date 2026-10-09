@@ -29,6 +29,76 @@ type preparedMCPRequest struct {
 	protocolVersion mcpversions.Resolution
 }
 
+// requestIDEnvelope decodes the request ID independently of other fields so
+// invalid envelope fields do not prevent an error from identifying its caller.
+type requestIDEnvelope struct {
+	// ID correlates the response to the request, when it can be decoded.
+	ID mcpjsonrpc.ID `json:"id"`
+}
+
+// missingMCPTargetMaxBodyBytes bounds decoding on an unresolved address to
+// 1 MiB, matching the hosted and platform request limits.
+const missingMCPTargetMaxBodyBytes = 1 << 20
+
+// rejectMissingMCPTarget prepares a per-request declaration before returning
+// an address lookup failure, so its error carries the request's revision and
+// readable ID. Validation and encoding follow a resolved target's rules, so a
+// missing address and a policy-denied one stay indistinguishable. Handshake
+// declarations retain their pre-body lookup response. No resolved-endpoint
+// telemetry is emitted for caller-controlled addresses.
+func rejectMissingMCPTarget(w http.ResponseWriter, r *http.Request, logger *slog.Logger, supported []string, cause error) error {
+	rawVersion := r.Header.Get(mcpversions.HTTPHeader)
+	if rawVersion == "" || isHandshakeDeclaration(mcpversions.Sanitize(rawVersion)) {
+		return cause
+	}
+
+	prepared := prepareMCPRequest(w, r, missingMCPTargetMaxBodyBytes, supported)
+	resolution := prepared.protocolVersion
+	if isHandshakeDeclaration(resolution.Declared) {
+		return cause
+	}
+
+	if err := validateMCPRequestEnvelope(r.Context(), logger, prepared, oops.CodeRequestTooLarge, "MCP request body exceeds 1 MiB"); err != nil {
+		return err
+	}
+	if prepared.request.Method == "" || (prepared.request.ID.IsSet() && prepared.request.ID.IsNull()) {
+		return oops.E(oops.CodeBadRequest, nil, "invalid MCP request method or ID")
+	}
+
+	var validationErr error
+	if resolution.Declared == "" {
+		// The header is present but malformed, and no `_meta` declaration
+		// names a revision. A malformed declaration is a validation failure,
+		// not an absent one, so it is answered as on the meta surface.
+		validationErr = &declarationError{
+			revision: declarationRevision(""),
+			err:      headerMismatchError(prepared.request.ID, fmt.Sprintf("%s header is malformed", mcpversions.HTTPHeader)),
+		}
+	} else {
+		validationErr = prepared.validateProtocolMetadata(r.Header, supported)
+		if validationErr == nil && !slices.Contains(supported, resolution.Declared) {
+			// There is no target with which to negotiate an initialize handshake.
+			validationErr = unsupportedProtocolVersionError(prepared.request.ID, resolution.Declared, supported)
+		}
+	}
+	if validationErr != nil {
+		revision := resolution.InEffect
+		if declErr, ok := errors.AsType[*declarationError](validationErr); ok {
+			revision = declErr.revision
+		}
+		// Rejected notifications remain HTTP errors rather than accepted 202s.
+		return writeMCPError(r.Context(), logger, w, prepared.request.ID, revision, validationErr)
+	}
+
+	return cause
+}
+
+// isHandshakeDeclaration reports whether declared is a recognized revision
+// that negotiates through the initialize handshake.
+func isHandshakeDeclaration(declared string) bool {
+	return mcpversions.Known(declared) && !mcpversions.AtLeast(declared, mcpversions.Version20260728)
+}
+
 func prepareMCPRequest(w http.ResponseWriter, r *http.Request, maxBodyBytes int64, supported []string) *preparedMCPRequest {
 	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 	body, bodyReadErr := io.ReadAll(r.Body)
@@ -37,10 +107,17 @@ func prepareMCPRequest(w http.ResponseWriter, r *http.Request, maxBodyBytes int6
 	var bodyDecodeErr error
 	if bodyReadErr == nil {
 		bodyDecodeErr = json.Unmarshal(body, &req)
-		if bodyDecodeErr == nil {
-			if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok && req.ID.IsSet() {
-				rpcCtx.ID = req.ID
+		if bodyDecodeErr != nil {
+			// Recover only from a complete envelope with a decodable ID. A
+			// failed ID decode can leave a value from an earlier duplicate key.
+			req.ID = mcpjsonrpc.ID{Number: 0, String: ""}
+			var envelope requestIDEnvelope
+			if json.Unmarshal(body, &envelope) == nil {
+				req.ID = envelope.ID
 			}
+		}
+		if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok && req.ID.IsSet() {
+			rpcCtx.ID = req.ID
 		}
 	}
 
@@ -70,6 +147,16 @@ func (p *preparedMCPRequest) empty() bool {
 // empty, unreadable, malformed, and otherwise invalid envelopes.
 func (p *preparedMCPRequest) readyForProtocolVersionValidation() bool {
 	return !p.empty() && p.bodyReadErr == nil && p.bodyDecodeErr == nil && p.request.JSONRPC == "2.0"
+}
+
+// validateProtocolMetadata checks the request's protocol version
+// declarations against supported, then its mirrored request metadata.
+func (p *preparedMCPRequest) validateProtocolMetadata(header http.Header, supported []string) error {
+	if err := validateSupportedProtocolVersion(&p.request, p.protocolVersion, supported); err != nil {
+		return err
+	}
+
+	return validateRequestMetadata(header, &p.request, p.protocolVersion)
 }
 
 // validateMCPRequestEnvelope applies the shared transport and JSON-RPC shape
@@ -141,10 +228,7 @@ func (s *Service) prepareTerminatedMCPRequest(
 		return prepared, false, nil
 	}
 
-	validationErr := validateSupportedProtocolVersion(&prepared.request, prepared.protocolVersion, supported)
-	if validationErr == nil {
-		validationErr = validateRequestMetadata(r.Header, &prepared.request, prepared.protocolVersion)
-	}
+	validationErr := prepared.validateProtocolMetadata(r.Header, supported)
 	handled, err := s.handleProtocolVersionValidation(
 		r,
 		logger,

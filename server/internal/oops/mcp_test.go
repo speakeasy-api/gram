@@ -101,6 +101,37 @@ func TestMCPError_MarshalJSON(t *testing.T) {
 	require.JSONEq(t, `{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"tools/unknown: Method not found","data":{"code":"typed_code"}}}`, string(data))
 }
 
+func TestMCPError_MarshalJSONFor_ID(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name     string
+		revision string
+		id       mcpjsonrpc.ID
+		want     string
+	}{
+		{name: "handshake null", revision: mcpversions.Version20251125, id: mcpjsonrpc.NullID(), want: "null"},
+		{name: "unresolved null", id: mcpjsonrpc.NullID(), want: "null"},
+		{name: "per-request null", revision: mcpversions.Version20260728, id: mcpjsonrpc.NullID()},
+		{name: "per-request unset", revision: mcpversions.Version20260728},
+		{name: "per-request zero", revision: mcpversions.Version20260728, id: mcpjsonrpc.NumberID(0), want: "0"},
+		{name: "per-request empty string", revision: mcpversions.Version20260728, id: mcpjsonrpc.StringID(""), want: `""`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := &MCPError{ID: tc.id, Code: MCPCodeInvalidParams}
+			bs, marshalErr := err.MarshalJSONFor(tc.revision)
+			require.NoError(t, marshalErr)
+			var response struct {
+				ID json.RawMessage `json:"id"`
+			}
+			require.NoError(t, json.Unmarshal(bs, &response))
+			require.Equal(t, tc.want, string(response.ID))
+		})
+	}
+}
+
 func TestCodeMCPCode(t *testing.T) {
 	t.Parallel()
 
@@ -443,7 +474,7 @@ func TestMCPErrHandle_ModernRevisionUsesMandatedStatusForNullID(t *testing.T) {
 
 	var response map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
-	require.Nil(t, response["id"])
+	require.NotContains(t, response, "id")
 }
 
 // TestMCPErrHandle_ModernRevisionMapsNotImplementedToNotFound covers the one
