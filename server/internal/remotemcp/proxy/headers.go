@@ -416,20 +416,19 @@ func (p *Proxy) applyRemoteConfiguredHeaders(ctx context.Context, userReq *http.
 			}
 			p.logWithIdentity(ctx, slog.LevelWarn, "skip invalid configured header for remote mcp server", attr.SlogRemoteMCPConfiguredHeaderName(h.Name), attr.SlogError(err))
 		}
-		if value == "" {
-			clearSuppressedRemoteDestination(remoteReq.Header, h.Name)
-			continue
+		clearRemoteDestination(remoteReq.Header, h.Name)
+		if value != "" {
+			remoteReq.Header.Set(h.Name, value)
 		}
-		remoteReq.Header.Set(h.Name, value)
 	}
 	return nil
 }
 
-// clearSuppressedRemoteDestination removes client values under the name of a
-// configured header that is not being sent, so they cannot stand in for it.
+// clearRemoteDestination removes client values under the name of a
+// configured header, so they cannot stand in for it or sit beside it.
 // Every spelling an upstream may fold together goes, matched by the trimmed
 // name the client would send. Unowned headers are never touched.
-func clearSuppressedRemoteDestination(header http.Header, stored string) {
+func clearRemoteDestination(header http.Header, stored string) {
 	name, err := NormalizeHeaderName(stored)
 	if err != nil {
 		return

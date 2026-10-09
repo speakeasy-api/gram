@@ -578,6 +578,25 @@ func TestApplyRequestHeadersRemoteOverrideLeavesCustomPassThrough(t *testing.T) 
 	require.Equal(t, []string{"Bearer caller-upstream"}, remoteReq.Header.Values("X-Upstream-Token"))
 }
 
+// A sent configured header replaces every client spelling of its name, so an
+// upstream folding '_' into '-' cannot read the client's value instead.
+func TestApplyRequestHeadersRemoteSentHeaderClearsClientSpellings(t *testing.T) {
+	t.Parallel()
+
+	userReq, remoteReq := newRemotePolicyRequests(t)
+	userReq.Header["X_api_key"] = []string{"client-supplied"}
+	userReq.Header.Set("X-Api-Key", "client-supplied")
+	p := &Proxy{
+		Logger: testenv.NewLogger(t),
+		Headers: []ConfiguredHeader{
+			{Name: "X-Api-Key", StaticValue: "operator-credential", ValueFromRequestHeader: "", IsRequired: true},
+		},
+	}
+	require.NoError(t, p.applyRequestHeaders(t.Context(), userReq, remoteReq))
+	require.Equal(t, []string{"operator-credential"}, remoteReq.Header.Values("X-Api-Key"))
+	require.Empty(t, remoteReq.Header.Values("X_api_key"))
+}
+
 // A padded optional row is suppressed, and the client's own value under the
 // trimmed name, the header it would actually send, is cleared with it.
 func TestApplyRequestHeadersRemotePaddedOptionalRowClearsClientValue(t *testing.T) {

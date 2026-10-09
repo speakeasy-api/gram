@@ -342,6 +342,28 @@ func TestUpdateServerHeader_KeepsNameWithoutConflictingWithItself(t *testing.T) 
 	require.Equal(t, "x-api-key", updated.Name)
 }
 
+// Rows that collided before names were matched case-insensitively stay
+// editable as long as the edit keeps the name.
+func TestUpdateServerHeader_LegacyCollidingRowKeepsName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+	legacy := seedLegacyHeader(t, ctx, ti, server.ID, "X-Foo", "legacy", "")
+	seedLegacyHeader(t, ctx, ti, server.ID, "x_foo", "other", "")
+
+	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(legacy.ID.String(), "X-Foo", func(p *gen.UpdateServerHeaderPayload) {
+		p.Value = new("rotated")
+	}))
+	require.NoError(t, err)
+	require.Equal(t, "X-Foo", updated.Name)
+
+	_, err = ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(legacy.ID.String(), "x-foo", func(p *gen.UpdateServerHeaderPayload) {
+		p.Value = new("rotated")
+	}))
+	requireOopsCode(t, err, oops.CodeConflict)
+}
+
 // Editing a secret without resupplying its value still validates the name,
 // renames it as entered, even by case only, and keeps the ciphertext.
 func TestUpdateServerHeader_LegacySecretKeepsValueWhenRenamed(t *testing.T) {

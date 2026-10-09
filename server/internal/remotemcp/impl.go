@@ -786,8 +786,11 @@ func (s *Service) UpdateServerHeader(ctx context.Context, payload *gen.UpdateSer
 		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogWarn(ctx, logger)
 	}
 
-	if err := requireUnusedHeaderName(ctx, txRepo, server.ID, *authCtx.ProjectID, name, existing.ID); err != nil {
-		return nil, err.LogWarn(ctx, logger)
+	// An unchanged name keeps working even beside a legacy row it collides with.
+	if name != existing.Name {
+		if err := requireUnusedHeaderName(ctx, txRepo, server.ID, *authCtx.ProjectID, name, existing.ID); err != nil {
+			return nil, err.LogWarn(ctx, logger)
+		}
 	}
 
 	beforeView := mv.BuildRemoteMcpServerHeaderView(existing)
