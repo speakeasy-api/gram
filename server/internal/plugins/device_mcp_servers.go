@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -24,9 +25,10 @@ type DeviceMCPServer struct {
 	// DisplayName is the server's display name within its plugin.
 	DisplayName string
 
-	// Key is DisplayName reduced to the characters every managed tool accepts
-	// as an MCP server name.
-	Key string
+	// Name is the key the device writes the server under in each tool's MCP
+	// configuration: `speakeasy-` followed by the server's slug. The prefix
+	// keeps it apart from servers people add by hand.
+	Name string
 
 	// URL is the server's streamable-HTTP address.
 	URL string
@@ -79,7 +81,7 @@ func ListDeviceMCPServers(ctx context.Context, logger *slog.Logger, db repo.DBTX
 			servers = append(servers, DeviceMCPServer{
 				PluginSlug:  r.PluginSlug,
 				DisplayName: r.ServerDisplayName,
-				Key:         codexMCPServerName(r.ServerDisplayName),
+				Name:        deviceMCPServerName(r.ToolsetMcpSlug.String, r.ServerDisplayName),
 				URL:         mcpURL,
 				SortOrder:   r.ServerSortOrder,
 			})
@@ -94,7 +96,7 @@ func ListDeviceMCPServers(ctx context.Context, logger *slog.Logger, db repo.DBTX
 			servers = append(servers, DeviceMCPServer{
 				PluginSlug:  r.PluginSlug,
 				DisplayName: r.ServerDisplayName,
-				Key:         codexMCPServerName(r.ServerDisplayName),
+				Name:        deviceMCPServerName(r.McpServerSlug.String, r.ServerDisplayName),
 				URL:         mcpURL,
 				SortOrder:   r.ServerSortOrder,
 			})
@@ -109,4 +111,42 @@ func ListDeviceMCPServers(ctx context.Context, logger *slog.Logger, db repo.DBTX
 		)
 	})
 	return servers, nil
+}
+
+// deviceMCPServerNamePrefix marks the MCP server entries Speakeasy writes into
+// a tool's configuration.
+const deviceMCPServerNamePrefix = "speakeasy-"
+
+// deviceMCPServerName names a server's entry in a tool's MCP configuration:
+// the prefix followed by slug, or by displayName when the server has no slug,
+// lowercased with each run of characters outside [a-z0-9-] collapsed into one
+// `-` and the ends trimmed. The result is a valid key in Claude Code's
+// mcpServers, Codex's bare TOML table names, and Cursor's mcp.json.
+func deviceMCPServerName(slug, displayName string) string {
+	name := slugifyMCPServerName(slug)
+	if name == "" {
+		name = slugifyMCPServerName(displayName)
+	}
+	if name == "" {
+		name = "mcp-server"
+	}
+	return deviceMCPServerNamePrefix + name
+}
+
+func slugifyMCPServerName(value string) string {
+	var b strings.Builder
+	b.Grow(len(value))
+	pendingDash := false
+	for _, r := range strings.ToLower(value) {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') {
+			pendingDash = true
+			continue
+		}
+		if pendingDash && b.Len() > 0 {
+			b.WriteByte('-')
+		}
+		pendingDash = false
+		b.WriteRune(r)
+	}
+	return b.String()
 }

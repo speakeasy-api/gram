@@ -9,7 +9,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type AgentMCPServer = {
   /**
-   * Stable key the agent writes the server under in each tool's MCP configuration. Unique within the response and limited to letters, digits, `_` and `-`.
+   * Stable key the agent writes the server under in each tool's MCP configuration: `speakeasy-` followed by the server's slug, using only lowercase letters, digits and `-`. Unique within the response; a second server with the same name gets a numeric suffix such as `speakeasy-linear-2`.
    */
   name: string;
   /**
