@@ -174,6 +174,9 @@ type FindMCPOutput struct {
 type GetMCPInput struct {
 	ProjectID string `json:"project_id" jsonschema:"project ID that owns the MCP"`
 	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID"`
+	// ToolCursor continues a paged tool_exposure read. The other fields of
+	// the result are re-read in full on every page.
+	ToolCursor string `json:"tool_cursor,omitempty" jsonschema:"tool_exposure.next_tool_cursor from the previous get_mcp read of this same server; omit for the first page"`
 }
 
 type featureUnavailableResult struct {

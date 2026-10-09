@@ -770,7 +770,20 @@ func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input 
 		}
 		return MCP{}, err
 	}
-	return r.getMCPInventory(ctx, principal, projectID, mcpID, true)
+	// A tool_cursor's signature and binding are checked before the inventory
+	// is read, so a malformed or foreign one costs no queries. Whether the
+	// list it pins still stands is checked by the page read itself. Without an
+	// exposure read nothing could continue any cursor, so that is reported as
+	// the read being unavailable, the same as ExposurePage reports it.
+	if input.ToolCursor != "" {
+		if !r.toolExposure.valid() {
+			return MCP{}, ErrUnavailable
+		}
+		if _, err := r.toolExposure.openExposureCursor(principal, projectID, mcpID, input.ToolCursor); err != nil {
+			return MCP{}, err
+		}
+	}
+	return r.getMCPInventory(ctx, principal, projectID, mcpID, true, input.ToolCursor)
 }
 
 // GetMCPForDiagnostics reads one MCP after project:read has been enforced. The
@@ -786,14 +799,14 @@ func (r *PostgresReader) GetMCPForDiagnostics(ctx context.Context, principal Pri
 	if err != nil {
 		return MCP{}, fmt.Errorf("parse mcp id: %w", err)
 	}
-	return r.getMCPInventory(ctx, principal, project.ID, mcpID, false)
+	return r.getMCPInventory(ctx, principal, project.ID, mcpID, false, "")
 }
 
 // getMCPInventory reads one MCP. withPluginMembership stays false for callers
 // admitted on project-read alone: which plugins carry a server is inventory
 // detail, and a caller who has not cleared the MCP-read boundary has no claim
 // on it.
-func (r *PostgresReader) getMCPInventory(ctx context.Context, principal Principal, projectID, mcpID uuid.UUID, withPluginMembership bool) (MCP, error) {
+func (r *PostgresReader) getMCPInventory(ctx context.Context, principal Principal, projectID, mcpID uuid.UUID, withPluginMembership bool, toolCursor string) (MCP, error) {
 	if r == nil || r.inventory == nil {
 		return MCP{}, ErrUnavailable
 	}
@@ -835,7 +848,7 @@ func (r *PostgresReader) getMCPInventory(ctx context.Context, principal Principa
 	// admitted on project read alone gets the operational projection, not the
 	// server's configuration.
 	if withPluginMembership && r.toolExposure.valid() && row.McpServerID != uuid.Nil {
-		exposure, err := r.toolExposure.Exposure(ctx, principal, projectID, row.McpServerID)
+		exposure, err := r.toolExposure.ExposurePage(ctx, principal, projectID, row.McpServerID, toolCursor)
 		switch {
 		case err == nil:
 			mcp.ToolExposure = &exposure
@@ -844,6 +857,10 @@ func (r *PostgresReader) getMCPInventory(ctx context.Context, principal Principa
 		default:
 			return MCP{}, fmt.Errorf("read platform MCP tool exposure: %w", err)
 		}
+	} else if toolCursor != "" {
+		// Ignoring the cursor would hand back the first page's projection as
+		// if it continued the read.
+		return MCP{}, toolExposureCursorInvalid()
 	}
 	return mcp, nil
 }
