@@ -122,16 +122,18 @@ Use the compound API only when the body needs custom structure that the declarat
       ))}
     </Table.Body>
   )}
-  <Table.Row>
-    <div className="border-border col-span-full border-t py-5 text-center">
-      <Text small muted>
-        Want to grant new members access?
-      </Text>
-      <Button variant="tertiary" size="sm" className="mt-2">
-        Configure roles
-      </Button>
-    </div>
-  </Table.Row>
+  <Table.Body>
+    <Table.Row>
+      <div className="border-border col-span-full border-t py-5 text-center">
+        <Text small muted>
+          Want to grant new members access?
+        </Text>
+        <Button variant="tertiary" size="sm" className="mt-2">
+          Configure roles
+        </Button>
+      </div>
+    </Table.Row>
+  </Table.Body>
 </Table>
 ```
 

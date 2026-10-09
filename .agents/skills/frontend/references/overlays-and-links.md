@@ -2,7 +2,7 @@
 
 ## Tooltip usage
 
-`App.tsx` wraps the entire app in a global `TooltipProvider`. **Never add another `TooltipProvider` inside a component** — doing so creates a redundant Radix context per instance and contributes to `ResizeObserver loop completed with undelivered notifications` errors in the browser.
+`App.tsx` wraps the entire app in a global `TooltipProvider`. Use that provider by default; do not wrap individual components in another `TooltipProvider`. Add a nested provider only when a subtree genuinely needs different provider settings (for example, a different delay).
 
 Use `<Tooltip>`, `<TooltipTrigger>`, and `<TooltipContent>` directly — they inherit the global provider automatically. For simple cases use the existing `<SimpleTooltip tooltip="...">` wrapper from `@/components/ui/Tooltip`.
 

@@ -39,7 +39,7 @@ Working with no user to choose? Pick your recommended direction, put the other t
 
    `principal` → "person or agent", `toolset` → "MCP server", `grain` → drop it. Put information where the user _changes_ it, not where it loosely relates.
 
-2. **Find two precedents.** One page in our app and one outside product that already solve this job. Name the exact detail you will copy — "the Polar sidebar's white active state and track", not "like Polar". Start from the [reference shelf](#reference-shelf). Precedents may predate these rules: copy the pattern, not its violations.
+2. **Find precedents.** One page in our app that already solves this job; for a new page, tab, nav item, or flow, also one outside product. Name the exact detail you will copy — "the Polar sidebar's white active state and track", not "like Polar". Start from the [reference shelf](#reference-shelf). Precedents may predate these rules: copy the pattern, not its violations.
 3. **Show three directions.** ASCII sketches before code or data-model changes. Directions must differ in _structure_ (where it lives, what pattern, what the user does first), not in styling. At least one removes a step, a field, or a tab. Recommend one and say why.
 4. **Build on real data, then critique.** Seed realistic volume and edge cases (`gram-demo-seed` skill): long names, many rows, zero rows, failures. Screenshot each state with `mise run playwright` (`gram-playwright-cli` skill): loading, empty, error, full, longest real value, 400px wide. Then critique — see [How to critique](#how-to-critique). Fix, re-screenshot, repeat until a round finds nothing. Expect several rounds; strong surfaces here took dozens. No browser? Critique the code against the checklist, list the screenshots you would take, and say they are not taken.
 5. **Subtract, then systemise.** Remove at least one thing you built: a repeated heading, an intro that restates the title, a control nobody needs, a column nobody reads. If you built the same pattern twice, make it a component.
@@ -164,7 +164,7 @@ Each line is a sign the feature still describes the backend, not the outcome. Im
 - [ ] No control that does nothing. Rare settings sit under "Advanced".
 - [ ] One page, one topic. Unrelated concepts (keys, branding, billing, sync) live on their own pages.
 - [ ] The main outcome takes the fewest possible steps.
-- [ ] Every table row leads somewhere — for every role that can see it, not only admins: the name links to its detail or activity, or the row has an action that fixes what it shows. Use one action label for every row. A log the user can only read is a dead end.
+- [ ] Every table row leads somewhere — for every role that can see it, not only admins: the name links to its detail or activity, or the row has an action that fixes what it shows. Use one action label for every row. Exception: a log whose job is inspection may be read-only, but its names still link to their detail. Do not invent actions a row does not need.
 - [ ] Evidence comes before a destructive action: show what will be affected, then the button that breaks it.
 - [ ] State-changing actions (publish, deprecate, pause) sit where the state is shown, not only in a Settings tab.
 - [ ] Settings show who last changed them and when ("Changed by Priya Raman · 3 Oct").

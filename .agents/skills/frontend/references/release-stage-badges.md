@@ -4,12 +4,12 @@ Pre-GA features get a `Preview` or `Beta` badge wherever the user would otherwis
 
 **Source of truth:** `client/dashboard/src/components/release-stage-badge.tsx` — exports `ReleaseStageBadge` and the `ReleaseStage = "preview" | "beta"` type.
 
-**Underlying primitive:** the design system `<Badge>` (`@/components/ui/Badge`). `ReleaseStageBadge` composes it with `background` enabled — this is the source of truth for shape (mono, uppercase, tracked, hairline-bordered, square). Do **not** override these classes; the design system owns them. The wrapper just picks a semantic variant and adds a tooltip.
+**Shape:** `ReleaseStageBadge` renders its own mono, uppercase, tracked, hairline-bordered span inside a `SimpleTooltip`; it does not compose the design-system `<Badge>`. Use the component as-is rather than re-creating its classes, and if you need a new stage style, change it there.
 
-**Variant → stage mapping** (variant names are hooks, not literal semantics):
+**Stage → color** (token names are hooks, not literal semantics):
 
-- `preview` → the `warning` variant (amber).
-- `beta` → the `information` variant (Speakeasy brand blue).
+- `preview` → warning tokens (amber).
+- `beta` → information tokens (Speakeasy brand blue).
 
 > The badge variants (`neutral | destructive | information | success | warning`) are tuned for alert/feedback contexts, but the names are just hooks — `warning` here means "experimental, use with caution," not "alert." That's the intended way to reuse the palettes; don't invent new variants without design buy-in.
 
@@ -17,7 +17,7 @@ Pre-GA features get a `Preview` or `Beta` badge wherever the user would otherwis
 
 ## Surface 1 — sidebar nav (route-driven)
 
-Set `stage` on the route declaration. `app-sidebar.tsx` forwards `item.stage` through `ScopeGatedTopLevelItem → NavButton` (in `nav-menu.tsx`), which renders the badge with a hover tooltip explaining what the stage means. The badge auto-hides in collapsed-icon mode. Grouped items go through `CollapsibleNavItem`, which reads `item.stage` itself.
+Set `stage` on the route declaration. `app-sidebar.tsx` forwards `item.stage` through `ScopeGatedTopLevelItem → NavButton` (in `nav-menu.tsx`), which renders the badge (sidebar badges have no hover tooltip). The badge auto-hides in collapsed-icon mode. Grouped items go through `CollapsibleNavItem`, which reads `item.stage` itself.
 
 ```tsx
 // client/dashboard/src/routes.tsx
@@ -88,7 +88,7 @@ Prefer `Page.Section.Title stage="…"` (Surface 2). A page that needs a custom 
 
 ## Removing a badge (feature ships GA)
 
-Grep for `stage="preview"`, `stage="beta"` (JSX props) and `stage: "preview"`, `stage: "beta"` (route and tab objects), and delete every match:
+Grep for `stage="preview"`, `stage="beta"` (JSX props) and `stage: "preview"`, `stage: "beta"` (route and tab objects), and delete only the matches that belong to the feature shipping GA — other pre-GA features keep theirs:
 
 - `routes.tsx` — remove the `stage:` field on the route entry
 - `Page.Section.Title stage="…"` — drop the prop

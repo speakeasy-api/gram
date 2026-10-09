@@ -10,13 +10,13 @@ If no component exists and you expect the pattern to appear in more than a few p
 
 ## No duplicated className strings
 
-If the same Tailwind className string (or any meaningful substring of one) appears on 3+ elements anywhere in the codebase, extract it to:
+If the same Tailwind className string for a coherent visual pattern (a card shell, a header row, a pill) appears on 3+ elements, extract it to the options below. Short incidental utilities such as `flex items-center gap-2` stay local.
 
 - A component's built-in styling
 - A `cva` variant
 - A named `const` used in `cn()`
 
-The symptom to watch for: copy-pasting a `className` prop. That is always wrong.
+The symptom to watch for: copy-pasting a whole `className` prop that defines how a thing looks.
 
 ## No duplicated JSX blocks
 

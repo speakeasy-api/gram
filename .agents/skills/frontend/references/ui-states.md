@@ -8,7 +8,7 @@ Put protocol fields, endpoints, slugs, and raw values in a `Collapsible` from `@
 
 ## Errors
 
-- Raw `error.message` / server text is never the heading, body, badge, or `toast.error(err.message)`. Map each known error to plain words plus a next step; map unknown values to a safe default, never the raw string.
+- Raw `error.message` / server text is never the primary message — not a heading, badge, inline error, or `toast.error(err.message)`. It may appear only as secondary detail under a plain-words title (as `handleError` renders it). Map each known error to plain words plus a next step; map unknown values to a safe default, never the raw string.
 - Toast failures with `handleError(error, { title: "Couldn't delete the key" })` from `@/lib/errors`. The title carries the plain-words message; the server text sits under it as secondary detail. Do not use `handleAPIError` — its friendly message almost never shows.
 - Show a specific refusal the user must act on inline, not in a toast. In a `ConfirmDialog`, pass it as `error` (a node, so it can link to the fix). Branch with `error instanceof GramError && error.statusCode === 409` (`GramError` from `@gram/client/models/errors/gramerror.js`).
 - If the next action needs an API that does not exist, do not drop it silently: show the button disabled with a one-line reason, list the gap in your reply and the PR, and add the endpoint with the `gram-management-api` skill if it is in scope. Problems the user can only wait out (a rate limit) get a quiet status, no button.
