@@ -166,13 +166,18 @@ func TestDeleteServerRequiresProjectMCPWrite(t *testing.T) {
 		})}},
 		{name: "write in another project", grants: []authz.Grant{projectScopedMCPGrant(authz.ScopeMCPWrite, uuid.New())}},
 	}
+	// Runs once every parallel case below has finished. t.Context is
+	// cancelled by then, so the checks use a context that outlives it.
+	t.Cleanup(func() {
+		checkCtx := context.WithoutCancel(ctx)
+		requireTunnelLive(t, checkCtx, ti.conn, tunnel)
+		requireDeleteAuditCount(t, checkCtx, ti.conn, 0)
+	})
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			err := ti.service.DeleteServer(authztest.WithExactGrants(t, ctx, tc.grants...), deleteServerPayload(tunnel.ID))
 			requireOopsCode(t, err, oops.CodeForbidden)
 		})
 	}
-
-	requireTunnelLive(t, ctx, ti.conn, tunnel)
-	requireDeleteAuditCount(t, ctx, ti.conn, 0)
 }
