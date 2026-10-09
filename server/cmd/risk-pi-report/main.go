@@ -69,6 +69,10 @@ type labeledCase struct {
 	DirectivePresent       *bool          `json:"directive_present,omitempty"`
 	KnownGap               string         `json:"known_gap,omitempty"`
 	SeedID                 string         `json:"seed_id,omitempty"`
+
+	// raw is the fixture line the case was read from. Hashing it identifies
+	// the case the same way across versions of this tool.
+	raw string
 }
 
 func (c labeledCase) trajectory() judgemessage.Trajectory {
@@ -282,6 +286,19 @@ type options struct {
 	extraCorpus      string
 	repeats          int
 	samples          int
+	excludeSources   string
+
+	// production evaluates the detector this commit ships, with its
+	// production model and settings.
+	production bool
+
+	// runDir, when set, keeps per-case records there: the run resumes from
+	// them and evaluates only cases without a current record.
+	runDir string
+
+	// label and ref name the run in progress lines and its manifest.
+	label string
+	ref   string
 }
 
 const (
@@ -317,6 +334,11 @@ func parseFlags() options {
 		extraCorpus:      "",
 		repeats:          0,
 		samples:          0,
+		excludeSources:   "",
+		production:       false,
+		runDir:           "",
+		label:            "",
+		ref:              "",
 	}
 	flag.StringVar(&opts.corpusDir, "corpus-dir", defaultCorpusDir, "directory containing prompt-injection JSONL corpus files")
 	flag.StringVar(&opts.outFile, "out", defaultOutFile, "path to write metrics JSON")
@@ -328,6 +350,11 @@ func parseFlags() options {
 	flag.StringVar(&opts.extraCorpus, "extra-corpus", "", "absolute path to an additional local JSONL corpus; never loaded by default")
 	flag.IntVar(&opts.repeats, "repeats", 1, "number of complete repeated trials")
 	flag.IntVar(&opts.samples, "samples", piopenrouter.SamplesPerEvent, "physical judge calls per event; production defaults to one")
+	flag.StringVar(&opts.excludeSources, "exclude-sources", "", "comma-separated source substrings to drop after -sources (empty = none)")
+	flag.BoolVar(&opts.production, "production", false, "evaluate the detector this commit ships, with its production model and settings")
+	flag.StringVar(&opts.runDir, "run-dir", "", "with -production, keep per-case records in this directory and run only cases without a current record")
+	flag.StringVar(&opts.label, "label", "this change", "name of the run in progress lines and its manifest")
+	flag.StringVar(&opts.ref, "ref", "", "code the run evaluates, such as \"branch @ sha\"")
 	flag.Parse()
 	return opts
 }
@@ -336,6 +363,16 @@ func parseFlags() options {
 // substrings. Empty spec keeps everything. Used to run a cheap iteration slice
 // (benigns + adversarial + recall guards) without judging the full corpus.
 func filterSources(corpus []labeledCase, spec string) []labeledCase {
+	return selectSources(corpus, spec, true)
+}
+
+// excludeSources drops cases whose Source contains one of the comma-separated
+// substrings. Empty spec keeps everything.
+func excludeSources(corpus []labeledCase, spec string) []labeledCase {
+	return selectSources(corpus, spec, false)
+}
+
+func selectSources(corpus []labeledCase, spec string, keepMatches bool) []labeledCase {
 	spec = strings.TrimSpace(spec)
 	if spec == "" {
 		return corpus
@@ -348,11 +385,9 @@ func filterSources(corpus []labeledCase, spec string) []labeledCase {
 	}
 	out := corpus[:0:0]
 	for _, c := range corpus {
-		for _, n := range needles {
-			if strings.Contains(c.Source, n) {
-				out = append(out, c)
-				break
-			}
+		matches := slices.ContainsFunc(needles, func(n string) bool { return strings.Contains(c.Source, n) })
+		if matches == keepMatches {
+			out = append(out, c)
 		}
 	}
 	return out
@@ -363,9 +398,22 @@ func run(ctx context.Context, opts options) error {
 	if err != nil {
 		return err
 	}
-	corpus = filterSources(corpus, opts.sources)
+	corpus = excludeSources(filterSources(corpus, opts.sources), opts.excludeSources)
 	if len(corpus) == 0 {
-		return fmt.Errorf("no cases after --sources filter %q", opts.sources)
+		return fmt.Errorf("no cases after --sources filter %q and --exclude-sources filter %q", opts.sources, opts.excludeSources)
+	}
+	if opts.production {
+		// Main's production detector is the single judge with its pinned model,
+		// reasoning and one sample per event.
+		opts.judgeModel = piopenrouter.Model
+		opts.reasoning = piopenrouter.ReasoningEffort
+		opts.samples = 1
+	}
+	if opts.runDir != "" {
+		if !opts.production {
+			return fmt.Errorf("-run-dir requires -production")
+		}
+		return runRecords(ctx, opts, corpus)
 	}
 	fl, err := loadFloors(opts.corpusDir)
 	if err != nil {
@@ -726,6 +774,9 @@ var optionalCorpusFiles = []string{
 	"agent_fp_ais324.jsonl",
 	"adversarial_ais324.jsonl",
 	"trajectory_twins.jsonl",
+	"llmail_inject.jsonl",
+	"agentdojo.jsonl",
+	"agentdyn.jsonl",
 }
 
 func loadCorpus(dir, extraCorpus string) ([]labeledCase, error) {
@@ -756,6 +807,7 @@ func loadCorpus(dir, extraCorpus string) ([]labeledCase, error) {
 			if err := json.Unmarshal([]byte(raw), &c); err != nil {
 				return fmt.Errorf("%s line %d unmarshal: %w", name, line, err)
 			}
+			c.raw = raw
 			if c.ID == "" {
 				return fmt.Errorf("%s line %d missing id", name, line)
 			}
@@ -795,9 +847,10 @@ func loadCorpus(dir, extraCorpus string) ([]labeledCase, error) {
 		}
 	}
 	for _, name := range optionalCorpusFiles {
-		// Paired trajectory rows intentionally share current-event text. Preserve
-		// those semantics; the committed merge is deduped across source corpora.
-		dedupe := name != "trajectory_twins.jsonl"
+		// Paired trajectory rows and AgentDojo's clean twins intentionally share
+		// current-event text. Preserve those semantics; the committed merge is
+		// deduped across source corpora.
+		dedupe := name != "trajectory_twins.jsonl" && name != "agentdojo.jsonl"
 		if err := load(filepath.Join(dir, name), true, dedupe); err != nil {
 			return nil, err
 		}
@@ -964,7 +1017,7 @@ func scanJudgeMode(ctx context.Context, opts options, corpus []labeledCase) (mod
 	}
 
 	fmt.Fprintf(os.Stderr, "judging %d cases with %s (concurrency=%d)\n", len(corpus), opts.judgeModel, opts.judgeConcurrency)
-	findings, eval, err := scanJudge(ctx, opts, newOpenRouterClient(apiKey), corpus)
+	findings, eval, err := scanJudge(ctx, opts, newOpenRouterClient(apiKey), corpus, nil)
 	if err != nil {
 		return modeSummary{}, nil, err
 	}
@@ -978,7 +1031,6 @@ func scanJudgeMode(ctx context.Context, opts options, corpus []labeledCase) (mod
 	return mode, findings, nil
 }
 
-// scanJudge runs the judge for every corpus row and records positive verdicts.
 type callObservation struct {
 	Latency          time.Duration
 	PromptTokens     int
@@ -992,7 +1044,10 @@ type decisionObservation struct {
 	Latency time.Duration
 }
 
-func scanJudge(ctx context.Context, opts options, client openrouter.CompletionClient, corpus []labeledCase) ([][]scanners.Finding, evaluationStats, error) {
+// scanJudge runs the judge for every corpus row and records positive verdicts.
+// onCase, when set, receives each case as it finishes; cancelling ctx stops new
+// cases from starting.
+func scanJudge(ctx context.Context, opts options, client openrouter.CompletionClient, corpus []labeledCase, onCase func(int, caseOutcome)) ([][]scanners.Finding, evaluationStats, error) {
 	out := make([][]scanners.Finding, len(corpus))
 	ruleID, description := promptinjection.Describe()
 
@@ -1003,6 +1058,9 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 	observations := make([]decisionObservation, len(corpus))
 
 	for i := range corpus {
+		if ctx.Err() != nil {
+			break
+		}
 		wg.Add(1)
 		sem <- struct{}{}
 		go func(i int) {
@@ -1020,6 +1078,9 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 				fmt.Fprintf(os.Stderr, "\r  judge %d/%d", done, len(corpus))
 			}
 			observations[i] = observation
+			if onCase != nil {
+				defer func() { onCase(i, caseOutcome{findings: out[i], verdict: result, observation: observation}) }()
+			}
 			if !result.IsInjection {
 				return
 			}
