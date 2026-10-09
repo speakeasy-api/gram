@@ -2,6 +2,8 @@ package access
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -896,7 +898,9 @@ func TestService_SetResourceAudience_RejectsUnauthorableDisposition(t *testing.T
 				SessionToken:    nil,
 				ApikeyToken:     nil,
 			})
-			require.Error(t, err)
+			// The selector check rejects it; the audience path reports every
+			// invalid selector this way, not as a typed invalid-input code.
+			require.ErrorContains(t, errors.Unwrap(err), fmt.Sprintf("invalid disposition value %q", disposition))
 		})
 	}
 }

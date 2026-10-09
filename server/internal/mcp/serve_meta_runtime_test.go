@@ -682,10 +682,6 @@ func TestServePublic_MetaEndpoint_ListServers_RBACFiltersPrivateMembers(t *testi
 	require.Equal(t, member.slug, listed.Servers[0].Slug)
 }
 
-// Describe parity with the direct surface's per-tool RBAC filter: an
-// authenticated caller whose tool-scoped connect grant passes the
-// toolset-level gate but names a different tool gets an empty catalog, not
-// the schemas the member endpoint would hide.
 // describe_server applies the same per-tool check as the member's own
 // tools/list: a grant narrowed only by disposition does not reach a tool that
 // carries no annotations, while a server-level grant does.
@@ -725,6 +721,10 @@ func TestServePublic_MetaEndpoint_DescribeServer_DispositionGrantHidesUnannotate
 	require.Equal(t, member.slug+"--alpha_tool", described.Tools[0].Name)
 }
 
+// Describe parity with the direct surface's per-tool RBAC filter: an
+// authenticated caller whose tool-scoped connect grant passes the
+// toolset-level gate but names a different tool gets an empty catalog, not
+// the schemas the member endpoint would hide.
 func TestServePublic_MetaEndpoint_DescribeServer_FiltersRBACHiddenTools(t *testing.T) {
 	t.Parallel()
 
