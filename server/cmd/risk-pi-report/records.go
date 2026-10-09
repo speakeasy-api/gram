@@ -92,14 +92,14 @@ type caseRecord struct {
 	Status caseStatus `json:"status"`
 
 	// Model is the model whose verdict decided the case: Jev when it cleared
-	// the case, otherwise the confirmer or its fallback.
+	// the case, otherwise the confirmer.
 	Model string `json:"model,omitempty"`
 
 	// Detail is the deciding model's rationale, or why no verdict was reached.
 	Detail string `json:"detail,omitempty"`
 
-	// Refused reports that the confirmation model refused the case. The
-	// fallback model may still have reached a verdict.
+	// Refused reports that the confirmation model refused the case, which
+	// leaves it without a verdict.
 	Refused bool `json:"refused,omitempty"`
 
 	// CostUSD is the provider-reported cost of the case's calls.
@@ -129,10 +129,6 @@ type runManifest struct {
 
 	// ConfirmationModel confirms Jev's candidates.
 	ConfirmationModel string `json:"confirmation_model"`
-
-	// RefusalFallbackModel judges candidates the confirmer refuses; empty
-	// when the run skipped it.
-	RefusalFallbackModel string `json:"refusal_fallback_model,omitempty"`
 
 	// ConfirmationPromptSHA256 hashes the confirmer prompt.
 	ConfirmationPromptSHA256 string `json:"confirmation_prompt_sha256"`
@@ -266,7 +262,7 @@ func recordFromOutcome(c labeledCase, o caseOutcome) caseRecord {
 // noVerdictDetail says why a case reached no verdict.
 func noVerdictDetail(refused bool, lastCallErr, caseErr error) string {
 	if refused {
-		return "refused by the confirmation and fallback models"
+		return "refused by the confirmation model"
 	}
 	if lastCallErr != nil && !errors.Is(lastCallErr, promptinjection.ErrNoVerdict) {
 		return truncateRunes(lastCallErr.Error(), maxDetailRunes)
@@ -599,10 +595,6 @@ func currentManifest(opts options) (runManifest, error) {
 	if err != nil {
 		return manifest, err
 	}
-	fallback := ""
-	if opts.refusalFallback {
-		fallback = piopenrouter.RefusalFallbackModel
-	}
 	manifest = runManifest{
 		EvaluatorSHA256:          "",
 		Label:                    opts.label,
@@ -610,7 +602,6 @@ func currentManifest(opts options) (runManifest, error) {
 		PrefilterModel:           typesafe.Model,
 		PrefilterThreshold:       piopenrouter.PrefilterThreshold,
 		ConfirmationModel:        piopenrouter.ConfirmationModel,
-		RefusalFallbackModel:     fallback,
 		ConfirmationPromptSHA256: confirmationHash,
 		PrefilterQuestionsSHA256: questionsHash,
 		Updated:                  time.Now().UTC(),

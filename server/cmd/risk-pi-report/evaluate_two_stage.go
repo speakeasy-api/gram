@@ -64,7 +64,6 @@ func scanCascadeWithClients(ctx context.Context, opts options, corpus []labeledC
 	missed := make([]bool, len(corpus))
 	confirmations := make([]int, len(corpus))
 	refusals := make([]int, len(corpus))
-	fallbacks := make([]int, len(corpus))
 	refused := make([]bool, len(corpus))
 	failed := make([]bool, len(corpus))
 	firstUnavailable := make([]bool, len(corpus))
@@ -90,7 +89,7 @@ schedule:
 			observation := &observations[i]
 			completion := &observedCompletion{
 				CompletionClient: client, observation: observation, calls: &confirmations[i], refusals: &refusals[i],
-				fallbacks: &fallbacks[i], refused: &refused[i], refusalFallback: opts.refusalFallback,
+				refused: &refused[i],
 			}
 			prefilter := &observedPrefilter{Evaluator: jev, observation: observation}
 			load := func(_ context.Context, _, _ string, target judgemessage.Message) (judgemessage.Window, error) {
@@ -134,7 +133,6 @@ schedule:
 		}
 		stats.ConfirmationCalls += confirmations[i]
 		stats.ConfirmationRefusals += refusals[i]
-		stats.RefusalFallbackCalls += fallbacks[i]
 		if refused[i] {
 			stats.ConfirmationRefusedEvents++
 		}
@@ -226,34 +224,21 @@ type observedCompletion struct {
 	observation *decisionObservation
 	calls       *int
 	// refusals counts safety-classifier refusals (finish_reason
-	// content_filter); fallbacks counts calls to the refusal fallback model.
-	refusals  *int
-	fallbacks *int
+	// content_filter).
+	refusals *int
 
 	// refused records whether the confirmation model's last request ended
 	// refused after every attempt.
 	refused *bool
-
-	// refusalFallback is false to skip the refusal fallback model, scoring
-	// a refused confirmation as a refusal without another call.
-	refusalFallback bool
 }
 
 // GetCompletion asks again while the model refuses or returns no valid
 // verdict, up to maxVerdictAttempts calls, as the evaluation harness does.
 func (c *observedCompletion) GetCompletion(ctx context.Context, req openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
-	if req.Model == piopenrouter.RefusalFallbackModel && !c.refusalFallback {
-		var skipped openrouter.CompletionResponse
-		skipped.Model = req.Model
-		skipped.FinishReason = new(finishReasonContentFilter)
-		return &skipped, nil
-	}
 	for attempt := 1; ; attempt++ {
 		result, err := c.complete(ctx, req)
 		if err != nil || hasVerdict(result) || attempt == maxVerdictAttempts || ctx.Err() != nil {
-			if req.Model != piopenrouter.RefusalFallbackModel {
-				*c.refused = err == nil && isRefusal(result)
-			}
+			*c.refused = err == nil && isRefusal(result)
 			return result, err
 		}
 	}
@@ -289,9 +274,6 @@ func hasVerdict(result *openrouter.CompletionResponse) bool {
 
 func (c *observedCompletion) complete(ctx context.Context, req openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
 	*c.calls++
-	if req.Model == piopenrouter.RefusalFallbackModel {
-		*c.fallbacks++
-	}
 	start := time.Now()
 	result, err := c.CompletionClient.GetCompletion(ctx, req)
 	if isRefusal(result) {

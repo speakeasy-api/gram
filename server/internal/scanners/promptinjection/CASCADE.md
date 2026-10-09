@@ -55,32 +55,14 @@ Body/tool evidence is bounded, and
 truncated bodies are marked. Tool invocations retain names and arguments; stored
 tool results retain their actor role, but historical rows may lack a tool name.
 
-## Refusal fallback
+## Refusals
 
 Anthropic's cyber safety classifier can refuse a real injection payload
 instead of judging it: the completion ends with `finish_reason: content_filter`
-and no verdict. Without handling, every refusal would be an unavailable result,
-so the attacks most likely to be dangerous would never become findings.
-
-When Sonnet 5.5 refuses, the same evidence is sent once to Opus 4.8
-(`anthropic/claude-opus-4.8`), Anthropic's recommended fallback for
-cyber-category refusals. Its verdict is used as the confirmation, and the
-result records the model that produced it. Both calls share the 45-second
-confirmation deadline: fallback is best-effort within the remaining budget,
-not a fresh 45-second attempt. A late primary refusal can leave too little time
-for Opus 4.8; expiry or caller cancellation then produces an unavailable result.
-The cascade remains bounded by 55 seconds overall, including Jev and context
-loading. Shortening the primary deadline to reserve fallback time would turn
-late refusals into timeouts, which do not trigger fallback under this policy.
-If Opus 4.8 also refuses, the result is unavailable.
-Only refusals fall back; timeouts, throttling, provider errors and malformed
-responses do not. Refusals are recorded with the `refused` failure reason, and
-the span's `pi_judge.refusal_fallback` attribute marks fallback verdicts.
-
-Evidence from the 2,046-case benchmark (October 8): Sonnet 5.5 refused 8 of
-Jev's 898 candidates, all attacks, and Opus 4.8 judged all 8 Not PI. Opus 5.5,
-the earlier confirmer, refused 201 of the same candidates, so the fallback now
-matters far less.
+and no verdict. A refusal is an unavailable result with the `refused` failure
+reason, never a clean scan, and there is no second model to ask. On the
+2,046-case benchmark (October 8), Sonnet 5.5 refused 8 of Jev's 898 candidates,
+all attacks; Opus 5.5, the earlier confirmer, refused 201.
 
 Only a confirmed verdict creates a finding. Jev errors, unavailable context,
 malformed responses, provider throttling, and confirmer errors remain unavailable verdicts,
@@ -103,8 +85,7 @@ contracts; no new tool, permission, or seed shape is needed.
 
 Run `mise exec -- go run ./server/cmd/risk-pi-report -cascade` from the repository
 root with `OPENROUTER_DEV_KEY` configured. The report uses production orchestration
-and records confirmation calls, confirmation refusals, refusal-fallback calls,
-prefilter misses, total provider cost, latency, precision, and recall. Benchmark
+and records confirmation calls, confirmation refusals, prefilter misses, total provider cost, latency, precision, and recall. Benchmark
 case latency includes all whole-case attempts and retry waits, from the first
 attempt until the final result; physical-call latency remains separate. The
 `benchmark_first_attempt_unavailable` count records unavailable first benchmark
@@ -202,8 +183,7 @@ surface.
 
 Success evidence: `TestCascadeConfirmedInjection` and
 `TestCascadeConfirmationFailureIsUnavailable` cover confirmed findings and unavailable
-reviews; `TestCascadeRefusalFallsBackToOpus48` and
-`TestCascadeBothModelsRefusingIsUnavailable` cover the refusal fallback.
+reviews; `TestCascadeConfirmationRefusalIsUnavailable` covers refusals.
 `TestRiskFindingsMCPInProcess`, `TestRiskFindingsEvidence`, and
 `TestRiskFindingsValidationAndGates` cover the existing MCP result, redaction,
 and access/feature boundaries. No Platform MCP schema or shipped workflow needs

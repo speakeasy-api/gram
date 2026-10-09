@@ -76,7 +76,6 @@ const (
 	spanAttrOperational     = "pi_judge.operational"
 	spanAttrFindingSurfaced = "pi_judge.finding_surfaced"
 	spanAttrFailOpen        = "pi_judge.fail_open"
-	spanAttrRefusalFallback = "pi_judge.refusal_fallback"
 	spanAttrFailOpenReason  = "pi_judge.fail_open_reason"
 )
 
@@ -135,13 +134,10 @@ type Engine struct {
 	metrics      *metrics
 	client       gramopenrouter.CompletionClient
 	model        string
-	// refusalFallbackModel, when set, re-judges the same evidence once after
-	// the provider's safety classifier refuses the primary model.
-	refusalFallbackModel string
-	reasoning            string
-	temperature          float64
-	schema               or.ChatJSONSchemaConfig // built once; the verdict shape is constant
-	stokenCodec          *stokens.Codec
+	reasoning    string
+	temperature  float64
+	schema       or.ChatJSONSchemaConfig // built once; the verdict shape is constant
+	stokenCodec  *stokens.Codec
 }
 
 type trajectoryTelemetry struct {
@@ -183,11 +179,9 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 		metrics:      newMetrics(meterProvider, logger),
 		client:       client,
 		model:        Model,
-		// Only the cascade's confirmation sets a refusal fallback.
-		refusalFallbackModel: "",
-		reasoning:            ReasoningEffort,
-		temperature:          defaultTemperature,
-		stokenCodec:          stokens.NewCodec(),
+		reasoning:    ReasoningEffort,
+		temperature:  defaultTemperature,
+		stokenCodec:  stokens.NewCodec(),
 		schema: or.ChatJSONSchemaConfig{
 			Name:        "prompt_injection_typed_verdict",
 			Schema:      VerdictSchema(),
@@ -339,12 +333,7 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 
 	start := time.Now()
 	model := c.model
-	verdict, failureReason, err := c.judge(decisionCtx, req, prepared, userID, model, c.refusalFallbackModel != "")
-	refusalFallback := errors.Is(err, errRefused) && c.refusalFallbackModel != ""
-	if refusalFallback {
-		model = c.refusalFallbackModel
-		verdict, failureReason, err = c.judge(decisionCtx, req, prepared, userID, model, false)
-	}
+	verdict, failureReason, err := c.judge(decisionCtx, req, prepared, userID, model)
 	failOpen := err != nil
 	stabilized := StabilizeSingle(verdict)
 
@@ -372,7 +361,6 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 	)
 	span.SetAttributes(
 		attribute.String(spanAttrModel, model),
-		attribute.Bool(spanAttrRefusalFallback, refusalFallback),
 		attribute.String(spanAttrDirectiveKind, directiveKind),
 		attribute.String(spanAttrTarget, target),
 		attribute.Bool(spanAttrOperational, stabilized.Operational),
@@ -445,10 +433,9 @@ func observeTrajectoryField(value string) (present bool, length int, truncated b
 	return present, length, false
 }
 
-// judge makes the physical call to model and records its telemetry. A failed
-// or malformed call returns the zero Verdict and an error. A refusal that will
-// be retried on a fallback model is not a fail-open event.
-func (c *Engine) judge(ctx context.Context, req promptinjection.Request, prepared []byte, userID string, model string, refusalRetried bool) (Verdict, string, error) {
+// judge makes the physical call to model and records its telemetry. A failed,
+// refused or malformed call returns the zero Verdict and an error.
+func (c *Engine) judge(ctx context.Context, req promptinjection.Request, prepared []byte, userID string, model string) (Verdict, string, error) {
 	start := time.Now()
 	verdict, err := c.call(ctx, req, prepared, userID, model)
 	outcome := o11y.OutcomeFromErrorWithTimeout(err)
@@ -456,12 +443,6 @@ func (c *Engine) judge(ctx context.Context, req promptinjection.Request, prepare
 	reason := typedFailureReason(err, outcome)
 	c.metrics.RecordPhysicalCall(ctx, req.OrgID, model, c.reasoning, outcome, reason, duration)
 	c.metrics.RecordClassification(ctx, req.OrgID, labelFor(IsInjection(verdict), err), model, c.reasoning, outcome, duration)
-	if errors.Is(err, errRefused) && refusalRetried {
-		c.logger.InfoContext(ctx, "PI judge refused by provider safety classifier; retrying on fallback model",
-			attr.SlogOrganizationID(req.OrgID),
-		)
-		return verdict, reason, err
-	}
 	if err != nil {
 		c.metrics.RecordFailOpen(ctx, req.OrgID, model, c.reasoning, reason)
 		if outcome != o11y.OutcomeCanceled {

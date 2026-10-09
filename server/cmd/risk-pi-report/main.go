@@ -201,7 +201,6 @@ type evaluationStats struct {
 	PrefilterMissedAttacks int     `json:"prefilter_missed_attacks,omitempty"`
 	ConfirmationCalls      int     `json:"confirmation_calls,omitempty"`
 	ConfirmationRefusals   int     `json:"confirmation_refusals,omitempty"`
-	RefusalFallbackCalls   int     `json:"refusal_fallback_calls,omitempty"`
 	PhysicalCalls          int     `json:"physical_calls"`
 	Errors                 int     `json:"errors"`
 	Timeouts               int     `json:"timeouts"`
@@ -309,10 +308,6 @@ type envelope struct {
 	CorpusSHA256       string          `json:"corpus_sha256"`
 	Summary            accuracySummary `json:"summary"`
 
-	// RefusalFallbackModel re-judged refused confirmations. It is empty when
-	// -refusal-fallback=false scored them as refusals.
-	RefusalFallbackModel string `json:"refusal_fallback_model,omitempty"`
-
 	// ConfirmationPromptSHA256 hashes the confirmer's system prompt as sent.
 	// Its first 10 hex characters are the evaluation harness's prompt
 	// version key.
@@ -328,7 +323,6 @@ type envelope struct {
 
 type options struct {
 	cascade          bool
-	refusalFallback  bool
 	corpusDir        string
 	outFile          string
 	checkFloors      bool
@@ -407,7 +401,6 @@ func parseFlags() options {
 		repeats:          0,
 		samples:          0,
 
-		refusalFallback:   false,
 		excludeSources:    "",
 		maxFalsePositives: 0,
 		minRecall:         0,
@@ -432,7 +425,6 @@ func parseFlags() options {
 	flag.IntVar(&opts.repeats, "repeats", 1, "number of complete repeated trials")
 	flag.IntVar(&opts.samples, "samples", piopenrouter.SamplesPerEvent, "physical judge calls per event; production defaults to one")
 	flag.BoolVar(&opts.cascade, "cascade", false, fmt.Sprintf("evaluate the production Jev >= %.2f to confirmer cascade", piopenrouter.PrefilterThreshold))
-	flag.BoolVar(&opts.refusalFallback, "refusal-fallback", true, "with -cascade, re-judge refused confirmations with the refusal fallback model; false scores them as refusals")
 	flag.StringVar(&opts.excludeSources, "exclude-sources", "", "comma-separated source substrings to drop after -sources (empty = none)")
 	flag.IntVar(&opts.maxFalsePositives, "max-false-positives", gateDisabledFalsePositives, "fail when any trial flags more benign cases than this, deepset included (-1 = unenforced)")
 	flag.Float64Var(&opts.minRecall, "min-recall", 0, "fail when any trial catches a smaller share of all attacks, deepset included (0 = unenforced)")
@@ -911,9 +903,9 @@ func printSummary(w io.Writer, modes []modeSummary) {
 				m.Evaluation.BenchmarkCases, m.Evaluation.BenchmarkFirstAttemptUnavailable, m.Evaluation.FailOpenEvents)
 		}
 		if m.Evaluation.ConfirmationCalls > 0 || m.Evaluation.PrefilterMissedAttacks > 0 {
-			p("             confirmations=%d refusals=%d refused_events=%d refusal_fallbacks=%d prefilter_missed_attacks=%d\n",
+			p("             confirmations=%d refusals=%d refused_events=%d prefilter_missed_attacks=%d\n",
 				m.Evaluation.ConfirmationCalls, m.Evaluation.ConfirmationRefusals, m.Evaluation.ConfirmationRefusedEvents,
-				m.Evaluation.RefusalFallbackCalls, m.Evaluation.PrefilterMissedAttacks)
+				m.Evaluation.PrefilterMissedAttacks)
 		}
 		if m.InScope > 0 || len(m.LostTruePositives) > 0 || len(m.SuppressedFalsePositives) > 0 {
 			p("             scope: in_scope=%d suppressed_FPs=%d LOST_TPs=%d\n",
@@ -1650,7 +1642,7 @@ func writeMetrics(path string, opts options, corpus []labeledCase, summary accur
 	schemaHash := sha256.Sum256(schemaJSON)
 	corpusHash := sha256.Sum256(corpusJSON)
 	payload := envelope{
-		Cascade: opts.cascade, PrefilterModel: "", PrefilterThreshold: 0, RefusalFallbackModel: "",
+		Cascade: opts.cascade, PrefilterModel: "", PrefilterThreshold: 0,
 		ConfirmationPromptSHA256: "", PrefilterQuestionsSHA256: "", Gate: gate,
 		GitSHA:          envOr("GITHUB_SHA", "local"),
 		Ref:             envOr("GITHUB_REF_NAME", "local"),
@@ -1669,9 +1661,6 @@ func writeMetrics(path string, opts options, corpus []labeledCase, summary accur
 		payload.PrefilterModel = "typesafe/jev-1.13"
 		payload.PrefilterThreshold = piopenrouter.PrefilterThreshold
 		payload.TimeoutMS = (10*time.Second + piopenrouter.ConfirmationTimeout).Milliseconds()
-		if opts.refusalFallback {
-			payload.RefusalFallbackModel = piopenrouter.RefusalFallbackModel
-		}
 		questions, _ := json.Marshal(piopenrouter.PrefilterQuestions())
 		combined := sha256.Sum256(append([]byte(piopenrouter.SystemPrompt+"\n"+piopenrouter.WindowInstructions), questions...))
 		payload.PromptSHA256 = fmt.Sprintf("%x", combined)

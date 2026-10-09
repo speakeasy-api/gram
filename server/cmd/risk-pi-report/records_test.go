@@ -146,7 +146,7 @@ func TestRunRecordsGatesAFinishedRunWithoutCalls(t *testing.T) {
 		`{"key":"s::attack","hash":"` + caseHash(attack) + `","status":"flagged","cost_usd":0,"latency_ms":10}`,
 	}, "\n")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, casesFile), []byte(body), 0o600))
-	opts := options{runDir: dir, label: "this change", ref: "test", refusalFallback: true, maxFalsePositives: 0, minRecall: 0.8}
+	opts := options{runDir: dir, label: "this change", ref: "test", maxFalsePositives: 0, minRecall: 0.8}
 
 	records, err := loadRecords(filepath.Join(dir, casesFile))
 	require.NoError(t, err)
@@ -198,7 +198,7 @@ func TestFinishRunWithoutAGateOnlySummarizes(t *testing.T) {
 
 func TestEvaluatorFingerprintBindsCodeAndConfiguration(t *testing.T) {
 	t.Parallel()
-	opts := options{refusalFallback: true, reasoning: "none", judgeConcurrency: 4}
+	opts := options{reasoning: "none", judgeConcurrency: 4}
 	manifest, err := currentManifest(opts)
 	require.NoError(t, err)
 	original, err := evaluatorFingerprint(manifest, "code-a", opts)
@@ -209,7 +209,6 @@ func TestEvaluatorFingerprintBindsCodeAndConfiguration(t *testing.T) {
 	}{
 		{"prefilter model", func(m *runManifest) { m.PrefilterModel += "changed" }},
 		{"confirmation model", func(m *runManifest) { m.ConfirmationModel += "changed" }},
-		{"fallback", func(m *runManifest) { m.RefusalFallbackModel = "" }},
 		{"threshold", func(m *runManifest) { m.PrefilterThreshold = 0.9 }},
 		{"confirmation prompt", func(m *runManifest) { m.ConfirmationPromptSHA256 = "changed" }},
 		{"questions", func(m *runManifest) { m.PrefilterQuestionsSHA256 = "changed" }},
@@ -235,7 +234,7 @@ func TestEvaluatorFingerprintBindsCodeAndConfiguration(t *testing.T) {
 func TestRunRecordsRejectsIncompatibleCacheBeforeCallsOrRewrite(t *testing.T) {
 	t.Setenv("OPENROUTER_DEV_KEY", "")
 	t.Setenv("OPENROUTER_API_KEY", "")
-	for _, scenario := range []string{"fallback changed", "old manifest", "missing manifest", "changed code"} {
+	for _, scenario := range []string{"reasoning changed", "old manifest", "missing manifest", "changed code"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Setenv("OPENROUTER_DEV_KEY", "")
 			t.Setenv("OPENROUTER_API_KEY", "")
@@ -245,12 +244,12 @@ func TestRunRecordsRejectsIncompatibleCacheBeforeCallsOrRewrite(t *testing.T) {
 			body, err := json.Marshal(rec)
 			require.NoError(t, err)
 			require.NoError(t, os.WriteFile(filepath.Join(dir, casesFile), append(body, '\n'), 0o600))
-			opts := options{runDir: dir, refusalFallback: true}
+			opts := options{runDir: dir}
 			manifest, err := currentManifest(opts)
 			require.NoError(t, err)
 			switch scenario {
-			case "fallback changed":
-				opts.refusalFallback = false
+			case "reasoning changed":
+				opts.reasoning = "high"
 			case "old manifest":
 				manifest.EvaluatorSHA256 = ""
 			case "changed code":
@@ -277,7 +276,7 @@ func TestRunRecordsRejectsIncompatibleCacheBeforeCallsOrRewrite(t *testing.T) {
 func TestRunRecordsWritesIdentityBeforeAnyProviderCalls(t *testing.T) {
 	t.Setenv("OPENROUTER_DEV_KEY", "")
 	t.Setenv("OPENROUTER_API_KEY", "")
-	opts := options{runDir: t.TempDir(), refusalFallback: true}
+	opts := options{runDir: t.TempDir()}
 	err := runRecords(t.Context(), opts, []labeledCase{recordsCase("new", "benign", "")})
 	require.ErrorContains(t, err, "set OPENROUTER_DEV_KEY")
 	manifest, err := loadManifest(opts.runDir)

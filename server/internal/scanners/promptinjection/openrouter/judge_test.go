@@ -359,9 +359,9 @@ func (c *fakeCompletionClient) requestedModels() []string {
 	return models
 }
 
-// TestClassifyRefusalWithoutFallbackIsUnavailable pins the single-model judge:
-// a safety-classifier refusal is a failed call, never a clean scan.
-func TestClassifyRefusalWithoutFallbackIsUnavailable(t *testing.T) {
+// TestClassifyRefusalIsUnavailable pins the judge: a safety-classifier
+// refusal is a failed call, never a clean scan.
+func TestClassifyRefusalIsUnavailable(t *testing.T) {
 	t.Parallel()
 	client := &fakeCompletionClient{refuseModels: map[string]bool{Model: true}}
 	c := newEngine(t, client)

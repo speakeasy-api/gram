@@ -49,11 +49,10 @@ func answer(content string) *openrouter.CompletionResponse {
 	return &openrouter.CompletionResponse{Message: &msg, FinishReason: new("stop")}
 }
 
-func newObservedCompletion(client openrouter.CompletionClient, refusalFallback bool) (*observedCompletion, *bool) {
+func newObservedCompletion(client openrouter.CompletionClient) (*observedCompletion, *bool) {
 	refused := false
 	return &observedCompletion{
-		CompletionClient: client, observation: &decisionObservation{}, calls: new(0), refusals: new(0),
-		fallbacks: new(0), refused: &refused, refusalFallback: refusalFallback,
+		CompletionClient: client, observation: &decisionObservation{}, calls: new(0), refusals: new(0), refused: &refused,
 	}, &refused
 }
 
@@ -61,7 +60,7 @@ func TestObservedCompletionAsksAgainAfterRefusalAndMalformedVerdict(t *testing.T
 	t.Parallel()
 
 	client := &scriptedCompletion{responses: []*openrouter.CompletionResponse{refusal(), answer(`{"directive_kind":"none"}`), answer(validVerdictJSON)}}
-	observed, refused := newObservedCompletion(client, true)
+	observed, refused := newObservedCompletion(client)
 	result, err := observed.GetCompletion(t.Context(), openrouter.CompletionRequest{Model: piopenrouter.ConfirmationModel})
 	require.NoError(t, err)
 	require.True(t, hasVerdict(result))
@@ -75,24 +74,12 @@ func TestObservedCompletionStopsAfterMaxVerdictAttempts(t *testing.T) {
 	t.Parallel()
 
 	client := &scriptedCompletion{responses: []*openrouter.CompletionResponse{refusal(), refusal(), refusal(), answer(validVerdictJSON)}}
-	observed, refused := newObservedCompletion(client, true)
+	observed, refused := newObservedCompletion(client)
 	result, err := observed.GetCompletion(t.Context(), openrouter.CompletionRequest{Model: piopenrouter.ConfirmationModel})
 	require.NoError(t, err)
 	require.True(t, isRefusal(result))
 	require.True(t, *refused, "the report scores a confirmation refused three times as a refusal")
 	require.Equal(t, maxVerdictAttempts, *observed.calls)
-}
-
-func TestObservedCompletionSkipsDisabledRefusalFallback(t *testing.T) {
-	t.Parallel()
-
-	client := &scriptedCompletion{responses: nil}
-	observed, _ := newObservedCompletion(client, false)
-	result, err := observed.GetCompletion(t.Context(), openrouter.CompletionRequest{Model: piopenrouter.RefusalFallbackModel})
-	require.NoError(t, err)
-	require.True(t, isRefusal(result))
-	require.Empty(t, client.models, "a disabled fallback makes no provider call")
-	require.Zero(t, *observed.calls)
 }
 
 func TestTransientCallFailure(t *testing.T) {

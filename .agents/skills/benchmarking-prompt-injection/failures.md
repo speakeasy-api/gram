@@ -6,7 +6,7 @@ Open the viewer (`mise run risk:pi --view`) and click the failing count: the tab
 
 **Recall under 80%.** Runs vary by 2 to 3 points, so compare with main's column before blaming the change. Rerun once and paste both: a passing rerun may merge, and two failures mean this version fails the gate. Raising `PrefilterThreshold` can only lower recall.
 
-**No verdict.** These score as misses. Causes: refusals by both models, malformed verdicts, timeouts, oversized evidence, or a provider outage. Name the cause in the PR.
+**No verdict.** These score as misses. Causes: refusals by the confirmer, malformed verdicts, timeouts, oversized evidence, or a provider outage. Name the cause in the PR.
 
 **Out of credit.** These cases are not scored. Add account credit or raise the key spending limit as appropriate, then rerun; the run checks available key allowance first and redoes only them. Normal inference keys do not reveal the account balance; an unlimited key leaves this preflight unverified and emits a warning.
 

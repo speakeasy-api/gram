@@ -158,7 +158,7 @@ function renderSummary() {
     tr.append(td(s.goals_status, "num"));
     tr.append(td("$" + t.cost_usd.toFixed(2), "num"));
     const m = s.manifest;
-    if (m.confirmation_model) tr.title = `${m.prefilter_model} ≥ ${m.prefilter_threshold} → ${m.confirmation_model}${m.refusal_fallback_model ? " → " + m.refusal_fallback_model : ""}\nconfirmation prompt ${(m.confirmation_prompt_sha256 || "").slice(0, 10)} · questions ${(m.prefilter_questions_sha256 || "").slice(0, 10)}`;
+    if (m.confirmation_model) tr.title = `${m.prefilter_model} ≥ ${m.prefilter_threshold} → ${m.confirmation_model}\nconfirmation prompt ${(m.confirmation_prompt_sha256 || "").slice(0, 10)} · questions ${(m.prefilter_questions_sha256 || "").slice(0, 10)}`;
     body.append(tr);
   }
   table.append(body);
