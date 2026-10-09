@@ -285,18 +285,28 @@ func TestBackstopDoesNotForwardAJSONRPCErrorsText(t *testing.T) {
 
 	// The SDK would otherwise send a handler's JSON-RPC error to the external
 	// client as a protocol error carrying its message and data.
-	var externalLogs bytes.Buffer
-	registrar := backstopRegistrar(slog.New(slog.NewTextHandler(&externalLogs, nil)), remote)
+	require.Contains(t, requireExternalBackstopRefusal(t, remote), "does not exist")
+}
+
+// requireExternalBackstopRefusal calls a tool failing with cause over the
+// external endpoint, asserts the client got the generic refusal as a tool
+// result, and returns what the server logged.
+func requireExternalBackstopRefusal(t *testing.T, cause error) string {
+	t.Helper()
+
+	var logs bytes.Buffer
+	registrar := backstopRegistrar(slog.New(slog.NewTextHandler(&logs, nil)), cause)
 	bindExternalTestPrincipal(registrar.server)
+
 	result, err := connectTestClient(t, registrar.server).CallTool(t.Context(), &mcp.CallToolParams{Name: "fails", Arguments: map[string]any{}})
-	require.NoError(t, err, "the external client gets a tool result, not the JSON-RPC error")
+	require.NoError(t, err, "the external client gets a tool result, not the handler's error")
 	require.True(t, result.IsError)
 	require.Len(t, result.Content, 1)
 	text, ok := result.Content[0].(*mcp.TextContent)
 	require.True(t, ok)
 	require.Contains(t, text.Text, unavailableCode)
 	requireNoDatabaseText(t, "fails", text.Text)
-	require.Contains(t, externalLogs.String(), "does not exist")
+	return logs.String()
 }
 
 // A recognised error keeps its meaning: a tool's own refusal and an
@@ -337,19 +347,8 @@ func TestBackstopPassesRecognisedErrorsThrough(t *testing.T) {
 func TestBackstopCoversTheExternalEndpoint(t *testing.T) {
 	t.Parallel()
 
-	var logs bytes.Buffer
-	registrar := backstopRegistrar(slog.New(slog.NewTextHandler(&logs, nil)), errors.New(`pgx: relation "projects" does not exist: closed pool`))
-	bindExternalTestPrincipal(registrar.server)
-
-	result, err := connectTestClient(t, registrar.server).CallTool(t.Context(), &mcp.CallToolParams{Name: "fails", Arguments: map[string]any{}})
-	require.NoError(t, err)
-	require.True(t, result.IsError)
-	require.Len(t, result.Content, 1)
-	text, ok := result.Content[0].(*mcp.TextContent)
-	require.True(t, ok)
-	require.Contains(t, text.Text, unavailableCode)
-	requireNoDatabaseText(t, "fails", text.Text)
-	require.Contains(t, logs.String(), `relation \"projects\" does not exist`)
+	logs := requireExternalBackstopRefusal(t, errors.New(`pgx: relation "projects" does not exist: closed pool`))
+	require.Contains(t, logs, `relation \"projects\" does not exist`)
 }
 
 // A resource read is authorized live, as a tool call is, so the same backstop
