@@ -33,7 +33,10 @@ export interface ToolSelectionServer {
   emptyLabel?: string;
   /** Expanded body when ready with zero tools. */
   emptyContent?: React.ReactNode;
-  /** Defaults to the unproxied-server copy. */
+  /**
+   * Defaults to the unproxied-server copy, as does the tooltip. A caller with
+   * its own label gets no tooltip unless it passes one.
+   */
   unavailableLabel?: string;
   unavailableTooltip?: React.ReactNode;
   onRetry?: () => void;
@@ -566,11 +569,13 @@ function ServerRow({
         </span>
       </div>
     );
+    const tooltip = unavailableTooltip(server);
+    if (!tooltip) return row;
     return (
       <Tooltip>
         <TooltipTrigger asChild>{row}</TooltipTrigger>
         <TooltipContent side="bottom" className="max-w-xs">
-          {server.unavailableTooltip ?? unproxiedTooltip}
+          {tooltip}
         </TooltipContent>
       </Tooltip>
     );
@@ -765,3 +770,15 @@ function HighlightMatch({
 
 const unproxiedTooltip =
   "Speakeasy doesn't proxy this server's traffic, so its tools can't be permissioned individually.";
+
+/**
+ * The unproxied explanation belongs only to rows using the default unproxied
+ * label; a row unavailable for another reason (say, no catalog on this
+ * surface) keeps just its own label unless it brings its own tooltip.
+ */
+export function unavailableTooltip(
+  server: Pick<ToolSelectionServer, "unavailableLabel" | "unavailableTooltip">,
+): React.ReactNode {
+  if (server.unavailableTooltip) return server.unavailableTooltip;
+  return server.unavailableLabel ? undefined : unproxiedTooltip;
+}
