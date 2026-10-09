@@ -89,6 +89,13 @@ type passthroughFixture struct {
 
 func newPassthroughFixture(t *testing.T) (context.Context, *testInstance, passthroughFixture) {
 	t.Helper()
+	return newPassthroughFixtureWith(t, true)
+}
+
+// newPassthroughFixtureWith builds the fixture, leaving out the materialized
+// lookup tool when withLookup is false so the toolset holds only the proxy.
+func newPassthroughFixtureWith(t *testing.T, withLookup bool) (context.Context, *testInstance, passthroughFixture) {
+	t.Helper()
 
 	ctx, ti := newTestMCPService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -115,7 +122,9 @@ func newPassthroughFixture(t *testing.T) (context.Context, *testInstance, passth
 	upstream, upstreamURL := newCountingUpstream(t, mock.URL)
 
 	cfg := setupToolsetWithExternalMCP(t, ctx, ti, upstreamURL, externalmcp_types.TransportTypeStreamableHTTP, passthroughSlug+"-"+uuid.NewString()[:6])
-	addReadOnlyLookupTool(t, ctx, ti, cfg)
+	if withLookup {
+		addReadOnlyLookupTool(t, ctx, ti, cfg)
+	}
 	setToolsetMcpPrivate(t, ctx, ti, cfg.toolset.ID, *authCtx.ProjectID)
 
 	issuer, err := usersessions_repo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessions_repo.CreateUserSessionIssuerParams{
@@ -345,5 +354,64 @@ func TestServePublic_PrivatePassthrough_AuthorizedAsUnclassified(t *testing.T) {
 
 		require.NotContains(t, listedTools(t, ti, f), passthroughName(f, "drop_data"))
 		requirePassthroughDenied(t, ti, f, "drop_data")
+	})
+}
+
+// dynamicExecute calls tool through the dynamic-mode execute_tool wrapper and
+// returns everything the request said.
+func dynamicExecute(t *testing.T, ti *testInstance, f passthroughFixture, tool string) string {
+	t.Helper()
+
+	body := dynamicToolsCall(t, "execute_tool", map[string]any{"name": passthroughName(f, tool), "arguments": map[string]any{}})
+	w, err := servePublicHTTP(t, context.Background(), ti, f.toolset.McpSlug.String, body, f.bearer, dynamicModeHeaders)
+	out := w.Body.String()
+	if err != nil {
+		out += err.Error()
+	}
+	return out
+}
+
+// Dynamic discovery can't count passthrough tools, but execute_tool is not a
+// discovery tool: it unwraps to its target, which is authorized like a direct
+// call. An authorized passthrough target runs; an unauthorized one is refused
+// without reaching the upstream.
+func TestServePublic_PrivatePassthrough_DynamicExecuteAuthorizesTheTarget(t *testing.T) {
+	t.Parallel()
+
+	t.Run("proxy-only toolset, whole-server rule", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti, f := newPassthroughFixtureWith(t, false)
+		seedMockUserToolsetGrant(t, ctx, ti, f.toolset.ID, nil)
+
+		before := f.upstream.toolCalls("read_data")
+		require.Contains(t, dynamicExecute(t, ti, f, "read_data"), "read_data result")
+		require.Equal(t, before+1, f.upstream.toolCalls("read_data"))
+	})
+
+	t.Run("mixed toolset, rule naming one passthrough tool", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti, f := newPassthroughFixture(t)
+		seedMockUserToolsetGrant(t, ctx, ti, f.toolset.ID, map[string]string{authz.SelectorKeyTool: passthroughName(f, "read_data")})
+
+		before := f.upstream.toolCalls("read_data")
+		require.Contains(t, dynamicExecute(t, ti, f, "read_data"), "read_data result")
+		require.Equal(t, before+1, f.upstream.toolCalls("read_data"))
+
+		beforeDenied := f.upstream.toolCalls("drop_data")
+		require.Contains(t, dynamicExecute(t, ti, f, "drop_data"), "permission")
+		require.Equal(t, beforeDenied, f.upstream.toolCalls("drop_data"), "a refused call must never reach the upstream")
+	})
+
+	t.Run("annotation rule does not reach a passthrough target", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti, f := newPassthroughFixtureWith(t, false)
+		seedMockUserToolsetGrant(t, ctx, ti, f.toolset.ID, map[string]string{authz.SelectorKeyDisposition: authz.DispositionReadOnly})
+
+		before := f.upstream.toolCalls("read_data")
+		require.Contains(t, dynamicExecute(t, ti, f, "read_data"), "permission")
+		require.Equal(t, before, f.upstream.toolCalls("read_data"))
 	})
 }
