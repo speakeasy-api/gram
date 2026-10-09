@@ -20,8 +20,8 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -80,7 +80,7 @@ func teeTestPayload(idempotencyKey string) *gen.IngestPayload {
 
 func teeTestProvenanceFor(orgID, projectID string) *otelv1.InboundLogRecord_Provenance {
 	return (&otelv1.InboundLogRecord_Provenance_builder{
-		Source:         new(gramotel.ProvenanceSource),
+		Source:         new(otelsvc.ProvenanceSource),
 		OrganizationId: &orgID,
 		ProjectId:      &projectID,
 	}).Build()
@@ -135,7 +135,7 @@ func TestInboundLogRecordsFromCanonicalHookStampsWhatTheIngestEdgeWould(t *testi
 	require.Len(t, records, 1)
 	record := records[0]
 
-	require.NoError(t, gramotel.ValidateLogRecord(record))
+	require.NoError(t, otelsvc.ValidateInboundLogRecord(record))
 	require.Equal(t, hookIngestRecordID("idem-1", 0), record.GetRecordId())
 	require.Equal(t, uint64(timestamp.UnixNano()), record.GetTimeUnixNano())
 	require.Equal(t, uint64(now.UnixNano()), record.GetObservedTimeUnixNano())
@@ -147,7 +147,7 @@ func TestInboundLogRecordsFromCanonicalHookStampsWhatTheIngestEdgeWould(t *testi
 	require.Equal(t, "1.2.3", record.GetScope().GetVersion())
 	require.Equal(t, "codex", teeAttrByKey(t, record.GetResource().GetAttributes(), string(attr.ServiceNameKey)).GetStringValue())
 	require.Equal(t, "1.2.3", teeAttrByKey(t, record.GetResource().GetAttributes(), string(attr.ServiceVersionKey)).GetStringValue())
-	require.Equal(t, gramotel.ProvenanceSource, record.GetProvenance().GetSource())
+	require.Equal(t, otelsvc.ProvenanceSource, record.GetProvenance().GetSource())
 	require.Equal(t, "org-tee-1", record.GetProvenance().GetOrganizationId())
 	require.Equal(t, "proj-tee-1", record.GetProvenance().GetProjectId())
 
@@ -274,9 +274,9 @@ func TestIngest_TeesToolCallIntoEventFeed(t *testing.T) {
 	require.Equal(t, hookIngestRecordID("idem-tee-1", 0), request.GetRecordId())
 	require.Equal(t, hookIngestRecordID("idem-tee-2", 0), response.GetRecordId())
 	for _, record := range []*otelv1.InboundLogRecord{request, response} {
-		require.NoError(t, gramotel.ValidateLogRecord(record))
+		require.NoError(t, otelsvc.ValidateInboundLogRecord(record))
 		require.Equal(t, dialect.HooksLogScopeName, record.GetScope().GetName())
-		require.Equal(t, gramotel.ProvenanceSource, record.GetProvenance().GetSource())
+		require.Equal(t, otelsvc.ProvenanceSource, record.GetProvenance().GetSource())
 		require.Equal(t, authCtx.ActiveOrganizationID, record.GetProvenance().GetOrganizationId())
 		require.Equal(t, authCtx.ProjectID.String(), record.GetProvenance().GetProjectId())
 		require.Equal(t, "codex", teeAttrByKey(t, record.GetResource().GetAttributes(), string(attr.ServiceNameKey)).GetStringValue())

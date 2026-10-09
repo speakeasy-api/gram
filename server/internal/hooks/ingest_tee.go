@@ -17,8 +17,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -119,7 +119,7 @@ func (s *Service) teeCanonicalHookToEventFeed(
 	}
 
 	provenance := (&otelv1.InboundLogRecord_Provenance_builder{
-		Source:         new(gramotel.ProvenanceSource),
+		Source:         new(otelsvc.ProvenanceSource),
 		OrganizationId: &orgID,
 		ProjectId:      new(authCtx.ProjectID.String()),
 	}).Build()
@@ -132,7 +132,7 @@ func (s *Service) teeCanonicalHookToEventFeed(
 	results := make([]gcp.PublishResult, 0, len(records))
 	invalid := 0
 	for _, record := range records {
-		if err := gramotel.ValidateLogRecord(record); err != nil {
+		if err := otelsvc.ValidateInboundLogRecord(record); err != nil {
 			invalid++
 			s.logger.WarnContext(ctx, "skipping hook row the event feed pipeline would refuse",
 				attr.SlogError(err),
