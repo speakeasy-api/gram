@@ -7,6 +7,7 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Table, type Column } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
+import { Switch } from "@/components/ui/Switch";
 import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import type {
@@ -188,12 +189,52 @@ export function SensorsTab(): JSX.Element {
 
   const mutationPending =
     create.isPending || update.isPending || remove.isPending;
+
+  const setSensorEnabled = async (
+    sensor: SigintSensor,
+    enabled: boolean,
+  ): Promise<void> => {
+    if (!canWrite || mutationPending) return;
+    try {
+      await update.mutateAsync({
+        request: { updateSigintSensorForm: { id: sensor.id, enabled } },
+      });
+      await invalidateAllSigintSensors(queryClient);
+      toast.success(enabled ? "Sensor enabled" : "Sensor disabled");
+    } catch (error) {
+      toast.error(errorMessage(error, "Unable to change sensor status."));
+    }
+  };
+
   const columns: Column<SigintSensor>[] = [
     {
       key: "name",
       header: "Name",
       width: "0.8fr",
       render: (sensor) => <Text className="font-medium">{sensor.name}</Text>,
+    },
+    {
+      key: "enabled",
+      header: "Status",
+      width: "160px",
+      render: (sensor) => (
+        <div
+          className="flex items-center gap-2"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <Switch
+            checked={sensor.enabled}
+            onCheckedChange={(enabled) =>
+              void setSensorEnabled(sensor, enabled)
+            }
+            disabled={!canWrite || mutationPending}
+            aria-label={`Enable ${sensor.name}`}
+          />
+          <Text small muted={!sensor.enabled}>
+            {sensor.enabled ? "Enabled" : "Disabled"}
+          </Text>
+        </div>
+      ),
     },
     {
       key: "mode",

@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { TextArea } from "@/components/ui/Textarea";
+import { Switch } from "@/components/ui/Switch";
 import type {
   SigintSensor,
   SigintSensorMode,
@@ -22,6 +23,7 @@ import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 
 export interface SensorDraft {
+  enabled: boolean;
   slug?: string;
   name: string;
   description: string;
@@ -110,6 +112,7 @@ export function SensorEditorDialog({
   onSave,
 }: SensorEditorDialogProps): JSX.Element {
   const [name, setName] = useState(sensor?.name ?? "");
+  const [enabled, setEnabled] = useState(sensor?.enabled ?? true);
   const [slug, setSlug] = useState(sensor?.slug ?? "");
   const [description, setDescription] = useState(sensor?.description ?? "");
   const [instructions, setInstructions] = useState(sensor?.instructions ?? "");
@@ -161,6 +164,7 @@ export function SensorEditorDialog({
     )
       return;
     onSave({
+      enabled,
       name: name.trim(),
       slug: slug.trim() || undefined,
       description,
@@ -184,11 +188,28 @@ export function SensorEditorDialog({
           </Dialog.Title>
           <Dialog.Description>
             Compose reusable signals into configuration for a classifier. Empty
-            and one-signal sensors are valid drafts; saving does not activate
-            analysis.
+            and one-signal sensors are valid drafts. Enabled sensors are
+            eligible for evaluation when their configuration is ready.
           </Dialog.Description>
         </Dialog.Header>
         <form onSubmit={submit} className="space-y-6">
+          <div className="flex items-center justify-between gap-4 border p-4">
+            <div>
+              <p id="sensor-enabled-label" className="text-sm font-medium">
+                Enabled
+              </p>
+              <p className="text-muted-foreground text-sm">
+                Disabled sensors stay editable and skip new evaluations.
+                Evaluations already in progress may finish.
+              </p>
+            </div>
+            <Switch
+              checked={enabled}
+              onCheckedChange={setEnabled}
+              disabled={!canWrite || pending}
+              aria-labelledby="sensor-enabled-label"
+            />
+          </div>
           <div className="grid gap-5 md:grid-cols-2">
             <InputField
               label="Name"
