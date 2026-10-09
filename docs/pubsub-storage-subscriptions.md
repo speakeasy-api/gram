@@ -158,6 +158,30 @@ The encoder's generated schema and field mappings are committed for review.
 
 ## Install in a Go process
 
+Inside `gram streams`, register consumers alongside the other subscribers:
+
+```go
+mustStreamToStorage(rg, storagebindings.GramSigintV1LakePrimary())
+```
+
+`receiverGroup` carries the shared storage store, logical bucket mapping, broker,
+logger and meter provider. The helper checks storage configuration, stamps the
+subscriber context and registers the runner in the group's lifecycle. Runtime
+errors propagate through the errgroup and cancel sibling receivers. Registrations
+are unconditional; consumers need no manual errgroup handling or application
+message handler.
+
+In local development, `server/internal/lake.FilesystemStore` writes beneath
+`GRAM_LAKE_DIRECTORY` (mise defaults to the gitignored `<repo>/local/lake`).
+The `lake` bucket defaults to a directory named `lake`. Files appear at
+`<lake-directory>/<bucket>/<marker>/part__year=.../part__month=.../part__day=.../`.
+Writes publish synced complete files atomically without overwriting existing
+objects; failed or panicking encoders leave no final object. No cloud credentials
+are needed locally. In every other environment, a valid bucket mapping and a
+successfully constructed GCS client are required at startup.
+
+For another Go process, use the lower-level installation below.
+
 The generated function name is the marker's Pascal-cased full name. The following
 installation template assumes you have explicitly added the illustrative
 `gram.events.v1.EventArchive` declaration above and regenerated its binding;
@@ -206,13 +230,13 @@ by the runner's HTTP protocol tests; this demo needs no cloud credentials.
 
 `gram.sigint.v1.LakePrimary` stores `gram.sigint.v1.Reading` in the logical `lake`
 bucket as Parquet, partitioned daily by UTC ingestion time. The `gram streams`
-process starts this consumer when `GRAM_STORAGE_BUCKETS` is configured, for example
-`{"lake":"<PHYSICAL_BUCKET_NAME>"}`. Without the mapping, the storage consumer stays
-stopped. Its lifecycle is independent of the evaluator's inference key and ack-only
+process always starts this consumer. Local development writes to the filesystem;
+other environments require `GRAM_STORAGE_BUCKETS`, for example
+`{"lake":"<PHYSICAL_BUCKET_NAME>"}`. Its lifecycle is independent of the evaluator's inference key and ack-only
 rollout flag, so it can drain already-published readings while evaluation is paused.
 
 Deploy the generated subscription, bucket, and object-creator permissions before
-enabling the mapping. Objects use the prefix
+starting the consumer outside local development. Objects use the prefix
 `gram.sigint.v1.LakePrimary/part__year=YYYY/part__month=MM/part__day=DD/`.
 The subscription retries for four days without retaining acknowledgments; this
 does not expire GCS objects. Queries must deduplicate logical reading `id` and

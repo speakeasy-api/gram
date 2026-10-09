@@ -20,13 +20,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sigint/evaluation"
 
 	"cloud.google.com/go/pubsub/v2"
-	cloudstorage "cloud.google.com/go/storage"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/client"
@@ -282,8 +282,14 @@ func newStreamsCommand() *cli.Command {
 		},
 		&cli.StringFlag{
 			Name:    "storage-buckets",
-			Usage:   "Logical-to-physical GCS bucket mapping as JSON; unset leaves the sensor readings storage consumer stopped",
+			Usage:   "Logical-to-physical storage bucket mapping as JSON; required outside local development",
 			EnvVars: []string{"GRAM_STORAGE_BUCKETS"},
+		},
+		&cli.PathFlag{
+			Name:    "lake-directory",
+			Usage:   "Filesystem object storage directory for local development",
+			EnvVars: []string{"GRAM_LAKE_DIRECTORY"},
+			Value:   "local/lake",
 		},
 		&cli.BoolFlag{
 			Name:    "sigint-ack-only",
@@ -521,20 +527,11 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("create sensor evaluator: %w", err)
 			}
 
-			var lakeClient *cloudstorage.Client
-			var lakeBuckets map[string]string
-			if raw := c.String("storage-buckets"); raw != "" {
-				lakeBuckets, err = storage.ParseBucketMapping(raw)
-				if err != nil {
-					return fmt.Errorf("parse storage bucket mapping: %w", err)
-				}
-
-				lakeClient, err = cloudstorage.NewClient(ctx)
-				if err != nil {
-					return fmt.Errorf("create sensor readings storage client: %w", err)
-				}
-				shutdownFuncs = append(shutdownFuncs, func(context.Context) error { return lakeClient.Close() })
+			lakeStore, lakeBuckets, lakeShutdown, err := newLakeStorage(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("initialize lake storage: %w", err)
 			}
+			shutdownFuncs = append(shutdownFuncs, lakeShutdown)
 
 			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub, riskRecorder)
 			replyWriter := enforcereply.NewWriter(redisClient)
@@ -616,11 +613,14 @@ func newStreamsCommand() *cli.Command {
 			// so subscriptions get reconciled afresh.
 			group, gctx := errgroup.WithContext(ctx)
 			rg := receiverGroup{
-				group:      group,
-				getContext: func() context.Context { return gctx },
-				tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/cmd/gram/streams"),
-				logger:     logger,
-				broker:     psbroker,
+				group:          group,
+				getContext:     func() context.Context { return gctx },
+				tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/cmd/gram/streams"),
+				logger:         logger,
+				broker:         psbroker,
+				meterProvider:  meterProvider,
+				storageStore:   lakeStore,
+				storageBuckets: lakeBuckets,
 			}
 
 			svixClient, svixShutdown, err := newSvixClient(c, logger, guardianPolicy)
@@ -737,29 +737,7 @@ func newStreamsCommand() *cli.Command {
 
 			// Start subscription receivers in this block
 			{
-				if lakeClient != nil {
-					group.Go(func() error {
-						return storage.Run(gctx, storagebindings.GramSigintV1LakePrimary(), storage.Config{
-							Broker:  psbroker,
-							Store:   &storage.GCSStore{Client: lakeClient},
-							Buckets: lakeBuckets,
-							Settings: storage.Settings{
-								MaxMessages:         0,
-								MaxBytes:            0,
-								MaxLatency:          0,
-								MaxPartitions:       0,
-								Concurrency:         0,
-								ProcessTimeout:      0,
-								MaxExtension:        0,
-								OutstandingMessages: 0,
-								OutstandingBytes:    0,
-							},
-							TempDir:       "",
-							MeterProvider: meterProvider,
-							Logger:        logger,
-						})
-					})
-				}
+				mustStreamToStorage(rg, storagebindings.GramSigintV1LakePrimary())
 
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
 				roleDistributionGuard := admission.NewGuard(featureFlags, admission.NewReportMetrics(meterProvider, logger))
@@ -921,11 +899,62 @@ func shutdownPubSubPublishers(
 }
 
 type receiverGroup struct {
-	group      *errgroup.Group
-	getContext func() context.Context
-	tracer     trace.Tracer
-	logger     *slog.Logger
-	broker     gcp.SubscriberBroker
+	group          *errgroup.Group
+	getContext     func() context.Context
+	tracer         trace.Tracer
+	logger         *slog.Logger
+	broker         pubSubBroker
+	meterProvider  metric.MeterProvider
+	storageStore   storage.Store
+	storageBuckets map[string]string
+}
+
+// streamToStorage registers a generated storage consumer with the shared receiver
+// lifecycle. Runtime failures cancel sibling receivers through the group's context.
+func streamToStorage(g receiverGroup, definition storage.Definition) error {
+	if g.storageStore == nil {
+		return errors.New("storage store is required")
+	}
+	if g.storageBuckets[definition.Bucket] == "" {
+		return fmt.Errorf("storage bucket mapping is required for %q", definition.Bucket)
+	}
+
+	ctx := contextvalues.SetPubSubSubscriberContext(g.getContext(), contextvalues.PubSubSubscriberContext{
+		TopicProtoName:        string(proto.MessageName(definition.Payload)),
+		SubscriptionProtoName: string(proto.MessageName(definition.Marker)),
+	})
+
+	g.group.Go(func() error {
+		if err := storage.Run(ctx, definition, storage.Config{
+			Broker:  g.broker,
+			Store:   g.storageStore,
+			Buckets: g.storageBuckets,
+			Settings: storage.Settings{
+				MaxMessages:         0,
+				MaxBytes:            0,
+				MaxLatency:          0,
+				MaxPartitions:       0,
+				Concurrency:         0,
+				ProcessTimeout:      0,
+				MaxExtension:        0,
+				OutstandingMessages: 0,
+				OutstandingBytes:    0,
+			},
+			TempDir:       "",
+			MeterProvider: g.meterProvider,
+			Logger:        g.logger,
+		}); err != nil {
+			return fmt.Errorf("stream %s to storage: %w", definition.ProtoName, err)
+		}
+
+		return nil
+	})
+
+	return nil
+}
+
+func mustStreamToStorage(g receiverGroup, definition storage.Definition) {
+	must.Nil(streamToStorage(g, definition))
 }
 
 // setupSubscriber resolves the subscriber for a message/subscription pair and

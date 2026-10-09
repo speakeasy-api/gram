@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/pubsub/v2"
+	cloudstorage "cloud.google.com/go/storage"
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/exaring/otelpgx"
@@ -77,6 +78,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/lake"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/must"
@@ -1298,6 +1300,37 @@ type pubSubBroker interface {
 	gcp.PublisherBroker
 	gcp.SubscriberBroker
 	storage.Broker
+}
+
+func newLakeStorage(ctx context.Context, logger *slog.Logger, c *cli.Context) (storage.Store, map[string]string, func(context.Context) error, error) {
+	buckets, err := storage.ParseBucketMapping(c.String("storage-buckets"))
+	if err != nil {
+		return nil, nil, noopShutdown, fmt.Errorf("parse storage bucket mapping: %w", err)
+	}
+
+	if c.String("environment") == "local" {
+		if buckets["lake"] == "" {
+			buckets["lake"] = "lake"
+		}
+
+		store, err := lake.NewFilesystemStore(ctx, logger, c.String("lake-directory"))
+		if err != nil {
+			return nil, nil, noopShutdown, fmt.Errorf("create filesystem lake: %w", err)
+		}
+
+		return store, buckets, func(context.Context) error { return store.Close() }, nil
+	}
+
+	if buckets["lake"] == "" {
+		return nil, nil, noopShutdown, errors.New("storage bucket mapping for lake is required")
+	}
+
+	client, err := cloudstorage.NewClient(ctx)
+	if err != nil {
+		return nil, nil, noopShutdown, fmt.Errorf("create lake GCS client: %w", err)
+	}
+
+	return &storage.GCSStore{Client: client}, buckets, func(context.Context) error { return client.Close() }, nil
 }
 
 func newPubSubClient(ctx context.Context, c *cli.Context, logger *slog.Logger) (*pubsub.Client, pubSubBroker, func(ctx context.Context) error, error) {
