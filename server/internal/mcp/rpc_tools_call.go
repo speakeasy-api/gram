@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/jwtclaims"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -100,6 +101,7 @@ func handleToolsCall(
 	billingRepository billing.Repository,
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	telemLogger *tm.Logger,
+	toolCallLogger *otelpub.Logger,
 	vectorToolStore *rag.ToolsetVectorStore,
 	mcpMetadataRepo *mcpmetadata_repo.Queries,
 	auditLogger *audit.Logger,
@@ -361,9 +363,11 @@ func handleToolsCall(
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
 	rw := &toolCallResponseWriter{
-		headers:    make(http.Header),
-		body:       new(bytes.Buffer),
-		statusCode: http.StatusOK,
+		headers:       make(http.Header),
+		body:          new(bytes.Buffer),
+		statusCode:    http.StatusOK,
+		failure:       nil,
+		resultIsError: false,
 	}
 
 	requestBodyBytes := params.Arguments
@@ -394,6 +398,42 @@ func handleToolsCall(
 		})
 	}
 
+	serverID := ""
+	if attributedMCPServerID != nil {
+		serverID = attributedMCPServerID.String()
+	}
+	toolName := descriptor.Name
+	if plan.Kind == gateway.ToolKindExternalMCP {
+		toolName = descriptor.URN.Name
+	}
+	externalUserID := payload.externalUserID
+	if externalUserID == "" && oauthToken != "" {
+		externalUserID = jwtclaims.UnsafeExtractSubject(oauthToken)
+	}
+
+	callerID, callerEmail := toolCallCaller(ctx, payload, descriptor.OrganizationID, gramEmail)
+
+	// One id names the call on its telemetry_logs row and its agent_events rows.
+	events := newToolCallEvents(toolCallLogger, logger, toolCallTenant{
+		organizationID: descriptor.OrganizationID,
+		projectID:      descriptor.ProjectID,
+	}, toolCallIdentity{
+		callID:          uuid.NewString(),
+		sessionID:       payload.sessionID,
+		chatID:          payload.chatID,
+		toolName:        toolName,
+		toolURN:         toolURN.String(),
+		toolsetSlug:     payload.toolset,
+		mcpServerID:     serverID,
+		metaMCPServerID: payload.metaMcpServerID,
+		mcpURL:          mcpURL,
+		clientName:      clientIdentity.Name,
+		clientVersion:   clientIdentity.Version,
+		externalUserID:  externalUserID,
+		userID:          callerID,
+		userEmail:       callerEmail,
+	}, time.Now)
+
 	logAttrs := tm.HTTPLogAttributes{}
 	defer func() {
 		go billingTracker.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
@@ -420,6 +460,9 @@ func handleToolsCall(
 		})
 
 		logAttrs[attr.EventSourceKey] = string(tm.EventSourceToolCall)
+		logAttrs[attr.ToolCallIDKey] = events.callID
+		logAttrs[attr.OutcomeKey] = toolCallOutcome(rw.statusCode, rw.resultIsError)
+		logAttrs[attr.ToolCallDurationKey] = time.Since(events.start).Seconds()
 		logAttrs.RecordStatusCode(rw.statusCode)
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
@@ -430,10 +473,6 @@ func handleToolsCall(
 
 		if payload.chatID != "" {
 			logAttrs[attr.GenAIConversationIDKey] = payload.chatID
-		}
-		externalUserID := payload.externalUserID
-		if externalUserID == "" && oauthToken != "" {
-			externalUserID = jwtclaims.UnsafeExtractSubject(oauthToken)
 		}
 		if externalUserID != "" {
 			logAttrs[attr.ExternalUserIDKey] = externalUserID
@@ -467,14 +506,11 @@ func handleToolsCall(
 		telemLogger.Log(ctx, params)
 	}()
 
-	serverID := ""
-	if attributedMCPServerID != nil {
-		serverID = attributedMCPServerID.String()
-	}
-	toolName := descriptor.Name
-	if plan.Kind == gateway.ToolKindExternalMCP {
-		toolName = descriptor.URN.Name
-	}
+	// The started record goes out before the scan, so a call the scan stops
+	// still shows. A publish that fails never fails the call.
+	events.started(ctx)
+	defer func() { events.completed(ctx, rw.statusCode, rw.resultIsError, rw.failure) }()
+
 	requestSubject := mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
 		Surface:         mcpriskscan.SurfaceHostedMCP,
 		Method:          mcpriskscan.MethodToolsCall,
@@ -549,6 +585,8 @@ func handleToolsCall(
 			recordToolCallErrorStatus(ctx, rw, failure)
 			return nil, failure
 		}
+		// The call's records follow the upstream's own isError verdict.
+		rw.resultIsError = mcpResultIsError(rw.body.Bytes())
 		bs, err := json.Marshal(result[json.RawMessage]{
 			ID:             req.ID,
 			Result:         json.RawMessage(rw.body.Bytes()),
@@ -556,7 +594,9 @@ func handleToolsCall(
 			cacheHints:     nil,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP result").LogError(ctx, logger)
+			failure := oops.E(oops.CodeUnexpected, err, "failed to serialize MCP result").LogError(ctx, logger)
+			recordToolCallErrorStatus(ctx, rw, failure)
+			return nil, failure
 		}
 
 		return bs, nil
@@ -564,7 +604,9 @@ func handleToolsCall(
 
 	chunk, structured, err := formatResult(*rw, plan.Kind)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed format tool call result").LogError(ctx, logger)
+		failure := oops.E(oops.CodeUnexpected, err, "failed format tool call result").LogError(ctx, logger)
+		recordToolCallErrorStatus(ctx, rw, failure)
+		return nil, failure
 	}
 	responseContent := []json.RawMessage{chunk}
 	if plan.Kind != gateway.ToolKindPrompt {
@@ -592,7 +634,9 @@ func handleToolsCall(
 		cacheHints:     nil,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").LogError(ctx, logger)
+		failure := oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call result").LogError(ctx, logger)
+		recordToolCallErrorStatus(ctx, rw, failure)
+		return nil, failure
 	}
 
 	return bs, nil
@@ -624,6 +668,7 @@ func toolCallRejection(ctx context.Context, logger *slog.Logger, err error, args
 func recordToolCallErrorStatus(ctx context.Context, rw *toolCallResponseWriter, err error) {
 	if shareableErr, ok := errors.AsType[*oops.ShareableError](err); ok {
 		rw.statusCode = shareableErr.HTTPStatus(ctx)
+		rw.failure = shareableErr
 	}
 }
 
@@ -769,6 +814,11 @@ type toolCallResponseWriter struct {
 	statusCode int
 	headers    http.Header
 	body       *bytes.Buffer
+	// failure is the error the gateway answered with; nil when the tool
+	// produced the response itself.
+	failure *oops.ShareableError
+	// resultIsError is the upstream's isError on a forwarded result.
+	resultIsError bool
 }
 
 func (w *toolCallResponseWriter) Header() http.Header {

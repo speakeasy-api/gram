@@ -63,9 +63,10 @@ func (a *autoVerifications) shutdown(ctx context.Context) error {
 }
 
 // Shutdown stops admitting automatic verifications and the keepalive
-// re-check, then drains the probes in flight. Run it after the HTTP servers
-// have drained and before the database and cache close: the probes detach
-// from their requests and still write verdicts and close upstream sessions.
+// re-check, drains the probes in flight, then closes the tool call logger.
+// Run it after the HTTP servers have drained and before the database and
+// cache close: the probes detach from their requests and still write
+// verdicts and close upstream sessions.
 func (s *Service) Shutdown(ctx context.Context) error {
 	// Close both admission gates before waiting for either group to drain.
 	s.autoVerifications.closeAdmission()
@@ -76,6 +77,7 @@ func (s *Service) Shutdown(ctx context.Context) error {
 	if err := s.autoVerifications.shutdown(ctx); err != nil {
 		errs = append(errs, fmt.Errorf("drain automatic verifications: %w", err))
 	}
+	s.toolCallLogger.Close()
 	return errors.Join(errs...)
 }
 

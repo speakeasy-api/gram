@@ -371,9 +371,11 @@ func (s *Service) callPlatformToolsetTool(
 	ctx, logger := o11y.EnrichToolCallContext(ctx, s.logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
 	rw := &toolCallResponseWriter{
-		headers:    make(http.Header),
-		body:       new(bytes.Buffer),
-		statusCode: http.StatusOK,
+		headers:       make(http.Header),
+		body:          new(bytes.Buffer),
+		statusCode:    http.StatusOK,
+		failure:       nil,
+		resultIsError: false,
 	}
 
 	gramEmail := conv.PtrValOrEmpty(authCtx.Email, "")

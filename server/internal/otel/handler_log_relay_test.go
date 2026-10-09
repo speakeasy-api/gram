@@ -20,8 +20,10 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
@@ -533,4 +535,36 @@ func relayRequestLogEventNames(request *collectorlogsv1.ExportLogsServiceRequest
 		}
 	}
 	return names
+}
+
+func TestLogRelayHandlerLeavesGatewayToolCallRecordsToTheToolCallRelay(t *testing.T) {
+	t.Parallel()
+
+	capture := &logRelayRequestCapture{mu: sync.Mutex{}, requests: nil}
+	server := httptest.NewServer(http.HandlerFunc(capture.handler))
+	t.Cleanup(server.Close)
+	reader, meterProvider := readableMeter(t)
+	handler := newLogRelayTestHandler(t, meterProvider)
+	cacheLogRelayTestDestination(t, handler, testLogOrganizationID, testLogProjectID, server.URL, nil, true)
+
+	gatewayScope := relayTestLogAttribute(string(enrich.OriginalInstrumentationScopeNameKey), dialect.GramGatewayLogScope)
+	started := relayTestLogRecord(dialect.GramToolCallStartedEvent, testLogOrganizationID, testLogProjectID, 0)
+	started.SetAttributes([]*otelv1.LogRecord_KeyValue{gatewayScope})
+	completed := relayTestLogRecord(dialect.GramToolCallCompletedEvent, testLogOrganizationID, testLogProjectID, 0)
+	completed.SetAttributes([]*otelv1.LogRecord_KeyValue{gatewayScope})
+	producer := relayTestLogRecord("api_request", testLogOrganizationID, testLogProjectID, 0)
+	producer.SetAttributes([]*otelv1.LogRecord_KeyValue{
+		relayTestLogAttribute(string(enrich.OriginalInstrumentationScopeNameKey), "com.anthropic.claude_code.events"),
+	})
+
+	messages, failures := logRelayTestMessages(started, producer, completed)
+	require.NoError(t, handler.handleBatch(t.Context(), messages))
+	for _, failure := range failures {
+		require.NoError(t, failure)
+	}
+
+	requests := capture.snapshot()
+	require.Len(t, requests, 1)
+	require.Equal(t, []string{"api_request"}, relayRequestLogBodies(requests[0].request))
+	require.Equal(t, int64(2), agentEventCount(t, reader, meterLogRelayRecordsDropped, attr.ReasonKey, string(relayReasonExcluded)))
 }

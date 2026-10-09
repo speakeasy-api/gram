@@ -19,8 +19,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/trace"
 
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -47,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -159,7 +163,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 	scanEvaluator := mcpriskscan.NewNoop(tracerProvider, meterProvider, logger)
 	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, conn, guardianPolicy, authzEngine, posthogClient, telemLogger, billingClient, billingClient, mcpservers.NewToolDispositionCache(logger, conn, cacheAdapter), toolcallobserver.NoopSuccessRecorder{}, toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache()), mcpToolExecutionCheckpoint, scanEvaluator, nil)
-	mcpService, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, &feature.InMemory{}, serverURL, serverURL, enc, cacheAdapter, guardianPolicy, funcs, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, authzEngine, assistantTokens, nil, shadowMCPClient, auditLogger, nil, nil, nil, nil, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, route.NewRouteTable(), "", nil, nil, redisClient, mcp.TunnelPublicConfig{
+	mcpService, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, &feature.InMemory{}, serverURL, serverURL, enc, cacheAdapter, guardianPolicy, funcs, billingClient, billingClient, telemLogger, otelpub.NewLogger(gcp.NewNoopPublisher[*otelv1.InboundLogRecord](), resource.Empty(), "xmcp-test"), telemService, vectorToolStore, nil, authzEngine, assistantTokens, nil, shadowMCPClient, auditLogger, nil, nil, nil, nil, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, route.NewRouteTable(), "", nil, nil, redisClient, mcp.TunnelPublicConfig{
 		SessionTTL:         0,
 		LiveSessionCap:     0,
 		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
