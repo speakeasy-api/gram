@@ -2,7 +2,6 @@ package mcpservers_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -233,7 +232,7 @@ func TestGetEnvironmentHeaders_UndecryptableEntryIsReported(t *testing.T) {
 	require.Equal(t, map[string]string{"MCP_HEADER_X-Broken": "undecryptable", "MCP_HEADER_X-Ok": "mapped"}, previewStatuses(result))
 	require.True(t, result.EnvironmentConfigurationInvalid)
 	for _, e := range result.Entries {
-		require.False(t, strings.Contains(e.Status, "ciphertext"))
+		require.NotContains(t, e.Status, "ciphertext")
 	}
 }
 

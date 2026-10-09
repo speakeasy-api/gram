@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -349,7 +348,7 @@ func TestApplyRequestHeadersEnvironmentRefusesEmptyRow(t *testing.T) {
 	remoteReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "https://upstream.test/mcp", nil)
 
 	err := p.applyRequestHeaders(t.Context(), userReq, remoteReq)
-	require.True(t, errors.Is(err, ErrInvalidEnvironmentHeader))
+	require.ErrorIs(t, err, ErrInvalidEnvironmentHeader)
 }
 
 // Redirect stripping covers every spelling of an environment header and the
