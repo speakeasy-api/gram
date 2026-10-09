@@ -236,6 +236,7 @@ export function ExistingTunnelFlow({
                 (!!flow.gatewayId && membersQuery.isPending)
               }
               isError={tunnelsQuery.isError || serversQuery.isError}
+              retrying={tunnelsQuery.isFetching || serversQuery.isFetching}
               onRetry={() => {
                 void tunnelsQuery.refetch();
                 void serversQuery.refetch();
@@ -378,17 +379,19 @@ function submitLabel(pending: boolean, uncertain: boolean): string {
 function TunnelChoice({
   isLoading,
   isError,
+  retrying,
   onRetry,
   children,
 }: {
   isLoading: boolean;
   isError: boolean;
+  retrying: boolean;
   onRetry: () => void;
   children: ReactNode;
 }): JSX.Element {
   if (isError) {
     return (
-      <RetryAlert onRetry={onRetry}>
+      <RetryAlert retrying={retrying} onRetry={onRetry}>
         Could not load this project&apos;s tunnels.
       </RetryAlert>
     );
@@ -398,11 +401,11 @@ function TunnelChoice({
 }
 
 function RetryAlert({
-  retrying = false,
+  retrying,
   onRetry,
   children,
 }: {
-  retrying?: boolean;
+  retrying: boolean;
   onRetry: () => void;
   children: ReactNode;
 }): JSX.Element {
