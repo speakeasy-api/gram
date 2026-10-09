@@ -412,7 +412,13 @@ type GetMCPDiagnosticsOutput struct {
 	Envelope  DataEnvelope `json:"data"`
 
 	Readiness MCPDiagnosticsReadiness `json:"readiness"`
-	Outcomes  MCPOutcomeSummary       `json:"outcomes"`
+
+	// Tunnel is the agent connection state of a tunneled MCP server, present
+	// only for callers who can read the project's tunneled sources. It is
+	// connection evidence, separate from readiness and attribution.
+	Tunnel *MCPTunnel `json:"tunnel,omitempty"`
+
+	Outcomes MCPOutcomeSummary `json:"outcomes"`
 	// OrganizationOutcomes is the same summary across the organization's
 	// projects. It is what makes the scope check answerable server-side.
 	OrganizationOutcomes MCPOutcomeSummary `json:"organization_outcomes"`
@@ -496,6 +502,12 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 		attribution.Scope = FaultScopeUnknown
 	}
 
+	// Read last, so a diagnosis that fails earlier never pays for it.
+	var tunnel *MCPTunnel
+	if tunnels, ok := s.reader.(tunnelStatusReader); ok {
+		tunnel = tunnels.TunnelStatus(ctx, principal, mcp)
+	}
+
 	return GetMCPDiagnosticsOutput{
 		ProjectID: input.ProjectID,
 		MCPID:     input.MCPID,
@@ -508,6 +520,7 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 			CheckedAt:     readinessTimestamp(readiness.CheckedAt),
 			Actions:       setupRepairActions(setupCategory, normalized.State),
 		},
+		Tunnel:                      tunnel,
 		Outcomes:                    summaryFromTotals(serverTotals),
 		OrganizationOutcomes:        summaryFromTotals(organizationTotals),
 		OrganizationOutcomesPartial: projectsTruncated,

@@ -473,6 +473,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"inspect_mcp_candidate",
 		"send_platform_mcp_feedback",
 		"get_setup_handoff",
+		"get_tunneled_mcp_setup_handoff",
 		"get_mcp_readiness",
 		"get_mcp_repair_plan",
 		"attach_platform_mcp_identity_provider",

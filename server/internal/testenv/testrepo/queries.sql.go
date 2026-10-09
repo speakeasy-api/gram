@@ -3640,6 +3640,28 @@ func (q *Queries) MakeAttachmentIssuerGlobalFixture(ctx context.Context, id uuid
 	return result.RowsAffected(), nil
 }
 
+const markTunneledMCPServerSeenFixture = `-- name: MarkTunneledMCPServerSeenFixture :exec
+UPDATE tunneled_mcp_servers
+SET status = 'active',
+    last_seen_at = clock_timestamp()
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+`
+
+type MarkTunneledMCPServerSeenFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Test fixture: records an agent sighting on a live tunneled source the way
+// the tunnel gateway does, so tests can reach the "seen before, not connected
+// now" state.
+func (q *Queries) MarkTunneledMCPServerSeenFixture(ctx context.Context, arg MarkTunneledMCPServerSeenFixtureParams) error {
+	_, err := q.db.Exec(ctx, markTunneledMCPServerSeenFixture, arg.ID, arg.ProjectID)
+	return err
+}
+
 const movePreparationFixtureClientProject = `-- name: MovePreparationFixtureClientProject :execrows
 UPDATE remote_session_clients SET project_id = $1
 WHERE id = $2 AND project_id = $3

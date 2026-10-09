@@ -526,7 +526,9 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 		PlatformMCPReadTools: assistant_platform_mcp_adapter.ExternalTools(
 			platformmcp.NewRuntimeWithLifecycle(
 				logger, nil, nil, platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine), "", "test-cursor-key",
-				platformmcp.NewPostgresReader(logger, conn).WithAuthorization(authzEngine), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+				platformmcp.NewPostgresReader(logger, conn).WithAuthorization(authzEngine).
+					WithTunnelStatus(noLiveTunnelConnections{}).
+					WithTunneledMCPSetupHandoff(testDashboardURL, platformmcp.OperationBudget{Connection: allowAllLimiter{}, Organization: allowAllLimiter{}}, features), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 				platformmcp.CatalogDescriptor{},
 			).AssistantTools(),
 			platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine),
@@ -815,4 +817,27 @@ func createTestUser(t *testing.T, ctx context.Context, ti *testInstance, id stri
 	})
 	require.NoError(t, err)
 	return urn.NewUserSubject(id)
+}
+
+// testDashboardURL is the dashboard origin Platform MCP handoffs link to in
+// these tests.
+var testDashboardURL = &url.URL{Scheme: "https", Host: "dashboard.example.test"}
+
+// noLiveTunnelConnections is a tunnel runtime store with no connected agents.
+type noLiveTunnelConnections struct{}
+
+func (noLiveTunnelConnections) Connections(context.Context, string) ([]route.Connection, error) {
+	return nil, nil
+}
+
+// allowAllLimiter admits every Platform MCP operation, so these tests exercise
+// authorization rather than rate limits.
+type allowAllLimiter struct{}
+
+func (allowAllLimiter) Allow(context.Context, string) (ratelimit.Result, error) {
+	return ratelimit.Result{Allowed: true, Remaining: 1, RetryAfter: 0}, nil
+}
+
+func (allowAllLimiter) AllowN(context.Context, string, int) (ratelimit.Result, error) {
+	return ratelimit.Result{Allowed: true, Remaining: 1, RetryAfter: 0}, nil
 }

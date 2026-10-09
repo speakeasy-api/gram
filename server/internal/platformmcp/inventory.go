@@ -150,6 +150,9 @@ func mcpFromInventory(id, projectID uuid.UUID, projectName, projectSlug, name, s
 		// The inventory projection never reads a server's tool list: only the
 		// server detail does, and it fills this in after the read.
 		ToolExposure: nil,
+		// Likewise the tunnel's live connection state: the detail and
+		// diagnostics reads add it for callers who may read tunneled sources.
+		Tunnel: nil,
 	}
 
 	// Every model can be carried by a plugin, so membership is attached before

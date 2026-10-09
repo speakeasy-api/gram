@@ -57,6 +57,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
+	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 type platformMCPConfig struct {
@@ -480,7 +481,9 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		// participants and person references, like the drill-down reads.
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey)).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
-		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
+		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore)).
+		WithTunnelStatus(platformMCPTunnelConnections(config)).
+		WithTunneledMCPSetupHandoff(config.DashboardURL, budgets.Handoff, config.FeatureFlags)
 	// Metered on the diagnostics allowance, like the other aggregate reads.
 	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics))
 	attachShadowInventory(platformReader, config, budgets.SensitiveDiagnostics)
@@ -1049,7 +1052,9 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		// participants and person references, like the drill-down reads.
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey)).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
-		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
+		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore)).
+		WithTunnelStatus(platformMCPTunnelConnections(config)).
+		WithTunneledMCPSetupHandoff(config.DashboardURL, budgets.Handoff, config.FeatureFlags)
 	// Metered on the diagnostics allowance, like the other aggregate reads.
 	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics))
 	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)
@@ -1121,4 +1126,14 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	platformmcp.AttachManagement(config.Mux, platformmcp.NewManagementService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, gate, authorizer, config.ServerURL.JoinPath("platform-mcp").String(), registrations, readiness, distributions, config.JWTSigningKey, catalog))
 	o11y.AttachHandler(config.Mux, http.MethodPost, platformmcp.Path, runtime.Handler().ServeHTTP)
 	return AssistantSurface{Tools: runtime.AssistantTools(), Authorizer: authorizer}, nil
+}
+
+// platformMCPTunnelConnections reads live tunnel agent connections from the
+// tunnel runtime store. Without Redis it returns no reader, so tunneled MCP
+// servers report their connection state as unknown instead of failing.
+func platformMCPTunnelConnections(config platformMCPConfig) platformmcp.TunnelConnectionReader {
+	if config.Redis == nil {
+		return nil
+	}
+	return route.NewRedis(config.Redis)
 }

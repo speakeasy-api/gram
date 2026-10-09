@@ -145,6 +145,23 @@ func TestGetMCPDiagnosticsOutput_ProjectsOnlyAllowlistedFields(t *testing.T) {
 	}, decodeKeys(t, output))
 }
 
+// TestGetMCPDiagnosticsOutput_TunnelCarriesOnlyConnectionStatus pins the
+// tunnel block of a tunneled MCP server's diagnosis to its status enum: no key,
+// header, resource identifier, or agent detail can ride along with it.
+func TestGetMCPDiagnosticsOutput_TunnelCarriesOnlyConnectionStatus(t *testing.T) {
+	t.Parallel()
+
+	output := GetMCPDiagnosticsOutput{Tunnel: &MCPTunnel{ConnectionStatus: TunnelConnectionInactive}}
+	encoded, err := json.Marshal(output)
+	require.NoError(t, err)
+
+	var decoded struct {
+		Tunnel map[string]any `json:"tunnel"`
+	}
+	require.NoError(t, json.Unmarshal(encoded, &decoded))
+	require.Equal(t, map[string]any{"connection_status": "inactive"}, decoded.Tunnel)
+}
+
 type diagnosticsProjectReader struct {
 	output ListProjectsOutput
 }

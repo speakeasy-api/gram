@@ -1,0 +1,5 @@
+---
+"server": minor
+---
+
+Platform MCP supports tunneled MCP servers. `get_mcp` and `get_mcp_diagnostics` report a tunneled server's `tunnel.connection_status` (connected, inactive, never_connected, or unknown) to callers who can read the project's tunneled sources; it says whether a tunnel agent is connected to the gateway, not whether the private server behind it works. The new `get_tunneled_mcp_setup_handoff` tool returns the dashboard page that adds a tunneled MCP server or opens an existing one's tunnel agent setup, for organization administrators. The add handoff requires the tunneled MCP rollout flag (`gram-tunneled-mcp`) to be enabled for the organization: an explicitly disabled flag answers `not_enabled`, and an unavailable or indeterminate evaluation answers `feature_unavailable`; an existing tunneled server's setup stays available. Tunnel keys and header values never pass through tool input or output. The `add-existing-mcp-servers` workflow can hand off tunnel setup for a local server instead of always leaving it out.
