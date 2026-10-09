@@ -68,6 +68,11 @@ const (
 	// covers the credit OpenRouter reserves for calls in flight.
 	costPerCaseUSD = 0.0015
 
+	// creditHeadroomUSD is balance kept beyond a run's expected cost.
+	// OpenRouter holds each in-flight call's maximum cost against the balance,
+	// so calls fail with 402 below about $1 even when the expected cost fits.
+	creditHeadroomUSD = 1.0
+
 	// creditCheckTimeout bounds each OpenRouter credit request.
 	creditCheckTimeout = 10 * time.Second
 )

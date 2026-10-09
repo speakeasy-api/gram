@@ -87,8 +87,8 @@ func checkCredit(ctx context.Context, client *http.Client, baseURL, key string, 
 		fmt.Fprintf(os.Stderr, "warning: could not check OpenRouter credit: %v\n", err)
 		return nil
 	}
-	if remaining < need {
-		return fmt.Errorf("OpenRouter has $%.2f of credit left and %d cases need about $%.2f; add credit at https://openrouter.ai/settings/credits and rerun", remaining, cases, need)
+	if remaining < need+creditHeadroomUSD {
+		return fmt.Errorf("OpenRouter has $%.2f of credit left and %d cases need about $%.2f, plus $%.2f for calls in flight; add credit at https://openrouter.ai/settings/credits and rerun", remaining, cases, need, creditHeadroomUSD)
 	}
 	return nil
 }
