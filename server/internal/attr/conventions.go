@@ -807,6 +807,7 @@ const (
 	OTELSpanEnricherNameKey   = attribute.Key("gram.otel.span_enricher_name")
 	OTELLogEnricherNameKey    = attribute.Key("gram.otel.log_enricher_name")
 	OTELMetricEnricherNameKey = attribute.Key("gram.otel.metric_enricher_name")
+	OTELSignalKey             = attribute.Key("gram.otel.signal")
 
 	// GenAI semantic convention keys (OTel GenAI semconv - experimental)
 	// See: https://opentelemetry.io/docs/specs/semconv/gen-ai/
@@ -1119,6 +1120,8 @@ func OTELLogEnricherName(v string) attribute.KeyValue { return OTELLogEnricherNa
 func OTELMetricEnricherName(v string) attribute.KeyValue { return OTELMetricEnricherNameKey.String(v) }
 
 func OTELSpanEnricherName(v string) attribute.KeyValue { return OTELSpanEnricherNameKey.String(v) }
+
+func OTELSignal[V ~string](v V) attribute.KeyValue { return OTELSignalKey.String(string(v)) }
 func SlogOTELSpanEnricherName(v string) slog.Attr {
 	return slog.String(string(OTELSpanEnricherNameKey), v)
 }

@@ -1,4 +1,4 @@
-package otel
+package enrich
 
 import (
 	"testing"
@@ -11,7 +11,7 @@ import (
 func TestNewEnrichSpeakeasyTokens(t *testing.T) {
 	t.Parallel()
 
-	enricher := NewEnrichSpeakeasyTokens()
+	enricher := NewSpanTokens()
 
 	require.Equal(t, "enrich-speakeasy-tokens", enricher.Name())
 	require.NotNil(t, enricher.codec)
@@ -38,7 +38,7 @@ func TestEnrichSpeakeasyTokensCountsClaudeCodePrompt(t *testing.T) {
 		},
 	}).Build()
 
-	got, err := NewEnrichSpeakeasyTokens().Enrich(t.Context(), span)
+	got, err := NewSpanTokens().Enrich(t.Context(), span)
 
 	require.NoError(t, err)
 	require.Equal(t, []attribute.KeyValue{
@@ -67,7 +67,7 @@ func TestEnrichSpeakeasyTokensSkipsEmptyClaudeCodePrompt(t *testing.T) {
 		},
 	}).Build()
 
-	got, err := NewEnrichSpeakeasyTokens().Enrich(t.Context(), span)
+	got, err := NewSpanTokens().Enrich(t.Context(), span)
 
 	require.NoError(t, err)
 	require.Nil(t, got)
@@ -83,7 +83,7 @@ func TestEnrichSpeakeasyTokensTalliesInputAndOutputMessages(t *testing.T) {
 		},
 	}).Build()
 
-	got, err := NewEnrichSpeakeasyTokens().Enrich(t.Context(), span)
+	got, err := NewSpanTokens().Enrich(t.Context(), span)
 
 	require.NoError(t, err)
 	require.Equal(t, []attribute.KeyValue{
@@ -110,7 +110,7 @@ func TestEnrichSpeakeasyTokensSkipsMalformedSemconvContent(t *testing.T) {
 		},
 	}).Build()
 
-	got, err := NewEnrichSpeakeasyTokens().Enrich(t.Context(), span)
+	got, err := NewSpanTokens().Enrich(t.Context(), span)
 
 	require.NoError(t, err)
 	require.Nil(t, got)
