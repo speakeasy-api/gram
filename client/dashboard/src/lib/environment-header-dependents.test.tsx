@@ -76,6 +76,16 @@ const toolsKey = [
   "https://upstream.example.invalid/mcp/fixture",
   [],
 ];
+const previewKey = queryKeyGetMcpServerEnvironmentHeaders({
+  id: "server-1",
+  selection: "environment",
+  environmentId: "env-prod",
+});
+
+function seed(queryClient: QueryClient): void {
+  queryClient.setQueryData(toolsKey, mocks.tools);
+  queryClient.setQueryData(previewKey, { entries: [] });
+}
 
 function wrapper(queryClient: QueryClient) {
   return ({ children }: { children: ReactNode }) => (
@@ -120,7 +130,7 @@ describe("upstream header dependents", () => {
     "a successful %s invalidates both",
     async (_name, mutationKey) => {
       const queryClient = createQueryClient();
-      queryClient.setQueryData(toolsKey, mocks.tools);
+      seed(queryClient);
       await queryClient
         .getMutationCache()
         .build(queryClient, { mutationKey, mutationFn: async () => ({}) })
@@ -129,6 +139,7 @@ describe("upstream header dependents", () => {
       await waitFor(() =>
         expect(queryClient.getQueryState(toolsKey)?.isInvalidated).toBe(true),
       );
+      expect(queryClient.getQueryState(previewKey)?.isInvalidated).toBe(true);
     },
   );
 
