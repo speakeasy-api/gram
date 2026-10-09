@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   servers: [] as McpServer[],
   members: [] as { mcpServerId: string }[],
   membersError: false,
+  refetchMembers: vi.fn(),
   gatewayId: null as string | null,
   mutateAsync: vi.fn(),
   createError: undefined as Error | undefined,
@@ -126,7 +127,14 @@ vi.mock("@gram/client/react-query/mcpServers.js", () => ({
 vi.mock("@gram/client/react-query/metaMcpMembers.js", () => ({
   useMetaMcpMembers: () =>
     state.membersError
-      ? { data: undefined, isSuccess: false, isPending: false, isError: true }
+      ? {
+          data: undefined,
+          isSuccess: false,
+          isPending: false,
+          isError: true,
+          isFetching: false,
+          refetch: state.refetchMembers,
+        }
       : {
           data: { members: state.members },
           isSuccess: true,
@@ -177,6 +185,7 @@ beforeEach(() => {
   state.membersError = false;
   state.gatewayId = null;
   state.mutateAsync.mockReset();
+  state.refetchMembers.mockReset();
   state.createError = undefined;
 });
 
@@ -257,7 +266,11 @@ describe("ExistingTunnelFlow", () => {
       target: { value: "Name" },
     });
     expect(submitButton().disabled).toBe(true);
-    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+    // The tunnels stay listed; only the gateway's members need a retry.
+    expect(screen.getByText("Okta")).toBeTruthy();
+    expect(screen.getByText(/Could not load the gateway/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(state.refetchMembers).toHaveBeenCalledOnce();
   });
 
   it("offers deleting only tunnels no visible server uses", () => {

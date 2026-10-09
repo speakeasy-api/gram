@@ -235,15 +235,10 @@ export function ExistingTunnelFlow({
                 serversQuery.isPending ||
                 (!!flow.gatewayId && membersQuery.isPending)
               }
-              isError={
-                tunnelsQuery.isError ||
-                serversQuery.isError ||
-                membersQuery.isError
-              }
+              isError={tunnelsQuery.isError || serversQuery.isError}
               onRetry={() => {
                 void tunnelsQuery.refetch();
                 void serversQuery.refetch();
-                if (flow.gatewayId) void membersQuery.refetch();
               }}
             >
               {options.length === 0 ? (
@@ -273,6 +268,15 @@ export function ExistingTunnelFlow({
                 }
               />
             </TunnelChoice>
+            {flow.gatewayId && membersQuery.isError ? (
+              <RetryAlert
+                retrying={membersQuery.isFetching}
+                onRetry={() => void membersQuery.refetch()}
+              >
+                Could not load the gateway&apos;s MCP servers, so it is not
+                known which tunnels it can still include. Retry before creating.
+              </RetryAlert>
+            ) : null}
             {selected?.tunnel.resourceIdentifier ? (
               <Text muted small>
                 Resource identifier (shared by the tunnel):{" "}
@@ -384,25 +388,42 @@ function TunnelChoice({
 }): JSX.Element {
   if (isError) {
     return (
-      <Alert variant="error" dismissible={false}>
-        <Stack gap={2}>
-          <Text small>Could not load this project&apos;s tunnels.</Text>
-          <div>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={onRetry}
-            >
-              <Button.Text>Retry</Button.Text>
-            </Button>
-          </div>
-        </Stack>
-      </Alert>
+      <RetryAlert onRetry={onRetry}>
+        Could not load this project&apos;s tunnels.
+      </RetryAlert>
     );
   }
   if (isLoading) return <Skeleton className="h-24 w-full" />;
   return <>{children}</>;
+}
+
+function RetryAlert({
+  retrying = false,
+  onRetry,
+  children,
+}: {
+  retrying?: boolean;
+  onRetry: () => void;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <Alert variant="error" dismissible={false}>
+      <Stack gap={2}>
+        <Text small>{children}</Text>
+        <div>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={retrying}
+            onClick={onRetry}
+          >
+            <Button.Text>Retry</Button.Text>
+          </Button>
+        </div>
+      </Stack>
+    </Alert>
+  );
 }
 
 // The create request failed in a way that does not say whether it committed.
