@@ -2,7 +2,10 @@ import { createQueryClient } from "@/contexts/Sdk";
 import type { GetMcpServerEnvironmentHeadersRequest } from "@gram/client/models/operations/getmcpserverenvironmentheaders.js";
 import { useCreateTunneledMcpServerHeaderMutation } from "@gram/client/react-query/createTunneledMcpServerHeader.js";
 import { useDeleteRemoteMcpServerHeaderMutation } from "@gram/client/react-query/deleteRemoteMcpServerHeader.js";
-import { useGetMcpServerEnvironmentHeaders } from "@gram/client/react-query/getMcpServerEnvironmentHeaders.js";
+import {
+  queryKeyGetMcpServerEnvironmentHeaders,
+  useGetMcpServerEnvironmentHeaders,
+} from "@gram/client/react-query/getMcpServerEnvironmentHeaders.js";
 import { mutationKeyCloneEnvironment } from "@gram/client/react-query/cloneEnvironment.js";
 import { mutationKeyCreateRemoteMcpServerHeader } from "@gram/client/react-query/createRemoteMcpServerHeader.js";
 import { mutationKeyDeleteEnvironment } from "@gram/client/react-query/deleteEnvironment.js";
@@ -131,7 +134,7 @@ describe("upstream header dependents", () => {
 
   it("leaves both alone for an unrelated write", async () => {
     const queryClient = createQueryClient();
-    queryClient.setQueryData(toolsKey, mocks.tools);
+    seed(queryClient);
     await queryClient
       .getMutationCache()
       .build(queryClient, {
@@ -141,6 +144,7 @@ describe("upstream header dependents", () => {
       .execute(undefined);
 
     expect(queryClient.getQueryState(toolsKey)?.isInvalidated).toBe(false);
+    expect(queryClient.getQueryState(previewKey)?.isInvalidated).toBe(false);
   });
 
   it("refetches the tool listing after a linked environment's entry is edited", async () => {
