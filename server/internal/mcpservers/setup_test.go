@@ -22,6 +22,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -65,6 +67,7 @@ type testInstance struct {
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
 	dispositions   *mcpservers.ToolDispositionCache
+	enc            *encryption.Client
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -97,14 +100,17 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
 
-	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), guardianPolicy, nil)
-	svc := mcpservers.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, nil, dispositions, false, assetsSvc, revoker, networkaccess.DenyAllChecker{})
+	enc := testenv.NewEncryptionClient(t)
+	revoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, testenv.NewMeterProvider(t), conn, enc, guardianPolicy, nil)
+	svc := mcpservers.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, nil, dispositions, false, assetsSvc, revoker, networkaccess.DenyAllChecker{}).
+		WithEnvironmentHeaders(environments.NewEnvironmentEntries(logger, conn, enc, nil))
 
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
 		dispositions:   dispositions,
+		enc:            enc,
 	}
 }
 

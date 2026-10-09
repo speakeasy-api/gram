@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
@@ -185,6 +186,39 @@ func TestAddMetaMcpMember_RejectsSecondServerOnSameBackend(t *testing.T) {
 			requireOopsCode(t, err, oops.CodeConflict)
 		})
 	}
+}
+
+// Two servers on one tunnel stay one backend even when each is linked to its
+// own environment: a gateway cannot hold both.
+func TestAddMetaMcpMember_RejectsSecondTunnelServerWithDistinctEnvironment(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+
+	tunnelID := seedTunnelBackend(t, ctx, ti.conn, projectID)
+	environment := func() uuid.NullUUID {
+		slug := "env-" + uuid.NewString()[:8]
+		env, err := environmentsrepo.New(ti.conn).CreateEnvironment(ctx, environmentsrepo.CreateEnvironmentParams{
+			OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID, Name: slug, Slug: slug, Description: conv.PtrToPGTextEmpty(nil),
+		})
+		require.NoError(t, err)
+		return conv.ToNullUUID(env.ID)
+	}
+	prod := seedMcpServerFronting(t, ctx, ti.conn, projectID, mcpserversrepo.CreateMCPServerParams{TunneledMcpServerID: conv.ToNullUUID(tunnelID), EnvironmentID: environment()})
+	sandbox := seedMcpServerFronting(t, ctx, ti.conn, projectID, mcpserversrepo.CreateMCPServerParams{TunneledMcpServerID: conv.ToNullUUID(tunnelID), EnvironmentID: environment()})
+	meta := seedMetaMcpServer(t, ctx, ti, "environment gateway")
+
+	_, err := ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, MetaMcpServerID: meta.ID, McpServerID: prod.String(), SortOrder: nil,
+	})
+	require.NoError(t, err)
+	_, err = ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, MetaMcpServerID: meta.ID, McpServerID: sandbox.String(), SortOrder: nil,
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
 }
 
 func TestAddMetaMcpMember_AllowsDistinctBackends(t *testing.T) {

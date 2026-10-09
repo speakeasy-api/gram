@@ -22,6 +22,12 @@ type Service interface {
 	CreateMcpServer(context.Context, *CreateMcpServerPayload) (res *types.McpServer, err error)
 	// Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
 	GetMcpServer(context.Context, *GetMcpServerPayload) (res *types.McpServer, err error)
+	// Preview the upstream headers an MCP server sends from an environment. Only
+	// entries named MCP_HEADER_<Header-Name> are sent. The result lists entry and
+	// header names with a status for each, never values. Requires read access to
+	// the MCP server and project-wide environment read access, the authority
+	// needed to link an environment.
+	GetEnvironmentHeaders(context.Context, *GetEnvironmentHeadersPayload) (res *McpServerEnvironmentHeaders, err error)
 	// List MCP servers for a project. Accepts optional remote_mcp_server_id,
 	// tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id filters to
 	// scope the result to a single backend; at most one filter may be supplied
@@ -85,7 +91,7 @@ const ServiceName = "mcpServers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"createMcpServer", "getMcpServer", "listMcpServers", "listMcpServersForOrg", "updateMcpServer", "listToolFilters", "setToolMetadataBatch", "addToolMetadataBatch", "listToolMetadata", "setToolMetadata", "deleteToolMetadata", "deleteMcpServer"}
+var MethodNames = [13]string{"createMcpServer", "getMcpServer", "getEnvironmentHeaders", "listMcpServers", "listMcpServersForOrg", "updateMcpServer", "listToolFilters", "setToolMetadataBatch", "addToolMetadataBatch", "listToolMetadata", "setToolMetadata", "deleteToolMetadata", "deleteMcpServer"}
 
 // AddToolMetadataBatchPayload is the payload type of the mcpServers service
 // addToolMetadataBatch method.
@@ -155,6 +161,23 @@ type DeleteToolMetadataPayload struct {
 	McpServerID string
 	// The name of the tool to delete
 	ToolName         string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// GetEnvironmentHeadersPayload is the payload type of the mcpServers service
+// getEnvironmentHeaders method.
+type GetEnvironmentHeadersPayload struct {
+	// The ID of the MCP server. It must be backed by a remote or tunneled MCP
+	// server.
+	ID string
+	// Which environment to preview: linked previews the server's current link,
+	// environment previews environment_id, and none previews no environment.
+	Selection string
+	// The environment to preview. Required when selection is environment and
+	// rejected otherwise.
+	EnvironmentID    *string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -230,6 +253,54 @@ type ListToolMetadataPayload struct {
 type ListToolMetadataResult struct {
 	// The stored tool metadata for the MCP server
 	Tools []*types.ToolMetadata
+}
+
+// One environment entry relevant to the headers an MCP server sends upstream.
+// Values are never included.
+type McpServerEnvironmentHeader struct {
+	// The environment entry name
+	EntryName string
+	// The canonical header the entry targets. Absent when the entry is not mapped
+	// or its name is not a valid header name.
+	HeaderName *string
+	// mapped: sent upstream. overrides_source: sent upstream in place of the
+	// source header of the same name. invalid_name, reserved, empty_value,
+	// invalid_value, duplicate, undecryptable: the entry cannot be sent, and
+	// requests to the server are refused until it is fixed or removed. not_mapped:
+	// the name resembles the MCP_HEADER_ prefix without matching it exactly, so
+	// the entry is ignored.
+	Status string
+}
+
+// McpServerEnvironmentHeaders is the result type of the mcpServers service
+// getEnvironmentHeaders method.
+type McpServerEnvironmentHeaders struct {
+	// The previewed environment. Absent when the selection is none or the
+	// environment is unavailable.
+	Environment *McpServerEnvironmentSummary
+	// none: no environment is previewed. ok: the environment is live. unavailable:
+	// the environment is deleted, missing or in another project; requests to a
+	// server linked to it are refused.
+	EnvironmentStatus string
+	// Whether requests to the server would be refused because of the previewed
+	// environment. It reports only on the environment, not on the server's overall
+	// readiness.
+	EnvironmentConfigurationInvalid bool
+	// Entries named with the MCP_HEADER_ prefix, plus near-miss names that are
+	// ignored.
+	Entries []*McpServerEnvironmentHeader
+	// The live environments in the project that can be linked.
+	Environments []*McpServerEnvironmentSummary
+}
+
+// An environment that can be linked to an MCP server.
+type McpServerEnvironmentSummary struct {
+	// The ID of the environment
+	ID string
+	// The name of the environment
+	Name string
+	// The slug of the environment
+	Slug string
 }
 
 // SetToolMetadataBatchPayload is the payload type of the mcpServers service

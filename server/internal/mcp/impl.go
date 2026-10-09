@@ -50,6 +50,7 @@ import (
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/environments"
 	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
@@ -232,6 +233,9 @@ type Service struct {
 	// helpers but never serves a runtime request).
 	remoteProxyManager *remotemcp.ProxyManager
 	tunnelManager      *tunnelManager
+	// environmentHeaders loads the headers mapped from a proxied server's
+	// linked environment.
+	environmentHeaders environmentHeaderSource
 	// Nil when no Redis was wired; every public tunneled request then fails closed.
 	tunnelPublic *tunnelPublicRuntime
 
@@ -459,6 +463,8 @@ func NewService(
 		platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
 	)
 
+	environmentHeaders := environments.NewEnvironmentEntries(logger, db, enc, metadata_repo.New(db))
+
 	service := &Service{
 		federatedLoginConsumer:    nil,
 		identityChainer:           nil,
@@ -559,7 +565,8 @@ func NewService(
 		autoVerifications:    newAutoVerifications(),
 		remoteSessionRecheck: newRemoteSessionRecheck(metaRuntimeConfig.withDefaults().RecheckInterval, redisClient, meterProvider),
 		remoteProxyManager:   remoteProxyManager,
-		tunnelManager:        newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs, callerAssertions, tunneledmcp.NewHeaders(logger, db, enc)),
+		tunnelManager:        newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs, callerAssertions, tunneledmcp.NewHeaders(logger, db, enc), environmentHeaders),
+		environmentHeaders:   environmentHeaders,
 		tunnelPublic:         newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:          metaRuntimeConfig.withDefaults(),
 	}

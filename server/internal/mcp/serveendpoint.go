@@ -778,6 +778,12 @@ func (s *Service) remoteBackendProxyBuilder(
 		return nil, oops.E(oops.CodeUnexpected, err, "load remote mcp server headers").LogError(ctx, logger)
 	}
 
+	environment, err := loadEnvironmentHeaders(ctx, logger, s.environmentHeaders, projectID, mcpServer.EnvironmentID)
+	if err != nil {
+		return nil, err
+	}
+	options = append(options, remotemcp.WithEnvironmentHeaders(environment.rows))
+
 	if s.remoteProxyManager == nil {
 		return nil, oops.E(oops.CodeUnexpected, nil, "remote MCP proxy manager is unavailable").LogError(ctx, logger)
 	}
@@ -849,6 +855,7 @@ func (s *Service) serveTunneledBackend(
 		UpstreamAuth:       upstream.Token,
 		WWWAuthenticate:    wwwAuthenticate,
 		Selection:          selection,
+		EnvironmentHeaders: nil,
 	})
 	if err != nil {
 		return err

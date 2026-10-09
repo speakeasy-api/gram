@@ -169,6 +169,28 @@ func (s *Service) routeMetaMember(
 		return memberDial{}, "", fmt.Errorf("load meta MCP member server: %w", err)
 	}
 
+	// One environment snapshot serves every exchange built for this member,
+	// and a member whose environment headers cannot be sent is isolated
+	// rather than failing the whole gateway.
+	// Only proxied members carry environment headers.
+	backend := ""
+	switch {
+	case member.remoteServerID.Valid:
+		backend = "remote"
+	case member.tunneledServerID.Valid:
+		backend = "tunneled"
+	default:
+		return memberDial{}, "", &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
+	}
+	environment, err := readEnvironmentHeaders(ctx, s.environmentHeaders, member.projectID, serverRow.EnvironmentID)
+	if err != nil {
+		if isEnvironmentHeaderConfigError(err) {
+			logger.WarnContext(ctx, "meta MCP member environment headers are misconfigured", attr.SlogError(err))
+			return memberDial{}, backend, &metaMemberError{message: fmt.Sprintf("server %q has an invalid environment header configuration; contact the MCP server administrator", member.slug)}
+		}
+		return memberDial{}, backend, fmt.Errorf("load meta MCP member environment headers: %w", err)
+	}
+
 	// gate.toolSelection is provably nil today: meta endpoints mint no tool
 	// selections. If they ever do, its names are meta-MCP-qualified and would
 	// have to be translated before reaching a member proxy's strict filter.
@@ -202,7 +224,7 @@ func (s *Service) routeMetaMember(
 		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, build: func(context.Context) (*proxy.Proxy, error) {
 			// No WWW-Authenticate relay: a member's auth challenge must not
 			// invite the client to re-authenticate against the meta MCP.
-			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.organizationID, member.projectID.String(), upstreamToken, "", gate.toolSelection, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()))
+			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.organizationID, member.projectID.String(), upstreamToken, "", gate.toolSelection, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()), remotemcp.WithEnvironmentHeaders(environment.rows))
 			// Meta-MCP-synthesized initializes are not client sessions.
 			p.InitializeRequestInterceptors = nil
 			renewal := s.renewClientCredentialOnRejection(p, logger, routed)
@@ -232,6 +254,7 @@ func (s *Service) routeMetaMember(
 				UpstreamAuth:       upstreamToken,
 				WWWAuthenticate:    "",
 				Selection:          gate.toolSelection,
+				EnvironmentHeaders: &environment,
 			}, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()))
 			if berr != nil {
 				return nil, fmt.Errorf("build tunnel proxy: %w", berr)

@@ -148,6 +148,67 @@ func BuildGetMcpServerPayload(mcpServersGetMcpServerID string, mcpServersGetMcpS
 	return v, nil
 }
 
+// BuildGetEnvironmentHeadersPayload builds the payload for the mcpServers
+// getEnvironmentHeaders endpoint from CLI flags.
+func BuildGetEnvironmentHeadersPayload(mcpServersGetEnvironmentHeadersID string, mcpServersGetEnvironmentHeadersSelection string, mcpServersGetEnvironmentHeadersEnvironmentID string, mcpServersGetEnvironmentHeadersSessionToken string, mcpServersGetEnvironmentHeadersApikeyToken string, mcpServersGetEnvironmentHeadersProjectSlugInput string) (*mcpservers.GetEnvironmentHeadersPayload, error) {
+	var err error
+	var id string
+	{
+		id = mcpServersGetEnvironmentHeadersID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var selection string
+	{
+		selection = mcpServersGetEnvironmentHeadersSelection
+		if !(selection == "linked" || selection == "environment" || selection == "none") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("selection", selection, []any{"linked", "environment", "none"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var environmentID *string
+	{
+		if mcpServersGetEnvironmentHeadersEnvironmentID != "" {
+			environmentID = &mcpServersGetEnvironmentHeadersEnvironmentID
+			err = goa.MergeErrors(err, goa.ValidateFormat("environment_id", *environmentID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpServersGetEnvironmentHeadersSessionToken != "" {
+			sessionToken = &mcpServersGetEnvironmentHeadersSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpServersGetEnvironmentHeadersApikeyToken != "" {
+			apikeyToken = &mcpServersGetEnvironmentHeadersApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpServersGetEnvironmentHeadersProjectSlugInput != "" {
+			projectSlugInput = &mcpServersGetEnvironmentHeadersProjectSlugInput
+		}
+	}
+	v := &mcpservers.GetEnvironmentHeadersPayload{}
+	v.ID = id
+	v.Selection = selection
+	v.EnvironmentID = environmentID
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListMcpServersPayload builds the payload for the mcpServers
 // listMcpServers endpoint from CLI flags.
 func BuildListMcpServersPayload(mcpServersListMcpServersRemoteMcpServerID string, mcpServersListMcpServersTunneledMcpServerID string, mcpServersListMcpServersToolsetID string, mcpServersListMcpServersUnproxiedMcpServerID string, mcpServersListMcpServersSessionToken string, mcpServersListMcpServersApikeyToken string, mcpServersListMcpServersProjectSlugInput string) (*mcpservers.ListMcpServersPayload, error) {

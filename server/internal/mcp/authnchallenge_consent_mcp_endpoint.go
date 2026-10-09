@@ -405,7 +405,11 @@ func (s *Service) serveConsentProxiedMCP(
 		if herr != nil {
 			return oops.E(oops.CodeUnexpected, herr, "load remote mcp server headers for consent transport").LogError(ctx, logger)
 		}
-		p = s.remoteProxyManager.Build(logger, &remoteServer, serverRow.ID.String(), headers, serverRow.Visibility, endpoint.OrganizationID, endpoint.ProjectID.String(), upstreamToken.Token, "", nil)
+		environment, eerr := loadEnvironmentHeaders(ctx, logger, s.environmentHeaders, endpoint.ProjectID, serverRow.EnvironmentID)
+		if eerr != nil {
+			return eerr
+		}
+		p = s.remoteProxyManager.Build(logger, &remoteServer, serverRow.ID.String(), headers, serverRow.Visibility, endpoint.OrganizationID, endpoint.ProjectID.String(), upstreamToken.Token, "", nil, remotemcp.WithEnvironmentHeaders(environment.rows))
 	} else {
 		// One state-derived affinity key pins the whole consent session
 		// (initialize, list pages, DELETE) to a single gateway.
@@ -419,6 +423,7 @@ func (s *Service) serveConsentProxiedMCP(
 			UpstreamAuth:       upstreamToken.Token,
 			WWWAuthenticate:    "",
 			Selection:          nil,
+			EnvironmentHeaders: nil,
 		})
 		if err != nil {
 			return err

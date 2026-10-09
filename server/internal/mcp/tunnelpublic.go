@@ -441,6 +441,7 @@ func (s *Service) serveTunneledPublicInit(
 		UpstreamAuth:       "",
 		WWWAuthenticate:    "",
 		Selection:          nil,
+		EnvironmentHeaders: nil,
 	})
 	if err != nil {
 		if reserved {
@@ -687,6 +688,10 @@ func (s *Service) serveTunneledPublicSession(
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "load tunneled mcp server headers").LogError(ctx, logger)
 	}
+	environment, err := loadEnvironmentHeaders(ctx, logger, m.environments, endpoint.ProjectID, mcpServer.EnvironmentID)
+	if err != nil {
+		return err
+	}
 
 	p := m.proxyManager.BuildTarget(
 		logger,
@@ -704,6 +709,7 @@ func (s *Service) serveTunneledPublicSession(
 		"",
 		"",
 		nil,
+		remotemcp.WithEnvironmentHeaders(environment.rows),
 		remotemcp.WithRoutingHeaders(routing),
 		remotemcp.WithHeaderPolicy(proxy.HeaderPolicyTunneled),
 	)

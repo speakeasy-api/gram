@@ -81,6 +81,43 @@ var _ = Service("mcpServers", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetMcpServer"}`)
 	})
 
+	Method("getEnvironmentHeaders", func() {
+		Description("Preview the upstream headers an MCP server sends from an environment. Only entries named MCP_HEADER_<Header-Name> are sent. The result lists entry and header names with a status for each, never values. Requires read access to the MCP server and project-wide environment read access, the authority needed to link an environment.")
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the MCP server. It must be backed by a remote or tunneled MCP server.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("selection", String, "Which environment to preview: linked previews the server's current link, environment previews environment_id, and none previews no environment.", func() {
+				Enum("linked", "environment", "none")
+			})
+			Attribute("environment_id", String, "The environment to preview. Required when selection is environment and rejected otherwise.", func() {
+				Format(FormatUUID)
+			})
+			Required("id", "selection")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(McpServerEnvironmentHeaders)
+
+		HTTP(func() {
+			GET("/rpc/mcpServers.getEnvironmentHeaders")
+			Param("id")
+			Param("selection")
+			Param("environment_id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getMcpServerEnvironmentHeaders")
+		Meta("openapi:extension:x-speakeasy-name-override", "getEnvironmentHeaders")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetMcpServerEnvironmentHeaders"}`)
+	})
+
 	Method("listMcpServers", func() {
 		Description("List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.")
 
@@ -376,6 +413,44 @@ var _ = Service("mcpServers", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "delete")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteMcpServer"}`)
 	})
+})
+
+var McpServerEnvironmentSummary = Type("McpServerEnvironmentSummary", func() {
+	Description("An environment that can be linked to an MCP server.")
+
+	Attribute("id", String, "The ID of the environment", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The name of the environment")
+	Attribute("slug", String, "The slug of the environment")
+
+	Required("id", "name", "slug")
+})
+
+var McpServerEnvironmentHeader = Type("McpServerEnvironmentHeader", func() {
+	Description("One environment entry relevant to the headers an MCP server sends upstream. Values are never included.")
+
+	Attribute("entry_name", String, "The environment entry name")
+	Attribute("header_name", String, "The canonical header the entry targets. Absent when the entry is not mapped or its name is not a valid header name.")
+	Attribute("status", String, "mapped: sent upstream. overrides_source: sent upstream in place of the source header of the same name. invalid_name, reserved, empty_value, invalid_value, duplicate, undecryptable: the entry cannot be sent, and requests to the server are refused until it is fixed or removed. not_mapped: the name resembles the MCP_HEADER_ prefix without matching it exactly, so the entry is ignored.", func() {
+		Enum("mapped", "overrides_source", "invalid_name", "reserved", "empty_value", "invalid_value", "duplicate", "undecryptable", "not_mapped")
+	})
+
+	Required("entry_name", "status")
+})
+
+var McpServerEnvironmentHeaders = Type("McpServerEnvironmentHeaders", func() {
+	Description("A names-only preview of the upstream headers an MCP server sends from an environment.")
+
+	Attribute("environment", McpServerEnvironmentSummary, "The previewed environment. Absent when the selection is none or the environment is unavailable.")
+	Attribute("environment_status", String, "none: no environment is previewed. ok: the environment is live. unavailable: the environment is deleted, missing or in another project; requests to a server linked to it are refused.", func() {
+		Enum("none", "ok", "unavailable")
+	})
+	Attribute("environment_configuration_invalid", Boolean, "Whether requests to the server would be refused because of the previewed environment. It reports only on the environment, not on the server's overall readiness.")
+	Attribute("entries", ArrayOf(McpServerEnvironmentHeader), "Entries named with the MCP_HEADER_ prefix, plus near-miss names that are ignored.")
+	Attribute("environments", ArrayOf(McpServerEnvironmentSummary), "The live environments in the project that can be linked.")
+
+	Required("environment_status", "environment_configuration_invalid", "entries", "environments")
 })
 
 var McpServerVisibility = Type("McpServerVisibility", String, func() {

@@ -79,6 +79,8 @@ type Service struct {
 	networkAccessEligibility networkaccess.EligibilityChecker
 	distributionAdmission    *admission.Guard
 	publicationRequests      plugins.PublicationRequests
+	// environmentHeaders reads environments for GetEnvironmentHeaders.
+	environmentHeaders EnvironmentHeaderInspector
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -115,6 +117,7 @@ func NewService(
 		networkAccessEligibility: networkAccessEligibility,
 		distributionAdmission:    admission.NewGuard(nil, nil),
 		publicationRequests:      plugins.PublicationRequests{Enabled: false},
+		environmentHeaders:       nil,
 	}
 }
 
