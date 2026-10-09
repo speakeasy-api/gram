@@ -145,3 +145,9 @@ func TestExcludeSourcesDropsMatchingCases(t *testing.T) {
 	require.Equal(t, []labeledCase{keep}, excludeSources([]labeledCase{keep, drop}, "cascade_context"))
 	require.Equal(t, []labeledCase{keep, drop}, excludeSources([]labeledCase{keep, drop}, ""))
 }
+
+func TestFirstEnvSkipsTheMisePlaceholder(t *testing.T) {
+	t.Setenv("OPENROUTER_DEV_KEY", unsetEnvPlaceholder)
+	t.Setenv("OPENROUTER_API_KEY", "sk-test")
+	require.Equal(t, "sk-test", firstEnv("OPENROUTER_DEV_KEY", "OPENROUTER_API_KEY"))
+}
