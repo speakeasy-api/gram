@@ -19,7 +19,7 @@ const (
 	PrincipalTypeRole  PrincipalType = "role"
 	PrincipalTypeEmail PrincipalType = "email"
 	PrincipalTypeAgent PrincipalType = "agent"
-	// PrincipalTypeSystem is a Gram component acting with no request behind it; new background work audits as it, older writers still audit as "user:system".
+	// PrincipalTypeSystem is a Speakeasy component acting with no request behind it; new background work audits as it, older writers still audit as "user:system".
 	PrincipalTypeSystem PrincipalType = "system"
 	// PrincipalTypeWorkload is a machine vouched for by an external issuer; it holds no grants and inherits policy from its assigned agent.
 	PrincipalTypeWorkload PrincipalType = "workload"
@@ -31,7 +31,7 @@ const (
 const PrincipalWildcard = "*"
 
 // AllUsersPrincipalID is reserved for the user:all subject-set principal.
-// It must not be resolved as a concrete Gram user ID.
+// It must not be resolved as a concrete Speakeasy user ID.
 const AllUsersPrincipalID = "all"
 
 var principalTypes = map[PrincipalType]struct{}{
@@ -75,7 +75,7 @@ func NewPrincipal(typ PrincipalType, id string) Principal {
 	return p
 }
 
-// NewSystemPrincipal names a Gram component acting on its own, for audit entries background work writes.
+// NewSystemPrincipal names a Speakeasy component acting on its own, for audit entries background work writes.
 func NewSystemPrincipal(component string) Principal {
 	return NewPrincipal(PrincipalTypeSystem, component)
 }

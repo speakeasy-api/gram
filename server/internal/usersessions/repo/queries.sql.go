@@ -1998,6 +1998,41 @@ func (q *Queries) GetUserSessionIssuerCimdClientByID(ctx context.Context, arg Ge
 	return i, err
 }
 
+const getUserSessionPolicyByJTI = `-- name: GetUserSessionPolicyByJTI :one
+SELECT tool_selection, expires_at,
+       COALESCE(refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false)::boolean AS refreshable
+FROM user_sessions
+WHERE user_session_issuer_id = $1
+  AND jti = $2
+  AND deleted IS FALSE
+`
+
+type GetUserSessionPolicyByJTIParams struct {
+	UserSessionIssuerID uuid.UUID
+	Jti                 string
+}
+
+type GetUserSessionPolicyByJTIRow struct {
+	ToolSelection []byte
+	ExpiresAt     pgtype.Timestamptz
+	Refreshable   bool
+}
+
+// Serve-path lookup for immutable session policy, keyed the same way
+// runtime requests are addressed (issuer + jti). Deliberately narrow: request
+// handling must not haul refresh-token material around. Project scoping is
+// intentionally NOT applied here -- the OAuth surface is public and the
+// issuer_id is the authoritative scope.
+// Actual refresh tokens are stored as a 43-character base64url SHA-256 hash.
+// Access-only sessions instead store NULL or a colon-delimited source marker.
+// Only the derived capability leaves SQL.
+func (q *Queries) GetUserSessionPolicyByJTI(ctx context.Context, arg GetUserSessionPolicyByJTIParams) (GetUserSessionPolicyByJTIRow, error) {
+	row := q.db.QueryRow(ctx, getUserSessionPolicyByJTI, arg.UserSessionIssuerID, arg.Jti)
+	var i GetUserSessionPolicyByJTIRow
+	err := row.Scan(&i.ToolSelection, &i.ExpiresAt, &i.Refreshable)
+	return i, err
+}
+
 const getUserSessionPrincipalCredentialByJTI = `-- name: GetUserSessionPrincipalCredentialByJTI :one
 SELECT organization_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version
 FROM user_sessions
@@ -2036,34 +2071,53 @@ func (q *Queries) GetUserSessionPrincipalCredentialByJTI(ctx context.Context, ar
 	return i, err
 }
 
-const getUserSessionToolSelectionByJTI = `-- name: GetUserSessionToolSelectionByJTI :one
-SELECT tool_selection, expires_at
-FROM user_sessions
-WHERE user_session_issuer_id = $1
-  AND jti = $2
-  AND deleted IS FALSE
+const hasWorkloadGrantResourceForIssuer = `-- name: HasWorkloadGrantResourceForIssuer :one
+SELECT EXISTS (
+    SELECT 1
+    FROM mcp_servers AS server
+    JOIN projects AS project ON project.id = server.project_id
+    JOIN mcp_endpoints AS endpoint ON endpoint.mcp_server_id = server.id AND endpoint.project_id = server.project_id
+    WHERE server.user_session_issuer_id = $1
+      AND project.organization_id = $2::text
+      AND project.deleted IS FALSE
+      AND server.deleted IS FALSE
+      AND endpoint.deleted IS FALSE
+      AND server.visibility <> 'disabled'
+      AND NOT (server.tunneled_mcp_server_id IS NOT NULL AND server.visibility = 'public')
+      AND COALESCE(NULLIF(server.network_access_mode, ''), 'public_only') IN ('public_only', 'dual')
+    UNION ALL
+    SELECT 1
+    FROM toolsets AS toolset
+    JOIN projects AS project ON project.id = toolset.project_id
+    WHERE toolset.user_session_issuer_id = $1
+      AND project.organization_id = $2::text
+      AND project.deleted IS FALSE
+      AND toolset.deleted IS FALSE
+      AND toolset.mcp_enabled IS TRUE
+      AND toolset.mcp_slug IS NOT NULL
+      AND NOT EXISTS (
+          SELECT 1 FROM mcp_servers AS server
+          WHERE server.toolset_id = toolset.id
+            AND server.project_id = toolset.project_id
+            AND server.deleted IS FALSE
+      )
+) AS available
 `
 
-type GetUserSessionToolSelectionByJTIParams struct {
-	UserSessionIssuerID uuid.UUID
-	Jti                 string
+type HasWorkloadGrantResourceForIssuerParams struct {
+	UserSessionIssuerID uuid.NullUUID
+	OrganizationID      string
 }
 
-type GetUserSessionToolSelectionByJTIRow struct {
-	ToolSelection []byte
-	ExpiresAt     pgtype.Timestamptz
-}
-
-// Serve-path lookup for the consent-screen tool selection, keyed the same way
-// runtime requests are addressed (issuer + jti). Deliberately narrow: request
-// handling must not haul refresh-token material around. Project scoping is
-// intentionally NOT applied here -- the OAuth surface is public and the
-// issuer_id is the authoritative scope.
-func (q *Queries) GetUserSessionToolSelectionByJTI(ctx context.Context, arg GetUserSessionToolSelectionByJTIParams) (GetUserSessionToolSelectionByJTIRow, error) {
-	row := q.db.QueryRow(ctx, getUserSessionToolSelectionByJTI, arg.UserSessionIssuerID, arg.Jti)
-	var i GetUserSessionToolSelectionByJTIRow
-	err := row.Scan(&i.ToolSelection, &i.ExpiresAt)
-	return i, err
+// Discovery is issuer-scoped and advisory; the token endpoint re-resolves
+// the exact resource and applies its live trust and agent policy. Meta MCP
+// does not carry workload sessions. Private-only and public tunnel servers
+// expose no shared OAuth surface.
+func (q *Queries) HasWorkloadGrantResourceForIssuer(ctx context.Context, arg HasWorkloadGrantResourceForIssuerParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasWorkloadGrantResourceForIssuer, arg.UserSessionIssuerID, arg.OrganizationID)
+	var available bool
+	err := row.Scan(&available)
+	return available, err
 }
 
 const insertTargetRemoteSessionClientIssuerLinks = `-- name: InsertTargetRemoteSessionClientIssuerLinks :execrows
@@ -2556,6 +2610,88 @@ func (q *Queries) ListRemoteSessionUpstreamsForSubjects(ctx context.Context, arg
 			&i.AutoRefresh,
 			&i.LastUsedAt,
 			&i.Scopes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSharedUserSessionIssuersInOrganization = `-- name: ListSharedUserSessionIssuersInOrganization :many
+SELECT
+    user_session_issuers.id, user_session_issuers.project_id, user_session_issuers.organization_id, user_session_issuers.attachment_scope, user_session_issuers.slug, user_session_issuers.authn_challenge_mode, user_session_issuers.session_duration, user_session_issuers.classification, user_session_issuers.client_id_metadata_admission_mode, user_session_issuers.trusted_remote_session_issuer_id, user_session_issuers.trusted_remote_session_client_id, user_session_issuers.use_authentication_host, user_session_issuers.authorization_server_mode, user_session_issuers.pinned_issuer_url, user_session_issuers.created_at, user_session_issuers.updated_at, user_session_issuers.deleted_at, user_session_issuers.deleted,
+    projects.name AS project_name,
+    projects.slug AS project_slug
+FROM user_session_issuers
+LEFT JOIN projects ON projects.id = user_session_issuers.project_id
+WHERE (
+    (
+      user_session_issuers.project_id IS NULL
+      AND user_session_issuers.organization_id = $1::text
+    )
+    OR (
+      user_session_issuers.project_id IS NOT NULL
+      AND projects.organization_id = $1::text
+      AND projects.deleted IS FALSE
+      AND ($2::uuid IS NULL OR user_session_issuers.project_id = $2::uuid)
+    )
+  )
+  AND user_session_issuers.authorization_server_mode = 'shared'
+  AND user_session_issuers.deleted IS FALSE
+ORDER BY (user_session_issuers.project_id IS NULL) DESC, projects.name, user_session_issuers.slug, user_session_issuers.id
+`
+
+type ListSharedUserSessionIssuersInOrganizationParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+}
+
+type ListSharedUserSessionIssuersInOrganizationRow struct {
+	UserSessionIssuer UserSessionIssuer
+	ProjectName       pgtype.Text
+	ProjectSlug       pgtype.Text
+}
+
+// Every shared-mode issuer an organization owns, at the organization level and
+// in its live projects, for showing which token endpoint an external platform
+// is pointed at. A project-owned issuer's tenancy is read through its project
+// alone, never its own organization_id. A caller selecting a project sees that
+// project's issuers and no other project's. Organization-level issuers first,
+// then by project name and slug, so the list reads the same way every time.
+func (q *Queries) ListSharedUserSessionIssuersInOrganization(ctx context.Context, arg ListSharedUserSessionIssuersInOrganizationParams) ([]ListSharedUserSessionIssuersInOrganizationRow, error) {
+	rows, err := q.db.Query(ctx, listSharedUserSessionIssuersInOrganization, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSharedUserSessionIssuersInOrganizationRow
+	for rows.Next() {
+		var i ListSharedUserSessionIssuersInOrganizationRow
+		if err := rows.Scan(
+			&i.UserSessionIssuer.ID,
+			&i.UserSessionIssuer.ProjectID,
+			&i.UserSessionIssuer.OrganizationID,
+			&i.UserSessionIssuer.AttachmentScope,
+			&i.UserSessionIssuer.Slug,
+			&i.UserSessionIssuer.AuthnChallengeMode,
+			&i.UserSessionIssuer.SessionDuration,
+			&i.UserSessionIssuer.Classification,
+			&i.UserSessionIssuer.ClientIDMetadataAdmissionMode,
+			&i.UserSessionIssuer.TrustedRemoteSessionIssuerID,
+			&i.UserSessionIssuer.TrustedRemoteSessionClientID,
+			&i.UserSessionIssuer.UseAuthenticationHost,
+			&i.UserSessionIssuer.AuthorizationServerMode,
+			&i.UserSessionIssuer.PinnedIssuerUrl,
+			&i.UserSessionIssuer.CreatedAt,
+			&i.UserSessionIssuer.UpdatedAt,
+			&i.UserSessionIssuer.DeletedAt,
+			&i.UserSessionIssuer.Deleted,
+			&i.ProjectName,
+			&i.ProjectSlug,
 		); err != nil {
 			return nil, err
 		}

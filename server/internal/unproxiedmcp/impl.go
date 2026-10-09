@@ -339,7 +339,7 @@ func (s *Service) probeListTools(probeCtx context.Context, serverURL string) *ge
 			return &gen.ListUnproxiedMcpServerToolsResult{
 				Status:  "auth_required",
 				Tools:   []*gen.UnproxiedMcpServerTool{},
-				Message: conv.PtrEmpty("This server requires authentication Gram doesn't manage."),
+				Message: conv.PtrEmpty("This server requires authentication Speakeasy doesn't manage."),
 			}
 		}
 		return &gen.ListUnproxiedMcpServerToolsResult{
@@ -356,7 +356,7 @@ func (s *Service) probeListTools(probeCtx context.Context, serverURL string) *ge
 			return &gen.ListUnproxiedMcpServerToolsResult{
 				Status:  "auth_required",
 				Tools:   []*gen.UnproxiedMcpServerTool{},
-				Message: conv.PtrEmpty("This server requires authentication Gram doesn't manage."),
+				Message: conv.PtrEmpty("This server requires authentication Speakeasy doesn't manage."),
 			}
 		}
 		return &gen.ListUnproxiedMcpServerToolsResult{

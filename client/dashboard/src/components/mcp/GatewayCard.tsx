@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/Badge";
-import { useIconConfetti } from "@/components/icon-confetti";
+import { useIconDither } from "@/components/icon-dither";
 import { Card } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
@@ -99,7 +99,7 @@ export function GatewayCard({
   gateway: MetaMcpServer;
 }): JSX.Element {
   const routes = useRoutes();
-  const { canvasRef, start, stop } = useIconConfetti();
+  const { canvasRef, start, stop } = useIconDither();
 
   return (
     <div onMouseEnter={start} onMouseLeave={stop} className="h-full">

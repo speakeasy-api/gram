@@ -89,7 +89,7 @@ type ToggleDataExportRouteOutput struct {
 	// that read could not be taken; SnapshotScope says which.
 	Route         *DataExportRoute `json:"route,omitempty"`
 	SnapshotScope string           `json:"snapshot_scope"`
-	// LastDelivery is "not_recorded": Gram does not keep a per-route time of
+	// LastDelivery is "not_recorded": Speakeasy does not keep a per-route time of
 	// the last successful delivery.
 	LastDelivery string `json:"last_delivery"`
 	// WhilePaused states what happens to data produced while the route is

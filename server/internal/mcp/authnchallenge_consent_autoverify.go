@@ -152,6 +152,7 @@ func (s *Service) probeRemoteGrant(ctx context.Context, logger *slog.Logger, end
 		logger.WarnContext(ctx, "new remote grant not verified: list clients", attr.SlogError(err))
 		return
 	}
+	clients = subjectConnectedClients(clients)
 	client := findConsentClient(clients, grant.RemoteSessionClientID)
 	if client == nil {
 		logger.InfoContext(ctx, "new remote grant not verified: client is not bound to this endpoint")

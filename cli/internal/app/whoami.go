@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -22,6 +23,10 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+// ErrNotAuthenticated reports that no profile or API key is available, so the
+// user must authenticate before the command can run.
+var ErrNotAuthenticated = errors.New("not authenticated")
+
 type WhoamiOptions struct {
 	Profile *profile.Profile
 	APIKey  string
@@ -39,7 +44,7 @@ type WhoamiResult struct {
 func DoWhoami(ctx context.Context, opts WhoamiOptions) (*WhoamiResult, error) {
 	prof := opts.Profile
 	if prof == nil {
-		return nil, fmt.Errorf("not authenticated: no profile provided")
+		return nil, fmt.Errorf("%w: no profile provided", ErrNotAuthenticated)
 	}
 
 	apiKey := secret.Secret(opts.APIKey)
@@ -47,7 +52,7 @@ func DoWhoami(ctx context.Context, opts WhoamiOptions) (*WhoamiResult, error) {
 		apiKey = secret.Secret(prof.Secret)
 	}
 	if apiKey == "" {
-		return nil, fmt.Errorf("no API key found in options or profile")
+		return nil, fmt.Errorf("%w: no API key found in options or profile", ErrNotAuthenticated)
 	}
 
 	apiURLStr := opts.APIURL
@@ -91,7 +96,7 @@ func newWhoAmICommand() *cli.Command {
 		Description: `
 Display information about the profile currently in use.
 
-If no profile is configured, the command will indicate that no profile is set up.`,
+If no profile is configured, the command will indicate that no profile is set up.`[1:],
 		Flags: []cli.Flag{
 			flags.APIEndpoint(),
 			flags.APIKey(),
@@ -111,7 +116,7 @@ If no profile is configured, the command will indicate that no profile is set up
 				APIURL:  c.String("api-url"),
 			})
 			if err != nil {
-				return fmt.Errorf("no profile configured, please set up a profile in $home/.gram/profile.json: %w", err)
+				return whoamiError(err)
 			}
 
 			if c.Bool("json") {
@@ -216,4 +221,13 @@ func printProfile(profile ProfileInfo) {
 	}
 
 	fmt.Println(projectTable.Render())
+}
+
+// whoamiError adds authentication guidance when the profile or API key is
+// missing, and returns other failures unchanged.
+func whoamiError(err error) error {
+	if errors.Is(err, ErrNotAuthenticated) {
+		return fmt.Errorf("%w. Run 'speakeasy auth' to set up a profile", err)
+	}
+	return err
 }

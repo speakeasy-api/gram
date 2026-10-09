@@ -246,7 +246,7 @@ func TestRecheckSweep_OwnsOnlyUnrenewableRoutableGrants(t *testing.T) {
 		{name: "refresh token present", seed: pastInterval(recheckSeed{withRefreshToken: true, withGramSession: true})},
 		{name: "refresh expiry present", seed: pastInterval(recheckSeed{refreshExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), withGramSession: true})},
 		{name: "access token expired", seed: pastInterval(recheckSeed{accessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Minute)), withGramSession: true})},
-		{name: "no live Gram session", seed: pastInterval(recheckSeed{})},
+		{name: "no live Speakeasy session", seed: pastInterval(recheckSeed{})},
 		{name: "deleted", seed: pastInterval(recheckSeed{withGramSession: true, deleteAfterSeeding: true})},
 	}
 	for _, tt := range tests {

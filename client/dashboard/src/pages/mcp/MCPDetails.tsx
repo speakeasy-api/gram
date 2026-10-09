@@ -1399,7 +1399,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
   });
 
   // TODO(AGE-1902): replace the single-slug + single-customDomainId fields
-  // below with the shared Endpoints split-surface (Gram endpoint + N
+  // below with the shared Endpoints split-surface (Speakeasy endpoint + N
   // custom-domain endpoint rows) introduced for mcp_servers-backed servers
   // under `client/dashboard/src/pages/mcp/x/MCPServerDetails.tsx`. Once the
   // Hosted MCP cards source from mcp_servers/mcp_endpoints, slug + custom
@@ -1815,7 +1815,7 @@ export function OAuthDetailsModal({
                     <CodeBlock className="mt-1">
                       {toolset.externalOauthServer.authorizationServerIssuer
                         ? "Provider hosted"
-                        : "Gram hosted"}
+                        : "Speakeasy hosted"}
                     </CodeBlock>
                   </div>
                   {toolset.externalOauthServer.authorizationServerIssuer ? (

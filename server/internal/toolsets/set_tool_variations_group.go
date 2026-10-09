@@ -70,15 +70,34 @@ func (s *Service) SetToolVariationsGroup(ctx context.Context, payload *gen.SetTo
 		}
 	}
 
-	if _, err := s.repo.WithTx(dbtx).UpdateToolsetToolVariationsGroup(ctx, repo.UpdateToolsetToolVariationsGroupParams{
+	locked, err := s.repo.WithTx(dbtx).GetToolsetForUpdate(ctx, repo.GetToolsetForUpdateParams{
+		Slug:      string(payload.Slug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "lock toolset").LogError(ctx, s.logger)
+	}
+	// The slug was authorized against a specific toolset; a recreated slug is a different one.
+	if locked.ID.String() != beforeView.ID {
+		return nil, oops.E(oops.CodeConflict, nil, "toolset changed concurrently; retry the request").LogError(ctx, s.logger)
+	}
+	updatedToolset, err := s.repo.WithTx(dbtx).UpdateToolsetToolVariationsGroup(ctx, repo.UpdateToolsetToolVariationsGroupParams{
 		ToolVariationsGroupID: groupID,
 		Slug:                  string(payload.Slug),
 		ProjectID:             *authCtx.ProjectID,
-	}); err != nil {
+	})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, s.logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update toolset tool_variations_group").LogError(ctx, s.logger)
+	}
+	clearedDomainIDs, err := s.syncHostedServer(ctx, dbtx, authCtx, updatedToolset, nil)
+	if err != nil {
+		return nil, err
 	}
 
 	afterView, err := mv.DescribeToolset(ctx, s.logger, dbtx, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), new(s.toolsetCache.SkipCache()), nil)
@@ -109,6 +128,9 @@ func (s *Service) SetToolVariationsGroup(ctx context.Context, payload *gen.SetTo
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
+	}
+	if err := s.reconcileCustomDomains(ctx, clearedDomainIDs); err != nil {
+		return nil, err
 	}
 
 	return afterView, nil

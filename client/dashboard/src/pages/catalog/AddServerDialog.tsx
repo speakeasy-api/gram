@@ -204,7 +204,7 @@ export function AddServerDialog({
       !autoStartInstall &&
       !headless &&
       hasScope("org:admin", organization.id) &&
-      // Unproxied servers (e.g. Figma) never pass through Gram.
+      // Unproxied servers (e.g. Figma) never pass through Speakeasy.
       enrichedServers.some((server) => !isFigmaCatalogServer(server)),
   });
   const serversKey = servers.map((s) => s.registrySpecifier).join(",");

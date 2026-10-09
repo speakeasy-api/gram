@@ -68,7 +68,7 @@ type CreateMCPAccessRoleInput struct {
 	ProjectID      string              `json:"project_id" jsonschema:"explicit project ID that owns every configured MCP in rules"`
 	Name           string              `json:"name" jsonschema:"display name for the new custom role"`
 	Description    string              `json:"description,omitempty" jsonschema:"optional description for the new custom role"`
-	Rules          []MCPAccessRoleRule `json:"rules" jsonschema:"MCP access rules generated only for configured MCP IDs in this project"`
+	Rules          []MCPAccessRoleRule `json:"rules" jsonschema:"MCP access rules generated only for configured MCP IDs in this project; an empty list creates a role with no grants"`
 	IdempotencyKey string              `json:"idempotency_key" jsonschema:"stable unique key for safely retrying this exact write"`
 	Confirmed      bool                `json:"confirmed" jsonschema:"set true only after the user confirms this exact project, role, and MCP access delta"`
 }
@@ -179,9 +179,6 @@ func (s *AccessRoleMutationService) Create(ctx context.Context, principal Princi
 	rules, err := s.resolveRules(ctx, principal, project, input.Rules, true, make(map[uuid.UUID]accessRoleRuleTarget))
 	if err != nil {
 		return CreateMCPAccessRoleOutput{}, err
-	}
-	if len(rules) == 0 {
-		return CreateMCPAccessRoleOutput{}, accessRoleMutationInvalid("At least one MCP access rule is required to create an MCP access role.")
 	}
 	normalized := normalizedCreateMCPAccessRole{ProjectID: project.ID.String(), Name: name, Description: description, Rules: rules}
 	receipt, err := s.receipts.ExecuteCreate(ctx, principal, project, idempotencyKey, normalized, s.charge(principal), func(ctx context.Context, tx pgx.Tx) (AccessRoleMutationReceiptResult, error) {

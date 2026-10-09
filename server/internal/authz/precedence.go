@@ -70,18 +70,18 @@ func isDirectOverrideGrant(grant Grant) bool {
 	if !IsDirectGrant(grant) {
 		return false
 	}
-	return isBlocklistScope(grant.Scope) || grant.Selector.ResourceID() != WildcardResource
+	return IsBlocklistScope(grant.Scope) || grant.Selector.ResourceID() != WildcardResource
 }
 
 // ExclusionYieldsToDirectGrants reports whether a direct concrete grant can
 // outrank the exclusion paired with scope when that exclusion is inherited.
 func ExclusionYieldsToDirectGrants(scope Scope) bool {
 	exclusion, ok := ExclusionScopeFor(scope)
-	return ok && isBlocklistScope(exclusion)
+	return ok && IsBlocklistScope(exclusion)
 }
 
-// isBlocklistScope reports whether scope is one of the *:blocked_* scopes.
-func isBlocklistScope(scope Scope) bool {
+// IsBlocklistScope reports whether scope is one of the *:blocked_* scopes.
+func IsBlocklistScope(scope Scope) bool {
 	return strings.HasPrefix(scope.Parts().Action, "blocked_")
 }
 

@@ -46,10 +46,16 @@ const testState = vi.hoisted(() => ({
   pageContext: {} as Record<string, unknown>,
   /** What the Widgets tab last asked of the cards' filter bar. */
   pageFilterConfig: undefined as Record<string, unknown> | undefined,
+  /** Whether the URL holds values for the page's filter bar. */
+  pageTouched: false,
+  /** Every whole-bar setting, in call order. */
+  pageApplied: [] as unknown[],
   /** The project's dashboards, as the list endpoint returns them. */
   dashboards: [] as Record<string, unknown>[],
   /** Every dashboard write, in call order. */
   dashboardWrites: [] as { kind: string; request: Record<string, unknown> }[],
+  /** Who is told when the dashboards change, as react-query would tell. */
+  dashboardListeners: new Set<() => void>(),
 }));
 
 type Write = "create" | "update" | "duplicate" | "delete";
@@ -153,6 +159,7 @@ type DashboardWrite =
   | "create"
   | "update"
   | "saveLayout"
+  | "saveFilters"
   | "addWidget"
   | "removeWidget"
   | "duplicate"
@@ -210,6 +217,13 @@ function applyDashboardWrite(
         })),
         updatedAt: now,
       });
+    }
+    case "saveFilters": {
+      const body = request.saveDashboardFiltersRequestBody as {
+        id: string;
+        filters: unknown;
+      };
+      return put({ ...find(body.id), filters: body.filters, updatedAt: now });
     }
     case "addWidget": {
       const body = request.addDashboardWidgetRequestBody as {
@@ -278,31 +292,57 @@ function mockDashboardWrite(kind: DashboardWrite) {
     ) => {
       void options?.onSuccess?.(applyDashboardWrite(kind, request));
       void options?.onSettled?.();
+      // The refetch after a write lands at once.
+      for (const listener of testState.dashboardListeners) listener();
     },
   });
 }
 
-vi.mock("@gram/client/react-query/dashboards.js", () => ({
-  useDashboards: () => ({
-    isPending: false,
-    isError: false,
-    data: { dashboards: testState.dashboards },
-    refetch: vi.fn(),
-  }),
-  invalidateAllDashboards: () => Promise.resolve(),
-}));
-vi.mock("@gram/client/react-query/dashboard.js", () => ({
-  useDashboard: ({ id }: { id: string }) => {
-    const found = testState.dashboards.find((dashboard) => dashboard.id === id);
-    return {
-      isPending: false,
-      isError: found === undefined,
-      data: found,
-      refetch: vi.fn(),
-    };
-  },
-  invalidateAllDashboard: () => Promise.resolve(),
-}));
+/** Re-renders the caller when the dashboards change, as react-query would. */
+async function dashboardSubscription() {
+  const { useEffect, useReducer } = await import("react");
+  return function useDashboardChanges() {
+    const [, bump] = useReducer((n: number) => n + 1, 0);
+    useEffect(() => {
+      testState.dashboardListeners.add(bump);
+      return () => void testState.dashboardListeners.delete(bump);
+    }, []);
+  };
+}
+
+vi.mock("@gram/client/react-query/dashboards.js", async () => {
+  const useDashboardChanges = await dashboardSubscription();
+  return {
+    useDashboards: () => {
+      useDashboardChanges();
+      return {
+        isPending: false,
+        isError: false,
+        data: { dashboards: testState.dashboards },
+        refetch: vi.fn(),
+      };
+    },
+    invalidateAllDashboards: () => Promise.resolve(),
+  };
+});
+vi.mock("@gram/client/react-query/dashboard.js", async () => {
+  const useDashboardChanges = await dashboardSubscription();
+  return {
+    useDashboard: ({ id }: { id: string }) => {
+      useDashboardChanges();
+      const found = testState.dashboards.find(
+        (dashboard) => dashboard.id === id,
+      );
+      return {
+        isPending: false,
+        isError: found === undefined,
+        data: found,
+        refetch: vi.fn(),
+      };
+    },
+    invalidateAllDashboard: () => Promise.resolve(),
+  };
+});
 vi.mock("@gram/client/react-query/createDashboard.js", () => ({
   useCreateDashboardMutation: mockDashboardWrite("create"),
 }));
@@ -311,6 +351,9 @@ vi.mock("@gram/client/react-query/updateDashboard.js", () => ({
 }));
 vi.mock("@gram/client/react-query/saveDashboardLayout.js", () => ({
   useSaveDashboardLayoutMutation: mockDashboardWrite("saveLayout"),
+}));
+vi.mock("@gram/client/react-query/saveDashboardFilters.js", () => ({
+  useSaveDashboardFiltersMutation: mockDashboardWrite("saveFilters"),
 }));
 vi.mock("@gram/client/react-query/addDashboardWidget.js", () => ({
   useAddDashboardWidgetMutation: mockDashboardWrite("addWidget"),
@@ -336,17 +379,23 @@ vi.mock("./DashboardGrid", async () => {
     DashboardGrid: ({
       dashboard,
       widgets,
+      page,
       canEdit,
       onOpen,
       onRemove,
     }: {
       dashboard: { widgets: Placement[] };
       widgets: Card[];
+      page?: unknown;
       canEdit: boolean;
       onOpen: (spec: unknown, widgetId: string) => void;
       onRemove: (placementId: string) => void;
     }) => (
-      <ul aria-label="Cards" data-editable={canEdit}>
+      <ul
+        aria-label="Cards"
+        data-editable={canEdit}
+        data-page={JSON.stringify(page ?? null)}
+      >
         {dashboard.widgets.map((placement) => {
           const widget = widgets.find((card) => card.id === placement.widgetId);
           const name = widget?.name ?? "…";
@@ -502,8 +551,9 @@ vi.mock("@/components/page-layout", async () => {
   const { Toolbar } = await import("@/components/ui/Toolbar");
   return { Page: { Eyebrow: () => null, Toolbar } };
 });
-// The cards' filter bar is the shared one, tested with usePageFilters.
-vi.mock("./usePageFilters", () => ({
+// The pages' filter bar is the shared one, tested with usePageFilters.
+vi.mock("./usePageFilters", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./usePageFilters")>()),
   usePageFilters: (config: Record<string, unknown>) => {
     testState.pageFilterConfig = config;
     return {
@@ -516,6 +566,10 @@ vi.mock("./usePageFilters", () => ({
         onClearAll: () => {},
       },
       context: testState.pageContext,
+      touched: testState.pageTouched,
+      apply: (values: unknown) => {
+        testState.pageApplied.push(values);
+      },
     };
   },
 }));
@@ -650,6 +704,8 @@ describe("Explore", () => {
     testState.pageContext = {};
     testState.dashboards = [];
     testState.dashboardWrites = [];
+    testState.pageTouched = false;
+    testState.pageApplied = [];
   });
 
   afterEach(() => {
@@ -1837,6 +1893,157 @@ describe("Explore", () => {
         screen.getByRole("heading", { name: "Agent activity (copy)" }),
       ).toBeTruthy();
       expect(screen.getByRole("button", { name: "Add widget" })).toBeTruthy();
+    });
+
+    it("opens on its saved filters, offering the fields its cards can be filtered by, and folds the bar into every card", () => {
+      testState.widgets = [savedWidget("w-1", "Sessions by user")];
+      testState.dashboards = [
+        dashboard("d-1", "Agent activity", {
+          filters: { range: { preset: "30d" }, values: { user: ["alice"] } },
+          widgets: [{ id: "p-1", widgetId: "w-1", x: 0, y: 0, w: 6, h: 3 }],
+        }),
+      ];
+      testState.pageContext = {
+        window: { preset: "30d", customRange: null, customLabel: null },
+        filters: { user: ["alice"] },
+      };
+      renderExplore("/explore?tab=dashboards&dashboard=d-1");
+
+      // The sessions dataset filters by user and surface, not model.
+      expect(testState.pageFilterConfig).toMatchObject({
+        fields: [
+          { field: "user", label: "User" },
+          { field: "surface", label: "Agent" },
+        ],
+        defaultPreset: "30d",
+        optionsDatasets: ["sessions"],
+      });
+      expect(testState.pageApplied).toEqual([
+        {
+          window: { preset: "30d", customRange: null, customLabel: null },
+          filters: { user: ["alice"], surface: [] },
+        },
+      ]);
+      const cards = screen.getByRole("list", { name: "Cards" });
+      expect(JSON.parse(cards.getAttribute("data-page") ?? "null")).toEqual({
+        window: { preset: "30d", customRange: null, customLabel: null },
+        filters: { user: ["alice"] },
+      });
+      // The bar matches what is saved, so there is nothing to save or reset.
+      expect(screen.queryByRole("button", { name: "Save filters" })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Reset filters" }),
+      ).toBeNull();
+    });
+
+    it("offers nothing to save until the bar has opened on the saved filters", () => {
+      testState.listPending = true;
+      testState.dashboards = [
+        dashboard("d-1", "Agent activity", {
+          filters: { range: { preset: "30d" }, values: {} },
+          widgets: [{ id: "p-1", widgetId: "w-1", x: 0, y: 0, w: 6, h: 3 }],
+        }),
+      ];
+      // The bar still shows its defaults, which differ from what is saved.
+      testState.pageContext = {
+        window: { preset: "7d", customRange: null, customLabel: null },
+        filters: {},
+      };
+      renderExplore("/explore?tab=dashboards&dashboard=d-1");
+
+      expect(testState.pageApplied).toEqual([]);
+      expect(screen.queryByRole("button", { name: "Save filters" })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Reset filters" }),
+      ).toBeNull();
+    });
+
+    it("leaves a link that says what to show alone", () => {
+      testState.widgets = [savedWidget("w-1", "Sessions by user")];
+      testState.dashboards = [
+        dashboard("d-1", "Agent activity", {
+          filters: { range: { preset: "30d" }, values: {} },
+          widgets: [{ id: "p-1", widgetId: "w-1", x: 0, y: 0, w: 6, h: 3 }],
+        }),
+      ];
+      testState.pageTouched = true;
+      renderExplore("/explore?tab=dashboards&dashboard=d-1&range=1d");
+
+      expect(testState.pageApplied).toEqual([]);
+    });
+
+    it("saves the bar as what the dashboard opens on, for its editor, and resets to it for anyone", async () => {
+      const user = userEvent.setup();
+      testState.widgets = [savedWidget("w-1", "Sessions by user")];
+      testState.dashboards = [
+        dashboard("d-1", "Agent activity", {
+          widgets: [{ id: "p-1", widgetId: "w-1", x: 0, y: 0, w: 6, h: 3 }],
+        }),
+      ];
+      // The viewer has picked a range and a user the dashboard does not save.
+      testState.pageTouched = true;
+      testState.pageContext = {
+        window: { preset: "30d", customRange: null, customLabel: null },
+        filters: { user: ["alice"] },
+      };
+      renderExplore(
+        "/explore?tab=dashboards&dashboard=d-1&range=30d&user=alice",
+      );
+
+      await user.click(screen.getByRole("button", { name: "Reset filters" }));
+      expect(testState.pageApplied).toEqual([
+        {
+          window: { preset: "7d", customRange: null, customLabel: null },
+          filters: { user: [], surface: [] },
+        },
+      ]);
+
+      await user.click(screen.getByRole("button", { name: "Save filters" }));
+      expect(testState.dashboardWrites).toEqual([
+        {
+          kind: "saveFilters",
+          request: {
+            saveDashboardFiltersRequestBody: {
+              id: "d-1",
+              filters: {
+                range: { preset: "30d" },
+                values: { user: ["alice"] },
+              },
+            },
+          },
+        },
+      ]);
+    });
+
+    it("offers a reader no Save filters, only Reset", () => {
+      testState.widgets = [savedWidget("w-1", "Sessions by user")];
+      testState.dashboards = [
+        dashboard("d-1", "Agent activity", {
+          createdByUserId: "other",
+          widgets: [{ id: "p-1", widgetId: "w-1", x: 0, y: 0, w: 6, h: 3 }],
+        }),
+      ];
+      testState.pageTouched = true;
+      testState.pageContext = {
+        window: { preset: "30d", customRange: null, customLabel: null },
+        filters: {},
+      };
+      renderExplore("/explore?tab=dashboards&dashboard=d-1&range=30d");
+
+      expect(screen.queryByRole("button", { name: "Save filters" })).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Reset filters" }),
+      ).toBeTruthy();
+    });
+
+    it("opens a dashboard without the bar's values from the page before", () => {
+      testState.dashboards = [dashboard("d-1", "Agent activity")];
+      renderExplore("/explore?tab=widgets&view=cards&range=30d&user=alice");
+
+      fireEvent.click(dashboardsTab());
+      expect(param("range")).toBeNull();
+      expect(param("user")).toBeNull();
+      expect(param("view")).toBe("cards");
     });
 
     it("says when the widgets behind the cards did not load, and tries again", () => {

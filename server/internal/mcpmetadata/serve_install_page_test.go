@@ -331,7 +331,7 @@ func TestServeInstallPage_Instructions(t *testing.T) {
 	assert.Contains(t, body, "Server Instructions", "Should contain instructions section header")
 	assert.Contains(t, body, "Test Hub - Search and analyze test data", "Should contain instructions content")
 	assert.Contains(t, body, "https://www.speakeasy.com/product/mcp-gateway", "Should link to Speakeasy")
-	assert.NotContains(t, body, "https://getgram.ai", "Should not link to the retired Gram marketing site")
+	assert.NotContains(t, body, "https://getgram.ai", "Should not link to the retired Speakeasy marketing site")
 }
 
 func TestServeInstallPage_ToolDetails(t *testing.T) {
@@ -1095,8 +1095,8 @@ func TestServeInstallPage_AntigravityClients_WithSecurityInputs(t *testing.T) {
 }
 
 // TestServeInstallPage_PrivateWithGramOAuth_NoAuthorizationHeader regression-tests
-// AGE-1962: a private MCP server with a Gram OAuth proxy attached must not render
-// the GRAM_KEY Authorization header (or gram-environment) in the install snippets.
+// AGE-1962: a private MCP server with a Speakeasy OAuth proxy attached must not render
+// the SPEAKEASY_AI_API_KEY Authorization header (or speakeasy-ai-environment) in the install snippets.
 // OAuth handles identity auth at the HTTP layer, so the install command must not
 // instruct users to set those headers manually.
 // TestServeInstallPage_PrivateWithUserSessionIssuer_NoGramKey covers the new
@@ -1143,9 +1143,9 @@ func TestServeInstallPage_PrivateWithUserSessionIssuer_NoGramKey(t *testing.T) {
 	require.Equal(t, http.StatusOK, rr.Code)
 
 	body := rr.Body.String()
-	assert.NotContains(t, body, "gram-key", "issuer-gated install command must not reference the gram-key input")
-	assert.NotContains(t, body, "gram-environment", "issuer-gated install command must not reference the gram-environment input")
-	assert.NotContains(t, body, "GRAM_KEY", "issuer-gated install command must not reference the GRAM_KEY env var")
+	assert.NotContains(t, body, "speakeasy-ai-api-key", "issuer-gated install command must not reference the speakeasy-ai-api-key input")
+	assert.NotContains(t, body, "speakeasy-ai-environment", "issuer-gated install command must not reference the speakeasy-ai-environment input")
+	assert.NotContains(t, body, "SPEAKEASY_AI_API_KEY", "issuer-gated install command must not reference the SPEAKEASY_AI_API_KEY env var")
 }
 
 // TestServeInstallPage_McpServer_UserSessionIssuer_NoGramKey covers the bridge
@@ -1194,8 +1194,8 @@ func TestServeInstallPage_McpServer_UserSessionIssuer_NoGramKey(t *testing.T) {
 	require.Equal(t, http.StatusOK, rr.Code)
 
 	body := rr.Body.String()
-	assert.NotContains(t, body, "gram-key", "issuer-gated mcp_server install command must not reference the gram-key input")
-	assert.NotContains(t, body, "GRAM_KEY", "issuer-gated mcp_server install command must not reference the GRAM_KEY env var")
+	assert.NotContains(t, body, "speakeasy-ai-api-key", "issuer-gated mcp_server install command must not reference the speakeasy-ai-api-key input")
+	assert.NotContains(t, body, "SPEAKEASY_AI_API_KEY", "issuer-gated mcp_server install command must not reference the SPEAKEASY_AI_API_KEY env var")
 }
 
 // TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain verifies that a toolset
@@ -2069,7 +2069,7 @@ func TestServeInstallPage_PrivateNetworkUsesControlPlanePage(t *testing.T) {
 	require.Equal(t, http.StatusOK, rr.Code)
 	require.Contains(t, rr.Body.String(), "https://private.example.ts.net/mcp/"+mcpSlug)
 	require.NotContains(t, rr.Body.String(), "private.example.ts.net/mcp/"+mcpSlug+"/install")
-	require.NotEqual(t, overrideURL, rr.Header().Get("Location"), "private installs must remain on the authenticated Gram renderer")
+	require.NotEqual(t, overrideURL, rr.Header().Get("Location"), "private installs must remain on the authenticated Speakeasy renderer")
 
 	unauthenticated := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install?network=private", nil)
 	unauthenticated = unauthenticated.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
@@ -2729,7 +2729,7 @@ func TestServeInstallPage_ChatGPTDesktop_NoSecurityInputs(t *testing.T) {
 }
 
 // TestServeInstallPage_ChatGPTDesktop_WithSecurityInputs verifies that a
-// private Gram-key server tells ChatGPT Desktop users to use Token auth and
+// private Speakeasy-key server tells ChatGPT Desktop users to use Token auth and
 // does not offer the mcp-remote workaround (ChatGPT is remote-HTTPS only).
 func TestServeInstallPage_ChatGPTDesktop_WithSecurityInputs(t *testing.T) {
 	t.Parallel()
@@ -2764,6 +2764,13 @@ func TestServeInstallPage_ChatGPTDesktop_WithSecurityInputs(t *testing.T) {
 
 	body := rr.Body.String()
 	assert.Contains(t, body, `data-install-target="chatgpt-desktop"`, "should offer ChatGPT Desktop as an install target")
+
+	// Install snippets use the canonical Speakeasy AI names, never the
+	// deprecated Gram ones.
+	assert.Contains(t, body, "Speakeasy-AI-Environment:${SPEAKEASY_AI_ENVIRONMENT}")
+	assert.Contains(t, body, "Authorization:${SPEAKEASY_AI_API_KEY}")
+	assert.NotContains(t, body, "Gram-Environment")
+	assert.NotContains(t, body, "GRAM_")
 
 	section := installTargetTemplateHTML(t, body, "chatgpt-desktop")
 	assert.Contains(t, section, "Set authentication to <strong>Token</strong>", "private servers should use Token auth")
@@ -2824,12 +2831,12 @@ func TestServeInstallPage_ChatGPTDesktop_OAuth(t *testing.T) {
 	assert.Contains(t, section, "Set authentication to <strong>OAuth</strong>", "OAuth-gated servers should use OAuth")
 	assert.NotContains(t, section, "Set authentication to <strong>Token</strong>", "OAuth-gated servers should not ask for Token auth")
 	assert.NotContains(t, section, "Leave authentication as <strong>None</strong>", "OAuth-gated servers should not suggest None auth")
-	assert.NotContains(t, section, "GRAM_KEY", "OAuth-gated install must not ask for a Gram key")
+	assert.NotContains(t, section, "SPEAKEASY_AI_API_KEY", "OAuth-gated install must not ask for a Speakeasy API key")
 }
 
 // TestServeInstallPage_ChatGPTDesktop_PublicWithHeaders verifies that a public
 // server expecting user-provided headers says ChatGPT cannot send them, rather
-// than asking for a Gram API key the server would not accept.
+// than asking for a Speakeasy API key the server would not accept.
 func TestServeInstallPage_ChatGPTDesktop_PublicWithHeaders(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPMetadataService(t)
@@ -2930,7 +2937,7 @@ func TestServeInstallPage_ChatGPTDesktop_PublicWithHeaders(t *testing.T) {
 	section := installTargetTemplateHTML(t, rr.Body.String(), "chatgpt-desktop")
 	assert.Contains(t, section, "headers, which ChatGPT cannot send", "should explain ChatGPT cannot send the server's headers")
 	assert.Contains(t, section, "ACME-X-API-KEY", "should name the header ChatGPT cannot send")
-	assert.NotContains(t, section, "paste your Gram", "public servers must not ask for a Gram API key")
+	assert.NotContains(t, section, "paste your Speakeasy", "public servers must not ask for a Speakeasy API key")
 	assert.NotContains(t, section, "Set authentication to <strong>Token</strong>", "public servers should not ask for Token auth")
 }
 

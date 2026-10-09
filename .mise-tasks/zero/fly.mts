@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-//MISE description="Setup Gram Functions to use Fly.io during development. Assistant runtimes run locally and need no Fly.io setup."
+//MISE description="Setup Speakeasy Functions to use Fly.io during development. Assistant runtimes run locally and need no Fly.io setup."
 //MISE dir="{{ config_root }}"
 //USAGE flag "--restart" default="false" help="Force the onboarding even if configuration already exists."
 
@@ -98,7 +98,7 @@ async function fallbackToMockFlyio() {
     GRAM_FUNCTIONS_PROVIDER: "local",
   });
   outro(
-    "Defaulted Gram Functions to the local provider. Assistant runtimes run locally by default and need no Fly.io setup. To configure real Fly.io credentials later, run `mise run zero:fly --restart`.",
+    "Defaulted Speakeasy Functions to the local provider. Assistant runtimes run locally by default and need no Fly.io setup. To configure real Fly.io credentials later, run `mise run zero:fly --restart`.",
   );
   process.exit(0);
 }
@@ -346,7 +346,7 @@ async function getBucket(
 
   if (buckets.length > 1) {
     const selectedBucket = await select({
-      message: "Select your Tigris bucket for Gram Functions",
+      message: "Select your Tigris bucket for Speakeasy Functions",
       options: buckets.map((bucket) => ({ value: bucket, label: bucket })),
     });
     if (isCancel(selectedBucket)) {
@@ -357,7 +357,7 @@ async function getBucket(
   }
 
   const bucket = await text({
-    message: "Enter your Tigris bucket name for Gram Functions",
+    message: "Enter your Tigris bucket name for Speakeasy Functions",
     validate: (value) => {
       if (!value) {
         return "Tigris bucket name is required.";
@@ -455,11 +455,11 @@ async function run() {
     process.exit(0);
   }
 
-  intro("Gram Functions Fly.io Setup");
+  intro("Speakeasy Functions Fly.io Setup");
 
   note(
     `
-To deploy Gram Functions to Fly.io, you'll need:
+To deploy Speakeasy Functions to Fly.io, you'll need:
     - A Fly.io account
     - A Fly.io organization-scoped token
     - A Fly.io app namespace for runner images
@@ -542,7 +542,7 @@ To deploy Gram Functions to Fly.io, you'll need:
   });
 
   outro(
-    "Updated mise.local.toml. You're ready to deploy Gram Functions to Fly.io.",
+    "Updated mise.local.toml. You're ready to deploy Speakeasy Functions to Fly.io.",
   );
 }
 

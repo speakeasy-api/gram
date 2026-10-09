@@ -68,7 +68,7 @@ func TestMSTeamsIngestMessageActivity(t *testing.T) {
 		"serviceUrl": "https://smba.trafficmanager.net/teams/",
 		"channelId": "msteams",
 		"from": {"id": "29:user-id", "name": "Jo Doe", "aadObjectId": "aad-1"},
-		"recipient": {"id": "28:bot-app-id", "name": "Gram"},
+		"recipient": {"id": "28:bot-app-id", "name": "Speakeasy"},
 		"conversation": {"id": "19:channel@thread.tacv2;messageid=123", "conversationType": "channel", "tenantId": "tenant-1"},
 		"text": "hello bot",
 		"replyToId": "123",

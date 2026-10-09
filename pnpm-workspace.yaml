@@ -3,7 +3,6 @@ packages:
   - sdks/*
   - ts-framework/*
   - ts-framework/create-function/*
-  - "!ts-framework/create-function/gram-template-*"
   - server
   - cli
   - tunnel
@@ -14,7 +13,7 @@ packages:
   - e2e
 
 catalog:
-  "@ai-sdk/react": ^4.0.123
+  "@ai-sdk/react": ^4.0.126
   "@cfworker/json-schema": ^4.1.1
   "@modelcontextprotocol/sdk": ^1.30.0
   "@tailwindcss/vite": ^4.3.3
@@ -23,7 +22,7 @@ catalog:
   "@types/react-dom": ^19.3.0
   "@assistant-ui/react": ^0.15.22
   "@vitejs/plugin-react": ^6.1.1
-  ai: ^7.0.120
+  ai: ^7.0.123
   "lucide-react": ^1.28.0
   typescript: 7.0.2
   vite: ^8.3.0
@@ -41,10 +40,8 @@ minimumReleaseAgeExclude:
   - "@chromatic-com/storybook"
 
 overrides:
-  # Keep assistant-ui's SDK dependencies aligned with the dashboard: newer AI
-  # stream chunks are not assignable to the older ChatTransport types.
-  ai: 7.0.120
-  "@ai-sdk/react": 4.0.123
+  ai: 7.0.123
+  "@ai-sdk/react": 4.0.126
   glob@>=10.0 <10.5.0: 10.5.0
   fast-uri@<3.1.8: 3.1.8
   # monaco-editor pins dompurify exactly; 3.4.15 has open XSS advisories.

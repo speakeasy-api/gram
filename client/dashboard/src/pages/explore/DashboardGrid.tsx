@@ -17,6 +17,7 @@ import {
   sameLayout,
 } from "./dashboardLayout";
 import type { ChartType } from "./exploreModel";
+import type { PageContext } from "./pageContext";
 import { OnceVisible } from "./WidgetCards";
 import {
   WidgetPlaceholder,
@@ -34,6 +35,7 @@ import {
 export function DashboardGrid({
   dashboard,
   widgets,
+  page,
   canEdit,
   saving,
   onSave,
@@ -43,6 +45,8 @@ export function DashboardGrid({
   dashboard: Dashboard;
   /** The project's widgets, which the cards link to. */
   widgets: Widget[];
+  /** What the dashboard's filter bar holds, folded into every card. */
+  page?: PageContext | undefined;
   canEdit: boolean;
   /** A layout save is in flight, so no card may move until it lands. */
   saving: boolean;
@@ -111,6 +115,7 @@ export function DashboardGrid({
                   <OnceVisible chartType={chartType}>
                     <WidgetView
                       widget={widget}
+                      page={page}
                       height="fill"
                       onOpen={onOpen}
                       actions={

@@ -33,7 +33,7 @@ func (a Assertion) Value() string        { return a.value }
 func (a Assertion) ExpiresAt() time.Time { return a.expiresAt }
 
 // Subject is the verified upstream subject the retained assertion restates,
-// distinct from the Gram human it was retained for. Empty when unrecorded.
+// distinct from the Speakeasy human it was retained for. Empty when unrecorded.
 func (a Assertion) Subject() string { return a.subject }
 
 // SessionID identifies the retained trusted issuer session the assertion came

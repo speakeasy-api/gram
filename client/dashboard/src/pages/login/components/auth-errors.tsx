@@ -5,7 +5,7 @@ const authErrorMessages: Record<string, string> = {
   lookup_error:
     "Failed to look up account details. Try again or contact support.",
   init_error: "Failed to initialize account. Try again or contact support.",
-  // A session transfer between Gram hosts failed and sent the browser here.
+  // A session transfer between Speakeasy hosts failed and sent the browser here.
   transfer_session_expired:
     "Your previous sign-in is no longer available. Please sign in again.",
   transfer_wrong_destination:

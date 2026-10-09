@@ -15,7 +15,7 @@ describe("supportsFirstPartyConnect", () => {
     visibility: "private",
   };
 
-  it("allows an issuer-gated server with a Gram-hosted slug", () => {
+  it("allows an issuer-gated server with a Speakeasy-hosted slug", () => {
     expect(supportsFirstPartyConnect(eligible)).toBe(true);
   });
 

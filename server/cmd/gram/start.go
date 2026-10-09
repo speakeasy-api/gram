@@ -112,6 +112,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	oauthregistration "github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
 	"github.com/speakeasy-api/gram/server/internal/oktaserversuggestions"
@@ -181,6 +182,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/unproxiedmcp"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	"github.com/speakeasy-api/gram/server/internal/variations"
 	"github.com/speakeasy-api/gram/server/internal/widgets"
 	"github.com/speakeasy-api/gram/server/internal/workloadpolicy"
@@ -379,8 +381,8 @@ func mcpRuntimeFlags() []cli.Flag {
 			EnvVars:  []string{"GRAM_SITE_URL"},
 			Required: true,
 		},
-		&cli.StringFlag{Name: "slack-client-id", EnvVars: []string{"SLACK_CLIENT_ID"}, Usage: "OAuth client ID for the Gram Slack app"},
-		&cli.StringFlag{Name: "slack-client-secret", EnvVars: []string{"SLACK_CLIENT_SECRET"}, Usage: "OAuth client secret for the Gram Slack app"},
+		&cli.StringFlag{Name: "slack-client-id", EnvVars: []string{"SLACK_CLIENT_ID"}, Usage: "OAuth client ID for the Speakeasy Slack app"},
+		&cli.StringFlag{Name: "slack-client-secret", EnvVars: []string{"SLACK_CLIENT_SECRET"}, Usage: "OAuth client secret for the Speakeasy Slack app"},
 
 		&cli.StringFlag{
 			Name:     "database-url",
@@ -674,7 +676,7 @@ func newStartCommand() *cli.Command {
 
 	return &cli.Command{
 		Name:  "start",
-		Usage: "Start the Gram API server",
+		Usage: "Start the Speakeasy API server",
 		Flags: flags,
 		Action: func(c *cli.Context) error {
 			serviceName := "gram-server"
@@ -1121,7 +1123,9 @@ func newStartCommand() *cli.Command {
 				return err
 			}
 
-			remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner)
+			// One prober per replica, shared by the proxy's on-use refresh and the login's probe.
+			protectedResources := protectedresource.NewProber(db, guardianPolicy)
+			remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags)
 			if err != nil {
 				return err
 			}
@@ -1184,6 +1188,7 @@ func newStartCommand() *cli.Command {
 				ShadowMCP: shadowMCPClient, MCPRisk: mcpPolicyEvaluator, Audit: auditLogger, PlatformExtras: assistantPlatformExtras,
 				PlatformFeatureChecker: platformFeatureChecker, PlatformToolsets: platformToolsets,
 				Identity: identityResolver, Challenges: remoteChallengeManager, CallbackOrigins: callbackOrigins, PlatformHosts: platformHosts,
+				ProtectedResources: protectedResources,
 			})
 			if err != nil {
 				return err
@@ -1330,6 +1335,7 @@ func newStartCommand() *cli.Command {
 			// handlers, tracing, or logging.
 			mux.Use(middleware.NetworkServingPolicyVersion)
 			mux.Use(middleware.StripPrivateIngressHeaders)
+			mux.Use(middleware.SpeakeasyAIHeaders(meterProvider))
 			mux.Use(func(h http.Handler) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.Method == http.MethodGet && r.URL.Path == "/healthz" {
@@ -1388,7 +1394,7 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), platformOrigins(platformHosts), chatSessionsManager))
 			// Must stay below CORSMiddleware: chatSessionsCORS runs inside it and
 			// marks requests whose Origin matched the chat-session audience claim,
-			// which MCPSecurity reads to exempt Elements. The Gram first-party
+			// which MCPSecurity reads to exempt Elements. The Speakeasy first-party
 			// origins are trusted so the dashboard's MCP inspection tabs can reach a
 			// customer's custom domain, which is cross-site and cannot be rebased
 			// onto the platform host (mcp_endpoint rows resolve by slug + custom
@@ -1661,7 +1667,7 @@ func newStartCommand() *cli.Command {
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, auditLogger, featureFlags))
 			// Hoisted so the services that authenticate as a customer's GCP identity
 			// share one identity: they then agree on which impersonation targets are
-			// refused, and probe for Gram's own service account once between them
+			// refused, and probe for Speakeasy's own service account once between them
 			// rather than once each.
 			externalcredentials.Attach(mux, externalcredentials.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentity, productFeatures, ratelimit.NewRedisStore(redisClient)))
 			externalkeys.Attach(mux, externalkeys.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentity, kmsSigningClients, productFeatures, ratelimit.NewRedisStore(redisClient)))
@@ -1670,7 +1676,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			identityproviderconnections.Attach(mux, identityproviderconnections.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, featureFlags, identityProviderProvisioner, okta.NewClientFactory(logger, guardianPolicy, clientAssertionSigner), identityproviderconnections.NewDiscoverer(guardianPolicy), ratelimit.NewRedisStore(redisClient), &background.OktaApplicationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}))
+			identityproviderconnections.Attach(mux, identityproviderconnections.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, featureFlags, identityProviderProvisioner, okta.NewClientFactory(logger, guardianPolicy, clientAssertionSigner, encryptionClient), encryptionClient, identityproviderconnections.NewDiscoverer(guardianPolicy), ratelimit.NewRedisStore(redisClient), &background.OktaApplicationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}))
 			oktaresourceconnections.Attach(mux, oktaresourceconnections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, featureFlags))
 			registryValidator, err := mcpregistry.LoadValidator()
 			if err != nil {
@@ -1728,7 +1734,7 @@ func newStartCommand() *cli.Command {
 			})
 			mcpService.SetConsentBindingService(remoteSessionsService)
 			remotesessions.Attach(mux, remoteSessionsService)
-			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger, mcpServersService).
+			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger, mcpServersService, featureFlags).
 				WithDistributionAdmission(distributionAdmission))
 			unproxiedmcp.Attach(mux, unproxiedmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, guardianPolicy, auditLogger))
 			tunneledmcp.Attach(mux, tunneledmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, route.NewRedis(redisClient), redisClient))
@@ -1846,6 +1852,7 @@ func newStartCommand() *cli.Command {
 				ToolUsage:                 telemetryrepo.New(chDB),
 				ToolCallSearch:            telemetryrepo.New(chDB),
 				TelemetryDrilldown:        telemetryrepo.New(chDB),
+				Analytics:                 analyticsSvc.Engine(),
 				WorkflowRun:               posthogClient,
 				CanonicalIdentity:         telemSvc,
 				RecentToolCalls:           telemetryrepo.New(chDB),
@@ -1889,7 +1896,7 @@ func newStartCommand() *cli.Command {
 			analytics.Attach(mux, analyticsSvc)
 			widgets.Attach(mux, widgets.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			dashboards.Attach(mux, dashboards.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
-			workloadpolicy.Attach(mux, workloadpolicy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
+			workloadpolicy.Attach(mux, workloadpolicy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, authserver.Hosts{ServerURL: serverURL.String(), AuthenticationHostBaseURL: mcpAuthenticationHost.BaseURL(), PlatformHosts: platformHosts}))
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
 			otelService := otelsvc.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, otelsvc.FeatureChecker(logsEnabled), publishers.OTELSpans, publishers.OTELLogs, publishers.OTELMetrics)
 			// Exports accepted on /otel/v1/* also run the hooks telemetry

@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -109,12 +110,12 @@ func (s *Service) serveRevoke(w http.ResponseWriter, r *http.Request, logger *sl
 	}
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke client authenticated", clientID, presentedAuthMethod, "", "")
 
-	token := r.PostForm.Get("token")
+	token := r.PostForm.Get(oauthwire.ParamToken)
 	if token == "" {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth revoke request rejected", clientID, presentedAuthMethod, "", "missing_token")
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "token is required")
 	}
-	hint := r.PostForm.Get("token_type_hint")
+	hint := r.PostForm.Get(oauthwire.ParamTokenTypeHint)
 
 	// Try the hinted type first; on miss, fall through to the other. Per
 	// RFC 7009 §2.1 each path verifies the token belongs to the

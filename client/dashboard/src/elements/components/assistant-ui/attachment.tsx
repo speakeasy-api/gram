@@ -60,7 +60,7 @@ const useFileSrc = (file: File | undefined) => {
 };
 
 /**
- * Resolves an image attachment that lives behind Gram's authenticated serve
+ * Resolves an image attachment that lives behind Speakeasy's authenticated serve
  * endpoint. A replayed thread has no `File` to make an object URL from, and the
  * stored URL cannot be used as an image source directly because the request
  * needs session headers — so fetch it and hand the preview a blob URL instead.

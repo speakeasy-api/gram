@@ -1,0 +1,151 @@
+# The forms for trusting a platform the catalog does not list and allowing its
+# workloads. Each flow is one step, held to the management API form it submits.
+#
+# Copy that depends on what is being edited stays in the dashboard: validation
+# messages, the warning when an issuer does not permit wildcard rules, the
+# wildcard caution's wording (it names the rule and the agent), and the name
+# shown for an assigned agent that is no longer active.
+#
+# help is Markdown.
+
+register_platform:
+  title: Register new access
+  description: Both values come from the platform issuing your machines' tokens. Speakeasy trims surrounding spaces and otherwise stores them exactly as entered, because an assertion is matched against the spelling you register.
+  submit_label: Register
+  pending_label: Registering…
+  steps:
+    - id: platform
+      title: Platform
+      blocks:
+        - type: input
+          field: name
+          format: platform_name
+          label: Name
+          placeholder: New platform
+          help: How this issuer is labeled here. Not used for matching.
+        - type: input
+          field: description
+          format: platform_description
+          label: Description
+          placeholder: Claude agents in our Slack workspace
+          multiline: true
+          help: Optional. What this platform is and what runs on it, shown in place of the issuer URL in the Access Hub.
+        - type: input
+          field: issuer
+          format: issuer_url
+          label: Issuer
+          placeholder: https://identity.example.com
+          help: The value an assertion's `iss` claim must carry. An https URL on a fully qualified domain, with no query or fragment.
+        - type: input
+          field: jwks_uri
+          format: jwks_uri
+          label: JWKS URI
+          placeholder: https://identity.example.com/.well-known/jwks.json
+          help: Where the issuer publishes its signing keys. This is the only field Speakeasy reads when verifying an assertion.
+        - type: tags
+          label: Tags
+          placeholder: production, ci
+          help: Optional labels for grouping platforms here. Not used for matching.
+
+edit_platform:
+  title: Edit platform
+  description: The issuer URL is fixed once a platform is registered. Changing the JWKS URI changes which keys Speakeasy accepts assertions from.
+  submit_label: Save changes
+  pending_label: Saving…
+  steps:
+    - id: platform
+      title: Platform
+      blocks:
+        - type: input
+          field: name
+          format: platform_name
+          label: Name
+          placeholder: New platform
+          help: How this issuer is labeled here. Not used for matching.
+        - type: input
+          field: description
+          format: platform_description
+          label: Description
+          placeholder: Claude agents in our Slack workspace
+          multiline: true
+          help: Optional. What this platform is and what runs on it, shown in place of the issuer URL in the Access Hub.
+        - type: input
+          field: issuer
+          format: issuer_url
+          label: Issuer
+          placeholder: https://identity.example.com
+          read_only: true
+          help: Fixed at registration. To trust a different issuer, register it as a new platform.
+        - type: input
+          field: jwks_uri
+          format: jwks_uri
+          label: JWKS URI
+          placeholder: https://identity.example.com/.well-known/jwks.json
+          help: Where the issuer publishes its signing keys. This is the only field Speakeasy reads when verifying an assertion.
+        - type: tags
+          label: Tags
+          placeholder: production, ci
+          help: Optional labels for grouping platforms here. Not used for matching.
+
+allow_access:
+  title: Allow access
+  description: Allowing access lets a machine sign in to Speakeasy. The agent you choose supplies the whole policy that the machine acts under, so it is chosen at the same time.
+  submit_label: Allow access
+  pending_label: Allowing…
+  steps:
+    - id: access
+      title: Access
+      blocks:
+        - type: input
+          field: subject
+          format: subject_rule
+          label: Subject
+          placeholder: wimse://identity.example.com/org/acme/agent/a-1
+          help: Surrounding spaces are trimmed; otherwise stored and compared exactly as entered. End it with `*` to admit every subject beginning with the part before the `*`.
+        - type: agent_picker
+          label: Agent
+          placeholder: Select an agent
+          help: Choose the most narrowly scoped agent that can do the job. The machine inherits its policy in full.
+        - type: wildcard_caution
+        - type: input
+          field: label
+          format: none
+          label: Label (optional)
+          placeholder: Deploy bot
+          help: Useful where a subject is opaque, such as a numeric service account id.
+        - type: tags
+          label: Tags
+          placeholder: support, production
+          help: Optional labels for finding this machine later. Not used for matching.
+
+edit_access:
+  title: Edit access
+  description: The subject is fixed once access is allowed. Changing the agent changes the whole policy this machine acts under.
+  submit_label: Save changes
+  pending_label: Saving…
+  steps:
+    - id: access
+      title: Access
+      blocks:
+        - type: input
+          field: subject
+          format: subject_rule
+          label: Subject
+          placeholder: wimse://identity.example.com/org/acme/agent/a-1
+          read_only: true
+          help: Fixed once access is allowed. To allow a different subject, allow access for it separately.
+        - type: agent_picker
+          label: Agent
+          placeholder: Select an agent
+          help: The machine inherits this agent's policy in full. Where the same subject is also allowed at the other tier, that access uses the same agent and changes with it.
+        - type: wildcard_caution
+        - type: input
+          field: label
+          format: none
+          label: Label (optional)
+          placeholder: Deploy bot
+          help: Useful where a subject is opaque, such as a numeric service account id.
+        - type: tags
+          label: Tags
+          placeholder: support, production
+          help: Optional labels for finding this machine later. Not used for matching.

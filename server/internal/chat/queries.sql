@@ -370,6 +370,20 @@ WHERE chat_id = @chat_id
 ORDER BY created_at DESC, seq DESC
 LIMIT 1;
 
+-- name: GetLatestExternalChatMessageClient :one
+-- Imported chat messages carry the capturing client's identity (source, user
+-- agent, ip address). A later import of the same chat that learns nothing
+-- about the client inherits it from the newest stored message so one chat
+-- does not split across sources. The chat_id/created_at index serves this
+-- backward LIMIT 1 scan.
+SELECT source, user_agent, ip_address
+FROM chat_messages
+WHERE chat_id = @chat_id
+  AND project_id = @project_id::uuid
+  AND external_message_id IS NOT NULL
+ORDER BY created_at DESC, seq DESC
+LIMIT 1;
+
 -- name: MarkChatLiteLLMProxied :exec
 -- Flags a session as observed by the LiteLLM proxy. Set on every proxied
 -- ingest event rather than at chat creation because natively captured
@@ -897,6 +911,9 @@ page_chats AS (
     -- assistant_id) key to rule that row out.
     a.id AS assistant_id,
     a.name AS assistant_name,
+    -- The agent identity the assistant acts as, when it has one. At most one
+    -- live binding exists per assistant, so this join adds no rows.
+    b.original_agent_id AS assistant_agent_id,
     lc.total_count,
     lc.page_position
   FROM limited_chats lc
@@ -916,6 +933,7 @@ page_chats AS (
   ) picked ON TRUE
   LEFT JOIN assistant_threads thread ON thread.id = picked.thread_id AND thread.project_id = @project_id
   LEFT JOIN assistants a ON a.id = thread.assistant_id AND a.project_id = @project_id AND a.deleted IS FALSE
+  LEFT JOIN assistant_agent_bindings b ON b.original_assistant_id = a.id AND b.project_id = @project_id AND b.deleted IS FALSE
 ),
 chat_attribution AS (
   SELECT
@@ -964,6 +982,7 @@ SELECT
   lc.account_email,
   lc.assistant_id,
   lc.assistant_name,
+  lc.assistant_agent_id,
   lc.total_count
 FROM chat_attribution lc
 ORDER BY lc.page_position;
@@ -1093,14 +1112,15 @@ ORDER BY source;
 -- '' for account_type/account_email when the chat has no linked account or it
 -- is unclassified.
 SELECT c.*, COALESCE(ua.account_type, '')::text AS account_type, COALESCE(ua.email, '')::text AS account_email,
-  at.assistant_id, a.name AS assistant_name,
+  a.id AS assistant_id, a.name AS assistant_name, b.original_agent_id AS assistant_agent_id,
   coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links l
     WHERE l.project_id = c.project_id AND l.child_chat_id = c.id AND l.kind = 'subagent'
       AND l.source_surface = 'claude-tag') THEN 'claude-tag' END, '')::text AS captured_surface
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
-LEFT JOIN assistant_threads at ON at.chat_id = c.id AND at.deleted IS FALSE
-LEFT JOIN assistants a ON a.id = at.assistant_id AND a.deleted IS FALSE
+LEFT JOIN assistant_threads at ON at.chat_id = c.id AND at.project_id = c.project_id AND at.deleted IS FALSE
+LEFT JOIN assistants a ON a.id = at.assistant_id AND a.project_id = c.project_id AND a.deleted IS FALSE
+LEFT JOIN assistant_agent_bindings b ON b.original_assistant_id = a.id AND b.project_id = c.project_id AND b.deleted IS FALSE
 WHERE c.id = @id AND c.project_id = @project_id AND c.deleted IS FALSE;
 
 -- name: GetChatTitlesByIDs :many

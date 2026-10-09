@@ -28,6 +28,8 @@ export type ResultRow = AnalyticsQueryResult["rows"][number];
 export const MAX_DIMENSIONS = 3;
 export const DEFAULT_LIMIT = 100;
 export const MAX_LIMIT = 1000;
+// Rows at the dataset's grain are capped lower than a grouped result.
+export const MAX_ROWS_LIMIT = 200;
 
 // Result columns the server adds beside the requested ones: the bucket start
 // of a grouped, bucketed query and the event time of a row.
@@ -234,11 +236,17 @@ export function dimensionFields(
   return (dataset?.fields ?? []).filter((field) => field.role === "dimension");
 }
 
-/** The dataset's numeric quantities. */
-function measureFields(
+/**
+ * Fields an aggregation can target: anything the catalog declares
+ * aggregations for. A measure declares sums and percentiles; a dimension
+ * declares count_distinct over its own values.
+ */
+function aggregatableFields(
   dataset: AnalyticsDataset | undefined,
 ): AnalyticsField[] {
-  return (dataset?.fields ?? []).filter((field) => field.role === "measure");
+  return (dataset?.fields ?? []).filter(
+    (field) => (field.aggregations ?? []).length > 0,
+  );
 }
 
 /** Fields a WHERE row can target: anything the catalog declares operators for. */
@@ -253,6 +261,7 @@ export function filterableFields(
 // The order aggregations are offered in, whichever fields declare them.
 const MEASURE_OP_ORDER: MeasureOp[] = [
   "count",
+  "count_distinct",
   "sum",
   "avg",
   "min",
@@ -268,13 +277,13 @@ export function isMeasureOp(value: unknown): value is MeasureOp {
 
 /**
  * The aggregations a dataset admits: count (every dataset), then every op
- * at least one measure field declares.
+ * at least one field declares.
  */
 export function opsForDataset(
   dataset: AnalyticsDataset | undefined,
 ): MeasureOp[] {
   const declared = new Set<string>();
-  for (const field of measureFields(dataset)) {
+  for (const field of aggregatableFields(dataset)) {
     for (const aggregation of field.aggregations ?? []) {
       declared.add(aggregation);
     }
@@ -282,13 +291,13 @@ export function opsForDataset(
   return MEASURE_OP_ORDER.filter((op) => op === "count" || declared.has(op));
 }
 
-/** The measure fields an aggregation can target; count targets none. */
+/** The fields an aggregation can target; count targets none. */
 export function fieldsForOp(
   dataset: AnalyticsDataset | undefined,
   op: MeasureOp,
 ): AnalyticsField[] {
   if (op === "count") return [];
-  return measureFields(dataset).filter((field) =>
+  return aggregatableFields(dataset).filter((field) =>
     (field.aggregations ?? []).includes(op),
   );
 }
@@ -517,11 +526,14 @@ export function specProblem(
   return "";
 }
 
-/** Parse the LIMIT control's text into a spec limit (0 = server default). */
-export function parseLimit(raw: string): number {
+/**
+ * Parse the LIMIT control's text into a spec limit (0 = server default),
+ * capped at what the server allows for rows or for a grouped result.
+ */
+export function parseLimit(raw: string, rows = false): number {
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed <= 0) return 0;
-  return Math.min(parsed, MAX_LIMIT);
+  return Math.min(parsed, rows ? MAX_ROWS_LIMIT : MAX_LIMIT);
 }
 
 /**
@@ -558,7 +570,8 @@ export function queryBodyFromSpec(spec: ExploreSpec): AnalyticsQueryPayload {
 
   if (measures.length === 0) {
     // Rows at the dataset's grain, newest first; the dimensions are the
-    // projection rather than a grouping.
+    // projection rather than a grouping. A limit carried over from a grouped
+    // query is clamped to what rows allow.
     return {
       dataset: spec.dataset,
       from,
@@ -567,7 +580,7 @@ export function queryBodyFromSpec(spec: ExploreSpec): AnalyticsQueryPayload {
       dimensions,
       filters,
       ungrouped: true,
-      limit,
+      limit: limit === undefined ? undefined : Math.min(limit, MAX_ROWS_LIMIT),
     };
   }
 

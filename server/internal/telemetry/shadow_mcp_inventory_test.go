@@ -827,7 +827,7 @@ func TestBackfillShadowMCPInventoryURLs_ExcludesHostedHostnames(t *testing.T) {
 	insertHistoricalShadowMCPCall(t, ctx, ti, historicalShadowMCPCall{
 		ProjectID:  projectID,
 		ServerURL:  "https://app.getgram.ai/mcp/hosted",
-		ServerName: "Gram Hosted",
+		ServerName: "Speakeasy Hosted",
 		UserEmail:  "grace@example.com",
 		ObservedAt: observedAt.Add(time.Minute),
 	})

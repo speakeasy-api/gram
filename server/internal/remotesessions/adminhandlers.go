@@ -177,6 +177,7 @@ func (s *Service) createGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
 		ScopeOverride:                              scopeOverride(payload.ScopeOverride),
+		OmitScopeFallback:                          conv.PtrToPGBool(payload.OmitScopeFallback),
 		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
 		Metadata:                                   nil,
 		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
@@ -456,6 +457,7 @@ func (s *Service) updateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 		BackchannelLogoutSupported:                 conv.PtrToPGBool(payload.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(payload.AuthorizationResponseIssParameterSupported),
 		ScopeOverride:                              payload.ScopeOverride,
+		OmitScopeFallback:                          conv.PtrToPGBool(payload.OmitScopeFallback),
 		ResourceIndicatorSupported:                 conv.PtrToPGBool(payload.ResourceIndicatorSupported),
 		Oidc:                                       conv.PtrToPGBool(payload.Oidc),
 		Passthrough:                                conv.PtrToPGBool(payload.Passthrough),
@@ -474,6 +476,10 @@ func (s *Service) updateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 		if err := guardEMABindingsForIssuer(ctx, repo.New(dbtx), "", uuid.Nil, issuerID); err != nil {
 			return nil, err
 		}
+	}
+
+	if err := requireIssuerTokenEndpointForSelfClients(ctx, logger, txRepo, updated); err != nil {
+		return nil, err
 	}
 
 	if err := validateTrustedIdentityProviderIssuerClients(ctx, txRepo, updated); err != nil {
@@ -1073,7 +1079,7 @@ func (s *Service) CreateGlobalClient(ctx context.Context, payload *adminrsgen.Cr
 		return nil, oops.E(oops.CodeUnexpected, err, "get global remote session issuer").LogError(ctx, logger)
 	}
 
-	if err := requirePrivateKeyJWTKeySet(payload.TokenEndpointAuthMethod, uuid.NullUUID{UUID: uuid.Nil, Valid: false}); err != nil {
+	if err := refuseGlobalPrivateKeyJWT(payload.TokenEndpointAuthMethod); err != nil {
 		return nil, err
 	}
 
@@ -1095,6 +1101,10 @@ func (s *Service) CreateGlobalClient(ctx context.Context, payload *adminrsgen.Cr
 		// Global clients are shared across organizations and stay on the
 		// pinned outbound callback origin.
 		CallbackBaseUrl: pgtype.Text{String: "", Valid: false},
+		// Global clients have no organization, so the credential_owner
+		// constraint keeps them subject.
+		GrantTypes:      nil,
+		CredentialOwner: pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create global remote session client").LogError(ctx, logger)
@@ -1209,7 +1219,7 @@ func (s *Service) UpdateGlobalClient(ctx context.Context, payload *adminrsgen.Up
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	if err := requirePrivateKeyJWTKeySet(payload.TokenEndpointAuthMethod, uuid.NullUUID{UUID: uuid.Nil, Valid: false}); err != nil {
+	if err := refuseGlobalPrivateKeyJWT(payload.TokenEndpointAuthMethod); err != nil {
 		return nil, err
 	}
 

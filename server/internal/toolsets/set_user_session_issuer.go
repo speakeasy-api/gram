@@ -97,7 +97,8 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update toolset user_session_issuer").LogError(ctx, s.logger)
 	}
-	if err := s.reconcileHostedNetworkAccess(ctx, dbtx, authCtx, updatedToolset, nil); err != nil {
+	clearedDomainIDs, err := s.syncHostedServer(ctx, dbtx, authCtx, updatedToolset, nil)
+	if err != nil {
 		return nil, err
 	}
 	// A package renders an OAuth server differently from a key-authenticated
@@ -147,6 +148,9 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 
 	if carried {
 		s.publishPluginsAfterToolsetChange(ctx, authCtx)
+	}
+	if err := s.reconcileCustomDomains(ctx, clearedDomainIDs); err != nil {
+		return nil, err
 	}
 
 	return afterView, nil

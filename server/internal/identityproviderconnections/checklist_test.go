@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	idpc "github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 const checklistJWKSURL = "https://example.test/jwks.json"
@@ -21,7 +22,7 @@ var agentKeys = []string{
 
 func checklist(t *testing.T, signal idpc.ChecklistSignal) map[string]idpc.ChecklistItem {
 	t.Helper()
-	items := idpc.OktaChecklist(idpc.ListingModeCustomApp, signal)
+	items := idpc.OktaChecklist(remotesessions.TokenEndpointAuthMethodPrivateKeyJWT, signal)
 	byKey := make(map[string]idpc.ChecklistItem, len(items))
 	for _, item := range items {
 		byKey[item.Key] = item
@@ -36,29 +37,60 @@ func itemText(item idpc.ChecklistItem) string {
 
 func TestOktaChecklist_ConnectStepsThenAgentSteps(t *testing.T) {
 	t.Parallel()
-	for mode, appKey := range map[string]string{
-		idpc.ListingModeCustomApp: idpc.ChecklistKeyCreateAPIServicesApp,
-		idpc.ListingModeOIN:       idpc.ChecklistKeyAddOINApp,
-	} {
-		items := idpc.OktaChecklist(mode, idpc.ChecklistSignal{})
-		keys := make([]string, 0, len(items))
-		for _, item := range items {
-			keys = append(keys, item.Key)
-			want := idpc.ChecklistGroupConnect
-			if len(keys) > len(items)-len(agentKeys) {
-				want = idpc.ChecklistGroupCrossAppAccess
-			}
-			require.Equal(t, want, item.Group, item.Key)
-		}
-		require.Equal(t, append([]string{
-			appKey,
+	tests := []struct {
+		mode    remotesessions.TokenEndpointAuthMethod
+		connect []string
+	}{
+		{mode: remotesessions.TokenEndpointAuthMethodPrivateKeyJWT, connect: []string{
+			idpc.ChecklistKeyCreateAPIServicesApp,
 			idpc.ChecklistKeyPublicKeyAuth,
 			idpc.ChecklistKeyDPoP,
 			idpc.ChecklistKeyGrantScopes,
 			idpc.ChecklistKeyAssignAdminRoles,
 			idpc.ChecklistKeySubmitClientID,
-		}, agentKeys...), keys, mode)
+		}},
+		{mode: remotesessions.TokenEndpointAuthMethodBasic, connect: []string{
+			idpc.ChecklistKeyAddOINApp,
+			idpc.ChecklistKeyGrantScopes,
+			idpc.ChecklistKeyAssignAdminRoles,
+			idpc.ChecklistKeySubmitClientID,
+		}},
 	}
+	for _, tt := range tests {
+		t.Run(string(tt.mode), func(t *testing.T) {
+			t.Parallel()
+			items := idpc.OktaChecklist(tt.mode, idpc.ChecklistSignal{})
+			keys := make([]string, 0, len(items))
+			for _, item := range items {
+				keys = append(keys, item.Key)
+				want := idpc.ChecklistGroupConnect
+				if len(keys) > len(items)-len(agentKeys) {
+					want = idpc.ChecklistGroupCrossAppAccess
+				}
+				require.Equal(t, want, item.Group, item.Key)
+			}
+			require.Equal(t, append(append([]string{}, tt.connect...), agentKeys...), keys)
+		})
+	}
+}
+
+func TestOktaChecklist_OINSecretRejectedLeavesAppUnobserved(t *testing.T) {
+	t.Parallel()
+	items := idpc.OktaChecklist(remotesessions.TokenEndpointAuthMethodBasic, idpc.ChecklistSignal{
+		Checked:           false,
+		ClientIDSubmitted: true,
+		Reasons:           []string{idpc.ReasonSecretRejected},
+		MissingScopes:     []string{},
+	})
+	completed := make(map[string]*bool, len(items))
+	for _, item := range items {
+		completed[item.Key] = item.Completed
+	}
+	require.Contains(t, completed, idpc.ChecklistKeyAddOINApp)
+	require.Nil(t, completed[idpc.ChecklistKeyAddOINApp])
+	require.Contains(t, completed, idpc.ChecklistKeyGrantScopes)
+	require.Nil(t, completed[idpc.ChecklistKeyGrantScopes])
+	require.Equal(t, new(true), completed[idpc.ChecklistKeySubmitClientID])
 }
 
 func TestOktaChecklist_Completion(t *testing.T) {

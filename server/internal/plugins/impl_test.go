@@ -1502,7 +1502,7 @@ func TestPluginsService_PublishPlugins_HappyPath(t *testing.T) {
 		"codex observability plugin slug %q not found among published files", *status.CodexObservabilityPlugin)
 }
 
-// An unproxied-backed server has no mcp_endpoints row (Gram never proxies
+// An unproxied-backed server has no mcp_endpoints row (Speakeasy never proxies
 // it), so ListPluginsWithMcpServersForProject must resolve it via its own
 // unproxied_mcp_servers URL rather than dropping it for lacking an endpoint
 // slug — otherwise a server that AddPluginServer successfully attaches
@@ -1542,10 +1542,10 @@ func TestPluginsService_PublishPlugins_UnproxiedBackedServerAppearsInBundle(t *t
 	server, ok := config.MCPServers["Vendor Widget"]
 	require.True(t, ok, "unproxied server missing from published .mcp.json")
 	require.Equal(t, "https://vendor.example.com/mcp", server.URL,
-		"unproxied server must publish its own vendor URL, not a Gram-hosted endpoint")
+		"unproxied server must publish its own vendor URL, not a Speakeasy-hosted endpoint")
 	require.Empty(t, server.Headers,
-		"unproxied server must never carry Gram's API key (or any other Gram-managed credential): "+
-			"MCPURL points straight at the vendor, so any header here leaks a Gram credential to a third party")
+		"unproxied server must never carry Speakeasy's API key (or any other Speakeasy-managed credential): "+
+			"MCPURL points straight at the vendor, so any header here leaks a Speakeasy credential to a third party")
 }
 
 // Reproduces the plugin_github_connections_installation_repo_key conflict:
@@ -1825,7 +1825,7 @@ func TestPluginsService_PublishPlugins_McpServerBacked(t *testing.T) {
 	require.Equal(t, "https://app.getgram.ai/mcp/"+mcpServer.endpointSlug, server.URL)
 	// No static auth header for OAuth (mcp_server-backed) remotes.
 	require.Empty(t, server.Headers["Authorization"])
-	// And no Gram API key is baked in for a Remote MCP-backed server.
+	// And no Speakeasy API key is baked in for a Remote MCP-backed server.
 	require.NotContains(t, string(claudeMCP), "gram_local_")
 }
 
@@ -2092,7 +2092,7 @@ func TestPluginsService_PublishPlugins_PublicToolsetEnvConfigs(t *testing.T) {
 	require.NotNil(t, claudeMCP)
 	require.Contains(t, string(claudeMCP), "${user_config.ANALYTICS_API_KEY}")
 
-	// Verify NO Gram API key is injected for public servers.
+	// Verify NO Speakeasy API key is injected for public servers.
 	require.NotContains(t, string(cursorMCP), "gram_local_")
 }
 

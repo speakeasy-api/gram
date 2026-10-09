@@ -45,7 +45,8 @@ import (
 var platformMCPInfra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	infra, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
+	// ClickHouse backs the analytics tools' end-to-end test.
+	infra, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
 	if err != nil {
 		log.Fatalf("launch test infrastructure: %v", err)
 	}

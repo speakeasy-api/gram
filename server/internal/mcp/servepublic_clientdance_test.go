@@ -233,10 +233,10 @@ func TestClientDance_ExternalOAuth_FullFlow(t *testing.T) {
 	require.True(t, ok, "authorization_servers should be an array")
 	require.NotEmpty(t, authServers, "authorization_servers should not be empty")
 
-	// 7. Fetch the RFC 8414 authorization-server metadata. Gram re-serves the
+	// 7. Fetch the RFC 8414 authorization-server metadata. Speakeasy re-serves the
 	//    captured upstream document from its own well-known URL, so per
 	//    RFC 8414 §3.3 the served issuer must equal the resource URL the
-	//    protected-resource metadata advertises (the Gram URL), NOT the
+	//    protected-resource metadata advertises (the Speakeasy URL), NOT the
 	//    upstream issuer. The upstream's own endpoints stay verbatim.
 	asReq := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+mcpSlug, nil)
 	asRctx := chi.NewRouteContext()

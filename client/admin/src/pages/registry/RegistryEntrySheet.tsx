@@ -31,7 +31,7 @@ import {
 const RegistryJsonEditor = lazy(() => import("./RegistryJsonEditor"));
 
 export const STAGE_A_NOTICE =
-  "Edits affect the Gram catalog. Customer catalog reads still use Pulse.";
+  "Edits affect the Speakeasy catalog. Customer catalog reads still use Pulse.";
 const EMPTY =
   '{\n  "server": {\n    "name": "",\n    "description": "",\n    "version": "1.0.0",\n    "remotes": []\n  }\n}';
 type Props = {

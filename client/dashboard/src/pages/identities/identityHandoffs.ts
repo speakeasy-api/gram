@@ -58,7 +58,7 @@ export function identityHandoffs(
       subjectUrn: userId ? `user:${userId}` : undefined,
       status: "active",
     }),
-    // Audit logs key on the Gram user id, which is what its actor facet holds.
+    // Audit logs key on the Speakeasy user id, which is what its actor facet holds.
     auditLogs: query(orgRoutes.auditLogs.href(), { actor: userId }),
     // Agent sessions has no user dimension of its own; its search covers the
     // chat's user id and name, so the address is the closest honest filter.

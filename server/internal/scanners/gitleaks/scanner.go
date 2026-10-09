@@ -63,7 +63,7 @@ func newDetector() (*detect.Detector, error) {
 }
 
 // effectiveConfig returns the exact configuration used by every scanner: the
-// pinned Gitleaks defaults plus Gram's AWS secret and session-token extensions.
+// pinned Gitleaks defaults plus Speakeasy's AWS secret and session-token extensions.
 // Callers must hold detectorInitMu because Gitleaks uses process-global Viper
 // state while constructing its default configuration.
 func effectiveConfig() (config.Config, error) {
@@ -102,7 +102,7 @@ func effectiveConfig() (config.Config, error) {
 }
 
 // ReportableRuleIDs returns the canonical rule IDs the effective scanner can
-// emit. It deliberately exposes only stable Gram identifiers, never Gitleaks
+// emit. It deliberately exposes only stable Speakeasy identifiers, never Gitleaks
 // configuration or detector types. Rules retained only as composite anchors are
 // excluded because SkipReport prevents them from producing findings.
 func ReportableRuleIDs() ([]string, error) {

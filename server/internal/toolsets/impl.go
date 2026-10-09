@@ -35,6 +35,7 @@ import (
 	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpmetadataRepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -47,6 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -556,6 +558,10 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 			domainID = uuid.NullUUID{UUID: uuid.MustParse(*toolsetDomainID), Valid: true}
 		}
 
+		// Domain rows lock before the slug scope, the order endpoint writers use.
+		if _, err := hostedmcp.LockDomains(ctx, dbtx, authCtx.ActiveOrganizationID, existingToolset.CustomDomainID, domainID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock custom domains").LogError(ctx, logger)
+		}
 		if err := mcpendpoints.LockSlugScope(ctx, dbtx, domainID, slug); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "lock mcp slug scope").LogError(ctx, logger)
 		}
@@ -620,8 +626,27 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating toolset").LogError(ctx, logger)
 	}
-	if err := s.reconcileHostedNetworkAccess(ctx, dbtx, authCtx, updatedToolset, requestedMode); err != nil {
+	clearedDomainIDs, err := s.syncHostedServer(ctx, dbtx, authCtx, updatedToolset, requestedMode)
+	if err != nil {
 		return nil, err
+	}
+
+	var pluginContentsChanged bool
+	if payload.ToolUrns != nil {
+		removed, err := roledelivery.ContentChanged(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, updatedToolset.ID, nil)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "update automatic plugin distribution").LogError(ctx, logger)
+		}
+		carried, err := toolsetCarriedByPlugin(ctx, dbtx, authCtx, updatedToolset.ID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check toolset plugin membership").LogError(ctx, logger)
+		}
+		pluginContentsChanged = len(removed) > 0 || carried
+		if pluginContentsChanged {
+			if err := s.requestPluginPublication(ctx, dbtx, authCtx); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "request plugin publication").LogError(ctx, logger)
+			}
+		}
 	}
 
 	var pluginCreated bool
@@ -690,8 +715,11 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	// its entry in the generated package even though no attach ran, and
 	// disabling MCP drops the entry entirely — so the previous state counts as
 	// much as the new one.
-	s.triggerPluginPublish(ctx, authCtx, existingToolset.McpEnabled || updatedToolset.McpEnabled, pluginCreated)
+	s.triggerPluginPublish(ctx, authCtx, existingToolset.McpEnabled || updatedToolset.McpEnabled || pluginContentsChanged, pluginCreated)
 	s.triggerToolsetIndex(ctx, toolsetDetails)
+	if err := s.reconcileCustomDomains(ctx, clearedDomainIDs); err != nil {
+		return nil, err
+	}
 
 	return toolsetDetails, nil
 }
@@ -771,7 +799,8 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to detach assistant toolsets").LogError(ctx, logger)
 	}
-	if err := s.deleteHostedNetworkAccess(ctx, dbtx, authCtx, toDelete); err != nil {
+	clearedDomainIDs, err := s.deleteHostedServer(ctx, dbtx, authCtx, toDelete)
+	if err != nil {
 		return err
 	}
 	if carried {
@@ -801,7 +830,7 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 		s.publishPluginsAfterToolsetChange(ctx, authCtx)
 	}
 
-	return nil
+	return s.reconcileCustomDomains(ctx, clearedDomainIDs)
 }
 
 func (s *Service) GetToolset(ctx context.Context, payload *gen.GetToolsetPayload) (*types.Toolset, error) {
@@ -980,6 +1009,9 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 		ToolsetSlug:      clonedToolset.Slug,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to log toolset create audit event").LogError(ctx, logger)
+	}
+	if _, err := s.syncHostedServer(ctx, dbtx, authCtx, clonedToolset, nil); err != nil {
+		return nil, err
 	}
 
 	// Clone the latest toolset version

@@ -29,10 +29,10 @@ import {
   invalidateAllPlugin,
   usePlugin,
 } from "@gram/client/react-query/plugin";
+import { ClaudeCodeSettingsInstall } from "@/components/claude-code-settings-install";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { CopyButton } from "@/components/ui/CopyButton";
 import {
   Sheet,
   SheetContent,
@@ -389,9 +389,6 @@ export function DistributeServersStep({
 
   const isAdding = drawerStep === "adding" && !drawerError;
   const drawerIdx = drawerStep === "done" ? 1 : 0;
-  const marketplaceCommand = publishStatus?.marketplaceUrl
-    ? `/plugin marketplace add ${publishStatus.marketplaceUrl}`
-    : null;
   // Gate the action on actually-deployable servers, not the raw selection:
   // already-distributed picks are filtered out of selectedServerObjects, so
   // counting selected.size could enable a Continue that deploys nothing.
@@ -648,32 +645,20 @@ export function DistributeServersStep({
                   to your marketplace. Share these instructions so your
                   organization can install them.
                 </p>
-                {marketplaceCommand && (
-                  <div className="space-y-2">
-                    <p className="text-foreground text-sm font-medium">
-                      Install for yourself in Claude Code
-                    </p>
-                    <p className="text-muted-foreground text-xs">
-                      Registers the marketplace for your own account.
-                    </p>
-                    <div className="bg-muted/50 flex items-center justify-between gap-2 border p-3">
-                      <code className="text-foreground truncate text-xs">
-                        {marketplaceCommand}
-                      </code>
-                      <CopyButton text={marketplaceCommand} />
-                    </div>
-                  </div>
+                {publishStatus?.marketplaceUrl && (
+                  <ClaudeCodeSettingsInstall
+                    marketplaceUrl={publishStatus.marketplaceUrl}
+                    plugins={[distributedPluginSlug ?? DEFAULT_PLUGIN_SLUG]}
+                    secretUrl
+                  />
                 )}
                 {publishStatus?.repoOwner && publishStatus?.repoName && (
                   <div className="space-y-2">
                     <p className="text-foreground text-sm font-medium">
-                      Roll out to your whole organization
+                      All agents
                     </p>
                     <p className="text-muted-foreground text-xs leading-relaxed">
-                      Push the marketplace to every developer through Claude
-                      Code Managed Settings — no per-user install command
-                      required. The full guide also covers the other supported
-                      platforms.
+                      Install instructions for every supported agent.
                     </p>
                     <InstallInstructionsButton
                       repoOwner={publishStatus.repoOwner}
