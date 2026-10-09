@@ -20,7 +20,7 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { fetchLinkedMcpServers } from "./sourceDelete";
 
@@ -43,18 +43,25 @@ export function DeleteTunnelDialogContent({
   mcpServerId,
   onClose,
   onLeave,
+  onBusyChange,
 }: {
   tunnel: TunneledMcpServer;
   mcpServerId: string;
   onClose: () => void;
   /** Leaves the page, to `href` when given; this server may be gone. */
   onLeave: (href?: string) => void;
+  /** Told while the delete runs, so the dialog can refuse to close. */
+  onBusyChange?: (busy: boolean) => void;
 }): JSX.Element {
   const routes = useRoutes();
   const client = useSdkClient();
   const queryClient = useQueryClient();
   const impact = useSharedTunnelImpact(tunnel.id, { active: true });
   const remove = useDeleteTunneledMcpSource();
+  useEffect(
+    () => onBusyChange?.(remove.isPending),
+    [remove.isPending, onBusyChange],
+  );
   const [confirmation, setConfirmation] = useState<Confirmation>({
     text: "",
     servers: [],

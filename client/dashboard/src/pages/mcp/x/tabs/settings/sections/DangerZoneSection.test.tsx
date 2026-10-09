@@ -16,6 +16,7 @@ import { DangerZoneSection } from "./DangerZoneSection";
 // The resources the caller holds mcp:write on.
 const grants = vi.hoisted(() => ({ writable: new Set<string>() }));
 const deleteMcpServer = vi.hoisted(() => vi.fn());
+const deleteState = vi.hoisted(() => ({ isPending: false }));
 
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
@@ -44,7 +45,9 @@ vi.mock("@gram/client/react-query/mcpServers.js", () => ({
 vi.mock("@gram/client/react-query/deleteMcpServer.js", () => ({
   useDeleteMcpServerMutation: () => ({
     mutate: deleteMcpServer,
-    isPending: false,
+    get isPending() {
+      return deleteState.isPending;
+    },
     isError: false,
   }),
 }));
@@ -101,6 +104,7 @@ function renderSection(deleteTarget?: TunnelTarget) {
 beforeEach(() => {
   grants.writable = new Set();
   deleteMcpServer.mockReset();
+  deleteState.isPending = false;
 });
 
 afterEach(cleanup);
@@ -137,6 +141,17 @@ describe("DangerZoneSection on a tunneled server", () => {
     expect(deleteMcpServer).toHaveBeenCalledWith({
       request: { id: "server-a" },
     });
+  });
+
+  it("keeps the delete dialog open while the delete runs", () => {
+    grants.writable = new Set(["server-a", "project-1"]);
+    deleteState.isPending = true;
+    renderSection({ kind: "tunneled", source: tunnel });
+    fireEvent.click(screen.getByRole("button", { name: "Delete MCP server" }));
+
+    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(screen.getByText("Delete this MCP server?")).toBeTruthy();
   });
 
   it("never swaps the tunnel delete for a server delete if the tunnel goes away", () => {

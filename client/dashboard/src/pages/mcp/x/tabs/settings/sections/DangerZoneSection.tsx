@@ -24,7 +24,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { DangerSettingsSection } from "@/components/detail/settings-section";
@@ -146,6 +146,8 @@ export function DangerZoneSection({
     setDeleteDialog(kind);
     setDeleteDialogOpen(true);
   };
+  // A delete in flight keeps the dialog open, so its outcome is never lost.
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const closeDeleteDialog = () => setDeleteDialogOpen(false);
   const leavePage = (href: string = routes.mcp.href()) => {
     setDeleteDialogOpen(false);
@@ -386,10 +388,10 @@ export function DangerZoneSection({
       <Dialog
         open={deleteDialogOpen}
         onOpenChange={(open) => {
-          if (!open) closeDeleteDialog();
+          if (!open && !deleteBusy) closeDeleteDialog();
         }}
       >
-        <Dialog.Content className="max-w-2xl!">
+        <Dialog.Content className="max-w-2xl!" closeable={!deleteBusy}>
           <DeleteDialogBody
             dialog={deleteDialog}
             mcpServer={mcpServer}
@@ -399,6 +401,7 @@ export function DangerZoneSection({
             linkedMcpServers={linkedMcpServers}
             onClose={closeDeleteDialog}
             onLeave={leavePage}
+            onBusyChange={setDeleteBusy}
           />
         </Dialog.Content>
       </Dialog>
@@ -421,6 +424,7 @@ function DeleteDialogBody({
   linkedMcpServers,
   onClose,
   onLeave,
+  onBusyChange,
 }: {
   dialog: DeleteDialogKind;
   mcpServer: McpServer;
@@ -432,6 +436,7 @@ function DeleteDialogBody({
   linkedMcpServers: McpServer[];
   onClose: () => void;
   onLeave: (href?: string) => void;
+  onBusyChange: (busy: boolean) => void;
 }): JSX.Element {
   if (dialog === "tunnel") {
     // Never fall through to another delete: the user asked to delete the
@@ -443,6 +448,7 @@ function DeleteDialogBody({
         mcpServerId={mcpServer.id}
         onClose={onClose}
         onLeave={onLeave}
+        onBusyChange={onBusyChange}
       />
     );
   }
@@ -461,6 +467,7 @@ function DeleteDialogBody({
       mcpServer={mcpServer}
       endpoints={endpoints}
       keepsTunnel={!!mcpServer.tunneledMcpServerId}
+      onBusyChange={onBusyChange}
       onClose={onClose}
       onSuccess={() => onLeave()}
     />
@@ -544,6 +551,7 @@ function DeleteMcpServerDialogContent({
   mcpServer,
   endpoints,
   keepsTunnel,
+  onBusyChange,
   onClose,
   onSuccess,
 }: {
@@ -551,6 +559,7 @@ function DeleteMcpServerDialogContent({
   endpoints: McpEndpoint[];
   /** The server is on a tunnel, which this delete leaves in place. */
   keepsTunnel: boolean;
+  onBusyChange: (busy: boolean) => void;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -571,6 +580,11 @@ function DeleteMcpServerDialogContent({
       );
     },
   });
+
+  useEffect(
+    () => onBusyChange(remove.isPending),
+    [remove.isPending, onBusyChange],
+  );
 
   const handleConfirm = () => {
     remove.mutate({ request: { id: mcpServer.id } });
