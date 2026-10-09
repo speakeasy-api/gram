@@ -16,7 +16,7 @@ const (
 
 const getTunneledMCPSetupHandoffDescription = "Open the dashboard page that sets up an MCP server running on a private network, reachable through a Speakeasy tunnel. " +
 	"Omit mcp_id to get the form that adds a new tunneled MCP server; pass an existing tunneled MCP server's mcp_id to get its tunnel agent setup panel. " +
-	"Adding tunneled MCP servers is not available to every organization yet: a not_enabled refusal means the dashboard has no add form for this one, so say so and stop rather than sending the user to the dashboard. " +
+	"Adding tunneled MCP servers is not available to every organization yet: a not_enabled refusal means the dashboard has no add form for this one, so say so and stop rather than sending the user to the dashboard; a feature_unavailable refusal means availability could not be checked right now, so say so and stop without retrying in a loop. " +
 	"Returns a dashboard link and fixed instructions only: creating the tunnel, revealing or rotating its key, and running the agent all happen in the dashboard and on the user's own infrastructure. " +
 	"Constraints: never ask for, accept, or repeat a tunnel key, header value, or other credential in chat; the link does not create anything, so confirm the result afterwards with get_mcp."
 
