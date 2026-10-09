@@ -204,3 +204,28 @@ func TestCurrentManifestOmitsRefusalFallback(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, string(raw), "refusal_fallback_model")
 }
+
+func TestViewJoinsLegacyHashesWithoutReusingExecutionCache(t *testing.T) {
+	t.Parallel()
+
+	attack := recordsCase("attack", "malicious", "DAN")
+	legacy := viewRecord(attack, statusFlagged)
+	raw, err := json.Marshal(attack)
+	require.NoError(t, err)
+	attack.raw = "  " + string(raw)
+	require.NotEqual(t, legacy.Hash, caseHash(attack))
+	base := writeRun(t, "main", legacy)
+	change := writeRun(t, "this change", viewRecord(attack, statusClear))
+	data, err := buildViewData(options{runDir: change, baseRunDir: base, minRecall: 0.8}, []labeledCase{attack}, time.Unix(0, 0))
+	require.NoError(t, err)
+	require.Equal(t, 1, data.Sides[0].Totals.Caught)
+	require.Equal(t, 1, compareSides(data.Cases).NewlyMissed)
+	require.Len(t, casesToRun([]labeledCase{attack}, map[string]caseRecord{legacy.Key: legacy}), 1)
+
+	attack.Text = "edited attack"
+	attack.raw = `{"text":"edited attack"}`
+	data, err = buildViewData(options{runDir: change, baseRunDir: base, minRecall: 0.8}, []labeledCase{attack}, time.Unix(0, 0))
+	require.NoError(t, err)
+	require.Equal(t, 1, data.Sides[0].Totals.Pending)
+	require.Nil(t, data.Cases[0].Base)
+}

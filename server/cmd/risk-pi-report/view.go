@@ -226,6 +226,20 @@ func loadViewSide(id, dir string, opts options, corpus []labeledCase) (viewSide,
 	if err != nil {
 		return none, nil, err
 	}
+	// Older reports hashed the decoded fields instead of the fixture line.
+	// Normalize only for display; execution caches still require current hashes.
+	for _, c := range corpus {
+		rec, ok := records[caseKey(c)]
+		if !ok || rec.Hash == caseHash(c) {
+			continue
+		}
+		legacy := c
+		legacy.raw = ""
+		if rec.Hash == caseHash(legacy) {
+			rec.Hash = caseHash(c)
+			records[caseKey(c)] = rec
+		}
+	}
 	totals := computeTotals(corpus, records)
 	required := 0
 	if opts.minRecall > 0 {

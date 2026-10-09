@@ -69,8 +69,8 @@ change_dir="$cache/runs/$change_key"
 change_bin="$cache/bin/risk-pi-$change_key"
 build "$root" "$change_bin"
 
-common=(-production -corpus-dir "$corpus" -exclude-sources=cascade_context -check-floors=false)
-view_args=("${common[@]}" -view -run-dir "$change_dir")
+common=(-corpus-dir "$corpus" -exclude-sources=cascade_context -check-floors=false)
+view_args=(-production "${common[@]}" -view -run-dir "$change_dir")
 if [ -n "$sources" ]; then
   common+=(-sources "$sources")
   view_args+=(-sources "$sources")
@@ -80,6 +80,7 @@ fi
 
 # Main: the merge-base with origin/main, or --base, from a detached worktree.
 run_main=false
+base_mode=-production
 if [ "$no_main" != "true" ]; then
   if [ -z "$base_ref" ]; then
     if ! git fetch -q origin main; then
@@ -103,7 +104,15 @@ if [ "$no_main" != "true" ]; then
     git worktree add -q --detach "$base_tree" "$base_sha"
   fi
   git -C "$base_tree" checkout -q --detach "$base_sha"
-  if grep -q '"production"' "$base_tree/server/cmd/risk-pi-report/main.go" && grep -q '"run-dir"' "$base_tree/server/cmd/risk-pi-report/main.go"; then
+  if grep -q '"run-dir"' "$base_tree/server/cmd/risk-pi-report/main.go"; then
+    if grep -q '"production"' "$base_tree/server/cmd/risk-pi-report/main.go"; then
+      base_mode=-production
+    elif grep -q '"cascade"' "$base_tree/server/cmd/risk-pi-report/main.go"; then
+      base_mode=-cascade
+    else
+      echo "baseline @ $base_short has no supported detector mode; choose a compatible --base <ref>, or explicitly use --no-main" >&2
+      exit 1
+    fi
     run_main=true
     view_args+=(-base-run-dir "$base_dir")
   else
@@ -127,7 +136,7 @@ if [ "$watch" = "true" ]; then
   viewer_pid=$!
 fi
 
-change_args=("${common[@]}" -run-dir "$change_dir" -label "this change" -ref "$change_ref")
+change_args=(-production "${common[@]}" -run-dir "$change_dir" -label "this change" -ref "$change_ref")
 if [ -z "$sources" ]; then
   change_args+=("${gate_args[@]}")
 else
@@ -142,7 +151,7 @@ elif [ "$run_main" = "true" ]; then
   if [ ! -x "$base_bin" ]; then
     build "$base_tree" "$base_bin"
   fi
-  "$base_bin" "${common[@]}" -run-dir "$base_dir" -label "main" -ref "$base_ref @ $base_short" &
+  "$base_bin" "$base_mode" "${common[@]}" -run-dir "$base_dir" -label "main" -ref "$base_ref @ $base_short" &
   base_pid=$!
 fi
 
