@@ -18,7 +18,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -37,7 +39,8 @@ type preparationDCRResponse struct {
 }
 
 // Every failure after submission that does not prove rejection is indeterminate.
-// No response body, client secret or management token becomes a diagnostic.
+// No response body, client secret or management token becomes a diagnostic;
+// only a rejection's RFC 7591 error and error_description are logged.
 func (s *Service) submitPreparationDCR(ctx context.Context, in PreparationInput, endpoint, method string) (preparationDCRResponse, string) {
 	return s.submitPreparationDCRWithTunnel(ctx, in, endpoint, method, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 }
@@ -47,15 +50,24 @@ func (s *Service) submitPreparationDCRWithTunnel(ctx context.Context, in Prepara
 	if (method != oauthwire.AuthMethodClientSecretBasic && method != oauthwire.AuthMethodClientSecretPost) || !urls.IsAbsoluteHTTPSOrLoopback(endpoint) {
 		return result, PreparationStateManualSetupRequired
 	}
-	if s.policy == nil {
+	origin := s.origins.ForNewClient(true)
+	if s.policy == nil || origin == nil {
 		return result, PreparationStateIndeterminate
 	}
+	// Some providers require redirect_uris and a one-time owner sign-in approval.
 	body, _ := json.Marshal(struct {
-		GrantTypes []string `json:"grant_types"`
-		AuthMethod string   `json:"token_endpoint_auth_method"`
-		Scope      string   `json:"scope,omitempty"`
-		ClientName string   `json:"client_name"`
-	}{[]string{oauthwire.GrantTypeJWTBearer}, method, strings.Join(in.Scopes, " "), "Speakeasy identity chaining"})
+		RedirectURIs  []string `json:"redirect_uris"`
+		ResponseTypes []string `json:"response_types"`
+		GrantTypes    []string `json:"grant_types"`
+		AuthMethod    string   `json:"token_endpoint_auth_method"`
+		Scope         string   `json:"scope,omitempty"`
+		ClientName    string   `json:"client_name"`
+	}{
+		[]string{RemoteLoginCallbackURL(origin)},
+		[]string{oauthwire.ResponseTypeCode},
+		[]string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer},
+		method, strings.Join(in.Scopes, " "), "Speakeasy identity chaining",
+	})
 	requestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, endpoint, bytes.NewReader(body))
@@ -64,6 +76,7 @@ func (s *Service) submitPreparationDCRWithTunnel(ctx context.Context, in Prepara
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "application/json")
+	request.Header.Set("User-Agent", constants.UserAgent)
 	client := s.policy.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	doer, err := upstreamHTTPDoer(client, s.tunnels, tunnelID)
@@ -76,6 +89,12 @@ func (s *Service) submitPreparationDCRWithTunnel(ctx context.Context, in Prepara
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode >= 400 && response.StatusCode < 500 && response.StatusCode != http.StatusRequestTimeout && response.StatusCode != http.StatusTooManyRequests {
+		code, description := preparationDCRRejection(response.Body)
+		s.logger.WarnContext(ctx, "identity chaining registration rejected by provider",
+			attr.SlogHTTPResponseStatusCode(response.StatusCode),
+			attr.SlogOAuthError(code),
+			attr.SlogOAuthErrorDescription(description),
+		)
 		return result, PreparationStateProviderRejection
 	}
 	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusCreated {
@@ -110,6 +129,20 @@ func (s *Service) submitPreparationDCRWithTunnel(ctx context.Context, in Prepara
 	}
 	return result, validatePreparationDCR(result, in.Scopes, method)
 }
+
+// preparationDCRRejection reads only the RFC 7591 section 3.2.2 error members.
+func preparationDCRRejection(body io.Reader) (string, string) {
+	var rejection struct {
+		Error       string `json:"error"`
+		Description string `json:"error_description"`
+	}
+	data, err := io.ReadAll(io.LimitReader(body, 64<<10))
+	if err != nil || json.Unmarshal(data, &rejection) != nil {
+		return "", ""
+	}
+	return providerErrorCode(strings.TrimSpace(rejection.Error)), ProviderErrorDescription(rejection.Description)
+}
+
 func validatePreparationDCR(result preparationDCRResponse, requested []string, method string) string {
 	if (method != oauthwire.AuthMethodClientSecretBasic && method != oauthwire.AuthMethodClientSecretPost) || strings.TrimSpace(result.ClientID) == "" || result.ClientSecret == "" || (result.TokenEndpointAuthMethod != oauthwire.AuthMethodClientSecretBasic && result.TokenEndpointAuthMethod != oauthwire.AuthMethodClientSecretPost) || result.ClientIDIssuedAt < 0 || result.ClientSecretExpiresAt < 0 {
 		return PreparationStateIndeterminate
@@ -217,9 +250,8 @@ func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, 
 		if response.ClientSecretExpiresAt > 0 {
 			expires = conv.ToPGTimestamptz(time.Unix(response.ClientSecretExpiresAt, 0))
 		}
-		// Identity-chaining registrations carry no redirect_uris, so they record
-		// no callback origin.
-		client, err = q.CreateRemoteSessionClient(saveCtx, repo.CreateRemoteSessionClientParams{JsonWebKeySetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, IdentityProviderConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, TokenEndpointAuthAudienceFormat: conv.ToPGTextEmpty(""), Audience: conv.ToPGTextEmpty(""), LegacyCallbackUrl: false, CallbackBaseUrl: pgtype.Text{String: "", Valid: false}, ProjectID: conv.ToNullUUID(b.ProjectID), OrganizationID: conv.ToPGText(b.OrganizationID), RemoteSessionIssuerID: issuer.ID, ClientID: response.ClientID, ClientSecretEncrypted: conv.ToPGText(ciphertext), TokenEndpointAuthMethod: conv.ToPGText(response.TokenEndpointAuthMethod), Scope: scopes, ClientIDIssuedAt: issued, ClientSecretExpiresAt: expires, GrantTypes: nil, CredentialOwner: pgtype.Text{String: "", Valid: false}})
+		// The registration's redirect_uris use this origin, as interactive clients do.
+		client, err = q.CreateRemoteSessionClient(saveCtx, repo.CreateRemoteSessionClientParams{JsonWebKeySetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, IdentityProviderConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, TokenEndpointAuthAudienceFormat: conv.ToPGTextEmpty(""), Audience: conv.ToPGTextEmpty(""), LegacyCallbackUrl: false, CallbackBaseUrl: s.origins.NewClientBaseURL(true), ProjectID: conv.ToNullUUID(b.ProjectID), OrganizationID: conv.ToPGText(b.OrganizationID), RemoteSessionIssuerID: issuer.ID, ClientID: response.ClientID, ClientSecretEncrypted: conv.ToPGText(ciphertext), TokenEndpointAuthMethod: conv.ToPGText(response.TokenEndpointAuthMethod), Scope: scopes, ClientIDIssuedAt: issued, ClientSecretExpiresAt: expires, GrantTypes: nil, CredentialOwner: pgtype.Text{String: "", Valid: false}})
 		if err != nil {
 			return preparationResult(b, currentIssuer, client, PreparationStateIndeterminate), err
 		}

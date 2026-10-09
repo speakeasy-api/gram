@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -211,6 +212,8 @@ func TestDetachUserSessionIssuer_RefusesOrgClientOnOrgIssuer(t *testing.T) {
 // The pre-lock binding snapshot must not turn a concurrent org-wide change
 // into an authorized project-scoped mutation.
 func TestClientAttachment_OrgWideGuardUsesLockedBinding(t *testing.T) {
+	t.Parallel()
+
 	for _, attach := range []bool{true, false} {
 		name := "detach"
 		if attach {
@@ -243,8 +246,9 @@ func TestClientAttachment_OrgWideGuardUsesLockedBinding(t *testing.T) {
 			// Simulate an organization-authorized mutation while the project request
 			// waits for the issuer lock, after it has read the old binding state.
 			if attach {
-				_, err := tx.Exec(ctx, "DELETE FROM remote_session_client_user_session_issuers WHERE remote_session_client_id = $1 AND user_session_issuer_id = $2", orgClient, userIssuer)
+				removed, err := testrepo.New(tx).DetachRemoteSessionClientFromUserSessionIssuer(ctx, testrepo.DetachRemoteSessionClientFromUserSessionIssuerParams{RemoteSessionClientID: orgClient, UserSessionIssuerID: userIssuer})
 				require.NoError(t, err)
+				require.Equal(t, int64(1), removed)
 			} else {
 				require.NoError(t, repo.New(tx).AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: orgClient, UserSessionIssuerID: userIssuer}))
 			}

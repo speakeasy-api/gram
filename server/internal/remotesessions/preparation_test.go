@@ -8,12 +8,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -117,17 +120,28 @@ func TestPreparationDCRValidation(t *testing.T) {
 		})
 	}
 }
+
+const preparationDCRTestOrigin = "https://gram.example.test"
+
+func newPreparationDCRTestService(t *testing.T, policy *guardian.Policy) *Service {
+	t.Helper()
+	origin, err := url.Parse(preparationDCRTestOrigin)
+	require.NoError(t, err)
+	return &Service{policy: policy, logger: testenv.NewLogger(t), origins: DefaultCallbackOrigins(origin)}
+}
+
 func TestPreparationDCRWireAndUncertainty(t *testing.T) {
 	t.Parallel()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	s := &Service{policy: policy}
+	s := newPreparationDCRTestService(t, policy)
 	for _, tt := range []struct {
 		name                string
 		status              int
 		body, content, want string
 	}{
 		{"confirmed", 201, `{"client_id":"resource-client","client_secret":"test-secret","token_endpoint_auth_method":"client_secret_basic","grant_types":["urn:ietf:params:oauth:grant-type:jwt-bearer"]}`, "application/json", "ready"},
+		{"grants omitted", 201, `{"client_id":"resource-client","client_secret":"test-secret","client_secret_expires_at":0,"redirect_uris":["` + preparationDCRTestOrigin + `/mcp/remote_login_callback"]}`, "application/json", "unknown_grants"},
 		{"malformed grants", 201, `{"grant_types":"bad"}`, "application/json", "indeterminate"},
 		{"HTML", 201, `<html>ok</html>`, "text/html", "indeterminate"},
 		{"rejected", 400, `{"error":"invalid_client_metadata"}`, "application/json", "provider_rejection"},
@@ -139,9 +153,11 @@ func TestPreparationDCRWireAndUncertainty(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				var request map[string]json.RawMessage
 				assert.NoError(t, json.NewDecoder(r.Body).Decode(&request))
-				assert.JSONEq(t, `["urn:ietf:params:oauth:grant-type:jwt-bearer"]`, string(request["grant_types"]))
+				assert.JSONEq(t, `["authorization_code","refresh_token","urn:ietf:params:oauth:grant-type:jwt-bearer"]`, string(request["grant_types"]))
+				assert.JSONEq(t, `["`+preparationDCRTestOrigin+`/mcp/remote_login_callback"]`, string(request["redirect_uris"]))
+				assert.JSONEq(t, `["code"]`, string(request["response_types"]))
 				assert.NotContains(t, request, "client_secret")
-				assert.NotContains(t, request, "redirect_uris")
+				assert.Equal(t, constants.UserAgent, r.Header.Get("User-Agent"))
 				w.Header().Set("Content-Type", tt.content)
 				w.WriteHeader(tt.status)
 				_, _ = w.Write([]byte(tt.body))
@@ -254,4 +270,33 @@ func TestPreparationDCRRejectsUnsupportedConfidentialMethods(t *testing.T) {
 			require.Equal(t, "indeterminate", validatePreparationDCR(response, nil, method))
 		})
 	}
+}
+
+func TestPreparationDCRWithoutCallbackOriginSubmitsNothing(t *testing.T) {
+	t.Parallel()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	var submitted atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { submitted.Add(1) }))
+	t.Cleanup(server.Close)
+	_, state := (&Service{policy: policy}).submitPreparationDCR(t.Context(), PreparationInput{}, server.URL, "client_secret_basic")
+	require.Equal(t, "indeterminate", state)
+	require.Zero(t, submitted.Load())
+}
+
+func TestPreparationDCRRejectionKeepsOnlyErrorMembers(t *testing.T) {
+	t.Parallel()
+	body := `{"error":"invalid_client_metadata","error_description":"redirect_uris: Invalid input:\n\u001b[31mexpected array\u0007","client_secret":"leaked-secret"}`
+	code, description := preparationDCRRejection(strings.NewReader(body))
+	require.Equal(t, "invalid_client_metadata", code)
+	require.Equal(t, "redirect_uris: Invalid input: [31mexpected array", description)
+	require.NotContains(t, description, "leaked-secret")
+
+	code, description = preparationDCRRejection(strings.NewReader(`{"error":"bad\ncode","error_description":"` + strings.Repeat("a", 400) + `"}`))
+	require.Empty(t, code, "codes outside NQSCHAR are dropped")
+	require.Len(t, []rune(description), maxProviderErrorDescriptionRunes+1)
+
+	code, description = preparationDCRRejection(strings.NewReader(`<html>nope</html>`))
+	require.Empty(t, code)
+	require.Empty(t, description)
 }

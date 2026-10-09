@@ -55,7 +55,7 @@ func TestPreparationDCRTunneledSubmission(t *testing.T) {
 					Scope      string   `json:"scope"`
 				}
 				assert.NoError(t, json.NewDecoder(r.Body).Decode(&body))
-				assert.Equal(t, []string{oauthwire.GrantTypeJWTBearer}, body.GrantTypes)
+				assert.Equal(t, []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer}, body.GrantTypes)
 				assert.Equal(t, "client_secret_basic", body.AuthMethod)
 				assert.Equal(t, "read", body.Scope)
 				w.Header().Set("Content-Type", "application/json")
@@ -68,7 +68,8 @@ func TestPreparationDCRTunneledSubmission(t *testing.T) {
 			require.NoError(t, err)
 			routes := route.NewRouteTable()
 			require.NoError(t, routes.Publish(t.Context(), tunnelID.UUID.String(), gateway.URL, time.Minute))
-			s := &Service{policy: policy, tunnels: tunnelrouting.NewHTTPClient(routes, "forward-token", policy, nil)}
+			s := newPreparationDCRTestService(t, policy)
+			s.tunnels = tunnelrouting.NewHTTPClient(routes, "forward-token", policy, nil)
 			// An unresolvable issuer hostname ensures direct egress cannot pass.
 			response, state := s.submitPreparationDCRWithTunnel(t.Context(), PreparationInput{Scopes: []string{"read"}}, "https://issuer.invalid/register", "client_secret_basic", tunnelID)
 			require.Equal(t, tc.state, state)
@@ -92,7 +93,8 @@ func TestPreparationDCRTunneledSubmissionFailsClosed(t *testing.T) {
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 	for _, tunnels := range []*tunnelrouting.HTTPClient{nil, tunnelrouting.NewHTTPClient(route.NewRouteTable(), "forward-token", policy, nil)} {
-		s := &Service{policy: policy, tunnels: tunnels}
+		s := newPreparationDCRTestService(t, policy)
+		s.tunnels = tunnels
 		_, state := s.submitPreparationDCRWithTunnel(t.Context(), PreparationInput{}, endpoint.URL, "client_secret_basic", uuid.NullUUID{UUID: uuid.New(), Valid: true})
 		require.Equal(t, "indeterminate", state)
 	}

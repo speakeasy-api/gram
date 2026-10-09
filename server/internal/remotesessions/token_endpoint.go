@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -59,28 +60,29 @@ func (e *TokenEndpoint) Post(ctx context.Context, form url.Values) (TokenRespons
 	req, err := NewTokenEndpointRequest(ctx, e.endpoint, form, e.auth)
 	if err != nil {
 		if _, ok := errors.AsType[*tokenEndpointSigningError](err); ok {
-			return none, &TokenEndpointError{StatusCode: 0, Code: "", Transport: false, Signing: true}
+			return none, &TokenEndpointError{StatusCode: 0, Code: "", Description: "", Transport: false, Signing: true}
 		}
 		return none, fmt.Errorf("build token request: %w", err)
 	}
+	req.Header.Set("User-Agent", constants.UserAgent)
 	resp, err := e.doer.Do(req)
 	if err != nil {
-		return none, &TokenEndpointError{StatusCode: 0, Code: "", Transport: true, Signing: false}
+		return none, &TokenEndpointError{StatusCode: 0, Code: "", Description: "", Transport: true, Signing: false}
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxTokenEndpointResponseBytes+1))
 	if err != nil {
-		return none, &TokenEndpointError{StatusCode: resp.StatusCode, Code: "", Transport: true, Signing: false}
+		return none, &TokenEndpointError{StatusCode: resp.StatusCode, Code: "", Description: "", Transport: true, Signing: false}
 	}
 	if len(body) > maxTokenEndpointResponseBytes {
 		return none, fmt.Errorf("token response exceeds %d bytes", maxTokenEndpointResponseBytes)
 	}
 	if resp.StatusCode/100 != 2 {
-		code := ""
+		code, description := "", ""
 		if parsed, ok := oautherr.ParseTokenError(body); ok {
-			code = tokenEndpointErrorCode(parsed.Code)
+			code, description = tokenEndpointErrorCode(parsed.Code), providerErrorDescriptionField(body)
 		}
-		return none, &TokenEndpointError{StatusCode: resp.StatusCode, Code: code, Transport: false, Signing: false}
+		return none, &TokenEndpointError{StatusCode: resp.StatusCode, Code: code, Description: description, Transport: false, Signing: false}
 	}
 	tok, err := DecodeTokenResponse(body)
 	if err != nil {
@@ -88,7 +90,7 @@ func (e *TokenEndpoint) Post(ctx context.Context, form url.Values) (TokenRespons
 	}
 	if tok.AccessToken() == "" {
 		if parsed, ok := oautherr.ParseTokenError(body); ok {
-			return none, &TokenEndpointError{StatusCode: resp.StatusCode, Code: tokenEndpointErrorCode(parsed.Code), Transport: false, Signing: false}
+			return none, &TokenEndpointError{StatusCode: resp.StatusCode, Code: tokenEndpointErrorCode(parsed.Code), Description: providerErrorDescriptionField(body), Transport: false, Signing: false}
 		}
 		return none, errors.New("token response has no access_token")
 	}

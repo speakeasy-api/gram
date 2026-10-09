@@ -20,7 +20,7 @@ func preparationDiagnostic(state string) *PreparationResult {
 		r.Remediation = "Refresh discovery or ask the provider to advertise JWT-bearer support."
 	case PreparationStateUnknownGrants:
 		r.Stage = PreparationStageRegistration
-		r.Remediation = "An administrator must confirm effective registration grants."
+		r.Remediation = "The provider registered the client without reporting its grants. Check in the provider that the client allows the JWT-bearer grant (some providers also require an owner to approve it by signing in once), then confirm its grants."
 	case PreparationStateManualSetupRequired:
 		r.Stage = PreparationStageRegistration
 		r.Remediation = "Configure a separate downstream client with JWT-bearer and a supported authentication method."
