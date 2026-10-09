@@ -51,7 +51,7 @@ Licenses: LLMail-Inject, MIT, Copyright (c) Microsoft Corporation. AgentDojo and
 
 ## Well-known attacks
 
-175 attacks carry `well_known`, naming the classic phrase they use: ignore previous instructions, reveal the system prompt, DAN or developer mode, a jailbreak or unrestricted AI, a fake system override, or a German version of these. The tags come from the evaluation report's phrase match over the production payloads. The report's second goal is catching 95% of them, and `mise run risk:pi` reports how many each run catches.
+169 attacks carry `well_known`, naming the classic phrase they use: ignore previous instructions, reveal the system prompt, DAN or developer mode, a jailbreak or unrestricted AI, a fake system override, or a German version of these. The tags started from the evaluation report's phrase match over the production payloads. Manual review removed six matches caused by sender names, negated jailbreak language, or generic bypass requests without a listed classic phrase. Historical report results still use the original 175-case set. The report's second goal is catching 95% of them, and `mise run risk:pi` reports how many each run catches.
 
 ## Deepset labeling philosophy mismatch
 

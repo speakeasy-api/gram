@@ -36,7 +36,7 @@ func TestGateCorpusMatchesEvaluationReport(t *testing.T) {
 		}
 	}
 	require.Equal(t, 975, attacks, "the report counts 975 attacks")
-	require.Equal(t, 175, wellKnown, "the report counts 175 well-known attacks")
+	require.Equal(t, 169, wellKnown, "the reviewed corpus counts 169 well-known attacks")
 }
 
 func TestTallyGateCountsFalsePositivesAndAttacks(t *testing.T) {

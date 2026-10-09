@@ -17,10 +17,10 @@ type creditsResponse struct {
 	// Data holds the account totals.
 	Data struct {
 		// TotalCredits is all credit ever purchased.
-		TotalCredits float64 `json:"total_credits"`
+		TotalCredits *float64 `json:"total_credits"`
 
 		// TotalUsage is all credit ever spent.
-		TotalUsage float64 `json:"total_usage"`
+		TotalUsage *float64 `json:"total_usage"`
 	} `json:"data"`
 }
 
@@ -28,28 +28,49 @@ type creditsResponse struct {
 type keyResponse struct {
 	// Data holds the key's own limit.
 	Data struct {
+		// IsManagementKey permits account-wide balance lookup.
+		IsManagementKey bool `json:"is_management_key"`
+
 		// LimitRemaining is what the key may still spend, or null when the key
 		// has no limit of its own.
 		LimitRemaining *float64 `json:"limit_remaining"`
 	} `json:"data"`
 }
 
-// openRouterCredit returns the credit the key can still spend: the account
-// balance, capped by the key's own limit when it has one.
-func openRouterCredit(ctx context.Context, client *http.Client, baseURL, key string) (float64, error) {
-	var credits creditsResponse
-	if err := getOpenRouterJSON(ctx, client, baseURL+"/v1/credits", key, &credits); err != nil {
-		return 0, err
-	}
-	remaining := credits.Data.TotalCredits - credits.Data.TotalUsage
+// creditBalance describes a checked account balance or key spending allowance.
+type creditBalance struct {
+	// Remaining is the amount available under the checked limit, in USD.
+	Remaining float64
+
+	// AccountVerified distinguishes an account balance from a key-only allowance.
+	AccountVerified bool
+}
+
+// openRouterCredit checks the current key without requiring a management key.
+// An inference key reveals only its own allowance, not the account balance.
+func openRouterCredit(ctx context.Context, client *http.Client, baseURL, key string) (creditBalance, error) {
 	var keyInfo keyResponse
 	if err := getOpenRouterJSON(ctx, client, baseURL+"/v1/key", key, &keyInfo); err != nil {
-		return 0, err
+		return creditBalance{Remaining: 0, AccountVerified: false}, err
 	}
+	if !keyInfo.Data.IsManagementKey {
+		if keyInfo.Data.LimitRemaining == nil {
+			return creditBalance{Remaining: 0, AccountVerified: false}, fmt.Errorf("inference key has no reported spending allowance; account balance cannot be verified")
+		}
+		return creditBalance{Remaining: *keyInfo.Data.LimitRemaining, AccountVerified: false}, nil
+	}
+	var credits creditsResponse
+	if err := getOpenRouterJSON(ctx, client, baseURL+"/v1/credits", key, &credits); err != nil {
+		return creditBalance{Remaining: 0, AccountVerified: false}, err
+	}
+	if credits.Data.TotalCredits == nil || credits.Data.TotalUsage == nil {
+		return creditBalance{Remaining: 0, AccountVerified: false}, fmt.Errorf("OpenRouter credit response is missing account totals")
+	}
+	remaining := *credits.Data.TotalCredits - *credits.Data.TotalUsage
 	if limit := keyInfo.Data.LimitRemaining; limit != nil && *limit < remaining {
 		remaining = *limit
 	}
-	return remaining, nil
+	return creditBalance{Remaining: remaining, AccountVerified: true}, nil
 }
 
 func getOpenRouterJSON(ctx context.Context, client *http.Client, url, key string, out any) error {
@@ -78,17 +99,20 @@ func getOpenRouterJSON(ctx context.Context, client *http.Client, url, key string
 	return nil
 }
 
-// checkCredit fails before a run when the key cannot fund it. A credit check
+// checkCredit fails when the checked allowance cannot fund a run. A credit check
 // that itself fails only warns, so a provider hiccup never blocks a run.
 func checkCredit(ctx context.Context, client *http.Client, baseURL, key string, cases int) error {
 	need := float64(cases) * costPerCaseUSD
-	remaining, err := openRouterCredit(ctx, client, baseURL, key)
+	balance, err := openRouterCredit(ctx, client, baseURL, key)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not check OpenRouter credit: %v\n", err)
 		return nil
 	}
-	if remaining < need+creditHeadroomUSD {
-		return fmt.Errorf("OpenRouter has $%.2f of credit left and %d cases need about $%.2f, plus $%.2f for calls in flight; add credit at https://openrouter.ai/settings/credits and rerun", remaining, cases, need, creditHeadroomUSD)
+	if !balance.AccountVerified {
+		fmt.Fprintln(os.Stderr, "warning: checked OpenRouter key allowance only; the account balance may be lower")
+	}
+	if balance.Remaining < need+creditHeadroomUSD {
+		return fmt.Errorf("OpenRouter has $%.2f of checked allowance left and %d cases need about $%.2f, plus $%.2f for calls in flight; check account credit at https://openrouter.ai/settings/credits or the key spending limit and rerun", balance.Remaining, cases, need, creditHeadroomUSD)
 	}
 	return nil
 }

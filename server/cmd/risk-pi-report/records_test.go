@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -135,7 +136,8 @@ func TestGateTallyFromRecordsMatchesTallyGate(t *testing.T) {
 }
 
 func TestRunRecordsGatesAFinishedRunWithoutCalls(t *testing.T) {
-	t.Parallel()
+	t.Setenv("OPENROUTER_DEV_KEY", "")
+	t.Setenv("OPENROUTER_API_KEY", "")
 
 	benign, attack := recordsCase("benign", "benign", ""), recordsCase("attack", "malicious", "")
 	dir := t.TempDir()
@@ -146,6 +148,13 @@ func TestRunRecordsGatesAFinishedRunWithoutCalls(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, casesFile), []byte(body), 0o600))
 	opts := options{runDir: dir, label: "this change", ref: "test", refusalFallback: true, maxFalsePositives: 0, minRecall: 0.8}
 
+	records, err := loadRecords(filepath.Join(dir, casesFile))
+	require.NoError(t, err)
+	require.Len(t, records, 2)
+	require.Empty(t, casesToRun([]labeledCase{benign, attack}, records))
+	initial, err := currentManifest(opts)
+	require.NoError(t, err)
+	require.NoError(t, writeManifest(dir, initial))
 	require.NoError(t, runRecords(t.Context(), opts, []labeledCase{benign, attack}))
 	manifest, err := loadManifest(dir)
 	require.NoError(t, err)
@@ -185,4 +194,112 @@ func TestFinishRunWithoutAGateOnlySummarizes(t *testing.T) {
 	benign := recordsCase("benign", "benign", "")
 	err := finishRun(options{label: "main", maxFalsePositives: gateDisabledFalsePositives}, []labeledCase{benign}, map[string]caseRecord{}, false)
 	require.NoError(t, err)
+}
+
+func TestEvaluatorFingerprintBindsCodeAndConfiguration(t *testing.T) {
+	t.Parallel()
+	opts := options{refusalFallback: true, reasoning: "none", judgeConcurrency: 4}
+	manifest, err := currentManifest(opts)
+	require.NoError(t, err)
+	original, err := evaluatorFingerprint(manifest, "code-a", opts)
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name   string
+		change func(*runManifest)
+	}{
+		{"prefilter model", func(m *runManifest) { m.PrefilterModel += "changed" }},
+		{"confirmation model", func(m *runManifest) { m.ConfirmationModel += "changed" }},
+		{"fallback", func(m *runManifest) { m.RefusalFallbackModel = "" }},
+		{"threshold", func(m *runManifest) { m.PrefilterThreshold = 0.9 }},
+		{"confirmation prompt", func(m *runManifest) { m.ConfirmationPromptSHA256 = "changed" }},
+		{"questions", func(m *runManifest) { m.PrefilterQuestionsSHA256 = "changed" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			changed := manifest
+			tc.change(&changed)
+			hash, err := evaluatorFingerprint(changed, "code-a", opts)
+			require.NoError(t, err)
+			require.NotEqual(t, original, hash)
+		})
+	}
+	codeHash, err := evaluatorFingerprint(manifest, "code-b", opts)
+	require.NoError(t, err)
+	require.NotEqual(t, original, codeHash)
+	manifest.Label, manifest.Ref, manifest.Updated = "new label", "new ref", time.Unix(99, 0)
+	same, err := evaluatorFingerprint(manifest, "code-a", opts)
+	require.NoError(t, err)
+	require.Equal(t, original, same)
+}
+
+func TestRunRecordsRejectsIncompatibleCacheBeforeCallsOrRewrite(t *testing.T) {
+	t.Setenv("OPENROUTER_DEV_KEY", "")
+	t.Setenv("OPENROUTER_API_KEY", "")
+	for _, scenario := range []string{"fallback changed", "old manifest", "missing manifest", "changed code"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Setenv("OPENROUTER_DEV_KEY", "")
+			t.Setenv("OPENROUTER_API_KEY", "")
+			dir := t.TempDir()
+			row := recordsCase("done", "benign", "")
+			rec := caseRecord{Key: caseKey(row), Hash: caseHash(row), Status: statusClear}
+			body, err := json.Marshal(rec)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(filepath.Join(dir, casesFile), append(body, '\n'), 0o600))
+			opts := options{runDir: dir, refusalFallback: true}
+			manifest, err := currentManifest(opts)
+			require.NoError(t, err)
+			switch scenario {
+			case "fallback changed":
+				opts.refusalFallback = false
+			case "old manifest":
+				manifest.EvaluatorSHA256 = ""
+			case "changed code":
+				manifest.EvaluatorSHA256 = "different-code"
+			}
+			var before []byte
+			if scenario != "missing manifest" {
+				require.NoError(t, writeManifest(dir, manifest))
+				before, err = os.ReadFile(filepath.Join(dir, manifestFile))
+				require.NoError(t, err)
+			}
+			require.ErrorContains(t, runRecords(t.Context(), opts, []labeledCase{row}), "incompatible evaluator")
+			after, readErr := os.ReadFile(filepath.Join(dir, manifestFile))
+			if scenario == "missing manifest" {
+				require.ErrorIs(t, readErr, os.ErrNotExist)
+			} else {
+				require.NoError(t, readErr)
+				require.Equal(t, before, after)
+			}
+		})
+	}
+}
+
+func TestRunRecordsWritesIdentityBeforeAnyProviderCalls(t *testing.T) {
+	t.Setenv("OPENROUTER_DEV_KEY", "")
+	t.Setenv("OPENROUTER_API_KEY", "")
+	opts := options{runDir: t.TempDir(), refusalFallback: true}
+	err := runRecords(t.Context(), opts, []labeledCase{recordsCase("new", "benign", "")})
+	require.ErrorContains(t, err, "set OPENROUTER_DEV_KEY")
+	manifest, err := loadManifest(opts.runDir)
+	require.NoError(t, err)
+	require.Len(t, manifest.EvaluatorSHA256, 64)
+	_, err = os.Stat(filepath.Join(opts.runDir, casesFile))
+	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func TestRunRecorderSeparatesInterruptedTail(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), casesFile)
+	body := "{\"key\":\"s::a\",\"hash\":\"h1\",\"status\":\"clear\"}\n{\"key\":\"s::partial\""
+	require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o600)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, file.Close()) })
+	recorder := &runRecorder{file: file, records: make(map[string]caseRecord)}
+	require.NoError(t, recorder.add(caseRecord{Key: "s::b", Hash: "h2", Status: statusFlagged}))
+	records, err := loadRecords(path)
+	require.NoError(t, err)
+	require.Len(t, records, 2)
+	require.Equal(t, statusClear, records["s::a"].Status)
+	require.Equal(t, statusFlagged, records["s::b"].Status)
 }

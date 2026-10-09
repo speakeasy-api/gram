@@ -87,3 +87,93 @@ func TestRenderViewerLiveModePollsForData(t *testing.T) {
 	require.Contains(t, string(page), "const LIVE = true;")
 	require.Contains(t, string(page), "let DATA = null;")
 }
+
+func TestViewerGateOutcomes(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name      string
+		minRecall float64
+		maxFP     int
+		label     string
+		status    caseStatus
+		want      string
+	}{
+		{name: "recall requires attacks", minRecall: 0.8, maxFP: -1, label: "benign", status: statusClear, want: "Fail"},
+		{name: "recall with FP limit requires attacks", minRecall: 0.8, maxFP: 0, label: "benign", status: statusClear, want: "Fail"},
+		{name: "zero recall is disabled", maxFP: -1, label: "benign", status: statusClear, want: "Not set"},
+		{name: "FP only passes without attacks", maxFP: 0, label: "benign", status: statusClear, want: "Pass"},
+		{name: "FP only rejects flagged benign", maxFP: 0, label: "benign", status: statusFlagged, want: "Fail"},
+		{name: "recall passes", minRecall: 0.8, maxFP: -1, label: "malicious", status: statusFlagged, want: "Pass"},
+		{name: "recall fails", minRecall: 0.8, maxFP: -1, label: "malicious", status: statusClear, want: "Fail"},
+		{name: "out of credit is incomplete", minRecall: 0.8, maxFP: 0, label: "malicious", status: statusOutOfCredit, want: "Incomplete"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c := recordsCase("case", tc.label, "")
+			dir := writeRun(t, "change", viewRecord(c, tc.status))
+			data, err := buildViewData(options{runDir: dir, minRecall: tc.minRecall, maxFalsePositives: tc.maxFP}, []labeledCase{c}, time.Unix(0, 0))
+			require.NoError(t, err)
+			require.Equal(t, tc.want, data.Sides[0].GateStatus)
+			require.Contains(t, summaryMarkdown(data), "| "+tc.want+" |")
+			page, err := renderViewer(&data, false)
+			require.NoError(t, err)
+			require.Contains(t, string(page), `"gate_status":"`+tc.want+`"`)
+		})
+	}
+}
+
+func TestViewerGoalsWaitForCompleteRuns(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		totals sideTotals
+		want   string
+	}{
+		{name: "pending", totals: sideTotals{Pending: 1, WellKnown: 1, WellKnownCaught: 1}, want: "Incomplete"},
+		{name: "out of credit", totals: sideTotals{OutOfCredit: 1, WellKnown: 1, WellKnownCaught: 1}, want: "Incomplete"},
+		{name: "both", totals: sideTotals{WellKnown: 1, WellKnownCaught: 1}, want: "Meets both"},
+		{name: "first only", totals: sideTotals{WellKnown: 1}, want: "Goal 1 only"},
+		{name: "second only", totals: sideTotals{FalsePositives: 1, WellKnown: 1, WellKnownCaught: 1}, want: "Goal 2 only"},
+		{name: "neither", totals: sideTotals{FalsePositives: 1, WellKnown: 1}, want: "Fails both"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, goalsOutcome(tc.totals))
+		})
+	}
+}
+
+func TestViewerListenAddress(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		address string
+		want    string
+	}{
+		{address: "127.0.0.1:8765", want: "127.0.0.1:8765"},
+		{address: "127.0.0.2:0", want: "127.0.0.2:0"},
+		{address: "[::1]:8765", want: "[::1]:8765"},
+		{address: "[::ffff:127.0.0.1]:8765", want: "[::ffff:127.0.0.1]:8765"},
+		{address: "localhost:8765", want: "127.0.0.1:8765"},
+		{address: ":8765"},
+		{address: "0.0.0.0:8765"},
+		{address: "[::]:8765"},
+		{address: "192.0.2.1:8765"},
+		{address: "example.com:8765"},
+		{address: "127.0.0.1"},
+	} {
+		t.Run(tc.address, func(t *testing.T) {
+			t.Parallel()
+			address, err := viewerListenAddress(tc.address)
+			if tc.want == "" {
+				require.Error(t, err)
+				require.Error(t, serveViewer(t.Context(), options{serve: tc.address}, nil))
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, address)
+		})
+	}
+}

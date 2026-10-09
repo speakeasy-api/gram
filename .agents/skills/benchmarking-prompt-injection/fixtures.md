@@ -6,6 +6,6 @@ Read with `SKILL.md` in this folder. Fixtures live in `server/internal/scanners/
 - Tag an attack that uses a classic phrase with `well_known`, naming the phrase: "Ignore previous instructions", "Reveal the system prompt", "DAN or developer mode", "Jailbreak or unrestricted AI", "Fake system override" or "German version".
 - A row that repeats an earlier row's text is dropped silently (except in `trajectory_twins` and `agentdojo`). A new `.jsonl` file loads only when `requiredCorpusFiles` or `optionalCorpusFiles` in `server/cmd/risk-pi-report/main.go` lists it.
 - Update the counts:
-  - `TestGateCorpusMatchesEvaluationReport` in `server/cmd/risk-pi-report/gate_test.go` (2,046 cases, 975 attacks, 175 well-known), and `TestCommittedRecallFixturesUseReviewedDirectiveTaxonomy` in `main_test.go`;
+  - `TestGateCorpusMatchesEvaluationReport` in `server/cmd/risk-pi-report/gate_test.go` (2,046 cases, 975 attacks, 169 well-known), and `TestCommittedRecallFixturesUseReviewedDirectiveTaxonomy` in `main_test.go`;
   - the tables and prose counts in `corpus_notes.md`;
-  - the gate paragraph of CASCADE.md and the numbers in `SKILL.md`. The gate needs 80% of the attacks, rounded up: 976 attacks need 781.
+  - the gate paragraph of CASCADE.md and the numbers in `SKILL.md`. The gate needs 80% of the attacks, rounded up: the current 975 attacks need 780; for example, adding one attack would make 976 attacks need 781.

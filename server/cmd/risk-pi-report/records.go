@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"os"
@@ -111,6 +112,9 @@ type caseRecord struct {
 // runManifest describes a run directory: which code produced it and with
 // which models and prompts.
 type runManifest struct {
+	// EvaluatorSHA256 binds records to the compiled evaluator and its runtime settings.
+	EvaluatorSHA256 string `json:"evaluator_sha256"`
+
 	// Label names the side of a comparison, "main" or "this change".
 	Label string `json:"label"`
 
@@ -445,6 +449,11 @@ func (r *runRecorder) add(rec caseRecord) error {
 	if err != nil {
 		return fmt.Errorf("marshal run record: %w", err)
 	}
+	// Separate an interrupted final line before appending this run's first record.
+	// Empty lines are ignored by the loader.
+	if r.done == 0 {
+		line = append([]byte{'\n'}, line...)
+	}
 	if _, err := r.file.Write(append(line, '\n')); err != nil {
 		return fmt.Errorf("append run record: %w", err)
 	}
@@ -469,6 +478,21 @@ func runRecords(ctx context.Context, opts options, corpus []labeledCase) error {
 	if err != nil {
 		return err
 	}
+	manifest, err := currentManifest(opts)
+	if err != nil {
+		return err
+	}
+	previous, err := loadManifest(opts.runDir)
+	if err != nil {
+		return err
+	}
+	if len(records) > 0 && (previous.EvaluatorSHA256 == "" || previous.EvaluatorSHA256 != manifest.EvaluatorSHA256) {
+		return fmt.Errorf("run directory contains records from an incompatible evaluator; choose a new --run-dir")
+	}
+	// Publish the identity before any case is appended, including interrupted runs.
+	if err := writeManifest(opts.runDir, manifest); err != nil {
+		return err
+	}
 	todo := casesToRun(corpus, records)
 	fmt.Fprintf(os.Stderr, "%s: %d cases, %d reused, %d to run (%s)\n", opts.label, len(corpus), len(corpus)-len(todo), len(todo), opts.ref)
 	stopped := false
@@ -486,7 +510,8 @@ func runRecords(ctx context.Context, opts options, corpus []labeledCase) error {
 			return err
 		}
 	}
-	if err := writeManifest(opts); err != nil {
+	manifest.Updated = time.Now().UTC()
+	if err := writeManifest(opts.runDir, manifest); err != nil {
 		return err
 	}
 	return finishRun(opts, corpus, records, stopped)
@@ -534,7 +559,7 @@ func evaluateIntoRun(ctx context.Context, opts options, key string, corpus, todo
 		defer stopMu.Unlock()
 		// After a stop, calls cut short by the cancellation leave the case
 		// for the next run rather than recording a failure it did not have.
-		if stopped && rec.Status == statusNoVerdict {
+		if runCtx.Err() != nil && rec.Status == statusNoVerdict {
 			return
 		}
 		if rec.Status == statusOutOfCredit && !stopped {
@@ -544,22 +569,42 @@ func evaluateIntoRun(ctx context.Context, opts options, key string, corpus, todo
 		addErr = errors.Join(addErr, recorder.add(rec))
 	}
 	if _, _, err := scanCascade(runCtx, opts, key, todo, onCase); err != nil {
-		return false, err
+		if !stopped || ctx.Err() != nil || !errors.Is(err, context.Canceled) {
+			return stopped, errors.Join(addErr, err)
+		}
 	}
 	return stopped, addErr
 }
 
-// writeManifest records which code and models produced the run.
-func writeManifest(opts options) error {
+// currentManifest identifies the actual executable, not a user-supplied ref.
+// Rebuilding with changed evaluator code, dependencies, or prompts invalidates
+// reuse, including uncommitted edits. Conservative rebuild invalidation is safe.
+func currentManifest(opts options) (runManifest, error) {
+	var manifest runManifest
+	executable, err := os.Executable()
+	if err != nil {
+		return manifest, fmt.Errorf("locate evaluator executable: %w", err)
+	}
+	file, err := os.Open(executable) // #nosec G304 -- os.Executable identifies this running binary.
+	if err != nil {
+		return manifest, fmt.Errorf("open evaluator executable: %w", err)
+	}
+	defer o11y.NoLogDefer(file.Close)
+	code := sha256.New()
+	if _, err := io.Copy(code, file); err != nil {
+		return manifest, fmt.Errorf("hash evaluator executable: %w", err)
+	}
+
 	confirmationHash, questionsHash, err := registryPromptHashes()
 	if err != nil {
-		return err
+		return manifest, err
 	}
 	fallback := ""
 	if opts.refusalFallback {
 		fallback = piopenrouter.RefusalFallbackModel
 	}
-	manifest := runManifest{
+	manifest = runManifest{
+		EvaluatorSHA256:          "",
 		Label:                    opts.label,
 		Ref:                      opts.ref,
 		PrefilterModel:           typesafe.Model,
@@ -570,11 +615,34 @@ func writeManifest(opts options) error {
 		PrefilterQuestionsSHA256: questionsHash,
 		Updated:                  time.Now().UTC(),
 	}
+	manifest.EvaluatorSHA256, err = evaluatorFingerprint(manifest, fmt.Sprintf("%x", code.Sum(nil)), opts)
+	return manifest, err
+}
+
+// evaluatorFingerprint excludes display metadata and gate settings, which do
+// not change a case verdict. Case content is fingerprinted separately.
+func evaluatorFingerprint(manifest runManifest, code string, opts options) (string, error) {
+	manifest.EvaluatorSHA256, manifest.Label, manifest.Ref = "", "", ""
+	manifest.Updated = time.Time{}
+	configuration, err := json.Marshal(struct {
+		Code        string      `json:"code"`
+		Manifest    runManifest `json:"manifest"`
+		Reasoning   string      `json:"reasoning"`
+		Concurrency int         `json:"concurrency"`
+	}{Code: code, Manifest: manifest, Reasoning: opts.reasoning, Concurrency: opts.judgeConcurrency})
+	if err != nil {
+		return "", fmt.Errorf("marshal evaluator configuration: %w", err)
+	}
+	return fmt.Sprintf("%x", sha256.Sum256(configuration)), nil
+}
+
+// writeManifest records which code and models produced the run.
+func writeManifest(dir string, manifest runManifest) error {
 	body, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal run manifest: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(opts.runDir, manifestFile), body, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, manifestFile), body, 0o600); err != nil {
 		return fmt.Errorf("write run manifest: %w", err)
 	}
 	return nil

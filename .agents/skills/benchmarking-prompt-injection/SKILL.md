@@ -1,6 +1,6 @@
 ---
 name: benchmarking-prompt-injection
-description: Use when changing or reviewing prompt-injection detection in server/internal/scanners/promptinjection, server/cmd/risk-pi-report, the prompt_injection fixtures, server/internal/judgemessage, GetJudgeMessageWindow, risk_analysis trajectories, or server/internal/hooks skill-upload handling. Triggers: "prompt injection", "Jev", "confirmer", "risk:pi", "false positive", "recall", "relabel".
+description: Use when changing or reviewing prompt-injection detection in server/internal/scanners/promptinjection, server/cmd/risk-pi-report, the prompt_injection fixtures, server/internal/judgemessage, GetJudgeMessageWindow in server/internal/risk/queries.sql, trajectory building in server/internal/background/activities/risk_analysis, or server/internal/hooks skill-upload handling. Triggers: "prompt injection", "Jev", "confirmer", "risk:pi", "false positive", "recall", "relabel".
 ---
 
 # Benchmarking prompt-injection changes
@@ -17,7 +17,7 @@ A change that can alter a verdict merges only after `mise run risk:pi` passes on
 - `mise run risk:pi --sources <source>`: a cheap slice while iterating, without the gate.
 - `mise run risk:pi`: full run, merge gate, `report.html`, and a Markdown summary for the PR.
 - `--watch` serves a live viewer; `--view` opens cached results; `--summary-md` prints the PR table; `--no-main` skips main.
-- Rerun the same command to resume, including after running out of credit.
+- Rerun the same command to resume, including after running out of credit. A baseline without per-case recording support fails before scoring; choose a compatible `--base <ref>` or explicitly use `--no-main` for a one-sided run.
 
 Agents: never read `mise.local.toml`; ask before committing and before paid runs.
 

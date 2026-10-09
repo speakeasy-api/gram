@@ -50,11 +50,15 @@ const (
 // provider error runs again, before it is scored. onCase, when set, receives
 // each case as it finishes; cancelling ctx stops new cases from starting.
 func scanCascade(ctx context.Context, opts options, key string, corpus []labeledCase, onCase func(int, caseOutcome)) ([][]scanners.Finding, evaluationStats, error) {
+	policy := guardian.NewDefaultPolicy(tracenoop.NewTracerProvider())
+	jev := typesafe.New(policy.PooledClient(), func(context.Context, string) (string, error) { return key, nil })
+	return scanCascadeWithClients(ctx, opts, corpus, onCase, jev, newOpenRouterClient(key))
+}
+
+// scanCascadeWithClients keeps scheduling and reporting testable without providers.
+func scanCascadeWithClients(ctx context.Context, opts options, corpus []labeledCase, onCase func(int, caseOutcome), jev typesafe.Evaluator, client openrouter.CompletionClient) ([][]scanners.Finding, evaluationStats, error) {
 	tracer, meter := tracenoop.NewTracerProvider(), meternoop.NewMeterProvider()
 	logger := slog.New(slog.DiscardHandler)
-	policy := guardian.NewDefaultPolicy(tracer)
-	jev := typesafe.New(policy.PooledClient(), func(context.Context, string) (string, error) { return key, nil })
-	client := newOpenRouterClient(key)
 	results := make([][]scanners.Finding, len(corpus))
 	observations := make([]decisionObservation, len(corpus))
 	missed := make([]bool, len(corpus))
@@ -66,11 +70,21 @@ func scanCascade(ctx context.Context, opts options, key string, corpus []labeled
 	firstUnavailable := make([]bool, len(corpus))
 	sem := make(chan struct{}, opts.judgeConcurrency)
 	var wg sync.WaitGroup
+schedule:
 	for i, row := range corpus {
 		if ctx.Err() != nil {
 			break
 		}
-		sem <- struct{}{}
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			break schedule
+		}
+		if ctx.Err() != nil {
+			<-sem
+			break
+		}
+
 		wg.Go(func() {
 			defer func() { <-sem }()
 			observation := &observations[i]
@@ -107,6 +121,9 @@ func scanCascade(ctx context.Context, opts options, key string, corpus []labeled
 		})
 	}
 	wg.Wait()
+	if err := ctx.Err(); err != nil {
+		return nil, evaluationStats{}, fmt.Errorf("incomplete cascade run: %w", err)
+	}
 	stats := summarizeEvaluation(observations)
 	// A recovered Jev overflow is a failed physical call, not a failed scan.
 	stats.FailOpenEvents = 0

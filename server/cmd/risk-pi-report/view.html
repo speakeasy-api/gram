@@ -34,7 +34,9 @@ th.focus,td.focus{background:var(--focus)}
 select,input,button{font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--fg)}
 input[type=search]{min-width:260px}
 button{cursor:pointer}
-.msg{cursor:pointer;max-width:520px}
+.msg{max-width:520px}
+.msg button{width:100%;text-align:left;border:0;padding:0;background:transparent}
+.msg button:focus-visible{outline:2px solid var(--link);outline-offset:3px}
 .snippet{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere}
 .pager{display:flex;gap:12px;align-items:center;justify-content:center;margin:14px 0}
 dialog{width:min(900px,94vw);max-height:90vh;border:1px solid var(--line);border-radius:10px;padding:0;background:var(--surface);color:var(--fg)}
@@ -43,7 +45,7 @@ dialog::backdrop{background:#0008}
 .dlg-body{padding:14px 18px;overflow:auto;max-height:calc(90vh - 60px)}
 pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--soft);padding:12px;border-radius:6px;font:12px/1.6 ui-monospace,Menlo,monospace;max-height:40vh;overflow:auto}
 .sides{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
-.sides div{border:1px solid var(--line);border-radius:8px;padding:10px}
+.sides > div{border:1px solid var(--line);border-radius:8px;padding:10px}
 .live{color:var(--ok);font-weight:600}
 </style>
 </head>
@@ -129,17 +131,6 @@ function link(text, f, title) {
 }
 function td(content, cls) { const c = el("td", undefined, cls); if (content instanceof Node) c.append(content); else c.textContent = content; return c; }
 
-function gate(s) {
-  const t = s.totals;
-  if (t.pending > 0 || t.out_of_credit > 0) return "Incomplete";
-  if (!s.required_caught && s.max_false_positives === -1) return "Not set";
-  if (s.max_false_positives !== -1 && t.false_positives > s.max_false_positives) return "Fail";
-  return t.caught < s.required_caught ? "Fail" : "Pass";
-}
-function goals(t) {
-  const g1 = t.false_positives === 0, g2 = t.well_known > 0 && t.well_known_caught >= 0.95 * t.well_known;
-  return g1 && g2 ? "Meets both" : g1 ? "Goal 1 only" : g2 ? "Goal 2 only" : "Fails both";
-}
 const pct = (a, b) => (b ? (100 * a / b).toFixed(1) : "0.0") + "%";
 const secs = (ms) => (ms / 1000).toFixed(1) + " s";
 
@@ -163,8 +154,8 @@ function renderSummary() {
     tr.append(td(link(String(t.out_of_credit), `ooc-${s.id}`), "num"));
     const time = el("span", secs(t.latency_p50_ms)); time.append(el("span", ` p90 ${secs(t.latency_p90_ms)}`, "chip"));
     tr.append(td(time, "num"));
-    tr.append(td(gate(s), "num"));
-    tr.append(td(goals(t), "num"));
+    tr.append(td(s.gate_status, "num"));
+    tr.append(td(s.goals_status, "num"));
     tr.append(td("$" + t.cost_usd.toFixed(2), "num"));
     const m = s.manifest;
     if (m.confirmation_model) tr.title = `${m.prefilter_model} ≥ ${m.prefilter_threshold} → ${m.confirmation_model}${m.refusal_fallback_model ? " → " + m.refusal_fallback_model : ""}\nconfirmation prompt ${(m.confirmation_prompt_sha256 || "").slice(0, 10)} · questions ${(m.prefilter_questions_sha256 || "").slice(0, 10)}`;
@@ -217,7 +208,9 @@ function render() {
   const body = $("rows"); body.replaceChildren();
   for (const c of rows.slice(state.p * PAGE, state.p * PAGE + PAGE)) {
     const tr = el("tr");
-    const msg = td(el("div", c.text, "snippet"), "msg"); msg.addEventListener("click", () => openCase(c.key)); tr.append(msg);
+    const details = el("button", c.text, "snippet"); details.type = "button";
+    details.setAttribute("aria-label", `Show details for ${c.key}`); details.setAttribute("aria-haspopup", "dialog");
+    details.addEventListener("click", () => openCase(c.key)); tr.append(td(details, "msg"));
     const kase = el("div"); kase.append(el("div", c.source)); kase.append(el("div", c.id, "muted")); tr.append(td(kase));
     const label = el("div"); label.append(el("span", c.label === "malicious" ? "Attack" : "Benign", "badge " + c.label));
     if (c.well_known) label.append(el("div", c.well_known, "chip"));

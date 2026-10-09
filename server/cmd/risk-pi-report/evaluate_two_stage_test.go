@@ -205,3 +205,48 @@ func TestBenchmarkAvailabilityReportLabels(t *testing.T) {
 	printSummary(&output, []modeSummary{{Evaluation: stats}})
 	require.Contains(t, output.String(), "benchmark_first_attempt_unavailable=0 final_unavailable=0")
 }
+
+// clearingPrefilter makes the scheduler tests deterministic without any network.
+type clearingPrefilter struct{ calls int }
+
+func (p *clearingPrefilter) Evaluate(_ context.Context, _ string, _ json.RawMessage, questions map[string]typesafe.Question) (typesafe.Result, error) {
+	p.calls++
+	probabilities := make(map[string]float64, len(questions))
+	for key := range questions {
+		probabilities[key] = 0
+	}
+	return typesafe.Result{Probabilities: probabilities, Model: typesafe.Model}, nil
+}
+
+func TestCascadeCancellationDoesNotScoreUnstartedCases(t *testing.T) {
+	t.Parallel()
+	for _, cancelBefore := range []bool{true, false} {
+		t.Run(fmt.Sprintf("before_%t", cancelBefore), func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if cancelBefore {
+				cancel()
+			}
+			prefilter := &clearingPrefilter{}
+			completion := &scriptedCompletion{}
+			completed := 0
+			results, stats, err := scanCascadeWithClients(ctx, options{judgeConcurrency: 1}, []labeledCase{recordsCase("a", "benign", ""), recordsCase("b", "benign", ""), recordsCase("c", "benign", "")}, func(_ int, outcome caseOutcome) {
+				require.Equal(t, promptinjection.LabelSafe, outcome.verdict.Label)
+				completed++
+				cancel()
+			}, prefilter, completion)
+			require.ErrorIs(t, err, context.Canceled)
+			require.Nil(t, results, "partial slots must not be scored as clean cases")
+			require.Zero(t, stats.BenchmarkCases)
+			require.Empty(t, completion.models)
+			if cancelBefore {
+				require.Zero(t, completed)
+				require.Zero(t, prefilter.calls)
+			} else {
+				require.Equal(t, 1, completed)
+				require.Equal(t, 1, prefilter.calls)
+			}
+		})
+	}
+}

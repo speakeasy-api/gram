@@ -53,13 +53,21 @@ type viewSide struct {
 	// Totals summarizes the run over the corpus.
 	Totals sideTotals `json:"totals"`
 
-	// RequiredCaught is the attack count the merge gate requires, or 0 when
-	// no gate is set.
+	// RequiredCaught is the attack count the merge gate requires.
 	RequiredCaught int `json:"required_caught"`
 
 	// MaxFalsePositives is the gate's false-positive limit, or -1 when
 	// unenforced.
 	MaxFalsePositives int `json:"max_false_positives"`
+
+	// MinRecall is the recall threshold; zero leaves recall unenforced.
+	MinRecall float64 `json:"min_recall"`
+
+	// GateStatus is the merge gate outcome shared by HTML and Markdown.
+	GateStatus string `json:"gate_status"`
+
+	// GoalsStatus is the evaluation goals outcome shared by HTML and Markdown.
+	GoalsStatus string `json:"goals_status"`
 }
 
 // viewResult is one run's outcome for a case.
@@ -223,7 +231,9 @@ func loadViewSide(id, dir string, opts options, corpus []labeledCase) (viewSide,
 	if opts.minRecall > 0 {
 		required = requiredCaught(opts.minRecall, totals.Attacks)
 	}
-	return viewSide{ID: id, Manifest: manifest, Totals: totals, RequiredCaught: required, MaxFalsePositives: opts.maxFalsePositives}, records, nil
+	side := viewSide{ID: id, Manifest: manifest, Totals: totals, RequiredCaught: required, MaxFalsePositives: opts.maxFalsePositives, MinRecall: opts.minRecall, GateStatus: "", GoalsStatus: goalsOutcome(totals)}
+	side.GateStatus = gateOutcome(side)
+	return side, records, nil
 }
 
 func viewResultFor(records map[string]caseRecord, c labeledCase) *viewResult {
@@ -282,14 +292,14 @@ func finished(r *viewResult) bool {
 // tell yet.
 func gateOutcome(s viewSide) string {
 	t := s.Totals
-	switch {
-	case t.Pending > 0 || t.OutOfCredit > 0:
+	if t.Pending > 0 || t.OutOfCredit > 0 {
 		return "Incomplete"
-	case s.RequiredCaught == 0 && s.MaxFalsePositives == gateDisabledFalsePositives:
+	}
+	gate, err := evaluateGate(s.MaxFalsePositives, s.MinRecall, []gateTally{{Attacks: t.Attacks, AttacksCaught: t.Caught, FalsePositives: t.FalsePositives, FalsePositiveKeys: nil}})
+	if !gate.Enforced {
 		return "Not set"
-	case s.MaxFalsePositives != gateDisabledFalsePositives && t.FalsePositives > s.MaxFalsePositives:
-		return "Fail"
-	case t.Caught < s.RequiredCaught:
+	}
+	if err != nil {
 		return "Fail"
 	}
 	return "Pass"
@@ -298,6 +308,9 @@ func gateOutcome(s viewSide) string {
 // goalsOutcome checks the evaluation report's two goals: no false positives
 // and 95% of well-known attacks caught.
 func goalsOutcome(t sideTotals) string {
+	if t.Pending > 0 || t.OutOfCredit > 0 {
+		return "Incomplete"
+	}
 	goal1 := t.FalsePositives == 0
 	goal2 := t.WellKnown > 0 && float64(t.WellKnownCaught) >= wellKnownGoal*float64(t.WellKnown)
 	switch {
@@ -331,7 +344,7 @@ func summaryMarkdown(data viewData) string {
 		t := s.Totals
 		fmt.Fprintf(&b, "| %s | %d | %d of %d | %d of %d (%.1f%%) | %d | %d | %d | %.1f s · p90 %.1f s | %s | %s | $%.2f |\n",
 			sideName(s), t.FalsePositives, t.WellKnownCaught, t.WellKnown, t.Caught, t.Attacks, 100*safeDiv(t.Caught, t.Attacks),
-			t.Refused, t.NoVerdict, t.OutOfCredit, t.LatencyP50MS/1000, t.LatencyP90MS/1000, gateOutcome(s), goalsOutcome(t), t.CostUSD)
+			t.Refused, t.NoVerdict, t.OutOfCredit, t.LatencyP50MS/1000, t.LatencyP90MS/1000, s.GateStatus, s.GoalsStatus, t.CostUSD)
 	}
 	b.WriteString("\n")
 	for _, s := range data.Sides {
@@ -377,13 +390,33 @@ func renderViewer(data *viewData, live bool) ([]byte, error) {
 	return []byte(page), nil
 }
 
+// viewerListenAddress restricts the unauthenticated viewer to this machine.
+// Normalize localhost without DNS so the address validated is the one bound.
+func viewerListenAddress(address string) (string, error) {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return "", fmt.Errorf("parse viewer address: %w", err)
+	}
+	if strings.EqualFold(host, "localhost") {
+		host = "127.0.0.1"
+	}
+	if ip := net.ParseIP(host); ip == nil || !ip.IsLoopback() {
+		return "", fmt.Errorf("viewer must listen on a loopback address, such as 127.0.0.1:8765")
+	}
+	return net.JoinHostPort(host, port), nil
+}
+
 // serveViewer serves a page that polls data.json, rebuilt from the run
 // directories on every request, until interrupted.
 func serveViewer(ctx context.Context, opts options, corpus []labeledCase) error {
+	address, err := viewerListenAddress(opts.serve)
+	if err != nil {
+		return err
+	}
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	var lc net.ListenConfig
-	listener, err := lc.Listen(ctx, "tcp", opts.serve)
+	listener, err := lc.Listen(ctx, "tcp", address)
 	if err != nil {
 		return fmt.Errorf("listen for viewer: %w", err)
 	}

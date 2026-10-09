@@ -43,7 +43,7 @@ code_key() {
 }
 
 build() {
-  (cd "$1" && go build -o "$2" ./server/cmd/risk-pi-report)
+  (cd "$1" && go build -trimpath -buildvcs=false -o "$2" ./server/cmd/risk-pi-report)
 }
 
 mkdir -p "$cache/runs" "$cache/bin"
@@ -52,10 +52,13 @@ mkdir -p "$cache/runs" "$cache/bin"
 head_short=$(git rev-parse --short=10 HEAD)
 change_key=$(code_key HEAD)
 change_ref="$(git rev-parse --abbrev-ref HEAD) @ $head_short"
-if [ -n "$(git status --porcelain -- server ":(exclude)$fixtures")" ]; then
+if [ -n "$(git status --porcelain -- . ":(exclude)$fixtures")" ]; then
   dirty=$({
-    git diff HEAD -- server ":(exclude)$fixtures"
-    git ls-files --others --exclude-standard -- server ":(exclude)$fixtures" | while IFS= read -r f; do cat "$f"; done
+    git diff --binary HEAD -- . ":(exclude)$fixtures"
+    git ls-files -z --others --exclude-standard -- . ":(exclude)$fixtures" | while IFS= read -r -d '' f; do
+      printf '%s\0' "$f"
+      git hash-object -- "$f"
+    done
   } | git hash-object --stdin | cut -c1-8)
   change_key="$change_key-$dirty"
   change_ref="$change_ref + uncommitted"
@@ -77,9 +80,15 @@ fi
 run_main=false
 if [ "$no_main" != "true" ]; then
   if [ -z "$base_ref" ]; then
-    git fetch -q origin main || echo "warning: could not fetch origin/main; using the local copy" >&2
+    if ! git fetch -q origin main; then
+      if ! git rev-parse --verify --quiet 'origin/main^{commit}' >/dev/null; then
+        echo "cannot fetch origin/main and no local copy exists; fetch it, choose --base <ref>, or explicitly use --no-main" >&2
+        exit 1
+      fi
+      echo "warning: could not fetch origin/main; using the existing local origin/main" >&2
+    fi
     base_ref=origin/main
-    base_sha=$(git merge-base HEAD origin/main)
+    base_sha=$(git merge-base HEAD "$base_ref")
   else
     base_sha=$(git rev-parse "$base_ref^{commit}")
   fi
@@ -96,7 +105,8 @@ if [ "$no_main" != "true" ]; then
     run_main=true
     view_args+=(-base-run-dir "$base_dir")
   else
-    echo "main @ $base_short predates per-case benchmark records, so there is no main column; use --base <ref> to compare with a newer commit" >&2
+    echo "baseline @ $base_short predates per-case benchmark records; choose a compatible --base <ref>, or explicitly use --no-main for a one-sided run" >&2
+    exit 1
   fi
 fi
 
