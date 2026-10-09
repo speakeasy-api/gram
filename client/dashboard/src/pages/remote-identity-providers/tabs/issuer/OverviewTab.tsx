@@ -136,7 +136,7 @@ export function OverviewTab({
         </InfoSection>
       </div>
 
-      <InfoSection title="Identity Provider Details">
+      <InfoSection title="Authorization Server Details">
         <InfoField label="Scopes">{list(issuer.scopesSupported)}</InfoField>
         <InfoField label="Scope Override">
           {list(issuer.scopeOverride ?? undefined)}

@@ -30,7 +30,7 @@ function route(title: string, url: string): AppRoute {
 const routes = {
   mcpSessions: route("MCP Sessions", "mcp-sessions"),
   remoteIdentityProviders: route(
-    "Remote Identity Providers",
+    "Authorization Servers",
     "remote-identity-providers",
   ),
   agents: route("Agent Identity", "agent-management"),

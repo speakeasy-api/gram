@@ -53,7 +53,7 @@ export function MigrateIssuerDialog({
       await invalidateAllOrganizationRemoteSessionIssuers(queryClient, {
         refetchType: "all",
       });
-      toast.success("Providers consolidated");
+      toast.success("Authorization servers consolidated");
       onMigrated?.();
       onClose();
     },
@@ -61,7 +61,7 @@ export function MigrateIssuerDialog({
       toast.error(
         error instanceof Error
           ? error.message
-          : "Failed to consolidate providers",
+          : "Failed to consolidate authorization servers",
       );
     },
   });
@@ -98,9 +98,9 @@ export function MigrateIssuerDialog({
             Consolidate "{issuerDisplayName(source.issuer)}"
           </Dialog.Title>
           <Dialog.Description>
-            Move this provider's clients onto another provider for the same
-            upstream identity provider, then remove this one. Existing sessions
-            keep working, so nobody has to sign in again.
+            Move this authorization server's clients onto another authorization
+            server for the same upstream authorization server, then remove this
+            one. Existing sessions keep working, so nobody has to sign in again.
           </Dialog.Description>
         </Dialog.Header>
 
@@ -110,13 +110,14 @@ export function MigrateIssuerDialog({
           </Label>
           {candidates.length === 0 ? (
             <Text small muted>
-              No other provider in this organization can absorb this one. A
-              target must be organizational, or belong to the same project.
+              No other authorization server in this organization can absorb this
+              one. A target must be organizational, or belong to the same
+              project.
             </Text>
           ) : (
             <Select value={targetId} onValueChange={setTargetId}>
               <SelectTrigger>
-                <SelectValue placeholder="Select a provider" />
+                <SelectValue placeholder="Select an authorization server" />
               </SelectTrigger>
               <SelectContent>
                 {candidates.map((candidate) => (

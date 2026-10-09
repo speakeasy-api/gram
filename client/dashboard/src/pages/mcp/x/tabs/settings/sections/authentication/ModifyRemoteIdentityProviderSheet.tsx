@@ -116,7 +116,7 @@ export function ModifyRemoteIdentityProviderSheet({
       >
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle className="text-lg font-semibold">
-            Modify Remote Identity Provider
+            Modify Authorization Server
           </SheetTitle>
         </SheetHeader>
 

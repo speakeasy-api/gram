@@ -387,7 +387,8 @@ export function CreateRemoteSessionClientSheet({
               </Stack>
             ) : (
               <Text muted small>
-                The client will be created in this provider's project.
+                The client will be created in this authorization server's
+                project.
               </Text>
             )}
 

@@ -29,14 +29,14 @@ export function IssuerScopeOverrideAlert({
 
   return (
     <Alert variant="warning" dismissible={false} alignTop>
-      This client's remote identity provider has a scope override, so every
-      sign-in requests{" "}
+      This client's authorization server has a scope override, so every sign-in
+      requests{" "}
       <span className="font-mono">{issuer.scopeOverride.join(" ")}</span> and
       changing the client's scopes has no effect.{" "}
       {/* Platform providers have no settings page, and the organization
           cannot edit their override. */}
       {remoteSessionScopeTier(issuer) === "platform" ? (
-        "The platform remote identity provider sets this override, and it can't be changed from this organization."
+        "The platform authorization server sets this override, and it can't be changed from this organization."
       ) : (
         <EditScopeOverrideHint issuerId={issuer.id} />
       )}
@@ -61,10 +61,10 @@ function EditScopeOverrideHint({
       to={routes.remoteIdentityProviders.issuerDetail.settings.href(issuerId)}
       className="font-medium underline"
     >
-      remote identity provider's settings
+      authorization server's settings
     </Link>
   ) : (
-    "remote identity provider's settings"
+    "authorization server's settings"
   );
 
   return <>Edit the scope override in the {settings} instead.</>;
@@ -128,8 +128,8 @@ export function LegacyCallbackAlert({
         description={
           <>
             Sign-ins will send <span className="font-mono">{current}</span>. If
-            that URL is not registered with the identity provider yet, sign-ins
-            will fail until it is.
+            that URL is not registered with the authorization server yet,
+            sign-ins will fail until it is.
           </>
         }
         confirmLabel="Migrate"

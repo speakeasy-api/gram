@@ -175,7 +175,7 @@ export async function configureCreatedRemoteMcpIdentity({
     return setupRequired(
       mcpServer,
       identityMode,
-      "The matching identity provider is missing OAuth endpoints. Update it in Remote Identity Providers.",
+      "The matching authorization server is missing OAuth endpoints. Update it in Authorization Servers.",
     );
   }
 

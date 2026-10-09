@@ -117,7 +117,7 @@ describe("warningSentence", () => {
   // itself says only who wins.
   it("defers a list's values to the delta", () => {
     expect(warningSentence(listMismatch(["openid"], ["openid", "email"]))).toBe(
-      "scopes_supported differs; the target provider's values become authoritative.",
+      "scopes_supported differs; the target authorization server's values become authoritative.",
     );
   });
 });

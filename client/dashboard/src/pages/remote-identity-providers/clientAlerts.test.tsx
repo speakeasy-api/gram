@@ -13,7 +13,9 @@ vi.mock("@/routes", () => ({
   useRoutes: () => ({
     remoteIdentityProviders: {
       issuerDetail: {
-        settings: { href: (id: string) => `/providers/${id}/settings` },
+        settings: {
+          href: (id: string) => `/providers/${id}/settings`,
+        },
       },
     },
   }),
@@ -71,7 +73,7 @@ describe("IssuerScopeOverrideAlert", () => {
     expect(screen.getByText(/has no effect/)).toBeTruthy();
     expect(
       screen
-        .getByRole("link", { name: "remote identity provider's settings" })
+        .getByRole("link", { name: "authorization server's settings" })
         .getAttribute("href"),
     ).toBe("/providers/issuer-1/settings");
     expect(rbac.requested).toContainEqual(["org:read", "org:admin"]);
@@ -82,13 +84,11 @@ describe("IssuerScopeOverrideAlert", () => {
     render(<IssuerScopeOverrideAlert issuer={orgIssuer(["a"])} />);
 
     expect(screen.queryByRole("link")).toBeNull();
-    expect(
-      screen.getByText(/remote identity provider's settings/),
-    ).toBeTruthy();
+    expect(screen.getByText(/authorization server's settings/)).toBeTruthy();
     expect(rbac.requested).toContainEqual(["org:read", "org:admin"]);
   });
 
-  it("drops the edit instruction for a platform provider", () => {
+  it("drops the edit instruction for a platform authorization server", () => {
     render(
       <IssuerScopeOverrideAlert
         issuer={{ id: "issuer-1", scopeOverride: ["openid"] }}
