@@ -50,8 +50,9 @@ var ErrServerReferenceOutsideProject = errors.New("mcp server reference is not i
 // another.
 //
 // It checks tenancy, not authorization. A caller passing a non-null
-// EnvironmentID must already have required authz.EnvironmentLinkCheck and hold
-// admission.LockProject (see environment_link.go).
+// EnvironmentID must already hold admission.LockProject and have required
+// EnvironmentLinkChecks over that environment (the project-wide check alone
+// misses an exclusion on it; see environment_link.go).
 func CreateProjectMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, input MCPServerTransactionInput) (repo.McpServer, error) {
 	// Checked before the ownership queries, which would otherwise dereference
 	// a nil transaction before the delegate's own guard runs.
@@ -78,9 +79,9 @@ func CreateProjectMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLo
 
 // CreateMCPServerInTransaction creates the MCP server, its required lifetime
 // issuer, and its audit events together. Authorizing the references is the
-// caller's job: one passing a non-null EnvironmentID must already have
-// required authz.EnvironmentLinkCheck and hold admission.LockProject (see
-// environment_link.go). Both the resource-level MCP-server
+// caller's job: one passing a non-null EnvironmentID must already hold
+// admission.LockProject and have required EnvironmentLinkChecks over that
+// environment (see environment_link.go). Both the resource-level MCP-server
 // workflow and remote provisioning use this command so those invariants cannot
 // drift.
 func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, input MCPServerTransactionInput) (repo.McpServer, error) {

@@ -2,7 +2,7 @@ package remotemcp_test
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	remotemcpserver "github.com/speakeasy-api/gram/server/gen/http/remote_mcp/server"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -366,7 +367,11 @@ func TestGetServer_EnvironmentLinkAuthorizedNamesNoEnvironment(t *testing.T) {
 	got := getServer(t, f.mcpWriteOnly(t), f, f.remoteID)
 	require.True(t, conv.PtrValOr(got.EnvironmentLinked, false))
 	require.False(t, conv.PtrValOr(got.EnvironmentLinkAuthorized, true))
-	require.NotContains(t, fmt.Sprintf("%#v", *got), f.envID.String())
+	// Encode the response as the API sends it: no environment identifier.
+	body, err := json.Marshal(remotemcpserver.NewGetServerResponseBody(got))
+	require.NoError(t, err)
+	require.Contains(t, string(body), `"environment_link_authorized":false`)
+	require.NotContains(t, string(body), f.envID.String())
 
 	got = getServer(t, f.withEnvironmentAuthority(t), f, f.remoteID)
 	require.True(t, conv.PtrValOr(got.EnvironmentLinkAuthorized, false))

@@ -167,8 +167,12 @@ func UpdateMCPServerVisibilityInTransaction(ctx context.Context, tx pgx.Tx, audi
 // event plus a link or unlink event when the environment changes, but it never
 // creates, removes, or selects a plugin attachment. It does not authorize: a
 // caller changing the environment, or keeping one while changing the backend,
-// must already have required authz.EnvironmentLinkCheck under
-// admission.LockProject (see environment_link.go).
+// must already hold admission.LockProject and have required
+// EnvironmentLinkChecks over every environment the write affects — the old
+// and new environments, the retained one on a backend change, and the toolset
+// default an explicit unlink onto a toolset backend falls back to
+// (environmentLinkAffected and resolveHostedFallbackEnvironment in
+// environment_link.go compute these).
 func UpdateMCPServerLifecycleInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, existing repo.McpServer, input LifecycleUpdateInput) (repo.McpServer, error) {
 	if tx == nil || auditLogger == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || input.ActorUserID == "" || input.ServerID == uuid.Nil || existing.ID != input.ServerID || existing.ProjectID != input.ProjectID || input.Visibility == "" {
 		return repo.McpServer{}, fmt.Errorf("invalid MCP server lifecycle update input")

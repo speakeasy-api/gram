@@ -2,6 +2,7 @@ package tunneledmcp
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
@@ -9,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	tunneledmcpserver "github.com/speakeasy-api/gram/server/gen/http/tunneled_mcp/server"
 	gen "github.com/speakeasy-api/gram/server/gen/tunneled_mcp"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -268,6 +270,11 @@ func TestRotateServerKey_RefusedWhenAnyLinkedEnvironmentIsExcluded(t *testing.T)
 	require.NoError(t, err)
 	require.True(t, conv.PtrValOr(got.EnvironmentLinked, false))
 	require.False(t, conv.PtrValOr(got.EnvironmentLinkAuthorized, true))
+	// Encoded as the API sends it, the answer names no environment.
+	body, err := json.Marshal(tunneledmcpserver.NewGetServerResponseBody(got))
+	require.NoError(t, err)
+	require.NotContains(t, string(body), excluded.String())
+	require.NotContains(t, string(body), readable.String())
 
 	beforeAudits := rotateAudits(t, ctx, ti.conn)
 	_, err = ti.service.RotateServerKey(caller, rotatePayload(tunnel.ID))
