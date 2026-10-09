@@ -11,6 +11,7 @@ import (
 	tunneledgen "github.com/speakeasy-api/gram/server/gen/tunneled_mcp"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -342,4 +343,72 @@ func TestUpdateMcpServer_RejectsTunnelSharedWithMetaMcpSibling(t *testing.T) {
 	_, err = ti.service.UpdateMcpServer(ctx, repointToTunnelPayload(subject, tunnelID))
 	requireOopsCode(t, err, oops.CodeConflict)
 	require.Len(t, liveMCPServersOnTunnel(t, ctx, ti, *authCtx.ProjectID, tunnelID), 1)
+}
+
+// A caller who may delete the tunnel but cannot read one of its MCP servers
+// sees the tunnel as unused once the servers they can read are gone. The
+// tunnel delete must still be refused while that hidden server is live, and
+// must not reveal it.
+func TestTunnelDelete_RefusedWhileReadBlockedSiblingRemains(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx := requireAuth(t, ctx)
+	tunnels := newTunnelService(t, ti)
+	tunnelID := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
+
+	visiblePayload := createOnTunnelPayload(tunnelID)
+	visible, err := ti.service.CreateMcpServer(ctx, visiblePayload)
+	require.NoError(t, err)
+	hiddenPayload := createOnTunnelPayload(tunnelID)
+	hiddenPayload.Name = "hidden sibling " + uuid.NewString()
+	hidden, err := ti.service.CreateMcpServer(ctx, hiddenPayload)
+	require.NoError(t, err)
+	seedEndpointFor(t, ctx, ti.conn, *authCtx.ProjectID, hidden.ID)
+
+	callerCtx := authztest.WithExactGrants(t, ctx,
+		authz.NewGrantWithSelector(authz.ScopeMCPWrite, authz.Selector{
+			authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+			authz.SelectorKeyResourceID:   authz.WildcardResource,
+			authz.SelectorKeyProjectID:    authCtx.ProjectID.String(),
+		}),
+		authz.NewGrantWithSelector(authz.ScopeMCPBlockedRead, authz.Selector{
+			authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+			authz.SelectorKeyResourceID:   hidden.ID,
+			authz.SelectorKeyProjectID:    authCtx.ProjectID.String(),
+		}),
+	)
+	tunnelIDString := tunnelID.String()
+	listOnTunnel := func() []string {
+		listed, err := ti.service.ListMcpServers(callerCtx, &gen.ListMcpServersPayload{TunneledMcpServerID: &tunnelIDString})
+		require.NoError(t, err)
+		ids := make([]string, 0, len(listed.McpServers))
+		for _, server := range listed.McpServers {
+			ids = append(ids, server.ID)
+		}
+		return ids
+	}
+
+	// The caller's view of the tunnel omits the hidden server.
+	require.Equal(t, []string{visible.ID}, listOnTunnel())
+
+	require.NoError(t, ti.service.DeleteMcpServer(callerCtx, &gen.DeleteMcpServerPayload{ID: visible.ID}))
+	require.Empty(t, listOnTunnel(), "the caller now sees the tunnel as unused")
+
+	err = tunnels.DeleteServer(callerCtx, deleteTunnelPayload(tunnelID))
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.NotContains(t, err.Error(), hiddenPayload.Name)
+
+	require.True(t, tunnelIsLive(t, ctx, ti, *authCtx.ProjectID, tunnelID))
+	servers := liveMCPServersOnTunnel(t, ctx, ti, *authCtx.ProjectID, tunnelID)
+	require.Len(t, servers, 1)
+	require.Equal(t, hidden.ID, servers[0].ID.String())
+	endpoints, err := mcpendpointsrepo.New(ti.conn).ListMCPEndpointsByProject(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	require.Len(t, endpoints, 1)
+	require.Equal(t, hidden.ID, endpoints[0].McpServerID.UUID.String())
+
+	deleteEvents, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionTunneledMcpServerDelete)
+	require.NoError(t, err)
+	require.Zero(t, deleteEvents)
 }
