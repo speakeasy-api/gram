@@ -24,7 +24,11 @@ import {
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
-import { getTunneledMcpServerArgs } from "@/lib/sources";
+import {
+  formatTunneledMcpDisplay,
+  getTunneledMcpServerArgs,
+} from "@/lib/sources";
+import { SharedTunnelConfirmDialog } from "@/components/mcp/shared-tunnel-impact";
 import { invalidateAllPlugins } from "@gram/client/react-query/plugins";
 import { invalidateAllPublishStatus } from "@gram/client/react-query/publishStatus";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
@@ -37,6 +41,7 @@ import {
 import { Switch } from "@/components/ui/Switch";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Check, ChevronDown } from "lucide-react";
+import { useState } from "react";
 import { Link, Navigate, useLocation, useParams } from "react-router";
 import { toast } from "sonner";
 import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
@@ -333,6 +338,9 @@ export function MCPServerStatusDropdown({
   const publicBlocked = isTunneled && !sourceAllowsPublic;
   const routes = useRoutes();
   const publicAccessHref = `${mcpServerTabHref(routes, mcpServerRouteParam(server), "settings")}#${MCP_PUBLIC_ACCESS_SECTION_ID}`;
+  // Making a tunneled server public exposes the upstream every server on the
+  // tunnel shares, so it is confirmed against the tunnel's servers first.
+  const [confirmPublic, setConfirmPublic] = useState(false);
 
   // Unproxied servers have no Speakeasy-hosted endpoint for disabled/private to
   // gate — the vendor's own server is reachable regardless of this setting —
@@ -374,6 +382,10 @@ export function MCPServerStatusDropdown({
               disabled={optionBlocked}
               onSelect={() => {
                 if (optionBlocked) return;
+                if (isTunneled && option.value === "public") {
+                  setConfirmPublic(true);
+                  return;
+                }
                 updateVisibility(option.value);
               }}
               className="group flex cursor-pointer items-start gap-2.5 p-2 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
@@ -424,6 +436,30 @@ export function MCPServerStatusDropdown({
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>
+      {isTunneled && server.tunneledMcpServerId ? (
+        <SharedTunnelConfirmDialog
+          open={confirmPublic}
+          onOpenChange={setConfirmPublic}
+          tunneledMcpServerId={server.tunneledMcpServerId}
+          tunnelName={
+            tunneledSource
+              ? formatTunneledMcpDisplay(tunneledSource)
+              : "behind this server"
+          }
+          currentMcpServerId={server.id}
+          title="Make this MCP server public?"
+          description="Anyone who can reach its URL can call every tool it exposes, with no login."
+          effect="Making this server public does not change the others, but they share its upstream service."
+          publicWarning
+          confirmLabel="Make public"
+          pendingLabel="Saving"
+          isPending={updating}
+          onConfirm={() => {
+            updateVisibility("public");
+            setConfirmPublic(false);
+          }}
+        />
+      ) : null}
     </DropdownMenu>
   );
 }
