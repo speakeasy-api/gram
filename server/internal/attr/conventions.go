@@ -577,6 +577,7 @@ const (
 	PackageVersionKey                 = attribute.Key("gram.package.version")
 	PKCEMethodKey                     = attribute.Key("gram.pkce.method")
 	PKCESupportKey                    = attribute.Key("gram.pkce.support")
+	PluginSlugKey                     = attribute.Key("gram.plugin.slug")
 	ProductFeatureNameKey             = attribute.Key("gram.product.feature.name")
 	ProjectIDKey                      = attribute.Key("gram.project.id")
 	ProjectNameKey                    = attribute.Key("gram.project.name")
@@ -2798,6 +2799,9 @@ func MetaDispatchOutcome[V ~string](v V) attribute.KeyValue {
 
 func ToolsetID(v string) attribute.KeyValue { return ToolsetIDKey.String(v) }
 func SlogToolsetID(v string) slog.Attr      { return slog.String(string(ToolsetIDKey), v) }
+
+func PluginSlug(v string) attribute.KeyValue { return PluginSlugKey.String(v) }
+func SlogPluginSlug(v string) slog.Attr      { return slog.String(string(PluginSlugKey), v) }
 
 func ToolsetSlug(v string) attribute.KeyValue { return ToolsetSlugKey.String(v) }
 func SlogToolsetSlug(v string) slog.Attr      { return slog.String(string(ToolsetSlugKey), v) }

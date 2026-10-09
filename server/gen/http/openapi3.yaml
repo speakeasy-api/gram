@@ -87660,6 +87660,23 @@ components:
                     format: uuid
             required:
                 - agent_id
+        AgentMCPServer:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: Stable key the agent writes the server under in each tool's MCP configuration. Unique within the response and limited to letters, digits, `_` and `-`.
+                tools:
+                    type: array
+                    items:
+                        type: string
+                    description: Stable IDs of the managed tools this server applies to. Absent or empty means every managed tool.
+                url:
+                    type: string
+                    description: The server's streamable-HTTP URL.
+            required:
+                - name
+                - url
         AgentMarketplace:
             type: object
             properties:
@@ -96640,6 +96657,11 @@ components:
                     items:
                         $ref: '#/components/schemas/AgentMarketplace'
                     description: Plugin marketplaces the agent should register with the tools it manages. Sorted by name.
+                mcp_servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentMCPServer'
+                    description: 'Speakeasy-hosted MCP servers the agent registers directly in each managed tool''s configuration, authorized by the device''s own mcp:connect credential. Populated only for agent API keys, from the MCP servers in the plugins assigned to the agent; always empty for people, who reach these servers through their plugins. Always present: an empty list tells the agent to remove the entries it wrote earlier.'
                 plugins:
                     type: array
                     items:
@@ -96651,6 +96673,7 @@ components:
                 - etag
                 - marketplaces
                 - plugins
+                - mcp_servers
         GetProjectForm:
             type: object
             properties:

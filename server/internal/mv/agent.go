@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -140,7 +141,21 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 		Plugins:       plugins,
 		Configuration: nil,
 		Principal:     nil,
+		McpServers:    []*gen.AgentMCPServer{},
 	}
+}
+
+// AttachAgentMCPServers sets an agent-key poll's MCP servers and folds each
+// rendered entry into the ETag, so adding, removing, or re-addressing one
+// reaches devices on their next poll. Human polls never call this.
+func AttachAgentMCPServers(result *gen.GetPluginsResult, servers []*gen.AgentMCPServer) {
+	result.McpServers = servers
+	hash := sha256.New()
+	writeAgentPluginsETag(hash, "plugins=%s\n", result.Etag)
+	for _, server := range servers {
+		writeAgentPluginsETag(hash, "mcp\x00%s\x00%s\x00%s\n", server.Name, server.URL, strings.Join(server.Tools, ","))
+	}
+	result.Etag = hex.EncodeToString(hash.Sum(nil))
 }
 
 // AttachAgentPrincipal sets an agent-key poll's principal and folds it into the

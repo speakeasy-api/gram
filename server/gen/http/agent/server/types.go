@@ -132,6 +132,13 @@ type GetPluginsResponseBody struct {
 	// The non-human principal the plugin set was resolved for. Present only when
 	// the caller authenticated with an agent API key.
 	Principal *AgentPollingPrincipalResponseBody `form:"principal,omitempty" json:"principal,omitempty" xml:"principal,omitempty"`
+	// Speakeasy-hosted MCP servers the agent registers directly in each managed
+	// tool's configuration, authorized by the device's own mcp:connect credential.
+	// Populated only for agent API keys, from the MCP servers in the plugins
+	// assigned to the agent; always empty for people, who reach these servers
+	// through their plugins. Always present: an empty list tells the agent to
+	// remove the entries it wrote earlier.
+	McpServers []*AgentMCPServerResponseBody `form:"mcp_servers" json:"mcp_servers" xml:"mcp_servers"`
 }
 
 // ListSyncedUsersResponseBody is the type of the "agent" service
@@ -2295,6 +2302,19 @@ type AgentPollingPrincipalResponseBody struct {
 	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
 }
 
+// AgentMCPServerResponseBody is used to define fields on response body types.
+type AgentMCPServerResponseBody struct {
+	// Stable key the agent writes the server under in each tool's MCP
+	// configuration. Unique within the response and limited to letters, digits,
+	// `_` and `-`.
+	Name string `form:"name" json:"name" xml:"name"`
+	// The server's streamable-HTTP URL.
+	URL string `form:"url" json:"url" xml:"url"`
+	// Stable IDs of the managed tools this server applies to. Absent or empty
+	// means every managed tool.
+	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+}
+
 // SyncedAgentUserResponseBody is used to define fields on response body types.
 type SyncedAgentUserResponseBody struct {
 	// Email the device agent reported on sync. Resolve against org members for
@@ -2470,6 +2490,18 @@ func NewGetPluginsResponseBody(res *agent.GetPluginsResult) *GetPluginsResponseB
 	}
 	if res.Principal != nil {
 		body.Principal = marshalAgentAgentPollingPrincipalToAgentPollingPrincipalResponseBody(res.Principal)
+	}
+	if res.McpServers != nil {
+		body.McpServers = make([]*AgentMCPServerResponseBody, len(res.McpServers))
+		for i, val := range res.McpServers {
+			if val == nil {
+				body.McpServers[i] = nil
+				continue
+			}
+			body.McpServers[i] = marshalAgentAgentMCPServerToAgentMCPServerResponseBody(val)
+		}
+	} else {
+		body.McpServers = []*AgentMCPServerResponseBody{}
 	}
 	return body
 }

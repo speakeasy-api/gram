@@ -428,12 +428,20 @@ var _ = Service("agent", func() {
 // --- Types ---
 
 var GetPluginsResult = Type("GetPluginsResult", func() {
-	Required("etag", "marketplaces", "plugins")
+	Required("etag", "marketplaces", "plugins", "mcp_servers")
 	Attribute("etag", String, "Opaque revision identifier covering the marketplace, plugin, and remote-configuration set. The agent stores this to detect changes between polls.")
 	Attribute("marketplaces", ArrayOf(AgentMarketplaceModel), "Plugin marketplaces the agent should register with the tools it manages. Sorted by name.")
 	Attribute("plugins", ArrayOf(AgentPluginModel), "Plugins for the caller: the observability plugin of each listed marketplace, when enabled, and the plugins assigned to the caller. Each entry's install_mode says whether the agent installs it (`required`, `default`) or only offers it for the user to turn on (`available`). Each entry references one of the marketplaces above by name.")
 	Attribute("configuration", DeviceAgentConfigurationModel, "Organization-wide remote configuration. Absent until an administrator saves a configuration, allowing an agent with no cached remote layer to keep using its local configuration.")
 	Attribute("principal", AgentPollingPrincipalModel, "The non-human principal the plugin set was resolved for. Present only when the caller authenticated with an agent API key.")
+	Attribute("mcp_servers", ArrayOf(AgentMCPServerModel), "Speakeasy-hosted MCP servers the agent registers directly in each managed tool's configuration, authorized by the device's own mcp:connect credential. Populated only for agent API keys, from the MCP servers in the plugins assigned to the agent; always empty for people, who reach these servers through their plugins. Always present: an empty list tells the agent to remove the entries it wrote earlier.")
+})
+
+var AgentMCPServerModel = Type("AgentMCPServer", func() {
+	Required("name", "url")
+	Attribute("name", String, "Stable key the agent writes the server under in each tool's MCP configuration. Unique within the response and limited to letters, digits, `_` and `-`.")
+	Attribute("url", String, "The server's streamable-HTTP URL.")
+	Attribute("tools", ArrayOf(String), "Stable IDs of the managed tools this server applies to. Absent or empty means every managed tool.")
 })
 
 var AgentPollingPrincipalModel = Type("AgentPollingPrincipal", func() {

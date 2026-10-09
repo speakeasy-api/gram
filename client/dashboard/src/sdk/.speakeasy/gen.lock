@@ -854,6 +854,7 @@ trackedFiles:
   src/models/components/agentdelegatedpolicy.ts: {}
   src/models/components/agentidform.ts: {}
   src/models/components/agentmarketplace.ts: {}
+  src/models/components/agentmcpserver.ts: {}
   src/models/components/agentownerassignmentform.ts: {}
   src/models/components/agentownerprofile.ts: {}
   src/models/components/agentpermissions.ts: {}
@@ -6656,7 +6657,7 @@ examples:
           Gram-Device-Environment: "ephemeral"
       responses:
         "200":
-          application/json: {"etag": "<value>", "marketplaces": [], "plugins": []}
+          application/json: {"etag": "<value>", "marketplaces": [], "mcp_servers": [], "plugins": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
