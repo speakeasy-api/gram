@@ -320,12 +320,14 @@ func (p *Proxy) applyRemoteConfiguredHeaders(ctx context.Context, userReq *http.
 	return nil
 }
 
-// clearSuppressedRemoteDestination removes a client value under the name of a
-// configured header that is not being sent, so it cannot stand in for the
-// operator's configuration. A stored name with surrounding whitespace is
-// cleared under its trimmed form, which is the header the client would send;
-// a name that is not a field name at all cannot be on the request. The client's
-// standard MCP request headers and the caller assertion are never touched.
+// clearSuppressedRemoteDestination removes client values under the name of a
+// configured header that is not being sent, so they cannot stand in for the
+// operator's configuration. Every spelling the policy reads as that name goes,
+// any casing and underscores for dashes, since some upstreams fold them. A
+// stored name with surrounding whitespace is matched by its trimmed form, the
+// header the client would send; a name that is not a field name at all cannot
+// be on the request. The client's standard MCP request headers and the caller
+// assertion are never touched.
 func clearSuppressedRemoteDestination(header http.Header, stored string) {
 	name, err := NormalizeHeaderName(stored)
 	if err != nil {
@@ -334,7 +336,12 @@ func clearSuppressedRemoteDestination(header http.Header, stored string) {
 	if mcpauthz.ReservedHeader(name) || httpheaders.IsStandardMCPRequestHeader(strings.ReplaceAll(name, "_", "-")) {
 		return
 	}
-	header.Del(name)
+	key := headerKey(name)
+	for present := range header {
+		if headerKey(present) == key {
+			delete(header, present)
+		}
+	}
 }
 
 // remoteHeaderFailureMessage is the client-facing explanation for a required

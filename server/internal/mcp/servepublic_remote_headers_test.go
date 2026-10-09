@@ -277,6 +277,7 @@ func TestServePublic_MetaEndpoint_RemoteMembersApplyRemoteHeaderPolicy(t *testin
 	_, isError = metaToolResultText(t, rpc)
 	require.True(t, isError, "a required row reading Authorization must fail member B's call")
 	for _, req := range upstreamB.journal() {
-		require.NotEqual(t, "tools/call", req.rpcMethod, "member B must not receive the call")
+		// Only the proxy's background metadata probe may reach member B.
+		require.NotEqual(t, http.MethodPost, req.httpMethod, "member B must receive no MCP request, got %q", req.rpcMethod)
 	}
 }

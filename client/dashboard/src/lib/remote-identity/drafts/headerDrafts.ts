@@ -208,11 +208,14 @@ export function headerDraftErrors(
     const name = draft.name.trim();
 
     if (isUnchangedSavedDraft(draft)) {
-      // A Service Account writes its own static Authorization row, so a saved
-      // row claiming that name has to go first. Otherwise an untouched saved
-      // row is left alone, and its row explains any refusal.
+      // The identity still owns Authorization, so an untouched saved row
+      // claiming it has to go, unless the header policy already refuses the
+      // row: then its own warning explains it and it must not block other
+      // edits. A Service Account writes its own static Authorization row, so
+      // there even a refused row has to go first.
       const authorizationError =
-        identityMode === "agent"
+        identityMode &&
+        (identityMode === "agent" || !savedHeaderPolicyIssue(draft))
           ? authorizationHeaderGuard(
               identityMode,
               name,
@@ -259,9 +262,7 @@ export function headerDraftErrors(
     if (policyIssue) {
       errors.set(draft.key, {
         field: policyIssue.field === "source" ? "value" : "name",
-        message: draft.id
-          ? `Change the source or name of "${name}", or remove this header.`
-          : remoteHeaderPolicyReasonMessage(policyIssue.reason, draft),
+        message: remoteHeaderPolicyReasonMessage(policyIssue.reason, draft),
       });
       continue;
     }

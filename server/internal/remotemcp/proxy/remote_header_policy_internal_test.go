@@ -417,3 +417,24 @@ func TestApplyRequestHeadersRemotePaddedOptionalRowClearsClientValue(t *testing.
 	require.Empty(t, remoteReq.Header.Values("X-Api-Key"))
 	require.Equal(t, []string{"tools/call"}, remoteReq.Header.Values("Mcp-Method"), "the client's protocol header is never cleared")
 }
+
+// A suppressed row clears the client's value under every spelling the policy
+// reads as the same name, not just the canonical one.
+func TestApplyRequestHeadersRemoteSuppressionClearsUnderscoreSpelling(t *testing.T) {
+	t.Parallel()
+
+	userReq, remoteReq := newRemotePolicyRequests(t)
+	userReq.Header["X_Upstream_Token"] = []string{"client-underscore"}
+	userReq.Header["x-upstream-token"] = []string{"client-lowercase"}
+	userReq.Header.Set("Authorization", "Bearer synthetic-speakeasy-token")
+	p := &Proxy{
+		Logger: testenv.NewLogger(t),
+		Headers: []ConfiguredHeader{
+			{Name: "X-Upstream-Token", StaticValue: "", ValueFromRequestHeader: "Authorization", IsRequired: false},
+		},
+	}
+	require.NoError(t, p.applyRequestHeaders(t.Context(), userReq, remoteReq))
+	for name := range remoteReq.Header {
+		require.NotEqual(t, "x-upstream-token", headerKey(name), "client spelling %q survived", name)
+	}
+}

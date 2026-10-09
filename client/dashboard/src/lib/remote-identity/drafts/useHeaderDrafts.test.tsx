@@ -453,8 +453,11 @@ describe("useHeaderDrafts with rows the remote header policy refuses", () => {
       }),
     );
 
-    expect(result.current.validationError).toBe(
-      'Change the source or name of "X-Upstream-Token", or remove this header.',
+    expect(result.current.validationError).toContain(
+      'Speakeasy does not forward "Authorization"',
+    );
+    expect(result.current.validationError).toContain(
+      "does not replace this header",
     );
     expect(result.current.fieldErrors.get("header-forwarded")?.field).toBe(
       "value",
@@ -710,6 +713,34 @@ describe("useHeaderDrafts with malformed or colliding saved rows", () => {
     );
     expect(result.current.validationError).toBe(
       'Duplicate header name "x_api_key".',
+    );
+  });
+});
+
+describe("useHeaderDrafts with an untouched Authorization row the policy allows", () => {
+  it("still asks for it to go when no identity is configured", () => {
+    mocks.headers.mockReturnValue(
+      headersResult([
+        refusedPassThrough({
+          id: "header-authorization",
+          name: "Authorization",
+          valueFromRequestHeader: "X-Service-Token",
+        }),
+      ]),
+    );
+    const { result } = renderDraftsWithoutIdentity();
+
+    act(() => result.current.addHeader());
+    act(() =>
+      result.current.replaceHeader(1, {
+        ...result.current.drafts[1]!,
+        name: "X-Trace",
+        staticValue: "on",
+      }),
+    );
+    expect(result.current.validationError).not.toBeNull();
+    expect(result.current.fieldErrors.get("header-authorization")?.field).toBe(
+      "name",
     );
   });
 });
