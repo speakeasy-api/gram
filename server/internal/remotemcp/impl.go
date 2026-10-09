@@ -31,7 +31,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -503,6 +502,20 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 
 	txRepo := repo.New(dbtx)
 
+	// Lock the parent before touching its headers. Header writers take the
+	// same lock first, so the two never wait on each other in opposite order
+	// and no header can be created under a server being deleted.
+	if _, err := txRepo.GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{
+		ID:        serverID,
+		ProjectID: *authCtx.ProjectID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+
+		return oops.E(oops.CodeUnexpected, err, "lock remote mcp server").LogError(ctx, logger)
+	}
+
 	// The FK's ON DELETE CASCADE only fires for hard deletes, so soft-delete the
 	// headers explicitly. This runs before the parent row is tombstoned so the
 	// query's project subselect can still see it.
@@ -629,8 +642,9 @@ func (s *Service) CreateServerHeader(ctx context.Context, payload *gen.CreateSer
 	}
 
 	isSecret := conv.PtrValOr(payload.IsSecret, false)
-	if err := validateHeaderValueSource(payload.Name, payload.Value, payload.ValueFromRequestHeader, isSecret); err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid header").LogError(ctx, logger)
+	name, source, err := validateHeaderWrite(payload.Name, payload.Value, payload.ValueFromRequestHeader, isSecret, false)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", headerWriteErrorMessage(err)).LogWarn(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -643,8 +657,9 @@ func (s *Service) CreateServerHeader(ctx context.Context, payload *gen.CreateSer
 	headersRepo := NewHeaders(s.logger, dbtx, s.headers.enc)
 
 	// Resolve the parent up front so a missing server is a 404 rather than an
-	// empty insert, and so the audit event can carry the server's URL.
-	server, err := txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
+	// empty insert, and so the audit event can carry the server's URL. The row
+	// lock serializes header writes on this server for the duplicate check.
+	server, err := txRepo.GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -656,15 +671,19 @@ func (s *Service) CreateServerHeader(ctx context.Context, payload *gen.CreateSer
 		return nil, oops.E(oops.CodeUnexpected, err, "get remote mcp server").LogError(ctx, logger)
 	}
 
+	if err := requireUnusedHeaderName(ctx, txRepo, server.ID, *authCtx.ProjectID, name, uuid.Nil); err != nil {
+		return nil, err.LogWarn(ctx, logger)
+	}
+
 	header, err := headersRepo.CreateServerHeader(ctx, repo.CreateServerHeaderParams{
 		RemoteMcpServerID:      server.ID,
 		ProjectID:              *authCtx.ProjectID,
-		Name:                   payload.Name,
+		Name:                   name,
 		Description:            conv.PtrToPGText(payload.Description),
 		IsRequired:             conv.PtrValOr(payload.IsRequired, false),
 		IsSecret:               isSecret,
 		Value:                  conv.PtrToPGTextEmpty(payload.Value),
-		ValueFromRequestHeader: conv.PtrToPGTextEmpty(payload.ValueFromRequestHeader),
+		ValueFromRequestHeader: conv.PtrToPGTextEmpty(source),
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -724,6 +743,29 @@ func (s *Service) UpdateServerHeader(ctx context.Context, payload *gen.UpdateSer
 	txRepo := repo.New(dbtx)
 	headersRepo := NewHeaders(s.logger, dbtx, s.headers.enc)
 
+	// This read only locates the parent. The header is read again once the
+	// parent is locked, so every decision below uses its current state.
+	located, err := headersRepo.GetServerHeader(ctx, headerID, *authCtx.ProjectID, true)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "remote mcp server header not found").LogError(ctx, logger)
+		}
+
+		return nil, oops.E(oops.CodeUnexpected, err, "get remote mcp server header").LogError(ctx, logger)
+	}
+
+	server, err := txRepo.GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{
+		ID:        located.RemoteMcpServerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "remote mcp server header not found").LogError(ctx, logger)
+		}
+
+		return nil, oops.E(oops.CodeUnexpected, err, "get remote mcp server").LogError(ctx, logger)
+	}
+
 	existing, err := headersRepo.GetServerHeader(ctx, headerID, *authCtx.ProjectID, true)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -739,21 +781,13 @@ func (s *Service) UpdateServerHeader(ctx context.Context, payload *gen.UpdateSer
 	hasValueFromRequestHeader := payload.ValueFromRequestHeader != nil && *payload.ValueFromRequestHeader != ""
 	preserveStoredValue := isSecret && !hasValue && !hasValueFromRequestHeader && existing.IsSecret && existing.Value.Valid
 
-	if mcpauthz.ReservedHeader(payload.Name) || (payload.ValueFromRequestHeader != nil && mcpauthz.ReservedHeader(*payload.ValueFromRequestHeader)) {
-		return nil, oops.E(oops.CodeBadRequest, nil, "caller assertion headers are reserved")
-	}
-	if !preserveStoredValue {
-		if err := validateHeaderValueSource(payload.Name, payload.Value, payload.ValueFromRequestHeader, isSecret); err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid header").LogError(ctx, logger)
-		}
+	name, source, err := validateHeaderWrite(payload.Name, payload.Value, payload.ValueFromRequestHeader, isSecret, preserveStoredValue)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", headerWriteErrorMessage(err)).LogWarn(ctx, logger)
 	}
 
-	server, err := txRepo.GetServerByID(ctx, repo.GetServerByIDParams{
-		ID:        existing.RemoteMcpServerID,
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get remote mcp server").LogError(ctx, logger)
+	if err := requireUnusedHeaderName(ctx, txRepo, server.ID, *authCtx.ProjectID, name, existing.ID); err != nil {
+		return nil, err.LogWarn(ctx, logger)
 	}
 
 	beforeView := mv.BuildRemoteMcpServerHeaderView(existing)
@@ -761,13 +795,13 @@ func (s *Service) UpdateServerHeader(ctx context.Context, payload *gen.UpdateSer
 	header, err := headersRepo.UpdateServerHeader(ctx, repo.UpdateServerHeaderParams{
 		ID:                     headerID,
 		ProjectID:              *authCtx.ProjectID,
-		Name:                   payload.Name,
+		Name:                   name,
 		Description:            conv.PtrToPGText(payload.Description),
 		IsRequired:             conv.PtrValOr(payload.IsRequired, false),
 		IsSecret:               isSecret,
 		SetValue:               !preserveStoredValue,
 		Value:                  conv.PtrToPGTextEmpty(payload.Value),
-		ValueFromRequestHeader: conv.PtrToPGTextEmpty(payload.ValueFromRequestHeader),
+		ValueFromRequestHeader: conv.PtrToPGTextEmpty(source),
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -873,29 +907,79 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// validateHeaderValueSource checks that exactly one of value or
-// value_from_request_header is provided, mirroring the
-// remote_mcp_server_headers_value_source_check constraint, and that a
-// pass-through header is not marked secret. Callers that want to preserve an
-// existing secret's stored value skip this check entirely; see UpdateServerHeader.
-func validateHeaderValueSource(name string, value *string, valueFromRequestHeader *string, isSecret bool) error {
-	if mcpauthz.ReservedHeader(name) || (valueFromRequestHeader != nil && mcpauthz.ReservedHeader(*valueFromRequestHeader)) {
-		return errors.New("caller assertion headers are reserved")
+// validateHeaderWrite checks a header create or update against the remote
+// header policy and returns the name and pass-through source to store, in
+// canonical form.
+//
+// It mirrors the remote_mcp_server_headers_value_source_check constraint:
+// exactly one of value or value_from_request_header, and a pass-through header
+// is not secret. Those checks are skipped when preserveStoredValue is set,
+// because an update that keeps an existing secret's stored value supplies
+// neither; the name is still validated.
+func validateHeaderWrite(name string, value *string, valueFromRequestHeader *string, isSecret bool, preserveStoredValue bool) (string, *string, error) {
+	canonicalName, err := proxy.NormalizeHeaderName(name)
+	if err != nil {
+		return "", nil, err
 	}
+
 	hasValue := value != nil && *value != ""
 	hasValueFromRequestHeader := valueFromRequestHeader != nil && *valueFromRequestHeader != ""
 
-	if hasValue == hasValueFromRequestHeader {
-		return fmt.Errorf("header %q must specify exactly one of value or value_from_request_header", name)
+	var source *string
+	if hasValueFromRequestHeader {
+		canonicalSource, err := proxy.NormalizeHeaderName(*valueFromRequestHeader)
+		if err != nil {
+			return "", nil, err
+		}
+		source = &canonicalSource
 	}
 
-	if hasValueFromRequestHeader && proxy.IsDeniedPassThroughSource(*valueFromRequestHeader) {
-		return fmt.Errorf("header %q: %q cannot be forwarded upstream", name, *valueFromRequestHeader)
+	if !preserveStoredValue {
+		if hasValue == hasValueFromRequestHeader {
+			return "", nil, fmt.Errorf("header %q must specify exactly one of value or value_from_request_header", canonicalName)
+		}
+		if hasValueFromRequestHeader && isSecret {
+			return "", nil, fmt.Errorf("header %q: pass-through headers cannot be marked as secret", canonicalName)
+		}
 	}
 
-	if hasValueFromRequestHeader && isSecret {
-		return fmt.Errorf("header %q: pass-through headers cannot be marked as secret", name)
+	check := proxy.ConfiguredHeader{
+		IsRequired:             false,
+		Name:                   canonicalName,
+		StaticValue:            conv.PtrValOr(value, ""),
+		ValueFromRequestHeader: conv.PtrValOr(source, ""),
+	}
+	if err := proxy.CheckRemoteHeader(check); err != nil {
+		return "", nil, err
 	}
 
+	return canonicalName, source, nil
+}
+
+// headerWriteErrorMessage is the client-facing explanation for a header write
+// that validateHeaderWrite refused. It names headers, never values.
+func headerWriteErrorMessage(err error) string {
+	if errors.Is(err, proxy.ErrProtectedSource) {
+		return err.Error() + ". Speakeasy does not forward caller credentials or Speakeasy headers to remote MCP servers: have clients send the upstream credential in a separate request header, store a static credential, or configure upstream OAuth where the server supports it"
+	}
+	return "invalid header: " + err.Error()
+}
+
+// requireUnusedHeaderName refuses a name another live header of the server
+// already uses, ignoring case. The caller must hold the parent server's row
+// lock so concurrent writers cannot both pass the check.
+func requireUnusedHeaderName(ctx context.Context, txRepo *repo.Queries, serverID uuid.UUID, projectID uuid.UUID, name string, excludeID uuid.UUID) *oops.ShareableError {
+	exists, err := txRepo.ServerHeaderNameExists(ctx, repo.ServerHeaderNameExistsParams{
+		RemoteMcpServerID: serverID,
+		Name:              name,
+		ExcludeID:         excludeID,
+		ProjectID:         projectID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check remote mcp server header name")
+	}
+	if exists {
+		return oops.E(oops.CodeConflict, nil, "header name already in use on this remote mcp server")
+	}
 	return nil
 }

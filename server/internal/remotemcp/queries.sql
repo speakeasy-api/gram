@@ -84,6 +84,25 @@ WHERE remote_mcp_server_headers.id = @id
         WHERE remote_mcp_servers.project_id = @project_id AND remote_mcp_servers.deleted IS FALSE
     );
 
+-- name: ServerHeaderNameExists :one
+-- Reports whether another live header of the server already uses name,
+-- ignoring case. The unique index compares names exactly, and headers stored
+-- before names were canonicalized can differ only in case, so writers check
+-- this while holding the parent server's row lock. exclude_id is the header
+-- being updated, or the nil UUID on create.
+SELECT EXISTS (
+    SELECT 1
+    FROM remote_mcp_server_headers
+    WHERE remote_mcp_server_headers.remote_mcp_server_id = @remote_mcp_server_id
+        AND remote_mcp_server_headers.deleted IS FALSE
+        AND lower(remote_mcp_server_headers.name) = lower(@name::text)
+        AND remote_mcp_server_headers.id <> @exclude_id
+        AND remote_mcp_server_headers.remote_mcp_server_id IN (
+            SELECT remote_mcp_servers.id FROM remote_mcp_servers
+            WHERE remote_mcp_servers.project_id = @project_id AND remote_mcp_servers.deleted IS FALSE
+        )
+) AS name_exists;
+
 -- name: CreateServerHeader :one
 -- Plain INSERT (never an upsert) so a live name collision raises a unique
 -- violation the caller maps to 409 rather than silently overwriting the

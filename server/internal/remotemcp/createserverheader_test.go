@@ -23,7 +23,7 @@ func TestCreateServerHeader_Secret(t *testing.T) {
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteMcpServerHeaderCreate)
 	require.NoError(t, err)
 
-	header, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
+	header, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Description = new("API key for authentication")
 		p.IsRequired = new(true)
 		p.IsSecret = new(true)
@@ -32,7 +32,7 @@ func TestCreateServerHeader_Secret(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NotEmpty(t, header.ID)
-	require.Equal(t, "X-API-Key", header.Name)
+	require.Equal(t, "X-Api-Key", header.Name)
 	require.True(t, header.IsSecret)
 	require.True(t, header.IsRequired)
 	require.NotNil(t, header.Description)
@@ -54,8 +54,8 @@ func TestCreateServerHeader_PassThrough(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	header, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Request-ID", func(p *gen.CreateServerHeaderPayload) {
-		p.ValueFromRequestHeader = new("X-Request-ID")
+	header, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Request-Id", func(p *gen.CreateServerHeaderPayload) {
+		p.ValueFromRequestHeader = new("X-Request-Id")
 	}))
 	require.NoError(t, err)
 
@@ -63,7 +63,7 @@ func TestCreateServerHeader_PassThrough(t *testing.T) {
 	require.False(t, header.IsRequired)
 	require.Nil(t, header.Value)
 	require.NotNil(t, header.ValueFromRequestHeader)
-	require.Equal(t, "X-Request-ID", *header.ValueFromRequestHeader)
+	require.Equal(t, "X-Request-Id", *header.ValueFromRequestHeader)
 }
 
 func TestCreateServerHeader_BothValuesRejected(t *testing.T) {
@@ -97,9 +97,9 @@ func TestCreateServerHeader_SecretPassThroughRejected(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Trace-ID", func(p *gen.CreateServerHeaderPayload) {
+	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Trace-Id", func(p *gen.CreateServerHeaderPayload) {
 		p.IsSecret = new(true)
-		p.ValueFromRequestHeader = new("X-Trace-ID")
+		p.ValueFromRequestHeader = new("X-Trace-Id")
 	}))
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeBadRequest)
@@ -129,12 +129,12 @@ func TestCreateServerHeader_DuplicateNameConflicts(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
+	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Value = new("first")
 	}))
 	require.NoError(t, err)
 
-	_, err = ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
+	_, err = ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Value = new("second")
 	}))
 	require.Error(t, err)
@@ -149,7 +149,7 @@ func TestCreateServerHeader_NameReusableAfterDelete(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	first, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
+	first, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Value = new("first")
 	}))
 	require.NoError(t, err)
@@ -161,7 +161,7 @@ func TestCreateServerHeader_NameReusableAfterDelete(t *testing.T) {
 		ProjectSlugInput: nil,
 	}))
 
-	second, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
+	second, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Value = new("second")
 	}))
 	require.NoError(t, err)
@@ -173,7 +173,7 @@ func TestCreateServerHeader_ServerNotFound(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(uuid.NewString(), "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
+	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(uuid.NewString(), "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Value = new("value")
 	}))
 	require.Error(t, err)
@@ -187,7 +187,7 @@ func TestCreateServerHeader_OtherProjectServerNotFound(t *testing.T) {
 	ctx, ti := newTestService(t)
 	otherServer := seedOtherProjectServer(t, ctx, ti)
 
-	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(otherServer.ID.String(), "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
+	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(otherServer.ID.String(), "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Value = new("value")
 	}))
 	require.Error(t, err)
@@ -206,7 +206,7 @@ func TestCreateServerHeader_RBACForbidden(t *testing.T) {
 
 	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeMCPRead, Selector: authz.NewSelector(authz.ScopeMCPRead, authCtx.ProjectID.String())})
 
-	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
+	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Value = new("value")
 	}))
 	requireOopsCode(t, err, oops.CodeForbidden)

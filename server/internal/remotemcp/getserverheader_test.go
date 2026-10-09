@@ -109,7 +109,7 @@ func TestGetServerHeader_RBACForbidden(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
+	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Value = new("value")
 	}))
 	require.NoError(t, err)
@@ -131,7 +131,7 @@ func TestGetServerHeader_DeletedNotFound(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
+	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Value = new("value")
 	}))
 	require.NoError(t, err)
