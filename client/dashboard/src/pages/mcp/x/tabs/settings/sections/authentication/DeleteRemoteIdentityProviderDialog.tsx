@@ -124,7 +124,7 @@ function DeleteRemoteIdentityProviderDialogBody({
   return (
     <>
       <Dialog.Header>
-        <Dialog.Title>Remove Remote Identity Provider</Dialog.Title>
+        <Dialog.Title>Remove Authorization Server</Dialog.Title>
         <Dialog.Description>
           This removes the identity provider's association with this MCP server.
           The provider configuration stays in the project and can be re-attached

@@ -44,14 +44,14 @@ export function RemoteIdentityProvidersField({
         <Button.LeftIcon>
           <Plus className="size-4" />
         </Button.LeftIcon>
-        <Button.Text>Add provider</Button.Text>
+        <Button.Text>Add authorization server</Button.Text>
       </Button>
     </RequireScope>
   );
 
   const loadError = (
     <FieldError>
-      Failed to load the connected services. Refresh the page to try again.
+      Failed to load the authorization servers. Refresh the page to try again.
     </FieldError>
   );
 
@@ -69,7 +69,7 @@ export function RemoteIdentityProvidersField({
     // absent list does not already say.
     providerControls = readOnly ? (
       <Text muted small>
-        No connected services.
+        No authorization servers.
       </Text>
     ) : (
       addButton
@@ -95,23 +95,21 @@ export function RemoteIdentityProvidersField({
 
   return (
     <AuthRow
-      label="Connected services"
+      label="Authorization servers"
       hint={
         <>
-          Rarely needed — only when the upstream service makes each user sign in
-          there themselves.
-          <ExplainerDialog title="Connected services">
+          Where each user signs in to the upstream service. Speakeasy keeps
+          their token and sends it with their requests.
+          <ExplainerDialog title="Authorization servers">
             <Text muted small className="block">
-              Some servers act on a user&apos;s own data in another system —
-              their Ashby account, their Linear workspace. That system decides
-              whether this particular person may do it, so each user signs in
-              there once and Speakeasy keeps that authorization alongside their
-              session.
+              An authorization server issues the OAuth tokens that let this
+              server act for each user in the upstream service — their Linear
+              workspace, their Ashby account. Each user signs in there once, and
+              Speakeasy keeps that authorization alongside their session.
             </Text>
             <Text muted small className="block">
-              Add a provider only when the upstream service asks every user to
-              sign in for themselves. A server that reaches its API with one
-              shared credential needs none.
+              The upstream service decides what each person may do, so every
+              user acts with their own permissions, not a shared credential.
             </Text>
           </ExplainerDialog>
         </>

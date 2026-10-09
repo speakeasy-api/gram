@@ -38,7 +38,7 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
   const tabHref = (tab: IssuerTab) =>
     routes.remoteIdentityProviders.issuerDetail[tab].href(issuerId);
 
-  const label = issuer ? issuerDisplayName(issuer) : "Remote Identity Provider";
+  const label = issuer ? issuerDisplayName(issuer) : "Authorization Server";
 
   // Platform issuers are read-only to tenants. The Settings tab holds the only
   // issuer mutation controls (edit + delete), both refused by the backend, so it
@@ -71,7 +71,7 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
           <Page.Eyebrow />
           <div className="flex items-center gap-3">
             <Text small muted>
-              Remote Identity Provider
+              Authorization Server
             </Text>
             {issuer && (
               <ScopeBadge

@@ -50,7 +50,7 @@ export function ClientsTab({
   } else if (!isLoading && items.length === 0) {
     body = (
       <Text muted className="py-8 text-center">
-        No clients registered with this provider.
+        No clients registered with this authorization server.
       </Text>
     );
   } else {

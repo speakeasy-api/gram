@@ -692,14 +692,14 @@ const ROUTE_STRUCTURE = {
   },
 
   remoteIdentityProviders: {
-    title: "Remote Identity Providers",
+    title: "Authorization Servers",
     url: "remote-identity-providers",
     icon: "key-round",
     component: RemoteIdentityProvidersRoot,
     indexComponent: RemoteIdentityProvidersPage,
     subPages: {
       issuerDetail: {
-        title: "Remote Identity Provider",
+        title: "Authorization Server",
         url: ":issuerId",
         component: RemoteIdentityProviderDetail,
         subPages: {
@@ -1536,7 +1536,7 @@ const ORG_ROUTE_STRUCTURE = {
     component: ProjectIdentityRedirect,
   },
   legacyRemoteIdentityProviders: {
-    title: "Remote Identity Providers",
+    title: "Authorization Servers",
     url: "remote-identity-providers/*",
     legacyRedirect: true,
     component: ProjectIdentityRedirect,

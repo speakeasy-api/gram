@@ -213,8 +213,8 @@ export function SettingsTab({
               </Label>
             </div>
             <Text small muted>
-              On for apps registered with the identity provider under the legacy
-              /oauth/callback URL. Turn it off once the app has the
+              On for apps registered with the authorization server under the
+              legacy /oauth/callback URL. Turn it off once the app has the
               /mcp/remote_login_callback URL registered. Saved with your other
               changes.
             </Text>
@@ -307,7 +307,7 @@ function RegistrationStatus({
     return (
       <Text small muted>
         {client.clientIdMetadataUri
-          ? "This client uses a client ID metadata document hosted by Speakeasy. It is never registered with the identity provider, so it cannot expire and has nothing to rotate."
+          ? "This client uses a client ID metadata document hosted by Speakeasy. It is never registered with the authorization server, so it cannot expire and has nothing to rotate."
           : "This client authenticates with a signed assertion bound to a key set, which dynamic registration cannot reproduce. Manage its key set instead of rotating it."}
       </Text>
     );
@@ -315,11 +315,11 @@ function RegistrationStatus({
   if (client.upstreamRejectedAt) {
     return (
       <Text small className="text-destructive">
-        The identity provider stopped recognizing this client on{" "}
+        The authorization server stopped recognizing this client on{" "}
         {client.upstreamRejectedAt.toLocaleString()}.{" "}
         {issuerRegistrationEndpoint
           ? "Rotate it to register a replacement; users reconnect once afterwards."
-          : "The provider publishes no registration endpoint, so replace the client ID and secret by hand."}
+          : "The authorization server publishes no registration endpoint, so replace the client ID and secret by hand."}
       </Text>
     );
   }
@@ -330,16 +330,16 @@ function RegistrationStatus({
     return (
       <Text small muted>
         Speakeasy re-registers this client at {issuerRegistrationEndpoint} if
-        the identity provider stops recognizing it or its secret expires; rotate
-        now to replace it ahead of time.{expiryNote}
+        the authorization server stops recognizing it or its secret expires;
+        rotate now to replace it ahead of time.{expiryNote}
       </Text>
     );
   }
   return (
     <Text small muted>
-      The identity provider publishes no registration endpoint, so Speakeasy
+      The authorization server publishes no registration endpoint, so Speakeasy
       cannot re-register this client; replace its credentials by hand if the
-      provider stops recognizing them.{expiryNote}
+      authorization server stops recognizing them.{expiryNote}
     </Text>
   );
 }

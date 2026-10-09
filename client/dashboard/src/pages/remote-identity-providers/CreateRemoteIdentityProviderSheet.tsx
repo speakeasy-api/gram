@@ -132,14 +132,14 @@ export function CreateRemoteIdentityProviderSheet({
       await invalidateAllOrganizationRemoteSessionIssuers(queryClient, {
         refetchType: "all",
       });
-      toast.success("Remote identity provider created");
+      toast.success("Authorization server created");
       onOpenChange(false);
       routes.remoteIdentityProviders.issuerDetail.goTo(created.id);
     },
     onError: (error) => {
       // useMutation surfaces error.message via createMutation.error (shown in
       // the inline Alert); a console line keeps the stack for debugging.
-      console.error("Create remote identity provider failed", error);
+      console.error("Create authorization server failed", error);
     },
   });
 
@@ -211,7 +211,7 @@ export function CreateRemoteIdentityProviderSheet({
       >
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle className="text-lg font-semibold">
-            New Remote Identity Provider
+            New Authorization Server
           </SheetTitle>
         </SheetHeader>
 
@@ -291,7 +291,7 @@ export function CreateRemoteIdentityProviderSheet({
                 placeholder="my-identity-provider"
               />
               <Text muted small>
-                Identifier for this identity provider. Auto-derived from the
+                Identifier for this authorization server. Auto-derived from the
                 Issuer URL until you edit it.
               </Text>
             </Stack>
@@ -306,7 +306,7 @@ export function CreateRemoteIdentityProviderSheet({
                   setName(value);
                   setNameDirty(true);
                 }}
-                placeholder="My Identity Provider"
+                placeholder="My Authorization Server"
               />
               <Text muted small>
                 Friendly label shown in the dashboard. Auto-derived from the
