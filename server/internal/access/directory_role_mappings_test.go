@@ -3,6 +3,10 @@ package access
 import (
 	"context"
 	"fmt"
+	accesshttp "github.com/speakeasy-api/gram/server/gen/http/access/server"
+	goahttp "goa.design/goa/v3/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -895,4 +899,85 @@ func TestService_ListAudienceOptions_CountsDirectoryMappedRoleMembers(t *testing
 		}
 	}
 	require.Equal(t, new(int64(1)), count)
+}
+
+func TestSetDirectoryRoleMappings_ExpectedSetWireDecoding(t *testing.T) {
+	for _, tc := range []struct {
+		name, field string
+		expected    []string
+	}{
+		{"omitted", "", nil},
+		{"empty", `,"expected_role_urns":[]`, []string{}},
+		{"populated", `,"expected_role_urns":["role:global:admin"]`, []string{"role:global:admin"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/rpc/access.setDirectoryRoleMappings", strings.NewReader(`{"source_kind":"attribute","attribute_key":"department","attribute_value":"Engineering","role_urns":[]`+tc.field+`}`))
+			req.Header.Set("Content-Type", "application/json")
+			payload, err := accesshttp.DecodeSetDirectoryRoleMappingsRequest(goahttp.NewMuxer(), goahttp.RequestDecoder)(req)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, payload.ExpectedRoleUrns)
+		})
+	}
+}
+
+func TestService_SetDirectoryRoleMappings_ExpectedSet(t *testing.T) {
+	t.Parallel()
+	for _, source := range []string{directoryRoleMappingSourceGroup, directoryRoleMappingSourceAttribute} {
+		t.Run(source, func(t *testing.T) {
+			ctx, ti := newTestAccessService(t)
+			seedMappingAdministrator(t, ctx, ti)
+			enableDirectoryRoleSetsForTest(t, ctx, ti)
+			orgID := testAccessAuthContext(t, ctx).ActiveOrganizationID
+			seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+			seedRole(t, ctx, ti.conn, orgID, mockRole("role_viewer", "Viewer", "viewer", ""))
+			builder := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder").String()
+			viewer := seededRolePrincipal(t, ctx, ti.conn, orgID, "viewer").String()
+			payload := &gen.SetDirectoryRoleMappingsPayload{SourceKind: source, RoleUrns: []string{builder, viewer}, ExpectedRoleUrns: []string{}}
+			if source == directoryRoleMappingSourceGroup {
+				id := seedMappingDirectoryGroup(t, ctx, ti.conn, orgID, "Engineering").String()
+				payload.DirectoryGroupID = &id
+			} else {
+				seedMappingDirectoryUser(t, ctx, ti.conn, orgID, "expected-set-user", "expected-set@example.com", `{"department":"Engineering"}`)
+				payload.AttributeKey, payload.AttributeValue = conv.PtrEmpty("department"), conv.PtrEmpty("Engineering")
+			}
+			original, err := ti.service.SetDirectoryRoleMappings(ctx, payload)
+			require.NoError(t, err) // explicit empty expectation matches unmapped source
+			beforeSet, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingSet)
+			require.NoError(t, err)
+			beforeDelete, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingDelete)
+			require.NoError(t, err)
+			for _, stale := range [][]string{{}, {builder}} {
+				payload.ExpectedRoleUrns, payload.RoleUrns = stale, []string{viewer}
+				_, err = ti.service.SetDirectoryRoleMappings(ctx, payload)
+				requireOopsCode(t, err, oops.CodeConflict)
+				listed, err := ti.service.ListDirectoryRoleMappings(ctx, &gen.ListDirectoryRoleMappingsPayload{})
+				require.NoError(t, err)
+				require.ElementsMatch(t, original, listed.Mappings)
+				afterSet, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingSet)
+				require.NoError(t, err)
+				afterDelete, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingDelete)
+				require.NoError(t, err)
+				require.Equal(t, beforeSet, afterSet)
+				require.Equal(t, beforeDelete, afterDelete)
+			}
+			// Order and duplicates do not matter to the precondition.
+			payload.ExpectedRoleUrns = []string{viewer, builder, viewer}
+			replaced, err := ti.service.SetDirectoryRoleMappings(ctx, payload)
+			require.NoError(t, err)
+			require.Len(t, replaced, 1)
+			require.Equal(t, viewer, replaced[0].RoleUrn)
+			// Omission retains unconditional complete-set replacement for old callers.
+			payload.ExpectedRoleUrns, payload.RoleUrns = nil, []string{builder}
+			replaced, err = ti.service.SetDirectoryRoleMappings(ctx, payload)
+			require.NoError(t, err)
+			require.Equal(t, builder, replaced[0].RoleUrn)
+			payload.ExpectedRoleUrns, payload.RoleUrns = []string{builder}, []string{}
+			cleared, err := ti.service.SetDirectoryRoleMappings(ctx, payload)
+			require.NoError(t, err)
+			require.Empty(t, cleared)
+			payload.ExpectedRoleUrns = []string{}
+			_, err = ti.service.SetDirectoryRoleMappings(ctx, payload)
+			require.NoError(t, err)
+		})
+	}
 }

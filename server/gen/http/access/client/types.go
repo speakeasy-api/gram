@@ -76,6 +76,10 @@ type SetDirectoryRoleMappingsRequestBody struct {
 	AttributeKey *string `form:"attribute_key,omitempty" json:"attribute_key,omitempty" xml:"attribute_key,omitempty"`
 	// Attribute value to match. Required when source_kind is attribute.
 	AttributeValue *string `form:"attribute_value,omitempty" json:"attribute_value,omitempty" xml:"attribute_value,omitempty"`
+	// Optional compare-and-set precondition. The normalized current role set must
+	// match or the request returns conflict without changes. Omit for
+	// unconditional replacement; an empty array requires an unmapped source.
+	ExpectedRoleUrns []string `form:"expected_role_urns,omitempty" json:"expected_role_urns,omitempty" xml:"expected_role_urns,omitempty"`
 	// The complete set of role principal URNs to grant, from Role.principal_urn.
 	// Empty removes every mapping for the source.
 	RoleUrns []string `form:"role_urns" json:"role_urns" xml:"role_urns"`
@@ -7419,6 +7423,12 @@ func NewSetDirectoryRoleMappingsRequestBody(p *access.SetDirectoryRoleMappingsPa
 		DirectoryGroupID: p.DirectoryGroupID,
 		AttributeKey:     p.AttributeKey,
 		AttributeValue:   p.AttributeValue,
+	}
+	if p.ExpectedRoleUrns != nil {
+		body.ExpectedRoleUrns = make([]string, len(p.ExpectedRoleUrns))
+		for i, val := range p.ExpectedRoleUrns {
+			body.ExpectedRoleUrns[i] = val
+		}
 	}
 	if p.RoleUrns != nil {
 		body.RoleUrns = make([]string, len(p.RoleUrns))

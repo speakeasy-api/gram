@@ -34,6 +34,10 @@ export type SetDirectoryRoleMappingsForm = {
    */
   directoryGroupId?: string | undefined;
   /**
+   * Optional compare-and-set precondition. The normalized current role set must match or the request returns conflict without changes. Omit for unconditional replacement; an empty array requires an unmapped source.
+   */
+  expectedRoleUrns?: Array<string> | undefined;
+  /**
    * The complete set of role principal URNs to grant, from Role.principal_urn. Empty removes every mapping for the source.
    */
   roleUrns: Array<string>;
@@ -54,6 +58,7 @@ export type SetDirectoryRoleMappingsForm$Outbound = {
   attribute_key?: string | undefined;
   attribute_value?: string | undefined;
   directory_group_id?: string | undefined;
+  expected_role_urns?: Array<string> | undefined;
   role_urns: Array<string>;
   source_kind: string;
 };
@@ -67,6 +72,7 @@ export const SetDirectoryRoleMappingsForm$outboundSchema: z.ZodMiniType<
     attributeKey: z.optional(z.string()),
     attributeValue: z.optional(z.string()),
     directoryGroupId: z.optional(z.string()),
+    expectedRoleUrns: z.optional(z.array(z.string())),
     roleUrns: z.array(z.string()),
     sourceKind: SetDirectoryRoleMappingsFormSourceKind$outboundSchema,
   }),
@@ -75,6 +81,7 @@ export const SetDirectoryRoleMappingsForm$outboundSchema: z.ZodMiniType<
       attributeKey: "attribute_key",
       attributeValue: "attribute_value",
       directoryGroupId: "directory_group_id",
+      expectedRoleUrns: "expected_role_urns",
       roleUrns: "role_urns",
       sourceKind: "source_kind",
     });

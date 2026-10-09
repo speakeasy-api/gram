@@ -218,6 +218,8 @@ var _ = Service("access", func() {
 			Response(StatusOK)
 		})
 		Meta("openapi:operationId", "setDirectoryRoleMapping")
+		Meta("openapi:extension:x-speakeasy-name-override", "setDirectoryRoleMapping")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetDirectoryRoleMapping", "type": "mutation"}`)
 	})
 
 	Method("setDirectoryRoleMappings", func() {
@@ -1913,5 +1915,6 @@ var SetDirectoryRoleMappingsForm = Type("SetDirectoryRoleMappingsForm", func() {
 	Attribute("attribute_value", String, "Attribute value to match. Required when source_kind is attribute.", func() {
 		MinLength(1)
 	})
+	Attribute("expected_role_urns", ArrayOf(String), "Optional compare-and-set precondition. The normalized current role set must match or the request returns conflict without changes. Omit for unconditional replacement; an empty array requires an unmapped source.")
 	Attribute("role_urns", ArrayOf(String), "The complete set of role principal URNs to grant, from Role.principal_urn. Empty removes every mapping for the source.")
 })
