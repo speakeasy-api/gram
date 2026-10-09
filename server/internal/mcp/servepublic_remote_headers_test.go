@@ -115,7 +115,7 @@ func TestServePublic_RemoteEndpoint_DoesNotForwardSpeakeasyHeaders(t *testing.T)
 	endpointSlug := "endpoint-" + uuid.NewString()
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
 	mcpServer, remoteServer := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.server.URL, endpointSlug, "public", issuerID)
-	// A static credential stored before names were canonicalized still works;
+	// A static credential stored under a lowercase name still works;
 	// an optional row reading a Speakeasy credential is not sent.
 	seedRemoteHeader(t, ctx, ti.conn, *authCtx.ProjectID, remoteServer.ID, "x-api-key", "operator-credential", "", true)
 	seedRemoteHeader(t, ctx, ti.conn, *authCtx.ProjectID, remoteServer.ID, "X-Upstream-Token", "", "Gram-Key", false)
@@ -253,7 +253,7 @@ func TestServePublic_MetaEndpoint_RemoteMembersApplyRemoteHeaderPolicy(t *testin
 	remoteB := remoteServerIDOf(t, ctx, ti.conn, projectID, memberB)
 	seedRemoteHeader(t, ctx, ti.conn, projectID, remoteA, "x-api-key", "operator-credential", "", true)
 	seedRemoteHeader(t, ctx, ti.conn, projectID, remoteA, "Set-Cookie", "synthetic=1", "", false)
-	seedRemoteHeader(t, ctx, ti.conn, projectID, remoteB, "X-Upstream-Token", "", "Authorization", true)
+	seedRemoteHeader(t, ctx, ti.conn, projectID, remoteB, "X-Upstream-Token", "", "Gram-Key", true)
 
 	clientA := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-header-a", "", []uuid.UUID{sharedIssuerID})
 	clientB := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-header-b", "", []uuid.UUID{sharedIssuerID})
@@ -278,7 +278,7 @@ func TestServePublic_MetaEndpoint_RemoteMembersApplyRemoteHeaderPolicy(t *testin
 
 	rpc = executeMetaTool(t, ti, metaSlug, bearer, "member-b--ping")
 	_, isError = metaToolResultText(t, rpc)
-	require.True(t, isError, "a required row reading Authorization must fail member B's call")
+	require.True(t, isError, "a required row reading a Speakeasy credential must fail member B's call")
 	for _, req := range upstreamB.journal() {
 		// Only the proxy's background metadata probe may reach member B.
 		require.NotEqual(t, http.MethodPost, req.httpMethod, "member B must receive no MCP request, got %q", req.rpcMethod)

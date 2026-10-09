@@ -42,7 +42,7 @@ func TestUpdateServerHeader_ReplacesFields(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
+	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Description = new("original")
 		p.IsRequired = new(true)
 		p.Value = new("original-value")
@@ -52,13 +52,13 @@ func TestUpdateServerHeader_ReplacesFields(t *testing.T) {
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteMcpServerHeaderUpdate)
 	require.NoError(t, err)
 
-	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-Api-Key-v2", func(p *gen.UpdateServerHeaderPayload) {
+	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-API-Key-v2", func(p *gen.UpdateServerHeaderPayload) {
 		p.Value = new("new-value")
 	}))
 	require.NoError(t, err)
 
 	require.Equal(t, created.ID, updated.ID)
-	require.Equal(t, "X-Api-Key-V2", updated.Name)
+	require.Equal(t, "X-API-Key-v2", updated.Name)
 	require.NotNil(t, updated.Value)
 	require.Equal(t, "new-value", *updated.Value)
 
@@ -78,9 +78,9 @@ func TestUpdateServerHeader_PreservesExistingSecretValue(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
-	created := createSecretHeader(t, ctx, ti, server.ID, "X-Api-Key", "my-secret-value")
+	created := createSecretHeader(t, ctx, ti, server.ID, "X-API-Key", "my-secret-value")
 
-	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-Api-Key", func(p *gen.UpdateServerHeaderPayload) {
+	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-API-Key", func(p *gen.UpdateServerHeaderPayload) {
 		p.IsSecret = new(true)
 		p.Description = new("now documented")
 	}))
@@ -91,7 +91,7 @@ func TestUpdateServerHeader_PreservesExistingSecretValue(t *testing.T) {
 
 	// The stored ciphertext must still decrypt to the original plaintext. The
 	// proxy read path is what actually consumes it, so read it unredacted.
-	requireStoredSecretValue(t, ctx, ti, server.ID, "X-Api-Key", "my-secret-value")
+	requireStoredSecretValue(t, ctx, ti, server.ID, "X-API-Key", "my-secret-value")
 }
 
 // Preserving a secret must not double-encrypt: a second no-value update still
@@ -101,16 +101,16 @@ func TestUpdateServerHeader_PreserveIsIdempotent(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
-	created := createSecretHeader(t, ctx, ti, server.ID, "X-Api-Key", "my-secret-value")
+	created := createSecretHeader(t, ctx, ti, server.ID, "X-API-Key", "my-secret-value")
 
 	for range 3 {
-		_, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-Api-Key", func(p *gen.UpdateServerHeaderPayload) {
+		_, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-API-Key", func(p *gen.UpdateServerHeaderPayload) {
 			p.IsSecret = new(true)
 		}))
 		require.NoError(t, err)
 	}
 
-	requireStoredSecretValue(t, ctx, ti, server.ID, "X-Api-Key", "my-secret-value")
+	requireStoredSecretValue(t, ctx, ti, server.ID, "X-API-Key", "my-secret-value")
 }
 
 func TestUpdateServerHeader_RotatesSecretValue(t *testing.T) {
@@ -118,15 +118,15 @@ func TestUpdateServerHeader_RotatesSecretValue(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
-	created := createSecretHeader(t, ctx, ti, server.ID, "X-Api-Key", "old-secret")
+	created := createSecretHeader(t, ctx, ti, server.ID, "X-API-Key", "old-secret")
 
-	_, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-Api-Key", func(p *gen.UpdateServerHeaderPayload) {
+	_, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-API-Key", func(p *gen.UpdateServerHeaderPayload) {
 		p.IsSecret = new(true)
 		p.Value = new("new-secret")
 	}))
 	require.NoError(t, err)
 
-	requireStoredSecretValue(t, ctx, ti, server.ID, "X-Api-Key", "new-secret")
+	requireStoredSecretValue(t, ctx, ti, server.ID, "X-API-Key", "new-secret")
 }
 
 // Marking an existing non-secret header secret without supplying a value is a
@@ -137,12 +137,12 @@ func TestUpdateServerHeader_NewSecretWithoutValueRejected(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
+	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Value = new("plain")
 	}))
 	require.NoError(t, err)
 
-	_, err = ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-Api-Key", func(p *gen.UpdateServerHeaderPayload) {
+	_, err = ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-API-Key", func(p *gen.UpdateServerHeaderPayload) {
 		p.IsSecret = new(true)
 	}))
 	require.Error(t, err)
@@ -157,18 +157,18 @@ func TestUpdateServerHeader_StaticToPassThrough(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Trace-Id", func(p *gen.CreateServerHeaderPayload) {
+	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Trace-ID", func(p *gen.CreateServerHeaderPayload) {
 		p.Value = new("static")
 	}))
 	require.NoError(t, err)
 
-	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-Trace-Id", func(p *gen.UpdateServerHeaderPayload) {
-		p.ValueFromRequestHeader = new("X-Trace-Id")
+	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-Trace-ID", func(p *gen.UpdateServerHeaderPayload) {
+		p.ValueFromRequestHeader = new("X-Trace-ID")
 	}))
 	require.NoError(t, err)
 	require.Nil(t, updated.Value)
 	require.NotNil(t, updated.ValueFromRequestHeader)
-	require.Equal(t, "X-Trace-Id", *updated.ValueFromRequestHeader)
+	require.Equal(t, "X-Trace-ID", *updated.ValueFromRequestHeader)
 }
 
 // The reverse transition must also hold.
@@ -178,12 +178,12 @@ func TestUpdateServerHeader_PassThroughToStatic(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Trace-Id", func(p *gen.CreateServerHeaderPayload) {
-		p.ValueFromRequestHeader = new("X-Trace-Id")
+	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Trace-ID", func(p *gen.CreateServerHeaderPayload) {
+		p.ValueFromRequestHeader = new("X-Trace-ID")
 	}))
 	require.NoError(t, err)
 
-	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-Trace-Id", func(p *gen.UpdateServerHeaderPayload) {
+	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-Trace-ID", func(p *gen.UpdateServerHeaderPayload) {
 		p.Value = new("static")
 	}))
 	require.NoError(t, err)
@@ -201,7 +201,7 @@ func TestUpdateServerHeader_SecretToPassThrough(t *testing.T) {
 	created := createSecretHeader(t, ctx, ti, server.ID, "Authorization", "Bearer token")
 
 	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "Authorization", func(p *gen.UpdateServerHeaderPayload) {
-		p.ValueFromRequestHeader = new("X-Upstream-Authorization")
+		p.ValueFromRequestHeader = new("Authorization")
 	}))
 	require.NoError(t, err)
 	require.False(t, updated.IsSecret)
@@ -215,12 +215,12 @@ func TestUpdateServerHeader_BothValuesRejected(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
+	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Value = new("value")
 	}))
 	require.NoError(t, err)
 
-	_, err = ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-Api-Key", func(p *gen.UpdateServerHeaderPayload) {
+	_, err = ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-API-Key", func(p *gen.UpdateServerHeaderPayload) {
 		p.Value = new("value")
 		p.ValueFromRequestHeader = new("X-Original")
 	}))
@@ -257,7 +257,7 @@ func TestUpdateServerHeader_NotFound(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	_, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(uuid.NewString(), "X-Api-Key", func(p *gen.UpdateServerHeaderPayload) {
+	_, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(uuid.NewString(), "X-API-Key", func(p *gen.UpdateServerHeaderPayload) {
 		p.Value = new("value")
 	}))
 	require.Error(t, err)
@@ -271,7 +271,7 @@ func TestUpdateServerHeader_RBACForbidden(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
+	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Value = new("value")
 	}))
 	require.NoError(t, err)
@@ -281,7 +281,7 @@ func TestUpdateServerHeader_RBACForbidden(t *testing.T) {
 
 	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeMCPRead, Selector: authz.NewSelector(authz.ScopeMCPRead, authCtx.ProjectID.String())})
 
-	_, err = ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-Api-Key", func(p *gen.UpdateServerHeaderPayload) {
+	_, err = ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-API-Key", func(p *gen.UpdateServerHeaderPayload) {
 		p.Value = new("hijacked")
 	}))
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -328,7 +328,7 @@ func TestUpdateServerHeader_CaseInsensitiveDuplicateConflicts(t *testing.T) {
 	requireStoredSecretValue(t, ctx, ti, server.ID, "X-Other", "other-secret")
 }
 
-func TestUpdateServerHeader_CanonicalizesLegacyRowWithoutConflictingWithItself(t *testing.T) {
+func TestUpdateServerHeader_KeepsNameWithoutConflictingWithItself(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -339,11 +339,11 @@ func TestUpdateServerHeader_CanonicalizesLegacyRowWithoutConflictingWithItself(t
 		p.Value = new("rotated")
 	}))
 	require.NoError(t, err)
-	require.Equal(t, "X-Api-Key", updated.Name)
+	require.Equal(t, "x-api-key", updated.Name)
 }
 
-// Editing a secret stored under a noncanonical name without resupplying its
-// value validates and canonicalizes the name and keeps the ciphertext.
+// Editing a secret without resupplying its value still validates the name,
+// renames it as entered, even by case only, and keeps the ciphertext.
 func TestUpdateServerHeader_LegacySecretKeepsValueWhenRenamed(t *testing.T) {
 	t.Parallel()
 
@@ -361,7 +361,7 @@ func TestUpdateServerHeader_LegacySecretKeepsValueWhenRenamed(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(legacy.ID.String(), "x-api-key", func(p *gen.UpdateServerHeaderPayload) {
+	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(legacy.ID.String(), "X-Api-Key", func(p *gen.UpdateServerHeaderPayload) {
 		p.IsSecret = new(true)
 		p.IsRequired = new(true)
 	}))
@@ -382,11 +382,11 @@ func TestUpdateServerHeader_RejectsProtectedPassThroughSource(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
-	legacy := seedLegacyHeader(t, ctx, ti, server.ID, "X-Upstream-Token", "", "Authorization")
+	legacy := seedLegacyHeader(t, ctx, ti, server.ID, "X-Upstream-Token", "", "Gram-Key")
 
 	// Keeping the protected source while changing anything else is refused.
 	_, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(legacy.ID.String(), "X-Upstream-Token", func(p *gen.UpdateServerHeaderPayload) {
-		p.ValueFromRequestHeader = new("Authorization")
+		p.ValueFromRequestHeader = new("Gram-Key")
 	}))
 	requireOopsCode(t, err, oops.CodeBadRequest)
 

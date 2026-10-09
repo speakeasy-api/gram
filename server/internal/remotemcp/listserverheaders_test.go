@@ -35,10 +35,10 @@ func TestListServerHeaders_OrderedByNameAndRedacted(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	createSecretHeader(t, ctx, ti, server.ID, "X-Api-Key", "secret-value")
+	createSecretHeader(t, ctx, ti, server.ID, "X-API-Key", "secret-value")
 
 	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "Authorization", func(p *gen.CreateServerHeaderPayload) {
-		p.ValueFromRequestHeader = new("X-Upstream-Authorization")
+		p.ValueFromRequestHeader = new("Authorization")
 	}))
 	require.NoError(t, err)
 
@@ -47,7 +47,7 @@ func TestListServerHeaders_OrderedByNameAndRedacted(t *testing.T) {
 
 	// ORDER BY name
 	require.Equal(t, "Authorization", result.Headers[0].Name)
-	require.Equal(t, "X-Api-Key", result.Headers[1].Name)
+	require.Equal(t, "X-API-Key", result.Headers[1].Name)
 
 	require.True(t, result.Headers[1].IsSecret)
 	require.NotNil(t, result.Headers[1].Value)
@@ -155,7 +155,7 @@ func TestListServerHeaders_ExcludesDeleted(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
+	created, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Value = new("value")
 	}))
 	require.NoError(t, err)

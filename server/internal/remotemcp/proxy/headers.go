@@ -27,14 +27,21 @@ const (
 type HeaderPolicy string
 
 const (
-	// HeaderPolicyRemote is the policy for remote MCP servers and the zero
-	// value. Speakeasy credentials, sessions, caller assertions and tunnel
-	// transport fields never reach the upstream, copied or configured.
+	// HeaderPolicyRemote (the zero value) is applied to remote MCP servers:
+	//   - client headers: Speakeasy credentials, sessions, caller assertions and
+	//     tunnel transport fields ([IsProtectedInboundHeader]) are not copied
+	//     upstream;
+	//   - configured headers: may not read those headers as their source, may
+	//     not set Set-Cookie/Proxy-Authorization or a request-sourced Cookie,
+	//     and are re-validated on every request (an invalid optional row is
+	//     dropped, an invalid required row fails the request with 400).
 	HeaderPolicyRemote HeaderPolicy = ""
 
-	// HeaderPolicyTunneled is the policy for tunneled MCP servers. Their
-	// configured headers carry Speakeasy's own tunnel routing fields, so the
-	// remote filtering does not apply to them.
+	// HeaderPolicyTunneled keeps the pre-existing behaviour for tunneled MCP
+	// servers. The tunnel's own routing fields (tunnel id, forward token,
+	// client affinity) are passed to the proxy as configured headers, so the
+	// remote filtering would reject them; tunnel-specific filtering is defined
+	// by the tunnel header work.
 	HeaderPolicyTunneled HeaderPolicy = "tunneled"
 )
 
@@ -109,6 +116,9 @@ const tunnelHeaderPrefix = "x-gram-tunnel-"
 // carries a Speakeasy credential, session, caller assertion or tunnel
 // transport field. Under [HeaderPolicyRemote] such a header is never copied
 // upstream and never used as the source of a configured header.
+//
+// Authorization is not listed: the copy already drops it, and a configured
+// header may forward the caller's own upstream credential from it.
 func IsProtectedInboundHeader(name string) bool {
 	if mcpauthz.ReservedHeader(name) {
 		return true
@@ -119,7 +129,6 @@ func IsProtectedInboundHeader(name string) bool {
 	}
 	switch key {
 	case
-		"authorization",
 		"proxy-authorization",
 		"cookie",
 		"set-cookie",
@@ -438,8 +447,8 @@ func isUnownedHeader(name string) bool {
 }
 
 // CheckRemoteHeader validates a configured header against
-// [HeaderPolicyRemote]. Names are matched case-insensitively and need not be
-// canonical, so a header stored before names were normalized keeps working.
+// [HeaderPolicyRemote]. Names are matched case-insensitively, with
+// underscores read as dashes.
 func CheckRemoteHeader(h ConfiguredHeader) error {
 	if h.ValueFromRequestHeader != "" && IsProtectedInboundHeader(h.ValueFromRequestHeader) {
 		return fmt.Errorf("%w: %w: %q cannot be forwarded to a remote MCP server", ErrReservedHeader, ErrProtectedSource, h.ValueFromRequestHeader)
@@ -511,7 +520,7 @@ func resolveRemoteHeader(h ConfiguredHeader, userReq *http.Request) (string, err
 func remoteHeaderFailureMessage(h ConfiguredHeader, err error) string {
 	switch {
 	case errors.Is(err, ErrProtectedSource):
-		return fmt.Sprintf("required header %q for remote mcp server cannot be populated from request header %q. %s", h.Name, h.ValueFromRequestHeader, ProtectedSourceRemediation(h.Name))
+		return fmt.Sprintf("required header %q for remote mcp server cannot be populated from request header %q. %s", h.Name, h.ValueFromRequestHeader, ProtectedSourceRemediation)
 	case errors.Is(err, ErrReservedHeader):
 		return fmt.Sprintf("required header %q cannot be configured on a remote mcp server: change or remove it in the server's settings", h.Name)
 	case errors.Is(err, ErrInvalidHeaderName), errors.Is(err, ErrInvalidHeaderValue):
@@ -522,13 +531,5 @@ func remoteHeaderFailureMessage(h ConfiguredHeader, err error) string {
 }
 
 // ProtectedSourceRemediation explains how to replace a configured header that
-// reads a protected inbound header, for the header named destination. Upstream
-// OAuth is offered only for Authorization: the resolved token supplies that
-// header and no other.
-func ProtectedSourceRemediation(destination string) string {
-	const separate = "Speakeasy does not forward caller credentials or Speakeasy headers to remote MCP servers. Have clients send the upstream credential in a separate request header and read it from there"
-	if headerKey(destination) == "authorization" {
-		return separate + ", store a static credential, or connect the server's upstream OAuth, which supplies Authorization itself"
-	}
-	return separate + ", or store a static credential. Upstream OAuth supplies only Authorization, so it does not replace this header"
-}
+// reads a protected inbound header.
+const ProtectedSourceRemediation = "Speakeasy does not forward Speakeasy credentials or headers to remote MCP servers. Have clients send the upstream credential in a separate request header and read it from there, or store a static credential"

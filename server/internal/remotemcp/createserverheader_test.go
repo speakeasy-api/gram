@@ -28,7 +28,7 @@ func TestCreateServerHeader_Secret(t *testing.T) {
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteMcpServerHeaderCreate)
 	require.NoError(t, err)
 
-	header, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
+	header, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Description = new("API key for authentication")
 		p.IsRequired = new(true)
 		p.IsSecret = new(true)
@@ -37,7 +37,7 @@ func TestCreateServerHeader_Secret(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NotEmpty(t, header.ID)
-	require.Equal(t, "X-Api-Key", header.Name)
+	require.Equal(t, "X-API-Key", header.Name)
 	require.True(t, header.IsSecret)
 	require.True(t, header.IsRequired)
 	require.NotNil(t, header.Description)
@@ -59,8 +59,8 @@ func TestCreateServerHeader_PassThrough(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	header, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Request-Id", func(p *gen.CreateServerHeaderPayload) {
-		p.ValueFromRequestHeader = new("X-Request-Id")
+	header, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Request-ID", func(p *gen.CreateServerHeaderPayload) {
+		p.ValueFromRequestHeader = new("X-Request-ID")
 	}))
 	require.NoError(t, err)
 
@@ -68,7 +68,7 @@ func TestCreateServerHeader_PassThrough(t *testing.T) {
 	require.False(t, header.IsRequired)
 	require.Nil(t, header.Value)
 	require.NotNil(t, header.ValueFromRequestHeader)
-	require.Equal(t, "X-Request-Id", *header.ValueFromRequestHeader)
+	require.Equal(t, "X-Request-ID", *header.ValueFromRequestHeader)
 }
 
 func TestCreateServerHeader_BothValuesRejected(t *testing.T) {
@@ -102,9 +102,9 @@ func TestCreateServerHeader_SecretPassThroughRejected(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Trace-Id", func(p *gen.CreateServerHeaderPayload) {
+	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Trace-ID", func(p *gen.CreateServerHeaderPayload) {
 		p.IsSecret = new(true)
-		p.ValueFromRequestHeader = new("X-Trace-Id")
+		p.ValueFromRequestHeader = new("X-Trace-ID")
 	}))
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeBadRequest)
@@ -134,12 +134,12 @@ func TestCreateServerHeader_DuplicateNameConflicts(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
+	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Value = new("first")
 	}))
 	require.NoError(t, err)
 
-	_, err = ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
+	_, err = ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Value = new("second")
 	}))
 	require.Error(t, err)
@@ -154,7 +154,7 @@ func TestCreateServerHeader_NameReusableAfterDelete(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	first, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
+	first, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Value = new("first")
 	}))
 	require.NoError(t, err)
@@ -166,7 +166,7 @@ func TestCreateServerHeader_NameReusableAfterDelete(t *testing.T) {
 		ProjectSlugInput: nil,
 	}))
 
-	second, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
+	second, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Value = new("second")
 	}))
 	require.NoError(t, err)
@@ -178,7 +178,7 @@ func TestCreateServerHeader_ServerNotFound(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(uuid.NewString(), "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
+	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(uuid.NewString(), "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Value = new("value")
 	}))
 	require.Error(t, err)
@@ -192,7 +192,7 @@ func TestCreateServerHeader_OtherProjectServerNotFound(t *testing.T) {
 	ctx, ti := newTestService(t)
 	otherServer := seedOtherProjectServer(t, ctx, ti)
 
-	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(otherServer.ID.String(), "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
+	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(otherServer.ID.String(), "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Value = new("value")
 	}))
 	require.Error(t, err)
@@ -211,7 +211,7 @@ func TestCreateServerHeader_RBACForbidden(t *testing.T) {
 
 	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{Scope: authz.ScopeMCPRead, Selector: authz.NewSelector(authz.ScopeMCPRead, authCtx.ProjectID.String())})
 
-	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Api-Key", func(p *gen.CreateServerHeaderPayload) {
+	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-API-Key", func(p *gen.CreateServerHeaderPayload) {
 		p.Value = new("value")
 	}))
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -227,7 +227,7 @@ func projectID(t *testing.T, ctx context.Context) uuid.UUID {
 }
 
 // seedLegacyHeader stores a header exactly as given, bypassing write
-// validation, the way rows written before names were canonicalized look.
+// validation, the way rows written before the remote header policy look.
 func seedLegacyHeader(t *testing.T, ctx context.Context, ti *testInstance, serverID string, name string, value string, source string) repo.RemoteMcpServerHeader {
 	t.Helper()
 
@@ -249,7 +249,7 @@ func TestCreateServerHeader_RejectsProtectedPassThroughSources(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	for _, source := range []string{"Authorization", "authorization", "Gram-Key", "gRaM-cHaT-sEsSiOn", "Gram_Session", "Gram-Project", "Gram-Consent-State", "X-Gram-Tunnel-Id", "X-Gram-Agent-Version", "X_Speakeasy_Identity", "Proxy-Authorization", "Set-Cookie", "Speakeasy-AI-Key", "speakeasy-ai-chat-session"} {
+	for _, source := range []string{"Gram-Key", "gRaM-cHaT-sEsSiOn", "Gram_Session", "Gram-Project", "Gram-Consent-State", "X-Gram-Tunnel-Id", "X-Gram-Agent-Version", "X_Speakeasy_Identity", "Proxy-Authorization", "Set-Cookie", "Speakeasy-AI-Key", "speakeasy-ai-chat-session"} {
 		_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Upstream-Token", func(p *gen.CreateServerHeaderPayload) {
 			p.ValueFromRequestHeader = new(source)
 		}))
@@ -257,7 +257,7 @@ func TestCreateServerHeader_RejectsProtectedPassThroughSources(t *testing.T) {
 	}
 
 	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Upstream-Token", func(p *gen.CreateServerHeaderPayload) {
-		p.ValueFromRequestHeader = new("Authorization")
+		p.ValueFromRequestHeader = new("Gram-Key")
 	}))
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
@@ -302,6 +302,14 @@ func TestCreateServerHeader_AllowsOperatorCredentials(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	require.Equal(t, "X-Service-Token", *header.ValueFromRequestHeader)
+
+	// Forwarding the caller's own upstream credential is what pass-through
+	// identity is for.
+	header, err = ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Upstream-Token", func(p *gen.CreateServerHeaderPayload) {
+		p.ValueFromRequestHeader = new("Authorization")
+	}))
+	require.NoError(t, err)
+	require.Equal(t, "Authorization", *header.ValueFromRequestHeader)
 }
 
 func TestCreateServerHeader_RejectsInvalidNamesAndValues(t *testing.T) {
@@ -337,7 +345,7 @@ func TestCreateServerHeader_RejectsInvalidNamesAndValues(t *testing.T) {
 	require.Equal(t, "a\tb", *header.Value)
 }
 
-func TestCreateServerHeader_StoresCanonicalNames(t *testing.T) {
+func TestCreateServerHeader_StoresNamesAsEntered(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -347,8 +355,8 @@ func TestCreateServerHeader_StoresCanonicalNames(t *testing.T) {
 		p.ValueFromRequestHeader = new("x-caller-token")
 	}))
 	require.NoError(t, err)
-	require.Equal(t, "X-Forwarded-Token", header.Name)
-	require.Equal(t, "X-Caller-Token", *header.ValueFromRequestHeader)
+	require.Equal(t, "x-forwarded-token", header.Name)
+	require.Equal(t, "x-caller-token", *header.ValueFromRequestHeader)
 }
 
 func TestCreateServerHeader_CaseInsensitiveDuplicateConflicts(t *testing.T) {
@@ -497,13 +505,12 @@ func TestCreateServerHeader_RefusalsExplainTheFix(t *testing.T) {
 		code oops.Code
 		want []string
 	}{
-		{name: "X-Upstream-Token", opts: func(p *gen.CreateServerHeaderPayload) { p.ValueFromRequestHeader = new("gram-key") }, code: oops.CodeBadRequest, want: []string{`header "X-Upstream-Token" cannot be populated from request header "Gram-Key"`, "separate request header", "Upstream OAuth supplies only Authorization"}},
-		{name: "Authorization", opts: func(p *gen.CreateServerHeaderPayload) { p.ValueFromRequestHeader = new("Authorization") }, code: oops.CodeBadRequest, want: []string{`header "Authorization" cannot be populated from request header "Authorization"`, "connect the server's upstream OAuth"}},
-		{name: "set-cookie", opts: func(p *gen.CreateServerHeaderPayload) { p.Value = new("v") }, code: oops.CodeBadRequest, want: []string{`header "Set-Cookie" cannot be configured on a remote MCP server`, "Cookie can only hold a static value"}},
+		{name: "X-Upstream-Token", opts: func(p *gen.CreateServerHeaderPayload) { p.ValueFromRequestHeader = new("gram-key") }, code: oops.CodeBadRequest, want: []string{`header "X-Upstream-Token" cannot be populated from request header "gram-key"`, "separate request header"}},
+		{name: "set-cookie", opts: func(p *gen.CreateServerHeaderPayload) { p.Value = new("v") }, code: oops.CodeBadRequest, want: []string{`header "set-cookie" cannot be configured on a remote MCP server`, "Cookie can only hold a static value"}},
 		{name: "X Bad", opts: func(p *gen.CreateServerHeaderPayload) { p.Value = new("v") }, code: oops.CodeBadRequest, want: []string{`header name "X Bad" is not a valid HTTP header name`}},
 		{name: "X-Forwarded", opts: func(p *gen.CreateServerHeaderPayload) { p.ValueFromRequestHeader = new("X Bad") }, code: oops.CodeBadRequest, want: []string{`header "X-Forwarded" reads request header "X Bad", which is not a valid HTTP header name`}},
 		{name: "X-Api-Key", opts: func(p *gen.CreateServerHeaderPayload) { p.Value = new("line1\nline2") }, code: oops.CodeBadRequest, want: []string{`the value of header "X-Api-Key" contains a character an HTTP header cannot carry`}},
-		{name: "x_taken", opts: func(p *gen.CreateServerHeaderPayload) { p.Value = new("v") }, code: oops.CodeConflict, want: []string{`this server already has a header named "X_taken"`, "'_' matches '-'"}},
+		{name: "x_taken", opts: func(p *gen.CreateServerHeaderPayload) { p.Value = new("v") }, code: oops.CodeConflict, want: []string{`this server already has a header named "x_taken"`, "'_' matches '-'"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -730,10 +730,10 @@ type ServerHeaderNameExistsParams struct {
 
 // Reports whether another live header of the server already uses name,
 // ignoring case and reading underscores as dashes, which is how the header
-// policy and some upstreams match names. The unique index compares names
-// exactly, and headers stored before names were canonicalized can differ only
-// in case, so writers check this while holding the parent server's row lock. exclude_id is the header
-// being updated, or the nil UUID on create.
+// policy and some upstreams match names. Names are stored as entered and the
+// unique index compares them exactly, so writers check this while holding the
+// parent server's row lock. exclude_id is the header being updated, or the nil
+// UUID on create.
 func (q *Queries) ServerHeaderNameExists(ctx context.Context, arg ServerHeaderNameExistsParams) (bool, error) {
 	row := q.db.QueryRow(ctx, serverHeaderNameExists,
 		arg.RemoteMcpServerID,

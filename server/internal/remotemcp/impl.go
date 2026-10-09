@@ -908,8 +908,8 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 // validateHeaderWrite checks a header create or update against the remote
-// header policy and returns the name and pass-through source to store, in
-// canonical form. A returned error's message is shown to the operator as is,
+// header policy and returns the name and pass-through source to store: as
+// entered, with surrounding spaces trimmed. A returned error's message is shown to the operator as is,
 // so it names the header and how to fix it, never a value.
 //
 // It mirrors the remote_mcp_server_headers_value_source_check constraint:
@@ -920,7 +920,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 func validateHeaderWrite(name string, value *string, valueFromRequestHeader *string, isSecret bool, preserveStoredValue bool) (string, *string, error) {
 	const fieldNameRule = "it cannot contain spaces, control characters or separators such as ':'"
 
-	canonicalName, err := proxy.NormalizeHeaderName(name)
+	headerName, err := trimHeaderName(name)
 	if err != nil {
 		return "", nil, fmt.Errorf("header name %q is not a valid HTTP header name: %s", name, fieldNameRule)
 	}
@@ -930,40 +930,50 @@ func validateHeaderWrite(name string, value *string, valueFromRequestHeader *str
 
 	var source *string
 	if hasValueFromRequestHeader {
-		canonicalSource, err := proxy.NormalizeHeaderName(*valueFromRequestHeader)
+		sourceName, err := trimHeaderName(*valueFromRequestHeader)
 		if err != nil {
-			return "", nil, fmt.Errorf("header %q reads request header %q, which is not a valid HTTP header name: %s", canonicalName, *valueFromRequestHeader, fieldNameRule)
+			return "", nil, fmt.Errorf("header %q reads request header %q, which is not a valid HTTP header name: %s", headerName, *valueFromRequestHeader, fieldNameRule)
 		}
-		source = &canonicalSource
+		source = &sourceName
 	}
 
 	if !preserveStoredValue {
 		if hasValue == hasValueFromRequestHeader {
-			return "", nil, fmt.Errorf("header %q must specify exactly one of value or value_from_request_header", canonicalName)
+			return "", nil, fmt.Errorf("header %q must specify exactly one of value or value_from_request_header", headerName)
 		}
 		if hasValueFromRequestHeader && isSecret {
-			return "", nil, fmt.Errorf("header %q: pass-through headers cannot be marked as secret", canonicalName)
+			return "", nil, fmt.Errorf("header %q: pass-through headers cannot be marked as secret", headerName)
 		}
 	}
 
 	check := proxy.ConfiguredHeader{
 		IsRequired:             false,
-		Name:                   canonicalName,
+		Name:                   headerName,
 		StaticValue:            conv.PtrValOr(value, ""),
 		ValueFromRequestHeader: conv.PtrValOr(source, ""),
 	}
 	switch err := proxy.CheckRemoteHeader(check); {
 	case err == nil:
-		return canonicalName, source, nil
+		return headerName, source, nil
 	case errors.Is(err, proxy.ErrProtectedSource):
-		return "", nil, fmt.Errorf("header %q cannot be populated from request header %q. %s", canonicalName, *source, proxy.ProtectedSourceRemediation(canonicalName))
+		return "", nil, fmt.Errorf("header %q cannot be populated from request header %q. %s", headerName, *source, proxy.ProtectedSourceRemediation)
 	case errors.Is(err, proxy.ErrReservedHeader):
-		return "", nil, fmt.Errorf("header %q cannot be configured on a remote MCP server: Set-Cookie, Proxy-Authorization, MCP protocol headers and the Speakeasy caller assertion are reserved, and Cookie can only hold a static value", canonicalName)
+		return "", nil, fmt.Errorf("header %q cannot be configured on a remote MCP server: Set-Cookie, Proxy-Authorization, MCP protocol headers and the Speakeasy caller assertion are reserved, and Cookie can only hold a static value", headerName)
 	case errors.Is(err, proxy.ErrInvalidHeaderValue):
-		return "", nil, fmt.Errorf("the value of header %q contains a character an HTTP header cannot carry, such as a line break", canonicalName)
+		return "", nil, fmt.Errorf("the value of header %q contains a character an HTTP header cannot carry, such as a line break", headerName)
 	default:
-		return "", nil, fmt.Errorf("header %q: %w", canonicalName, err)
+		return "", nil, fmt.Errorf("header %q: %w", headerName, err)
 	}
+}
+
+// trimHeaderName validates raw as an HTTP field name and returns it as
+// entered, without surrounding spaces. Names are stored as typed; the proxy
+// and the duplicate check match them case-insensitively.
+func trimHeaderName(raw string) (string, error) {
+	if _, err := proxy.NormalizeHeaderName(raw); err != nil {
+		return "", fmt.Errorf("validate header name: %w", err)
+	}
+	return strings.Trim(raw, " "), nil
 }
 
 // headerNameInUseMessage explains a refused header name that another header of

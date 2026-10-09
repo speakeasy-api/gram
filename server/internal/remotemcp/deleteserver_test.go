@@ -79,7 +79,7 @@ func TestDeleteServer_CascadeEmitsNoHeaderDeleteAudit(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 
-	createSecretHeader(t, ctx, ti, server.ID, "X-Api-Key", "secret-value")
+	createSecretHeader(t, ctx, ti, server.ID, "X-API-Key", "secret-value")
 
 	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Request-ID", func(p *gen.CreateServerHeaderPayload) {
 		p.ValueFromRequestHeader = new("X-Request-ID")
