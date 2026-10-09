@@ -154,6 +154,7 @@ export function DeleteTunnelDialogContent({
         tunnelName={tunnelName}
         currentMcpServerId={mcpServerId}
         effect="Only the MCP servers listed are deleted; if any others use the tunnel, it is kept."
+        publicWarning={tunnel.allowPublic}
       />
 
       {listChanged ? (

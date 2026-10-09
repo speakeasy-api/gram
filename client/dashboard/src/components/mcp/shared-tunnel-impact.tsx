@@ -101,11 +101,16 @@ export function SharedTunnelImpact({
   intro,
 }: {
   impact: SharedTunnelImpactState;
-  tunnelName: string;
+  /** Named in the default intro; required unless `intro` replaces it. */
+  tunnelName?: string;
   currentMcpServerId?: string;
   /** What this particular control changes for every server on the tunnel. */
   effect?: ReactNode;
-  /** Always show the public-sibling warning, e.g. when enabling public access. */
+  /**
+   * Show the public-sibling warning even when no listed server is public. Pass
+   * the tunnel's `allowPublic`: a public server on it may be one the user
+   * cannot view, and without public access none can serve anonymous callers.
+   */
   publicWarning?: boolean;
   /**
    * Replaces the default "this belongs to the tunnel" sentence, for a control
@@ -129,7 +134,8 @@ export function SharedTunnelImpact({
         {effect ? <> {effect}</> : null}
       </Text>
       <Text small muted>
-        MCP servers you can view ({impact.servers.length})
+        MCP servers you can view
+        {impact.isReady ? ` (${impact.servers.length})` : null}
       </Text>
       <ServerList impact={impact} currentMcpServerId={currentMcpServerId} />
       {showPublicWarning ? (
@@ -166,7 +172,7 @@ export function SharedTunnelConfirmDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tunneledMcpServerId: string;
-  tunnelName: string;
+  tunnelName?: string;
   currentMcpServerId?: string;
   title: string;
   description: ReactNode;
@@ -190,7 +196,7 @@ export function SharedTunnelConfirmDialog({
         if (!isPending) onOpenChange(next);
       }}
     >
-      <Dialog.Content className="max-w-xl!">
+      <Dialog.Content className="max-w-xl!" closeable={!isPending}>
         <Dialog.Header>
           <Dialog.Title>{title}</Dialog.Title>
           <Dialog.Description>{description}</Dialog.Description>

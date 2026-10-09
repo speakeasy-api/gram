@@ -17,6 +17,9 @@ export type SaveConfirmationProps = {
   errorMessage: string | undefined;
 };
 
+export const STORED_VALUE_CHANGED_MESSAGE =
+  "This setting changed since you opened the confirmation, so nothing was saved. Review the current value and save again.";
+
 // One settings section editing a single text field of the source behind an
 // MCP server. Owns its own draft, error, and pending state so sibling sections
 // never reflect each other's activity. Ported from the retired tunneled source
@@ -60,8 +63,11 @@ export function EditableSourceFieldSection({
   const [draft, setDraft] = useState(stored);
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
-  // The value awaiting confirmation; null while no confirmation is open.
-  const [pendingValue, setPendingValue] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  // The value awaiting confirmation and the stored value it was requested
+  // against. Kept after the confirmation closes so it does not change while
+  // the dialog animates out.
+  const [pending, setPending] = useState({ value: "", base: "" });
 
   // Re-sync when the upstream value changes so a stale draft doesn't survive
   // an edit from another tab or a refetch.
@@ -96,7 +102,8 @@ export function EditableSourceFieldSection({
     const value = draft.trim();
     if (confirmSave) {
       setError(undefined);
-      setPendingValue(value);
+      setPending({ value, base: stored });
+      setConfirmOpen(true);
       return;
     }
     void handleSave(value);
@@ -146,15 +153,21 @@ export function EditableSourceFieldSection({
       </SettingsSection.Panel>
       {confirmSave
         ? confirmSave({
-            value: pendingValue ?? "",
-            open: pendingValue !== null,
+            value: pending.value,
+            open: confirmOpen,
             onOpenChange: (open) => {
-              if (!open && !saving) setPendingValue(null);
+              if (!open && !saving) setConfirmOpen(false);
             },
             onConfirm: () => {
-              if (pendingValue === null) return;
-              void handleSave(pendingValue).then((saved) => {
-                if (saved) setPendingValue(null);
+              // The setting changed underneath the confirmation, e.g. from
+              // another tab: saving now would overwrite a value never shown.
+              if (stored !== pending.base) {
+                setConfirmOpen(false);
+                setError(STORED_VALUE_CHANGED_MESSAGE);
+                return;
+              }
+              void handleSave(pending.value).then((saved) => {
+                if (saved) setConfirmOpen(false);
               });
             },
             isPending: saving,

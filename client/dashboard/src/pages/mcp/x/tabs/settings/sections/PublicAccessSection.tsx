@@ -163,7 +163,7 @@ export function PublicAccessSection({
       </SettingsSection.Panel>
 
       <Dialog open={pending === "enable"} onOpenChange={handleOpenChange}>
-        <Dialog.Content className="max-w-xl!">
+        <Dialog.Content className="max-w-xl!" closeable={!applying}>
           <Dialog.Header>
             <Dialog.Title>Enable public anonymous access?</Dialog.Title>
             <Dialog.Description>
@@ -227,7 +227,7 @@ export function PublicAccessSection({
       </Dialog>
 
       <Dialog open={pending === "disable"} onOpenChange={handleOpenChange}>
-        <Dialog.Content className="max-w-md">
+        <Dialog.Content className="max-w-md" closeable={!applying}>
           <Dialog.Header>
             <Dialog.Title>Disable public access?</Dialog.Title>
             <Dialog.Description>
@@ -240,6 +240,7 @@ export function PublicAccessSection({
             tunnelName={tunnelName}
             currentMcpServerId={mcpServerId}
             effect="Public MCP servers on it stop serving anonymous callers."
+            publicWarning
           />
           {update.isError && (
             <Alert variant="error" dismissible={false}>
@@ -256,7 +257,10 @@ export function PublicAccessSection({
             </Button>
             <Button
               variant="primary"
-              disabled={!impact.isReady || applying}
+              // Disabling is the rollback for anonymous exposure, so a failed
+              // read of the servers does not block it; only a read in flight
+              // does, so the list shown is the one being confirmed.
+              disabled={impact.isLoading || applying}
               onClick={() => void applyAllowPublic(false)}
             >
               <PendingIcon pending={applying} />
