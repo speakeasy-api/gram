@@ -145,8 +145,9 @@ brings a newer token. A token whose stated expiry has passed is never written.
 A session ends at the earlier of its token's stated expiry plus 30 seconds and
 `TUNNEL_STDIO_CREDENTIALS_MAX_AGE` (default `1h`) after the last admitted
 token, unless a newer token arrives first. When the user unlinks or
-reauthorizes the account, the session ends at the next request that reaches
-the agent, or at that deadline if Speakeasy stops forwarding requests. Stopping
+reauthorizes the account, the session ends at the next POST that reaches the
+agent, or at that deadline if Speakeasy stops forwarding requests; GET and
+DELETE check only the caller, not the grant. Stopping
 the session can take up to about 40 seconds more (an in-flight stdin write,
 then stdin close, SIGTERM and SIGKILL to the process group).
 
@@ -161,11 +162,11 @@ then stdin close, SIGTERM and SIGKILL to the process group).
 | `TUNNEL_IDENTITY_JWKS_URL`         | Verification keys. Defaults to `<issuer>/.well-known/jwks.json`. Never taken from a token.                           |
 | `TUNNEL_IDENTITY_ALLOW_INSECURE`   | `true` admits `http://` issuer and JWKS URLs on localhost or `host.docker.internal`, for local development only.     |
 | `TUNNEL_STDIO_CREDENTIALS_DIR`     | Memory-backed directory for token files. Defaults to `/dev/shm`.                                                     |
-| `TUNNEL_STDIO_CREDENTIALS_MAX_AGE` | Longest a session keeps a token after its last write, whatever its stated expiry. Defaults to `1h`.                  |
+| `TUNNEL_STDIO_CREDENTIALS_MAX_AGE` | Longest a session keeps a token after its last write, whatever its stated expiry. Defaults to `1h`; at most `24h`.   |
 
 The agent refuses to start in this mode unless it runs on Linux with a stdio
 command, the verifier settings are valid, the credentials directory is on
-tmpfs or ramfs and safe from other users (below), and `SPEAKEASY_ACCESS_TOKEN_FILE` is not set in its own
+tmpfs and safe from other users (below), and `SPEAKEASY_ACCESS_TOKEN_FILE` is not set in its own
 environment. It fetches verification keys on demand, trusts them for five
 minutes, and rejects every assertion when it cannot revalidate expired keys.
 
