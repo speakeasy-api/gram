@@ -8,10 +8,12 @@ import (
 
 // EnvironmentHeaderPrefix marks an environment entry that an MCP server linked
 // to the environment sends upstream as a header. The match is exact and
-// case-sensitive: an entry named MCP_HEADER_X-Instance-Url is sent as
-// X-Instance-Url, while every other entry in the environment is ignored, so
+// case-sensitive, while every other entry in the environment is ignored, so
 // linking an environment never exports variables that were not written for
-// this purpose.
+// this purpose. The header name is the rest of the entry name with each
+// underscore read as a dash, in canonical HTTP casing: MCP_HEADER_X-Instance-Url
+// and MCP_HEADER_X_INSTANCE_URL are both sent as X-Instance-Url, the spelling
+// upstreams that drop underscored header names accept.
 const EnvironmentHeaderPrefix = "MCP_HEADER_"
 
 // ErrInvalidEnvironmentHeader reports an environment entry that opted in with
@@ -125,7 +127,7 @@ func inspectEnvironmentHeader(entry EnvironmentHeaderEntry) EnvironmentHeaderIns
 		value:      "",
 	}
 
-	suffix := strings.TrimPrefix(entry.Name, EnvironmentHeaderPrefix)
+	suffix := strings.ReplaceAll(strings.TrimPrefix(entry.Name, EnvironmentHeaderPrefix), "_", "-")
 	name, err := NormalizeHeaderName(suffix)
 	// A name is never trimmed into validity: the entry must spell the header
 	// exactly.

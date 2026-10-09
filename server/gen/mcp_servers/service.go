@@ -23,10 +23,13 @@ type Service interface {
 	// Get an MCP server by ID or slug. Exactly one of id or slug must be provided.
 	GetMcpServer(context.Context, *GetMcpServerPayload) (res *types.McpServer, err error)
 	// Preview the upstream headers an MCP server sends from an environment. Only
-	// entries named MCP_HEADER_<Header-Name> are sent. The result lists entry and
-	// header names with a status for each, never values. Requires read access to
-	// the MCP server and project-wide environment read access, the authority
-	// needed to link an environment.
+	// entries named MCP_HEADER_<Header-Name> are sent; the header name is the rest
+	// of the entry name with each underscore read as a dash, in canonical casing,
+	// so MCP_HEADER_X_INSTANCE_URL is sent as X-Instance-Url. The result lists
+	// entry and header names with a status for each, never values. Requires read
+	// access to the MCP server, project-wide environment read access, and
+	// environment read access that is not excluded for the previewed environment
+	// (linked or candidate): the authority needed to link that environment.
 	GetEnvironmentHeaders(context.Context, *GetEnvironmentHeadersPayload) (res *McpServerEnvironmentHeaders, err error)
 	// List MCP servers for a project. Accepts optional remote_mcp_server_id,
 	// tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id filters to

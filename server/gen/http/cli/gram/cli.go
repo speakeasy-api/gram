@@ -19546,7 +19546,7 @@ func mcpServersUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-mcp-server: Create a new MCP server`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server: Get an MCP server by ID or slug. Exactly one of id or slug must be provided.`)
-	fmt.Fprintln(os.Stderr, `    get-environment-headers: Preview the upstream headers an MCP server sends from an environment. Only entries named MCP_HEADER_<Header-Name> are sent. The result lists entry and header names with a status for each, never values. Requires read access to the MCP server and project-wide environment read access, the authority needed to link an environment.`)
+	fmt.Fprintln(os.Stderr, `    get-environment-headers: Preview the upstream headers an MCP server sends from an environment. Only entries named MCP_HEADER_<Header-Name> are sent; the header name is the rest of the entry name with each underscore read as a dash, in canonical casing, so MCP_HEADER_X_INSTANCE_URL is sent as X-Instance-Url. The result lists entry and header names with a status for each, never values. Requires read access to the MCP server, project-wide environment read access, and environment read access that is not excluded for the previewed environment (linked or candidate): the authority needed to link that environment.`)
 	fmt.Fprintln(os.Stderr, `    list-mcp-servers: List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.`)
 	fmt.Fprintln(os.Stderr, `    list-mcp-servers-for-org: List all MCP servers across the organization`)
 	fmt.Fprintln(os.Stderr, `    update-mcp-server: Update an MCP server. This is a full-record replace for the optional UUID references: fields omitted from the request become null on the stored record. name is an exception — omitting it leaves the existing display name unchanged, while providing it requires a non-empty value and recomputes the server-side slug. The id and visibility fields are required; exactly one of remote_mcp_server_id, tunneled_mcp_server_id, or toolset_id must be provided.`)
@@ -19624,7 +19624,7 @@ func mcpServersGetEnvironmentHeadersUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Preview the upstream headers an MCP server sends from an environment. Only entries named MCP_HEADER_<Header-Name> are sent. The result lists entry and header names with a status for each, never values. Requires read access to the MCP server and project-wide environment read access, the authority needed to link an environment.`)
+	fmt.Fprintln(os.Stderr, `Preview the upstream headers an MCP server sends from an environment. Only entries named MCP_HEADER_<Header-Name> are sent; the header name is the rest of the entry name with each underscore read as a dash, in canonical casing, so MCP_HEADER_X_INSTANCE_URL is sent as X-Instance-Url. The result lists entry and header names with a status for each, never values. Requires read access to the MCP server, project-wide environment read access, and environment read access that is not excluded for the previewed environment (linked or candidate): the authority needed to link that environment.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)

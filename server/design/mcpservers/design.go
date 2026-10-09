@@ -82,7 +82,7 @@ var _ = Service("mcpServers", func() {
 	})
 
 	Method("getEnvironmentHeaders", func() {
-		Description("Preview the upstream headers an MCP server sends from an environment. Only entries named MCP_HEADER_<Header-Name> are sent. The result lists entry and header names with a status for each, never values. Requires read access to the MCP server and project-wide environment read access, the authority needed to link an environment.")
+		Description("Preview the upstream headers an MCP server sends from an environment. Only entries named MCP_HEADER_<Header-Name> are sent; the header name is the rest of the entry name with each underscore read as a dash, in canonical casing, so MCP_HEADER_X_INSTANCE_URL is sent as X-Instance-Url. The result lists entry and header names with a status for each, never values. Requires read access to the MCP server, project-wide environment read access, and environment read access that is not excluded for the previewed environment (linked or candidate): the authority needed to link that environment.")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the MCP server. It must be backed by a remote or tunneled MCP server.", func() {

@@ -207,9 +207,12 @@ func TestEnvironmentHeaders_TwoServersOnOneTunnel(t *testing.T) {
 		envEntry{name: "MCP_HEADER_X-Instance-Url", value: envProdInstance, secret: false},
 		envEntry{name: "UNRELATED_SECRET", value: "synthetic-unrelated", secret: true},
 	)
+	// The sandbox environment spells its entries the environment-variable way;
+	// underscores read as dashes, so they still replace the dashed source
+	// header and send the dashed names.
 	sandbox := seedEnvironment(t, ctx, ti, projectID,
-		envEntry{name: "MCP_HEADER_X-Jamf-Tenant", value: envSandboxTenant, secret: true},
-		envEntry{name: "MCP_HEADER_X-Instance-Url", value: envSandboxInstance, secret: false},
+		envEntry{name: "MCP_HEADER_X_JAMF_TENANT", value: envSandboxTenant, secret: true},
+		envEntry{name: "MCP_HEADER_X_INSTANCE_URL", value: envSandboxInstance, secret: false},
 	)
 	linkEnvironment(t, ctx, ti, projectID, fixture.mcpServerID, linkTo(prod))
 	linkEnvironment(t, ctx, ti, projectID, siblingID, linkTo(sandbox))
@@ -228,8 +231,9 @@ func TestEnvironmentHeaders_TwoServersOnOneTunnel(t *testing.T) {
 	w, err = servePublicInitialize(t, ti, siblingSlug, nil)
 	requireServed(t, w, err)
 	sandboxForward := gateway.lastForward()
-	require.Equal(t, envSandboxTenant, sandboxForward.Get("X-Jamf-Tenant"))
+	require.Equal(t, []string{envSandboxTenant}, sandboxForward.Values("X-Jamf-Tenant"))
 	require.Equal(t, envSandboxInstance, sandboxForward.Get("X-Instance-Url"))
+	require.Empty(t, sandboxForward.Values("X_jamf_tenant"))
 
 	// The pinned public session continuation sends the same values.
 	w = httptest.NewRecorder()

@@ -37,9 +37,11 @@ func TestInspectEnvironmentHeadersNames(t *testing.T) {
 		wantStatus EnvironmentHeaderStatus
 	}{
 		{name: "canonicalizes casing", entry: "MCP_HEADER_x-instance-url", wantHeader: "X-Instance-Url", wantStatus: EnvironmentHeaderMapped},
-		{name: "keeps underscores", entry: "MCP_HEADER_X_Instance", wantHeader: "X_instance", wantStatus: EnvironmentHeaderMapped},
+		{name: "reads underscores as dashes", entry: "MCP_HEADER_X_INSTANCE_URL", wantHeader: "X-Instance-Url", wantStatus: EnvironmentHeaderMapped},
+		{name: "mixed underscores and dashes", entry: "MCP_HEADER_x_jamf-site", wantHeader: "X-Jamf-Site", wantStatus: EnvironmentHeaderMapped},
 		{name: "authorization is allowed", entry: "MCP_HEADER_Authorization", wantHeader: "Authorization", wantStatus: EnvironmentHeaderMapped},
 		{name: "empty suffix", entry: "MCP_HEADER_", wantHeader: "", wantStatus: EnvironmentHeaderInvalidName},
+		{name: "only underscores", entry: "MCP_HEADER___", wantHeader: "--", wantStatus: EnvironmentHeaderMapped},
 		{name: "leading space", entry: "MCP_HEADER_ X-Foo", wantHeader: "", wantStatus: EnvironmentHeaderInvalidName},
 		{name: "trailing space", entry: "MCP_HEADER_X-Foo ", wantHeader: "", wantStatus: EnvironmentHeaderInvalidName},
 		{name: "control character", entry: "MCP_HEADER_X-Foo\r\nX-Bar", wantHeader: "", wantStatus: EnvironmentHeaderInvalidName},
@@ -55,7 +57,8 @@ func TestInspectEnvironmentHeadersNames(t *testing.T) {
 		{name: "host", entry: "MCP_HEADER_Host", wantHeader: "Host", wantStatus: EnvironmentHeaderReserved},
 		{name: "mcp session", entry: "MCP_HEADER_Mcp-Session-Id", wantHeader: "Mcp-Session-Id", wantStatus: EnvironmentHeaderReserved},
 		{name: "mcp standard request header", entry: "MCP_HEADER_Mcp-Method", wantHeader: "Mcp-Method", wantStatus: EnvironmentHeaderReserved},
-		{name: "underscore spelling of reserved", entry: "MCP_HEADER_Gram_Key", wantHeader: "Gram_key", wantStatus: EnvironmentHeaderReserved},
+		{name: "underscore spelling of reserved", entry: "MCP_HEADER_GRAM_KEY", wantHeader: "Gram-Key", wantStatus: EnvironmentHeaderReserved},
+		{name: "underscore spelling of mcp session", entry: "MCP_HEADER_MCP_SESSION_ID", wantHeader: "Mcp-Session-Id", wantStatus: EnvironmentHeaderReserved},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -447,5 +450,33 @@ func TestApplyRequestHeadersEnvironmentRefusesPassThroughRows(t *testing.T) {
 				require.Empty(t, remoteReq.Header.Values("X-Upstream"))
 			})
 		}
+	}
+}
+
+// An underscored entry names the dashed header, so it replaces a source
+// header of that dashed name and owns every spelling upstream.
+func TestApplyRequestHeadersUnderscoredEntryReplacesDashedSourceHeader(t *testing.T) {
+	t.Parallel()
+
+	rows, err := EnvironmentHeaderRows(InspectEnvironmentHeaders([]EnvironmentHeaderEntry{
+		{Name: "MCP_HEADER_X_INSTANCE_URL", Value: syntheticEnvValue, Undecryptable: false},
+	}))
+	require.NoError(t, err)
+	require.Equal(t, "X-Instance-Url", rows[0].Name)
+
+	for _, tc := range bothPolicies {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			p := envProxy(t, tc.policy, []ConfiguredHeader{
+				{IsRequired: true, Name: "X-Instance-Url", StaticValue: "source-value", ValueFromRequestHeader: ""},
+			}, rows)
+			userReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "https://gram.test/mcp", nil)
+			userReq.Header["X_Instance_Url"] = []string{"client-alias"}
+			remoteReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "https://upstream.test/mcp", nil)
+
+			require.NoError(t, p.applyRequestHeaders(t.Context(), userReq, remoteReq))
+			require.Equal(t, http.Header{"X-Instance-Url": []string{syntheticEnvValue}}, remoteReq.Header)
+		})
 	}
 }

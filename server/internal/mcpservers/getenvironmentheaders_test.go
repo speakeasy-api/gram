@@ -91,7 +91,7 @@ func TestGetEnvironmentHeaders_LinkedEnvironmentStatuses(t *testing.T) {
 
 	f := newLinkFixture(t)
 	addEntries(t, f, f.envID,
-		[]string{"MCP_HEADER_X-Instance-Url", "MCP_HEADER_X-Tenant", "MCP_HEADER_Gram-Key", "MCP_HEADER_X-Empty", "mcp_header_X-Typo", "HEADER_X-Short", "API_KEY"},
+		[]string{"MCP_HEADER_X_INSTANCE_URL", "MCP_HEADER_X-Tenant", "MCP_HEADER_Gram-Key", "MCP_HEADER_X-Empty", "mcp_header_X-Typo", "HEADER_X-Short", "API_KEY"},
 		[]string{previewPlainValue, previewSecretValue, previewSecretValue, " ", previewSecretValue, previewSecretValue, previewSecretValue},
 		[]bool{false, true, true, false, true, true, true},
 	)
@@ -104,7 +104,7 @@ func TestGetEnvironmentHeaders_LinkedEnvironmentStatuses(t *testing.T) {
 	require.Equal(t, f.envID, result.Environment.ID)
 	require.True(t, result.EnvironmentConfigurationInvalid)
 	require.Equal(t, map[string]string{
-		"MCP_HEADER_X-Instance-Url": "overrides_source",
+		"MCP_HEADER_X_INSTANCE_URL": "overrides_source",
 		"MCP_HEADER_X-Tenant":       "mapped",
 		"MCP_HEADER_Gram-Key":       "reserved",
 		"MCP_HEADER_X-Empty":        "empty_value",
@@ -113,6 +113,11 @@ func TestGetEnvironmentHeaders_LinkedEnvironmentStatuses(t *testing.T) {
 	}, previewStatuses(result))
 	requireNoValues(t, result)
 	require.Len(t, result.Environments, 2)
+	for _, e := range result.Entries {
+		if e.EntryName == "MCP_HEADER_X_INSTANCE_URL" {
+			require.Equal(t, "X-Instance-Url", deref(e.HeaderName), "underscores read as dashes")
+		}
+	}
 }
 
 func TestGetEnvironmentHeaders_ValidEnvironmentIsNotInvalid(t *testing.T) {
