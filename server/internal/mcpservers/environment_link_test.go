@@ -421,9 +421,15 @@ func TestCreateMcpServer_EnvironmentLink_AuditFailureRollsBackCreate(t *testing.
 	require.NoError(t, audittest.RejectAction(f.ctx, f.ti.conn, audit.ActionMcpServerEnvironmentLink))
 
 	remoteID := seedRemoteMcpServer(t, f.ctx, f.ti.conn, f.projectID).String()
-	_, err := f.ti.service.CreateMcpServer(f.ctx, createPayload("rolled back", &f.envID, &remoteID, nil))
+	before, err := repo.New(f.ti.conn).ListMCPServersByProjectID(f.ctx, repo.ListMCPServersByProjectIDParams{ProjectID: f.projectID})
+	require.NoError(t, err)
+
+	_, err = f.ti.service.CreateMcpServer(f.ctx, createPayload("rolled back", &f.envID, &remoteID, nil))
 	require.Error(t, err)
 	require.Equal(t, beforeCreates, auditCount(t, f.ctx, f.ti.conn, audit.ActionMcpServerCreate))
+	after, err := repo.New(f.ti.conn).ListMCPServersByProjectID(f.ctx, repo.ListMCPServersByProjectIDParams{ProjectID: f.projectID})
+	require.NoError(t, err)
+	require.Len(t, after, len(before))
 }
 
 // A linked create joins the project lock that destination changes take, so it

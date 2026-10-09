@@ -77,8 +77,10 @@ func CreateProjectMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLo
 }
 
 // CreateMCPServerInTransaction creates the MCP server, its required lifetime
-// issuer, and its audit events together. Authorizing the references,
-// including any environment link, is the caller's job. Both the resource-level MCP-server
+// issuer, and its audit events together. Authorizing the references is the
+// caller's job: one passing a non-null EnvironmentID must already have
+// required authz.EnvironmentLinkCheck and hold admission.LockProject (see
+// environment_link.go). Both the resource-level MCP-server
 // workflow and remote provisioning use this command so those invariants cannot
 // drift.
 func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, input MCPServerTransactionInput) (repo.McpServer, error) {
