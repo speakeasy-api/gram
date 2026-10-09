@@ -76,6 +76,13 @@ actions:
   - target: $.paths.*[?@.operationId=='adminExtendTrial']
     update:
       x-speakeasy-name-override: extendTrial
+  - target: $.paths.*[?@.operationId=='adminRepairInferenceKey']
+    update:
+      x-speakeasy-name-override: repairInferenceKey
+  # Goa has no unique-items validator; the handler enforces this constraint.
+  - target: $.components.schemas.RepairInferenceKeyRequestBody.properties.remove_causes
+    update:
+      uniqueItems: true
   - target: $.paths.*[?@.operationId=='adminGetInferenceKeys']
     update:
       x-speakeasy-name-override: getInferenceKeys

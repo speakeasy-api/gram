@@ -25,7 +25,7 @@ func (s *Service) RepairInferenceKey(ctx context.Context, p *gen.RepairInference
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 	if p == nil || p.Confirmation != "I know what I'm doing" || strings.TrimSpace(p.Reason) == "" || len(p.Reason) > 2000 || len(p.RemoveCauses) == 0 || len(p.RemoveCauses) > 3 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "Explicit causes, exact confirmation, and a reason (at most 2000 characters) are required")
+		return nil, oops.E(oops.CodeBadRequest, nil, "Explicit causes, exact confirmation, and a reason (at most 2000 bytes) are required")
 	}
 	kt := openrouter.KeyType(p.KeyType)
 	if p.KeyType == "" {
@@ -79,6 +79,11 @@ func (s *Service) RepairInferenceKey(ctx context.Context, p *gen.RepairInference
 			return nil, err
 		}
 	}
+	if slices.Contains(p.RemoveCauses, string(openrouter.DisableCauseTrialDemotion)) {
+		if err = s.requireTrialDemotionRepairEligibility(ctx, org); err != nil {
+			return nil, err
+		}
+	}
 	change, err := new(openrouter.OpenRouter).PrepareAdminKeyPolicyWithDB(ctx, tx, id, kt, openrouter.AdminKeyPolicy{RemoveCauses: p.RemoveCauses, MonthlyCredits: nil})
 	if errors.Is(err, openrouter.ErrAPIKeyDisableCausesUnclassified) {
 		return nil, oops.E(oops.CodeConflict, err, "Unclassified key requires engineering investigation")
@@ -111,6 +116,10 @@ func (s *Service) inferenceKeyCauseDiagnostics(ctx context.Context, org repo.Adm
 			d.Description = "Explicit staff lock."
 		case openrouter.DisableCauseTrialDemotion:
 			d.Description = "Trial demotion disabled this key."
+			if err := s.requireTrialDemotionRepairEligibility(ctx, org); err != nil {
+				d.Removable = false
+				d.BlockedReason = conv.PtrEmpty("Verified PAYG billing or a non-trial enterprise entitlement is required. Use the account lifecycle workflow first.")
+			}
 		case openrouter.DisableCauseBillingInactive:
 			d.Description = "Billing is inactive or unverified."
 			if err := s.requireExistingBillingEligibility(ctx, org); err != nil {

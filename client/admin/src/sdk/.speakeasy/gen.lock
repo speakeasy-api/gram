@@ -95,6 +95,7 @@ trackedFiles:
   src/funcs/adminMigrateToGlobalIssuer.ts: {}
   src/funcs/adminRearmTrial.ts: {}
   src/funcs/adminRefreshGlobalIssuerMetadata.ts: {}
+  src/funcs/adminRepairInferenceKey.ts: {}
   src/funcs/adminResumeStripeSubscription.ts: {}
   src/funcs/adminSaveRegistryEntry.ts: {}
   src/funcs/adminServeImage.ts: {}
@@ -137,7 +138,10 @@ trackedFiles:
   src/models/components/admincustomerusageproductcost.ts: {}
   src/models/components/admincustomerusageresponse.ts: {}
   src/models/components/admininferencekey.ts: {}
+  src/models/components/admininferencekeycause.ts: {}
   src/models/components/admininferencekeylimit.ts: {}
+  src/models/components/admininferencekeyrepairresult.ts: {}
+  src/models/components/admininferencekeyrepairstate.ts: {}
   src/models/components/admininferencespendmonth.ts: {}
   src/models/components/adminlistorganizationactivityresult.ts: {}
   src/models/components/adminlistorganizationmembersresult.ts: {}
@@ -235,6 +239,7 @@ trackedFiles:
   src/models/components/remotesessionissuerduplicatematch.ts: {}
   src/models/components/remotesessionissuerduplicatepreflight.ts: {}
   src/models/components/remotesessionissuerrefresh.ts: {}
+  src/models/components/repairinferencekeyrequestbody.ts: {}
   src/models/components/resumestripesubscriptionrequestbody.ts: {}
   src/models/components/riskidrequestbody.ts: {}
   src/models/components/saveregistryentryrequestbody.ts: {}
@@ -407,6 +412,7 @@ trackedFiles:
   src/react-query/adminOrganizationOnboardingStack.ts: {}
   src/react-query/adminRearmTrial.ts: {}
   src/react-query/adminRefreshGlobalIssuerMetadata.ts: {}
+  src/react-query/adminRepairInferenceKey.ts: {}
   src/react-query/adminResumeStripeSubscription.ts: {}
   src/react-query/adminSaveRegistryEntry.ts: {}
   src/react-query/adminServeImage.core.ts: {}
@@ -1284,6 +1290,17 @@ examples:
       responses:
         "200":
           application/json: {"discovery_warnings": ["<value 1>", "<value 2>"], "issuer": {"client_id_metadata_document_supported": false, "created_at": "2024-12-29T16:32:57.496Z", "id": "e95f06e4-ced4-433d-83ac-b75f19c33f2a", "issuer": "mastercard", "oidc": false, "organization_id": "<id>", "passthrough": true, "project_id": "<id>", "slug": "<value>", "updated_at": "2024-11-22T00:08:32.529Z"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminRepairInferenceKey:
+    speakeasy-default-admin-repair-inference-key:
+      requestBody:
+        application/json: {"confirmation": "I know what I'm doing", "key_type": "internal", "organization_id": "<id>", "reason": "<value>", "remove_causes": []}
+      responses:
+        "200":
+          application/json: {"key": {"cause_diagnostics": [{"cause": "<value>", "description": "openly whoever after oof separate firm openly oxidise lavish youthfully", "removable": true}], "disable_causes": ["<value 1>", "<value 2>", "<value 3>"], "disable_causes_classified": false, "disabled": true, "key_type": "<value>", "monthly_credits": 158157}, "reconciliation_pending": false}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

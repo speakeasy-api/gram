@@ -14,6 +14,7 @@ import (
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 	"github.com/stretchr/testify/require"
+	"strings"
 	"testing"
 	"time"
 )
@@ -30,7 +31,7 @@ func TestRepairInferenceKey(t *testing.T) {
 	_, err := svc.RepairInferenceKey(ctx, p)
 	require.Error(t, err)
 	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
-	for _, bad := range []string{"confirmation", "reason", "selection", "duplicate", "unknown", "billing", "slug", "key"} {
+	for _, bad := range []string{"confirmation", "reason", "reason bytes", "selection", "duplicate", "unknown", "billing", "slug", "key"} {
 		t.Run(bad, func(t *testing.T) {
 			q := *p
 			switch bad {
@@ -38,6 +39,8 @@ func TestRepairInferenceKey(t *testing.T) {
 				q.Confirmation = "I know what I’m doing"
 			case "reason":
 				q.Reason = " "
+			case "reason bytes":
+				q.Reason = strings.Repeat("é", 1001)
 			case "selection":
 				q.RemoveCauses = nil
 			case "duplicate":
@@ -53,6 +56,9 @@ func TestRepairInferenceKey(t *testing.T) {
 			}
 			_, err := svc.RepairInferenceKey(ctx, &q)
 			require.Error(t, err)
+			if bad == "reason bytes" {
+				require.ErrorContains(t, err, "2000 bytes")
+			}
 		})
 	}
 	for range 2 { //nolint:paralleltest // Repeated repairs intentionally mutate the same key sequentially.
@@ -163,4 +169,37 @@ func TestRepairInferenceKeyUnclassified(t *testing.T) {
 	_, err := svc.RepairInferenceKey(ctx, &gen.RepairInferenceKeyPayload{OrganizationID: id, KeyType: "chat", RemoveCauses: []string{"admin_lock"}, Confirmation: "I know what I'm doing", Reason: "BUG-123"})
 	require.ErrorContains(t, err, "Unclassified")
 	require.Equal(t, before, readOpenRouterKey(t, ctx, db, id, openrouter.KeyTypeChat))
+}
+
+func TestRepairTrialDemotionRequiresEntitlement(t *testing.T) {
+	t.Parallel()
+	for _, tier := range []string{"free", "pro", "payg", "enterprise"} {
+		t.Run(tier, func(t *testing.T) {
+			t.Parallel()
+			ctx, svc, db := newTestAdminService(t)
+			ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
+			id := "org_repair_trial"
+			seedOrg(t, ctx, db, orgFixture{id: id, name: id, slug: id, accountType: tier})
+			seedOpenRouterKey(t, ctx, db, id, keyFixture{keyType: openrouter.KeyTypeChat, monthlyCredits: 17})
+			require.NoError(t, testrepo.New(db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: id, KeyType: "chat", Disabled: true, DisableCauses: []string{"trial_demotion"}}))
+			org, err := repo.New(db).AdminGetOrganization(ctx, repo.AdminGetOrganizationParams{ID: id, AllowSlug: false})
+			require.NoError(t, err)
+			allowed := tier == "enterprise"
+			diagnostic := svc.inferenceKeyCauseDiagnostics(ctx, org, []string{"trial_demotion"}, true)[0]
+			require.Equal(t, allowed, diagnostic.Removable)
+			if !allowed {
+				require.NotNil(t, diagnostic.BlockedReason)
+			}
+			result, err := svc.RepairInferenceKey(ctx, &gen.RepairInferenceKeyPayload{OrganizationID: id, KeyType: "chat", RemoveCauses: []string{"trial_demotion"}, Confirmation: "I know what I'm doing", Reason: "BUG-123"})
+			if allowed {
+				require.NoError(t, err)
+				require.False(t, result.Key.Disabled)
+			} else {
+				require.Error(t, err)
+			}
+			row := readOpenRouterKey(t, ctx, db, id, openrouter.KeyTypeChat)
+			require.Equal(t, !allowed, row.Disabled)
+			require.Equal(t, int64(17), row.MonthlyCredits)
+		})
+	}
 }

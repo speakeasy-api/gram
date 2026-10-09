@@ -30977,7 +30977,7 @@ func adminRepairInferenceKeyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin repair-inference-key --body '{\n      \"confirmation\": \"abc123\",\n      \"key_type\": \"abc123\",\n      \"organization_id\": \"abc123\",\n      \"reason\": \"abc123\",\n      \"remove_causes\": [\n         \"abc123\"\n      ]\n   }' --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin repair-inference-key --body '{\n      \"confirmation\": \"I know what I\\'m doing\",\n      \"key_type\": \"internal\",\n      \"organization_id\": \"abc123\",\n      \"reason\": \"aa\",\n      \"remove_causes\": [\n         \"trial_demotion\",\n         \"trial_demotion\"\n      ]\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminGetInferenceKeysUsage() {

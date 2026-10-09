@@ -65,6 +65,7 @@ import { adminMarkEnterpriseTrialConverted } from "../funcs/adminMarkEnterpriseT
 import { adminMigrateToGlobalIssuer } from "../funcs/adminMigrateToGlobalIssuer.js";
 import { adminRearmTrial } from "../funcs/adminRearmTrial.js";
 import { adminRefreshGlobalIssuerMetadata } from "../funcs/adminRefreshGlobalIssuerMetadata.js";
+import { adminRepairInferenceKey } from "../funcs/adminRepairInferenceKey.js";
 import { adminResumeStripeSubscription } from "../funcs/adminResumeStripeSubscription.js";
 import { adminSaveRegistryEntry } from "../funcs/adminSaveRegistryEntry.js";
 import { adminServeImage } from "../funcs/adminServeImage.js";
@@ -90,6 +91,7 @@ import { AdminChatAnalysisTriggerResult } from "../models/components/adminchatan
 import { AdminCustomerUsageResponse } from "../models/components/admincustomerusageresponse.js";
 import { AdminInferenceKey } from "../models/components/admininferencekey.js";
 import { AdminInferenceKeyLimit } from "../models/components/admininferencekeylimit.js";
+import { AdminInferenceKeyRepairResult } from "../models/components/admininferencekeyrepairresult.js";
 import { AdminInferenceSpendMonth } from "../models/components/admininferencespendmonth.js";
 import { AdminListOrganizationMembersResult } from "../models/components/adminlistorganizationmembersresult.js";
 import { AdminListOrganizationProjectsResult } from "../models/components/adminlistorganizationprojectsresult.js";
@@ -148,6 +150,7 @@ import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js
 import { RemoteSessionIssuerDraft } from "../models/components/remotesessionissuerdraft.js";
 import { RemoteSessionIssuerDuplicatePreflight } from "../models/components/remotesessionissuerduplicatepreflight.js";
 import { RemoteSessionIssuerRefresh } from "../models/components/remotesessionissuerrefresh.js";
+import { RepairInferenceKeyRequestBody } from "../models/components/repairinferencekeyrequestbody.js";
 import { ResumeStripeSubscriptionRequestBody } from "../models/components/resumestripesubscriptionrequestbody.js";
 import { RiskIDRequestBody } from "../models/components/riskidrequestbody.js";
 import { SaveRegistryEntryRequestBody } from "../models/components/saveregistryentryrequestbody.js";
@@ -771,6 +774,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminListOrganizationProjectsResult> {
     return unwrapAsync(adminListOrganizationProjects(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * repairInferenceKey admin
+   *
+   * @remarks
+   * Removes explicitly selected known disable causes without changing tier, credits, or runtime. Staff confirmation and reason required.
+   */
+  async repairInferenceKey(
+    request: RepairInferenceKeyRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminInferenceKeyRepairResult> {
+    return unwrapAsync(adminRepairInferenceKey(
       this,
       request,
       options,

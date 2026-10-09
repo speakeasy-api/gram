@@ -106,11 +106,14 @@ type RearmTrialRequestBody struct {
 // RepairInferenceKeyRequestBody is the type of the "admin" service
 // "repairInferenceKey" endpoint HTTP request body.
 type RepairInferenceKeyRequestBody struct {
-	OrganizationID string   `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	KeyType        string   `form:"key_type" json:"key_type" xml:"key_type"`
-	RemoveCauses   []string `form:"remove_causes" json:"remove_causes" xml:"remove_causes"`
-	Confirmation   string   `form:"confirmation" json:"confirmation" xml:"confirmation"`
-	Reason         string   `form:"reason" json:"reason" xml:"reason"`
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	KeyType        string `form:"key_type" json:"key_type" xml:"key_type"`
+	// Unique known disable causes to remove.
+	RemoveCauses []string `form:"remove_causes" json:"remove_causes" xml:"remove_causes"`
+	// Exact staff confirmation: I know what I'm doing
+	Confirmation string `form:"confirmation" json:"confirmation" xml:"confirmation"`
+	// Nonblank audit reason, at most 2000 UTF-8 bytes (enforced by the handler).
+	Reason string `form:"reason" json:"reason" xml:"reason"`
 }
 
 // SetInferenceKeyMonthlyLimitRequestBody is the type of the "admin" service

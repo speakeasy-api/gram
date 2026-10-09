@@ -107449,16 +107449,31 @@ components:
             properties:
                 confirmation:
                     type: string
+                    description: 'Exact staff confirmation: I know what I''m doing'
+                    enum:
+                        - I know what I'm doing
                 key_type:
                     type: string
+                    enum:
+                        - chat
+                        - internal
                 organization_id:
                     type: string
                 reason:
                     type: string
+                    description: Nonblank audit reason, at most 2000 UTF-8 bytes (enforced by the handler).
+                    minLength: 1
                 remove_causes:
                     type: array
                     items:
                         type: string
+                        enum:
+                            - admin_lock
+                            - trial_demotion
+                            - billing_inactive
+                    description: Unique known disable causes to remove.
+                    minItems: 1
+                    maxItems: 3
             required:
                 - organization_id
                 - key_type

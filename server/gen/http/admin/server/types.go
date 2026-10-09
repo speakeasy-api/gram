@@ -106,11 +106,14 @@ type RearmTrialRequestBody struct {
 // RepairInferenceKeyRequestBody is the type of the "admin" service
 // "repairInferenceKey" endpoint HTTP request body.
 type RepairInferenceKeyRequestBody struct {
-	OrganizationID *string  `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	KeyType        *string  `form:"key_type,omitempty" json:"key_type,omitempty" xml:"key_type,omitempty"`
-	RemoveCauses   []string `form:"remove_causes,omitempty" json:"remove_causes,omitempty" xml:"remove_causes,omitempty"`
-	Confirmation   *string  `form:"confirmation,omitempty" json:"confirmation,omitempty" xml:"confirmation,omitempty"`
-	Reason         *string  `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	KeyType        *string `form:"key_type,omitempty" json:"key_type,omitempty" xml:"key_type,omitempty"`
+	// Unique known disable causes to remove.
+	RemoveCauses []string `form:"remove_causes,omitempty" json:"remove_causes,omitempty" xml:"remove_causes,omitempty"`
+	// Exact staff confirmation: I know what I'm doing
+	Confirmation *string `form:"confirmation,omitempty" json:"confirmation,omitempty" xml:"confirmation,omitempty"`
+	// Nonblank audit reason, at most 2000 UTF-8 bytes (enforced by the handler).
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 }
 
 // SetInferenceKeyMonthlyLimitRequestBody is the type of the "admin" service
@@ -35540,6 +35543,32 @@ func ValidateRepairInferenceKeyRequestBody(body *RepairInferenceKeyRequestBody) 
 	}
 	if body.Reason == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
+	}
+	if body.KeyType != nil {
+		if !(*body.KeyType == "chat" || *body.KeyType == "internal") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.key_type", *body.KeyType, []any{"chat", "internal"}))
+		}
+	}
+	if len(body.RemoveCauses) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.remove_causes", body.RemoveCauses, len(body.RemoveCauses), 1, true))
+	}
+	if len(body.RemoveCauses) > 3 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.remove_causes", body.RemoveCauses, len(body.RemoveCauses), 3, false))
+	}
+	for _, e := range body.RemoveCauses {
+		if !(e == "admin_lock" || e == "trial_demotion" || e == "billing_inactive") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.remove_causes[*]", e, []any{"admin_lock", "trial_demotion", "billing_inactive"}))
+		}
+	}
+	if body.Confirmation != nil {
+		if !(*body.Confirmation == "I know what I'm doing") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.confirmation", *body.Confirmation, []any{"I know what I'm doing"}))
+		}
+	}
+	if body.Reason != nil {
+		if utf8.RuneCountInString(*body.Reason) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", *body.Reason, utf8.RuneCountInString(*body.Reason), 1, true))
+		}
 	}
 	return
 }

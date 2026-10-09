@@ -13,21 +13,11 @@ import {
 } from "./admininferencekeycause.js";
 
 /**
- * Current usage and configured state for one materialized platform-managed OpenRouter key, without key material or provider identifiers.
+ * Committed local key policy, without provider usage or credentials.
  */
-export type AdminInferenceKey = {
-  causeDiagnostics?: Array<AdminInferenceKeyCause> | undefined;
-  /**
-   * Credits spent this month in USD.
-   */
-  creditsUsed: number;
-  /**
-   * Active internal disable causes. Omitted for legacy unclassified rows.
-   */
-  disableCauses?: Array<string> | undefined;
-  /**
-   * Whether disable_causes is classified, including an explicitly empty cause set.
-   */
+export type AdminInferenceKeyRepairState = {
+  causeDiagnostics: Array<AdminInferenceKeyCause>;
+  disableCauses: Array<string>;
   disableCausesClassified: boolean;
   disabled: boolean;
   keyType: string;
@@ -35,16 +25,13 @@ export type AdminInferenceKey = {
 };
 
 /** @internal */
-export const AdminInferenceKey$inboundSchema: z.ZodMiniType<
-  AdminInferenceKey,
+export const AdminInferenceKeyRepairState$inboundSchema: z.ZodMiniType<
+  AdminInferenceKeyRepairState,
   unknown
 > = z.pipe(
   z.object({
-    cause_diagnostics: z.optional(
-      z.array(AdminInferenceKeyCause$inboundSchema),
-    ),
-    credits_used: z.number(),
-    disable_causes: z.optional(z.array(z.string())),
+    cause_diagnostics: z.array(AdminInferenceKeyCause$inboundSchema),
+    disable_causes: z.array(z.string()),
     disable_causes_classified: z.boolean(),
     disabled: z.boolean(),
     key_type: z.string(),
@@ -53,7 +40,6 @@ export const AdminInferenceKey$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "cause_diagnostics": "causeDiagnostics",
-      "credits_used": "creditsUsed",
       "disable_causes": "disableCauses",
       "disable_causes_classified": "disableCausesClassified",
       "key_type": "keyType",
@@ -62,12 +48,12 @@ export const AdminInferenceKey$inboundSchema: z.ZodMiniType<
   }),
 );
 
-export function adminInferenceKeyFromJSON(
+export function adminInferenceKeyRepairStateFromJSON(
   jsonString: string,
-): SafeParseResult<AdminInferenceKey, SDKValidationError> {
+): SafeParseResult<AdminInferenceKeyRepairState, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => AdminInferenceKey$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'AdminInferenceKey' from JSON`,
+    (x) => AdminInferenceKeyRepairState$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AdminInferenceKeyRepairState' from JSON`,
   );
 }

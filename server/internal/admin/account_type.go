@@ -64,7 +64,7 @@ func (s *Service) changeAccountTypes(ctx context.Context, ids []string, target s
 		}
 	}
 	if cacheErr != nil {
-		return nil, fmt.Errorf("tier change committed; refresh feature cache: %w", cacheErr)
+		s.logger.WarnContext(ctx, "tier change committed but feature cache refresh failed")
 	}
 	return updated, nil
 }

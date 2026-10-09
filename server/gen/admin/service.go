@@ -2204,9 +2204,12 @@ type RepairInferenceKeyPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
 	KeyType           string
-	RemoveCauses      []string
-	Confirmation      string
-	Reason            string
+	// Unique known disable causes to remove.
+	RemoveCauses []string
+	// Exact staff confirmation: I know what I'm doing
+	Confirmation string
+	// Nonblank audit reason, at most 2000 UTF-8 bytes (enforced by the handler).
+	Reason string
 }
 
 // ResumeStripeSubscriptionPayload is the payload type of the admin service

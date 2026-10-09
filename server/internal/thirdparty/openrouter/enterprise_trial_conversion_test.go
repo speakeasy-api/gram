@@ -247,6 +247,7 @@ func TestAdminKeyPolicy(t *testing.T) {
 				require.NoError(t, readErr)
 				require.EqualValues(t, 5, row.MonthlyCredits)
 				require.Nil(t, row.DisableCauses)
+				require.True(t, row.Disabled)
 				return
 			}
 			require.NoError(t, err)

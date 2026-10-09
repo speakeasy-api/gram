@@ -1061,10 +1061,19 @@ var _ = Service("admin", func() {
 		Payload(func() {
 			security.AdminAuthPayload()
 			Attribute("organization_id", String)
-			Attribute("key_type", String)
-			Attribute("remove_causes", ArrayOf(String))
-			Attribute("confirmation", String)
-			Attribute("reason", String)
+			Attribute("key_type", String, func() { Enum("chat", "internal") })
+			Attribute("remove_causes", ArrayOf(String, func() {
+				Enum("admin_lock", "trial_demotion", "billing_inactive")
+			}), "Unique known disable causes to remove.", func() {
+				MinLength(1)
+				MaxLength(3)
+			})
+			Attribute("confirmation", String, "Exact staff confirmation: I know what I'm doing", func() {
+				Enum("I know what I'm doing")
+			})
+			Attribute("reason", String, "Nonblank audit reason, at most 2000 UTF-8 bytes (enforced by the handler).", func() {
+				MinLength(1)
+			})
 			Required("organization_id", "key_type", "remove_causes", "confirmation", "reason")
 		})
 		Result(AdminInferenceKeyRepairResult)

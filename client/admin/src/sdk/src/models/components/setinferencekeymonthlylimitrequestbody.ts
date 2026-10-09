@@ -6,22 +6,25 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
-export const KeyType = {
+export const SetInferenceKeyMonthlyLimitRequestBodyKeyType = {
   Chat: "chat",
   Internal: "internal",
 } as const;
-export type KeyType = ClosedEnum<typeof KeyType>;
+export type SetInferenceKeyMonthlyLimitRequestBodyKeyType = ClosedEnum<
+  typeof SetInferenceKeyMonthlyLimitRequestBodyKeyType
+>;
 
 export type SetInferenceKeyMonthlyLimitRequestBody = {
-  keyType: KeyType;
+  keyType: SetInferenceKeyMonthlyLimitRequestBodyKeyType;
   monthlyCredits: number;
   organizationId: string;
 };
 
 /** @internal */
-export const KeyType$outboundSchema: z.ZodMiniEnum<typeof KeyType> = z.enum(
-  KeyType,
-);
+export const SetInferenceKeyMonthlyLimitRequestBodyKeyType$outboundSchema:
+  z.ZodMiniEnum<typeof SetInferenceKeyMonthlyLimitRequestBodyKeyType> = z.enum(
+    SetInferenceKeyMonthlyLimitRequestBodyKeyType,
+  );
 
 /** @internal */
 export type SetInferenceKeyMonthlyLimitRequestBody$Outbound = {
@@ -37,7 +40,7 @@ export const SetInferenceKeyMonthlyLimitRequestBody$outboundSchema:
     SetInferenceKeyMonthlyLimitRequestBody
   > = z.pipe(
     z.object({
-      keyType: KeyType$outboundSchema,
+      keyType: SetInferenceKeyMonthlyLimitRequestBodyKeyType$outboundSchema,
       monthlyCredits: z.int(),
       organizationId: z.string(),
     }),

@@ -2,6 +2,9 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
+	"github.com/jackc/pgx/v5"
+	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -15,59 +18,110 @@ import (
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+	"slices"
 	"testing"
 	"time"
 )
 
 //nolint:paralleltest // Cases reuse organization IDs in the shared Redis database and must remain sequential.
 func TestAccountTypeTransitionMatrix(t *testing.T) {
-	for _, target := range []string{"free", "pro", "payg", "enterprise"} {
-		for _, bulk := range []bool{false, true} {
-			t.Run(target+map[bool]string{true: "/bulk", false: "/single"}[bulk], func(t *testing.T) {
-				ctx, svc, db := newTestAdminService(t)
-				id := "org_tier_matrix"
-				seedOrg(t, ctx, db, orgFixture{id: id, name: id, slug: id, accountType: target})
-				if target == "payg" {
-					require.NoError(t, usagerepo.New(db).CreateStripeBillingMetadataFixture(ctx, usagerepo.CreateStripeBillingMetadataFixtureParams{OrganizationID: id, StripeCustomerID: conv.ToPGText("cus_test")}))
-					require.NoError(t, usagerepo.New(db).SetStripeSubscriptionFixture(ctx, usagerepo.SetStripeSubscriptionFixtureParams{OrganizationID: id, StripeSubscriptionID: conv.ToPGText("sub_test")}))
-					svc.billing = &fakeBillingOperations{subscriptionByID: &stripeclient.SubscriptionState{ID: "sub_test", CustomerID: "cus_test", Status: "active", BillingCycleAnchor: time.Now()}}
-				}
-				for _, kt := range openrouter.AllKeyTypes {
-					seedOpenRouterKey(t, ctx, db, id, keyFixture{keyType: kt, monthlyCredits: 1})
-					require.NoError(t, testrepo.New(db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: id, KeyType: string(kt), Disabled: true, DisableCauses: []string{"trial_demotion", "billing_inactive", "admin_lock", "future_cause"}}))
-				}
-				if bulk {
-					_, err := svc.BulkUpdateAccountType(ctx, &gen.BulkUpdateAccountTypePayload{Ids: []string{id}, AccountType: target})
-					require.NoError(t, err)
-				} else {
-					_, err := svc.UpdateOrganization(ctx, &gen.UpdateOrganizationPayload{ID: id, AccountType: &target})
-					require.NoError(t, err)
-				}
-				for _, feature := range productfeatures.TrialRuntimeFeatures {
-					enabled, err := svc.productFeatures.IsFeatureEnabledUncached(ctx, id, feature)
-					require.NoError(t, err)
-					require.Equal(t, target == "payg" || target == "enterprise", enabled)
-				}
-				for _, kt := range openrouter.AllKeyTypes {
-					key := readOpenRouterKey(t, ctx, db, id, kt)
-					credits := int64(100)
-					if target == "free" {
-						credits = 5
-					}
-					require.Equal(t, credits, key.MonthlyCredits)
-					require.Contains(t, key.DisableCauses, "admin_lock")
-					require.Contains(t, key.DisableCauses, "future_cause")
-					require.True(t, key.Disabled)
-					if target == "payg" || target == "enterprise" {
-						require.NotContains(t, key.DisableCauses, "trial_demotion")
-						if target == "payg" && kt == openrouter.KeyTypeChat {
-							require.NotContains(t, key.DisableCauses, "billing_inactive")
+	tiers := []string{"free", "pro", "payg", "enterprise"}
+	for _, source := range tiers {
+		for _, target := range tiers {
+			for _, bulk := range []bool{false, true} {
+				for _, state := range []struct {
+					name   string
+					causes []string
+				}{
+					{"enabled", []string{}},
+					{"trial_demotion", []string{"trial_demotion"}},
+					{"billing_inactive", []string{"billing_inactive"}},
+					{"admin_lock", []string{"admin_lock"}},
+					{"unknown", []string{"future_cause"}},
+					{"lifecycle_overlap", []string{"trial_demotion", "billing_inactive"}},
+					{"mixed", []string{"trial_demotion", "billing_inactive", "admin_lock", "future_cause"}},
+					{"unclassified", nil},
+				} {
+					t.Run(source+"_to_"+target+map[bool]string{true: "/bulk/", false: "/single/"}[bulk]+state.name, func(t *testing.T) {
+						ctx, svc, db := newTestAdminService(t)
+						id := "org_tier_matrix"
+						seedOrg(t, ctx, db, orgFixture{id: id, name: id, slug: id, accountType: source})
+						sourceRuntime := source == "payg" || source == "enterprise"
+						tx := testenv.BeginTx(t, ctx, db)
+						require.NoError(t, productfeatures.SetTrialRuntimeFeaturesTx(ctx, tx, id, sourceRuntime))
+						require.NoError(t, tx.Commit(ctx))
+						if target == "payg" {
+							require.NoError(t, usagerepo.New(db).CreateStripeBillingMetadataFixture(ctx, usagerepo.CreateStripeBillingMetadataFixtureParams{OrganizationID: id, StripeCustomerID: conv.ToPGText("cus_test")}))
+							require.NoError(t, usagerepo.New(db).SetStripeSubscriptionFixture(ctx, usagerepo.SetStripeSubscriptionFixtureParams{OrganizationID: id, StripeSubscriptionID: conv.ToPGText("sub_test")}))
+							svc.billing = &fakeBillingOperations{subscriptionByID: &stripeclient.SubscriptionState{ID: "sub_test", CustomerID: "cus_test", Status: "active", BillingCycleAnchor: time.Now()}}
 						}
-					} else {
-						require.Contains(t, key.DisableCauses, "trial_demotion")
-					}
+						for _, kt := range openrouter.AllKeyTypes {
+							seedOpenRouterKey(t, ctx, db, id, keyFixture{keyType: kt, monthlyCredits: 1})
+							require.NoError(t, testrepo.New(db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: id, KeyType: string(kt), Disabled: state.causes == nil || len(state.causes) > 0, DisableCauses: state.causes}))
+						}
+						var err error
+						if bulk {
+							_, err = svc.BulkUpdateAccountType(ctx, &gen.BulkUpdateAccountTypePayload{Ids: []string{id}, AccountType: target})
+						} else {
+							_, err = svc.UpdateOrganization(ctx, &gen.UpdateOrganizationPayload{ID: id, AccountType: &target})
+						}
+						envelope, outboxErr := auditrepo.New(db).GetLatestOutboxPayloadByOrg(ctx, auditrepo.GetLatestOutboxPayloadByOrgParams{OrganizationID: id, EventType: string(events.OrganizationAccountTypeV1.EventType())})
+						if state.causes == nil {
+							require.ErrorIs(t, err, openrouter.ErrAPIKeyDisableCausesUnclassified)
+							require.ErrorIs(t, outboxErr, pgx.ErrNoRows, "failed policy must not schedule reconciliation")
+							for _, kt := range openrouter.AllKeyTypes {
+								key := readOpenRouterKey(t, ctx, db, id, kt)
+								require.EqualValues(t, 1, key.MonthlyCredits)
+								require.Nil(t, key.DisableCauses)
+								require.True(t, key.Disabled)
+							}
+							return
+						}
+						require.NoError(t, err)
+						require.NoError(t, outboxErr, "every successful policy application must durably schedule reconciliation")
+						var event webhooksv1.Event
+						require.NoError(t, proto.Unmarshal(envelope, &event))
+						require.NotEmpty(t, event.GetEventId())
+						require.Equal(t, id, event.GetOrganizationId())
+						require.Equal(t, string(events.OrganizationAccountTypeV1.EventType()), event.GetEventType())
+						var payload events.AuditLogCreatedPayloadV1
+						require.NoError(t, json.Unmarshal(event.GetPayload(), &payload))
+						require.Equal(t, id, payload.OrganizationID)
+						require.Equal(t, id, payload.SubjectID)
+						require.Equal(t, "organization", payload.SubjectType)
+						require.Equal(t, string(audit.ActionOrganizationAccountTypeChanged), payload.Action)
+						require.JSONEq(t, `{"operation":"account_type_change"}`, string(payload.Metadata))
+						require.JSONEq(t, `{"account_type":"`+source+`"}`, string(payload.BeforeSnapshot))
+						require.JSONEq(t, `{"account_type":"`+target+`"}`, string(payload.AfterSnapshot))
+						for _, feature := range productfeatures.TrialRuntimeFeatures {
+							enabled, err := svc.productFeatures.IsFeatureEnabledUncached(ctx, id, feature)
+							require.NoError(t, err)
+							require.Equal(t, sourceRuntime || target == "payg" || target == "enterprise", enabled)
+						}
+						for _, kt := range openrouter.AllKeyTypes {
+							key := readOpenRouterKey(t, ctx, db, id, kt)
+							credits := int64(100)
+							if target == "free" {
+								credits = 5
+							}
+							require.Equal(t, credits, key.MonthlyCredits)
+							wantCauses := slices.Clone(state.causes)
+							if target == "payg" || target == "enterprise" {
+								wantCauses = slices.DeleteFunc(wantCauses, func(cause string) bool {
+									return cause == "trial_demotion" || (target == "payg" && kt == openrouter.KeyTypeChat && cause == "billing_inactive")
+								})
+							}
+							// Free chat without a subscription gains a billing hold; other causes are preserved.
+							if target == "free" && kt == openrouter.KeyTypeChat && !slices.Contains(wantCauses, "billing_inactive") {
+								wantCauses = append(wantCauses, "billing_inactive")
+							}
+							require.ElementsMatch(t, wantCauses, key.DisableCauses)
+							require.Equal(t, len(wantCauses) > 0, key.Disabled)
+						}
+					})
 				}
-			})
+			}
 		}
 	}
 }
