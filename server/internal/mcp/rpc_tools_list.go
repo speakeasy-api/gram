@@ -120,8 +120,12 @@ func handleToolsList(
 			"capabilities":         reqMeta.CapabilityKeys,
 		}
 		payload.recordServingAnalytics(props)
-		if err := productMetrics.CaptureEvent(ctx, "mcp_server_count", payload.sessionID, props); err != nil {
-			logger.ErrorContext(ctx, "failed to capture mcp_server_count event", attr.SlogError(err))
+		// Preserve existing analytics consumers while also emitting the shared
+		// hosted/remote event. Consumers should select one event, not sum both.
+		for _, event := range []string{"mcp_server_count", "mcp_server_tools_list"} {
+			if err := productMetrics.CaptureEvent(ctx, event, payload.sessionID, props); err != nil {
+				logger.ErrorContext(ctx, "failed to capture "+event+" event", attr.SlogError(err))
+			}
 		}
 	}
 

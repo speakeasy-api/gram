@@ -39,7 +39,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
-	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/jwtclaims"
@@ -127,6 +126,15 @@ func handleToolsCall(
 	// boundary, so record them once the toolset supplies the organization.
 	recordToolsCallIdentityCoverage(ctx, identityCoverage, toolset.OrganizationID, payload)
 
+	toolsetID, err := uuid.Parse(toolset.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").LogError(ctx, logger)
+	}
+	// Dynamic search/describe return before execution, but still need request
+	// attribution. Preserve their availability when optional lookup fails.
+	attributionErr := payload.resolveServingAttribution(ctx, logger, db, toolsetID)
+	attributedMCPServerID := payload.servingServerID()
+
 	// Apply the ?tags= filter before any tool resolution — dynamic dispatch,
 	// proxy matching, and the static name lookup all read this slice, so a
 	// filtered-out tool surfaces as method-not-found.
@@ -182,7 +190,6 @@ func handleToolsCall(
 	}
 	params.Arguments = stripped
 
-	attributedMCPServerID := payload.mcpServerID
 	var mcpURL string
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		mcpURL = requestContext.Host + requestContext.ReqURL
@@ -195,35 +202,8 @@ func handleToolsCall(
 
 	toolsetHelpers := toolsets.NewToolsets(db, platformExtras...)
 
-	toolsetID, err := uuid.Parse(toolset.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "invalid toolset ID").LogError(ctx, logger)
-	}
-
-	// Legacy /mcp/<toolset slug> calls do not carry the wrapper server id in
-	// their route payload. Attribute to the toolset's canonical wrapper, else
-	// only when exactly one enabled wrapper exists. Disabled wrappers do not
-	// serve, and choosing among multiple live wrappers would apply an arbitrary
-	// server's policy and telemetry identity.
-	// Keep the payload unchanged because its nil server id still identifies the
-	// legacy authorization path.
-	if attributedMCPServerID == nil {
-		servers, lookupErr := mcpservers_repo.New(db).ListEnabledMCPServersByToolsetID(ctx, mcpservers_repo.ListEnabledMCPServersByToolsetIDParams{
-			ToolsetID: toolsetID,
-			ProjectID: uuid.UUID(projectID),
-		})
-		if lookupErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, lookupErr, "resolve MCP server for toolset").LogError(ctx, logger)
-		}
-		switch len(servers) {
-		case 0:
-		case 1:
-			serverID := servers[0].ID
-			attributedMCPServerID = &serverID
-		default:
-			// Ambiguous wrappers leave the call unattributed rather than failing it.
-			logger.WarnContext(ctx, "multiple enabled MCP servers wrap the legacy toolset; skipping server attribution", attr.SlogToolsetID(toolsetID.String()))
-		}
+	if attributionErr != nil {
+		return nil, oops.E(oops.CodeUnexpected, attributionErr, "resolve MCP server for toolset").LogError(ctx, logger)
 	}
 
 	executor := externalmcp.BuildProxyToolExecutor(logger, guardianPolicy, toolset.Tools)

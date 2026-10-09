@@ -29,3 +29,13 @@ func TestServingAttribution_OmitsUnknownIDs(t *testing.T) {
 	require.Equal(t, serverID.String(), logAttrs[attr.McpServerIDKey])
 	require.Equal(t, endpointID.String(), logAttrs[attr.McpEndpointIDKey])
 }
+
+func TestServingAttribution_DoesNotChangeAuthorizationIdentity(t *testing.T) {
+	t.Parallel()
+	fallback, fronting := uuid.New(), uuid.New()
+	payload := &mcpInputs{attributionServerID: &fallback}
+	require.Equal(t, &fallback, payload.servingServerID())
+	require.Nil(t, payload.mcpServerID)
+	payload.mcpServerID = &fronting
+	require.Equal(t, &fronting, payload.servingServerID())
+}

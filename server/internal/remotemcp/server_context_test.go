@@ -115,3 +115,40 @@ func TestServerContext_LimitsUseServerTier(t *testing.T) {
 		})
 	}
 }
+
+func TestUsageTracking_ServerCopiesDoNotLeakAttribution(t *testing.T) {
+	t.Parallel()
+	for _, serverID := range []string{"", "server-one", "server-two"} {
+		t.Run("server="+serverID, func(t *testing.T) {
+			t.Parallel()
+			ctx := remotemcp.WithServerContext(t.Context(), remotemcp.ServerContext{
+				OrganizationID: "org-owner", ProjectID: uuid.New(),
+			})
+			toolTracker, resourceTracker := newFakeBillingTracker(), newFakeBillingTracker()
+			toolShared := remotemcp.NewToolsCallUsageTrackingInterceptor(toolTracker, testenv.NewLogger(t))
+			resourceShared := remotemcp.NewResourcesReadUsageTrackingInterceptor(resourceTracker, testenv.NewLogger(t))
+			tools := map[string]*remotemcp.ToolsCallUsageTrackingInterceptor{"": toolShared}
+			resources := map[string]*remotemcp.ResourcesReadUsageTrackingInterceptor{"": resourceShared}
+			for _, id := range []string{"server-one", "server-two"} {
+				tools[id] = toolShared.WithMCPServerID(id).WithMetaMCPServerID("gateway")
+				resources[id] = resourceShared.WithMCPServerID(id)
+			}
+			require.NoError(t, tools[serverID].InterceptToolsCallResponse(ctx, newToolsCallResponseForInterceptor(t, "")))
+			require.NoError(t, resources[serverID].InterceptResourcesReadResponse(ctx, newResourcesReadResponseForInterceptor(t, "", "file:///example")))
+			toolEvent, resourceEvent := toolTracker.waitForEvent(t), resourceTracker.waitForEvent(t)
+			for _, event := range []billing.ToolCallUsageEvent{toolEvent, resourceEvent} {
+				if serverID == "" {
+					require.Nil(t, event.MCPServerID)
+				} else {
+					require.Equal(t, new(serverID), event.MCPServerID)
+				}
+				require.Nil(t, event.MCPEndpointID)
+			}
+			if serverID == "" {
+				require.Nil(t, toolEvent.MetaMCPServerID)
+			} else {
+				require.Equal(t, new("gateway"), toolEvent.MetaMCPServerID)
+			}
+		})
+	}
+}

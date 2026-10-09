@@ -104,6 +104,7 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		toolVariationsGroupID: nil,
 		mcpServerID:           nil,
 		mcpEndpointID:         nil,
+		attributionServerID:   nil,
 		wrapperRBACResourceID: "",
 		wrapperIsPublic:       nil,
 		metaMcpServerID:       "",

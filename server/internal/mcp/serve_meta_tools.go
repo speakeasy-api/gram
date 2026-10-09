@@ -463,6 +463,7 @@ func (s *Service) buildMemberDispatch(
 		toolVariationsGroupID: variationsGroupID,
 		mcpServerID:           &serverID,
 		mcpEndpointID:         nil,
+		attributionServerID:   nil,
 		// Meta members keep their toolset-keyed per-tool checks; the meta
 		// surface's RBAC model is outside the wrapper-governance cutover.
 		wrapperRBACResourceID:    "",
