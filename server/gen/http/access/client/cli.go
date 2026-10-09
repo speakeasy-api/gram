@@ -359,7 +359,7 @@ func BuildSetDirectoryRoleMappingsPayload(accessSetDirectoryRoleMappingsBody str
 	{
 		err = json.Unmarshal([]byte(accessSetDirectoryRoleMappingsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"attribute_key\": \"aa\",\n      \"attribute_value\": \"aa\",\n      \"directory_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"role_urns\": [\n         \"abc123\"\n      ],\n      \"source_kind\": \"attribute\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"attribute_key\": \"aa\",\n      \"attribute_value\": \"aa\",\n      \"directory_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"expected_role_urns\": [\n         \"abc123\"\n      ],\n      \"role_urns\": [\n         \"abc123\"\n      ],\n      \"source_kind\": \"attribute\"\n   }'")
 		}
 		if body.RoleUrns == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("role_urns", "body"))
@@ -401,6 +401,12 @@ func BuildSetDirectoryRoleMappingsPayload(accessSetDirectoryRoleMappingsBody str
 		DirectoryGroupID: body.DirectoryGroupID,
 		AttributeKey:     body.AttributeKey,
 		AttributeValue:   body.AttributeValue,
+	}
+	if body.ExpectedRoleUrns != nil {
+		v.ExpectedRoleUrns = make([]string, len(body.ExpectedRoleUrns))
+		for i, val := range body.ExpectedRoleUrns {
+			v.ExpectedRoleUrns[i] = val
+		}
 	}
 	if body.RoleUrns != nil {
 		v.RoleUrns = make([]string, len(body.RoleUrns))

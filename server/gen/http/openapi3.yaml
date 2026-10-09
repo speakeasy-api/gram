@@ -9989,97 +9989,101 @@ paths:
                 type: mutation
     /rpc/access.setDirectoryRoleMapping:
         post:
-            tags:
-                - access
-            summary: setDirectoryRoleMapping access
+            deprecated: true
             description: Deprecated compatibility endpoint for older dashboard clients. Use setDirectoryRoleMappings. Rejects replacement when the source already grants multiple roles.
             operationId: setDirectoryRoleMapping
             parameters:
-                - name: Gram-Key
-                  in: header
+                - allowEmptyValue: true
                   description: API Key header
-                  allowEmptyValue: true
-                  schema:
-                    type: string
-                    description: API Key header
-                - name: Gram-Session
                   in: header
-                  description: Session header
-                  allowEmptyValue: true
+                  name: Gram-Key
                   schema:
+                    description: API Key header
                     type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
                     description: Session header
+                    type: string
             requestBody:
-                required: true
                 content:
                     application/json:
                         schema:
                             $ref: '#/components/schemas/SetDirectoryRoleMappingForm'
+                required: true
             responses:
                 "200":
-                    description: OK response.
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/DirectoryRoleMapping'
+                    description: OK response.
                 "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'bad_request: request is invalid'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'unauthorized: unauthorized access'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'forbidden: permission denied'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'not_found: resource not found'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'conflict: resource already exists'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'unsupported_media: unsupported media type'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'invalid: request contains one or more invalidation fields'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
                     description: 'unexpected: an unexpected error occurred'
-                    content:
-                        application/json:
-                            schema:
-                                $ref: '#/components/schemas/Error'
                 "502":
-                    description: 'gateway_error: an unexpected error occurred'
                     content:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Error'
-            deprecated: true
+                    description: 'gateway_error: an unexpected error occurred'
             security:
                 - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
+            summary: setDirectoryRoleMapping access
+            tags:
+                - access
+            x-speakeasy-name-override: setDirectoryRoleMapping
+            x-speakeasy-react-hook:
+                name: SetDirectoryRoleMapping
+                type: mutation
     /rpc/access.setDirectoryRoleMappings:
         post:
             description: Replace the full set of roles granted by a directory group or attribute value. An empty role list removes all mappings for the source.
@@ -109644,6 +109648,11 @@ components:
                     type: string
                     description: Directory group to map. Required when source_kind is group.
                     format: uuid
+                expected_role_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: Optional compare-and-set precondition. The normalized current role set must match or the request returns conflict without changes. Omit for unconditional replacement; an empty array requires an unmapped source.
                 role_urns:
                     type: array
                     items:
