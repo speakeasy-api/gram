@@ -1618,15 +1618,17 @@ jobs:
         # Bound package concurrency so eight race-enabled binaries plus their
         # containers do not compete for this runner's eight CPUs during startup.
         # Keep within-package parallelism and race detection; do not retry failures.
-        # A failure here is judged by the flaky-test gate below, which fails
-        # the job unless every failing test is tracked as flaky in Linear.
-        continue-on-error: true
+        # In the merge queue and on main, a failure here is judged by the
+        # flaky-test gate below, which fails the job unless every failing test
+        # is tracked as flaky in Linear. On PR branches a failure fails the job
+        # as before: those runs mix flakes with the PR's own breakage.
+        continue-on-error: ${{ github.event_name != 'pull_request' }}
         run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }} --shard-isolate="$SHARD_ISOLATE" -p=2 -race -tags=inv.debug ./...
 
       - name: Let tracked flaky tests through
         # Passes only when every failure is an open flaky-test ticket (see
         # ci/cmd/flaky). A failing candidate is quarantined and handed to the
-        # autopilot queue. Without LINEAR_API_KEY (fork PRs) this always fails.
+        # autopilot queue. Without LINEAR_API_KEY this always fails.
         if: steps.test.outcome == 'failure'
         env:
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
