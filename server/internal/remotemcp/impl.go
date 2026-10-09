@@ -644,7 +644,7 @@ func (s *Service) CreateServerHeader(ctx context.Context, payload *gen.CreateSer
 	isSecret := conv.PtrValOr(payload.IsSecret, false)
 	name, source, err := validateHeaderWrite(payload.Name, payload.Value, payload.ValueFromRequestHeader, isSecret, false)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "%s", headerWriteErrorMessage(payload.Name, err)).LogWarn(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogWarn(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -688,7 +688,7 @@ func (s *Service) CreateServerHeader(ctx context.Context, payload *gen.CreateSer
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, oops.E(oops.CodeConflict, err, "header name already in use on this remote mcp server").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeConflict, err, "%s", headerNameInUseMessage(name)).LogError(ctx, logger)
 		}
 
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote mcp server header").LogError(ctx, logger)
@@ -783,7 +783,7 @@ func (s *Service) UpdateServerHeader(ctx context.Context, payload *gen.UpdateSer
 
 	name, source, err := validateHeaderWrite(payload.Name, payload.Value, payload.ValueFromRequestHeader, isSecret, preserveStoredValue)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "%s", headerWriteErrorMessage(payload.Name, err)).LogWarn(ctx, logger)
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogWarn(ctx, logger)
 	}
 
 	if err := requireUnusedHeaderName(ctx, txRepo, server.ID, *authCtx.ProjectID, name, existing.ID); err != nil {
@@ -806,7 +806,7 @@ func (s *Service) UpdateServerHeader(ctx context.Context, payload *gen.UpdateSer
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, oops.E(oops.CodeConflict, err, "header name already in use on this remote mcp server").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeConflict, err, "%s", headerNameInUseMessage(name)).LogError(ctx, logger)
 		}
 
 		return nil, oops.E(oops.CodeUnexpected, err, "update remote mcp server header").LogError(ctx, logger)
@@ -909,7 +909,8 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 
 // validateHeaderWrite checks a header create or update against the remote
 // header policy and returns the name and pass-through source to store, in
-// canonical form.
+// canonical form. A returned error's message is shown to the operator as is,
+// so it names the header and how to fix it, never a value.
 //
 // It mirrors the remote_mcp_server_headers_value_source_check constraint:
 // exactly one of value or value_from_request_header, and a pass-through header
@@ -917,9 +918,11 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // because an update that keeps an existing secret's stored value supplies
 // neither; the name is still validated.
 func validateHeaderWrite(name string, value *string, valueFromRequestHeader *string, isSecret bool, preserveStoredValue bool) (string, *string, error) {
+	const fieldNameRule = "it cannot contain spaces, control characters or separators such as ':'"
+
 	canonicalName, err := proxy.NormalizeHeaderName(name)
 	if err != nil {
-		return "", nil, fmt.Errorf("header name: %w", err)
+		return "", nil, fmt.Errorf("header name %q is not a valid HTTP header name: %s", name, fieldNameRule)
 	}
 
 	hasValue := value != nil && *value != ""
@@ -929,7 +932,7 @@ func validateHeaderWrite(name string, value *string, valueFromRequestHeader *str
 	if hasValueFromRequestHeader {
 		canonicalSource, err := proxy.NormalizeHeaderName(*valueFromRequestHeader)
 		if err != nil {
-			return "", nil, fmt.Errorf("header %q source: %w", canonicalName, err)
+			return "", nil, fmt.Errorf("header %q reads request header %q, which is not a valid HTTP header name: %s", canonicalName, *valueFromRequestHeader, fieldNameRule)
 		}
 		source = &canonicalSource
 	}
@@ -949,20 +952,24 @@ func validateHeaderWrite(name string, value *string, valueFromRequestHeader *str
 		StaticValue:            conv.PtrValOr(value, ""),
 		ValueFromRequestHeader: conv.PtrValOr(source, ""),
 	}
-	if err := proxy.CheckRemoteHeader(check); err != nil {
+	switch err := proxy.CheckRemoteHeader(check); {
+	case err == nil:
+		return canonicalName, source, nil
+	case errors.Is(err, proxy.ErrProtectedSource):
+		return "", nil, fmt.Errorf("header %q cannot be populated from request header %q. %s", canonicalName, *source, proxy.ProtectedSourceRemediation(canonicalName))
+	case errors.Is(err, proxy.ErrReservedHeader):
+		return "", nil, fmt.Errorf("header %q cannot be configured on a remote MCP server: Set-Cookie, Proxy-Authorization, MCP protocol headers and the Speakeasy caller assertion are reserved, and Cookie can only hold a static value", canonicalName)
+	case errors.Is(err, proxy.ErrInvalidHeaderValue):
+		return "", nil, fmt.Errorf("the value of header %q contains a character an HTTP header cannot carry, such as a line break", canonicalName)
+	default:
 		return "", nil, fmt.Errorf("header %q: %w", canonicalName, err)
 	}
-
-	return canonicalName, source, nil
 }
 
-// headerWriteErrorMessage is the client-facing explanation for a header write
-// that validateHeaderWrite refused. It names headers, never values.
-func headerWriteErrorMessage(name string, err error) string {
-	if errors.Is(err, proxy.ErrProtectedSource) {
-		return err.Error() + ". " + proxy.ProtectedSourceRemediation(name)
-	}
-	return "invalid header: " + err.Error()
+// headerNameInUseMessage explains a refused header name that another header of
+// the server already uses.
+func headerNameInUseMessage(name string) string {
+	return fmt.Sprintf("this server already has a header named %q: header names match regardless of case, and '_' matches '-'", name)
 }
 
 // requireUnusedHeaderName refuses a name another live header of the server
@@ -979,7 +986,7 @@ func requireUnusedHeaderName(ctx context.Context, txRepo *repo.Queries, serverID
 		return oops.E(oops.CodeUnexpected, err, "check remote mcp server header name")
 	}
 	if exists {
-		return oops.E(oops.CodeConflict, nil, "header name already in use on this remote mcp server")
+		return oops.E(oops.CodeConflict, nil, "%s", headerNameInUseMessage(name))
 	}
 	return nil
 }

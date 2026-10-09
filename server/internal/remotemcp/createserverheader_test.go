@@ -478,3 +478,43 @@ func TestCreateServerHeader_UnderscoreDuplicateConflicts(t *testing.T) {
 	}))
 	requireOopsCode(t, err, oops.CodeConflict)
 }
+
+// The write-time refusal is the only explanation an operator gets, so each
+// one names the header and what to do instead.
+func TestCreateServerHeader_RefusalsExplainTheFix(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+	_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, "X-Taken", func(p *gen.CreateServerHeaderPayload) {
+		p.Value = new("v")
+	}))
+	require.NoError(t, err)
+
+	cases := []struct {
+		name string
+		opts func(*gen.CreateServerHeaderPayload)
+		code oops.Code
+		want []string
+	}{
+		{name: "X-Upstream-Token", opts: func(p *gen.CreateServerHeaderPayload) { p.ValueFromRequestHeader = new("gram-key") }, code: oops.CodeBadRequest, want: []string{`header "X-Upstream-Token" cannot be populated from request header "Gram-Key"`, "separate request header", "Upstream OAuth supplies only Authorization"}},
+		{name: "Authorization", opts: func(p *gen.CreateServerHeaderPayload) { p.ValueFromRequestHeader = new("Authorization") }, code: oops.CodeBadRequest, want: []string{`header "Authorization" cannot be populated from request header "Authorization"`, "connect the server's upstream OAuth"}},
+		{name: "set-cookie", opts: func(p *gen.CreateServerHeaderPayload) { p.Value = new("v") }, code: oops.CodeBadRequest, want: []string{`header "Set-Cookie" cannot be configured on a remote MCP server`, "Cookie can only hold a static value"}},
+		{name: "X Bad", opts: func(p *gen.CreateServerHeaderPayload) { p.Value = new("v") }, code: oops.CodeBadRequest, want: []string{`header name "X Bad" is not a valid HTTP header name`}},
+		{name: "X-Forwarded", opts: func(p *gen.CreateServerHeaderPayload) { p.ValueFromRequestHeader = new("X Bad") }, code: oops.CodeBadRequest, want: []string{`header "X-Forwarded" reads request header "X Bad", which is not a valid HTTP header name`}},
+		{name: "X-Api-Key", opts: func(p *gen.CreateServerHeaderPayload) { p.Value = new("line1\nline2") }, code: oops.CodeBadRequest, want: []string{`the value of header "X-Api-Key" contains a character an HTTP header cannot carry`}},
+		{name: "x_taken", opts: func(p *gen.CreateServerHeaderPayload) { p.Value = new("v") }, code: oops.CodeConflict, want: []string{`this server already has a header named "X_taken"`, "'_' matches '-'"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, tc.name, tc.opts))
+			requireOopsCode(t, err, tc.code)
+			for _, want := range tc.want {
+				require.Contains(t, err.Error(), want)
+			}
+			require.NotContains(t, err.Error(), "line1", "the refusal never echoes a value")
+		})
+	}
+}
