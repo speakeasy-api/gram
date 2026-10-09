@@ -507,7 +507,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     Save stays disabled on each until something is edited.
 29. **Inspect: tunneled server offline** — open MCP → **JAMF** → Inspect.
     The tunnel has never connected an agent, so the tools section reads
-    "Tunnel offline — connect the agent to list its tools." with Retry,
+    "Tunnel offline — connect the agent to list its tools." with **Try again**,
     and below it lists the five recorded tools: `list_devices` and
     `get_device` (read-only), `lock_device` (idempotent), `wipe_device`
     (destructive), and `device_status` (no annotation).

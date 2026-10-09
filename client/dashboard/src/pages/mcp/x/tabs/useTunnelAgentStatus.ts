@@ -41,8 +41,9 @@ export function useTunnelAgentStatus({
   /** Keep re-reading, e.g. while the tools listing is failing. */
   poll: boolean;
   /**
-   * Called when a status read stops saying the agent is offline, so a listing
-   * that failed while it was can be tried again.
+   * Called when a successful status read says the agent is connected after
+   * the last successful read for the same source said it was offline, so a
+   * listing that failed meanwhile can be tried again.
    */
   onReconnect?: () => void;
 }): TunnelAgentStatus {
@@ -62,11 +63,26 @@ export function useTunnelAgentStatus({
   const offline =
     query.isSuccess && tunnelAgentOffline(query.data?.connectionStatus);
 
-  const wasOffline = useRef(false);
+  // The last successful read for the current source. A failed or pending
+  // read changes nothing, so a transient error between offline and connected
+  // neither fires early nor hides the reconnection, and a different source
+  // or a disabled hook starts over.
+  const target = active ? `${projectSlug ?? ""}/${tunneledSourceId}` : null;
+  const status = query.isSuccess ? query.data?.connectionStatus : undefined;
+  const lastSeen = useRef<{ target: string | null; offline: boolean | null }>({
+    target: null,
+    offline: null,
+  });
   useEffect(() => {
-    if (wasOffline.current && !offline) onReconnect?.();
-    wasOffline.current = offline;
-  }, [offline, onReconnect]);
+    if (lastSeen.current.target !== target) {
+      lastSeen.current = { target, offline: null };
+    }
+    if (!target || status === undefined) return;
+    const nowOffline = tunnelAgentOffline(status);
+    if (!nowOffline && status !== "connected") return;
+    if (lastSeen.current.offline === true && !nowOffline) onReconnect?.();
+    lastSeen.current = { target, offline: nowOffline };
+  }, [target, status, onReconnect]);
 
   return {
     offline,
