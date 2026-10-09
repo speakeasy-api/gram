@@ -25,19 +25,29 @@ export function DeleteUnusedTunnelDialog({
   tunnel: TunneledMcpServer | null;
   onClose: () => void;
 }): JSX.Element {
+  const remove = useDeleteUnusedTunnel();
+  // Closing is refused while the delete is in flight, so its outcome (a
+  // refusal in particular) is never dropped unseen.
+  const close = () => {
+    if (remove.isPending) return;
+    remove.reset();
+    onClose();
+  };
+
   return (
     <Dialog
       open={tunnel !== null}
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open) close();
       }}
     >
-      <Dialog.Content className="max-w-xl!">
+      <Dialog.Content className="max-w-xl!" closeable={!remove.isPending}>
         {tunnel ? (
           <DeleteUnusedTunnelBody
             key={tunnel.id}
             tunnel={tunnel}
-            onClose={onClose}
+            remove={remove}
+            onClose={close}
           />
         ) : null}
       </Dialog.Content>
@@ -47,12 +57,13 @@ export function DeleteUnusedTunnelDialog({
 
 function DeleteUnusedTunnelBody({
   tunnel,
+  remove,
   onClose,
 }: {
   tunnel: TunneledMcpServer;
+  remove: ReturnType<typeof useDeleteUnusedTunnel>;
   onClose: () => void;
 }) {
-  const remove = useDeleteUnusedTunnel();
   const [confirmation, setConfirmation] = useState("");
   const tunnelName = formatTunneledMcpDisplay(tunnel);
 

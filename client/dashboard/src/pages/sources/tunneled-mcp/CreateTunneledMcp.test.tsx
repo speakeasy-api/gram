@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   // Resource ids the caller holds mcp:write on.
   writable: new Set<string>(),
   tunnels: [] as TunneledMcpServer[],
+  tunnelListError: false,
   tunnelListCalls: 0,
 }));
 
@@ -94,7 +95,8 @@ vi.mock("./ExistingTunnelFlow", () => ({
 vi.mock("@gram/client/react-query/tunneledMcpServers.js", () => ({
   useTunneledMcpServers: () => {
     state.tunnelListCalls++;
-    return { data: { tunneledMcpServers: state.tunnels } };
+    if (state.tunnelListError) return { data: undefined, isError: true };
+    return { data: { tunneledMcpServers: state.tunnels }, isError: false };
   },
 }));
 
@@ -111,6 +113,7 @@ function page() {
 beforeEach(() => {
   state.writable = new Set(["project-1"]);
   state.tunnels = [{ id: "t1", name: "JAMF" } as TunneledMcpServer];
+  state.tunnelListError = false;
   state.tunnelListCalls = 0;
 });
 
@@ -126,6 +129,7 @@ describe("CreateTunneledMcp", () => {
     render(page());
     expect(state.tunnelListCalls).toBe(0);
     expect(screen.queryByLabelText("Display name")).toBeNull();
+    expect(screen.getByText("Access restricted")).toBeTruthy();
   });
 
   it("keeps a way back to a new tunnel after the last tunnel is deleted", () => {
@@ -147,5 +151,12 @@ describe("CreateTunneledMcp", () => {
       screen.queryByRole("button", { name: "Existing tunnel" }),
     ).toBeNull();
     expect(screen.getByLabelText("Display name")).toBeTruthy();
+  });
+
+  it("keeps the existing-tunnel choice when the tunnel list cannot be read", () => {
+    state.tunnelListError = true;
+    render(page());
+    fireEvent.click(screen.getByRole("button", { name: "Existing tunnel" }));
+    expect(screen.getByText("Existing tunnel flow")).toBeTruthy();
   });
 });

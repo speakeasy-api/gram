@@ -145,7 +145,9 @@ export default function CreateFromSource(): JSX.Element {
         const reconcile = wrapperAttempted.current;
         wrapperAttempted.current = true;
         const serverId = await ensureToolsetWrapper(client, toolset, reconcile);
-        await flow.complete(serverId);
+        // GatewayAttachmentStatus reports an attach failure; repeating it here
+        // would add the raw backend message next to it.
+        await flow.complete(serverId).catch(() => undefined);
       } else {
         routes.mcp.details.tools.goTo(toolset.slug);
       }
