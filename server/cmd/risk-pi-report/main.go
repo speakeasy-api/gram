@@ -1012,7 +1012,7 @@ func loadFloors(dir string) (floors, error) {
 // model's raw accuracy on every case rather than a throttled subset.
 func scanJudgeMode(ctx context.Context, opts options, corpus []labeledCase) (modeSummary, [][]scanners.Finding, error) {
 	apiKey := firstEnv("OPENROUTER_DEV_KEY", "OPENROUTER_API_KEY")
-	if apiKey == "" || apiKey == "unset" {
+	if apiKey == "" {
 		return modeSummary{}, nil, fmt.Errorf("OPENROUTER_DEV_KEY not set")
 	}
 
@@ -1037,6 +1037,10 @@ type callObservation struct {
 	CompletionTokens int
 	CostUSD          float64
 	Err              error
+
+	// Rationale is the call's verdict rationale. The stabilized verdict drops
+	// it for a clear verdict, so run records read it here.
+	Rationale string
 }
 
 type decisionObservation struct {
@@ -1045,8 +1049,8 @@ type decisionObservation struct {
 }
 
 // scanJudge runs the judge for every corpus row and records positive verdicts.
-// onCase, when set, receives each case as it finishes; cancelling ctx stops new
-// cases from starting.
+// onCase, when set, receives each case as it finishes, from several goroutines
+// at once; cancelling ctx stops new cases from starting.
 func scanJudge(ctx context.Context, opts options, client openrouter.CompletionClient, corpus []labeledCase, onCase func(int, caseOutcome)) ([][]scanners.Finding, evaluationStats, error) {
 	out := make([][]scanners.Finding, len(corpus))
 	ruleID, description := promptinjection.Describe()
@@ -1058,11 +1062,16 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 	observations := make([]decisionObservation, len(corpus))
 
 	for i := range corpus {
+		// A cancel that lands while waiting for a slot starts no more cases.
+		// A slot taken just as ctx ends is left held; nothing waits on it.
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+		}
 		if ctx.Err() != nil {
 			break
 		}
 		wg.Add(1)
-		sem <- struct{}{}
 		go func(i int) {
 			defer wg.Done()
 			defer func() { <-sem }()
@@ -1071,37 +1080,40 @@ func scanJudge(ctx context.Context, opts options, client openrouter.CompletionCl
 			msg := corpus[i].judgeMessage()
 			result, observation := judgeOne(ctx, client, opts.judgeModel, opts.reasoning, opts.samples, msg, corpus[i].trajectory())
 
+			// Each goroutine owns its slot of observations and out; wg.Wait
+			// publishes them to the caller.
+			observations[i] = observation
+			if result.IsInjection {
+				out[i] = append(out[i], scanners.Finding{
+					RuleID:      ruleID,
+					Description: description,
+					Match:       text,
+					StartPos:    0,
+					EndPos:      len(text),
+					Source:      promptinjection.Source,
+					// Report-only score keeps optional multi-sample tuning sortable.
+					// Production typed findings leave legacy confidence untouched.
+					Confidence:       float64(result.PositiveVotes) / float64(result.Samples),
+					Tags:             []string{"llm-judge", "layer-1", "semantic-typed", "directive_kind:" + result.DirectiveKind, "target:" + result.Target, "operational:true"},
+					DeadLetterReason: "",
+
+					McpLookupToolCallID: "",
+					SpanGroupKey:        "",
+					Field:               "",
+					Path:                "",
+				})
+			}
+
 			mu.Lock()
-			defer mu.Unlock()
 			done++
 			if done%20 == 0 || done == len(corpus) {
 				fmt.Fprintf(os.Stderr, "\r  judge %d/%d", done, len(corpus))
 			}
-			observations[i] = observation
-			if onCase != nil {
-				defer func() { onCase(i, caseOutcome{findings: out[i], verdict: result, observation: observation}) }()
-			}
-			if !result.IsInjection {
-				return
-			}
-			out[i] = append(out[i], scanners.Finding{
-				RuleID:      ruleID,
-				Description: description,
-				Match:       text,
-				StartPos:    0,
-				EndPos:      len(text),
-				Source:      promptinjection.Source,
-				// Report-only score keeps optional multi-sample tuning sortable.
-				// Production typed findings leave legacy confidence untouched.
-				Confidence:       float64(result.PositiveVotes) / float64(result.Samples),
-				Tags:             []string{"llm-judge", "layer-1", "semantic-typed", "directive_kind:" + result.DirectiveKind, "target:" + result.Target, "operational:true"},
-				DeadLetterReason: "",
+			mu.Unlock()
 
-				McpLookupToolCallID: "",
-				SpanGroupKey:        "",
-				Field:               "",
-				Path:                "",
-			})
+			if onCase != nil {
+				onCase(i, caseOutcome{findings: out[i], verdict: result, observation: observation})
+			}
 		}(i)
 	}
 	wg.Wait()
@@ -1193,7 +1205,7 @@ func judgeVote(ctx context.Context, client openrouter.CompletionClient, model, r
 		Trajectory *judgemessage.TrajectoryPayload `json:"trajectory,omitempty"`
 	}{Message: judgemessage.RenderPayload(msg), Trajectory: trajectoryPayload})
 	if err != nil {
-		return emptyTypedVerdict, callObservation{Latency: 0, PromptTokens: 0, CompletionTokens: 0, CostUSD: 0, Err: fmt.Errorf("marshal judge payload: %w", err)}
+		return emptyTypedVerdict, callObservation{Latency: 0, PromptTokens: 0, CompletionTokens: 0, CostUSD: 0, Err: fmt.Errorf("marshal judge payload: %w", err), Rationale: ""}
 	}
 
 	strict := true
@@ -1219,7 +1231,7 @@ func judgeVote(ctx context.Context, client openrouter.CompletionClient, model, r
 		Reasoning:    &openrouter.Reasoning{Effort: reasoning, MaxTokens: nil, Exclude: nil, Enabled: nil},
 		CacheControl: nil, NormalizeOutboundMessages: false, WebSearch: nil, DisableResponseHealing: false,
 	})
-	observation := callObservation{Latency: time.Since(start), PromptTokens: 0, CompletionTokens: 0, CostUSD: 0, Err: nil}
+	observation := callObservation{Latency: time.Since(start), PromptTokens: 0, CompletionTokens: 0, CostUSD: 0, Err: nil, Rationale: ""}
 	if err != nil {
 		observation.Err = fmt.Errorf("openrouter completion: %w", err)
 		return emptyTypedVerdict, observation
@@ -1253,6 +1265,7 @@ func judgeVote(ctx context.Context, client openrouter.CompletionClient, model, r
 		observation.Err = fmt.Errorf("parse judge response: typed verdict contract is invalid")
 		return emptyTypedVerdict, observation
 	}
+	observation.Rationale = verdict.Rationale
 	return verdict, observation
 }
 
