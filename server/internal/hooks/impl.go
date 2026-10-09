@@ -104,6 +104,12 @@ type Service struct {
 	// relative to the attribute_metrics_summaries MV cutoff. Defaults to
 	// time.Now via NewService; access through now() for nil-safety.
 	nowFunc func() time.Time
+	// claudeBudget bounds how long the legacy /rpc/hooks.claude endpoint waits
+	// for a verdict before it answers from the org's fail-open posture.
+	claudeBudget time.Duration
+	// claudeDrains tracks legacy Claude handlers and posture reads that can
+	// outlive the response, so tests can await them deterministically.
+	claudeDrains sync.WaitGroup
 }
 
 // now returns the current time via the injected clock, falling back to
@@ -312,6 +318,8 @@ func NewService(
 		orgHostCache:       newOrgDefaultHostCache(),
 		jwtSecret:          jwtSecret,
 		nowFunc:            time.Now,
+		claudeBudget:       legacyClaudeHookDecisionBudget,
+		claudeDrains:       sync.WaitGroup{},
 	}
 }
 

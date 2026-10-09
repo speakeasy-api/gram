@@ -1127,6 +1127,7 @@ func SlogHookServerNameOverrideID(v string) slog.Attr {
 }
 
 func HookDecision(v string) attribute.KeyValue { return HookDecisionKey.String(v) }
+func SlogHookDecision(v string) slog.Attr      { return slog.String(string(HookDecisionKey), v) }
 
 func HookRiskScanned(v bool) attribute.KeyValue { return HookRiskScannedKey.Bool(v) }
 
