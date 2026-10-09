@@ -824,8 +824,8 @@ describe("Explore", () => {
     ).toBeTruthy();
     expect(
       screen.getByRole("combobox", { name: "Aggregation" }).textContent,
-    ).toBe("count");
-    expect(screen.getByText("of all rows")).toBeTruthy();
+    ).toBe("Count of");
+    expect(screen.getByText("all rows")).toBeTruthy();
     // The summary field is the opening breakdown.
     expect(screen.getByText("user")).toBeTruthy();
   });
@@ -999,9 +999,11 @@ describe("Explore", () => {
       expect(urlSpec()?.chartType).toBe("stacked_bar");
       // The first dataset opens grouped by its default dimension, so the
       // stack has something to stack by until that is cleared.
-      expect(screen.queryByText("Pick a field to stack by")).toBeNull();
-      fireEvent.click(screen.getByRole("button", { name: /^Clear all/ }));
-      expect(screen.getByText("Pick a field to stack by")).toBeTruthy();
+      expect(screen.queryByText("pick a field to stack by")).toBeNull();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Stop grouping by user" }),
+      );
+      expect(screen.getByText("pick a field to stack by")).toBeTruthy();
     });
 
     it("carries every edit, replacing the entry while nothing has run", () => {

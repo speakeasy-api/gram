@@ -11,7 +11,7 @@ import type { AnalyticsDataset } from "@gram/client/models/components/analyticsd
 import type { Widget } from "@gram/client/models/components/widget.js";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
 import { useWidgets } from "@gram/client/react-query/widgets.js";
-import { useEffect, useMemo, useState, type JSX } from "react";
+import { useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import {
   findDataset,
@@ -20,8 +20,8 @@ import {
   type ExploreSpec,
 } from "./exploreModel";
 import { encodeSpec, TAB_PARAM } from "./exploreUrl";
-import { ExploreResults } from "./ExploreResults";
-import { QueryBuilder } from "./QueryBuilder";
+import { ExploreResults, ResultsFrame } from "./ExploreResults";
+import { QueryBuilder, ResultsToolbar } from "./QueryBuilder";
 import { RequireExplore } from "./RequireExplore";
 import { useQueryUrl } from "./useQueryUrl";
 import { WidgetBar } from "./WidgetBar";
@@ -312,6 +312,16 @@ function ExploreTab({
   onChange: (spec: ExploreSpec) => void;
   onRun: () => void;
 }): JSX.Element {
+  // How and over when the question is answered sit on the results panel's
+  // header, whichever panel is showing.
+  const toolbar = (
+    <ResultsToolbar
+      spec={spec}
+      onChange={onChange}
+      onRun={onRun}
+      changed={ran !== null && !unchanged}
+    />
+  );
   return (
     <>
       {problem?.unreadable ? (
@@ -329,8 +339,6 @@ function ExploreTab({
         datasets={datasets}
         spec={spec}
         onChange={onChange}
-        onRun={onRun}
-        changed={ran !== null && !unchanged}
         actions={
           <WidgetBar
             spec={spec}
@@ -349,9 +357,10 @@ function ExploreTab({
           dataset={findDataset(datasets, ran.dataset)}
           spec={ran}
           result={result}
+          toolbar={toolbar}
         />
       ) : (
-        <ResultsPrompt />
+        <ResultsPrompt toolbar={toolbar} />
       )}
     </>
   );
@@ -426,16 +435,15 @@ function useTab(): {
 }
 
 // The results panel before the first run: the same frame, waiting.
-function ResultsPrompt(): JSX.Element {
+function ResultsPrompt({ toolbar }: { toolbar: ReactNode }): JSX.Element {
   return (
-    <section className="border-border bg-card flex flex-col gap-4 border p-5">
-      <span className="text-eyebrow">Results</span>
+    <ResultsFrame toolbar={toolbar}>
       <InlineEmptyState
         icon="telescope"
         heading="Nothing has run yet"
         description="Compose a query above and press Run query."
       />
-    </section>
+    </ResultsFrame>
   );
 }
 
