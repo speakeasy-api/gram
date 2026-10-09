@@ -24,7 +24,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { DangerSettingsSection } from "@/components/detail/settings-section";
@@ -42,6 +42,7 @@ import {
   type SourceBackedDeleteTarget,
 } from "./sourceDelete";
 import { invalidateWrapperDeleteAuthViews } from "./sourceInvalidation";
+import { useReportBusy } from "./useReportBusy";
 
 function ServerControlRow({
   title,
@@ -582,10 +583,7 @@ function DeleteMcpServerDialogContent({
     },
   });
 
-  useEffect(
-    () => onBusyChange(remove.isPending),
-    [remove.isPending, onBusyChange],
-  );
+  useReportBusy(remove.isPending, onBusyChange);
 
   const handleConfirm = () => {
     remove.mutate({ request: { id: mcpServer.id } });
