@@ -11,11 +11,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -30,8 +32,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -40,21 +44,64 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
-// recordingUpstream is one member's live upstream plus what reached it.
-type recordingUpstream struct {
-	url      string
-	auth     *atomic.Value
-	requests *atomic.Int64
+// metadataProbeWait bounds how long a test waits for the proxy's detached
+// protected resource probe to reach a recorder. The probe's own discovery
+// budget is ten seconds, so a probe still missing after this never started.
+const metadataProbeWait = 15 * time.Second
+
+// recordedRequest is one request a recordingUpstream received.
+type recordedRequest struct {
+	// httpMethod is the request's HTTP method.
+	httpMethod string
+
+	// path is the request's URL path.
+	path string
+
+	// rpcMethod is the JSON-RPC method of a POST body, empty otherwise.
+	rpcMethod string
+
+	// authorization is the Authorization header as it arrived, empty when absent.
+	authorization string
 }
 
-func (u *recordingUpstream) capturedAuth() string {
-	got, _ := u.auth.Load().(string)
-	return got
+// recordingUpstream is one member's live upstream plus every request that
+// reached it, in arrival order. Credential assertions read the tools/call
+// requests specifically: the same upstream also receives the session
+// lifecycle and the proxy's unauthenticated protected resource probe.
+type recordingUpstream struct {
+	url string
+
+	// holdMetadataProbe makes the recorder hold protected resource metadata
+	// requests until a tools/call response has completed, forcing the probe
+	// to arrive after the credentialed call.
+	holdMetadataProbe bool
+
+	// toolCallServed closes once the first tools/call response has completed.
+	toolCallServed     chan struct{}
+	toolCallServedOnce sync.Once
+
+	// metadataProbeServed closes once the first protected resource metadata
+	// request has been proxied.
+	metadataProbeServed     chan struct{}
+	metadataProbeServedOnce sync.Once
+
+	mu       sync.Mutex
+	requests []recordedRequest
+}
+
+// recordingUpstreamOption configures a recordingUpstream before it serves.
+type recordingUpstreamOption func(*recordingUpstream)
+
+// withMetadataProbeHeldUntilToolCall holds the proxy's protected resource
+// probe until a tools/call has completed, the interleaving in which an
+// unauthenticated probe is the last request the upstream sees.
+func withMetadataProbeHeldUntilToolCall() recordingUpstreamOption {
+	return func(u *recordingUpstream) { u.holdMetadataProbe = true }
 }
 
 // newRecordingUpstream stands up a real MCP SDK server behind a reverse
-// proxy that records the Authorization header and request count.
-func newRecordingUpstream(t *testing.T, toolName string) *recordingUpstream {
+// proxy that records every request it forwards.
+func newRecordingUpstream(t *testing.T, toolName string, opts ...recordingUpstreamOption) *recordingUpstream {
 	t.Helper()
 
 	mock := newMockExternalMCPServer(t, externalmcp_types.TransportTypeStreamableHTTP, []testmcp.Tool{{
@@ -71,17 +118,131 @@ func newRecordingUpstream(t *testing.T, toolName string) *recordingUpstream {
 	require.NoError(t, err)
 	proxy := httputil.NewSingleHostReverseProxy(target)
 
-	captured := &atomic.Value{}
-	captured.Store("")
-	requests := &atomic.Int64{}
+	u := &recordingUpstream{
+		url:                     "",
+		holdMetadataProbe:       false,
+		toolCallServed:          make(chan struct{}),
+		toolCallServedOnce:      sync.Once{},
+		metadataProbeServed:     make(chan struct{}),
+		metadataProbeServedOnce: sync.Once{},
+		mu:                      sync.Mutex{},
+		requests:                nil,
+	}
+	for _, opt := range opts {
+		opt(u)
+	}
+
 	recorder := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests.Add(1)
-		captured.Store(r.Header.Get("Authorization"))
+		isMetadataProbe := r.Method == http.MethodGet && r.URL.Path == wellknown.OAuthProtectedResourcePath
+		if isMetadataProbe && u.holdMetadataProbe {
+			select {
+			case <-u.toolCallServed:
+			case <-r.Context().Done():
+				return
+			}
+		}
+
+		rpcMethod, err := u.record(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		proxy.ServeHTTP(w, r)
+
+		switch {
+		case rpcMethod == mcpversions.MethodToolsCall:
+			u.toolCallServedOnce.Do(func() { close(u.toolCallServed) })
+		case isMetadataProbe:
+			u.metadataProbeServedOnce.Do(func() { close(u.metadataProbeServed) })
+		}
 	}))
 	t.Cleanup(recorder.Close)
+	// Registered after recorder.Close so it runs first: Close waits for a
+	// held probe's handler to return.
+	t.Cleanup(func() { u.toolCallServedOnce.Do(func() { close(u.toolCallServed) }) })
 
-	return &recordingUpstream{url: recorder.URL, auth: captured, requests: requests}
+	u.url = recorder.URL
+	return u
+}
+
+// record appends r to the journal and returns its JSON-RPC method, leaving
+// the body readable for the proxy.
+func (u *recordingUpstream) record(r *http.Request) (string, error) {
+	var rpcMethod string
+	if r.Method == http.MethodPost {
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			return "", fmt.Errorf("read upstream request body: %w", err)
+		}
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+
+		var rpc struct {
+			Method string `json:"method"`
+		}
+		if json.Unmarshal(raw, &rpc) == nil {
+			rpcMethod = rpc.Method
+		}
+	}
+
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.requests = append(u.requests, recordedRequest{
+		httpMethod:    r.Method,
+		path:          r.URL.Path,
+		rpcMethod:     rpcMethod,
+		authorization: r.Header.Get("Authorization"),
+	})
+	return rpcMethod, nil
+}
+
+func (u *recordingUpstream) journal() []recordedRequest {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return slices.Clone(u.requests)
+}
+
+func (u *recordingUpstream) requestCount() int {
+	return len(u.journal())
+}
+
+// requireToolCallAuth asserts the upstream received at least one tools/call
+// and that every tools/call carried exactly want; an empty want asserts an
+// anonymous call.
+func (u *recordingUpstream) requireToolCallAuth(t *testing.T, want string, msgAndArgs ...any) {
+	t.Helper()
+
+	var got []string
+	for _, req := range u.journal() {
+		if req.rpcMethod == mcpversions.MethodToolsCall {
+			got = append(got, req.authorization)
+		}
+	}
+	require.NotEmpty(t, got, "the upstream must have received a tools/call")
+	for _, auth := range got {
+		require.Equal(t, want, auth, msgAndArgs...)
+	}
+}
+
+// requireNeverCarried asserts no request of any kind reached the upstream
+// with the given Authorization value.
+func (u *recordingUpstream) requireNeverCarried(t *testing.T, authorization string, msgAndArgs ...any) {
+	t.Helper()
+
+	for _, req := range u.journal() {
+		require.NotEqual(t, authorization, req.authorization, msgAndArgs...)
+	}
+}
+
+// awaitMetadataProbe waits for the proxy's detached protected resource probe
+// to have been served by the upstream.
+func (u *recordingUpstream) awaitMetadataProbe(t *testing.T) {
+	t.Helper()
+
+	select {
+	case <-u.metadataProbeServed:
+	case <-time.After(metadataProbeWait):
+		require.FailNow(t, "the proxy never probed the upstream's protected resource metadata")
+	}
 }
 
 // seedMetaMemberWithUpstream is seedMetaMember pointed at a live upstream,
@@ -247,15 +408,17 @@ func TestServePublic_MetaEndpoint_ExecuteTool_ForwardsEachMembersOwnBearer(t *te
 	text, isError := metaToolResultText(t, rpc)
 	require.False(t, isError, "member A execute_tool must succeed: %s", text)
 	require.Contains(t, text, "pong from ping")
-	require.Equal(t, "Bearer token-member-a", upstreamA.capturedAuth(),
+	upstreamA.requireToolCallAuth(t, "Bearer token-member-a",
 		"member A's upstream must receive exactly member A's bearer")
-	require.Zero(t, upstreamB.requests.Load(), "member B's upstream must not be contacted by member A's call")
+	require.Zero(t, upstreamB.requestCount(), "member B's upstream must not be contacted by member A's call")
 
 	rpc = executeMetaTool(t, ti, metaSlug, bearer, "member-b--ping")
 	_, isError = metaToolResultText(t, rpc)
 	require.False(t, isError, "member B execute_tool must succeed")
-	require.Equal(t, "Bearer token-member-b", upstreamB.capturedAuth(),
+	upstreamB.requireToolCallAuth(t, "Bearer token-member-b",
 		"member B's upstream must receive exactly member B's bearer and never A's")
+	upstreamA.requireNeverCarried(t, "Bearer token-member-b", "member A's upstream must never see member B's bearer")
+	upstreamB.requireNeverCarried(t, "Bearer token-member-a", "member B's upstream must never see member A's bearer")
 
 	// The proxied members' tool_call rows carry the gateway id.
 	requireTelemetryRowCount(t, `meta_mcp_server_id = ? AND event_source = 'tool_call' AND tool_name = 'ping'`, 2, meta.ID.String())
@@ -356,7 +519,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_AmbiguousCredentialMakesNoCall(t *
 	text, isError := metaToolResultText(t, rpc)
 	require.True(t, isError, "an ambiguous credential map must fail the member call")
 	require.Contains(t, text, "recorded for the same upstream", "the message must name the duplication, not just report misconfiguration")
-	require.Zero(t, upstream.requests.Load(), "no call may be made when the credential is ambiguous")
+	require.Zero(t, upstream.requestCount(), "no call may be made when the credential is ambiguous")
 }
 
 // A member with no matching credential is called anonymously — no bearer at
@@ -393,9 +556,9 @@ func TestServePublic_MetaEndpoint_ExecuteTool_NoCredentialCallsAnonymously(t *te
 	rpc := executeMetaTool(t, ti, metaSlug, bearer, "member-a--ping")
 	text, isError := metaToolResultText(t, rpc)
 	require.False(t, isError, "an uncredentialed member must still be callable anonymously: %s", text)
-	require.Positive(t, upstreamA.requests.Load(), "member A's upstream must have been called")
-	require.Empty(t, upstreamA.capturedAuth(),
+	upstreamA.requireToolCallAuth(t, "",
 		"no bearer may be forwarded to a member with no matching credential — least of all a sibling's")
+	upstreamA.requireNeverCarried(t, "Bearer token-member-b", "member A's upstream must never see member B's bearer")
 }
 
 // A subject who connected only one of the gateway's two providers still gets
@@ -437,15 +600,59 @@ func TestServePublic_MetaEndpoint_PartialProviderConnectionsServe(t *testing.T) 
 	rpc := executeMetaTool(t, ti, metaSlug, bearer, "member-b--ping")
 	text, isError := metaToolResultText(t, rpc)
 	require.False(t, isError, "the covered member must serve on a partially connected session: %s", text)
-	require.Equal(t, "Bearer token-member-b", upstreamB.capturedAuth(),
+	upstreamB.requireToolCallAuth(t, "Bearer token-member-b",
 		"the covered member must receive its own bearer")
 
 	rpc = executeMetaTool(t, ti, metaSlug, bearer, "member-a--ping")
 	text, isError = metaToolResultText(t, rpc)
 	require.False(t, isError, "the uncovered member must degrade to an anonymous call, not fail the session: %s", text)
-	require.Positive(t, upstreamA.requests.Load(), "member A's upstream must have been called")
-	require.Empty(t, upstreamA.capturedAuth(),
+	upstreamA.requireToolCallAuth(t, "",
 		"no bearer may reach the member whose provider was never connected")
+	upstreamA.requireNeverCarried(t, "Bearer token-member-b", "member A's upstream must never see member B's bearer")
+}
+
+// The proxy probes a member's protected resource metadata off the request
+// path, without a bearer. A probe landing after the credentialed tools/call
+// must not change what the call is asserted to have carried.
+func TestServePublic_MetaEndpoint_ExecuteTool_MetadataProbeAfterToolCall(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	sharedIssuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-probe-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, sharedIssuerID)
+
+	upstream := newRecordingUpstream(t, "ping", withMetadataProbeHeldUntilToolCall())
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Member", "member-probe", 0, upstream.url)
+
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-probe", "", []uuid.UUID{sharedIssuerID})
+	subject := createTestUser(t, ctx, ti, "meta-probe-user-"+uuid.NewString())
+	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientID, subject, "token-member", upstream.url)
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
+
+	rpc := executeMetaTool(t, ti, metaSlug, bearer, "member-probe--ping")
+	text, isError := metaToolResultText(t, rpc)
+	require.False(t, isError, "execute_tool must succeed: %s", text)
+	upstream.awaitMetadataProbe(t)
+
+	journal := upstream.journal()
+	toolCallIdx := slices.IndexFunc(journal, func(req recordedRequest) bool {
+		return req.rpcMethod == mcpversions.MethodToolsCall
+	})
+	probeIdx := slices.IndexFunc(journal, func(req recordedRequest) bool {
+		return req.httpMethod == http.MethodGet && req.path == wellknown.OAuthProtectedResourcePath
+	})
+	require.NotEqual(t, -1, toolCallIdx, "the upstream must have received a tools/call")
+	require.Greater(t, probeIdx, toolCallIdx, "the metadata probe must arrive after the tools/call")
+	require.Empty(t, journal[probeIdx].authorization, "the metadata probe carries no bearer")
+	upstream.requireToolCallAuth(t, "Bearer token-member",
+		"a later unauthenticated probe must not change what the tools/call carried")
 }
 
 // An upstream 401 means two different things to the caller: the gateway

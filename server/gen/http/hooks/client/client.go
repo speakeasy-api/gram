@@ -44,6 +44,10 @@ type Client struct {
 	// endpoint.
 	MetricsDoer goahttp.Doer
 
+	// GetStatus Doer is the HTTP client used to make requests to the getStatus
+	// endpoint.
+	GetStatusDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -72,6 +76,7 @@ func NewClient(
 		SkillFeedbackDoer:      doer,
 		LogsDoer:               doer,
 		MetricsDoer:            doer,
+		GetStatusDoer:          doer,
 		RestoreResponseBody:    restoreBody,
 		scheme:                 scheme,
 		host:                   host,
@@ -267,6 +272,30 @@ func (c *Client) Metrics() goa.Endpoint {
 		resp, err := c.MetricsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("hooks", "metrics", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetStatus returns an endpoint that makes HTTP requests to the hooks service
+// getStatus server.
+func (c *Client) GetStatus() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetStatusRequest(c.encoder)
+		decodeResponse = DecodeGetStatusResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetStatusRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetStatusDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("hooks", "getStatus", err)
 		}
 		return decodeResponse(resp)
 	}

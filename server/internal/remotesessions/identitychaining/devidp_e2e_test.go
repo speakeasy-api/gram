@@ -34,7 +34,7 @@ import (
 )
 
 const (
-	// devIDPClientID is shared by Gram's trusted client at the dev-idp and its
+	// devIDPClientID is shared by Speakeasy's trusted client at the dev-idp and its
 	// client at the resource authorization server: the dev-idp names the
 	// requesting app as the ID-JAG's client_id, which the resource
 	// authorization server then requires the redeeming client to present.
@@ -44,7 +44,7 @@ const (
 	devIDPResource     = "https://mcp.docs.example/"
 )
 
-// devIDPFixture is a Gram tenant whose trusted identity provider and resource
+// devIDPFixture is a Speakeasy tenant whose trusted identity provider and resource
 // authorization server are both one real dev-idp instance.
 type devIDPFixture struct {
 	observed    *recordingObserver
@@ -77,11 +77,11 @@ func (r *recordingObserver) all() []Observation {
 
 // devIDPOptions varies the dev-idp tenant a fixture builds.
 type devIDPOptions struct {
-	// unassigned withholds the dev-idp assignment that lets Gram's app act for
+	// unassigned withholds the dev-idp assignment that lets Speakeasy's app act for
 	// the human at the resource.
 	unassigned bool
 
-	// remoteIssuer, when set, is the issuer Gram records for the downstream
+	// remoteIssuer, when set, is the issuer Speakeasy records for the downstream
 	// authorization server instead of the dev-idp resource server's own, as
 	// with Linear, whose MCP authorization server and Okta resource app differ.
 	remoteIssuer string
@@ -122,7 +122,7 @@ func newDevIDPFixture(t *testing.T, opts devIDPOptions) devIDPFixture {
 	require.NoError(t, fixtures.InsertUserFixture(ctx, testrepo.InsertUserFixtureParams{ID: human, Email: human + "@example.test", DisplayName: "Chaining user"}))
 	require.NoError(t, fixtures.CreateOrganizationUserRelationshipFixture(ctx, testrepo.CreateOrganizationUserRelationshipFixtureParams{OrganizationID: org, UserID: pgtype.Text{String: human, Valid: true}}))
 
-	// Gram's trusted registration at the dev-idp, as an administrator records it.
+	// Speakeasy's trusted registration at the dev-idp, as an administrator records it.
 	idpIssuer, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
 		OrganizationID: pgtype.Text{String: org, Valid: true}, Slug: "dev-idp", Issuer: idp.OAuth21URL,
 		AuthorizationEndpoint: pgtype.Text{String: idp.OAuth21URL + "/authorize", Valid: true},

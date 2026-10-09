@@ -376,6 +376,6 @@ DO UPDATE SET name = EXCLUDED.name, updated_at = clock_timestamp()
 // which is precisely why it cannot live in the tenant seed.
 const localMCPRegistrySQL = `
 INSERT INTO mcp_registries (name, url)
-VALUES ('Gram Recommended', 'https://api.pulsemcp.com')
+VALUES ('Speakeasy Recommended', 'https://api.pulsemcp.com')
 ON CONFLICT (url) WHERE deleted IS FALSE DO NOTHING
 `

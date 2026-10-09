@@ -24,6 +24,19 @@ type Service interface {
 	// names a project, with the agent each subject resolves to. Requires
 	// workload:read.
 	List(context.Context, *ListPayload) (res *WorkloadIdentityPolicy, err error)
+	// List the platforms the catalog offers to trust without looking anything up,
+	// each with the guided setup that connects it. The same for every
+	// organization. Requires workload:read.
+	ListPlatforms(context.Context, *ListPlatformsPayload) (res *WorkloadPlatformCatalog, err error)
+	// Get the forms for trusting a platform the catalog does not list and allowing
+	// its workloads: registering and editing a trusted platform, and allowing and
+	// editing access. The same for every organization. Requires workload:read.
+	GetCustomFlows(context.Context, *GetCustomFlowsPayload) (res *WorkloadCustomFlows, err error)
+	// List the token endpoints an external platform can be pointed at: one per
+	// user session issuer in shared mode, at the organization level and in each
+	// project, with the issuer it serves. Issuers this deployment does not serve a
+	// shared authorization server for are left out. Requires workload:read.
+	ListTokenEndpoints(context.Context, *ListTokenEndpointsPayload) (res *types.WorkloadTokenEndpoints, err error)
 	// Trust an external issuer to vouch for workloads. Requires workload:write.
 	// Returns the whole policy, so a caller replaces its view rather than merging
 	// into it.
@@ -74,7 +87,7 @@ const ServiceName = "workloadIdentities"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"list", "registerIssuer", "updateIssuer", "withdrawIssuer", "admitSubject", "updateSubject", "withdrawSubject"}
+var MethodNames = [10]string{"list", "listPlatforms", "getCustomFlows", "listTokenEndpoints", "registerIssuer", "updateIssuer", "withdrawIssuer", "admitSubject", "updateSubject", "withdrawSubject"}
 
 // AdmitSubjectPayload is the payload type of the workloadIdentities service
 // admitSubject method.
@@ -108,9 +121,33 @@ type AdmitSubjectPayload struct {
 	ProjectScoped bool
 }
 
+// GetCustomFlowsPayload is the payload type of the workloadIdentities service
+// getCustomFlows method.
+type GetCustomFlowsPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // ListPayload is the payload type of the workloadIdentities service list
 // method.
 type ListPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListPlatformsPayload is the payload type of the workloadIdentities service
+// listPlatforms method.
+type ListPlatformsPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// ListTokenEndpointsPayload is the payload type of the workloadIdentities
+// service listTokenEndpoints method.
+type ListTokenEndpointsPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -210,6 +247,73 @@ type WithdrawSubjectPayload struct {
 	ProjectSlugInput *string
 }
 
+// WorkloadCustomFlows is the result type of the workloadIdentities service
+// getCustomFlows method.
+type WorkloadCustomFlows struct {
+	// Trusts a new platform; submits registerIssuer.
+	RegisterPlatform *WorkloadForm
+	// Edits a trusted platform; submits updateIssuer.
+	EditPlatform *WorkloadForm
+	// Allows a subject under a trusted platform; submits admitSubject.
+	AllowAccess *WorkloadForm
+	// Edits allowed access; submits updateSubject.
+	EditAccess *WorkloadForm
+}
+
+// A custom flow's form, held to the management API form it submits.
+type WorkloadForm struct {
+	// Heads the form.
+	Title string
+	// Shown under the title.
+	Description string
+	// The submit button's label.
+	SubmitLabel string
+	// The submit button's label while the form submits.
+	PendingLabel string
+	// The form's steps, in order.
+	Steps []*WorkloadFormStep
+}
+
+// One piece of a custom flow's form. Which fields are set depends on type; the
+// rest are empty.
+type WorkloadFormBlock struct {
+	// The kind of content. wildcard_caution marks where the form warns that a
+	// wildcard rule admits more than one identity; the dashboard writes that
+	// warning, since it names the rule and the agent.
+	Type string
+	// A text block's Markdown. Raw HTML in it must not be rendered.
+	Markdown string
+	// A link's https target.
+	Href string
+	// A link's label, or a form control's.
+	Label string
+	// The form value an input collects. label is submitted as an admission's name.
+	Field string
+	// Shown in an empty form control.
+	Placeholder string
+	// Markdown shown under a form control while it has no validation message. Raw
+	// HTML in it must not be rendered.
+	Help string
+	// Whether an input is a text area.
+	Multiline bool
+	// Whether an input shows its value without letting it change. A read-only
+	// value is not submitted.
+	ReadOnly bool
+	// The dashboard validator an input's value must pass. The server applies the
+	// same rules when the form is submitted.
+	Format string
+}
+
+// One screen of a custom flow's form.
+type WorkloadFormStep struct {
+	// Stable within the form.
+	ID string
+	// Heads the step.
+	Title string
+	// Rendered in order.
+	Blocks []*WorkloadFormBlock
+}
+
 // WorkloadIdentityPolicy is the result type of the workloadIdentities service
 // list method.
 type WorkloadIdentityPolicy struct {
@@ -217,6 +321,115 @@ type WorkloadIdentityPolicy struct {
 	Issuers []*types.WorkloadIssuer
 	// Admitted subjects.
 	Admissions []*types.WorkloadAdmission
+}
+
+// A platform the catalog offers to trust, with what the operator supplies and
+// the guided setup that connects it.
+type WorkloadPlatform struct {
+	// Identifies the entry permanently.
+	Key string
+	// What the operator sees.
+	DisplayName string
+	// What connecting the platform does.
+	Description string
+	// The platform's logo, a path on the dashboard's origin. Empty where it has
+	// none.
+	Icon string
+	// False for a platform listed but not offered.
+	Enabled bool
+	// The issuer identifier its tokens carry.
+	Issuer *WorkloadPlatformConstant
+	// Where it publishes its signing keys.
+	JwksURI *WorkloadPlatformConstant
+	// What the operator supplies.
+	Variables []*WorkloadPlatformVariable
+	// The access rule it produces.
+	Subject *WorkloadPlatformSubject
+	// The guided setup. Empty for a platform without one, which is listed as
+	// coming soon and cannot be opened.
+	Steps []*WorkloadPlatformStep
+}
+
+// One piece of a guided setup step. Which fields are set depends on type; the
+// rest are empty.
+type WorkloadPlatformBlock struct {
+	// The kind of content.
+	Type string
+	// A text block's Markdown, or what a checklist item without a value asks the
+	// operator to do. Raw HTML in it must not be rendered.
+	Markdown string
+	// An image's path on the dashboard's origin.
+	Src string
+	// An image's alternative text.
+	Alt string
+	// Shown under an image.
+	Caption string
+	// A link's https target.
+	Href string
+	// A link's or computed value's label, or the console field or control a
+	// checklist item names.
+	Label string
+	// The variable key a field collects.
+	Variable string
+	// The value a computed block or checklist item shows.
+	Value string
+	// Shown under a computed value or checklist item.
+	Help string
+}
+
+// WorkloadPlatformCatalog is the result type of the workloadIdentities service
+// listPlatforms method.
+type WorkloadPlatformCatalog struct {
+	// The catalog entries.
+	Platforms []*WorkloadPlatform
+}
+
+// A value a catalog platform supplies, the same for every customer.
+type WorkloadPlatformConstant struct {
+	// The value, with {key} placeholders for platform-tier variables.
+	Value string
+	// Whether the operator sees the value.
+	Visibility string
+}
+
+// One screen of a guided setup.
+type WorkloadPlatformStep struct {
+	// Stable within the platform; used in the dashboard URL.
+	ID string
+	// Heads the step.
+	Title string
+	// collect steps gather values, the create step writes the rows, connect steps
+	// describe the platform's side.
+	Phase string
+	// Rendered in order.
+	Blocks []*WorkloadPlatformBlock
+}
+
+// The access rule a catalog platform produces.
+type WorkloadPlatformSubject struct {
+	// The subject with {key} placeholders for rule-tier variables; the stem, for a
+	// wildcard rule.
+	Template string
+	// Whether the rule is the filled template followed by *.
+	Wildcard bool
+}
+
+// Something the operator supplies when connecting a catalog platform.
+type WorkloadPlatformVariable struct {
+	// Names the variable in templates, as {key}.
+	Key string
+	// Whether it is supplied once per trusted platform or once per access rule.
+	Tier string
+	// The field's label.
+	Label string
+	// Where the operator finds the value. Empty where there is no help.
+	Help string
+	// Shown in the empty field. Empty where there is none.
+	Placeholder string
+	// A regular expression the whole value must match.
+	Pattern string
+	// Shown when the value does not match. Empty where there is none.
+	PatternMessage string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

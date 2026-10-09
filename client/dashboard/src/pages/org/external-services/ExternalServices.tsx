@@ -62,7 +62,7 @@ function ExternalServicesOverview(): JSX.Element {
   const [createOpen, setCreateOpen] = useState(false);
   // GCP is the only provider with a detail page today, so scope the list to it
   // rather than linking rows to a route that cannot render them. AWS is deferred
-  // until Gram has an AWS identity to assume a customer role from.
+  // until Speakeasy has an AWS identity to assume a customer role from.
   const { data, isLoading, isError, refetch } = useListExternalCredentials({
     provider: "gcp_iam",
   });

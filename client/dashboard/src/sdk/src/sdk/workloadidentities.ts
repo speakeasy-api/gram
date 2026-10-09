@@ -3,22 +3,40 @@
  */
 
 import { workloadIdentitiesAdmitSubject } from "../funcs/workloadIdentitiesAdmitSubject.js";
+import { workloadIdentitiesGetCustomFlows } from "../funcs/workloadIdentitiesGetCustomFlows.js";
 import { workloadIdentitiesList } from "../funcs/workloadIdentitiesList.js";
+import { workloadIdentitiesListPlatforms } from "../funcs/workloadIdentitiesListPlatforms.js";
+import { workloadIdentitiesListTokenEndpoints } from "../funcs/workloadIdentitiesListTokenEndpoints.js";
 import { workloadIdentitiesRegisterIssuer } from "../funcs/workloadIdentitiesRegisterIssuer.js";
 import { workloadIdentitiesUpdateIssuer } from "../funcs/workloadIdentitiesUpdateIssuer.js";
 import { workloadIdentitiesUpdateSubject } from "../funcs/workloadIdentitiesUpdateSubject.js";
 import { workloadIdentitiesWithdrawIssuer } from "../funcs/workloadIdentitiesWithdrawIssuer.js";
 import { workloadIdentitiesWithdrawSubject } from "../funcs/workloadIdentitiesWithdrawSubject.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { WorkloadCustomFlows } from "../models/components/workloadcustomflows.js";
 import { WorkloadIdentityPolicy } from "../models/components/workloadidentitypolicy.js";
+import { WorkloadPlatformCatalog } from "../models/components/workloadplatformcatalog.js";
+import { WorkloadTokenEndpoints } from "../models/components/workloadtokenendpoints.js";
 import {
   AdmitWorkloadSubjectRequest,
   AdmitWorkloadSubjectSecurity,
 } from "../models/operations/admitworkloadsubject.js";
 import {
+  GetWorkloadCustomFlowsRequest,
+  GetWorkloadCustomFlowsSecurity,
+} from "../models/operations/getworkloadcustomflows.js";
+import {
   ListWorkloadIdentitiesRequest,
   ListWorkloadIdentitiesSecurity,
 } from "../models/operations/listworkloadidentities.js";
+import {
+  ListWorkloadPlatformsRequest,
+  ListWorkloadPlatformsSecurity,
+} from "../models/operations/listworkloadplatforms.js";
+import {
+  ListWorkloadTokenEndpointsRequest,
+  ListWorkloadTokenEndpointsSecurity,
+} from "../models/operations/listworkloadtokenendpoints.js";
 import {
   RegisterWorkloadIssuerRequest,
   RegisterWorkloadIssuerSecurity,
@@ -62,6 +80,25 @@ export class WorkloadIdentities extends ClientSDK {
   }
 
   /**
+   * getCustomFlows workloadIdentities
+   *
+   * @remarks
+   * Get the forms for trusting a platform the catalog does not list and allowing its workloads: registering and editing a trusted platform, and allowing and editing access. The same for every organization. Requires workload:read.
+   */
+  async getCustomFlows(
+    request?: GetWorkloadCustomFlowsRequest | undefined,
+    security?: GetWorkloadCustomFlowsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<WorkloadCustomFlows> {
+    return unwrapAsync(workloadIdentitiesGetCustomFlows(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * list workloadIdentities
    *
    * @remarks
@@ -73,6 +110,44 @@ export class WorkloadIdentities extends ClientSDK {
     options?: RequestOptions,
   ): Promise<WorkloadIdentityPolicy> {
     return unwrapAsync(workloadIdentitiesList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listPlatforms workloadIdentities
+   *
+   * @remarks
+   * List the platforms the catalog offers to trust without looking anything up, each with the guided setup that connects it. The same for every organization. Requires workload:read.
+   */
+  async listPlatforms(
+    request?: ListWorkloadPlatformsRequest | undefined,
+    security?: ListWorkloadPlatformsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<WorkloadPlatformCatalog> {
+    return unwrapAsync(workloadIdentitiesListPlatforms(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listTokenEndpoints workloadIdentities
+   *
+   * @remarks
+   * List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. Requires workload:read.
+   */
+  async listTokenEndpoints(
+    request?: ListWorkloadTokenEndpointsRequest | undefined,
+    security?: ListWorkloadTokenEndpointsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<WorkloadTokenEndpoints> {
+    return unwrapAsync(workloadIdentitiesListTokenEndpoints(
       this,
       request,
       security,

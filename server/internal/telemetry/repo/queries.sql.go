@@ -230,7 +230,7 @@ const searchUsersKnownEmailsJoin = "(SELECT user_id, any(user_email) AS known_em
 // undercounted anyone whose usage spans both.
 //
 // The guard is deliberately WIDER than the MV's is_usage_row: it adds any row
-// carrying a gen_ai.usage.* field. Gram-hosted completions are not an agent
+// carrying a gen_ai.usage.* field. Speakeasy-hosted completions are not an agent
 // surface and the MV does not bill them, but these summaries have always
 // counted them, so narrowing to the MV's row set would silently drop them.
 // Every branch below mirrors the MV where the MV has an opinion.
@@ -2477,7 +2477,7 @@ func (q *Queries) GetMetricsSummary(ctx context.Context, arg GetMetricsSummaryPa
 
 // GetTimeSeriesMetricsParams contains the parameters for getting time series metrics.
 type GetTimeSeriesMetricsParams struct {
-	// ExcludedHookSources drops rows whose hook_source names a Gram-hosted
+	// ExcludedHookSources drops rows whose hook_source names a Speakeasy-hosted
 	// completion surface (billing.GramHostedHookSourceNames) - platform-side
 	// inference such as the risk-analysis judges, logged under the session
 	// owner's identity but not their usage. Never include the empty string
@@ -2571,7 +2571,7 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
 	}
 	// The exclusion is a default, not a veto: a caller naming a specific
-	// hook_source gets that source, even a Gram-hosted one — otherwise the
+	// hook_source gets that source, even a Speakeasy-hosted one — otherwise the
 	// two filters would conjoin into a silently empty result.
 	if len(arg.ExcludedHookSources) > 0 && arg.HookSource == "" {
 		sb = sb.Where(squirrel.NotEq{"hook_source": arg.ExcludedHookSources})
@@ -2617,7 +2617,7 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 
 // GetToolMetricsBreakdownParams contains the parameters for getting tool metrics breakdown.
 type GetToolMetricsBreakdownParams struct {
-	// ExcludedHookSources drops rows whose hook_source names a Gram-hosted
+	// ExcludedHookSources drops rows whose hook_source names a Speakeasy-hosted
 	// completion surface (billing.GramHostedHookSourceNames) - platform-side
 	// inference such as the risk-analysis judges, logged under the session
 	// owner's identity but not their usage. Never include the empty string
@@ -2690,7 +2690,7 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
 	}
 	// The exclusion is a default, not a veto: a caller naming a specific
-	// hook_source gets that source, even a Gram-hosted one — otherwise the
+	// hook_source gets that source, even a Speakeasy-hosted one — otherwise the
 	// two filters would conjoin into a silently empty result.
 	if len(arg.ExcludedHookSources) > 0 && arg.HookSource == "" {
 		sb = sb.Where(squirrel.NotEq{"hook_source": arg.ExcludedHookSources})
@@ -2740,7 +2740,7 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 
 // GetOverviewSummaryParams contains the parameters for getting overview summary metrics.
 type GetOverviewSummaryParams struct {
-	// ExcludedHookSources drops rows whose hook_source names a Gram-hosted
+	// ExcludedHookSources drops rows whose hook_source names a Speakeasy-hosted
 	// completion surface (billing.GramHostedHookSourceNames) - platform-side
 	// inference such as the risk-analysis judges, logged under the session
 	// owner's identity but not their usage. Never include the empty string
@@ -2898,7 +2898,7 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
 	}
 	// The exclusion is a default, not a veto: a caller naming a specific
-	// hook_source gets that source, even a Gram-hosted one — otherwise the
+	// hook_source gets that source, even a Speakeasy-hosted one — otherwise the
 	// two filters would conjoin into a silently empty result.
 	if len(arg.ExcludedHookSources) > 0 && arg.HookSource == "" {
 		sb = sb.Where(squirrel.NotEq{"hook_source": arg.ExcludedHookSources})
@@ -3320,7 +3320,7 @@ func (q *Queries) GetClaudeToolUsageByChatIDs(ctx context.Context, arg GetClaude
 // given event source. Hook events (Claude Code, Cursor, Codex) carry a
 // tool_name and a hook event name but no gram_urn; we only count the
 // completion-side event so each call counts once, not once per pre/post pair.
-// Other event sources count Gram MCP tool invocations via gram_urn + HTTP
+// Other event sources count Speakeasy MCP tool invocations via gram_urn + HTTP
 // status.
 type toolCallExpressions struct {
 	isCall    string
@@ -3339,7 +3339,7 @@ func toolCallExprsFor(eventSource string) toolCallExpressions {
 		}
 	}
 	// Default: both arms, same shape as the employee data-flow graph — hook
-	// tool events (which carry account attribution) plus Gram MCP tool spans
+	// tool events (which carry account attribution) plus Speakeasy MCP tool spans
 	// (which do not). Counting only the spans zeroed the employee page's tool
 	// calls whenever an account scope was applied, while the data-flow graph
 	// beside it still showed the hook-attributed calls.
@@ -3390,14 +3390,14 @@ func chAny(conditions ...string) string {
 
 // SearchUsersParams contains the parameters for searching users with aggregated metrics.
 type SearchUsersParams struct {
-	// ExcludedHookSources drops rows whose hook_source names a Gram-hosted
+	// ExcludedHookSources drops rows whose hook_source names a Speakeasy-hosted
 	// completion surface (billing.GramHostedHookSourceNames), so platform-side
 	// inference logged under an employee's identity never counts as their
 	// usage. Aligns the raw-logs path with the agent-metrics summaries path,
 	// which never ingests those rows. Never include the empty string here.
 	// Ignored when HookSource is set (an explicit source filter overrides
 	// the exclusion) and under external_user_id grouping (an external user's
-	// Gram-hosted completions ARE their usage).
+	// Speakeasy-hosted completions ARE their usage).
 	ExcludedHookSources []string
 	GramProjectID       string
 	TimeStart           int64
@@ -3521,7 +3521,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 			"toFloat64("+summaryTotalTokensExpr+") / greatest(countIf("+summaryUsageRowFilter+"), 1) AS avg_tokens_per_request",
 			summaryCostExpr+" AS total_cost",
 
-			// Tool call metrics (path depends on event source — Gram MCP tools vs AI-coding hook tools)
+			// Tool call metrics (path depends on event source — Speakeasy MCP tools vs AI-coding hook tools)
 			"countIf("+tc.isCall+") AS total_tool_calls",
 			"countIf("+tc.isSuccess+") AS tool_call_success",
 			"countIf("+tc.isFailure+") AS tool_call_failure",
@@ -3569,9 +3569,9 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 		sb = sb.Where("hook_source = ?", arg.HookSource)
 	}
 	// The exclusion is a default, not a veto: a caller naming a specific
-	// hook_source gets that source, even a Gram-hosted one — otherwise the
+	// hook_source gets that source, even a Speakeasy-hosted one — otherwise the
 	// two filters would conjoin into a silently empty result. External
-	// grouping never applies it either: an external user's Gram-hosted
+	// grouping never applies it either: an external user's Speakeasy-hosted
 	// completions ARE their usage, and their only token-bearing rows.
 	if len(arg.ExcludedHookSources) > 0 && arg.HookSource == "" && arg.GroupBy != "external_user_id" {
 		sb = sb.Where(squirrel.NotEq{"hook_source": arg.ExcludedHookSources})
@@ -3655,7 +3655,7 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 
 // GetUserMetricsSummaryParams contains the parameters for getting a user's metrics summary.
 type GetUserMetricsSummaryParams struct {
-	// ExcludedHookSources drops rows whose hook_source names a Gram-hosted
+	// ExcludedHookSources drops rows whose hook_source names a Speakeasy-hosted
 	// completion surface (billing.GramHostedHookSourceNames) - platform-side
 	// inference such as the risk-analysis judges, logged under the session
 	// owner's identity but not their usage. Never include the empty string
@@ -3712,7 +3712,7 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 		"countIf(position(toString(attributes.gen_ai.response.finish_reasons), 'stop') > 0) AS finish_reason_stop",
 		"countIf(position(toString(attributes.gen_ai.response.finish_reasons), 'tool_calls') > 0) AS finish_reason_tool_calls",
 
-		// Tool call metrics (path depends on event source — Gram MCP tools vs AI-coding hook tools)
+		// Tool call metrics (path depends on event source — Speakeasy MCP tools vs AI-coding hook tools)
 		"countIf("+tc.isCall+") AS total_tool_calls",
 		"countIf("+tc.isSuccess+") AS tool_call_success",
 		"countIf("+tc.isFailure+") AS tool_call_failure",
@@ -3752,7 +3752,7 @@ func (q *Queries) GetUserMetricsSummary(ctx context.Context, arg GetUserMetricsS
 		sb = sb.Where(squirrel.Eq{"hook_source": arg.HookSource})
 	}
 	// The exclusion is a default, not a veto: a caller naming a specific
-	// hook_source gets that source, even a Gram-hosted one — otherwise the
+	// hook_source gets that source, even a Speakeasy-hosted one — otherwise the
 	// two filters would conjoin into a silently empty result.
 	if len(arg.ExcludedHookSources) > 0 && arg.HookSource == "" {
 		sb = sb.Where(squirrel.NotEq{"hook_source": arg.ExcludedHookSources})
@@ -5060,7 +5060,7 @@ func (q *Queries) GetToolUsageUsers(ctx context.Context, arg GetToolUsageSummary
 }
 
 // GetToolUsageClients ranks the MCP clients that called this project's tools.
-// Calls Gram never saw an initialize handshake for (hook-observed traffic,
+// Calls Speakeasy never saw an initialize handshake for (hook-observed traffic,
 // pre-handshake sessions, non-MCP tool calls) collapse into a single
 // MCPClientUnattributed row rather than being dropped.
 //
@@ -6464,7 +6464,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 	userLabel := chMultiIf("g_agent_id != ''", "concat('agent:', g_agent_id)", userKey)
 
 	// The MCP client is self-reported at the initialize handshake, so it is only
-	// present on traffic Gram terminated as an MCP server. Hook-observed calls,
+	// present on traffic Speakeasy terminated as an MCP server. Hook-observed calls,
 	// pre-handshake sessions and non-MCP tool calls fold into one bucket rather
 	// than borrowing hook_source, which names a harness that never spoke MCP.
 	// Grouping folds case so "Claude Code" and "claude code" are one client; the
@@ -8114,7 +8114,7 @@ func (q *Queries) GetUnifiedActiveServerCount(ctx context.Context, arg GetTopSer
 // ListRecentHookEventsForOnboardingParams contains the parameters for the
 // onboarding wizard's hook verification query.
 type ListRecentHookEventsForOnboardingParams struct {
-	// ProjectIDs is the set of Gram project IDs (uuid strings) to query across.
+	// ProjectIDs is the set of Speakeasy project IDs (uuid strings) to query across.
 	// Typically every project under the active organization.
 	ProjectIDs []string
 	// SinceUnixNano returns only events strictly greater than this value.
@@ -8127,7 +8127,7 @@ type ListRecentHookEventsForOnboardingParams struct {
 // ListRecentHookEventsForOnboarding returns the most recent hook events for the
 // given project IDs, newest first. It powers the onboarding wizard's
 // confirm-traffic step, which polls this endpoint to verify that Claude Code /
-// Cursor / Codex hooks are flowing into Gram after the user finishes
+// Cursor / Codex hooks are flowing into Speakeasy after the user finishes
 // instrumentation.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
@@ -8235,14 +8235,14 @@ type GetTokensUnderManagementParams struct {
 	ProjectIDs    []string
 	StartUnixNano int64
 	EndUnixNano   int64
-	// ExcludedHookSources drops rows consumed through Gram-hosted completion
+	// ExcludedHookSources drops rows consumed through Speakeasy-hosted completion
 	// surfaces (billing.GramHostedHookSourceStrings). Tokens under management
 	// are the agent traffic the platform OBSERVES coming from the customer's
-	// users (Claude Code, Cursor, Codex sessions) — never the inference Gram
+	// users (Claude Code, Cursor, Codex sessions) — never the inference Speakeasy
 	// itself spends reacting to that traffic (risk-policy judges, playground
 	// and elements chats, title generation). The aggregate's provenance rules
 	// only admit observed traffic going forward; the exclusion also drops
-	// Gram completion rows retained from before that cutover. Empty means no
+	// Speakeasy completion rows retained from before that cutover. Empty means no
 	// exclusion.
 	ExcludedHookSources []string
 }

@@ -391,6 +391,26 @@ describe("stored constraints the editor cannot show", () => {
     });
   });
 
+  it("edits a grant naming one assistant and writes it back unchanged", () => {
+    const own = storedGrant("grant_own", "assistant:write", {
+      resourceKind: "assistant",
+      resourceId: "assistant_one",
+    });
+    const view = agentPolicyViewFromGrants([own]);
+    expect(view.preserved).toEqual([]);
+    expect(view.draft).toEqual({
+      "assistant:write": [
+        { resourceKind: "assistant", resourceId: "assistant_one" },
+      ],
+    });
+    expect(
+      diffAgentPolicyGrants(
+        view.editable,
+        agentPolicyGrantsFromDraft(view.draft),
+      ),
+    ).toEqual({ create: [], remove: [] });
+  });
+
   it("locks a grant whose resource kind does not match its scope", () => {
     const mismatched = storedGrant("grant_bad", "skill:read", {
       resourceKind: "mcp",

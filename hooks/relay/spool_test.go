@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/speakeasy-api/agenthooks"
@@ -55,24 +56,26 @@ func closedPortURL(t *testing.T) string {
 // entry lands in the spool, carrying the deployment identity, a non-empty
 // idempotency key, and an envelope that round-trips with the event intact.
 func TestSpoolCapturesUnreachableSend(t *testing.T) {
-	setSpoolStateHome(t)
-	cfg := authedConfig(t, closedPortURL(t))
-	cfg.OrgID = "org-1"
-	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	synctest.Test(t, func(t *testing.T) {
+		setSpoolStateHome(t)
+		cfg := authedConfig(t, refusedPipeURL(t))
+		cfg.OrgID = "org-1"
+		invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
-	names := spoolFiles(t)
-	require.Len(t, names, 1, "an unreachable send must spool exactly one entry")
+		names := spoolFiles(t)
+		require.Len(t, names, 1, "an unreachable send must spool exactly one entry")
 
-	entry := readSpoolEntry(t, names[0])
-	require.Equal(t, spoolEntryVersion, entry.V)
-	require.NotEmpty(t, entry.IdempotencyKey, "replay needs the original send's idempotency key")
-	require.Equal(t, cfg.ServerURL, entry.ServerURL)
-	require.Equal(t, "org-1", entry.OrgID)
-	require.Equal(t, "default", entry.ProjectSlug)
-	require.WithinDuration(t, time.Now(), entry.SpooledAt, time.Minute)
-	require.Equal(t, components.TypeToolRequested, entry.Envelope.Event.Type)
-	require.NotNil(t, entry.Envelope.Session)
-	require.Equal(t, "sess-claude-1", *entry.Envelope.Session.ID)
+		entry := readSpoolEntry(t, names[0])
+		require.Equal(t, spoolEntryVersion, entry.V)
+		require.NotEmpty(t, entry.IdempotencyKey, "replay needs the original send's idempotency key")
+		require.Equal(t, cfg.ServerURL, entry.ServerURL)
+		require.Equal(t, "org-1", entry.OrgID)
+		require.Equal(t, "default", entry.ProjectSlug)
+		require.WithinDuration(t, time.Now(), entry.SpooledAt, time.Minute)
+		require.Equal(t, components.TypeToolRequested, entry.Envelope.Event.Type)
+		require.NotNil(t, entry.Envelope.Session)
+		require.Equal(t, "sess-claude-1", *entry.Envelope.Session.ID)
+	})
 }
 
 // assertNoSpoolForStatus pins the other half of the predicate: a server that
@@ -104,7 +107,7 @@ func TestSpoolSkipsWhenServerRejects4xx(t *testing.T) {
 // spool is a delivery buffer, not a credential bypass.
 func TestSpoolSkipsWithoutCredentials(t *testing.T) {
 	setSpoolStateHome(t)
-	t.Setenv("GRAM_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
+	t.Setenv("SPEAKEASY_AI_HOOKS_AUTH_FILE", filepath.Join(t.TempDir(), "hooks-auth.env"))
 	cfg := Config{ServerURL: closedPortURL(t), ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
 	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
@@ -237,16 +240,18 @@ func TestTrimSpoolLeavesForeignFilesAlone(t *testing.T) {
 // sends append distinct files whose sorted order is delivery order, the
 // invariant the drain's oldest-first replay depends on.
 func TestSpoolEntriesAccumulateAcrossEvents(t *testing.T) {
-	setSpoolStateHome(t)
-	cfg := authedConfig(t, closedPortURL(t))
-	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
-	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+	synctest.Test(t, func(t *testing.T) {
+		setSpoolStateHome(t)
+		cfg := authedConfig(t, refusedPipeURL(t))
+		invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
+		invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
-	names := spoolFiles(t)
-	require.Len(t, names, 2)
-	first, second := readSpoolEntry(t, names[0]), readSpoolEntry(t, names[1])
-	require.NotEqual(t, first.IdempotencyKey, second.IdempotencyKey, "each event replays under its own key")
-	require.False(t, second.SpooledAt.Before(first.SpooledAt), fmt.Sprintf("sorted filenames must be chronological: %v then %v", first.SpooledAt, second.SpooledAt))
+		names := spoolFiles(t)
+		require.Len(t, names, 2)
+		first, second := readSpoolEntry(t, names[0]), readSpoolEntry(t, names[1])
+		require.NotEqual(t, first.IdempotencyKey, second.IdempotencyKey, "each event replays under its own key")
+		require.False(t, second.SpooledAt.Before(first.SpooledAt), fmt.Sprintf("sorted filenames must be chronological: %v then %v", first.SpooledAt, second.SpooledAt))
+	})
 }
 
 // TestSpoolOversizeEntryShedsRawNotBacklog pins the per-entry cap: a giant

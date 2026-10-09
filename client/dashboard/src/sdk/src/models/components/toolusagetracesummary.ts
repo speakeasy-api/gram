@@ -108,7 +108,7 @@ export type ToolUsageTraceSummary = {
    */
   eventSource: string;
   /**
-   * Gram URN associated with the trace
+   * Speakeasy URN associated with the trace
    */
   gramUrn: string;
   /**

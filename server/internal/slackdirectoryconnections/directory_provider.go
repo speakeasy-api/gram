@@ -15,7 +15,7 @@ import (
 	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 )
 
-// DirectoryMember is an observation, never evidence of ownership of a Gram person.
+// DirectoryMember is an observation, never evidence of ownership of a Speakeasy person.
 type DirectoryMember struct {
 	UserID      string
 	DisplayName string

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-//MISE description="Start a local Gram Functions runner for development and testing."
+//MISE description="Start a local Speakeasy Functions runner for development and testing."
 
 //USAGE flag "--code <file>" help="Path to file containing the function code to run."
 //USAGE flag "--name <name>" default="gf-runner" required=#true help="A name for the runner container instance."
@@ -72,7 +72,7 @@ async function run() {
   await $`zip -j ${zipPath} ${code}`;
 
   console.log(
-    `Starting Gram Functions runner "${name}" using image "${image}"...`,
+    `Starting Speakeasy Functions runner "${name}" using image "${image}"...`,
   );
 
   const env = [

@@ -292,7 +292,7 @@ func seedRoleAssignment(t *testing.T, ctx context.Context, conn *pgxpool.Pool, o
 
 // seedDisconnectedUser creates a user in the users table with a workos_id but
 // does NOT insert into organization_user_relationships, simulating a WorkOS
-// user who hasn't been connected to the Gram org.
+// user who hasn't been connected to the Speakeasy org.
 func seedDisconnectedUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, userID string, email string, displayName string, workosUserID string) {
 	t.Helper()
 

@@ -169,7 +169,7 @@ func TestServePublic_MetaEndpoint_Initialize(t *testing.T) {
 	// makeInitializeBody requests 2025-03-26; a supported requested revision
 	// is echoed, not upgraded — this is what lets mainstream clients connect.
 	require.Equal(t, mcpversions.Version20250326, result.ProtocolVersion)
-	require.Equal(t, "Gram Gateway", result.ServerInfo.Name)
+	require.Equal(t, "Speakeasy Gateway", result.ServerInfo.Name)
 	// Instructions are deliberately generic: the member inventory belongs to
 	// list_servers, so neither the meta server's name nor its members appear.
 	require.Contains(t, result.Instructions, "list_servers")

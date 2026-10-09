@@ -421,3 +421,8 @@ func GetStripeSubscriptionCandidateAdminPath() string {
 func SetStripeSubscriptionAdminPath() string {
 	return "/admin/organization.setStripeSubscription"
 }
+
+// ListCustomerUsageAdminPath returns the URL path to the admin service listCustomerUsage HTTP endpoint.
+func ListCustomerUsageAdminPath() string {
+	return "/admin/organizations.customerUsage"
+}

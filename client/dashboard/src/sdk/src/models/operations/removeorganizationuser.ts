@@ -11,7 +11,7 @@ export type RemoveOrganizationUserSecurity = {
 
 export type RemoveOrganizationUserRequest = {
   /**
-   * Gram user ID to remove.
+   * Speakeasy user ID to remove.
    */
   userId: string;
   /**

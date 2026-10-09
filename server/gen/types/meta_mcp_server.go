@@ -26,7 +26,7 @@ type MetaMcpServer struct {
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode NetworkAccessMode
 	// Operator-authored server instructions returned in the gateway's MCP
-	// initialize response. Null when the gateway serves Gram's built-in
+	// initialize response. Null when the gateway serves Speakeasy's built-in
 	// instructions.
 	Instructions *string
 	// When the meta MCP server was created

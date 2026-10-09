@@ -124,7 +124,7 @@ func TestConsentPagePreview(t *testing.T) {
 		{"first-party-incomplete", func() consentTemplateData {
 			d := withCards(base, connectedCard, disconnectedCard)
 			d.FirstParty = true
-			d.ClientName = "Gram"
+			d.ClientName = "Speakeasy"
 			d.RedirectURI = ""
 			d.SessionDurationOptions = nil
 			return d
@@ -132,7 +132,7 @@ func TestConsentPagePreview(t *testing.T) {
 		{"first-party-auto-close", func() consentTemplateData {
 			d := withCards(base, connectedCard)
 			d.FirstParty = true
-			d.ClientName = "Gram"
+			d.ClientName = "Speakeasy"
 			d.RedirectURI = ""
 			d.SessionDurationOptions = nil
 			d.AutoClose = true

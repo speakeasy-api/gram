@@ -287,7 +287,7 @@ func TestProxyManager_RecordsChallengeScopes(t *testing.T) {
 
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	manager := remotemcp.NewProxyManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	manager := remotemcp.NewProxyManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	written := make(chan struct{}, 8)
 	manager.SetAfterChallengeScopes(func() { written <- struct{}{} })
 	probed := make(chan struct{}, 8)
@@ -346,7 +346,7 @@ func TestProxyManager_ChallengeScopesLatestWins(t *testing.T) {
 
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	manager := remotemcp.NewProxyManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	manager := remotemcp.NewProxyManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	written := make(chan struct{}, 8)
 	manager.SetAfterChallengeScopes(func() { written <- struct{}{} })
 
@@ -394,7 +394,7 @@ func TestProxyManager_ChallengeScopesWithoutRowIsNoop(t *testing.T) {
 	ctx, ti := newTestServiceForProbe(t)
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	manager := remotemcp.NewProxyManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	manager := remotemcp.NewProxyManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	written := make(chan struct{}, 1)
 	manager.SetAfterChallengeScopes(func() { written <- struct{}{} })
 	probed := make(chan struct{}, 1)
@@ -470,7 +470,7 @@ func newProbingManager(t *testing.T, ti *testInstance) (*remotemcp.ProxyManager,
 	t.Helper()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	manager := remotemcp.NewProxyManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	manager := remotemcp.NewProxyManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	probed := make(chan struct{}, 8)
 	manager.SetAfterProtectedResourceProbe(func() { probed <- struct{}{} })
 	return manager, probed

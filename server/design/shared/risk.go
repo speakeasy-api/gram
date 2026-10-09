@@ -67,7 +67,7 @@ func RiskPolicyAudienceTypeEnum() {
 }
 
 // RiskPolicyShadowMCPDispositionEnum constrains the default disposition of a
-// shadow MCP blocking policy. `block_all` blocks every non-Gram-hosted server
+// shadow MCP blocking policy. `block_all` blocks every non-Speakeasy-hosted server
 // unless explicitly allowed (the original behavior); `allow_all` permits every
 // server unless it appears on the policy's blocked-URL list. The disposition is
 // immutable after create — switching posture requires deleting and recreating
@@ -191,7 +191,7 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	})
 	Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs the policy applies to. Contains user:all when audience_type is everyone.")
 	Attribute("mcp_scope", RiskMCPScope, "Optional MCP server and tool restriction. Null applies the policy to every MCP server. When set, the action must be flag or block.")
-	Attribute("shadow_mcp_disposition", String, "Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.", func() {
+	Attribute("shadow_mcp_disposition", String, "Default disposition for shadow MCP blocking policies: block_all blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.", func() {
 		RiskPolicyShadowMCPDispositionEnum()
 	})
 	Attribute("auto_name", Boolean, "Whether the policy name is auto-generated. When true, the name is regenerated on each update.")

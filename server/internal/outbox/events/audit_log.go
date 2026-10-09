@@ -119,7 +119,7 @@ type AuditLogCreatedPayloadV1 struct {
 
 	// ActingSurface is how the change was made — a dashboard session, an API
 	// key, Platform MCP, a project assistant — drawn from a closed server-side
-	// set. Every record Gram writes carries one, and 'unknown' means no surface
+	// set. Every record Speakeasy writes carries one, and 'unknown' means no surface
 	// was identifiable rather than that the field was omitted.
 	//
 	// It is optional in the schema even so. This payload is published under 62

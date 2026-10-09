@@ -26,7 +26,7 @@ export type SearchToolCallsFilter = {
    */
   functionId?: string | undefined;
   /**
-   * Gram URN filter (single URN, use gram_urns for multiple)
+   * Speakeasy URN filter (single URN, use gram_urns for multiple)
    */
   gramUrn?: string | undefined;
   /**

@@ -406,7 +406,7 @@ describe("InferenceCapsSection", () => {
     }
   });
 
-  // The endpoint answers with the materialized Gram-managed keys — two, one, or
+  // The endpoint answers with the materialized Speakeasy-managed keys — two, one, or
   // none — so the section renders what it was given rather than a shape it
   // assumed.
   describe("one control per key the API returned", () => {
@@ -453,7 +453,7 @@ describe("InferenceCapsSection", () => {
       expect(saveButton(absent)).toBeNull();
     });
 
-    // An empty list says only that no Gram-managed key has been materialized
+    // An empty list says only that no Speakeasy-managed key has been materialized
     // for this organization yet. It says nothing about what the organization
     // runs, and the copy must not read as if it did.
     it("states plainly that there is nothing to configure yet", () => {
@@ -476,7 +476,7 @@ describe("InferenceCapsSection", () => {
     });
 
     // An empty list is not evidence of a customer-supplied key, and not
-    // evidence that Gram runs no inference for this organization.
+    // evidence that Speakeasy runs no inference for this organization.
     it("draws no conclusion about what the organization runs", () => {
       loadedCaps([]);
 

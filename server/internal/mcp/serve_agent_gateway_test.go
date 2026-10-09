@@ -193,7 +193,7 @@ func TestServeAgentGateway_ListsOnlyGrantedServers(t *testing.T) {
 	require.Contains(t, w.Body.String(), fx.granted)
 	require.NotContains(t, w.Body.String(), fx.denied)
 	// A public server is anonymously reachable by anyone, so withholding it
-	// here would hide something the agent can already reach without Gram.
+	// here would hide something the agent can already reach without Speakeasy.
 	// Listing it is deliberate, not an admission leak.
 	require.Contains(t, w.Body.String(), fx.open)
 }
