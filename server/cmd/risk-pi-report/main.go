@@ -38,7 +38,7 @@ import (
 const (
 	// defaultCorpusDir is this checkout's fixtures, relative to the repository
 	// root.
-	defaultCorpusDir = "server/internal/scanners/promptinjection/testdata/prompt_injection"
+	defaultCorpusDir = fixturesPath + "/prompt_injection"
 
 	// judgeConcurrency bounds concurrent cases without turning the benchmark
 	// into a provider load test.

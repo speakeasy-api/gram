@@ -99,6 +99,29 @@ func TestMeasuredCodeMarksUncommittedCode(t *testing.T) {
 	}
 }
 
+func TestMeasuredCodeHashesAnUntrackedSymlinkByItsTarget(t *testing.T) {
+	t.Parallel()
+
+	dir := benchRepo(t)
+	clean, err := measuredCode(t.Context(), dir)
+	require.NoError(t, err)
+
+	outside := t.TempDir()
+	secret := filepath.Join(outside, "secret")
+	require.NoError(t, os.WriteFile(secret, []byte("v1"), 0o600))
+	require.NoError(t, os.Symlink(outside, filepath.Join(dir, "server", "dir-link")))
+	require.NoError(t, os.Symlink(secret, filepath.Join(dir, "server", "file-link")))
+	linked, err := measuredCode(t.Context(), dir)
+	require.NoError(t, err, "a symlink to a directory must not stop the run")
+	require.True(t, linked.commit.Uncommitted)
+	require.NotEqual(t, clean.key, linked.key)
+
+	require.NoError(t, os.WriteFile(secret, []byte("v2"), 0o600))
+	retargeted, err := measuredCode(t.Context(), dir)
+	require.NoError(t, err)
+	require.Equal(t, linked.key, retargeted.key, "a symlink counts by its target path, not the file it points to")
+}
+
 func TestRunCommitName(t *testing.T) {
 	t.Parallel()
 

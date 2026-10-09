@@ -125,9 +125,9 @@ func uncommittedCode(ctx context.Context, root string) ([]byte, error) {
 		if name == "" {
 			continue
 		}
-		content, err := os.ReadFile(filepath.Join(root, name)) // #nosec G304 -- git lists the file inside the checkout.
+		content, err := untrackedContent(filepath.Join(root, name))
 		if err != nil {
-			return nil, fmt.Errorf("read untracked file: %w", err)
+			return nil, err
 		}
 		sum := sha256.Sum256(content)
 		changes.WriteString(name)
@@ -138,6 +138,31 @@ func uncommittedCode(ctx context.Context, root string) ([]byte, error) {
 		return nil, nil
 	}
 	return changes.Bytes(), nil
+}
+
+// untrackedContent is what an untracked path contributes to the code key, as
+// git would store it: a symlink's target rather than the file it points to, a
+// nested repository's name only, and a file's bytes.
+func untrackedContent(path string) ([]byte, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, fmt.Errorf("stat untracked file: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		target, err := os.Readlink(path)
+		if err != nil {
+			return nil, fmt.Errorf("read untracked symlink: %w", err)
+		}
+		return []byte(target), nil
+	}
+	if info.IsDir() {
+		return nil, nil
+	}
+	content, err := os.ReadFile(path) // #nosec G304 -- git lists the file inside the checkout.
+	if err != nil {
+		return nil, fmt.Errorf("read untracked file: %w", err)
+	}
+	return content, nil
 }
 
 func shortHash(b []byte, n int) string {

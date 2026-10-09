@@ -95,8 +95,9 @@ type runManifest struct {
 	// Detector identifies the detector behind the run's verdicts.
 	Detector runDetector `json:"detector"`
 
-	// Commits lists, oldest first, the commits whose code produced the run.
-	// Commits that differ only in fixtures share a run.
+	// Commits lists the commits whose code produced the run, in the order a
+	// run first measured each. Commits that differ only in fixtures share a
+	// run.
 	Commits []runCommit `json:"commits"`
 
 	// Updated is when a run last wrote the manifest.
@@ -355,6 +356,10 @@ func evaluateIntoRun(ctx context.Context, opts options, key string, corpus, todo
 		rec := recordFromOutcome(todo[i], o)
 		mu.Lock()
 		defer mu.Unlock()
+		// After a failed write, no later record can be kept either.
+		if addErr != nil {
+			return
+		}
 		// After a stop, calls cut short by the cancellation leave the case for
 		// the next run rather than recording a failure it did not have.
 		if stopped && rec.Status == statusNoVerdict {
@@ -365,7 +370,9 @@ func evaluateIntoRun(ctx context.Context, opts options, key string, corpus, todo
 			cancel()
 		}
 		if err := appendRecord(file, rec); err != nil {
-			addErr = errors.Join(addErr, err)
+			// Stop paying for cases whose records cannot be kept.
+			addErr = err
+			cancel()
 			return
 		}
 		records[rec.Key] = rec
