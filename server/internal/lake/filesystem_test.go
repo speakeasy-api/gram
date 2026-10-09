@@ -50,6 +50,28 @@ func TestFilesystemStorePublishesCompleteObjectWithoutOverwrite(t *testing.T) {
 	require.Len(t, entries, 1)
 }
 
+func TestFilesystemStoreCreatesNestedRootThroughSymlink(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	physical := filepath.Join(base, "physical")
+	require.NoError(t, os.Mkdir(physical, 0o750))
+	alias := filepath.Join(base, "alias")
+	require.NoError(t, os.Symlink(physical, alias))
+	store, err := lake.NewFilesystemStore(t.Context(), testenv.NewLogger(t), filepath.Join(alias, "new-parent", "lake-root"))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+
+	err = store.Write(t.Context(), storage.Object{Bucket: "lake", Name: "example.parquet"}, func(w io.Writer) error {
+		_, err := io.WriteString(w, "complete object")
+		require.NoError(t, err)
+		return nil
+	})
+	require.NoError(t, err)
+	contents, err := os.ReadFile(filepath.Join(physical, "new-parent", "lake-root", "lake", "example.parquet"))
+	require.NoError(t, err)
+	require.Equal(t, "complete object", string(contents))
+}
+
 func TestFilesystemStoreAbortsIncompleteObjects(t *testing.T) {
 	t.Parallel()
 	for _, mode := range []string{"error", "panic", "cancellation"} {

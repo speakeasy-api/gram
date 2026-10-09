@@ -89,6 +89,7 @@ type Reading struct {
 	xxx_hidden_AssistantId         *string                `protobuf:"bytes,17,opt,name=assistant_id,json=assistantId"`
 	xxx_hidden_Replayed            bool                   `protobuf:"varint,18,opt,name=replayed"`
 	xxx_hidden_Result              isReading_Result       `protobuf_oneof:"result"`
+	xxx_hidden_Provider            *string                `protobuf:"bytes,22,opt,name=provider"`
 	XXX_raceDetectHookData         protoimpl.RaceDetectHookData
 	XXX_presence                   [1]uint32
 	unknownFields                  protoimpl.UnknownFields
@@ -312,24 +313,34 @@ func (x *Reading) GetScore() *Reading_Score {
 	return nil
 }
 
+func (x *Reading) GetProvider() string {
+	if x != nil {
+		if x.xxx_hidden_Provider != nil {
+			return *x.xxx_hidden_Provider
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *Reading) SetId(v string) {
 	x.xxx_hidden_Id = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 19)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 20)
 }
 
 func (x *Reading) SetEvaluationAttemptId(v string) {
 	x.xxx_hidden_EvaluationAttemptId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 19)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 20)
 }
 
 func (x *Reading) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 19)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 20)
 }
 
 func (x *Reading) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 19)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 20)
 }
 
 func (x *Reading) SetEvent(v *Reading_Event) {
@@ -338,27 +349,27 @@ func (x *Reading) SetEvent(v *Reading_Event) {
 
 func (x *Reading) SetSensorId(v string) {
 	x.xxx_hidden_SensorId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 19)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 20)
 }
 
 func (x *Reading) SetSensorSlug(v string) {
 	x.xxx_hidden_SensorSlug = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 19)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 20)
 }
 
 func (x *Reading) SetEvaluatedAt(v string) {
 	x.xxx_hidden_EvaluatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 19)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 20)
 }
 
 func (x *Reading) SetDefinitionHash(v string) {
 	x.xxx_hidden_DefinitionHash = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 19)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 20)
 }
 
 func (x *Reading) SetConfiguredModel(v string) {
 	x.xxx_hidden_ConfiguredModel = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 19)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 20)
 }
 
 func (x *Reading) SetModels(v []string) {
@@ -367,7 +378,7 @@ func (x *Reading) SetModels(v []string) {
 
 func (x *Reading) SetCompilerVersion(v string) {
 	x.xxx_hidden_CompilerVersion = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 19)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 20)
 }
 
 func (x *Reading) SetActor(v *Reading_Actor) {
@@ -376,12 +387,12 @@ func (x *Reading) SetActor(v *Reading_Actor) {
 
 func (x *Reading) SetBillingUserId(v string) {
 	x.xxx_hidden_BillingUserId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 13, 19)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 13, 20)
 }
 
 func (x *Reading) SetSource(v string) {
 	x.xxx_hidden_Source = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 19)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 20)
 }
 
 func (x *Reading) SetAccount(v *Reading_Account) {
@@ -390,12 +401,12 @@ func (x *Reading) SetAccount(v *Reading_Account) {
 
 func (x *Reading) SetAssistantId(v string) {
 	x.xxx_hidden_AssistantId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 19)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 20)
 }
 
 func (x *Reading) SetReplayed(v bool) {
 	x.xxx_hidden_Replayed = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 19)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 20)
 }
 
 func (x *Reading) SetMultiLabel(v *Reading_MultiLabel) {
@@ -420,6 +431,11 @@ func (x *Reading) SetScore(v *Reading_Score) {
 		return
 	}
 	x.xxx_hidden_Result = &reading_Score_{v}
+}
+
+func (x *Reading) SetProvider(v string) {
+	x.xxx_hidden_Provider = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 20)
 }
 
 func (x *Reading) HasId() bool {
@@ -572,6 +588,13 @@ func (x *Reading) HasScore() bool {
 	return ok
 }
 
+func (x *Reading) HasProvider() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 19)
+}
+
 func (x *Reading) ClearId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_Id = nil
@@ -676,6 +699,11 @@ func (x *Reading) ClearScore() {
 	}
 }
 
+func (x *Reading) ClearProvider() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 19)
+	x.xxx_hidden_Provider = nil
+}
+
 const Reading_Result_not_set_case case_Reading_Result = 0
 const Reading_MultiLabel_case case_Reading_Result = 19
 const Reading_Choice_case case_Reading_Result = 20
@@ -751,6 +779,9 @@ type Reading_builder struct {
 	Choice     *Reading_Choice
 	Score      *Reading_Score
 	// -- end of xxx_hidden_Result
+	// Inference transport used for classification, e.g. "openrouter". Independent
+	// of configured_model and models, which identify the model rather than routing.
+	Provider *string
 }
 
 func (b0 Reading_builder) Build() *Reading {
@@ -758,63 +789,63 @@ func (b0 Reading_builder) Build() *Reading {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.Id != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 19)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 20)
 		x.xxx_hidden_Id = b.Id
 	}
 	if b.EvaluationAttemptId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 19)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 20)
 		x.xxx_hidden_EvaluationAttemptId = b.EvaluationAttemptId
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 19)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 20)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 19)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 20)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	x.xxx_hidden_Event = b.Event
 	if b.SensorId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 19)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 20)
 		x.xxx_hidden_SensorId = b.SensorId
 	}
 	if b.SensorSlug != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 19)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 20)
 		x.xxx_hidden_SensorSlug = b.SensorSlug
 	}
 	if b.EvaluatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 19)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 20)
 		x.xxx_hidden_EvaluatedAt = b.EvaluatedAt
 	}
 	if b.DefinitionHash != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 19)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 20)
 		x.xxx_hidden_DefinitionHash = b.DefinitionHash
 	}
 	if b.ConfiguredModel != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 19)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 20)
 		x.xxx_hidden_ConfiguredModel = b.ConfiguredModel
 	}
 	x.xxx_hidden_Models = b.Models
 	if b.CompilerVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 19)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 20)
 		x.xxx_hidden_CompilerVersion = b.CompilerVersion
 	}
 	x.xxx_hidden_Actor = b.Actor
 	if b.BillingUserId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 13, 19)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 13, 20)
 		x.xxx_hidden_BillingUserId = b.BillingUserId
 	}
 	if b.Source != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 19)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 20)
 		x.xxx_hidden_Source = b.Source
 	}
 	x.xxx_hidden_Account = b.Account
 	if b.AssistantId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 19)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 20)
 		x.xxx_hidden_AssistantId = b.AssistantId
 	}
 	if b.Replayed != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 19)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 20)
 		x.xxx_hidden_Replayed = *b.Replayed
 	}
 	if b.MultiLabel != nil {
@@ -825,6 +856,10 @@ func (b0 Reading_builder) Build() *Reading {
 	}
 	if b.Score != nil {
 		x.xxx_hidden_Result = &reading_Score_{b.Score}
+	}
+	if b.Provider != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 20)
+		x.xxx_hidden_Provider = b.Provider
 	}
 	return m0
 }
@@ -2215,7 +2250,7 @@ var File_gram_sigint_v1_reading_proto protoreflect.FileDescriptor
 
 const file_gram_sigint_v1_reading_proto_rawDesc = "" +
 	"\n" +
-	"\x1cgram/sigint/v1/reading.proto\x12\x0egram.sigint.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xc1\x11\n" +
+	"\x1cgram/sigint/v1/reading.proto\x12\x0egram.sigint.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xdd\x11\n" +
 	"\aReading\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x122\n" +
 	"\x15evaluation_attempt_id\x18\x02 \x01(\tR\x13evaluationAttemptId\x12'\n" +
@@ -2241,7 +2276,8 @@ const file_gram_sigint_v1_reading_proto_rawDesc = "" +
 	"\vmulti_label\x18\x13 \x01(\v2\".gram.sigint.v1.Reading.MultiLabelH\x00R\n" +
 	"multiLabel\x128\n" +
 	"\x06choice\x18\x14 \x01(\v2\x1e.gram.sigint.v1.Reading.ChoiceH\x00R\x06choice\x125\n" +
-	"\x05score\x18\x15 \x01(\v2\x1d.gram.sigint.v1.Reading.ScoreH\x00R\x05score\x1ai\n" +
+	"\x05score\x18\x15 \x01(\v2\x1d.gram.sigint.v1.Reading.ScoreH\x00R\x05score\x12\x1a\n" +
+	"\bprovider\x18\x16 \x01(\tR\bprovider\x1ai\n" +
 	"\x05Actor\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12(\n" +
 	"\x10external_user_id\x18\x02 \x01(\tR\x0eexternalUserId\x12\x1d\n" +

@@ -96,6 +96,7 @@ func reading(event Event, sensor compiledSensor, answers map[classifier.Question
 	r.SetEvaluatedAt(at)
 	r.SetDefinitionHash(sensor.hash)
 	r.SetConfiguredModel(result.Metadata.Model)
+	r.SetProvider(result.Metadata.Provider)
 	r.SetModels(result.Models)
 	r.SetCompilerVersion("sigint-v1/" + result.Metadata.CompilerVersion)
 	if event.Actor != nil {

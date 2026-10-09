@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
@@ -39,12 +40,54 @@ func NewFilesystemStore(ctx context.Context, logger *slog.Logger, directory stri
 		return nil, fmt.Errorf("create lake directory: %w", err)
 	}
 
+	// Persist the root's own directory entry as well as any ancestors MkdirAll
+	// created. Object writes can only sync directories beneath the open root.
+	if err := syncRootAncestors(ctx, logger, directory); err != nil {
+		return nil, err
+	}
+
 	root, err := os.OpenRoot(directory)
 	if err != nil {
 		return nil, fmt.Errorf("open lake directory: %w", err)
 	}
 
 	return &FilesystemStore{root: root, logger: logger}, nil
+}
+
+func syncRootAncestors(ctx context.Context, logger *slog.Logger, directory string) error {
+	absolute, err := filepath.Abs(directory)
+	if err != nil {
+		return fmt.Errorf("resolve lake directory: %w", err)
+	}
+
+	// Follow the physical path so a symlinked local directory also persists the
+	// ancestors containing the actual files, rather than just the symlink's path.
+	current, err := filepath.EvalSymlinks(absolute)
+	if err != nil {
+		return fmt.Errorf("resolve physical lake directory: %w", err)
+	}
+
+	for {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("sync lake root ancestors: %w", err)
+		}
+
+		dir, err := os.Open(current)
+		if err != nil {
+			return fmt.Errorf("open lake root ancestor: %w", err)
+		}
+		defer o11y.LogDefer(ctx, logger, "close lake root ancestor", dir.Close)
+
+		if err := dir.Sync(); err != nil {
+			return fmt.Errorf("sync lake root ancestor: %w", err)
+		}
+
+		parent := filepath.Dir(current)
+		if parent == current {
+			return nil
+		}
+		current = parent
+	}
 }
 
 // Close releases the directory handle after all storage runners have stopped.

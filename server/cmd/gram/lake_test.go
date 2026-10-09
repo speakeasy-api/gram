@@ -57,3 +57,28 @@ func TestNewLakeStorageNonlocalRequiresBucketMapping(t *testing.T) {
 		})
 	}
 }
+
+func TestNewLakeStorageWhitespaceMapping(t *testing.T) {
+	t.Parallel()
+	for _, environment := range []string{"local", "test", "prod"} {
+		t.Run(environment, func(t *testing.T) {
+			t.Parallel()
+			flags := flag.NewFlagSet("lake", flag.ContinueOnError)
+			flags.String("environment", environment, "")
+			flags.String("storage-buckets", " \t\n", "")
+			flags.String("lake-directory", t.TempDir(), "")
+			c := cli.NewContext(cli.NewApp(), flags, nil)
+
+			store, buckets, shutdown, err := newLakeStorage(t.Context(), testenv.NewLogger(t), c)
+			if environment == "local" {
+				require.NoError(t, err)
+				t.Cleanup(func() { require.NoError(t, shutdown(t.Context())) })
+				require.IsType(t, &lake.FilesystemStore{}, store)
+				require.Equal(t, "lake", buckets["lake"])
+			} else {
+				require.ErrorContains(t, err, "storage bucket mapping for lake is required")
+				require.Nil(t, store)
+			}
+		})
+	}
+}

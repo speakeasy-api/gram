@@ -172,6 +172,9 @@ message Reading {
     Choice choice = 20;
     Score score = 21;
   }
+  // Inference transport used for classification, e.g. "openrouter". Independent
+  // of configured_model and models, which identify the model rather than routing.
+  string provider = 22;
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: { seconds: 345600 /* 4 days */ }

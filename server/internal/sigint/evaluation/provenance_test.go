@@ -61,3 +61,34 @@ func TestReadingIdentityPresence(t *testing.T) {
 		})
 	}
 }
+
+func TestReadingProviderProvenanceRoundTrip(t *testing.T) {
+	t.Parallel()
+	for _, provider := range []string{"openrouter", "typesafe"} {
+		t.Run(provider, func(t *testing.T) {
+			t.Parallel()
+			m := message()
+			sensor, ready := compileSensor(sensors()[0])
+			require.True(t, ready)
+			answers := map[classifier.QuestionKey]classifier.QuestionOutcome{}
+			for _, q := range sensor.questions {
+				answers[q.Key] = classifier.QuestionOutcome{Key: q.Key, Answer: &classifier.Answer{Noul: &classifier.NoulAnswer{Probability: 0.5}}}
+			}
+			result := classifier.Result{
+				Metadata: classifier.Metadata{Provider: provider, Model: "jev-latest", CompilerVersion: "1"},
+				Models:   []string{"jev-1.13.0"},
+			}
+
+			r, err := reading((&conversationInput{message: m, stored: storedMessage(m)}).Event(), sensor, answers, "attempt", "time", result)
+			require.NoError(t, err)
+			data, err := proto.Marshal(r)
+			require.NoError(t, err)
+			decoded := &sigintv1.Reading{}
+			require.NoError(t, proto.Unmarshal(data, decoded))
+			require.Equal(t, provider, decoded.GetProvider())
+			require.Equal(t, "jev-latest", decoded.GetConfiguredModel())
+			require.Equal(t, []string{"jev-1.13.0"}, decoded.GetModels())
+			require.Equal(t, "sigint-v1/1", decoded.GetCompilerVersion())
+		})
+	}
+}

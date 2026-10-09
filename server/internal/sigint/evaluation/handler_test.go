@@ -202,6 +202,7 @@ func TestHandlerJevAllModesAndStableRedelivery(t *testing.T) {
 		require.NotEqual(t, a.GetEvaluationAttemptId(), b.GetEvaluationAttemptId())
 		require.Equal(t, sigintv1.Reading_ConversationMessage_ROLE_ASSISTANT, a.GetEvent().GetConversationMessage().GetRole())
 		require.Equal(t, []string{"test-model"}, a.GetModels())
+		require.Equal(t, "openrouter", a.GetProvider())
 		require.Equal(t, m.GetMessageCreatedAt(), a.GetEvent().GetOccurredAt())
 		require.Equal(t, "message-user", a.GetActor().GetUserId())
 		require.Equal(t, "external-user", a.GetActor().GetExternalUserId())

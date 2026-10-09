@@ -1435,6 +1435,7 @@ pubsub:
             Choice choice = 20;
             Score score = 21;
           }
+          string provider = 22;
         }
       type: PROTOCOL_BUFFER
   - labels:

@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from gcp.pubsub.v1 import options_pb2 as gcp_dot_pubsub_dot_v1_dot_options__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1cgram/sigint/v1/reading.proto\x12\x0egram.sigint.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xc1\x11\n\x07Reading\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x12\x32\n\x15\x65valuation_attempt_id\x18\x02 \x01(\tR\x13\x65valuationAttemptId\x12\'\n\x0forganization_id\x18\x03 \x01(\tR\x0eorganizationId\x12\x1d\n\nproject_id\x18\x04 \x01(\tR\tprojectId\x12\x33\n\x05\x65vent\x18\x05 \x01(\x0b\x32\x1d.gram.sigint.v1.Reading.EventR\x05\x65vent\x12\x1b\n\tsensor_id\x18\x06 \x01(\tR\x08sensorId\x12\x1f\n\x0bsensor_slug\x18\x07 \x01(\tR\nsensorSlug\x12!\n\x0c\x65valuated_at\x18\x08 \x01(\tR\x0b\x65valuatedAt\x12\'\n\x0f\x64\x65\x66inition_hash\x18\t \x01(\tR\x0e\x64\x65\x66initionHash\x12)\n\x10\x63onfigured_model\x18\n \x01(\tR\x0f\x63onfiguredModel\x12\x16\n\x06models\x18\x0b \x03(\tR\x06models\x12)\n\x10\x63ompiler_version\x18\x0c \x01(\tR\x0f\x63ompilerVersion\x12\x33\n\x05\x61\x63tor\x18\r \x01(\x0b\x32\x1d.gram.sigint.v1.Reading.ActorR\x05\x61\x63tor\x12&\n\x0f\x62illing_user_id\x18\x0e \x01(\tR\rbillingUserId\x12\x16\n\x06source\x18\x0f \x01(\tR\x06source\x12\x39\n\x07\x61\x63\x63ount\x18\x10 \x01(\x0b\x32\x1f.gram.sigint.v1.Reading.AccountR\x07\x61\x63\x63ount\x12!\n\x0c\x61ssistant_id\x18\x11 \x01(\tR\x0b\x61ssistantId\x12\x1a\n\x08replayed\x18\x12 \x01(\x08R\x08replayed\x12\x45\n\x0bmulti_label\x18\x13 \x01(\x0b\x32\".gram.sigint.v1.Reading.MultiLabelH\x00R\nmultiLabel\x12\x38\n\x06\x63hoice\x18\x14 \x01(\x0b\x32\x1e.gram.sigint.v1.Reading.ChoiceH\x00R\x06\x63hoice\x12\x35\n\x05score\x18\x15 \x01(\x0b\x32\x1d.gram.sigint.v1.Reading.ScoreH\x00R\x05score\x1ai\n\x05\x41\x63tor\x12\x17\n\x07user_id\x18\x01 \x01(\tR\x06userId\x12(\n\x10\x65xternal_user_id\x18\x02 \x01(\tR\x0e\x65xternalUserId\x12\x1d\n\nuser_email\x18\x03 \x01(\tR\tuserEmail\x1aw\n\x07\x41\x63\x63ount\x12&\n\x0fuser_account_id\x18\x01 \x01(\tR\ruserAccountId\x12!\n\x0c\x61\x63\x63ount_type\x18\x02 \x01(\tR\x0b\x61\x63\x63ountType\x12!\n\x0c\x62illing_mode\x18\x03 \x01(\tR\x0b\x62illingMode\x1a\xfa\x01\n\x05\x45vent\x12\x12\n\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n\x02id\x18\x02 \x01(\tR\x02id\x12\x1f\n\x0boccurred_at\x18\x03 \x01(\tR\noccurredAt\x12`\n\x14\x63onversation_message\x18\x04 \x01(\x0b\x32+.gram.sigint.v1.Reading.ConversationMessageH\x00R\x13\x63onversationMessage\x12?\n\ttool_call\x18\x05 \x01(\x0b\x32 .gram.sigint.v1.Reading.ToolCallH\x00R\x08toolCallB\t\n\x07\x63ontext\x1a\xc5\x01\n\x13\x43onversationMessage\x12\'\n\x0f\x63onversation_id\x18\x01 \x01(\tR\x0e\x63onversationId\x12\x44\n\x04role\x18\x02 \x01(\x0e\x32\x30.gram.sigint.v1.Reading.ConversationMessage.RoleR\x04role\"?\n\x04Role\x12\x14\n\x10ROLE_UNSPECIFIED\x10\x00\x12\r\n\tROLE_USER\x10\x01\x12\x12\n\x0eROLE_ASSISTANT\x10\x02\x1am\n\x08ToolCall\x12\x1b\n\ttool_name\x18\x01 \x01(\tR\x08toolName\x12 \n\x0ctool_call_id\x18\x02 \x01(\tR\ntoolCallId\x12\"\n\rmcp_server_id\x18\x03 \x01(\tR\x0bmcpServerId\x1am\n\x0bProbability\x12\x1b\n\tsignal_id\x18\x01 \x01(\tR\x08signalId\x12 \n\x0bprobability\x18\x02 \x01(\x01R\x0bprobability\x12\x1f\n\x0bsignal_slug\x18\x03 \x01(\tR\nsignalSlug\x1aK\n\nMultiLabel\x12=\n\x07signals\x18\x01 \x03(\x0b\x32#.gram.sigint.v1.Reading.ProbabilityR\x07signals\x1a\xd1\x01\n\x06\x43hoice\x12,\n\x12selected_signal_id\x18\x01 \x01(\tR\x10selectedSignalId\x12G\n\x0c\x64istribution\x18\x02 \x03(\x0b\x32#.gram.sigint.v1.Reading.ProbabilityR\x0c\x64istribution\x12\x1e\n\nconfidence\x18\x03 \x01(\x01R\nconfidence\x12\x30\n\x14selected_signal_slug\x18\x04 \x01(\tR\x12selectedSignalSlug\x1a\x97\x01\n\x05Score\x12%\n\x0e\x65xpected_index\x18\x01 \x01(\x01R\rexpectedIndex\x12G\n\x0c\x64istribution\x18\x02 \x03(\x0b\x32#.gram.sigint.v1.Reading.ProbabilityR\x0c\x64istribution\x12\x1e\n\nconfidence\x18\x03 \x01(\x01R\nconfidence:\n\x8a\xb5\x18\x06\x12\x04\x08\x80\x8c\x15\x42\x08\n\x06resultBAZ?github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1;sigintv1b\x08\x65\x64itionsp\xe9\x07')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1cgram/sigint/v1/reading.proto\x12\x0egram.sigint.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xdd\x11\n\x07Reading\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x12\x32\n\x15\x65valuation_attempt_id\x18\x02 \x01(\tR\x13\x65valuationAttemptId\x12\'\n\x0forganization_id\x18\x03 \x01(\tR\x0eorganizationId\x12\x1d\n\nproject_id\x18\x04 \x01(\tR\tprojectId\x12\x33\n\x05\x65vent\x18\x05 \x01(\x0b\x32\x1d.gram.sigint.v1.Reading.EventR\x05\x65vent\x12\x1b\n\tsensor_id\x18\x06 \x01(\tR\x08sensorId\x12\x1f\n\x0bsensor_slug\x18\x07 \x01(\tR\nsensorSlug\x12!\n\x0c\x65valuated_at\x18\x08 \x01(\tR\x0b\x65valuatedAt\x12\'\n\x0f\x64\x65\x66inition_hash\x18\t \x01(\tR\x0e\x64\x65\x66initionHash\x12)\n\x10\x63onfigured_model\x18\n \x01(\tR\x0f\x63onfiguredModel\x12\x16\n\x06models\x18\x0b \x03(\tR\x06models\x12)\n\x10\x63ompiler_version\x18\x0c \x01(\tR\x0f\x63ompilerVersion\x12\x33\n\x05\x61\x63tor\x18\r \x01(\x0b\x32\x1d.gram.sigint.v1.Reading.ActorR\x05\x61\x63tor\x12&\n\x0f\x62illing_user_id\x18\x0e \x01(\tR\rbillingUserId\x12\x16\n\x06source\x18\x0f \x01(\tR\x06source\x12\x39\n\x07\x61\x63\x63ount\x18\x10 \x01(\x0b\x32\x1f.gram.sigint.v1.Reading.AccountR\x07\x61\x63\x63ount\x12!\n\x0c\x61ssistant_id\x18\x11 \x01(\tR\x0b\x61ssistantId\x12\x1a\n\x08replayed\x18\x12 \x01(\x08R\x08replayed\x12\x45\n\x0bmulti_label\x18\x13 \x01(\x0b\x32\".gram.sigint.v1.Reading.MultiLabelH\x00R\nmultiLabel\x12\x38\n\x06\x63hoice\x18\x14 \x01(\x0b\x32\x1e.gram.sigint.v1.Reading.ChoiceH\x00R\x06\x63hoice\x12\x35\n\x05score\x18\x15 \x01(\x0b\x32\x1d.gram.sigint.v1.Reading.ScoreH\x00R\x05score\x12\x1a\n\x08provider\x18\x16 \x01(\tR\x08provider\x1ai\n\x05\x41\x63tor\x12\x17\n\x07user_id\x18\x01 \x01(\tR\x06userId\x12(\n\x10\x65xternal_user_id\x18\x02 \x01(\tR\x0e\x65xternalUserId\x12\x1d\n\nuser_email\x18\x03 \x01(\tR\tuserEmail\x1aw\n\x07\x41\x63\x63ount\x12&\n\x0fuser_account_id\x18\x01 \x01(\tR\ruserAccountId\x12!\n\x0c\x61\x63\x63ount_type\x18\x02 \x01(\tR\x0b\x61\x63\x63ountType\x12!\n\x0c\x62illing_mode\x18\x03 \x01(\tR\x0b\x62illingMode\x1a\xfa\x01\n\x05\x45vent\x12\x12\n\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n\x02id\x18\x02 \x01(\tR\x02id\x12\x1f\n\x0boccurred_at\x18\x03 \x01(\tR\noccurredAt\x12`\n\x14\x63onversation_message\x18\x04 \x01(\x0b\x32+.gram.sigint.v1.Reading.ConversationMessageH\x00R\x13\x63onversationMessage\x12?\n\ttool_call\x18\x05 \x01(\x0b\x32 .gram.sigint.v1.Reading.ToolCallH\x00R\x08toolCallB\t\n\x07\x63ontext\x1a\xc5\x01\n\x13\x43onversationMessage\x12\'\n\x0f\x63onversation_id\x18\x01 \x01(\tR\x0e\x63onversationId\x12\x44\n\x04role\x18\x02 \x01(\x0e\x32\x30.gram.sigint.v1.Reading.ConversationMessage.RoleR\x04role\"?\n\x04Role\x12\x14\n\x10ROLE_UNSPECIFIED\x10\x00\x12\r\n\tROLE_USER\x10\x01\x12\x12\n\x0eROLE_ASSISTANT\x10\x02\x1am\n\x08ToolCall\x12\x1b\n\ttool_name\x18\x01 \x01(\tR\x08toolName\x12 \n\x0ctool_call_id\x18\x02 \x01(\tR\ntoolCallId\x12\"\n\rmcp_server_id\x18\x03 \x01(\tR\x0bmcpServerId\x1am\n\x0bProbability\x12\x1b\n\tsignal_id\x18\x01 \x01(\tR\x08signalId\x12 \n\x0bprobability\x18\x02 \x01(\x01R\x0bprobability\x12\x1f\n\x0bsignal_slug\x18\x03 \x01(\tR\nsignalSlug\x1aK\n\nMultiLabel\x12=\n\x07signals\x18\x01 \x03(\x0b\x32#.gram.sigint.v1.Reading.ProbabilityR\x07signals\x1a\xd1\x01\n\x06\x43hoice\x12,\n\x12selected_signal_id\x18\x01 \x01(\tR\x10selectedSignalId\x12G\n\x0c\x64istribution\x18\x02 \x03(\x0b\x32#.gram.sigint.v1.Reading.ProbabilityR\x0c\x64istribution\x12\x1e\n\nconfidence\x18\x03 \x01(\x01R\nconfidence\x12\x30\n\x14selected_signal_slug\x18\x04 \x01(\tR\x12selectedSignalSlug\x1a\x97\x01\n\x05Score\x12%\n\x0e\x65xpected_index\x18\x01 \x01(\x01R\rexpectedIndex\x12G\n\x0c\x64istribution\x18\x02 \x03(\x0b\x32#.gram.sigint.v1.Reading.ProbabilityR\x0c\x64istribution\x12\x1e\n\nconfidence\x18\x03 \x01(\x01R\nconfidence:\n\x8a\xb5\x18\x06\x12\x04\x08\x80\x8c\x15\x42\x08\n\x06resultBAZ?github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1;sigintv1b\x08\x65\x64itionsp\xe9\x07')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -36,25 +36,25 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_READING']._loaded_options = None
   _globals['_READING']._serialized_options = b'\212\265\030\006\022\004\010\200\214\025'
   _globals['_READING']._serialized_start=78
-  _globals['_READING']._serialized_end=2319
-  _globals['_READING_ACTOR']._serialized_start=953
-  _globals['_READING_ACTOR']._serialized_end=1058
-  _globals['_READING_ACCOUNT']._serialized_start=1060
-  _globals['_READING_ACCOUNT']._serialized_end=1179
-  _globals['_READING_EVENT']._serialized_start=1182
-  _globals['_READING_EVENT']._serialized_end=1432
-  _globals['_READING_CONVERSATIONMESSAGE']._serialized_start=1435
-  _globals['_READING_CONVERSATIONMESSAGE']._serialized_end=1632
-  _globals['_READING_CONVERSATIONMESSAGE_ROLE']._serialized_start=1569
-  _globals['_READING_CONVERSATIONMESSAGE_ROLE']._serialized_end=1632
-  _globals['_READING_TOOLCALL']._serialized_start=1634
-  _globals['_READING_TOOLCALL']._serialized_end=1743
-  _globals['_READING_PROBABILITY']._serialized_start=1745
-  _globals['_READING_PROBABILITY']._serialized_end=1854
-  _globals['_READING_MULTILABEL']._serialized_start=1856
-  _globals['_READING_MULTILABEL']._serialized_end=1931
-  _globals['_READING_CHOICE']._serialized_start=1934
-  _globals['_READING_CHOICE']._serialized_end=2143
-  _globals['_READING_SCORE']._serialized_start=2146
-  _globals['_READING_SCORE']._serialized_end=2297
+  _globals['_READING']._serialized_end=2347
+  _globals['_READING_ACTOR']._serialized_start=981
+  _globals['_READING_ACTOR']._serialized_end=1086
+  _globals['_READING_ACCOUNT']._serialized_start=1088
+  _globals['_READING_ACCOUNT']._serialized_end=1207
+  _globals['_READING_EVENT']._serialized_start=1210
+  _globals['_READING_EVENT']._serialized_end=1460
+  _globals['_READING_CONVERSATIONMESSAGE']._serialized_start=1463
+  _globals['_READING_CONVERSATIONMESSAGE']._serialized_end=1660
+  _globals['_READING_CONVERSATIONMESSAGE_ROLE']._serialized_start=1597
+  _globals['_READING_CONVERSATIONMESSAGE_ROLE']._serialized_end=1660
+  _globals['_READING_TOOLCALL']._serialized_start=1662
+  _globals['_READING_TOOLCALL']._serialized_end=1771
+  _globals['_READING_PROBABILITY']._serialized_start=1773
+  _globals['_READING_PROBABILITY']._serialized_end=1882
+  _globals['_READING_MULTILABEL']._serialized_start=1884
+  _globals['_READING_MULTILABEL']._serialized_end=1959
+  _globals['_READING_CHOICE']._serialized_start=1962
+  _globals['_READING_CHOICE']._serialized_end=2171
+  _globals['_READING_SCORE']._serialized_start=2174
+  _globals['_READING_SCORE']._serialized_end=2325
 # @@protoc_insertion_point(module_scope)
