@@ -170,6 +170,10 @@ export type OktaIdentityProviderConnection = {
    */
   provider: OktaIdentityProviderConnectionProvider;
   /**
+   * Organization remote session issuer that backs this connection. Omitted until the managed client is provisioned.
+   */
+  remoteSessionIssuerId?: string | undefined;
+  /**
    * Okta API scopes the integration needs.
    */
   requiredScopes: Array<string>;
@@ -242,6 +246,7 @@ export const OktaIdentityProviderConnection$inboundSchema: z.ZodMiniType<
     org_url: z.string(),
     organization_id: z.string(),
     provider: OktaIdentityProviderConnectionProvider$inboundSchema,
+    remote_session_issuer_id: z.optional(z.string()),
     required_scopes: z.array(z.string()),
     status: OktaIdentityProviderConnectionStatus$inboundSchema,
     updated_at: z.pipe(
@@ -269,6 +274,7 @@ export const OktaIdentityProviderConnection$inboundSchema: z.ZodMiniType<
       "missing_scopes": "missingScopes",
       "org_url": "orgUrl",
       "organization_id": "organizationId",
+      "remote_session_issuer_id": "remoteSessionIssuerId",
       "required_scopes": "requiredScopes",
       "updated_at": "updatedAt",
       "verification_reasons": "verificationReasons",

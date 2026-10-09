@@ -82,6 +82,10 @@ export type RemoteSessionClient = {
    */
   credentialOwner: CredentialOwner;
   /**
+   * The redirect URI to register in the customer identity provider's app when this client is a user session issuer's trusted sign-in client. Present only on organization-owned clients outside any project and not managed by an identity provider connection, the only clients a user session issuer can trust.
+   */
+  federatedCallbackUrl?: string | undefined;
+  /**
    * Recorded effective registration grants. Null means unknown; an empty array means no recorded grants.
    */
   grantTypes: Array<string> | null;
@@ -171,6 +175,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     credential_owner: CredentialOwner$inboundSchema,
+    federated_callback_url: z.optional(z.string()),
     grant_types: z.nullable(z.array(z.string())),
     id: z.string(),
     json_web_key_set_id: z.optional(z.string()),
@@ -203,6 +208,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       "client_secret_expires_at": "clientSecretExpiresAt",
       "created_at": "createdAt",
       "credential_owner": "credentialOwner",
+      "federated_callback_url": "federatedCallbackUrl",
       "grant_types": "grantTypes",
       "json_web_key_set_id": "jsonWebKeySetId",
       "legacy_callback_url": "legacyCallbackUrl",

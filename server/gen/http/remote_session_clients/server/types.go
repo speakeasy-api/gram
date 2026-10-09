@@ -315,8 +315,14 @@ type CreateRemoteSessionClientResponseBody struct {
 	// changes after the client is created. Absent on global clients and on clients
 	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
-	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // CreateCimdResponseBody is the type of the "remoteSessionClients" service
@@ -380,8 +386,14 @@ type CreateCimdResponseBody struct {
 	// changes after the client is created. Absent on global clients and on clients
 	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
-	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateRemoteSessionClientResponseBody is the type of the
@@ -446,8 +458,14 @@ type UpdateRemoteSessionClientResponseBody struct {
 	// changes after the client is created. Absent on global clients and on clients
 	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
-	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // AttachUserSessionIssuerResponseBody is the type of the
@@ -512,8 +530,14 @@ type AttachUserSessionIssuerResponseBody struct {
 	// changes after the client is created. Absent on global clients and on clients
 	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
-	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // DetachUserSessionIssuerResponseBody is the type of the
@@ -578,8 +602,14 @@ type DetachUserSessionIssuerResponseBody struct {
 	// changes after the client is created. Absent on global clients and on clients
 	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
-	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // AttachKeySetResponseBody is the type of the "remoteSessionClients" service
@@ -643,8 +673,14 @@ type AttachKeySetResponseBody struct {
 	// changes after the client is created. Absent on global clients and on clients
 	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
-	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // DetachKeySetResponseBody is the type of the "remoteSessionClients" service
@@ -708,8 +744,14 @@ type DetachKeySetResponseBody struct {
 	// changes after the client is created. Absent on global clients and on clients
 	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
-	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListRemoteSessionClientsResponseBody is the type of the
@@ -790,8 +832,14 @@ type GetRemoteSessionClientResponseBody struct {
 	// changes after the client is created. Absent on global clients and on clients
 	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
-	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // PrepareEMAUnauthorizedResponseBody is the type of the "remoteSessionClients"
@@ -3518,8 +3566,14 @@ type RemoteSessionClientResponseBody struct {
 	// changes after the client is created. Absent on global clients and on clients
 	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
-	CreatedAt   string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt   string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The redirect URI to register in the customer identity provider's app when
+	// this client is a user session issuer's trusted sign-in client. Present only
+	// on organization-owned clients outside any project and not managed by an
+	// identity provider connection, the only clients a user session issuer can
+	// trust.
+	FederatedCallbackURL *string `form:"federated_callback_url,omitempty" json:"federated_callback_url,omitempty" xml:"federated_callback_url,omitempty"`
+	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // NewPrepareEMAResponseBody builds the HTTP response body from the result of
@@ -3642,6 +3696,7 @@ func NewCreateRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *C
 		LegacyCallbackURL:               res.LegacyCallbackURL,
 		CredentialOwner:                 res.CredentialOwner,
 		CallbackURL:                     res.CallbackURL,
+		FederatedCallbackURL:            res.FederatedCallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}
@@ -3688,6 +3743,7 @@ func NewCreateCimdResponseBody(res *types.RemoteSessionClient) *CreateCimdRespon
 		LegacyCallbackURL:               res.LegacyCallbackURL,
 		CredentialOwner:                 res.CredentialOwner,
 		CallbackURL:                     res.CallbackURL,
+		FederatedCallbackURL:            res.FederatedCallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}
@@ -3735,6 +3791,7 @@ func NewUpdateRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *U
 		LegacyCallbackURL:               res.LegacyCallbackURL,
 		CredentialOwner:                 res.CredentialOwner,
 		CallbackURL:                     res.CallbackURL,
+		FederatedCallbackURL:            res.FederatedCallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}
@@ -3782,6 +3839,7 @@ func NewAttachUserSessionIssuerResponseBody(res *types.RemoteSessionClient) *Att
 		LegacyCallbackURL:               res.LegacyCallbackURL,
 		CredentialOwner:                 res.CredentialOwner,
 		CallbackURL:                     res.CallbackURL,
+		FederatedCallbackURL:            res.FederatedCallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}
@@ -3829,6 +3887,7 @@ func NewDetachUserSessionIssuerResponseBody(res *types.RemoteSessionClient) *Det
 		LegacyCallbackURL:               res.LegacyCallbackURL,
 		CredentialOwner:                 res.CredentialOwner,
 		CallbackURL:                     res.CallbackURL,
+		FederatedCallbackURL:            res.FederatedCallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}
@@ -3875,6 +3934,7 @@ func NewAttachKeySetResponseBody(res *types.RemoteSessionClient) *AttachKeySetRe
 		LegacyCallbackURL:               res.LegacyCallbackURL,
 		CredentialOwner:                 res.CredentialOwner,
 		CallbackURL:                     res.CallbackURL,
+		FederatedCallbackURL:            res.FederatedCallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}
@@ -3921,6 +3981,7 @@ func NewDetachKeySetResponseBody(res *types.RemoteSessionClient) *DetachKeySetRe
 		LegacyCallbackURL:               res.LegacyCallbackURL,
 		CredentialOwner:                 res.CredentialOwner,
 		CallbackURL:                     res.CallbackURL,
+		FederatedCallbackURL:            res.FederatedCallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}
@@ -4000,6 +4061,7 @@ func NewGetRemoteSessionClientResponseBody(res *types.RemoteSessionClient) *GetR
 		LegacyCallbackURL:               res.LegacyCallbackURL,
 		CredentialOwner:                 res.CredentialOwner,
 		CallbackURL:                     res.CallbackURL,
+		FederatedCallbackURL:            res.FederatedCallbackURL,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}

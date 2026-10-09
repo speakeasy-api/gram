@@ -65,9 +65,7 @@ func (p *FederatedProvider) CallbackBaseURL() pgtype.Text {
 	return p.client.CallbackBaseUrl
 }
 
-// ValidateResponseIssuer implements RFC 9207 before the code leaves Speakeasy.
-// The response issuer is never used to select a provider. The shared callback
-// has no issuer-specific redirect URI fallback, so iss is always required.
+// ValidateResponseIssuer requires exactly this provider's issuer; it never selects a provider.
 func (p *FederatedProvider) ValidateResponseIssuer(issuer string) error {
 	if p == nil || issuer == "" || issuer != p.issuer.Issuer {
 		return ErrFederatedIdentity
@@ -75,9 +73,34 @@ func (p *FederatedProvider) ValidateResponseIssuer(issuer string) error {
 	return nil
 }
 
+// AdvertisesResponseIssuer reports RFC 9207 iss support from discovery or the operator-set issuer column.
+func (p *FederatedProvider) AdvertisesResponseIssuer() bool {
+	return p != nil && (p.metadata.AuthorizationResponseIssParameterSupported || (p.issuer.AuthorizationResponseIssParameterSupported.Valid && p.issuer.AuthorizationResponseIssParameterSupported.Bool))
+}
+
+// ValidateAuthorizationResponseIssuer requires exactly one matching iss, except an omitted one from a provider that does not advertise it; the per-client redirect binds the issuer (RFC 9207 2.4).
+func (p *FederatedProvider) ValidateAuthorizationResponseIssuer(query url.Values) error {
+	if p == nil {
+		return ErrFederatedIdentity
+	}
+	issuers, present := query["iss"]
+	if !present && !p.AdvertisesResponseIssuer() {
+		return nil
+	}
+	if len(issuers) != 1 {
+		return ErrFederatedIdentity
+	}
+	return p.ValidateResponseIssuer(issuers[0])
+}
+
 // LoadFederatedProvider resolves only a trusted organization-owned registration
 // against the endpoint's organization. The IDs must come from the live USI.
 func (m *ChallengeManager) LoadFederatedProvider(ctx context.Context, organizationID string, issuerID, clientID uuid.UUID) (*FederatedProvider, error) {
+	return m.LoadFederatedLoginProvider(ctx, organizationID, issuerID, clientID, nil)
+}
+
+// LoadFederatedLoginProvider runs checkCallbackBase on the client's recorded callback base before discovery.
+func (m *ChallengeManager) LoadFederatedLoginProvider(ctx context.Context, organizationID string, issuerID, clientID uuid.UUID, checkCallbackBase func(pgtype.Text) error) (*FederatedProvider, error) {
 	if organizationID == "" || issuerID == uuid.Nil || clientID == uuid.Nil {
 		return nil, ErrFederatedConfiguration
 	}
@@ -89,6 +112,11 @@ func (m *ChallengeManager) LoadFederatedProvider(ctx context.Context, organizati
 			return nil, ErrFederatedConfiguration
 		}
 		return nil, fmt.Errorf("read federated registration: %w", err)
+	}
+	if checkCallbackBase != nil {
+		if err := checkCallbackBase(row.RemoteSessionClient.CallbackBaseUrl); err != nil {
+			return nil, err
+		}
 	}
 	issuerURL, err := url.Parse(row.RemoteSessionIssuer.Issuer)
 	if err != nil || !validIssuerDiscoveryURL(issuerURL) || issuerURL.RawQuery != "" || issuerURL.Fragment != "" {
@@ -189,23 +217,9 @@ func newFederatedProvider(organizationID string, issuer repo.RemoteSessionIssuer
 	return &FederatedProvider{organizationID: organizationID, client: client, issuer: issuer, metadata: doc, fingerprint: hex.EncodeToString(digest[:]), signingKeyRevision: ""}, nil
 }
 
-// RequireLoginRedirect reports whether the provider can serve federated login.
-// A shared callback needs response issuer identification before code exchange
-// (RFC 9700 section 4.4.2); a state-selected provider alone is insufficient.
-// Token exchange and refresh never receive a redirect, so only login requires it.
-func (p *FederatedProvider) RequireLoginRedirect() error {
-	if p == nil || !p.metadata.AuthorizationResponseIssParameterSupported {
-		return ErrFederatedConfiguration
-	}
-	return nil
-}
-
 func (p *FederatedProvider) BuildAuthorizationURL(callbackURL, state, nonce, verifier string) (*url.URL, error) {
 	if p == nil || state == "" || nonce == "" || !validFederatedVerifier(verifier) {
 		return nil, ErrFederatedIdentity
-	}
-	if err := p.RequireLoginRedirect(); err != nil {
-		return nil, err
 	}
 	callback, err := url.Parse(callbackURL)
 	if err != nil || !validIssuerDiscoveryURL(callback) || callback.Fragment != "" {

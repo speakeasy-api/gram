@@ -500,6 +500,12 @@ const (
 	OAuthResourceScopesSupportedKey = attribute.Key("gram.oauth.resource_scopes_supported")
 	// OAuthScopeSourceKey names which precedence step produced a login's scope request.
 	OAuthScopeSourceKey = attribute.Key("gram.oauth.scope_source")
+	// OAuthFederatedCallbackRejectReasonKey is why a federated IdP callback was rejected.
+	OAuthFederatedCallbackRejectReasonKey = attribute.Key("gram.oauth.federated_callback_reject_reason")
+	// OAuthResponseIssuerAdvertisedKey reports RFC 9207 iss support in issuer metadata.
+	OAuthResponseIssuerAdvertisedKey = attribute.Key("gram.oauth.response_issuer_advertised")
+	// OAuthScopeGrantedKey lists the scopes a token endpoint reported granting.
+	OAuthScopeGrantedKey = attribute.Key("gram.oauth.scope_granted")
 	// OAuthScopeUnadvertisedKey lists pinned scopes the resource's advertised list lacks.
 	OAuthScopeUnadvertisedKey = attribute.Key("gram.oauth.scope_unadvertised")
 	// OAuthResourceProbeOutcomeKey is how a login resolved its resource's metadata.
@@ -2073,6 +2079,18 @@ func OAuthScopeSource[V ~string](v V) attribute.KeyValue {
 }
 func SlogOAuthScopeSource[V ~string](v V) slog.Attr {
 	return slog.String(string(OAuthScopeSourceKey), string(v))
+}
+
+func SlogOAuthFederatedCallbackRejectReason[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthFederatedCallbackRejectReasonKey), string(v))
+}
+
+func SlogOAuthResponseIssuerAdvertised(v bool) slog.Attr {
+	return slog.Bool(string(OAuthResponseIssuerAdvertisedKey), v)
+}
+
+func SlogOAuthScopeGranted(v []string) slog.Attr {
+	return slog.Any(string(OAuthScopeGrantedKey), v)
 }
 
 func SlogOAuthScopeUnadvertised(v []string) slog.Attr {

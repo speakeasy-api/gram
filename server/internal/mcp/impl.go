@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -587,10 +588,10 @@ func (s *Service) outboundOrigin() *url.URL {
 // federatedCallbackOrigin is the origin of the federated IdP callback for a
 // trusted client: its recorded callback_base_url, so it shares a host with
 // the client's remote_login_callback, or outboundOrigin when none is recorded.
-func (s *Service) federatedCallbackOrigin(provider *remotesessions.FederatedProvider) *url.URL {
+func (s *Service) federatedCallbackOrigin(callbackBase pgtype.Text) *url.URL {
 	origins := s.callbackOrigins
 	origins.Outbound = s.outboundOrigin()
-	return origins.ForClient(provider.CallbackBaseURL())
+	return origins.ForClient(callbackBase)
 }
 
 func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverName string) string {
@@ -693,6 +694,7 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.MCPErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback/{clientID}", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
 	// Both stops of the remote login browser hop: the bind stop on a remote
 	// client's callback host, and the confirm stop on the IdP callback host.

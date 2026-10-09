@@ -403,10 +403,11 @@ type migratePreflight struct {
 	warnings                      []issuerFieldMismatch
 	trustedUserSessionIssuerCount int64
 	trustedUserSessionIssuers     []trustedUserSessionIssuerReference
+	trustedClientCount            int64
 }
 
 func (p migratePreflight) canMigrate() bool {
-	return p.emaBindingCount == 0 && len(p.endpointMismatches) == 0 && len(p.conflictingMcpServerNames) == 0 && p.trustedUserSessionIssuerCount == 0
+	return p.emaBindingCount == 0 && len(p.endpointMismatches) == 0 && len(p.conflictingMcpServerNames) == 0 && p.trustedUserSessionIssuerCount == 0 && p.trustedClientCount == 0
 }
 
 type trustedUserSessionIssuerReference struct {
@@ -477,6 +478,11 @@ func buildMigratePreflight(ctx context.Context, r *repo.Queries, source, target 
 		trusted = append(trusted, trustedUserSessionIssuerReference{id: row.ID, slug: row.Slug})
 	}
 
+	trustedClientCount, err := r.CountTrustedUserSessionIssuersForRemoteSessionIssuerClients(ctx, source.ID)
+	if err != nil {
+		return migratePreflight{}, fmt.Errorf("count user session issuers that trust source issuer clients: %w", err)
+	}
+
 	return migratePreflight{
 		emaBindingCount:               emaCount,
 		clientCount:                   clientCount,
@@ -486,6 +492,7 @@ func buildMigratePreflight(ctx context.Context, r *repo.Queries, source, target 
 		warnings:                      migrationWarnings(source, target),
 		trustedUserSessionIssuerCount: trustedCount,
 		trustedUserSessionIssuers:     trusted,
+		trustedClientCount:            trustedClientCount,
 	}, nil
 }
 
@@ -549,6 +556,11 @@ func runIssuerMigration(ctx context.Context, r *repo.Queries, logger *slog.Logge
 
 	if preflight.trustedUserSessionIssuerCount > 0 {
 		return 0, oops.E(oops.CodeConflict, nil, "source remote session issuer is trusted by active user session issuers; unlink or re-link them before migrating").LogError(ctx, logger)
+	}
+
+	// The per-client federated redirect URI is what binds a login response to one issuer (RFC 9700 4.4.2); moving a trusted client would re-point it.
+	if preflight.trustedClientCount > 0 {
+		return 0, oops.E(oops.CodeConflict, nil, "a client of the source remote session issuer is a user session issuer's trusted sign-in client; its sign-in callback identifies this issuer, so unlink it before migrating").LogError(ctx, logger)
 	}
 
 	clientsMigrated, err := r.UpdateRemoteSessionClientsToRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionClientsToRemoteSessionIssuerParams{

@@ -68,10 +68,10 @@ func TestFederatedOptionalOfflineConsent(t *testing.T) {
 			require.False(t, initial.Federation.OfflineRequested)
 			f.provider.issueCode(t, "minimal", federationToken{nonce: nonce, email: mockidp.MockUserEmail, issuer: f.provider.URL, secret: "selected-secret", challenge: challenge, verified: true})
 			callback := func(q url.Values, cookie *http.Cookie) (*httptest.ResponseRecorder, error) {
-				req := httptest.NewRequest(http.MethodGet, f.ti.serverURL.String()+"/mcp/idp_callback?"+q.Encode(), nil).WithContext(ctx)
+				req := httptest.NewRequest(http.MethodGet, f.ti.serverURL.String()+f.callbackPath()+"?"+q.Encode(), nil).WithContext(ctx)
 				req.AddCookie(cookie)
 				rec := httptest.NewRecorder()
-				err := f.ti.service.HandleIDPCallback(rec, req)
+				err := f.ti.service.HandleIDPCallback(rec, routeIDPCallback(req))
 				if err != nil {
 					return rec, fmt.Errorf("perform federation request: %w", err)
 				}

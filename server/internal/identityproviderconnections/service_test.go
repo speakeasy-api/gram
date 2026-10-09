@@ -556,6 +556,8 @@ func TestRevoke_IsIdempotentAndFreesTheOrganization(t *testing.T) {
 	managed, err := si.provisioner.GetManagedClient(ctx, si.orgID, mustParseUUID(t, created.ID))
 	require.NoError(t, err)
 	require.Equal(t, conv.PtrValOr(created.JwksURL, ""), managed.JSONWebKeySetURL)
+	require.NotNil(t, created.RemoteSessionIssuerID)
+	require.Equal(t, managed.IssuerID.String(), *created.RemoteSessionIssuerID)
 	require.False(t, managed.ActiveKeyID.Valid)
 	require.JSONEq(t, `{"keys":[]}`, managedJWKS(t, ctx, si, managed))
 
@@ -843,6 +845,7 @@ func TestRevoke_RetryAfterManagedClientDeleted(t *testing.T) {
 	require.Nil(t, again.ClientID)
 	require.False(t, again.ClientIDSubmitted)
 	require.Empty(t, again.JwksURL)
+	require.Nil(t, again.RemoteSessionIssuerID, "no managed client, no issuer to report")
 }
 
 func TestRevoke_ConcurrentCallsBothSucceedAndAuditOnce(t *testing.T) {

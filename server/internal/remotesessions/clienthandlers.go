@@ -193,6 +193,7 @@ func (s *Service) clientView(row repo.RemoteSessionClient, userSessionIssuerIDs 
 		return nil, fmt.Errorf("build remote session client view: %w", err)
 	}
 	view.CallbackURL = s.clientCallbackURL(row)
+	view.FederatedCallbackURL = s.origins.ClientFederatedCallbackURL(row)
 	return view, nil
 }
 
@@ -651,6 +652,7 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 
 	// Set after the audit snapshot so it matches the snapshot before.
 	afterView.CallbackURL = s.clientCallbackURL(updated)
+	afterView.FederatedCallbackURL = s.origins.ClientFederatedCallbackURL(updated)
 	return afterView, nil
 }
 

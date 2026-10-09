@@ -255,6 +255,9 @@ type OktaIdentityProviderConnection struct {
 	ClientID *string
 	// Whether the real Okta client ID has replaced the provisioning placeholder.
 	ClientIDSubmitted bool
+	// Organization remote session issuer that backs this connection. Omitted until
+	// the managed client is provisioned.
+	RemoteSessionIssuerID *string
 	// Whether Okta issued a DPoP-bound token at the last verification.
 	DpopRequired bool
 	// Okta API scopes the integration needs.

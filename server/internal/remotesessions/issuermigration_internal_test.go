@@ -303,6 +303,9 @@ func TestMigratePreflight_CanMigrate(t *testing.T) {
 
 	conflicted := migratePreflight{conflictingMcpServerNames: []string{"Acme"}}
 	require.False(t, conflicted.canMigrate())
+
+	trustedClient := migratePreflight{trustedClientCount: 1}
+	require.False(t, trustedClient.canMigrate(), "a trusted sign-in client cannot change issuer")
 }
 
 // TestIssuerURLsCanonicallyEqual_CollapsesEquivalentSpellings covers the axes

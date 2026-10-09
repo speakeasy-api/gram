@@ -70,7 +70,8 @@ func BuildRemoteSessionClientView(row repo.RemoteSessionClient, userSessionIssue
 		UpdatedAt:                       row.UpdatedAt.Time.Format(time.RFC3339),
 		GrantTypes:                      row.GrantTypes,
 		// The owning service fills this in from its pinned callback origins.
-		CallbackURL: nil,
+		CallbackURL:          nil,
+		FederatedCallbackURL: nil,
 	}, nil
 }
 
@@ -128,6 +129,7 @@ func BuildGlobalRemoteSessionClientView(row repo.RemoteSessionClient) *types.Rem
 		UpdatedAt:                       row.UpdatedAt.Time.Format(time.RFC3339),
 		GrantTypes:                      row.GrantTypes,
 		// Global clients are shared and keep the pinned outbound origin.
-		CallbackURL: nil,
+		CallbackURL:          nil,
+		FederatedCallbackURL: nil,
 	}
 }

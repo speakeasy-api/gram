@@ -1,0 +1,5 @@
+---
+"server": minor
+---
+
+All federated sign-ins now use a per-client redirect URI, `/mcp/idp_callback/{clientID}`, that binds each authorization response to its issuer (RFC 9700 section 4.4.2). This makes federated sign-in work with identity providers that do not return the RFC 9207 `iss` authorization response parameter, such as Okta's org authorization server. A provider that advertises `iss` support, in discovery or through the issuer's `authorization_response_iss_parameter_supported` setting, must still return a matching `iss`. Existing federated identity provider apps must register the new redirect URI, which organization-owned remote session clients now report as `federated_callback_url`. The shared `/mcp/idp_callback` serves only WorkOS; a misrouted federated callback is rejected without spending the login state. Issuer migration is refused while a client of the source issuer is a user session issuer's trusted sign-in client. Okta identity provider connections now report their `remote_session_issuer_id`.
