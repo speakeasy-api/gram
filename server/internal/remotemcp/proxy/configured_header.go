@@ -15,8 +15,10 @@ import (
 // without this it could carry that same cookie upstream under any name it
 // likes and walk straight around that decision.
 //
-// Authorization is deliberately absent: forwarding the caller's own upstream
-// credential is what pass-through identity is for.
+// This is the narrow check every policy shares. Resolving a source does not
+// make it acceptable: the proxy's [HeaderPolicy] decides which inbound headers
+// may be read before Resolve is called, and [HeaderPolicyRemote] refuses
+// Authorization and the other protected headers as well.
 func IsDeniedPassThroughSource(name string) bool {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "cookie", "set-cookie", "proxy-authorization":

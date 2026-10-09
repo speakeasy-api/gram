@@ -41,7 +41,7 @@ func assertionProxy(t *testing.T, remoteURL string) (*Proxy, context.Context, *r
 	ctx = mcpidentity.NewValidatorBoundary().StampAPIKey(ctx, uuid.NewString())
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	return &Proxy{GuardianPolicy: policy, Logger: testenv.NewLogger(t), Tracer: testenv.NewTracerProvider(t).Tracer("test"), NonStreamingTimeout: time.Second, StreamingTimeout: time.Second, RemoteURL: remoteURL, MaxBufferedBodyBytes: DefaultMaxBufferedBodyBytes, Identity: ServerIdentity{TunneledMCPServerID: target.TunnelID.String(), McpServerID: uuid.NewString()}, CallerAssertion: func(ctx context.Context) (string, error) { return issuer.Mint(ctx, target) }}, ctx, &key.PublicKey
+	return &Proxy{GuardianPolicy: policy, Logger: testenv.NewLogger(t), Tracer: testenv.NewTracerProvider(t).Tracer("test"), NonStreamingTimeout: time.Second, StreamingTimeout: time.Second, RemoteURL: remoteURL, HeaderPolicy: HeaderPolicyTunneled, MaxBufferedBodyBytes: DefaultMaxBufferedBodyBytes, Identity: ServerIdentity{TunneledMCPServerID: target.TunnelID.String(), McpServerID: uuid.NewString()}, CallerAssertion: func(ctx context.Context) (string, error) { return issuer.Mint(ctx, target) }}, ctx, &key.PublicKey
 }
 
 func TestCallerAssertionStripsSpoofingWithAndWithoutSigning(t *testing.T) {

@@ -241,8 +241,12 @@ type Proxy struct {
 	RemoteURL string
 
 	// Headers are applied on top of any forwarded client headers when
-	// constructing the upstream request.
+	// constructing the upstream request and checked against HeaderPolicy.
 	Headers []ConfiguredHeader
+
+	// HeaderPolicy selects how configured and copied client headers are
+	// filtered. The zero value is [HeaderPolicyRemote].
+	HeaderPolicy HeaderPolicy
 
 	// AuthorizationOverride is the Bearer token to set on the outgoing
 	// Authorization header. The caller's incoming Authorization is
