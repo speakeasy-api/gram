@@ -398,6 +398,35 @@ SELECT EXISTS (
     AND ea.deleted IS FALSE
 );
 
+-- name: ToolsetIsServed :one
+-- Reports whether anything serves the toolset over MCP, and so whether dynamic
+-- mode on it needs a search index. A toolset is served when it is MCP-enabled
+-- or when a live, non-disabled mcp_servers row other than its own hosted
+-- address fronts it. The serving path gates only the hosted address (the row
+-- whose id equals the toolset id) on mcp_enabled; any other such row serves
+-- the toolset whatever the flag says. ListProjectsForToolsetIndexing and
+-- ListToolsetsForIndexing in the background activities repeat this predicate
+-- and must stay identical to it.
+SELECT EXISTS (
+  SELECT 1
+  FROM toolsets t
+  WHERE t.id = @toolset_id
+    AND t.project_id = @project_id
+    AND t.deleted IS FALSE
+    AND (
+      t.mcp_enabled IS TRUE
+      OR EXISTS (
+        SELECT 1
+        FROM mcp_servers ms
+        WHERE ms.toolset_id = t.id
+          AND ms.project_id = t.project_id
+          AND ms.id <> t.id
+          AND ms.deleted IS FALSE
+          AND ms.visibility <> 'disabled'
+      )
+    )
+);
+
 -- name: GetToolsetPromptTemplateNames :many
 SELECT tp.prompt_name
 FROM toolset_prompts tp
