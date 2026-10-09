@@ -1757,6 +1757,60 @@ BEGIN
      demo.det_uuid('gram-demo-tunhdr-tunnel'),
      demo.det_uuid('gram-demo-issuer-workforce'), 'private');
 
+  -- Two MCP servers on one tunnel, each linked to its own environment. The
+  -- tunnel sends one instance URL to every server on it; each environment's
+  -- MCP_HEADER_X-Instance-Url entry replaces it for its own server, so prod
+  -- and sandbox reach different instances through the same agent. Values are
+  -- non-secret placeholders: a fake ciphertext would fail decryption. The
+  -- sandbox environment also holds a near-miss HEADER_ entry, which the
+  -- settings preview lists as not used.
+  INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix, status)
+  VALUES
+    (demo.det_uuid('gram-demo-tunenv-tunnel'), proj_a, 'JAMF (multi-instance)',
+     'demo-nonfunctional-' || demo.det_uuid('gram-demo-tunenv-tunnel')::text,
+     'gram_tunnel_demo', 'created');
+
+  INSERT INTO tunneled_mcp_server_headers
+    (id, tunneled_mcp_server_id, name, description, is_required, is_secret,
+     value, value_from_request_header)
+  VALUES
+    (demo.det_uuid('gram-demo-tunenv-header-instance'),
+     demo.det_uuid('gram-demo-tunenv-tunnel'), 'X-Instance-Url',
+     'Default instance; each server''s environment overrides it', TRUE, FALSE,
+     'https://default.jamf.example.invalid', NULL);
+
+  INSERT INTO environments (id, organization_id, project_id, name, slug, description)
+  VALUES
+    (demo.det_uuid('gram-demo-tunenv-env-prod'), demo_org, proj_a,
+     'JAMF Prod', 'jamf-prod', 'Headers for the production JAMF MCP server'),
+    (demo.det_uuid('gram-demo-tunenv-env-sandbox'), demo_org, proj_a,
+     'JAMF Sandbox', 'jamf-sandbox', 'Headers for the sandbox JAMF MCP server');
+
+  INSERT INTO environment_entries (environment_id, name, value, is_secret)
+  VALUES
+    (demo.det_uuid('gram-demo-tunenv-env-prod'), 'MCP_HEADER_X-Instance-Url',
+     'https://prod.jamf.example.invalid', FALSE),
+    (demo.det_uuid('gram-demo-tunenv-env-prod'), 'MCP_HEADER_X-Jamf-Site',
+     'demo-site-prod', FALSE),
+    (demo.det_uuid('gram-demo-tunenv-env-sandbox'), 'MCP_HEADER_X-Instance-Url',
+     'https://sandbox.jamf.example.invalid', FALSE),
+    (demo.det_uuid('gram-demo-tunenv-env-sandbox'), 'MCP_HEADER_X-Jamf-Site',
+     'demo-site-sandbox', FALSE),
+    (demo.det_uuid('gram-demo-tunenv-env-sandbox'), 'HEADER_X-Jamf-Region',
+     'demo-region', FALSE);
+
+  INSERT INTO mcp_servers (id, project_id, name, slug, tunneled_mcp_server_id,
+                           environment_id, user_session_issuer_id, visibility)
+  VALUES
+    (demo.det_uuid('gram-demo-tunenv-mcpserver-prod'), proj_a, 'JAMF Prod',
+     'jamf-prod', demo.det_uuid('gram-demo-tunenv-tunnel'),
+     demo.det_uuid('gram-demo-tunenv-env-prod'),
+     demo.det_uuid('gram-demo-issuer-workforce'), 'private'),
+    (demo.det_uuid('gram-demo-tunenv-mcpserver-sandbox'), proj_a, 'JAMF Sandbox',
+     'jamf-sandbox', demo.det_uuid('gram-demo-tunenv-tunnel'),
+     demo.det_uuid('gram-demo-tunenv-env-sandbox'),
+     demo.det_uuid('gram-demo-issuer-workforce'), 'private');
+
   INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
                                 user_session_issuer_id) VALUES
     (demo.det_uuid('gram-demo-metamcp-1'), demo_org, proj_a, 'Acme Agent Gateway',
@@ -1793,7 +1847,11 @@ BEGIN
     (demo.det_uuid('gram-demo-endpoint-slack'), proj_a, NULL,
      demo.det_uuid('gram-demo-mcpserver-slack'), 'acme-demo-slack'),
     (demo.det_uuid('gram-demo-tunhdr-endpoint'), proj_a, NULL,
-     demo.det_uuid('gram-demo-tunhdr-mcpserver'), 'acme-demo-jamf-headers');
+     demo.det_uuid('gram-demo-tunhdr-mcpserver'), 'acme-demo-jamf-headers'),
+    (demo.det_uuid('gram-demo-tunenv-endpoint-prod'), proj_a, NULL,
+     demo.det_uuid('gram-demo-tunenv-mcpserver-prod'), 'acme-demo-jamf-prod'),
+    (demo.det_uuid('gram-demo-tunenv-endpoint-sandbox'), proj_a, NULL,
+     demo.det_uuid('gram-demo-tunenv-mcpserver-sandbox'), 'acme-demo-jamf-sandbox');
 
   -- Live connections spread across the MCP servers, not pooled on one issuer.
   -- The identity page's connections tab groups by MCP server, and every
@@ -3784,6 +3842,38 @@ Channel context stays in the Raw view.
     AND header.deleted IS FALSE AND header.is_secret IS FALSE;
   IF stray <> 2 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 2 non-secret headers on the tunhdr tunnel, found %', stray;
+  END IF;
+
+  -- The tunenv checks are scoped to that fixture's own tunnel and
+  -- environments, so other fixtures in the project never change them.
+  SELECT count(*) INTO stray
+  FROM tunneled_mcp_server_headers header
+  JOIN tunneled_mcp_servers tunnel ON tunnel.id = header.tunneled_mcp_server_id
+  WHERE tunnel.id = demo.det_uuid('gram-demo-tunenv-tunnel')
+    AND tunnel.project_id = proj_a AND tunnel.deleted IS FALSE
+    AND header.deleted IS FALSE AND header.is_secret IS FALSE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 non-secret header on the tunenv tunnel, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM mcp_servers server
+  JOIN environments env ON env.id = server.environment_id
+  WHERE server.project_id = proj_a AND server.deleted IS FALSE
+    AND env.project_id = proj_a AND env.deleted IS FALSE
+    AND server.tunneled_mcp_server_id = demo.det_uuid('gram-demo-tunenv-tunnel');
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 environment-linked MCP servers on the tunenv tunnel, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM environment_entries entry
+  JOIN environments env ON env.id = entry.environment_id
+  WHERE env.id IN (demo.det_uuid('gram-demo-tunenv-env-prod'), demo.det_uuid('gram-demo-tunenv-env-sandbox'))
+    AND env.project_id = proj_a AND env.deleted IS FALSE
+    AND entry.name LIKE 'MCP\_HEADER\_%';
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 4 MCP_HEADER_ entries in the tunenv environments, found %', stray;
   END IF;
 
   -- Managed-agent credentials are a separate surface from ordinary MCP
