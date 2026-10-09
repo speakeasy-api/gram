@@ -33,7 +33,7 @@ func (h *EnterpriseTrialConversionKeyReconcileHandler) Handle(ctx context.Contex
 		return nil
 	}
 	eventID, organizationID := event.GetEventId(), event.GetOrganizationId()
-	if eventID == "" || organizationID == "" || event.GetEventType() != string(events.OrganizationEnterpriseTrialV1.EventType()) {
+	if eventID == "" || organizationID == "" {
 		return nil
 	}
 	var payload events.AuditLogCreatedPayloadV1
@@ -41,13 +41,24 @@ func (h *EnterpriseTrialConversionKeyReconcileHandler) Handle(ctx context.Contex
 		h.logger.ErrorContext(ctx, "dropping unreadable enterprise trial conversion key reconciliation event", attr.SlogError(err))
 		return nil
 	}
-	if audit.Action(payload.Action) != audit.ActionOrganizationEnterpriseTrialConverted {
-		return nil
-	}
 	var metadata struct {
 		ConversionSource string `json:"conversion_source"`
+		Operation        string `json:"operation"`
 	}
-	if err := json.Unmarshal(payload.Metadata, &metadata); err != nil || metadata.ConversionSource != "stripe_checkout" {
+	if err := json.Unmarshal(payload.Metadata, &metadata); err != nil {
+		return nil
+	}
+	switch event.GetEventType() {
+	case string(events.OrganizationEnterpriseTrialV1.EventType()):
+		if audit.Action(payload.Action) != audit.ActionOrganizationEnterpriseTrialConverted || metadata.ConversionSource != "stripe_checkout" {
+			return nil
+		}
+	case string(events.OrganizationAccountTypeV1.EventType()):
+		if (audit.Action(payload.Action) != audit.ActionOrganizationAccountTypeChanged || metadata.Operation != "account_type_change") &&
+			(audit.Action(payload.Action) != audit.ActionOrganizationInferenceKeyRepaired || metadata.Operation != "inference_key_repair") {
+			return nil
+		}
+	default:
 		return nil
 	}
 	if payload.OrganizationID != organizationID || payload.SubjectID != organizationID || payload.SubjectType != "organization" {

@@ -124,6 +124,10 @@ type Client struct {
 	// getOrganizationStats endpoint.
 	GetOrganizationStatsDoer goahttp.Doer
 
+	// RepairInferenceKey Doer is the HTTP client used to make requests to the
+	// repairInferenceKey endpoint.
+	RepairInferenceKeyDoer goahttp.Doer
+
 	// GetInferenceKeys Doer is the HTTP client used to make requests to the
 	// getInferenceKeys endpoint.
 	GetInferenceKeysDoer goahttp.Doer
@@ -399,6 +403,7 @@ func NewClient(
 		CreateOrganizationDoer:                    doer,
 		RearmTrialDoer:                            doer,
 		GetOrganizationStatsDoer:                  doer,
+		RepairInferenceKeyDoer:                    doer,
 		GetInferenceKeysDoer:                      doer,
 		SetInferenceKeyMonthlyLimitDoer:           doer,
 		GetInferenceSpendHistoryDoer:              doer,
@@ -1107,6 +1112,30 @@ func (c *Client) GetOrganizationStats() goa.Endpoint {
 		resp, err := c.GetOrganizationStatsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getOrganizationStats", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RepairInferenceKey returns an endpoint that makes HTTP requests to the admin
+// service repairInferenceKey server.
+func (c *Client) RepairInferenceKey() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRepairInferenceKeyRequest(c.encoder)
+		decodeResponse = DecodeRepairInferenceKeyResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRepairInferenceKeyRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RepairInferenceKeyDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "repairInferenceKey", err)
 		}
 		return decodeResponse(resp)
 	}

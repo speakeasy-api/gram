@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"maps"
+	"net/http"
+	"net/http/httptest"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -70,15 +73,15 @@ func TestBillingDiagnosticsBoundAndRedact(t *testing.T) {
 	var keys InferenceKeyStates
 	require.NoError(t, json.Unmarshal(data, &keys))
 	require.Equal(t, InferenceKeyStates{OrganizationID: "org-a", Keys: []InferenceKeyState{
-		{KeyType: "chat", MonthlyCredits: 100, DisableCauses: []string{}},
-		{KeyType: "agents", CreditsUsed: 1.5, MonthlyCredits: 50, Disabled: true, DisableCauses: []string{"monthly_limit"}, DisableCausesClassified: true},
+		{KeyType: "chat", MonthlyCredits: 100, DisableCauses: []string{}, CauseDiagnostics: []InferenceKeyCauseDiagnostic{}},
+		{KeyType: "agents", CreditsUsed: 1.5, MonthlyCredits: 50, Disabled: true, DisableCauses: []string{"monthly_limit"}, DisableCausesClassified: true, CauseDiagnostics: []InferenceKeyCauseDiagnostic{}},
 	}}, keys)
 	var rawKeys struct {
 		Keys []json.RawMessage `json:"keys"`
 	}
 	require.NoError(t, json.Unmarshal(data, &rawKeys))
 	requireJSONKeys(t, data, "organization_id", "keys")
-	requireJSONKeys(t, rawKeys.Keys[0], "key_type", "credits_used", "monthly_credits", "disabled", "disable_causes", "disable_causes_classified")
+	requireJSONKeys(t, rawKeys.Keys[0], "key_type", "credits_used", "monthly_credits", "disabled", "disable_causes", "disable_causes_classified", "cause_diagnostics")
 	var legacyKey struct {
 		DisableCauses json.RawMessage `json:"disable_causes"`
 	}
@@ -142,4 +145,102 @@ func TestBillingDiagnosticsBoundAndRedact(t *testing.T) {
 	reads.keys = make([]*gen.AdminInferenceKey, 5)
 	body, _ = issuerToolCall(t, reads, "get_organization_inference_key_state", `{"organization_id":"org-a"}`, true)
 	require.Contains(t, body, `"isError":true`)
+}
+
+func TestInferenceCauseDiagnosticsProjection(t *testing.T) {
+	t.Parallel()
+	reason := "Monthly credits are exhausted"
+	reads := &recordingBillingDiagnostics{recordingOrganizationReader: recordingOrganizationReader{org: &gen.AdminOrganization{ID: "org-a"}}, keys: []*gen.AdminInferenceKey{{KeyType: "chat", CauseDiagnostics: []*gen.AdminInferenceKeyCause{
+		{Cause: "manual", Description: "Manually disabled", Removable: true},
+		{Cause: "monthly_limit", Description: "Monthly limit reached", BlockedReason: &reason},
+	}}}}
+	body, data := issuerToolCall(t, reads, "get_organization_inference_key_state", `{"organization_id":"org-a"}`, true)
+	require.NotContains(t, body, `"isError":true`)
+	var result struct {
+		Keys []struct {
+			Diagnostics []json.RawMessage `json:"cause_diagnostics"`
+		} `json:"keys"`
+	}
+	require.NoError(t, json.Unmarshal(data, &result))
+	require.Len(t, result.Keys, 1)
+	require.Len(t, result.Keys[0].Diagnostics, 2)
+	requireJSONKeys(t, result.Keys[0].Diagnostics[0], "cause", "description", "removable")
+	requireJSONKeys(t, result.Keys[0].Diagnostics[1], "cause", "description", "removable", "blocked_reason")
+	require.JSONEq(t, `{"cause":"manual","description":"Manually disabled","removable":true}`, string(result.Keys[0].Diagnostics[0]))
+	require.JSONEq(t, `{"cause":"monthly_limit","description":"Monthly limit reached","removable":false,"blocked_reason":"Monthly credits are exhausted"}`, string(result.Keys[0].Diagnostics[1]))
+	for _, secret := range []string{"admin_session_token", "key_hash", "api_key", "provider_id"} {
+		require.NotContains(t, body, secret)
+	}
+}
+
+func TestInferenceCauseDiagnosticsBounds(t *testing.T) {
+	t.Parallel()
+	oversized := strings.Repeat("x", 513)
+	for name, diagnostics := range map[string][]*gen.AdminInferenceKeyCause{
+		"nil entry":        {nil},
+		"too many":         make([]*gen.AdminInferenceKeyCause, 9),
+		"long cause":       {{Cause: strings.Repeat("c", 65)}},
+		"long description": {{Description: oversized}},
+		"long reason":      {{BlockedReason: &oversized}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			reads := &recordingBillingDiagnostics{recordingOrganizationReader: recordingOrganizationReader{org: &gen.AdminOrganization{ID: "org-a"}}, keys: []*gen.AdminInferenceKey{{KeyType: "chat", CauseDiagnostics: diagnostics}}}
+			body, _ := issuerToolCall(t, reads, "get_organization_inference_key_state", `{"organization_id":"org-a"}`, true)
+			require.Contains(t, body, `"isError":true`)
+			require.NotContains(t, body, oversized)
+			require.NotContains(t, body, strings.Repeat("c", 65))
+		})
+	}
+}
+
+func TestInferenceCauseDiagnosticsSchema(t *testing.T) {
+	t.Parallel()
+	request := httptest.NewRequest(http.MethodPost, Path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`))
+	request.Header.Set("Authorization", "Bearer test-token")
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json, text/event-stream")
+	response := httptest.NewRecorder()
+	NewRuntime(&testAuthenticator{principal: staffPrincipal()}, "").Handler().ServeHTTP(response, request)
+	require.Equal(t, http.StatusOK, response.Code)
+	var message struct {
+		Result struct {
+			Tools []struct {
+				Name         string          `json:"name"`
+				OutputSchema json.RawMessage `json:"outputSchema"`
+				Annotations  struct {
+					ReadOnly bool `json:"readOnlyHint"`
+				} `json:"annotations"`
+			} `json:"tools"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &message))
+	for _, tool := range message.Result.Tools {
+		if tool.Name != "get_organization_inference_key_state" {
+			continue
+		}
+		require.True(t, tool.Annotations.ReadOnly)
+		var schema struct {
+			Properties struct {
+				Keys struct {
+					Items struct {
+						Properties struct {
+							Diagnostics struct {
+								Items struct {
+									Properties json.RawMessage `json:"properties"`
+								} `json:"items"`
+							} `json:"cause_diagnostics"`
+						} `json:"properties"`
+					} `json:"items"`
+				} `json:"keys"`
+			} `json:"properties"`
+		}
+		require.NoError(t, json.Unmarshal(tool.OutputSchema, &schema))
+		requireJSONKeys(t, schema.Properties.Keys.Items.Properties.Diagnostics.Items.Properties, "cause", "description", "removable", "blocked_reason")
+		for _, secret := range []string{"admin_session_token", "key_hash", "api_key", "provider_id"} {
+			require.NotContains(t, string(tool.OutputSchema), secret)
+		}
+		return
+	}
+	t.Fatal("inference key state tool missing")
 }

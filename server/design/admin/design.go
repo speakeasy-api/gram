@@ -278,6 +278,31 @@ var AdminStripeSubscription = Type("AdminStripeSubscription", func() {
 	Required("status", "current_period_start", "current_period_end", "cancel_at_period_end", "payment_failed")
 })
 
+var AdminInferenceKeyCause = Type("AdminInferenceKeyCause", func() {
+	Attribute("cause", String)
+	Attribute("description", String)
+	Attribute("removable", Boolean)
+	Attribute("blocked_reason", String)
+	Required("cause", "description", "removable")
+})
+
+var AdminInferenceKeyRepairState = Type("AdminInferenceKeyRepairState", func() {
+	Description("Committed local key policy, without provider usage or credentials.")
+	Attribute("key_type", String)
+	Attribute("monthly_credits", Int64)
+	Attribute("disabled", Boolean)
+	Attribute("disable_causes", ArrayOf(String))
+	Attribute("disable_causes_classified", Boolean)
+	Attribute("cause_diagnostics", ArrayOf(AdminInferenceKeyCause))
+	Required("key_type", "monthly_credits", "disabled", "disable_causes", "disable_causes_classified", "cause_diagnostics")
+})
+
+var AdminInferenceKeyRepairResult = Type("AdminInferenceKeyRepairResult", func() {
+	Attribute("key", AdminInferenceKeyRepairState)
+	Attribute("reconciliation_pending", Boolean)
+	Required("key", "reconciliation_pending")
+})
+
 var AdminInferenceKey = Type("AdminInferenceKey", func() {
 	Description("Current usage and configured state for one materialized platform-managed OpenRouter key, without key material or provider identifiers.")
 	Attribute("key_type", String)
@@ -285,6 +310,7 @@ var AdminInferenceKey = Type("AdminInferenceKey", func() {
 	Attribute("monthly_credits", Int64)
 	Attribute("disabled", Boolean)
 	Attribute("disable_causes", ArrayOf(String), "Active internal disable causes. Omitted for legacy unclassified rows.")
+	Attribute("cause_diagnostics", ArrayOf(AdminInferenceKeyCause))
 	Attribute("disable_causes_classified", Boolean, "Whether disable_causes is classified, including an explicitly empty cause set.")
 	Required("key_type", "credits_used", "monthly_credits", "disabled", "disable_causes_classified")
 })
@@ -1028,6 +1054,22 @@ var _ = Service("admin", func() {
 		})
 
 		Meta("openapi:operationId", "adminGetOrganizationStats")
+	})
+
+	Method("repairInferenceKey", func() {
+		Description("Removes explicitly selected known disable causes without changing tier, credits, or runtime. Staff confirmation and reason required.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("organization_id", String)
+			Attribute("key_type", String)
+			Attribute("remove_causes", ArrayOf(String))
+			Attribute("confirmation", String)
+			Attribute("reason", String)
+			Required("organization_id", "key_type", "remove_causes", "confirmation", "reason")
+		})
+		Result(AdminInferenceKeyRepairResult)
+		HTTP(func() { POST("/admin/organization.repairInferenceKey"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminRepairInferenceKey")
 	})
 
 	Method("getInferenceKeys", func() {

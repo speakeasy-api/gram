@@ -207,3 +207,60 @@ func TestPrepareEnterpriseTrialConversionKeyWithDBNullFailsClosed(t *testing.T) 
 	require.EqualValues(t, 5, after.MonthlyCredits)
 	require.Zero(t, upstream.requestCount())
 }
+
+func TestAdminKeyPolicy(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name        string
+		causes      []string
+		remove      []string
+		credits     *int64
+		want        []string
+		wantCredits int64
+		missing     bool
+	}{
+		{"layered restore", []string{"trial_demotion", "billing_inactive", "admin_lock", "security_hold"}, []string{"trial_demotion", "billing_inactive"}, new(int64(100)), []string{"admin_lock", "security_hold"}, 100, false},
+		{"exact lower", []string{"admin_lock"}, nil, new(int64(2)), []string{"admin_lock"}, 2, false},
+		{"repair preserves credits", []string{"admin_lock", "security_hold"}, []string{"admin_lock"}, nil, []string{"security_hold"}, 5, false},
+		{"last removal", []string{"trial_demotion"}, []string{"trial_demotion"}, nil, []string{}, 5, false},
+		{"enabled", []string{}, nil, new(int64(20)), []string{}, 20, false},
+		{"unclassified", nil, []string{"trial_demotion"}, new(int64(100)), nil, 5, false},
+		{"missing", nil, nil, nil, nil, 0, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			orgID := "org-" + uuid.NewString()[:8]
+			provisioner, upstream, queries := newDisableTestProvisioner(t, orgID)
+			if !tt.missing {
+				_, err := queries.CreateOpenRouterAPIKey(ctx, repo.CreateOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat), KeyEncrypted: pgtype.Text{String: "ciphertext", Valid: true}, KeyHash: "hash-" + orgID, MonthlyCredits: 5})
+				require.NoError(t, err)
+				require.NoError(t, testrepo.New(provisioner.db).SetOpenRouterAPIKeyClassificationFixture(ctx, testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: orgID, KeyType: string(KeyTypeChat), Disabled: len(tt.causes) > 0 || tt.causes == nil, DisableCauses: tt.causes}))
+			}
+			tx := testenv.BeginTx(t, ctx, provisioner.db)
+			require.NoError(t, AcquireAPIKeyBillingTransactionLock(ctx, tx, orgID, KeyTypeChat))
+			policy := AdminKeyPolicy{RemoveCauses: tt.remove, MonthlyCredits: tt.credits}
+			change, err := provisioner.PrepareAdminKeyPolicyWithDB(ctx, tx, orgID, KeyTypeChat, policy)
+			if !tt.missing && tt.causes == nil {
+				require.ErrorIs(t, err, ErrAPIKeyDisableCausesUnclassified)
+				row, readErr := repo.New(tx).GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)})
+				require.NoError(t, readErr)
+				require.EqualValues(t, 5, row.MonthlyCredits)
+				require.Nil(t, row.DisableCauses)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, !tt.missing, change.Exists)
+			if !tt.missing {
+				require.Equal(t, tt.want, change.After.DisableCauses)
+				require.Equal(t, tt.wantCredits, change.After.MonthlyCredits)
+				require.Equal(t, len(tt.want) > 0, change.After.Disabled)
+			}
+			again, err := provisioner.PrepareAdminKeyPolicyWithDB(ctx, tx, orgID, KeyTypeChat, policy)
+			require.NoError(t, err)
+			require.False(t, again.Changed)
+			require.NoError(t, tx.Commit(ctx))
+			require.Zero(t, upstream.requestCount())
+		})
+	}
+}

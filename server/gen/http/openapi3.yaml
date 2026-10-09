@@ -2955,6 +2955,82 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/organization.repairInferenceKey:
+        post:
+            tags:
+                - admin
+            summary: repairInferenceKey admin
+            description: Removes explicitly selected known disable causes without changing tier, credits, or runtime. Staff confirmation and reason required.
+            operationId: adminRepairInferenceKey
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RepairInferenceKeyRequestBody'
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminInferenceKeyRepairResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/organization.resumeStripeSubscription:
         post:
             tags:
@@ -85979,6 +86055,10 @@ components:
         AdminInferenceKey:
             type: object
             properties:
+                cause_diagnostics:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminInferenceKeyCause'
                 credits_used:
                     type: number
                     description: Credits spent this month in USD.
@@ -86005,6 +86085,21 @@ components:
                 - monthly_credits
                 - disabled
                 - disable_causes_classified
+        AdminInferenceKeyCause:
+            type: object
+            properties:
+                blocked_reason:
+                    type: string
+                cause:
+                    type: string
+                description:
+                    type: string
+                removable:
+                    type: boolean
+            required:
+                - cause
+                - description
+                - removable
         AdminInferenceKeyLimit:
             type: object
             properties:
@@ -86017,6 +86112,44 @@ components:
             required:
                 - key_type
                 - monthly_credits
+        AdminInferenceKeyRepairResult:
+            type: object
+            properties:
+                key:
+                    $ref: '#/components/schemas/AdminInferenceKeyRepairState'
+                reconciliation_pending:
+                    type: boolean
+            required:
+                - key
+                - reconciliation_pending
+        AdminInferenceKeyRepairState:
+            type: object
+            properties:
+                cause_diagnostics:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminInferenceKeyCause'
+                disable_causes:
+                    type: array
+                    items:
+                        type: string
+                disable_causes_classified:
+                    type: boolean
+                disabled:
+                    type: boolean
+                key_type:
+                    type: string
+                monthly_credits:
+                    type: integer
+                    format: int64
+            description: Committed local key policy, without provider usage or credentials.
+            required:
+                - key_type
+                - monthly_credits
+                - disabled
+                - disable_causes
+                - disable_causes_classified
+                - cause_diagnostics
         AdminInferenceSpendMonth:
             type: object
             properties:
@@ -107311,6 +107444,27 @@ components:
                     description: The rendered prompt
             required:
                 - prompt
+        RepairInferenceKeyRequestBody:
+            type: object
+            properties:
+                confirmation:
+                    type: string
+                key_type:
+                    type: string
+                organization_id:
+                    type: string
+                reason:
+                    type: string
+                remove_causes:
+                    type: array
+                    items:
+                        type: string
+            required:
+                - organization_id
+                - key_type
+                - remove_causes
+                - confirmation
+                - reason
         ReplaceIdentityProviderConnectionClientSecretRequestBody:
             type: object
             properties:

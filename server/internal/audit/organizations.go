@@ -40,6 +40,8 @@ const (
 	ActionOrganizationEnterpriseTrialDemoted    Action = "organization:enterprise_trial_demoted"
 	ActionOrganizationEnterpriseTrialRearmed    Action = "organization:enterprise_trial_rearmed"
 	ActionOrganizationEnterpriseTrialExtended   Action = "organization:enterprise_trial_extended"
+	ActionOrganizationInferenceKeyRepaired      Action = "organization:inference_key_repaired"
+	ActionOrganizationAccountTypeChanged        Action = "organization:account_type_changed"
 	ActionOrganizationEnterpriseTrialConverted  Action = "organization:enterprise_trial_converted"
 	ActionOrganizationEnterpriseTrialStarted    Action = "organization:enterprise_trial_started"
 	ActionOrganizationEnterpriseTrialEndChanged Action = "organization:enterprise_trial_end_changed"
@@ -1125,4 +1127,70 @@ func (l *Logger) LogOrganizationPaygDeactivated(ctx context.Context, dbtx repo.D
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationBillingV1})
+}
+
+// LogOrganizationAccountTypeChangedEvent describes a committed tier policy intent.
+// Equal before/after tiers intentionally emit an event to repair existing keys.
+type LogOrganizationAccountTypeChangedEvent struct {
+	OrganizationID    string
+	Actor             urn.Principal
+	ActorDisplayName  *string
+	BeforeAccountType string
+	AccountType       string
+}
+
+func (l *Logger) LogOrganizationAccountTypeChanged(ctx context.Context, dbtx repo.DBTX, event LogOrganizationAccountTypeChangedEvent) error {
+	action := ActionOrganizationAccountTypeChanged
+	metadata, err := marshalAuditPayload(map[string]string{"operation": "account_type_change"})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+	before, err := marshalAuditPayload(map[string]string{"account_type": event.BeforeAccountType})
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
+	}
+	after, err := marshalAuditPayload(map[string]string{"account_type": event.AccountType})
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ActorSlug: conv.ToPGTextEmpty(""), SubjectSlug: conv.ToPGTextEmpty(""), ActingSurface: conv.ToPGTextEmpty(""), ActingClientID: conv.ToPGTextEmpty(""),
+		OrganizationID: event.OrganizationID,
+		ActorID:        event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		Action: string(action), SubjectID: event.OrganizationID, SubjectType: "organization", SubjectDisplayName: conv.ToPGText("Organization"),
+		Metadata: metadata, BeforeSnapshot: before, AfterSnapshot: after,
+	}, OutboxEvent: events.OrganizationAccountTypeV1})
+}
+
+// LogOrganizationInferenceKeyRepairedEvent contains policy state only, never credentials.
+type InferenceKeyPolicySnapshot struct {
+	KeyType        string   `json:"key_type"`
+	MonthlyCredits int64    `json:"monthly_credits"`
+	Disabled       bool     `json:"disabled"`
+	DisableCauses  []string `json:"disable_causes"`
+}
+
+type LogOrganizationInferenceKeyRepairedEvent struct {
+	OrganizationID   string
+	Actor            urn.Principal
+	ActorDisplayName *string
+	Reason           string
+	RemoveCauses     []string
+	Before           InferenceKeyPolicySnapshot
+	After            InferenceKeyPolicySnapshot
+}
+
+func (l *Logger) LogOrganizationInferenceKeyRepaired(ctx context.Context, dbtx repo.DBTX, event LogOrganizationInferenceKeyRepairedEvent) error {
+	metadata, err := marshalAuditPayload(map[string]any{"operation": "inference_key_repair", "reason": event.Reason, "remove_causes": event.RemoveCauses, "key_type": event.After.KeyType})
+	if err != nil {
+		return err
+	}
+	before, err := marshalAuditPayload(event.Before)
+	if err != nil {
+		return err
+	}
+	after, err := marshalAuditPayload(event.After)
+	if err != nil {
+		return err
+	}
+	return l.log(ctx, dbtx, auditEntry{Params: repo.InsertAuditLogParams{ProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ActorSlug: conv.ToPGTextEmpty(""), SubjectSlug: conv.ToPGTextEmpty(""), ActingSurface: conv.ToPGTextEmpty(""), ActingClientID: conv.ToPGTextEmpty(""), OrganizationID: event.OrganizationID, ActorID: event.Actor.ID, ActorType: string(event.Actor.Type), ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName), Action: string(ActionOrganizationInferenceKeyRepaired), SubjectID: event.OrganizationID, SubjectType: "organization", SubjectDisplayName: conv.ToPGText("Organization"), Metadata: metadata, BeforeSnapshot: before, AfterSnapshot: after}, OutboxEvent: events.OrganizationAccountTypeV1})
 }

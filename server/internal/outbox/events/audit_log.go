@@ -61,6 +61,7 @@ var (
 	OrganizationAccessV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_access_event_v1", "Emitted when staff enable or disable organization access, or change its demo-access whitelisting")
 	OrganizationBillingV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_billing_event_v1", "Emitted when the organization's billing state changes")
 	OrganizationDeviceAgentConfigurationV1 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_device_agent_configuration_event_v1", "Emitted when the organization's device-agent configuration is changed")
+	OrganizationAccountTypeV1              = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_account_type_event_v1", "Emitted when staff apply organization account type policy, including same-tier repair")
 	OrganizationEnterpriseTrialV1          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_enterprise_trial_event_v1", "Emitted when the organization's enterprise trial is armed, started, extended, given a new end date, demoted, re-armed, or converted")
 	OrganizationInviteV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_invite_event_v1", "Emitted when changes to organization invites are made")
 	OrganizationOnboardingV1               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_onboarding_event_v1", "Emitted when an organization's onboarding selection is saved")

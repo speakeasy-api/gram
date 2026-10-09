@@ -972,6 +972,48 @@ func BuildGetOrganizationStatsPayload(adminGetOrganizationStatsAdminSessionToken
 	return v, nil
 }
 
+// BuildRepairInferenceKeyPayload builds the payload for the admin
+// repairInferenceKey endpoint from CLI flags.
+func BuildRepairInferenceKeyPayload(adminRepairInferenceKeyBody string, adminRepairInferenceKeyAdminSessionToken string) (*admin.RepairInferenceKeyPayload, error) {
+	var err error
+	var body RepairInferenceKeyRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRepairInferenceKeyBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"confirmation\": \"abc123\",\n      \"key_type\": \"abc123\",\n      \"organization_id\": \"abc123\",\n      \"reason\": \"abc123\",\n      \"remove_causes\": [\n         \"abc123\"\n      ]\n   }'")
+		}
+		if body.RemoveCauses == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("remove_causes", "body"))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminRepairInferenceKeyAdminSessionToken != "" {
+			adminSessionToken = &adminRepairInferenceKeyAdminSessionToken
+		}
+	}
+	v := &admin.RepairInferenceKeyPayload{
+		OrganizationID: body.OrganizationID,
+		KeyType:        body.KeyType,
+		Confirmation:   body.Confirmation,
+		Reason:         body.Reason,
+	}
+	if body.RemoveCauses != nil {
+		v.RemoveCauses = make([]string, len(body.RemoveCauses))
+		for i, val := range body.RemoveCauses {
+			v.RemoveCauses[i] = val
+		}
+	} else {
+		v.RemoveCauses = []string{}
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildGetInferenceKeysPayload builds the payload for the admin
 // getInferenceKeys endpoint from CLI flags.
 func BuildGetInferenceKeysPayload(adminGetInferenceKeysOrganizationID string, adminGetInferenceKeysAdminSessionToken string) (*admin.GetInferenceKeysPayload, error) {
