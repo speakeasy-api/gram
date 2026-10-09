@@ -65,17 +65,6 @@ var audienceLockoutLevels = []string{audienceLevelBlockedView}
 // The levels whose scope keeps this page readable: manage implies view.
 var audienceViewLevels = []string{audienceLevelView, audienceLevelManage}
 
-// Every block level. Blocking the administrator role is guarded at all three:
-// the caller guard above only protects whoever is writing, and an administrator
-// is not usually the one restricting a server. Blocking the role that exists to
-// undo such a rule leaves nobody who can, so it is refused whichever capability
-// it names.
-var audienceBlockLevels = []string{
-	audienceLevelBlocked,
-	audienceLevelBlockedView,
-	audienceLevelBlockedManage,
-}
-
 // Agent restrictions use the same server-local exclusions as other principals.
 // They constrain live parent policy and are carried into delegated credentials.
 var agentAudienceLevels = []string{audienceLevelUse, audienceLevelView, audienceLevelManage, audienceLevelBlocked, audienceLevelBlockedView, audienceLevelBlockedManage}
@@ -270,8 +259,8 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 	}
 
 	// Lockout guardrail: the administrator role is what undoes a rule written
-	// here, so a block naming it takes the server's access away from everyone
-	// who could give it back. The caller guard below does not catch this — the
+	// here, so a view block naming it takes this page away from everyone who
+	// could give it back. The caller guard below does not catch this — the
 	// person restricting a server is rarely an administrator themselves.
 	if err := s.rejectAdminRoleBlocks(ctx, ac.ActiveOrganizationID, principalsByLevel); err != nil {
 		return nil, err
@@ -710,16 +699,16 @@ func audienceSelectors(scope authz.Scope, resourceID string, tools, dispositions
 	return selectors, nil
 }
 
-// rejectAdminRoleBlocks refuses a save that would block the administrator role
-// on this resource. Restricting a server to one team is normally written as
-// "everyone else: no access", which stores a block — and a role block outranks
-// every grant except one made to a person by name for this resource, so naming
-// the administrator role there locks administrators out of the page that could
-// undo it. Roles other than admin are left alone: taking a team off a server is
-// the point of this surface.
+// rejectAdminRoleBlocks refuses a save that would block the administrator
+// role's view of this resource. A role block outranks every grant except one
+// made to a person by name for this resource, so blocking the administrator
+// role's read locks administrators out of the page that could undo it. Blocks
+// on connect and manage leave the page readable, so administrators can still
+// be taken off a server's use or management. Roles other than admin are left
+// alone: taking a team off a server is the point of this surface.
 func (s *Service) rejectAdminRoleBlocks(ctx context.Context, organizationID string, principalsByLevel map[string][]authz.PrincipalSelectors) error {
 	blocked := make(map[string]struct{})
-	for _, level := range audienceBlockLevels {
+	for _, level := range audienceLockoutLevels {
 		for _, entry := range principalsByLevel[level] {
 			if entry.Principal.Type == urn.PrincipalTypeRole {
 				blocked[entry.Principal.String()] = struct{}{}
@@ -739,7 +728,7 @@ func (s *Service) rejectAdminRoleBlocks(ctx context.Context, organizationID stri
 			continue
 		}
 		if _, ok := blocked[role.RoleUrn]; ok {
-			return oops.E(oops.CodeInvalid, nil, "blocking the %s role would take this server away from every administrator, including the ones who could give it back; remove its access instead of blocking it", role.WorkosName)
+			return oops.E(oops.CodeInvalid, nil, "blocking the %s role from viewing this server would take its access page away from every administrator, including the ones who could give it back; block its use or management instead", role.WorkosName)
 		}
 	}
 	return nil
