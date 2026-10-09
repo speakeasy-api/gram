@@ -266,7 +266,7 @@ type Policy struct {
 	limiter           Limiter
 	breaker           Breaker
 	tlsRootCAs        *x509.CertPool
-	internalCatalog   *catalogRule
+	internalCatalog   *net.IPNet
 }
 
 // WithResolver is a functional option that sets the Policy's resolver.
@@ -394,6 +394,9 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	for _, option := range options {
 		option(&opts)
 	}
+	if opts.internalCatalog && p.internalCatalog != nil {
+		opts.allowedCIDRBlocks = append(opts.allowedCIDRBlocks, p.internalCatalog)
+	}
 
 	dialOpts := []func(*dialerOptions){}
 	if opts.resolver != nil {
@@ -417,16 +420,6 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 		} else {
 			transport.TLSClientConfig.RootCAs = p.tlsRootCAs
 		}
-	}
-
-	if opts.internalCatalog && p.internalCatalog != nil {
-		// Direct TLS dialing keeps the destination check local rather than
-		// delegating DNS or connections to an environment proxy.
-		transport.Proxy = nil
-		if transport.TLSClientConfig == nil {
-			transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
-		}
-		transport.DialTLSContext = p.catalogTLSDialer(dialer, transport.TLSClientConfig).DialContext
 	}
 
 	otelOpts := []otelhttp.Option{otelhttp.WithTracerProvider(p.tracerProvider)}
@@ -564,15 +557,7 @@ func (p *Policy) Dialer(options ...func(*dialerOptions)) *net.Dialer {
 				return fmt.Errorf("%s: %w: bad ip", address, ErrBadHost)
 			}
 
-			// A client-scoped allowlist overrides the blocklist for trusted,
-			// non-user-controlled destinations (e.g. GKE runner pod IPs).
-			for _, block := range opts.allowedCIDRBlocks {
-				if block.Contains(ip) {
-					return nil
-				}
-			}
-
-			return p.checkIP(ip)
+			return p.checkIP(ip, opts.allowedCIDRBlocks...)
 		},
 	}
 }
@@ -583,6 +568,7 @@ func (p *Policy) Dialer(options ...func(*dialerOptions)) *net.Dialer {
 // checked. Returns [ErrBlockedIP] when any address falls within a blocked
 // CIDR, and [ErrBadHost] when host is empty, fails to resolve, or resolves to
 // no addresses.
+// CIDR allowance options apply as they do to Client; other options are ignored.
 //
 // ValidateHost is intended for management-time URL validation so that callers
 // reject blocked hosts before persisting them. Runtime enforcement still
@@ -594,17 +580,21 @@ func (p *Policy) Dialer(options ...func(*dialerOptions)) *net.Dialer {
 // address. The asymmetry is intentional — validation should not persist a row
 // whose host points anywhere blocked, even if a public address happens to be
 // tried first at dial time.
-func (p *Policy) ValidateHost(ctx context.Context, host string) error {
-	return p.validateHost(ctx, host, p.checkIP)
-}
-
-func (p *Policy) validateHost(ctx context.Context, host string, checkIP func(net.IP) error) error {
+func (p *Policy) ValidateHost(ctx context.Context, host string, options ...ClientOption) error {
 	if host == "" {
 		return fmt.Errorf("%w: empty host", ErrBadHost)
 	}
 
+	var opts httpClientOptions
+	for _, option := range options {
+		option(&opts)
+	}
+	if opts.internalCatalog && p.internalCatalog != nil {
+		opts.allowedCIDRBlocks = append(opts.allowedCIDRBlocks, p.internalCatalog)
+	}
+
 	if ip := net.ParseIP(host); ip != nil {
-		return checkIP(ip)
+		return p.checkIP(ip, opts.allowedCIDRBlocks...)
 	}
 
 	ips, err := p.resolver.LookupIP(ctx, "ip", host)
@@ -616,7 +606,7 @@ func (p *Policy) validateHost(ctx context.Context, host string, checkIP func(net
 	}
 
 	for _, ip := range ips {
-		if err := checkIP(ip); err != nil {
+		if err := p.checkIP(ip, opts.allowedCIDRBlocks...); err != nil {
 			return err
 		}
 	}
@@ -630,7 +620,7 @@ func (p *Policy) validateHost(ctx context.Context, host string, checkIP func(net
 // happens via [Policy.Dialer] on the subsequent request, including each
 // redirect. Callers that fetch user-supplied content (OpenAPI specs, images)
 // should use [Policy.ValidateHTTPSURL] instead so the body cannot travel in
-// the clear. WithInternalCatalog opts into the configured catalog rule;
+// the clear. CIDR allowance options apply as they do to Client;
 // other client options do not affect URL validation.
 func (p *Policy) ValidateHTTPURL(ctx context.Context, rawURL string, options ...ClientOption) (*url.URL, error) {
 	return p.validateAbsoluteURL(ctx, rawURL, []string{"http", "https"}, options...)
@@ -659,28 +649,24 @@ func (p *Policy) validateAbsoluteURL(ctx context.Context, rawURL string, schemes
 		return nil, fmt.Errorf("url must include a host")
 	}
 
-	var opts httpClientOptions
-	for _, option := range options {
-		option(&opts)
-	}
-	checkIP := p.checkIP
-	if opts.internalCatalog && p.internalCatalog != nil && catalogHTTPSURL(u) {
-		checkIP = p.checkCatalogIP
-	}
-
-	if err := p.validateHost(ctx, u.Hostname(), checkIP); err != nil {
+	if err := p.ValidateHost(ctx, u.Hostname(), options...); err != nil {
 		return nil, fmt.Errorf("validate host: %w", err)
 	}
 
 	return u, nil
 }
 
-// checkIP returns [ErrBlockedIP] if ip falls within any of the policy's
-// blocked CIDR ranges, and nil otherwise. It is the shared CIDR-membership
+// checkIP applies explicit CIDR allowances before the policy's blocklist,
+// returning [ErrBlockedIP] for blocked addresses. It is the shared CIDR-membership
 // test used by both [Policy.Dialer]'s ControlContext callback and
 // [Policy.ValidateHost], so that runtime and management-time enforcement stay
 // in sync.
-func (p *Policy) checkIP(ip net.IP) error {
+func (p *Policy) checkIP(ip net.IP, allowedCIDRBlocks ...*net.IPNet) error {
+	for _, block := range allowedCIDRBlocks {
+		if block.Contains(ip) {
+			return nil
+		}
+	}
 	for _, block := range p.blockedCIDRBlocks {
 		if block.Contains(ip) {
 			return fmt.Errorf("%s: %w", ip, ErrBlockedIP)

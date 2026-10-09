@@ -12,9 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/netip"
 	"net/url"
-	"strconv"
 	"testing"
 	"time"
 
@@ -61,9 +59,8 @@ func TestCatalogURLValidation(t *testing.T) {
 		{"alternate hostname", "https://alternate.example.test/mcp", []string{"10.23.45.67"}, true},
 		{"literal", "https://10.23.45.67/mcp", nil, true},
 		{"mapped literal", "https://[::ffff:10.23.45.67]/mcp", nil, true},
-		{"http", "http://alpha.catalog.dev.speakeasy.com:443/mcp", []string{"10.23.45.67"}, false},
-		{"other port", "https://alpha.catalog.dev.speakeasy.com:8443/mcp", []string{"10.23.45.67"}, false},
-		{"empty port", "https://alpha.catalog.dev.speakeasy.com:/mcp", []string{"10.23.45.67"}, false},
+		{"http", "http://alpha.catalog.dev.speakeasy.com/mcp", []string{"10.23.45.67"}, true},
+		{"other port", "https://alpha.catalog.dev.speakeasy.com:8443/mcp", []string{"10.23.45.67"}, true},
 		{"other private IP", "https://alpha.catalog.dev.speakeasy.com/mcp", []string{"10.23.45.68"}, false},
 		{"public IP", "https://alpha.catalog.dev.speakeasy.com/mcp", []string{"8.8.8.8"}, true},
 		{"mixed DNS with private IP", "https://alpha.catalog.dev.speakeasy.com/mcp", []string{"10.23.45.67", "10.23.45.68"}, false},
@@ -130,26 +127,6 @@ func TestCatalogRequiresConfigurationAndClientOptIn(t *testing.T) {
 	}
 }
 
-func TestCatalogSocketDestination(t *testing.T) {
-	t.Parallel()
-	option, err := WithInternalCatalogCIDR("10.23.45.67/32")
-	require.NoError(t, err)
-	policy := NewDefaultPolicy(noop.NewTracerProvider(), option) //nolint:forbidigo // testenv imports guardian through its identity fixtures, causing an import cycle.
-	for _, tc := range []struct {
-		address string
-		valid   bool
-	}{
-		{"10.23.45.67:443", true}, {"[::ffff:10.23.45.67]:443", true},
-		{"10.23.45.68:443", false}, {"10.23.45.67:80", false},
-		{"8.8.8.8:443", false}, {"[::1]:443", false}, {"bad", false},
-	} {
-		t.Run(tc.address, func(t *testing.T) {
-			t.Parallel()
-			require.Equal(t, tc.valid, policy.internalCatalog.permits(tc.address))
-		})
-	}
-}
-
 func TestCatalogRebindingRejectedByClient(t *testing.T) {
 	t.Parallel()
 	option, err := WithInternalCatalogCIDR("10.23.45.67/32")
@@ -176,10 +153,9 @@ func TestCatalogRebindingRejectedByClient(t *testing.T) {
 	require.ErrorIs(t, err, ErrBlockedIP)
 }
 
-// catalogTLSFixture substitutes only the expected socket and port for a local
-// TLS listener. It exercises the production client, TLS-only dialer, DNS
-// resolver, real Guardian ControlContext and normal certificate validation.
-func catalogTLSFixture(t *testing.T, trusted bool, handler http.Handler) *http.Client {
+// catalogTLSFixture permits one loopback address in place of the private ILB.
+// The real Guardian client resolves and connects normally, including TLS.
+func catalogTLSFixture(t *testing.T, trusted bool, handler http.Handler) (*http.Client, string) {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
@@ -204,54 +180,45 @@ func catalogTLSFixture(t *testing.T, trusted bool, handler http.Handler) *http.C
 		return []net.IP{net.ParseIP("127.0.0.1")}, nil
 	}})
 	policy := NewDefaultPolicy(noop.NewTracerProvider(), WithResolver(resolver), WithTLSRootCAs(roots)) //nolint:forbidigo // testenv imports guardian through its identity fixtures, causing an import cycle.
-	local := netip.MustParseAddrPort(server.Listener.Addr().String())
-	policy.internalCatalog = &catalogRule{destination: local}
-	base := &http.Transport{ForceAttemptHTTP2: true}
-	client := policy.clientWithBaseTransport(base, WithInternalCatalog())
-	dial := base.DialTLSContext
-	base.DialTLSContext = func(ctx context.Context, network, address string) (net.Conn, error) {
-		host, port, err := net.SplitHostPort(address)
-		if err != nil {
-			return nil, fmt.Errorf("split fixture address: %w", err)
-		}
-		if port == "443" {
-			address = net.JoinHostPort(host, strconv.Itoa(int(local.Port())))
-		}
-		return dial(ctx, network, address)
-	}
+	policy.internalCatalog = mustParseCIDR("127.0.0.1/32")
+	client := policy.PooledClient(WithInternalCatalog())
 	t.Cleanup(client.CloseIdleConnections)
-	return client
+	_, port, err := net.SplitHostPort(server.Listener.Addr().String())
+	require.NoError(t, err)
+	return client, port
 }
 
 func TestCatalogTransportAndRedirects(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name, target string
-		valid        bool
+		name, targetHost string
+		valid            bool
 	}{
-		{"same origin", "/okta/mcp", true},
-		{"second customer", "https://beta.catalog.dev.speakeasy.com/okta/mcp", true},
-		{"alternate hostname", "https://alternate.example.test/mcp", true},
-		{"wrong certificate hostname", "https://wrong.example.test/mcp", false},
-		{"other private host", "https://private.example.test/mcp", false},
-		{"literal with valid certificate", "https://127.0.0.1/mcp", true},
-		{"scheme", "http://alpha.catalog.dev.speakeasy.com/okta/mcp", false},
-		{"plaintext on TLS port", "http://alpha.catalog.dev.speakeasy.com:443/okta/mcp", false},
-		{"port", "https://alpha.catalog.dev.speakeasy.com:8443/okta/mcp", false},
+		{"same origin", "alpha.catalog.dev.speakeasy.com", true},
+		{"second customer", "beta.catalog.dev.speakeasy.com", true},
+		{"alternate hostname", "alternate.example.test", true},
+		{"wrong certificate hostname", "wrong.example.test", false},
+		{"other private host", "private.example.test", false},
+		{"literal with valid certificate", "127.0.0.1", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			client := catalogTLSFixture(t, true, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			client, port := catalogTLSFixture(t, true, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.ProtoMajor != 2 {
 					t.Errorf("expected HTTP/2, got %s", r.Proto)
 				}
 				if r.URL.Path == "/redirect" {
-					http.Redirect(w, r, tc.target, http.StatusFound)
+					_, port, err := net.SplitHostPort(r.Host)
+					if err != nil {
+						t.Errorf("split request host: %v", err)
+						return
+					}
+					http.Redirect(w, r, "https://"+net.JoinHostPort(tc.targetHost, port)+"/okta/mcp", http.StatusFound)
 					return
 				}
 				w.WriteHeader(http.StatusNoContent)
 			}))
-			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "https://alpha.catalog.dev.speakeasy.com/redirect", nil)
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "https://alpha.catalog.dev.speakeasy.com:"+port+"/redirect", nil)
 			require.NoError(t, err)
 			resp, err := client.Do(req)
 			if tc.valid {
@@ -267,8 +234,8 @@ func TestCatalogTransportAndRedirects(t *testing.T) {
 
 func TestCatalogTLSCertificateStillVerified(t *testing.T) {
 	t.Parallel()
-	client := catalogTLSFixture(t, false, http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Error("untrusted TLS reached handler") }))
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://alpha.catalog.dev.speakeasy.com/okta/mcp", nil)
+	client, port := catalogTLSFixture(t, false, http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Error("untrusted TLS reached handler") }))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "https://alpha.catalog.dev.speakeasy.com:"+port+"/okta/mcp", nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	if resp != nil {

@@ -29,27 +29,22 @@ they do not prove deployed DNS, certificates, firewall rules, or ILB routing.
 
 The catalog uses `https://<customer>.catalog.dev.speakeasy.com/<server>/mcp`.
 The ILB handles path-prefix stripping; the application sends the original path.
-The exception trusts the configured ILB's HTTPS listener, regardless of the
-hostname used to reach it. Customer labels are release-channel conventions,
+The exception permits the configured ILB address, regardless of hostname or port.
+The ILB treats inbound requests as untrusted. Customer labels are release-channel conventions,
 **not authorization boundaries**. Every customer can route to every catalog
 server; ordinary product authorization and upstream authentication still apply.
 
 ## Enforcement and path audit
 
-- The configured private IPv4 address is permitted only over HTTPS on port 443.
-  Other destinations retain the ordinary Guardian blocklist; public destinations
-  remain allowed. There is no hostname allowlist.
+- Opted-in MCP clients add the configured `/32` to Guardian's existing CIDR
+  allowance. Other destinations retain the ordinary blocklist. There is no
+  catalog-specific hostname, scheme, port, or transport logic.
 - Preflight checks every DNS answer. Runtime checks the actual resolved socket
   on every connection, including after preflight and redirects. A DNS change to
   another private address cannot reuse the exception.
-- The standard TLS dialer receives the socket exception; the plaintext dialer
-  does not. A redirect to HTTP, even on port 443, cannot use it. Existing MCP
-  URL validation and redirect/body-replay rules remain in force.
-- Opted-in clients connect directly (environment HTTP proxies are disabled) so
-  DNS and socket checks cannot be delegated to a proxy. TLS trust and hostname
-  verification remain enabled, using the original request hostname. IP-literal
-  URLs require a certificate valid for that IP. The load balancer must expose
-  only services intended to be reachable by all catalog consumers.
+- Existing MCP HTTPS validation and redirect/body-replay rules remain in force.
+  Guardian uses its ordinary HTTP transport and TLS verification. The allowance
+  changes only which IPs are reachable, not authentication or authorization.
 - Remote MCP create/update/provision/verify use `proxy.ValidateRemoteMCPURL`;
   probes and the hosted proxy opt in at client construction. Unproxied registration
   uses the same validation option.
