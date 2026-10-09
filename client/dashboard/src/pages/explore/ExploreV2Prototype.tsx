@@ -6,8 +6,9 @@
 // Each query is two lines. The first is what is asked of: the query's letter,
 // its dataset, and a search field holding its filters. The second hangs off
 // the letter and reads as a sentence of joined segments: Show | Count of |
-// all rows — by | user | + — limit to top | 10 — rollup | every | auto —
-// Σ Modify.
+// all rows — by | user | + — limit to top | 10 — rollup | every | auto.
+// Rollup is the time bucket a line, area or bar chart draws a point per:
+// the query's grain (hour, day, week, month), picked from the window on auto.
 import { AXIS, seriesForTheme, TOOLTIP } from "@/components/chart/palette";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { Badge } from "@/components/ui/Badge";
@@ -101,7 +102,14 @@ const AGGS: { value: string; label: string }[] = [
   { value: "max", label: "Max of" },
 ];
 const LIMITS = ["5", "10", "25", "100"];
-const ROLLUPS = ["auto", "1m", "5m", "1h", "1d"];
+// The grains the analytics API buckets by; auto picks one from the window.
+const ROLLUPS: { value: string; label: string }[] = [
+  { value: "auto", label: "auto" },
+  { value: "hour", label: "1h" },
+  { value: "day", label: "1d" },
+  { value: "week", label: "1w" },
+  { value: "month", label: "1mo" },
+];
 const LETTERS = "abcdefgh";
 
 type ChartKind =
@@ -146,7 +154,6 @@ interface Query {
 
 interface State {
   queries: Query[];
-  formulas: string[];
   chart: ChartKind;
   window: WindowPreset;
 }
@@ -168,7 +175,6 @@ const INITIAL: State = {
       alias: "",
     },
   ],
-  formulas: [],
   chart: "line",
   window: "7d",
 };
@@ -206,36 +212,6 @@ export function ExploreV2Prototype(): JSX.Element {
             }
           />
         ))}
-        {state.formulas.map((formula, index) => (
-          <div key={index} className="flex items-center gap-2">
-            <span className="border-border text-muted-foreground flex size-8 shrink-0 items-center justify-center border font-mono text-xs italic">
-              ƒ
-            </span>
-            <Input
-              value={formula}
-              aria-label="Formula"
-              onChange={(value) =>
-                patch({
-                  formulas: state.formulas.map((f, i) =>
-                    i === index ? value : f,
-                  ),
-                })
-              }
-              className="h-8 flex-1 font-mono"
-            />
-            <Button
-              variant="tertiary"
-              size="sm"
-              icon="x"
-              aria-label="Remove formula"
-              onClick={() =>
-                patch({
-                  formulas: state.formulas.filter((_, i) => i !== index),
-                })
-              }
-            />
-          </div>
-        ))}
         <div className="flex items-center gap-1">
           <Button
             variant="tertiary"
@@ -256,21 +232,6 @@ export function ExploreV2Prototype(): JSX.Element {
             }}
           >
             Add query
-          </Button>
-          <Button
-            variant="tertiary"
-            size="sm"
-            icon="plus"
-            onClick={() =>
-              patch({
-                formulas: [
-                  ...state.formulas,
-                  state.queries.length > 1 ? "a / b" : "a * 100",
-                ],
-              })
-            }
-          >
-            Add formula
           </Button>
         </div>
       </section>
@@ -498,23 +459,11 @@ function QueryBlock({
             <ValueSelect
               label="Rollup"
               value={query.rollup}
-              options={ROLLUPS.map((r) => ({
-                value: r,
-                label: r === "auto" ? "1h (auto)" : r,
-              }))}
+              options={ROLLUPS.map((r) =>
+                r.value === "auto" ? { ...r, label: "1h (auto)" } : r,
+              )}
               onSelect={(rollup) => onChange({ rollup })}
             />
-          </Segments>
-          <Joint />
-          <Segments>
-            <button
-              type="button"
-              title="Functions (not in the prototype)"
-              className="hover:bg-muted flex h-full items-center gap-1.5 px-2.5 text-sm"
-            >
-              <Icon name="sigma" className="size-3.5" />
-              Modify
-            </button>
           </Segments>
         </div>
       </div>
@@ -1067,10 +1016,6 @@ function dummyResult(state: State): DummyResult {
       series.push(label);
       seeds.push(label + key);
     }
-  }
-  for (const formula of state.formulas) {
-    series.push(`ƒ ${formula}`);
-    seeds.push(formula);
   }
 
   const buckets = 24;
