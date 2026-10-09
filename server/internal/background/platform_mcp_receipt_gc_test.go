@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -36,7 +37,10 @@ func executePlatformMCPReceiptGC(t *testing.T, deleted func(call int) int64) (in
 	env.ExecuteWorkflow(PlatformMCPReceiptGCWorkflow)
 
 	require.True(t, env.IsWorkflowCompleted())
-	return calls, sizes, env.GetWorkflowError()
+	if err := env.GetWorkflowError(); err != nil {
+		return calls, sizes, fmt.Errorf("platform mcp receipt gc workflow: %w", err)
+	}
+	return calls, sizes, nil
 }
 
 func TestPlatformMCPReceiptGCWorkflow_PartialBatchStops(t *testing.T) {
