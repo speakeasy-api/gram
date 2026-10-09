@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -67,12 +66,11 @@ func TestIngestOTLPExportHandlesGzipAndSettlesAfterEnqueue(t *testing.T) {
 			require.Equal(t, testLogProjectID, tenant.projectID)
 			return []*wrapperspb.StringValue{wrapperspb.String("first"), wrapperspb.String("second")}, nil
 		},
-		publish: func(ctx context.Context, items []*wrapperspb.StringValue) error {
-			return gramotel.Publish(ctx, nil, gramotel.Signal("test"), publisher, func(*wrapperspb.StringValue) error {
-				validated++
-				return nil
-			}, items)
+		validate: func(*wrapperspb.StringValue) error {
+			validated++
+			return nil
 		},
+		publisher: publisher,
 	})
 
 	require.NoError(t, err)

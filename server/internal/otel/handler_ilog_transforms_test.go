@@ -9,7 +9,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -139,9 +138,9 @@ func TestMaxSizeLogRecordFitsRelayExportAfterFullEnrichment(t *testing.T) {
 			logStringAttribute("gen_ai.output.messages", `[{"role":"assistant","parts":[{"type":"text","content":"done"}],"finish_reason":"stop"}]`),
 		},
 	}).Build()
-	padInboundLogRecordToSize(t, inbound, gramotel.MaxLogRecordBytes)
-	require.Equal(t, gramotel.MaxLogRecordBytes, proto.Size(inbound))
-	require.NoError(t, gramotel.ValidateLogRecord(inbound))
+	padInboundLogRecordToSize(t, inbound, maxOTLPLogRecordBytes)
+	require.Equal(t, maxOTLPLogRecordBytes, proto.Size(inbound))
+	require.NoError(t, ValidateLogRecord(inbound))
 
 	var published *otelv1.LogRecord
 	publisher := gcp.NewMockPublisher[*otelv1.LogRecord]()
@@ -170,7 +169,7 @@ func TestMaxSizeLogRecordFitsRelayExportAfterFullEnrichment(t *testing.T) {
 
 	request, err := newLogRelayExportRequest([]*otelv1.LogRecord{published}, true)
 	require.NoError(t, err)
-	require.LessOrEqual(t, proto.Size(request), gramotel.MaxLogRelayExportBytes)
+	require.LessOrEqual(t, proto.Size(request), maxLogRelayExportBytes)
 }
 
 func padInboundLogRecordToSize(t *testing.T, record *otelv1.InboundLogRecord, target int) {
@@ -353,7 +352,7 @@ func TestNearLimitPromptStillFitsRelayExportAfterEnrichment(t *testing.T) {
 	// text: the tokens enricher counts a prompt's tokens, and one word of
 	// several megabytes would keep its merge loop busy for an hour.
 	sentence := "the quick brown fox jumps over the lazy dog. "
-	prompt := strings.Repeat(sentence, (gramotel.MaxLogRecordBytes-16*constants.KiB)/len(sentence))
+	prompt := strings.Repeat(sentence, (maxOTLPLogRecordBytes-16*constants.KiB)/len(sentence))
 	inbound := (&otelv1.InboundLogRecord_builder{
 		RecordId:  new("record-id"),
 		EventName: new("user_prompt"),
@@ -371,8 +370,8 @@ func TestNearLimitPromptStillFitsRelayExportAfterEnrichment(t *testing.T) {
 			logStringAttribute("message.uuid", "m1"),
 		},
 	}).Build()
-	require.LessOrEqual(t, proto.Size(inbound), gramotel.MaxLogRecordBytes)
-	require.NoError(t, gramotel.ValidateLogRecord(inbound))
+	require.LessOrEqual(t, proto.Size(inbound), maxOTLPLogRecordBytes)
+	require.NoError(t, ValidateLogRecord(inbound))
 
 	var published *otelv1.LogRecord
 	publisher := gcp.NewMockPublisher[*otelv1.LogRecord]()
@@ -397,5 +396,5 @@ func TestNearLimitPromptStillFitsRelayExportAfterEnrichment(t *testing.T) {
 
 	request, err := newLogRelayExportRequest([]*otelv1.LogRecord{published}, true)
 	require.NoError(t, err)
-	require.LessOrEqual(t, proto.Size(request), gramotel.MaxLogRelayExportBytes)
+	require.LessOrEqual(t, proto.Size(request), maxLogRelayExportBytes)
 }

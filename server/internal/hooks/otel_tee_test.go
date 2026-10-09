@@ -15,13 +15,13 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/metering"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
+	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func teeTestProvenance() *otelv1.InboundLogRecord_Provenance {
 	return (&otelv1.InboundLogRecord_Provenance_builder{
-		Source:         new(gramotel.ProvenanceSource),
+		Source:         new(otelsvc.ProvenanceSource),
 		OrganizationId: new("org-tee-1"),
 		ProjectId:      new("proj-tee-1"),
 	}).Build()
@@ -87,7 +87,7 @@ func TestInboundLogRecordsFromHooksExportMapsFields(t *testing.T) {
 	require.Equal(t, "devbox.local", teeAttrByKey(t, record.GetResource().GetAttributes(), "host.name").GetStringValue())
 	require.Equal(t, "claude-code", record.GetScope().GetName())
 	require.Equal(t, "1.2.3", record.GetScope().GetVersion())
-	require.Equal(t, gramotel.ProvenanceSource, record.GetProvenance().GetSource())
+	require.Equal(t, otelsvc.ProvenanceSource, record.GetProvenance().GetSource())
 	require.Equal(t, "org-tee-1", record.GetProvenance().GetOrganizationId())
 	require.Equal(t, "proj-tee-1", record.GetProvenance().GetProjectId())
 }
@@ -213,7 +213,7 @@ func TestTeeOTELLogsToEventFeedPublishesRecords(t *testing.T) {
 	require.Len(t, published, 2)
 	require.Equal(t, "first", published[0].GetBody().GetStringValue())
 	require.Equal(t, "second", published[1].GetBody().GetStringValue())
-	require.Equal(t, gramotel.ProvenanceSource, published[0].GetProvenance().GetSource())
+	require.Equal(t, otelsvc.ProvenanceSource, published[0].GetProvenance().GetSource())
 	require.Equal(t, "org-tee-1", published[0].GetProvenance().GetOrganizationId())
 	require.Equal(t, "proj-tee-1", published[0].GetProvenance().GetProjectId())
 	require.NotEqual(t, published[0].GetRecordId(), published[1].GetRecordId())
@@ -277,7 +277,7 @@ func TestLogsTeesExportIntoEventFeedPipeline(t *testing.T) {
 	require.Len(t, published, 1)
 	record := published[0]
 	require.Equal(t, "teed request", record.GetBody().GetStringValue())
-	require.Equal(t, gramotel.ProvenanceSource, record.GetProvenance().GetSource())
+	require.Equal(t, otelsvc.ProvenanceSource, record.GetProvenance().GetSource())
 	require.Equal(t, authCtx.ActiveOrganizationID, record.GetProvenance().GetOrganizationId())
 	require.Equal(t, authCtx.ProjectID.String(), record.GetProvenance().GetProjectId())
 	require.Equal(t, uint64(timestamp.UnixNano()), record.GetTimeUnixNano())

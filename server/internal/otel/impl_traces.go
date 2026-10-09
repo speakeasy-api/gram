@@ -10,25 +10,23 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	gen "github.com/speakeasy-api/gram/server/gen/otel"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 )
 
 func (s *Service) Traces(ctx context.Context, payload *gen.TracesPayload, body io.ReadCloser) error {
 	return ingestOTLPExport(ctx, s.logger, otlpIngestSpec[*otelv1.InboundSpan]{
-		signal:          "trace",
+		signal:          SignalTrace,
 		contentEncoding: payload.ContentEncoding,
 		body:            body,
 		decode: func(raw []byte, tenant otlpIngestTenant) ([]*otelv1.InboundSpan, error) {
 			provenance := (&otelv1.InboundSpan_Provenance_builder{
-				Source:         new(gramotel.ProvenanceSource),
+				Source:         new(ProvenanceSource),
 				OrganizationId: &tenant.organizationID,
 				ProjectId:      &tenant.projectID,
 			}).Build()
 			return decodeOTLPTraceExport(raw, provenance)
 		},
-		publish: func(ctx context.Context, spans []*otelv1.InboundSpan) error {
-			return gramotel.Publish(ctx, s.records, gramotel.SignalSpan, s.spanPublisher, func(span *otelv1.InboundSpan) error { return validateSpan(span) }, spans)
-		},
+		validate:  func(span *otelv1.InboundSpan) error { return validateSpan(span) },
+		publisher: s.spanPublisher,
 	})
 }
 

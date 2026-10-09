@@ -1,4 +1,4 @@
-package gramotel
+package otelpub
 
 import (
 	"fmt"

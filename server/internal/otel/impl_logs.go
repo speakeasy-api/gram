@@ -2,6 +2,7 @@ package otel
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -12,18 +13,17 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	gen "github.com/speakeasy-api/gram/server/gen/otel"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 )
 
 func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload, body io.ReadCloser) error {
 	var export *collectorlogsv1.ExportLogsServiceRequest
 	err := ingestOTLPExport(ctx, s.logger, otlpIngestSpec[*otelv1.InboundLogRecord]{
-		signal:          "log",
+		signal:          SignalLog,
 		contentEncoding: payload.ContentEncoding,
 		body:            body,
 		decode: func(raw []byte, tenant otlpIngestTenant) ([]*otelv1.InboundLogRecord, error) {
 			provenance := (&otelv1.InboundLogRecord_Provenance_builder{
-				Source:         new(gramotel.ProvenanceSource),
+				Source:         new(ProvenanceSource),
 				OrganizationId: &tenant.organizationID,
 				ProjectId:      &tenant.projectID,
 			}).Build()
@@ -34,9 +34,8 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload, body io.Re
 			export = request
 			return inboundLogRecordsFromExport(request, provenance)
 		},
-		publish: func(ctx context.Context, records []*otelv1.InboundLogRecord) error {
-			return gramotel.PublishLogs(ctx, s.records, s.logPublisher, records)
-		},
+		validate:  ValidateLogRecord,
+		publisher: s.logPublisher,
 	})
 	if err != nil {
 		return err
@@ -118,4 +117,29 @@ func inboundLogRecordsFromExport(request *collectorlogsv1.ExportLogsServiceReque
 	}
 
 	return records, nil
+}
+
+// ValidateLogRecord enforces the ingest-edge contract on a log record
+// before it is published to the inbound pipeline topic: a record id must be
+// assigned, the record must fit the relay export budget, and trace/span ids
+// must be empty or exactly OTLP-sized. Exported so the hooks OTLP tee can
+// apply the same contract when it republishes records into this pipeline.
+func ValidateLogRecord(record *otelv1.InboundLogRecord) error {
+	if record == nil {
+		return errors.New("log record is required")
+	}
+	if record.GetRecordId() == "" {
+		return errors.New("log record ID is required")
+	}
+	if size := proto.Size(record); size > maxOTLPLogRecordBytes {
+		return fmt.Errorf("log record exceeds maximum size of %d bytes: got %d bytes", maxOTLPLogRecordBytes, size)
+	}
+	if size := len(record.GetTraceId()); size != 0 && size != otlpTraceIDSize {
+		return fmt.Errorf("trace ID must be empty or %d bytes, got %d", otlpTraceIDSize, size)
+	}
+	if size := len(record.GetSpanId()); size != 0 && size != otlpSpanIDSize {
+		return fmt.Errorf("span ID must be empty or %d bytes, got %d", otlpSpanIDSize, size)
+	}
+
+	return nil
 }

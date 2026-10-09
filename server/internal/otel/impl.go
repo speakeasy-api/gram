@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
-	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -24,26 +23,27 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/chrepo"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 )
 
 const maxOTLPExportBytes = 20 * constants.MiB
+
+// ProvenanceSource is the provenance source stamped on every record entering
+// the OTel pipeline through a Speakeasy-operated ingest edge (/otel/v1/*, the
+// hooks OTLP tee and otelpub).
+const ProvenanceSource = "speakeasy"
 
 // FeatureChecker reports whether a product feature is enabled for an
 // organization.
 type FeatureChecker func(ctx context.Context, organizationID string) (bool, error)
 
 type Service struct {
-	logger       *slog.Logger
-	tracer       trace.Tracer
-	auth         *auth.Auth
-	authz        *authz.Engine
-	chRepo       *chrepo.Queries
-	logsEnabled  FeatureChecker
-	logPublisher gcp.Publisher[*otelv1.InboundLogRecord]
-	// records counts what the publishing core does with every export. Nil
-	// records nothing.
-	records         *gramotel.Metrics
+	logger          *slog.Logger
+	tracer          trace.Tracer
+	auth            *auth.Auth
+	authz           *authz.Engine
+	chRepo          *chrepo.Queries
+	logsEnabled     FeatureChecker
+	logPublisher    gcp.Publisher[*otelv1.InboundLogRecord]
 	metricPublisher gcp.Publisher[*otelv1.InboundMetric]
 	spanPublisher   gcp.Publisher[*otelv1.InboundSpan]
 	hooksSink       HooksSink
@@ -55,7 +55,6 @@ var _ gen.Auther = (*Service)(nil)
 func NewService(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
-	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	chConn clickhouse.Conn,
 	sessions *sessions.Manager,
@@ -73,7 +72,6 @@ func NewService(
 		chRepo:          chrepo.New(chConn),
 		logsEnabled:     logsEnabled,
 		logPublisher:    logPublisher,
-		records:         gramotel.NewMetrics(logger, meterProvider),
 		metricPublisher: metricPublisher,
 		spanPublisher:   spanPublisher,
 		hooksSink:       nil,

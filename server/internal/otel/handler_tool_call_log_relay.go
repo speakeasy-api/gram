@@ -27,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 )
 
@@ -219,7 +218,7 @@ func (h *ToolCallLogRelayHandler) handleGroups(ctx context.Context, groups []too
 		}
 
 		observedAt := h.now().UTC()
-		batches, err := rightSizeProtoBatches(group.messages, gramotel.MaxLogRelayExportBytes, func(batch []toolCallLogRelayMessage) (*collectorlogsv1.ExportLogsServiceRequest, error) {
+		batches, err := rightSizeProtoBatches(group.messages, maxLogRelayExportBytes, func(batch []toolCallLogRelayMessage) (*collectorlogsv1.ExportLogsServiceRequest, error) {
 			return buildToolCallLogRelayExport(batch, observedAt, destination.includeSensitiveData)
 		})
 		if err != nil {
@@ -242,7 +241,7 @@ func (h *ToolCallLogRelayHandler) handleGroups(ctx context.Context, groups []too
 	exportGroup.SetLimit(logRelayExportConcurrency)
 	for _, item := range deliveries {
 		exportGroup.Go(func() error {
-			if err := item.destination.exportWithLimit(ctx, item.batch.message, gramotel.MaxLogRelayExportBytes); err != nil {
+			if err := item.destination.exportWithLimit(ctx, item.batch.message, maxLogRelayExportBytes); err != nil {
 				reason := relayReasonNetworkError
 				retryable := true
 				if exportErr, ok := errors.AsType[*relayExportError](err); ok && exportErr != nil {

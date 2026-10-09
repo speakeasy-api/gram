@@ -11,7 +11,6 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	gen "github.com/speakeasy-api/gram/server/gen/otel"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 )
 
 const maxOTLPMetricsPerExport = 10_000
@@ -19,12 +18,12 @@ const maxOTLPMetricsPerExport = 10_000
 func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload, body io.ReadCloser) error {
 	var export *collectormetricsv1.ExportMetricsServiceRequest
 	err := ingestOTLPExport(ctx, s.logger, otlpIngestSpec[*otelv1.InboundMetric]{
-		signal:          "metric",
+		signal:          SignalMetric,
 		contentEncoding: payload.ContentEncoding,
 		body:            body,
 		decode: func(raw []byte, tenant otlpIngestTenant) ([]*otelv1.InboundMetric, error) {
 			provenance := (&otelv1.InboundMetric_Provenance_builder{
-				Source:         new(gramotel.ProvenanceSource),
+				Source:         new(ProvenanceSource),
 				OrganizationId: &tenant.organizationID,
 				ProjectId:      &tenant.projectID,
 			}).Build()
@@ -35,9 +34,8 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload, body
 			export = request
 			return inboundMetricsFromExport(request, provenance)
 		},
-		publish: func(ctx context.Context, metrics []*otelv1.InboundMetric) error {
-			return gramotel.Publish(ctx, s.records, gramotel.SignalMetric, s.metricPublisher, validateInboundMetric, metrics)
-		},
+		validate:  validateInboundMetric,
+		publisher: s.metricPublisher,
 	})
 	if err != nil {
 		return err

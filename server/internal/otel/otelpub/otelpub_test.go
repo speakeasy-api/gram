@@ -1,8 +1,10 @@
-package gramotel
+package otelpub
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"math"
 	"strings"
 	"testing"
@@ -18,9 +20,10 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 const (
@@ -66,11 +69,17 @@ func capture(t *testing.T, result gcp.PublishResult) (*gcp.MockPublisher[*otelv1
 	return publisher, &published
 }
 
-func testLogger(t *testing.T, publisher gcp.Publisher[*otelv1.InboundLogRecord]) log.Logger {
+func testLogger(t *testing.T, publisher gcp.Publisher[*otelv1.InboundLogRecord]) (log.Logger, *bytes.Buffer) {
 	t.Helper()
-	res := resource.NewSchemaless(semconv.ServiceName("gram-server"))
-	provider := NewLoggerProvider(testenv.NewLogger(t), nil, publisher, res)
-	return provider.Logger(testLoggerName)
+	return testLoggerWithResource(t, publisher, resource.NewSchemaless(semconv.ServiceName("gram-server")))
+}
+
+// testLoggerWithResource also returns what otelpub logged, where refusals and publish failures surface.
+func testLoggerWithResource(t *testing.T, publisher gcp.Publisher[*otelv1.InboundLogRecord], res *resource.Resource) (log.Logger, *bytes.Buffer) {
+	t.Helper()
+	var warnings bytes.Buffer
+	provider := NewLoggerProvider(slog.New(slog.NewTextHandler(&warnings, nil)), publisher, res)
+	return provider.Logger(testLoggerName), &warnings
 }
 
 func toolCallRecord(at time.Time, attrs ...log.KeyValue) log.Record {
@@ -97,19 +106,18 @@ func TestEmitPublishesBeforeReturningWithTenancyFromTheAuthenticatedRequest(t *t
 	t.Parallel()
 
 	publisher, published := capture(t, gcp.NewSuccessPublishResult())
-	logger := testLogger(t, publisher)
-	ctx, result := WithResult(authenticated(t.Context()))
+	logger, warnings := testLogger(t, publisher)
 
-	logger.Emit(ctx, toolCallRecord(time.Unix(1_700_000_000, 0)))
+	logger.Emit(authenticated(t.Context()), toolCallRecord(time.Unix(1_700_000_000, 0)))
 
 	// Emit is synchronous: the record is on the topic by the time it returns.
 	require.Len(t, *published, 1)
-	require.NoError(t, result.Err())
+	require.Empty(t, warnings.String())
 
 	record := (*published)[0]
 	require.Equal(t, testOrganizationID, record.GetProvenance().GetOrganizationId())
 	require.Equal(t, testProjectID.String(), record.GetProvenance().GetProjectId())
-	require.Equal(t, ProvenanceSource, record.GetProvenance().GetSource())
+	require.Equal(t, otelsvc.ProvenanceSource, record.GetProvenance().GetSource())
 	require.Equal(t, "gram.tool_call.started", record.GetEventName())
 	require.Equal(t, "call-1", attributeValue(record, "gram.tool_call.id"))
 	require.Equal(t, "tool call started", record.GetBody().GetStringValue())
@@ -133,12 +141,10 @@ func TestEmitTakesTenancyFromWithTenantOutsideARequest(t *testing.T) {
 	t.Parallel()
 
 	publisher, published := capture(t, gcp.NewSuccessPublishResult())
-	logger := testLogger(t, publisher)
-	ctx, result := WithResult(WithTenant(t.Context(), "org-2", "project-2"))
+	logger, _ := testLogger(t, publisher)
 
-	logger.Emit(ctx, toolCallRecord(time.Unix(1_700_000_000, 0)))
+	logger.Emit(WithTenant(t.Context(), "org-2", "project-2"), toolCallRecord(time.Unix(1_700_000_000, 0)))
 
-	require.NoError(t, result.Err())
 	require.Len(t, *published, 1)
 	require.Equal(t, "org-2", (*published)[0].GetProvenance().GetOrganizationId())
 	require.Equal(t, "project-2", (*published)[0].GetProvenance().GetProjectId())
@@ -148,25 +154,36 @@ func TestEmitRefusesARecordWithNoTenancy(t *testing.T) {
 	t.Parallel()
 
 	publisher, published := capture(t, gcp.NewSuccessPublishResult())
-	logger := testLogger(t, publisher)
-	ctx, result := WithResult(t.Context())
+	logger, warnings := testLogger(t, publisher)
 
-	logger.Emit(ctx, toolCallRecord(time.Unix(1_700_000_000, 0)))
+	logger.Emit(t.Context(), toolCallRecord(time.Unix(1_700_000_000, 0)))
 
-	require.ErrorIs(t, result.Err(), ErrInvalid)
 	require.Empty(t, *published)
+	require.Contains(t, warnings.String(), "no tenancy in context")
+	require.Contains(t, warnings.String(), "gram.tool_call.started")
+}
+
+func TestEmitRefusesAnIncompleteTenantInsteadOfFallingBackToTheRequest(t *testing.T) {
+	t.Parallel()
+
+	publisher, published := capture(t, gcp.NewSuccessPublishResult())
+	logger, warnings := testLogger(t, publisher)
+
+	logger.Emit(WithTenant(authenticated(t.Context()), "org-2", ""), toolCallRecord(time.Unix(1_700_000_000, 0)))
+
+	require.Empty(t, *published)
+	require.Contains(t, warnings.String(), "no tenancy in context")
 }
 
 func TestEmitUsesTheRecordIDTheCallerSets(t *testing.T) {
 	t.Parallel()
 
 	publisher, published := capture(t, gcp.NewSuccessPublishResult())
-	logger := testLogger(t, publisher)
-	ctx, result := WithResult(WithRecordID(authenticated(t.Context()), "call-1"))
+	logger, _ := testLogger(t, publisher)
 
-	logger.Emit(ctx, toolCallRecord(time.Unix(1_700_000_000, 0)))
+	logger.Emit(WithRecordID(authenticated(t.Context()), "call-1"), toolCallRecord(time.Unix(1_700_000_000, 0)))
 
-	require.NoError(t, result.Err())
+	require.Len(t, *published, 1)
 	require.Equal(t, "call-1", (*published)[0].GetRecordId())
 }
 
@@ -174,7 +191,7 @@ func TestEmitDerivesTheSameRecordIDForTheSameRecord(t *testing.T) {
 	t.Parallel()
 
 	publisher, published := capture(t, gcp.NewSuccessPublishResult())
-	logger := testLogger(t, publisher)
+	logger, _ := testLogger(t, publisher)
 	ctx := authenticated(t.Context())
 	at := time.Unix(1_700_000_000, 0)
 
@@ -191,51 +208,12 @@ func TestEmitRefusesTheReservedNamespace(t *testing.T) {
 	t.Parallel()
 
 	publisher, published := capture(t, gcp.NewSuccessPublishResult())
-	logger := testLogger(t, publisher)
-	ctx, result := WithResult(authenticated(t.Context()))
+	logger, warnings := testLogger(t, publisher)
 
-	logger.Emit(ctx, toolCallRecord(time.Unix(1_700_000_000, 0), log.String(string(enrich.AgentEventTypeKey), "tool_call")))
+	logger.Emit(authenticated(t.Context()), toolCallRecord(time.Unix(1_700_000_000, 0), log.String(string(enrich.AgentEventTypeKey), "tool_call")))
 
-	require.ErrorIs(t, result.Err(), ErrInvalid)
-	require.ErrorContains(t, result.Err(), "reserved namespace")
 	require.Empty(t, *published)
-}
-
-func TestEmitRefusesARecordThatBreaksTheIngestContract(t *testing.T) {
-	t.Parallel()
-
-	publisher, published := capture(t, gcp.NewSuccessPublishResult())
-	logger := testLogger(t, publisher)
-	ctx, result := WithResult(authenticated(t.Context()))
-
-	logger.Emit(ctx, toolCallRecord(time.Unix(1_700_000_000, 0), log.String("payload", strings.Repeat("x", MaxLogRecordBytes))))
-
-	require.ErrorIs(t, result.Err(), ErrInvalid)
-	require.Empty(t, *published)
-}
-
-func TestEmitReportsAPublishFailureThroughTheResult(t *testing.T) {
-	t.Parallel()
-
-	publisher, _ := capture(t, gcp.NewErrPublishResult(errors.New("pubsub unavailable")))
-	logger := testLogger(t, publisher)
-	ctx, result := WithResult(authenticated(t.Context()))
-
-	logger.Emit(ctx, toolCallRecord(time.Unix(1_700_000_000, 0)))
-
-	require.ErrorContains(t, result.Err(), "pubsub unavailable")
-	require.NotErrorIs(t, result.Err(), ErrInvalid)
-}
-
-func TestEmitWithoutAResultStillPublishes(t *testing.T) {
-	t.Parallel()
-
-	publisher, published := capture(t, gcp.NewSuccessPublishResult())
-	logger := testLogger(t, publisher)
-
-	logger.Emit(authenticated(t.Context()), toolCallRecord(time.Unix(1_700_000_000, 0)))
-
-	require.Len(t, *published, 1)
+	require.Contains(t, warnings.String(), "reserved namespace")
 }
 
 func TestEmitRefusesTheReservedNamespaceOnTheResource(t *testing.T) {
@@ -243,42 +221,53 @@ func TestEmitRefusesTheReservedNamespaceOnTheResource(t *testing.T) {
 
 	publisher, published := capture(t, gcp.NewSuccessPublishResult())
 	res := resource.NewSchemaless(attribute.String(string(enrich.AgentEventTypeKey), "tool_call"))
-	logger := NewLoggerProvider(testenv.NewLogger(t), nil, publisher, res).Logger(testLoggerName)
-	ctx, result := WithResult(authenticated(t.Context()))
+	logger, warnings := testLoggerWithResource(t, publisher, res)
 
-	logger.Emit(ctx, toolCallRecord(time.Unix(1_700_000_000, 0)))
+	logger.Emit(authenticated(t.Context()), toolCallRecord(time.Unix(1_700_000_000, 0)))
 
-	require.ErrorIs(t, result.Err(), ErrInvalid)
 	require.Empty(t, *published)
+	require.Contains(t, warnings.String(), "reserved namespace")
 }
 
-func TestEmitRefusesAnIncompleteTenantInsteadOfFallingBackToTheRequest(t *testing.T) {
+func TestEmitRefusesARecordThatBreaksTheIngestContract(t *testing.T) {
 	t.Parallel()
 
 	publisher, published := capture(t, gcp.NewSuccessPublishResult())
-	logger := testLogger(t, publisher)
-	ctx, result := WithResult(WithTenant(authenticated(t.Context()), "org-2", ""))
+	logger, warnings := testLogger(t, publisher)
 
-	logger.Emit(ctx, toolCallRecord(time.Unix(1_700_000_000, 0)))
+	logger.Emit(authenticated(t.Context()), toolCallRecord(time.Unix(1_700_000_000, 0), log.String("payload", strings.Repeat("x", 4*constants.MiB))))
 
-	require.ErrorIs(t, result.Err(), ErrInvalid)
 	require.Empty(t, *published)
+	require.Contains(t, warnings.String(), "exceeds maximum size")
+}
+
+func TestEmitLogsAPublishFailureWithoutPanicking(t *testing.T) {
+	t.Parallel()
+
+	publisher, _ := capture(t, gcp.NewErrPublishResult(errors.New("pubsub unavailable")))
+	logger, warnings := testLogger(t, publisher)
+
+	require.NotPanics(t, func() {
+		logger.Emit(authenticated(t.Context()), toolCallRecord(time.Unix(1_700_000_000, 0)))
+	})
+
+	require.Contains(t, warnings.String(), "pubsub unavailable")
+	require.Contains(t, warnings.String(), "gram.tool_call.started")
 }
 
 func TestEmitKeepsEmptyAndNilBytesValues(t *testing.T) {
 	t.Parallel()
 
 	publisher, published := capture(t, gcp.NewSuccessPublishResult())
-	logger := testLogger(t, publisher)
-	ctx, result := WithResult(authenticated(t.Context()))
+	logger, warnings := testLogger(t, publisher)
 
-	logger.Emit(ctx, toolCallRecord(time.Unix(1_700_000_000, 0),
+	logger.Emit(authenticated(t.Context()), toolCallRecord(time.Unix(1_700_000_000, 0),
 		log.Slice("list", log.StringValue("a"), log.Value{}),
 		log.Bytes("raw", nil),
 	))
 
-	require.NoError(t, result.Err())
 	require.Len(t, *published, 1)
+	require.Empty(t, warnings.String())
 }
 
 func TestUnixNanoSaturatesInsteadOfOverflowing(t *testing.T) {

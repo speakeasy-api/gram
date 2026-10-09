@@ -14,7 +14,6 @@ import (
 	otelserver "github.com/speakeasy-api/gram/server/gen/http/otel/server"
 	gen "github.com/speakeasy-api/gram/server/gen/otel"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/otel/gramotel"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -61,7 +60,7 @@ func TestMetricsPublishesInboundWithoutEnrichment(t *testing.T) {
 	require.Equal(t, "request.duration", published.GetName())
 	require.Equal(t, "producer", published.GetResource().GetAttributes()[0].GetValue().GetStringValue())
 	require.Equal(t, "producer.scope", published.GetScope().GetName())
-	require.Equal(t, gramotel.ProvenanceSource, published.GetProvenance().GetSource())
+	require.Equal(t, ProvenanceSource, published.GetProvenance().GetSource())
 	require.Equal(t, testMetricOrganizationID, published.GetProvenance().GetOrganizationId())
 	require.Equal(t, testMetricProjectID, published.GetProvenance().GetProjectId())
 
@@ -157,7 +156,7 @@ func TestDecodeOTLPMetricExportClearsProducerPrivateSchemaFields(t *testing.T) {
 	require.NoError(t, err)
 
 	provenance := (&otelv1.InboundMetric_Provenance_builder{
-		Source:         new(gramotel.ProvenanceSource),
+		Source:         new(ProvenanceSource),
 		OrganizationId: new(testMetricOrganizationID),
 		ProjectId:      new(testMetricProjectID),
 	}).Build()
