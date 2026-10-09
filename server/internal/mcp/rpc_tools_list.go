@@ -148,9 +148,13 @@ func handleToolsList(
 			tools = []*toolListEntry{}
 			break
 		}
-		// Search tags come from the whole toolset's index, so they are left
-		// out when some tools are withheld from this caller.
-		tools, err = buildDynamicSessionTools(ctx, logger, discovery, vectorToolStore, !restricted)
+		// Search tags come from the whole toolset's index, not from this
+		// session's catalog. A caller subject to per-tool checks only gets
+		// them when nothing narrowed the catalog: the ?tags= filter or a
+		// consent selection may already have removed tools this caller may
+		// not call, so an unrestricted RBAC pass alone proves nothing.
+		includeTags := !enforced || (!restricted && len(payload.tags) == 0 && payload.toolSelection == nil)
+		tools, err = buildDynamicSessionTools(ctx, logger, discovery, vectorToolStore, includeTags)
 		if err != nil {
 			if errors.Is(err, errToolSearchIndexUnavailable) {
 				return nil, oops.E(oops.CodeUnavailable, err, "tool search is temporarily unavailable; try again later").LogError(ctx, logger)
