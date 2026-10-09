@@ -110,7 +110,7 @@ func (c *linearClient) openFlakyIssues(ctx context.Context) (map[testKey]flakyIs
   issues(first: 250, after: $after, filter: {
     team: { key: { eq: $team } }
     labels: { some: { name: { in: $labels } } }
-    state: { type: { nin: ["completed", "canceled"] } }
+    state: { type: { nin: ["completed", "canceled", "duplicate"] } }
   }) {
     nodes { id identifier url title labels { nodes { id name } } }
     pageInfo { hasNextPage endCursor }
@@ -176,10 +176,10 @@ func (c *linearClient) closedFlakyIssues(ctx context.Context, since time.Time) (
   issues(first: 250, after: $after, includeArchived: true, filter: {
     team: { key: { eq: $team } }
     labels: { some: { name: { in: $labels } } }
-    state: { type: { in: ["completed", "canceled"] } }
+    state: { type: { in: ["completed", "canceled", "duplicate"] } }
     updatedAt: { gte: $since }
   }) {
-    nodes { title completedAt canceledAt }
+    nodes { title completedAt canceledAt updatedAt }
     pageInfo { hasNextPage endCursor }
   }
 }`
@@ -194,6 +194,7 @@ func (c *linearClient) closedFlakyIssues(ctx context.Context, since time.Time) (
 				Title       string     `json:"title"`
 				CompletedAt *time.Time `json:"completedAt"`
 				CanceledAt  *time.Time `json:"canceledAt"`
+				UpdatedAt   time.Time  `json:"updatedAt"`
 			} `json:"nodes"`
 		} `json:"issues"`
 	}
@@ -207,6 +208,12 @@ func (c *linearClient) closedFlakyIssues(ctx context.Context, since time.Time) (
 		}
 
 		for _, n := range out.Issues.Nodes {
+			if n.CompletedAt == nil && n.CanceledAt == nil {
+				// A ticket marked as a duplicate may carry neither close
+				// time; its last update is the closest stand-in.
+				closed.record(n.Title, &n.UpdatedAt)
+				continue
+			}
 			closed.record(n.Title, n.CompletedAt, n.CanceledAt)
 		}
 
