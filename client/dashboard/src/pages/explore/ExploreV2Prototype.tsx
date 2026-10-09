@@ -2,6 +2,12 @@
 // on dummy data, to get a feel for the layout before changing the real
 // builder. Nothing here calls the server or saves anything. Delete this file
 // and its tab in Explore.tsx once the decision is made.
+//
+// Three places for the filters, switchable via `?variant=` (A, B, C) from the
+// bar at the bottom right or the arrow keys:
+//   A — inline in each query's sentence (Datadog metrics' "from" scope)
+//   B — one search-style box, aligned with the query rows (Datadog log search)
+//   C — a facet panel down the left (Datadog's log explorer facets)
 import { AXIS, seriesForTheme, TOOLTIP } from "@/components/chart/palette";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { Badge } from "@/components/ui/Badge";
@@ -34,7 +40,8 @@ import {
 import { useIsDarkTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { XIcon } from "lucide-react";
-import { useMemo, useState, type JSX, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
+import { useSearchParams } from "react-router";
 import {
   Area,
   AreaChart,
@@ -121,6 +128,8 @@ interface Query {
   groupBy: string[];
   limit: string;
   alias: string;
+  /** Variant A: the filters live on the query. */
+  filters: Filter[];
 }
 
 interface State {
@@ -143,6 +152,9 @@ const INITIAL: State = {
       groupBy: ["user"],
       limit: "10",
       alias: "",
+      filters: [
+        { field: "surface", op: "is", values: ["claude_code", "cursor"] },
+      ],
     },
   ],
   formulas: [],
@@ -173,118 +185,220 @@ export function ExploreV2Prototype(): JSX.Element {
     ...new Set(state.queries.flatMap((q) => datasetOf(q.dataset).dimensions)),
   ];
 
-  return (
-    <div className="flex flex-col gap-4">
-      <section className="border-border bg-card flex flex-col border">
-        <FilterBar
-          fields={filterFields}
-          filters={state.filters}
-          onChange={(filters) => patch({ filters })}
-        />
-        <div className="flex flex-col gap-1.5 px-3 py-2">
-          {state.queries.map((query, index) => (
-            <QueryRow
-              key={query.letter}
-              query={query}
-              canRemove={state.queries.length > 1}
-              onChange={(next) => setQuery(index, next)}
-              onRemove={() =>
-                patch({ queries: state.queries.filter((_, i) => i !== index) })
-              }
-            />
-          ))}
-          {state.formulas.map((formula, index) => (
-            <div key={index} className="flex items-center gap-1.5">
-              <span className="text-muted-foreground flex size-6 items-center justify-center font-mono text-xs italic">
-                ƒ
-              </span>
-              <Input
-                value={formula}
-                aria-label="Formula"
-                onChange={(value) =>
-                  patch({
-                    formulas: state.formulas.map((f, i) =>
-                      i === index ? value : f,
-                    ),
-                  })
-                }
-                className="h-8 w-64 font-mono"
-              />
-              <Button
-                variant="tertiary"
-                size="sm"
-                icon="x"
-                aria-label="Remove formula"
-                onClick={() =>
-                  patch({
-                    formulas: state.formulas.filter((_, i) => i !== index),
-                  })
-                }
-              />
-            </div>
-          ))}
-          <div className="flex items-center gap-1">
-            <Button
-              variant="tertiary"
-              size="sm"
-              icon="plus"
-              onClick={() => {
-                const last = state.queries[state.queries.length - 1]!;
+  const variant = useVariant();
+  const setFilters = (filters: Filter[]) => patch({ filters });
+
+  const builder = (
+    <section className="border-border bg-card flex flex-col border">
+      <div className="flex flex-col gap-1.5 px-3 py-2">
+        {variant === "B" ? (
+          <SearchFilterBox
+            fields={filterFields}
+            filters={state.filters}
+            onChange={setFilters}
+          />
+        ) : null}
+        {state.queries.map((query, index) => (
+          <QueryRow
+            key={query.letter}
+            query={query}
+            inlineFilters={variant === "A"}
+            canRemove={state.queries.length > 1}
+            onChange={(next) => setQuery(index, next)}
+            onRemove={() =>
+              patch({ queries: state.queries.filter((_, i) => i !== index) })
+            }
+          />
+        ))}
+        {state.formulas.map((formula, index) => (
+          <div key={index} className="flex items-center gap-1.5">
+            <span className="text-muted-foreground flex size-8 items-center justify-center font-mono text-xs italic">
+              ƒ
+            </span>
+            <Input
+              value={formula}
+              aria-label="Formula"
+              onChange={(value) =>
                 patch({
-                  queries: [
-                    ...state.queries,
-                    {
-                      ...last,
-                      letter: LETTERS[state.queries.length] ?? "z",
-                      alias: "",
-                    },
-                  ],
-                });
-              }}
-            >
-              Add query
-            </Button>
-            <Button
-              variant="tertiary"
-              size="sm"
-              icon="plus"
-              onClick={() =>
-                patch({
-                  formulas: [
-                    ...state.formulas,
-                    state.queries.length > 1 ? "a / b" : "a * 100",
-                  ],
+                  formulas: state.formulas.map((f, i) =>
+                    i === index ? value : f,
+                  ),
                 })
               }
-            >
-              Add formula
-            </Button>
+              className="h-8 w-64 font-mono"
+            />
+            <Button
+              variant="tertiary"
+              size="sm"
+              icon="x"
+              aria-label="Remove formula"
+              onClick={() =>
+                patch({
+                  formulas: state.formulas.filter((_, i) => i !== index),
+                })
+              }
+            />
+          </div>
+        ))}
+        <div className="flex items-center gap-1">
+          <Button
+            variant="tertiary"
+            size="sm"
+            icon="plus"
+            onClick={() => {
+              const last = state.queries[state.queries.length - 1]!;
+              patch({
+                queries: [
+                  ...state.queries,
+                  {
+                    ...last,
+                    letter: LETTERS[state.queries.length] ?? "z",
+                    alias: "",
+                  },
+                ],
+              });
+            }}
+          >
+            Add query
+          </Button>
+          <Button
+            variant="tertiary"
+            size="sm"
+            icon="plus"
+            onClick={() =>
+              patch({
+                formulas: [
+                  ...state.formulas,
+                  state.queries.length > 1 ? "a / b" : "a * 100",
+                ],
+              })
+            }
+          >
+            Add formula
+          </Button>
+        </div>
+      </div>
+    </section>
+  );
+
+  const results = (
+    <Results
+      state={ran}
+      draft={state}
+      changed={changed}
+      onChart={(chart) => {
+        patch({ chart });
+        // Chart and window are presentation: they apply at once.
+        setRan({ ...ran, chart });
+      }}
+      onWindow={(window) => {
+        patch({ window });
+        setRan({ ...ran, window });
+      }}
+      onRun={() => setRan(state)}
+    />
+  );
+
+  return (
+    <>
+      {variant === "C" ? (
+        <div className="grid grid-cols-[14rem_minmax(0,1fr)] items-start gap-4">
+          <FacetPanel
+            fields={filterFields}
+            filters={state.filters}
+            onChange={setFilters}
+          />
+          <div className="flex min-w-0 flex-col gap-4">
+            {builder}
+            {results}
           </div>
         </div>
-      </section>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {builder}
+          {results}
+        </div>
+      )}
+      <VariantSwitcher current={variant} />
+    </>
+  );
+}
 
-      <Results
-        state={ran}
-        draft={state}
-        changed={changed}
-        onChart={(chart) => {
-          patch({ chart });
-          // Chart and window are presentation: they apply at once.
-          setRan({ ...ran, chart });
-        }}
-        onWindow={(window) => {
-          patch({ window });
-          setRan({ ...ran, window });
-        }}
-        onRun={() => setRan(state)}
-      />
+// ── Variants ──────────────────────────────────────────────────────────────
+
+type Variant = "A" | "B" | "C";
+const VARIANTS: { key: Variant; name: string }[] = [
+  { key: "A", name: "Filters inline per query" },
+  { key: "B", name: "Search box" },
+  { key: "C", name: "Facet panel" },
+];
+
+function useVariant(): Variant {
+  const [params] = useSearchParams();
+  const named = params.get("variant");
+  return named === "B" || named === "C" ? named : "A";
+}
+
+// Not part of the design: flips between the variants, with ← and → too.
+function VariantSwitcher({ current }: { current: Variant }): JSX.Element {
+  const [, setParams] = useSearchParams();
+  const index = VARIANTS.findIndex((v) => v.key === current);
+  const go = (step: number) => {
+    const next = VARIANTS[(index + step + VARIANTS.length) % VARIANTS.length]!;
+    setParams(
+      (prev) => {
+        const out = new URLSearchParams(prev);
+        out.set("variant", next.key);
+        return out;
+      },
+      { replace: true },
+    );
+  };
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (event.key === "ArrowLeft") go(-1);
+      if (event.key === "ArrowRight") go(1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+  return (
+    <div className="fixed right-6 bottom-6 z-50 flex items-center gap-1 rounded-full bg-neutral-900 px-2 py-1.5 font-mono text-xs text-white shadow-lg">
+      <button
+        type="button"
+        aria-label="Previous variant"
+        onClick={() => go(-1)}
+        className="px-2 hover:opacity-70"
+      >
+        ←
+      </button>
+      <span className="px-1">
+        {current} · {VARIANTS[index]!.name}
+      </span>
+      <button
+        type="button"
+        aria-label="Next variant"
+        onClick={() => go(1)}
+        className="px-2 hover:opacity-70"
+      >
+        →
+      </button>
     </div>
   );
 }
 
-// ── Filter bar: pills in one line ─────────────────────────────────────────
-
-function FilterBar({
+// Variant B: one box that reads as a search field, pills inside it, on the
+// query rows' grid so it lines up with the sentences under it.
+function SearchFilterBox({
   fields,
   filters,
   onChange,
@@ -294,40 +408,143 @@ function FilterBar({
   onChange: (filters: Filter[]) => void;
 }): JSX.Element {
   return (
-    <div className="border-border flex min-h-11 flex-wrap items-center gap-1.5 border-b px-3 py-1.5">
-      <span className="text-eyebrow pr-1">Where</span>
-      {filters.map((filter, index) => (
+    <div className="flex items-center gap-1.5">
+      <span className="text-muted-foreground flex size-8 shrink-0 items-center justify-center">
+        <Icon name="search" className="size-4" />
+      </span>
+      <div className="border-input flex min-h-8 flex-1 flex-wrap items-center gap-1.5 border px-1.5 py-1">
+        {filters.map((filter, index) => (
+          <FilterEditor
+            key={index}
+            fields={fields}
+            initial={filter}
+            onDone={(next) =>
+              onChange(filters.map((f, i) => (i === index ? next : f)))
+            }
+            trigger={
+              <FilterPill
+                filter={filter}
+                onRemove={() => onChange(filters.filter((_, i) => i !== index))}
+              />
+            }
+          />
+        ))}
         <FilterEditor
-          key={index}
           fields={fields}
-          initial={filter}
-          onDone={(next) =>
-            onChange(filters.map((f, i) => (i === index ? next : f)))
-          }
+          onDone={(filter) => onChange([...filters, filter])}
           trigger={
-            <Pill
-              onRemove={() => onChange(filters.filter((_, i) => i !== index))}
-              removeLabel={`Remove ${filter.field} filter`}
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground min-w-40 flex-1 px-1 text-left text-sm"
             >
-              {filter.field}
-              <span className="text-muted-foreground">
-                {filter.op === "is" ? " : " : " !: "}
-              </span>
-              {filter.values.join(", ")}
-            </Pill>
+              {filters.length === 0
+                ? "Filter every query: field is value…"
+                : "Add a filter…"}
+            </button>
           }
+          stretch
         />
-      ))}
-      <FilterEditor
-        fields={fields}
-        onDone={(filter) => onChange([...filters, filter])}
-        trigger={
-          <Button variant="tertiary" size="sm" icon="plus">
-            {filters.length === 0 ? "Add filter" : "Filter"}
-          </Button>
-        }
-      />
+      </div>
     </div>
+  );
+}
+
+// Variant C: every field, its values ticked to filter, down the left.
+function FacetPanel({
+  fields,
+  filters,
+  onChange,
+}: {
+  fields: string[];
+  filters: Filter[];
+  onChange: (filters: Filter[]) => void;
+}): JSX.Element {
+  const toggle = (field: string, value: string) => {
+    const current = filters.find((f) => f.field === field);
+    const values = current?.values.includes(value)
+      ? current.values.filter((v) => v !== value)
+      : [...(current?.values ?? []), value];
+    const rest = filters.filter((f) => f.field !== field);
+    onChange(
+      values.length === 0
+        ? rest
+        : [...rest, { field, op: current?.op ?? "is", values }],
+    );
+  };
+  return (
+    <aside className="border-border bg-card sticky top-0 flex flex-col border">
+      <div className="border-border flex items-center justify-between border-b px-3 py-2">
+        <span className="text-eyebrow">Filters</span>
+        {filters.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => onChange([])}
+            className="text-muted-foreground hover:text-foreground text-xs"
+          >
+            Clear
+          </button>
+        ) : null}
+      </div>
+      {fields.map((field) => {
+        const picked = filters.find((f) => f.field === field)?.values ?? [];
+        return (
+          <details
+            key={field}
+            open={picked.length > 0 || field === fields[0]}
+            className="border-border border-b last:border-b-0"
+          >
+            <summary className="hover:bg-muted flex cursor-pointer items-center justify-between px-3 py-2 font-mono text-sm">
+              {field}
+              {picked.length > 0 ? (
+                <Badge variant="neutral" size="md">
+                  {picked.length}
+                </Badge>
+              ) : null}
+            </summary>
+            <div className="flex flex-col pb-2">
+              {(VALUES[field] ?? []).map((value) => (
+                <label
+                  key={value}
+                  className="hover:bg-muted flex cursor-pointer items-center gap-2 px-3 py-1 font-mono text-sm"
+                >
+                  <Checkbox
+                    checked={picked.includes(value)}
+                    onCheckedChange={() => toggle(field, value)}
+                  />
+                  <span className="flex-1 truncate">{value}</span>
+                  <span className="text-muted-foreground text-xs tabular-nums">
+                    {facetCount(field, value)}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </details>
+        );
+      })}
+    </aside>
+  );
+}
+
+// A made-up row count beside a facet value.
+function facetCount(field: string, value: string): string {
+  return Math.round(50 + seeded(field + value)() * 950).toLocaleString();
+}
+
+function FilterPill({
+  filter,
+  onRemove,
+}: {
+  filter: Filter;
+  onRemove: () => void;
+}): JSX.Element {
+  return (
+    <Pill onRemove={onRemove} removeLabel={`Remove ${filter.field} filter`}>
+      {filter.field}
+      <span className="text-muted-foreground">
+        {filter.op === "is" ? " : " : " !: "}
+      </span>
+      {filter.values.join(", ")}
+    </Pill>
   );
 }
 
@@ -376,11 +593,13 @@ function FilterEditor({
   initial,
   onDone,
   trigger,
+  stretch = false,
 }: {
   fields: string[];
   initial?: Filter;
   onDone: (filter: Filter) => void;
   trigger: ReactNode;
+  stretch?: boolean;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Filter | null>(initial ?? null);
@@ -393,7 +612,9 @@ function FilterEditor({
       }}
     >
       <PopoverTrigger asChild>
-        <span className="inline-flex">{trigger}</span>
+        <span className={cn("inline-flex", stretch && "flex-1")}>
+          {trigger}
+        </span>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-0" align="start">
         {draft === null ? (
@@ -474,11 +695,13 @@ function FilterEditor({
 
 function QueryRow({
   query,
+  inlineFilters,
   canRemove,
   onChange,
   onRemove,
 }: {
   query: Query;
+  inlineFilters: boolean;
   canRemove: boolean;
   onChange: (next: Partial<Query>) => void;
   onRemove: () => void;
@@ -549,6 +772,51 @@ function QueryRow({
           });
         }}
       />
+      {inlineFilters ? (
+        <>
+          <Word>where</Word>
+          {query.filters.map((filter, index) => (
+            <FilterEditor
+              key={index}
+              fields={dataset.dimensions}
+              initial={filter}
+              onDone={(next) =>
+                onChange({
+                  filters: query.filters.map((f, i) =>
+                    i === index ? next : f,
+                  ),
+                })
+              }
+              trigger={
+                <FilterPill
+                  filter={filter}
+                  onRemove={() =>
+                    onChange({
+                      filters: query.filters.filter((_, i) => i !== index),
+                    })
+                  }
+                />
+              }
+            />
+          ))}
+          <FilterEditor
+            fields={dataset.dimensions}
+            onDone={(filter) =>
+              onChange({ filters: [...query.filters, filter] })
+            }
+            trigger={
+              <Button
+                variant="tertiary"
+                size="sm"
+                icon="plus"
+                aria-label="Add a filter"
+              >
+                {query.filters.length === 0 ? "everything" : undefined}
+              </Button>
+            }
+          />
+        </>
+      ) : null}
       <Word>by</Word>
       {query.groupBy.length === 0 ? <Word>everything</Word> : null}
       {query.groupBy.map((group) => (
@@ -882,7 +1150,10 @@ function seeded(seed: string): () => number {
 }
 
 function dummyResult(state: State): DummyResult {
-  const filterKey = JSON.stringify(state.filters);
+  const filterKey = JSON.stringify([
+    state.filters,
+    state.queries.map((q) => q.filters),
+  ]);
   const visible = state.queries.filter((q) => q.visible);
   const series: string[] = [];
   for (const query of visible) {
