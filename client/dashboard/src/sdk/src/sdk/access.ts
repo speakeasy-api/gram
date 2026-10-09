@@ -28,6 +28,7 @@ import { accessRequestAccess } from "../funcs/accessRequestAccess.js";
 import { accessResolveChallenge } from "../funcs/accessResolveChallenge.js";
 import { accessResolveShadowMCPInventoryRequest } from "../funcs/accessResolveShadowMCPInventoryRequest.js";
 import { accessSetAIToolDecision } from "../funcs/accessSetAIToolDecision.js";
+import { accessSetDirectoryRoleMapping } from "../funcs/accessSetDirectoryRoleMapping.js";
 import { accessSetDirectoryRoleMappings } from "../funcs/accessSetDirectoryRoleMappings.js";
 import { accessSetResourceAudience } from "../funcs/accessSetResourceAudience.js";
 import { accessSyncDirectoryGroups } from "../funcs/accessSyncDirectoryGroups.js";
@@ -163,6 +164,10 @@ import {
   SetAIToolDecisionRequest,
   SetAIToolDecisionSecurity,
 } from "../models/operations/setaitooldecision.js";
+import {
+  SetDirectoryRoleMappingRequest,
+  SetDirectoryRoleMappingSecurity,
+} from "../models/operations/setdirectoryrolemapping.js";
 import {
   SetDirectoryRoleMappingsRequest,
   SetDirectoryRoleMappingsSecurity,
@@ -677,6 +682,27 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<SetAIToolDecisionResult> {
     return unwrapAsync(accessSetAIToolDecision(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setDirectoryRoleMapping access
+   *
+   * @remarks
+   * Deprecated compatibility endpoint for older dashboard clients. Use setDirectoryRoleMappings. Rejects replacement when the source already grants multiple roles.
+   *
+   * @deprecated method: This will be removed in a future release, please migrate away from it as soon as possible.
+   */
+  async setDirectoryRoleMapping(
+    request: SetDirectoryRoleMappingRequest,
+    security?: SetDirectoryRoleMappingSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<DirectoryRoleMapping> {
+    return unwrapAsync(accessSetDirectoryRoleMapping(
       this,
       request,
       security,

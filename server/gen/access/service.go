@@ -1119,6 +1119,10 @@ type SetDirectoryRoleMappingsPayload struct {
 	AttributeKey *string
 	// Attribute value to match. Required when source_kind is attribute.
 	AttributeValue *string
+	// Optional compare-and-set precondition. The normalized current role set must
+	// match or the request returns conflict without changes. Omit for
+	// unconditional replacement; an empty array requires an unmapped source.
+	ExpectedRoleUrns []string
 	// The complete set of role principal URNs to grant, from Role.principal_urn.
 	// Empty removes every mapping for the source.
 	RoleUrns []string
