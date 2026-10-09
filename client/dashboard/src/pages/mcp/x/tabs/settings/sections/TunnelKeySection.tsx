@@ -13,6 +13,7 @@ import type { TunneledMcpServer } from "@gram/client/models/components/tunneledm
 import { KeyRound, Loader2, RotateCcw } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { useSourceDestinationLock } from "./useSourceDestinationLock";
 
 export const MCP_TUNNEL_KEY_SECTION_ID = "tunnel-key";
 
@@ -59,6 +60,17 @@ function RotatedKeyDialogBody({
   );
 }
 
+function RotateKeyButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button variant="secondary" size="md" onClick={onClick}>
+      <Button.LeftIcon>
+        <RotateCcw className="h-4 w-4" />
+      </Button.LeftIcon>
+      <Button.Text>Rotate key</Button.Text>
+    </Button>
+  );
+}
+
 // Ported from the retired tunneled source page: the key is issued to the
 // source, so its rotation is managed from the MCP server that fronts it.
 export function TunnelKeySection({
@@ -74,6 +86,14 @@ export function TunnelKeySection({
     useState<RotateTunneledMcpServerKeyData>();
   const [rotateError, setRotateError] = useState<string>();
   const rotate = useRotateTunneledMcpServerKey();
+  // Whoever holds the new key operates the tunnel's destination, so the
+  // server refuses rotation without environment authority while any MCP
+  // server on the tunnel has a linked environment.
+  const lock = useSourceDestinationLock({
+    kind: "tunneled",
+    id: tunneledMcpServer.id,
+    projectId: tunneledMcpServer.projectId,
+  });
   // Tracks the open dialog so a rotation that resolves after Cancel is
   // dropped instead of repopulating the cleared state.
   const dialogOpenRef = useRef(false);
@@ -139,16 +159,19 @@ export function TunnelKeySection({
               resourceId={tunneledMcpServer.projectId}
               level="component"
             >
-              <Button
-                variant="secondary"
-                size="md"
-                onClick={() => handleOpenChange(true)}
-              >
-                <Button.LeftIcon>
-                  <RotateCcw className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Rotate key</Button.Text>
-              </Button>
+              {lock.reason !== null ? (
+                <RequireScope
+                  scope="environment:read"
+                  resourceId={tunneledMcpServer.projectId}
+                  projectId={tunneledMcpServer.projectId}
+                  level="component"
+                  reason={lock.reason}
+                >
+                  <RotateKeyButton onClick={() => handleOpenChange(true)} />
+                </RequireScope>
+              ) : (
+                <RotateKeyButton onClick={() => handleOpenChange(true)} />
+              )}
             </RequireScope>
           </SettingsSection.FooterActions>
         </SettingsSection.Footer>
