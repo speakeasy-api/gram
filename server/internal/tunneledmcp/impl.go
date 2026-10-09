@@ -269,15 +269,19 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 	// Lets the dashboard explain up front why a key rotation will be refused.
 	// Only booleans: they name no server or environment the caller may not be
 	// able to read.
+	// The answer is advisory: if it cannot be worked out, leave it unset (the
+	// dashboard treats that as unknown and locks) rather than fail the read.
+	view := s.tunnelManager.serverView(ctx, s.logger, server)
 	linked, err := mcpservers.TunnelLinkedEnvironmentIDs(ctx, s.db, *authCtx.ProjectID, server.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "check environment-linked mcp servers").LogError(ctx, s.logger)
+		s.logger.ErrorContext(ctx, "check environment-linked mcp servers", attr.SlogError(err))
+		return view, nil
 	}
 	eligibility, err := mcpservers.EvaluateDestinationChange(ctx, s.authz, *authCtx.ProjectID, linked)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "evaluate environment link authority").LogError(ctx, s.logger)
+		s.logger.ErrorContext(ctx, "evaluate environment link authority", attr.SlogError(err))
+		return view, nil
 	}
-	view := s.tunnelManager.serverView(ctx, s.logger, server)
 	view.EnvironmentLinked = &eligibility.Linked
 	view.EnvironmentLinkAuthorized = &eligibility.Authorized
 	return view, nil
