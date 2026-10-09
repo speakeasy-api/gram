@@ -1,13 +1,13 @@
-// PROTOTYPE — throwaway. Explore v2: a Datadog-style compact query builder,
-// on dummy data, to get a feel for the layout before changing the real
-// builder. Nothing here calls the server or saves anything. Delete this file
-// and its tab in Explore.tsx once the decision is made.
+// PROTOTYPE — throwaway. Explore v2: the query builder laid out as Datadog's
+// is, on dummy data, to get a feel for it before changing the real builder.
+// Nothing here calls the server or saves anything. Delete this file and its
+// tab in Explore.tsx once the decision is made.
 //
-// Three places for the filters, switchable via `?variant=` (A, B, C) from the
-// bar at the bottom right or the arrow keys:
-//   A — inline in each query's sentence (Datadog metrics' "from" scope)
-//   B — one search-style box, aligned with the query rows (Datadog log search)
-//   C — a facet panel down the left (Datadog's log explorer facets)
+// Each query is two lines. The first is what is asked of: the query's letter,
+// its dataset, and a search field holding its filters. The second hangs off
+// the letter and reads as a sentence of joined segments: Show | Count of |
+// all rows — by | user | + — limit to top | 10 — rollup | every | auto —
+// Σ Modify.
 import { AXIS, seriesForTheme, TOOLTIP } from "@/components/chart/palette";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { Badge } from "@/components/ui/Badge";
@@ -40,8 +40,7 @@ import {
 import { useIsDarkTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { XIcon } from "lucide-react";
-import { useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
-import { useSearchParams } from "react-router";
+import { useMemo, useState, type JSX, type ReactNode } from "react";
 import {
   Area,
   AreaChart,
@@ -61,18 +60,22 @@ import { WINDOW_PRESETS, type WindowPreset } from "./exploreModel";
 
 interface DummyDataset {
   name: string;
+  /** What a row is, for "all <noun>" and the search field's placeholder. */
+  noun: string;
   dimensions: string[];
   measures: string[];
 }
 
 const DATASETS: DummyDataset[] = [
   {
-    name: "sessions",
+    name: "Sessions",
+    noun: "sessions",
     dimensions: ["user", "surface", "model", "repo"],
     measures: ["duration_ms", "tokens", "cost_usd"],
   },
   {
-    name: "tool_calls",
+    name: "Tool calls",
+    noun: "tool calls",
     dimensions: ["tool", "server", "user", "status"],
     measures: ["latency_ms", "payload_bytes"],
   },
@@ -88,8 +91,17 @@ const VALUES: Record<string, string[]> = {
   status: ["ok", "error", "timeout"],
 };
 
-const AGGS = ["count", "count distinct", "sum", "avg", "p50", "p95", "max"];
+// What is measured, as Datadog words it: the aggregation reads "<op> of".
+const AGGS: { value: string; label: string }[] = [
+  { value: "count", label: "Count of" },
+  { value: "count_distinct", label: "Unique count of" },
+  { value: "sum", label: "Sum of" },
+  { value: "avg", label: "Avg of" },
+  { value: "p95", label: "P95 of" },
+  { value: "max", label: "Max of" },
+];
 const LIMITS = ["5", "10", "25", "100"];
+const ROLLUPS = ["auto", "1m", "5m", "1h", "1d"];
 const LETTERS = "abcdefgh";
 
 type ChartKind =
@@ -123,17 +135,16 @@ interface Query {
   letter: string;
   visible: boolean;
   dataset: string;
+  filters: Filter[];
   agg: string;
   field: string;
   groupBy: string[];
   limit: string;
+  rollup: string;
   alias: string;
-  /** Variant A: the filters live on the query. */
-  filters: Filter[];
 }
 
 interface State {
-  filters: Filter[];
   queries: Query[];
   formulas: string[];
   chart: ChartKind;
@@ -141,20 +152,20 @@ interface State {
 }
 
 const INITIAL: State = {
-  filters: [{ field: "surface", op: "is", values: ["claude_code", "cursor"] }],
   queries: [
     {
       letter: "a",
       visible: true,
-      dataset: "sessions",
+      dataset: "Sessions",
+      filters: [
+        { field: "surface", op: "is", values: ["claude_code", "cursor"] },
+      ],
       agg: "count",
       field: "",
       groupBy: ["user"],
       limit: "10",
+      rollup: "auto",
       alias: "",
-      filters: [
-        { field: "surface", op: "is", values: ["claude_code", "cursor"] },
-      ],
     },
   ],
   formulas: [],
@@ -180,29 +191,14 @@ export function ExploreV2Prototype(): JSX.Element {
         i === index ? { ...q, ...next } : q,
       ),
     });
-  // Every dimension any query can be filtered by.
-  const filterFields = [
-    ...new Set(state.queries.flatMap((q) => datasetOf(q.dataset).dimensions)),
-  ];
 
-  const variant = useVariant();
-  const setFilters = (filters: Filter[]) => patch({ filters });
-
-  const builder = (
-    <section className="border-border bg-card flex flex-col border">
-      <div className="flex flex-col gap-1.5 px-3 py-2">
-        {variant === "B" ? (
-          <SearchFilterBox
-            fields={filterFields}
-            filters={state.filters}
-            onChange={setFilters}
-          />
-        ) : null}
+  return (
+    <div className="flex flex-col gap-4">
+      <section className="border-border bg-card flex flex-col gap-4 border p-3">
         {state.queries.map((query, index) => (
-          <QueryRow
+          <QueryBlock
             key={query.letter}
             query={query}
-            inlineFilters={variant === "A"}
             canRemove={state.queries.length > 1}
             onChange={(next) => setQuery(index, next)}
             onRemove={() =>
@@ -211,8 +207,8 @@ export function ExploreV2Prototype(): JSX.Element {
           />
         ))}
         {state.formulas.map((formula, index) => (
-          <div key={index} className="flex items-center gap-1.5">
-            <span className="text-muted-foreground flex size-8 items-center justify-center font-mono text-xs italic">
+          <div key={index} className="flex items-center gap-2">
+            <span className="border-border text-muted-foreground flex size-8 shrink-0 items-center justify-center border font-mono text-xs italic">
               ƒ
             </span>
             <Input
@@ -225,7 +221,7 @@ export function ExploreV2Prototype(): JSX.Element {
                   ),
                 })
               }
-              className="h-8 w-64 font-mono"
+              className="h-8 flex-1 font-mono"
             />
             <Button
               variant="tertiary"
@@ -277,146 +273,376 @@ export function ExploreV2Prototype(): JSX.Element {
             Add formula
           </Button>
         </div>
-      </div>
-    </section>
-  );
+      </section>
 
-  const results = (
-    <Results
-      state={ran}
-      draft={state}
-      changed={changed}
-      onChart={(chart) => {
-        patch({ chart });
-        // Chart and window are presentation: they apply at once.
-        setRan({ ...ran, chart });
-      }}
-      onWindow={(window) => {
-        patch({ window });
-        setRan({ ...ran, window });
-      }}
-      onRun={() => setRan(state)}
-    />
-  );
-
-  return (
-    <>
-      {variant === "C" ? (
-        <div className="grid grid-cols-[14rem_minmax(0,1fr)] items-start gap-4">
-          <FacetPanel
-            fields={filterFields}
-            filters={state.filters}
-            onChange={setFilters}
-          />
-          <div className="flex min-w-0 flex-col gap-4">
-            {builder}
-            {results}
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-4">
-          {builder}
-          {results}
-        </div>
-      )}
-      <VariantSwitcher current={variant} />
-    </>
-  );
-}
-
-// ── Variants ──────────────────────────────────────────────────────────────
-
-type Variant = "A" | "B" | "C";
-const VARIANTS: { key: Variant; name: string }[] = [
-  { key: "A", name: "Filters inline per query" },
-  { key: "B", name: "Search box" },
-  { key: "C", name: "Facet panel" },
-];
-
-function useVariant(): Variant {
-  const [params] = useSearchParams();
-  const named = params.get("variant");
-  return named === "B" || named === "C" ? named : "A";
-}
-
-// Not part of the design: flips between the variants, with ← and → too.
-function VariantSwitcher({ current }: { current: Variant }): JSX.Element {
-  const [, setParams] = useSearchParams();
-  const index = VARIANTS.findIndex((v) => v.key === current);
-  const go = (step: number) => {
-    const next = VARIANTS[(index + step + VARIANTS.length) % VARIANTS.length]!;
-    setParams(
-      (prev) => {
-        const out = new URLSearchParams(prev);
-        out.set("variant", next.key);
-        return out;
-      },
-      { replace: true },
-    );
-  };
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.isContentEditable)
-      ) {
-        return;
-      }
-      if (event.key === "ArrowLeft") go(-1);
-      if (event.key === "ArrowRight") go(1);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
-  return (
-    <div className="fixed right-6 bottom-6 z-50 flex items-center gap-1 rounded-full bg-neutral-900 px-2 py-1.5 font-mono text-xs text-white shadow-lg">
-      <button
-        type="button"
-        aria-label="Previous variant"
-        onClick={() => go(-1)}
-        className="px-2 hover:opacity-70"
-      >
-        ←
-      </button>
-      <span className="px-1">
-        {current} · {VARIANTS[index]!.name}
-      </span>
-      <button
-        type="button"
-        aria-label="Next variant"
-        onClick={() => go(1)}
-        className="px-2 hover:opacity-70"
-      >
-        →
-      </button>
+      <Results
+        state={ran}
+        draft={state}
+        changed={changed}
+        onChart={(chart) => {
+          patch({ chart });
+          // Chart and window are presentation: they apply at once.
+          setRan({ ...ran, chart });
+        }}
+        onWindow={(window) => {
+          patch({ window });
+          setRan({ ...ran, window });
+        }}
+        onRun={() => setRan(state)}
+      />
     </div>
   );
 }
 
-// Variant B: one box that reads as a search field, pills inside it, on the
-// query rows' grid so it lines up with the sentences under it.
-function SearchFilterBox({
-  fields,
+// ── One query: what is asked of, then the sentence under it ───────────────
+
+function QueryBlock({
+  query,
+  canRemove,
+  onChange,
+  onRemove,
+}: {
+  query: Query;
+  canRemove: boolean;
+  onChange: (next: Partial<Query>) => void;
+  onRemove: () => void;
+}): JSX.Element {
+  const dataset = datasetOf(query.dataset);
+  const counts = query.agg === "count";
+  const free = dataset.dimensions.filter((d) => !query.groupBy.includes(d));
+  const targets =
+    query.agg === "count_distinct" ? dataset.dimensions : dataset.measures;
+
+  return (
+    <div className={cn("flex flex-col", !query.visible && "opacity-50")}>
+      {/* Line one: letter, dataset, and the query's filters as a search. */}
+      <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-stretch">
+          <button
+            type="button"
+            title={query.visible ? "Hide this query" : "Show this query"}
+            onClick={() => onChange({ visible: !query.visible })}
+            className={cn(
+              "flex size-8 shrink-0 items-center justify-center font-mono text-sm",
+              query.visible
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground",
+            )}
+          >
+            {query.letter}
+          </button>
+          <Select
+            value={query.dataset}
+            onValueChange={(name) => {
+              const next = datasetOf(name);
+              onChange({
+                dataset: name,
+                field: counts ? "" : (next.measures[0] ?? ""),
+                groupBy: query.groupBy.filter((g) =>
+                  next.dimensions.includes(g),
+                ),
+                filters: query.filters.filter((f) =>
+                  next.dimensions.includes(f.field),
+                ),
+              });
+            }}
+          >
+            <SelectTrigger
+              size="sm"
+              aria-label="Dataset"
+              className="w-36 shrink-0 border-l-0"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DATASETS.map((d) => (
+                <SelectItem key={d.name} value={d.name}>
+                  {d.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <SearchField
+            dataset={dataset}
+            filters={query.filters}
+            onChange={(filters) => onChange({ filters })}
+          />
+        </div>
+        <Button
+          variant="tertiary"
+          size="sm"
+          icon="code"
+          aria-label="Edit as text (not in the prototype)"
+        />
+        <AliasInput
+          value={query.alias}
+          onChange={(alias) => onChange({ alias })}
+        />
+        {canRemove ? (
+          <Button
+            variant="tertiary"
+            size="sm"
+            icon="x"
+            aria-label="Remove query"
+            onClick={onRemove}
+          />
+        ) : null}
+      </div>
+
+      {/* Line two hangs off the letter: the sentence of joined segments. */}
+      <div className="flex">
+        <span
+          aria-hidden
+          className="border-border ml-4 h-6 w-4 shrink-0 border-b border-l"
+        />
+        <div className="flex flex-wrap items-center pt-2">
+          <Segments>
+            <Label>Show</Label>
+            <ValueSelect
+              label="Aggregation"
+              value={query.agg}
+              options={AGGS}
+              tone="measure"
+              onSelect={(agg) =>
+                onChange({
+                  agg,
+                  field:
+                    agg === "count"
+                      ? ""
+                      : agg === "count_distinct"
+                        ? (dataset.dimensions[0] ?? "")
+                        : dataset.measures.includes(query.field)
+                          ? query.field
+                          : (dataset.measures[0] ?? ""),
+                })
+              }
+            />
+            {counts ? (
+              <Cell tone="measure">all {dataset.noun}</Cell>
+            ) : (
+              <ValueSelect
+                label="Measure field"
+                value={query.field}
+                options={targets.map((t) => ({ value: t, label: t }))}
+                tone="measure"
+                mono
+                onSelect={(field) => onChange({ field })}
+              />
+            )}
+          </Segments>
+          <Joint />
+          <Segments>
+            <Label>by</Label>
+            {query.groupBy.length === 0 ? (
+              <Cell tone="group">(Everything)</Cell>
+            ) : null}
+            {query.groupBy.map((group) => (
+              <Cell key={group} tone="group" mono>
+                {group}
+                <button
+                  type="button"
+                  aria-label={`Stop grouping by ${group}`}
+                  onClick={() =>
+                    onChange({
+                      groupBy: query.groupBy.filter((g) => g !== group),
+                    })
+                  }
+                  className="text-muted-foreground hover:text-foreground ml-1.5 flex items-center"
+                >
+                  <XIcon className="size-3" />
+                </button>
+              </Cell>
+            ))}
+            {free.length > 0 && query.groupBy.length < 3 ? (
+              <Select
+                value=""
+                onValueChange={(group) =>
+                  onChange({ groupBy: [...query.groupBy, group] })
+                }
+              >
+                <SelectTrigger
+                  size="sm"
+                  aria-label="Add a group"
+                  className="h-full w-8 justify-center border-0 px-0 [&>svg:last-child]:hidden"
+                >
+                  <Icon name="plus" className="size-4" />
+                </SelectTrigger>
+                <SelectContent>
+                  {free.map((d) => (
+                    <SelectItem key={d} value={d} className="font-mono">
+                      {d}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
+          </Segments>
+          {query.groupBy.length > 0 ? (
+            <>
+              <Joint />
+              <Segments>
+                <Label>limit to top</Label>
+                <ValueSelect
+                  label="Limit"
+                  value={query.limit}
+                  options={LIMITS.map((l) => ({ value: l, label: l }))}
+                  onSelect={(limit) => onChange({ limit })}
+                />
+              </Segments>
+            </>
+          ) : null}
+          <Joint />
+          <Segments>
+            <Label>rollup</Label>
+            <Cell>every</Cell>
+            <ValueSelect
+              label="Rollup"
+              value={query.rollup}
+              options={ROLLUPS.map((r) => ({
+                value: r,
+                label: r === "auto" ? "1h (auto)" : r,
+              }))}
+              onSelect={(rollup) => onChange({ rollup })}
+            />
+          </Segments>
+          <Joint />
+          <Segments>
+            <button
+              type="button"
+              title="Functions (not in the prototype)"
+              className="hover:bg-muted flex h-full items-center gap-1.5 px-2.5 text-sm"
+            >
+              <Icon name="sigma" className="size-3.5" />
+              Modify
+            </button>
+          </Segments>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Segment pieces ────────────────────────────────────────────────────────
+
+type Tone = "plain" | "measure" | "group";
+
+const TONES: Record<Tone, string> = {
+  plain: "bg-card",
+  measure: "bg-warning-softest",
+  group: "bg-destructive-softest",
+};
+
+/** Joined cells: one bordered group, divided. */
+function Segments({ children }: { children: ReactNode }): JSX.Element {
+  return (
+    <div className="border-border divide-border flex h-8 items-stretch divide-x border">
+      {children}
+    </div>
+  );
+}
+
+/** The short line joining two segment groups. */
+function Joint(): JSX.Element {
+  return <span aria-hidden className="bg-border h-px w-2.5 shrink-0" />;
+}
+
+/** A word of the sentence: muted, not editable. */
+function Label({ children }: { children: ReactNode }): JSX.Element {
+  return (
+    <span className="bg-muted text-muted-foreground flex items-center px-2.5 text-sm">
+      {children}
+    </span>
+  );
+}
+
+/** A value that is not a choice of its own: "all sessions", "every". */
+function Cell({
+  children,
+  tone = "plain",
+  mono = false,
+}: {
+  children: ReactNode;
+  tone?: Tone;
+  mono?: boolean;
+}): JSX.Element {
+  return (
+    <span
+      className={cn(
+        "flex items-center px-2.5 text-sm",
+        TONES[tone],
+        mono && "font-mono",
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** A value picked from a list: the design system's select, as a cell. */
+function ValueSelect({
+  label,
+  value,
+  options,
+  tone = "plain",
+  mono = false,
+  onSelect,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  tone?: Tone;
+  mono?: boolean;
+  onSelect: (value: string) => void;
+}): JSX.Element {
+  return (
+    <Select value={value} onValueChange={onSelect}>
+      <SelectTrigger
+        size="sm"
+        aria-label={label}
+        className={cn(
+          "h-full w-auto gap-1.5 border-0 px-2.5 hover:brightness-95",
+          TONES[tone],
+          mono && "font-mono",
+        )}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem
+            key={option.value}
+            value={option.value}
+            className={mono ? "font-mono" : undefined}
+          >
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+// ── The query's filters, as a search field ────────────────────────────────
+
+function SearchField({
+  dataset,
   filters,
   onChange,
 }: {
-  fields: string[];
+  dataset: DummyDataset;
   filters: Filter[];
   onChange: (filters: Filter[]) => void;
 }): JSX.Element {
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-muted-foreground flex size-8 shrink-0 items-center justify-center">
-        <Icon name="search" className="size-4" />
+    <div className="border-input flex min-h-8 min-w-0 flex-1 items-stretch border border-l-0">
+      <span className="border-input text-muted-foreground flex w-8 shrink-0 items-center justify-center border-r">
+        <Icon name="search" className="size-3.5" />
       </span>
-      <div className="border-input flex min-h-8 flex-1 flex-wrap items-center gap-1.5 border px-1.5 py-1">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1 px-1.5 py-0.5">
         {filters.map((filter, index) => (
           <FilterEditor
             key={index}
-            fields={fields}
+            fields={dataset.dimensions}
             initial={filter}
             onDone={(next) =>
               onChange(filters.map((f, i) => (i === index ? next : f)))
@@ -430,104 +656,22 @@ function SearchFilterBox({
           />
         ))}
         <FilterEditor
-          fields={fields}
+          fields={dataset.dimensions}
           onDone={(filter) => onChange([...filters, filter])}
+          stretch
           trigger={
             <button
               type="button"
-              className="text-muted-foreground hover:text-foreground min-w-40 flex-1 px-1 text-left text-sm"
+              aria-label="Add a filter"
+              className="text-muted-foreground hover:text-foreground h-6 w-full min-w-40 px-1 text-left text-sm"
             >
-              {filters.length === 0
-                ? "Filter every query: field is value…"
-                : "Add a filter…"}
+              {filters.length === 0 ? `Filter your ${dataset.noun}` : ""}
             </button>
           }
-          stretch
         />
       </div>
     </div>
   );
-}
-
-// Variant C: every field, its values ticked to filter, down the left.
-function FacetPanel({
-  fields,
-  filters,
-  onChange,
-}: {
-  fields: string[];
-  filters: Filter[];
-  onChange: (filters: Filter[]) => void;
-}): JSX.Element {
-  const toggle = (field: string, value: string) => {
-    const current = filters.find((f) => f.field === field);
-    const values = current?.values.includes(value)
-      ? current.values.filter((v) => v !== value)
-      : [...(current?.values ?? []), value];
-    const rest = filters.filter((f) => f.field !== field);
-    onChange(
-      values.length === 0
-        ? rest
-        : [...rest, { field, op: current?.op ?? "is", values }],
-    );
-  };
-  return (
-    <aside className="border-border bg-card sticky top-0 flex flex-col border">
-      <div className="border-border flex items-center justify-between border-b px-3 py-2">
-        <span className="text-eyebrow">Filters</span>
-        {filters.length > 0 ? (
-          <button
-            type="button"
-            onClick={() => onChange([])}
-            className="text-muted-foreground hover:text-foreground text-xs"
-          >
-            Clear
-          </button>
-        ) : null}
-      </div>
-      {fields.map((field) => {
-        const picked = filters.find((f) => f.field === field)?.values ?? [];
-        return (
-          <details
-            key={field}
-            open={picked.length > 0 || field === fields[0]}
-            className="border-border border-b last:border-b-0"
-          >
-            <summary className="hover:bg-muted flex cursor-pointer items-center justify-between px-3 py-2 font-mono text-sm">
-              {field}
-              {picked.length > 0 ? (
-                <Badge variant="neutral" size="md">
-                  {picked.length}
-                </Badge>
-              ) : null}
-            </summary>
-            <div className="flex flex-col pb-2">
-              {(VALUES[field] ?? []).map((value) => (
-                <label
-                  key={value}
-                  className="hover:bg-muted flex cursor-pointer items-center gap-2 px-3 py-1 font-mono text-sm"
-                >
-                  <Checkbox
-                    checked={picked.includes(value)}
-                    onCheckedChange={() => toggle(field, value)}
-                  />
-                  <span className="flex-1 truncate">{value}</span>
-                  <span className="text-muted-foreground text-xs tabular-nums">
-                    {facetCount(field, value)}
-                  </span>
-                </label>
-              ))}
-            </div>
-          </details>
-        );
-      })}
-    </aside>
-  );
-}
-
-// A made-up row count beside a facet value.
-function facetCount(field: string, value: string): string {
-  return Math.round(50 + seeded(field + value)() * 950).toLocaleString();
 }
 
 function FilterPill({
@@ -538,42 +682,19 @@ function FilterPill({
   onRemove: () => void;
 }): JSX.Element {
   return (
-    <Pill onRemove={onRemove} removeLabel={`Remove ${filter.field} filter`}>
-      {filter.field}
-      <span className="text-muted-foreground">
-        {filter.op === "is" ? " : " : " !: "}
-      </span>
-      {filter.values.join(", ")}
-    </Pill>
-  );
-}
-
-// A value in the builder: a neutral badge with its own remove control, as
-// the filter value picker draws a picked value.
-function Pill({
-  children,
-  onRemove,
-  removeLabel,
-  ...rest
-}: {
-  children: ReactNode;
-  onRemove: () => void;
-  removeLabel: string;
-}): JSX.Element {
-  return (
     <Badge
       variant="neutral"
       size="lg"
       className="max-w-80 cursor-pointer normal-case"
-      {...rest}
     >
       <Badge.Text className="min-w-0 truncate font-mono text-xs [text-box-trim:none]">
-        {children}
+        {filter.op === "is not" ? "-" : ""}
+        {filter.field}:{filter.values.join(",")}
       </Badge.Text>
       <Badge.RightIcon>
         <button
           type="button"
-          aria-label={removeLabel}
+          aria-label={`Remove ${filter.field} filter`}
           onClick={(event) => {
             event.stopPropagation();
             onRemove();
@@ -691,190 +812,6 @@ function FilterEditor({
   );
 }
 
-// ── One query, read as a sentence ─────────────────────────────────────────
-
-function QueryRow({
-  query,
-  inlineFilters,
-  canRemove,
-  onChange,
-  onRemove,
-}: {
-  query: Query;
-  inlineFilters: boolean;
-  canRemove: boolean;
-  onChange: (next: Partial<Query>) => void;
-  onRemove: () => void;
-}): JSX.Element {
-  const dataset = datasetOf(query.dataset);
-  const counts = query.agg === "count";
-  const free = dataset.dimensions.filter((d) => !query.groupBy.includes(d));
-  return (
-    <div
-      className={cn(
-        "flex flex-wrap items-center gap-1.5",
-        !query.visible && "opacity-50",
-      )}
-    >
-      <button
-        type="button"
-        title={query.visible ? "Hide this query" : "Show this query"}
-        onClick={() => onChange({ visible: !query.visible })}
-        className={cn(
-          "border-border flex size-8 shrink-0 items-center justify-center border font-mono text-xs uppercase",
-          query.visible
-            ? "bg-primary text-primary-foreground"
-            : "bg-card text-muted-foreground",
-        )}
-      >
-        {query.letter}
-      </button>
-      <Token
-        label="Aggregation"
-        value={query.agg}
-        options={AGGS}
-        className="font-mono uppercase"
-        onSelect={(agg) =>
-          onChange({
-            agg,
-            field:
-              agg === "count"
-                ? ""
-                : agg === "count distinct"
-                  ? (dataset.dimensions[0] ?? "")
-                  : query.field || (dataset.measures[0] ?? ""),
-          })
-        }
-      />
-      {counts ? null : (
-        <Token
-          label="Measure field"
-          value={query.field}
-          options={
-            query.agg === "count distinct"
-              ? dataset.dimensions
-              : dataset.measures
-          }
-          onSelect={(field) => onChange({ field })}
-        />
-      )}
-      <Word>of</Word>
-      <Token
-        label="Dataset"
-        value={query.dataset}
-        options={DATASETS.map((d) => d.name)}
-        onSelect={(name) => {
-          const next = datasetOf(name);
-          onChange({
-            dataset: name,
-            field: counts ? "" : (next.measures[0] ?? ""),
-            groupBy: query.groupBy.filter((g) => next.dimensions.includes(g)),
-          });
-        }}
-      />
-      {inlineFilters ? (
-        <>
-          <Word>where</Word>
-          {query.filters.map((filter, index) => (
-            <FilterEditor
-              key={index}
-              fields={dataset.dimensions}
-              initial={filter}
-              onDone={(next) =>
-                onChange({
-                  filters: query.filters.map((f, i) =>
-                    i === index ? next : f,
-                  ),
-                })
-              }
-              trigger={
-                <FilterPill
-                  filter={filter}
-                  onRemove={() =>
-                    onChange({
-                      filters: query.filters.filter((_, i) => i !== index),
-                    })
-                  }
-                />
-              }
-            />
-          ))}
-          <FilterEditor
-            fields={dataset.dimensions}
-            onDone={(filter) =>
-              onChange({ filters: [...query.filters, filter] })
-            }
-            trigger={
-              <Button
-                variant="tertiary"
-                size="sm"
-                icon="plus"
-                aria-label="Add a filter"
-              >
-                {query.filters.length === 0 ? "everything" : undefined}
-              </Button>
-            }
-          />
-        </>
-      ) : null}
-      <Word>by</Word>
-      {query.groupBy.length === 0 ? <Word>everything</Word> : null}
-      {query.groupBy.map((group) => (
-        <Pill
-          key={group}
-          removeLabel={`Stop grouping by ${group}`}
-          onRemove={() =>
-            onChange({ groupBy: query.groupBy.filter((g) => g !== group) })
-          }
-        >
-          {group}
-        </Pill>
-      ))}
-      {free.length > 0 && query.groupBy.length < 3 ? (
-        <Token
-          label="Add a group"
-          value=""
-          placeholder="+ group"
-          options={free}
-          onSelect={(group) => onChange({ groupBy: [...query.groupBy, group] })}
-        />
-      ) : null}
-      {query.groupBy.length > 0 ? (
-        <>
-          <Word>top</Word>
-          <Token
-            label="Limit"
-            value={query.limit}
-            options={LIMITS}
-            onSelect={(limit) => onChange({ limit })}
-          />
-        </>
-      ) : null}
-      <span className="flex items-center gap-0.5">
-        <Button
-          variant="tertiary"
-          size="sm"
-          icon="sigma"
-          aria-label="Functions (not in the prototype)"
-        />
-        <AliasInput
-          value={query.alias}
-          onChange={(alias) => onChange({ alias })}
-        />
-        {canRemove ? (
-          <Button
-            variant="tertiary"
-            size="sm"
-            icon="x"
-            aria-label="Remove query"
-            onClick={onRemove}
-          />
-        ) : null}
-      </span>
-    </div>
-  );
-}
-
 function AliasInput({
   value,
   onChange,
@@ -901,47 +838,6 @@ function AliasInput({
       className="h-8 w-32"
     />
   );
-}
-
-// ── Token: the design system's small select, sized to its value ───────────
-
-function Token({
-  label,
-  value,
-  placeholder,
-  options,
-  className,
-  onSelect,
-}: {
-  label: string;
-  value: string;
-  placeholder?: string;
-  options: string[];
-  className?: string;
-  onSelect: (value: string) => void;
-}): JSX.Element {
-  return (
-    <Select value={value} onValueChange={onSelect}>
-      <SelectTrigger
-        size="sm"
-        aria-label={label}
-        className={cn("w-auto min-w-0 gap-1.5", className)}
-      >
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((option) => (
-          <SelectItem key={option} value={option} className={className}>
-            {option}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
-function Word({ children }: { children: ReactNode }): JSX.Element {
-  return <span className="text-muted-foreground text-xs">{children}</span>;
 }
 
 // ── Results: chart type, window and Run on the panel's header ─────────────
@@ -1019,8 +915,9 @@ function ResultBody({
   chart: ChartKind;
   data: DummyResult;
 }): JSX.Element {
-  const colors = seriesForTheme(useIsDarkTheme());
-  const grid = useIsDarkTheme() ? AXIS.gridDark : AXIS.grid;
+  const dark = useIsDarkTheme();
+  const colors = seriesForTheme(dark);
+  const grid = dark ? AXIS.gridDark : AXIS.grid;
   if (data.series.length === 0) {
     return (
       <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
@@ -1150,30 +1047,35 @@ function seeded(seed: string): () => number {
 }
 
 function dummyResult(state: State): DummyResult {
-  const filterKey = JSON.stringify([
-    state.filters,
-    state.queries.map((q) => q.filters),
-  ]);
   const visible = state.queries.filter((q) => q.visible);
   const series: string[] = [];
+  const seeds: string[] = [];
   for (const query of visible) {
+    const agg = AGGS.find((a) => a.value === query.agg)?.label ?? query.agg;
     const name =
       query.alias ||
-      `${query.letter}: ${query.agg}${query.field ? ` ${query.field}` : ""} of ${query.dataset}`;
+      `${query.letter}: ${agg} ${query.field || `all ${datasetOf(query.dataset).noun}`}`;
+    const key = JSON.stringify(query.filters) + query.rollup;
     const group = query.groupBy[0];
     if (!group) {
       series.push(name);
+      seeds.push(name + key);
       continue;
     }
     for (const value of (VALUES[group] ?? []).slice(0, Number(query.limit))) {
-      series.push(visible.length > 1 ? `${query.letter} · ${value}` : value);
+      const label = visible.length > 1 ? `${query.letter} · ${value}` : value;
+      series.push(label);
+      seeds.push(label + key);
     }
   }
-  for (const formula of state.formulas) series.push(`ƒ ${formula}`);
+  for (const formula of state.formulas) {
+    series.push(`ƒ ${formula}`);
+    seeds.push(formula);
+  }
 
   const buckets = 24;
   const points: Record<string, number | string>[] = [];
-  const randoms = series.map((s) => seeded(s + filterKey + state.window));
+  const randoms = seeds.map((s) => seeded(s + state.window));
   for (let b = 0; b < buckets; b++) {
     const point: Record<string, number | string> = { t: `${b}` };
     series.forEach((s, i) => {
