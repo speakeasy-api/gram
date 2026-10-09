@@ -84,6 +84,10 @@ export const AUDIT_ACTIONS = [
   "directory_role_mapping:set",
   "environment:create",
   "environment:delete",
+  "environment:link-source",
+  "environment:link-toolset",
+  "environment:unlink-source",
+  "environment:unlink-toolset",
   "environment:update",
   "gcp_iam_credential:create",
   "gcp_iam_credential:delete",
@@ -553,6 +557,14 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated environment";
     case "environment:delete":
       return "deleted environment";
+    case "environment:link-source":
+      return "linked a source to environment";
+    case "environment:unlink-source":
+      return "unlinked a source from environment";
+    case "environment:link-toolset":
+      return "linked a toolset to environment";
+    case "environment:unlink-toolset":
+      return "unlinked a toolset from environment";
 
     case "killswitch:activate":
       return "activated killswitch";

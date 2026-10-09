@@ -8,9 +8,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/environments"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -246,4 +249,113 @@ func TestSourceEnvironmentLink_TakesProjectLock(t *testing.T) {
 		t.Fatal("link change did not finish after the lock was released")
 	}
 	require.Equal(t, f.readable, f.sourceBinding(t, "locked"))
+}
+
+func auditCount(t *testing.T, ctx context.Context, conn *pgxpool.Pool, action audit.Action) int64 {
+	t.Helper()
+
+	count, err := audittest.AuditLogCountByAction(ctx, conn, action)
+	require.NoError(t, err)
+	return count
+}
+
+func requireBindingAudit(t *testing.T, f linkFixture, action audit.Action, environmentID string, metadata map[string]any) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(f.ctx)
+	require.True(t, ok)
+	record, err := audittest.LatestAuditLogByAction(f.ctx, f.ti.conn, action)
+	require.NoError(t, err)
+	require.Equal(t, "environment", record.SubjectType)
+	require.Equal(t, environmentID, record.SubjectID)
+	require.Equal(t, authCtx.UserID, record.ActorID)
+	require.Equal(t, uuid.NullUUID{UUID: f.projectID, Valid: true}, record.ProjectID)
+	got, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, metadata, got)
+}
+
+func TestSourceEnvironmentLink_AuditsEachBindingChange(t *testing.T) {
+	t.Parallel()
+
+	f := newLinkExclusionFixture(t)
+	links := func() int64 { return auditCount(t, f.ctx, f.ti.conn, audit.ActionEnvironmentSourceLink) }
+	unlinks := func() int64 { return auditCount(t, f.ctx, f.ti.conn, audit.ActionEnvironmentSourceUnlink) }
+	target := map[string]any{"source_kind": "http", "source_slug": "audited"}
+
+	require.NoError(t, f.setSource(f.ctx, "audited", f.readable))
+	require.Equal(t, int64(1), links())
+	require.Equal(t, int64(0), unlinks())
+	requireBindingAudit(t, f, audit.ActionEnvironmentSourceLink, f.readable, target)
+
+	// Setting the same environment again changes nothing.
+	require.NoError(t, f.setSource(f.ctx, "audited", f.readable))
+	require.Equal(t, int64(1), links())
+
+	// A replacement unlinks the old environment and links the new one.
+	require.NoError(t, f.setSource(f.ctx, "audited", f.excluded))
+	require.Equal(t, int64(2), links())
+	require.Equal(t, int64(1), unlinks())
+	requireBindingAudit(t, f, audit.ActionEnvironmentSourceUnlink, f.readable, target)
+	requireBindingAudit(t, f, audit.ActionEnvironmentSourceLink, f.excluded, target)
+
+	require.NoError(t, f.ti.service.DeleteSourceEnvironmentLink(f.ctx, &gen.DeleteSourceEnvironmentLinkPayload{SourceKind: gen.SourceKind("http"), SourceSlug: "audited"}))
+	require.Equal(t, int64(2), unlinks())
+	requireBindingAudit(t, f, audit.ActionEnvironmentSourceUnlink, f.excluded, target)
+
+	// Deleting a link that does not exist records nothing.
+	require.NoError(t, f.ti.service.DeleteSourceEnvironmentLink(f.ctx, &gen.DeleteSourceEnvironmentLinkPayload{SourceKind: gen.SourceKind("http"), SourceSlug: "audited"}))
+	require.Equal(t, int64(2), unlinks())
+}
+
+func TestToolsetEnvironmentLink_AuditsEachBindingChange(t *testing.T) {
+	t.Parallel()
+
+	f := newLinkExclusionFixture(t)
+	toolsetID := f.toolset(t, f.projectID)
+	target := map[string]any{"toolset_id": toolsetID}
+
+	require.NoError(t, f.setToolset(f.ctx, toolsetID, f.readable))
+	requireBindingAudit(t, f, audit.ActionEnvironmentToolsetLink, f.readable, target)
+
+	require.NoError(t, f.setToolset(f.ctx, toolsetID, f.excluded))
+	requireBindingAudit(t, f, audit.ActionEnvironmentToolsetUnlink, f.readable, target)
+	requireBindingAudit(t, f, audit.ActionEnvironmentToolsetLink, f.excluded, target)
+
+	require.NoError(t, f.ti.service.DeleteToolsetEnvironmentLink(f.ctx, &gen.DeleteToolsetEnvironmentLinkPayload{ToolsetID: toolsetID}))
+	requireBindingAudit(t, f, audit.ActionEnvironmentToolsetUnlink, f.excluded, target)
+	require.Equal(t, int64(2), auditCount(t, f.ctx, f.ti.conn, audit.ActionEnvironmentToolsetLink))
+	require.Equal(t, int64(2), auditCount(t, f.ctx, f.ti.conn, audit.ActionEnvironmentToolsetUnlink))
+}
+
+// The binding and its audit entry commit together.
+func TestEnvironmentLink_AuditFailureRollsBackBinding(t *testing.T) {
+	t.Parallel()
+
+	t.Run("source", func(t *testing.T) {
+		t.Parallel()
+
+		f := newLinkExclusionFixture(t)
+		require.NoError(t, f.setSource(f.ctx, "rollback", f.readable))
+		require.NoError(t, audittest.RejectAction(f.ctx, f.ti.conn, audit.ActionEnvironmentSourceUnlink))
+
+		require.Error(t, f.setSource(f.ctx, "rollback", f.excluded))
+		require.Equal(t, f.readable, f.sourceBinding(t, "rollback"))
+		require.Error(t, f.ti.service.DeleteSourceEnvironmentLink(f.ctx, &gen.DeleteSourceEnvironmentLinkPayload{SourceKind: gen.SourceKind("http"), SourceSlug: "rollback"}))
+		require.Equal(t, f.readable, f.sourceBinding(t, "rollback"))
+	})
+
+	t.Run("toolset", func(t *testing.T) {
+		t.Parallel()
+
+		f := newLinkExclusionFixture(t)
+		toolsetID := f.toolset(t, f.projectID)
+		require.NoError(t, audittest.RejectAction(f.ctx, f.ti.conn, audit.ActionEnvironmentToolsetLink))
+
+		require.Error(t, f.setToolset(f.ctx, toolsetID, f.readable))
+		_, err := repo.New(f.ti.conn).LockToolsetEnvironmentBinding(f.ctx, repo.LockToolsetEnvironmentBindingParams{
+			ToolsetID: uuid.MustParse(toolsetID), ProjectID: f.projectID,
+		})
+		require.ErrorIs(t, err, pgx.ErrNoRows)
+	})
 }

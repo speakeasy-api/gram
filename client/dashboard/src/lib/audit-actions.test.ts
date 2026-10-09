@@ -153,6 +153,15 @@ describe("AUDIT_ACTIONS", () => {
     );
   });
 
+  it("names source and toolset environment bindings", () => {
+    expect(staticActionPhrase("environment:link-source")).toBe(
+      "linked a source to environment",
+    );
+    expect(staticActionPhrase("environment:unlink-toolset")).toBe(
+      "unlinked a toolset from environment",
+    );
+  });
+
   it("names environment link changes on an MCP server", () => {
     expect(staticActionPhrase("mcp-server:link-environment")).toBe(
       "linked an environment to MCP server",
