@@ -33,6 +33,21 @@ vi.mock("@gram/client/react-query/updateMcpServer.js", () => ({
 vi.mock("@gram/client/react-query/getTunneledMcpServer.js", () => ({
   useGetTunneledMcpServer: () => mocks.tunneledSource(),
 }));
+vi.mock("@/components/mcp/use-shared-tunnel-impact", async (original) => ({
+  ...(await original<
+    typeof import("@/components/mcp/use-shared-tunnel-impact")
+  >()),
+  useSharedTunnelImpact: () => ({
+    servers: [
+      { id: "mcp-server-1", name: "Example server", visibility: "private" },
+      { id: "sibling", name: "Sibling server", visibility: "private" },
+    ],
+    isReady: true,
+    isLoading: false,
+    isError: false,
+    retry: () => {},
+  }),
+}));
 vi.mock("@/components/ui/Dropdown", () => ({
   DropdownMenu: ({ children }: { children: ReactNode }) => <>{children}</>,
   DropdownMenuTrigger: ({ children }: { children: ReactNode }) => (
@@ -189,7 +204,7 @@ describe("MCPServerAvailabilityToggle", () => {
     ).not.toBeNull();
   });
 
-  it("keeps the tunneled Public option after the source opts in", () => {
+  it("confirms a tunneled server going public against its tunnel's servers", () => {
     mocks.tunneledSource.mockReturnValue({ data: { allowPublic: true } });
     renderInApp(
       <MCPServerStatusDropdown
@@ -202,6 +217,12 @@ describe("MCPServerAvailabilityToggle", () => {
     );
 
     fireEvent.click(screen.getByRole("menuitem", { name: /^Public/ }));
+
+    // Nothing changes until the shared-tunnel warning is confirmed.
+    expect(mocks.mutate).not.toHaveBeenCalled();
+    expect(screen.getByText("Sibling server")).toBeTruthy();
+    expect(screen.getByText(/bypass per-tool access control/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Make public" }));
 
     expect(mocks.mutate).toHaveBeenCalledWith({
       request: {
