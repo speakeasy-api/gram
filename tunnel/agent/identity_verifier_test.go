@@ -412,7 +412,7 @@ func TestAdmitCredential(t *testing.T) {
 
 func TestCredentialChildEnvReplacesInheritedValues(t *testing.T) {
 	t.Parallel()
-	env := credentialChildEnv([]string{"PATH=/bin", "HOME=/root", "OKTA_ACCESS_TOKEN_FILE=/shared/token", AccessTokenFileEnv + "=/shared/other", "XDG_CONFIG_HOME=/etc"}, "/s/token", "/s/home")
+	env := credentialChildEnv([]string{"PATH=/bin", "HOME=/root", "OKTA_ACCESS_TOKEN_FILE=/shared/token", AccessTokenFileEnv + "=/shared/other", "XDG_CONFIG_HOME=/etc", "XDG_STATE_HOME=/shared/state"}, "/s/token", "/s/home")
 	require.Equal(t, []string{"PATH=/bin", "XDG_CACHE_HOME=/root/.cache", "npm_config_cache=/root/.cache/npm", AccessTokenFileEnv + "=/s/token", "HOME=/s/home", "XDG_CONFIG_HOME=/s/home/.config", "XDG_DATA_HOME=/s/home/.local/share", "XDG_STATE_HOME=/s/home/.local/state"}, env)
 }
 

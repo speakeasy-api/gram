@@ -29,8 +29,8 @@ const (
 	// revoked credential cannot outlive its revocation indefinitely.
 	defaultCredentialMaxAge = time.Hour
 
-	// maxCredentialMaxAge caps the configured maximum age, so no setting
-	// lets a token outlive its revocation for longer than a day.
+	// maxCredentialMaxAge caps the configured maximum age: no setting puts a
+	// session's credential deadline more than a day after its last write.
 	maxCredentialMaxAge = 24 * time.Hour
 
 	// credentialExpiryGrace keeps a session past its token's expiry long

@@ -431,16 +431,18 @@ func (b *stdioBridge) admitSessionCredential(w http.ResponseWriter, r *http.Requ
 		writeUnauthorized(w)
 		return cred, false
 	}
+	// Stop admission before anything that can block, such as logging or
+	// writing the response, so no other request slips in meanwhile.
 	if err != nil && !errors.Is(err, errCredentialExpired) {
+		sess.beginTerminate()
 		sess.logger.Info("tunnel stdio session credential no longer admitted; stopping server", slog.String("reason", err.Error()))
 		writeUnauthorized(w)
-		sess.beginTerminate()
 		return cred, false
 	}
 	if cred.context != sess.cred.context {
+		sess.beginTerminate()
 		sess.logger.Info("tunnel stdio session credential changed grant; stopping server")
 		writeRPCError(w, http.StatusNotFound, nil, rpcCodeSessionMissing, "session not found")
-		sess.beginTerminate()
 		return cred, false
 	}
 	for _, msg := range msgs {
