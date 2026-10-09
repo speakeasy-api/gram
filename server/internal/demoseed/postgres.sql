@@ -3702,12 +3702,19 @@ Channel context stays in the Raw view.
   -- duplicated any of them would leave the badges telling a different story
   -- than the one they were seeded to tell.
   -- One issuer per Connections credential story (acme-partner-gateway), three
-  -- project MCP issuers, one for each MCP server on the shared tunnel, and the
-  -- organization-wide workforce issuer used by GitHub.
+  -- project MCP issuers, and the organization-wide workforce issuer used by
+  -- GitHub. Issuers of tunnel-backed MCP servers are left out: each tunnel
+  -- fixture checks its own, so adding a fixture never changes this count.
   SELECT count(*) INTO stray FROM user_session_issuers
-  WHERE project_id = proj_a AND deleted IS FALSE;
-  IF stray <> 6 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 6 project user session issuers, found %', stray;
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND id NOT IN (
+      SELECT user_session_issuer_id FROM mcp_servers
+      WHERE project_id = proj_a AND deleted IS FALSE
+        AND tunneled_mcp_server_id IS NOT NULL
+        AND user_session_issuer_id IS NOT NULL
+    );
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 4 project user session issuers, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM user_session_issuers
@@ -4044,10 +4051,29 @@ Channel context stays in the Raw view.
     RAISE EXCEPTION 'demo seed postflight: expected 5 Explore widgets, found %', stray;
   END IF;
 
+  -- The shared-tunnel fixture checks only its own rows, so other tunnel
+  -- fixtures in the project never change these counts.
   SELECT count(*) INTO stray FROM tunneled_mcp_servers
-  WHERE project_id = proj_a AND deleted IS FALSE;
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND id = demo.det_uuid('gram-demo-tunshare-tunnel');
   IF stray <> 1 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 1 tunneled MCP source, found %', stray;
+    RAISE EXCEPTION 'demo seed postflight: expected the shared tunnel, found % rows', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM user_session_issuers
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND id IN (demo.det_uuid('gram-demo-tunshare-issuer-private'),
+               demo.det_uuid('gram-demo-tunshare-issuer-public'));
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 shared-tunnel issuers, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM mcp_endpoints
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND id IN (demo.det_uuid('gram-demo-tunshare-endpoint-private'),
+               demo.det_uuid('gram-demo-tunshare-endpoint-public'));
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 shared-tunnel endpoints, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM mcp_servers
