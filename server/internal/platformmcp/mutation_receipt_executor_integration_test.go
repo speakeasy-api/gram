@@ -184,16 +184,17 @@ func TestDeleteExpiredPlatformMCPOperationReceiptsBatch(t *testing.T) {
 	require.Equal(t, []uuid.UUID{live.ID}, remaining)
 }
 
-// The pre-check is only an optimisation, so a failed read must not refuse the
-// request: it falls through to the charge and the locked path, which decides.
-func TestChargedMutationReceiptFailedPreCheckFallsThrough(t *testing.T) {
+// A failed pre-check read cannot tell a replay from a first attempt, so it is
+// refused as unavailable before the charge rather than spending the allowance
+// on what may have been a free replay.
+func TestChargedMutationReceiptFailedPreCheckIsNotCharged(t *testing.T) {
 	t.Parallel()
 	probe := newReceiptProbe(t, "platform_mcp_receipt_failed_precheck")
 	probe.conn.Close()
 
 	_, err := probe.execute(t.Context(), "failed-read", "input")
-	require.ErrorContains(t, err, "begin receipt probe receipt", "the locked path, not the pre-check, decides the request")
-	require.Equal(t, 1, probe.charges)
+	require.ErrorContains(t, err, "look up replay receipt", "the pre-check refuses the request")
+	require.Zero(t, probe.charges, "a failed pre-check read must not be charged")
 	require.Zero(t, probe.writes)
 }
 
