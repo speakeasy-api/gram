@@ -22,15 +22,19 @@ const (
 )
 
 // consentGovernor answers Serves with issuer for every upstream in served,
-// Governs with governs, and fails any acquisition.
+// Governs with governs, HasUsableCredential with usable, and Acquire with
+// acquire; a nil acquire fails the test because rendering never acquires.
 type consentGovernor struct {
 	t          *testing.T
 	issuer     uuid.UUID
 	served     map[string]bool
 	governs    bool
 	configured bool
+	usable     bool
+	acquire    func(context.Context, identitychaining.Request) identitychaining.Outcome
 	mu         sync.Mutex
 	requests   []identitychaining.Request
+	acquired   []identitychaining.Request
 }
 
 func (g *consentGovernor) Governs(context.Context, identitychaining.Request) bool {
@@ -48,9 +52,20 @@ func (g *consentGovernor) Configured(context.Context, string, uuid.UUID, uuid.UU
 	return g.configured
 }
 
-func (g *consentGovernor) Acquire(context.Context, identitychaining.Request) (identitychaining.Token, identitychaining.Outcome) {
-	g.t.Error("consent must never acquire a chained token")
-	return identitychaining.Token{}, identitychaining.Outcome{}
+func (g *consentGovernor) HasUsableCredential(context.Context, identitychaining.Request) bool {
+	return g.usable
+}
+
+func (g *consentGovernor) Acquire(ctx context.Context, req identitychaining.Request) (identitychaining.Token, identitychaining.Outcome) {
+	g.mu.Lock()
+	g.acquired = append(g.acquired, req)
+	acquire := g.acquire
+	g.mu.Unlock()
+	if acquire == nil {
+		g.t.Error("consent rendering must never acquire a chained token")
+		return identitychaining.Token{}, identitychaining.Outcome{}
+	}
+	return identitychaining.Token{}, acquire(ctx, req)
 }
 
 func (g *consentGovernor) seen() []identitychaining.Request {
@@ -61,7 +76,7 @@ func (g *consentGovernor) seen() []identitychaining.Request {
 
 func setConsentGovernor(t *testing.T, fx consentActionFixture, issuer uuid.UUID, served ...string) *consentGovernor {
 	t.Helper()
-	g := &consentGovernor{t: t, issuer: issuer, served: map[string]bool{}, governs: len(served) > 0, configured: true, mu: sync.Mutex{}, requests: nil}
+	g := &consentGovernor{t: t, issuer: issuer, served: map[string]bool{}, governs: len(served) > 0, configured: true, usable: false, acquire: nil, mu: sync.Mutex{}, requests: nil, acquired: nil}
 	for _, u := range served {
 		g.served[u] = true
 	}
@@ -90,7 +105,8 @@ func TestConsentPage_IdentityChainedServiceIsManagedWithFallback(t *testing.T) {
 	require.Equal(t, http.StatusOK, code, "a governed sole service must not auto-connect")
 	require.Nil(t, loc)
 	require.Contains(t, page, consentManagedCopy)
-	require.Contains(t, page, "1 of 1 connected", "a chained service counts as connected")
+	require.Contains(t, page, "0 of 1 connected", "a chained service counts once its check connects")
+	require.Contains(t, page, `data-chain-check="pending"`)
 	require.Contains(t, page, "data-connect-fallback")
 	require.Contains(t, page, "Use a separate sign-in instead")
 	require.Contains(t, page, `data-consent-enabled="true"`)

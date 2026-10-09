@@ -38,6 +38,10 @@ func (c *recordingChainer) Configured(context.Context, string, uuid.UUID, uuid.U
 	return false
 }
 
+func (c *recordingChainer) HasUsableCredential(context.Context, identitychaining.Request) bool {
+	return false
+}
+
 func (c *recordingChainer) Acquire(_ context.Context, req identitychaining.Request) (identitychaining.Token, identitychaining.Outcome) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

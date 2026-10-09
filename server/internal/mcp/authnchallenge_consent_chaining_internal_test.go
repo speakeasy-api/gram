@@ -40,6 +40,10 @@ func (g *funcGovernor) Configured(context.Context, string, uuid.UUID, uuid.UUID)
 	return g.configured
 }
 
+func (g *funcGovernor) HasUsableCredential(context.Context, identitychaining.Request) bool {
+	return false
+}
+
 func (g *funcGovernor) Acquire(context.Context, identitychaining.Request) (identitychaining.Token, identitychaining.Outcome) {
 	panic("consent must never acquire a chained token")
 }
@@ -130,9 +134,8 @@ func TestConsentChainedClients_TunnelWithoutIssuerNeverChains(t *testing.T) {
 	require.Empty(t, g.requests)
 }
 
-func TestConsentTemplateRendersIdentityChainedServiceWithFallback(t *testing.T) {
-	t.Parallel()
-
+func renderChainedCard(t *testing.T, check, message string, connected int) string {
+	t.Helper()
 	var page bytes.Buffer
 	err := consentTemplate.Execute(&page, consentTemplateData{
 		ClientName:     "Client",
@@ -147,22 +150,49 @@ func TestConsentTemplateRendersIdentityChainedServiceWithFallback(t *testing.T) 
 			IssuerSlug:    "example-issuer",
 			IssuerDisplay: "Example",
 			Chained:       true,
+			ChainCheck:    check,
+			ChainMessage:  message,
 		}},
 		ConsentEnabled:     true,
-		ConnectedCardCount: 1,
+		ConnectedCardCount: connected,
 	})
 	require.NoError(t, err)
+	return normalizeWhitespace(page.String())
+}
 
-	html := normalizeWhitespace(page.String())
-	require.Contains(t, html, "Managed by your identity provider")
-	require.Regexp(t, `<span class="text-xs text-default-success" data-card-status data-identity-chained`, html)
+func TestConsentTemplateRendersIdentityChainedServiceWithFallback(t *testing.T) {
+	t.Parallel()
+
+	html := renderChainedCard(t, chainCheckPending, "", 0)
+	require.Contains(t, html, "Managed by your identity provider", "pending reads neutral without script")
+	require.Regexp(t, `<span class="text-xs text-muted-foreground" data-card-status data-identity-chained data-chain-check="pending"`, html)
 	require.Contains(t, html, "data-connect-fallback")
 	require.Contains(t, html, "Use a separate sign-in instead")
 	require.Regexp(t, `<button type="submit" name="action" value="connect" class="[^"]*\btext-muted-foreground\b[^"]*" data-connect-link data-connect-fallback`, html)
 	require.NotRegexp(t, `value="connect" class="[^"]*\b(border|bg-primary)\b[^"]*" data-connect-link data-connect-fallback`, html, "the fallback is a quiet text control")
-	require.Contains(t, html, "1 of 1 connected")
+	require.Contains(t, html, `data-connected-summary data-connected-count="0" data-connected-total="1"`)
+	require.Contains(t, html, "0 of 1 connected")
 	require.NotContains(t, html, `aria-label="Disconnect`)
 	require.NotContains(t, html, "Not connected")
+}
+
+func TestConsentTemplateRendersCachedChainedServiceConnected(t *testing.T) {
+	t.Parallel()
+
+	html := renderChainedCard(t, chainCheckConnected, "", 1)
+	require.Regexp(t, `<span class="text-xs text-default-success" data-card-status data-identity-chained data-chain-check="connected" >Connected through your identity provider`, html)
+	require.Contains(t, html, "1 of 1 connected")
+	require.Contains(t, html, "Use a separate sign-in instead", "the fallback stays available once connected")
+}
+
+func TestConsentTemplateRendersRejectedChainedServiceWithPrimaryConnect(t *testing.T) {
+	t.Parallel()
+
+	html := renderChainedCard(t, chainCheckRejected, "Example didn't accept your identity provider sign-in.", 0)
+	require.Regexp(t, `<span class="text-xs text-default-warning" data-card-status data-identity-chained data-chain-check="rejected" >Example didn&#39;t accept your identity provider sign-in.`, html)
+	require.Regexp(t, `value="connect" class="bg-primary text-primary-foreground[^"]*" data-connect-link > Connect </button>`, html)
+	require.NotContains(t, html, "data-connect-fallback")
+	require.Contains(t, html, "0 of 1 connected")
 }
 
 func TestShouldAutoCloseFirstPartyKeepsChainedCardOpen(t *testing.T) {

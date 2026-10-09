@@ -68,6 +68,18 @@ func TestConsentPagePreview(t *testing.T) {
 		IssuerDisplay: "Slack",
 	}
 
+	chainedCard := func(check, message string) remoteSessionCard {
+		return remoteSessionCard{
+			ClientID:           "client-supabase",
+			IssuerSlug:         "supabase",
+			IssuerDisplay:      "Supabase",
+			Chained:            true,
+			ChainCheck:         check,
+			ChainMessage:       message,
+			AutoRefreshChecked: true,
+		}
+	}
+
 	withIsland := func(d consentTemplateData) consentTemplateData {
 		d.ShowToolsIsland = true
 		d.ConsentToolsURL = "/mcp/example/connect/mcp"
@@ -77,7 +89,7 @@ func TestConsentPagePreview(t *testing.T) {
 	withCards := func(d consentTemplateData, cards ...remoteSessionCard) consentTemplateData {
 		d.RemoteSessionCards = cards
 		for _, c := range cards {
-			if c.Connected || c.Chained {
+			if c.Connected || c.ChainCheck == chainCheckConnected {
 				d.ConnectedCardCount++
 			}
 		}
@@ -104,6 +116,11 @@ func TestConsentPagePreview(t *testing.T) {
 			return d
 		}()},
 		{"multi-service-mixed", withIsland(withCards(base, connectedCard, expiredCard, disconnectedCard))},
+		// The script settles a pending check in place; a static preview has no
+		// server to answer it, so the pending card reads neutral.
+		{"identity-chained-pending", withIsland(withCards(base, connectedCard, chainedCard(chainCheckPending, "")))},
+		{"identity-chained-connected", withIsland(withCards(base, connectedCard, chainedCard(chainCheckConnected, "")))},
+		{"identity-chained-rejected", withIsland(withCards(base, connectedCard, chainedCard(chainCheckRejected, "Supabase didn't accept your identity provider sign-in. Ask your administrator, or use a separate sign-in.")))},
 		{"loopback-warning", func() consentTemplateData {
 			d := withIsland(withCards(base, connectedCard))
 			d.ClientIDOrigin = "claude.ai"

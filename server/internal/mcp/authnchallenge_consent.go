@@ -181,7 +181,8 @@ type consentTemplateData struct {
 	// ValidationDeadlineMS is the callback probe's absolute deadline. Only first-party pages poll because reloading interactive consent would discard unsaved tool choices.
 	ValidationDeadlineMS int64
 	// ConnectedCardCount is the number of RemoteSessionCards already linked or
-	// chained, rendered as the "n of m connected" summary above the service list.
+	// holding a usable chained credential, rendered as the "n of m connected"
+	// summary above the service list.
 	ConnectedCardCount int
 	// Styles is the compiled design-system stylesheet inlined into the
 	// document head. A build artifact, never user input.
@@ -249,8 +250,12 @@ type remoteSessionCard struct {
 	Expired    bool
 	Unroutable bool
 	// Chained marks a card without a usable interactive link whose upstream identity chaining is configured to serve; Connect stays a fallback.
-	Chained    bool
-	CanRefresh bool
+	Chained bool
+	// ChainCheck is a chained card's exchange check state; the page script settles pending.
+	ChainCheck string
+	// ChainMessage is the user-safe reason a rejected check shows.
+	ChainMessage string
+	CanRefresh   bool
 	// IdentityReconnect marks a connected grant lacking openid while a reconnect would request it.
 	IdentityReconnect bool
 	// Access expiry describes the current credential. Refresh expiry is kept
@@ -575,8 +580,8 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	// stored preference, so the page value is on only when none of them is off.
 	everyCardAutoRefreshes := true
 	for _, c := range cards {
-		// The summary counts chained services as connected; access rules use chainedCardCount.
-		if c.Connected || c.Chained {
+		// A chained service counts once its exchange is known to work; access rules use chainedCardCount.
+		if c.Connected || c.ChainCheck == chainCheckConnected {
 			connectedCardCount++
 		}
 		if c.Chained {
@@ -1439,26 +1444,11 @@ func (s *Service) buildRemoteSessionCards(
 		}
 	}
 
-	// Single round-trip for connection state across all cards. Empty when
-	// the subject hasn't been stamped yet (early render before IDP /
-	// anonymous late-bind); the per-card check below then resolves to
-	// not-connected.
-	var statuses map[uuid.UUID]remotesessions.RemoteSessionState
-	if challengeState.Subject != nil && !challengeState.Subject.IsZero() {
-		statuses, err = s.remoteChallengeMgr.RemoteSessionStatuses(ctx, *challengeState.Subject, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
-		if err != nil {
-			return nil, fmt.Errorf("remote session statuses: %w", err)
-		}
+	statuses, routing, err := s.consentSessionRouting(ctx, endpoint, challengeState, clients)
+	if err != nil {
+		return nil, err
 	}
-
-	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, issuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, members: nil, grants: nil}
-	if len(statuses) > 0 {
-		routing, err = s.resolveConsentRouting(ctx, endpoint, challengeState, clients, statuses)
-		if err != nil {
-			return nil, err
-		}
-	}
-	chainedClients := s.consentChainedClients(ctx, endpoint, challengeState, clients, routing)
+	chainRequests := s.consentChainingRequests(ctx, endpoint, challengeState, clients, routing)
 
 	cards := make([]remoteSessionCard, 0, len(clients))
 	renderedAt := time.Now()
@@ -1520,7 +1510,11 @@ func (s *Service) buildRemoteSessionCards(
 		}
 		requested := c.RequestedScopes(resourceScopes).Scopes
 		connected := hasSession && state.Status == remotesessions.RemoteSessionActive && !unroutable
-		chained := chainedClients[c.ID] && !connected && !unroutable
+		chained := len(chainRequests[c.ID]) > 0 && !connected && !unroutable
+		chainCheck := ""
+		if chained {
+			chainCheck = s.consentChainCheckAtRender(ctx, chainRequests[c.ID])
+		}
 		identityReconnect := connected && !slices.Contains(state.Scopes, "openid") && slices.Contains(requested, "openid")
 		cards = append(cards, remoteSessionCard{
 			ClientID:               c.ID.String(),
@@ -1534,6 +1528,8 @@ func (s *Service) buildRemoteSessionCards(
 			Expired:                state.Status == remotesessions.RemoteSessionExpired,
 			Unroutable:             unroutable,
 			Chained:                chained,
+			ChainCheck:             chainCheck,
+			ChainMessage:           "",
 			CanRefresh:             state.CanRefresh,
 			IdentityReconnect:      identityReconnect,
 			AccessExpiresAt:        accessExpiresAt,
