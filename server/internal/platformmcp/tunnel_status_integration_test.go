@@ -55,36 +55,44 @@ func seedTunnelStatusFixture(t *testing.T, name string) tunnelStatusFixture {
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	seedPlatformMCPAuthorizationMember(t, ctx, conn, principal.OrganizationID, principal.UserID, authz.SystemRoleMember)
 
-	tunnel, err := tunneledmcprepo.New(conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
-		ID:                 uuid.New(),
-		ProjectID:          project.ID,
-		Name:               "Private inventory tunnel",
-		KeyHash:            tunnelStatusSentinel + "-hash",
-		KeyPrefix:          tunnelStatusSentinel + "-prefix",
-		ResourceIdentifier: pgtype.Text{String: "https://" + tunnelStatusSentinel + ".internal", Valid: true},
-	})
-	require.NoError(t, err)
-	wrapper, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                  uuid.New(),
-		ProjectID:           project.ID,
-		Name:                pgtype.Text{String: "Private inventory", Valid: true},
-		Slug:                pgtype.Text{String: "private-inventory", Valid: true},
-		TunneledMcpServerID: uuid.NullUUID{UUID: tunnel.ID, Valid: true},
-		Visibility:          "private",
-	})
-	require.NoError(t, err)
+	tunnelID, wrapperID := seedTunneledMCP(t, conn, project.ID, "private-inventory", "private")
 
 	candidates, err := platformrepo.New(conn).ListPlatformMCPInventoryAuthorizationCandidates(ctx, principal.OrganizationID)
 	require.NoError(t, err)
 	var otherMCP uuid.UUID
 	for _, candidate := range candidates {
-		if candidate.ProjectID == project.ID && candidate.ID != wrapper.ID {
+		if candidate.ProjectID == project.ID && candidate.ID != wrapperID {
 			otherMCP = candidate.ID
 		}
 	}
 	require.NotEqual(t, uuid.Nil, otherMCP)
 
-	return tunnelStatusFixture{conn: conn, principal: principal, project: project, tunnelID: tunnel.ID, wrapperID: wrapper.ID, otherMCP: otherMCP}
+	return tunnelStatusFixture{conn: conn, principal: principal, project: project, tunnelID: tunnelID, wrapperID: wrapperID, otherMCP: otherMCP}
+}
+
+// seedTunneledMCP stores a tunneled source and one MCP server fronting it in
+// the project. Every secret-adjacent source field holds tunnelStatusSentinel.
+func seedTunneledMCP(t *testing.T, conn *pgxpool.Pool, projectID uuid.UUID, slug, visibility string) (uuid.UUID, uuid.UUID) {
+	t.Helper()
+	tunnel, err := tunneledmcprepo.New(conn).CreateServer(t.Context(), tunneledmcprepo.CreateServerParams{
+		ID:                 uuid.New(),
+		ProjectID:          projectID,
+		Name:               "Private inventory tunnel " + slug,
+		KeyHash:            tunnelStatusSentinel + "-hash-" + uuid.NewString(),
+		KeyPrefix:          tunnelStatusSentinel + "-prefix",
+		ResourceIdentifier: pgtype.Text{String: "https://" + tunnelStatusSentinel + ".internal", Valid: true},
+	})
+	require.NoError(t, err)
+	wrapper, err := mcpserversrepo.New(conn).CreateMCPServer(t.Context(), mcpserversrepo.CreateMCPServerParams{
+		ID:                  uuid.New(),
+		ProjectID:           projectID,
+		Name:                pgtype.Text{String: "Private inventory", Valid: true},
+		Slug:                pgtype.Text{String: slug, Valid: true},
+		TunneledMcpServerID: uuid.NullUUID{UUID: tunnel.ID, Valid: true},
+		Visibility:          visibility,
+	})
+	require.NoError(t, err)
+	return tunnel.ID, wrapper.ID
 }
 
 func (f tunnelStatusFixture) grant(t *testing.T, scope authz.Scope, resourceID string, projectDimension bool) {

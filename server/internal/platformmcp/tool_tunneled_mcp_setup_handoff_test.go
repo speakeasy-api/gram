@@ -94,3 +94,87 @@ func TestTunneledSetupHandoffComposesOnlyWithSafeDependencies(t *testing.T) {
 	require.NotNil(t, service)
 	require.Equal(t, "https://dashboard.example.test/base", service.dashboardURL.String())
 }
+
+func connectExternalTestSession(t *testing.T, server *mcp.Server) *mcp.ClientSession {
+	t.Helper()
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = serverSession.Close() })
+	client := mcp.NewClient(&mcp.Implementation{Name: "tunneled-setup-test", Version: "0.0.1"}, nil)
+	session, err := client.Connect(t.Context(), clientTransport, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = session.Close() })
+	return session
+}
+
+func listedTool(t *testing.T, session *mcp.ClientSession, name string) *mcp.Tool {
+	t.Helper()
+	tools, err := session.ListTools(t.Context(), nil)
+	require.NoError(t, err)
+	for _, tool := range tools.Tools {
+		if tool.Name == name {
+			return tool
+		}
+	}
+	t.Fatalf("%s is not listed", name)
+	return nil
+}
+
+// What an external client sees over a real MCP session: the stub and the live
+// tool advertise the same schemas and annotations, and the stub's call is a
+// readable error result rather than an empty handoff.
+func TestTunneledSetupHandoffExternalSessionContract(t *testing.T) {
+	t.Parallel()
+
+	liveServer := newTestMCPServer()
+	bindExternalTestPrincipal(liveServer)
+	live := newRegistrar(liveServer)
+	live.withExternalAuthorizer(allowExternalCallAuthorizer{})
+	registerTunneledMCPSetupHandoffTool(live, &TunneledMCPSetupHandoffService{})
+
+	stubServer := newTestMCPServer()
+	bindExternalTestPrincipal(stubServer)
+	stub := newRegistrar(stubServer)
+	stub.withExternalAuthorizer(allowExternalCallAuthorizer{})
+	registerTunneledMCPSetupHandoffTool(stub, nil)
+
+	stubSession := connectExternalTestSession(t, stubServer)
+	liveTool := listedTool(t, connectExternalTestSession(t, liveServer), getTunneledMCPSetupHandoffToolName)
+	stubTool := listedTool(t, stubSession, getTunneledMCPSetupHandoffToolName)
+	liveSchemas, err := json.Marshal([]any{liveTool.InputSchema, liveTool.OutputSchema, liveTool.Annotations})
+	require.NoError(t, err)
+	stubSchemas, err := json.Marshal([]any{stubTool.InputSchema, stubTool.OutputSchema, stubTool.Annotations})
+	require.NoError(t, err)
+	require.JSONEq(t, string(liveSchemas), string(stubSchemas))
+	require.NotNil(t, liveTool.OutputSchema)
+
+	result, err := stubSession.CallTool(t.Context(), &mcp.CallToolParams{Name: getTunneledMCPSetupHandoffToolName, Arguments: map[string]any{"project_id": "00000000-0000-0000-0000-000000000001"}})
+	require.NoError(t, err)
+	require.True(t, result.IsError)
+	require.Len(t, result.Content, 1)
+	text, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.JSONEq(t, `{"code":"feature_unavailable","feature":"tunneled_mcp_setup","message":"Tunneled MCP setup handoffs are unavailable on this server."}`, text.Text)
+}
+
+// The external endpoint applies organization administration before the
+// handler runs, so a denied caller never reaches the handoff.
+func TestTunneledSetupHandoffExternalDenialSkipsHandler(t *testing.T) {
+	t.Parallel()
+
+	server := newTestMCPServer()
+	bindExternalTestPrincipal(server)
+	registrar := newRegistrar(server)
+	registrar.withExternalAuthorizer(denyExternalCallAuthorizer{err: &ExternalAuthorizationError{RequiredScope: "org:admin", RequestAccessURL: "", cause: ErrForbidden}})
+	// A service without dependencies would answer "unavailable" if reached.
+	registerTunneledMCPSetupHandoffTool(registrar, &TunneledMCPSetupHandoffService{})
+
+	result, err := connectExternalTestSession(t, server).CallTool(t.Context(), &mcp.CallToolParams{Name: getTunneledMCPSetupHandoffToolName, Arguments: map[string]any{"project_id": "00000000-0000-0000-0000-000000000001"}})
+	require.NoError(t, err)
+	require.True(t, result.IsError)
+	text, ok := result.Content[0].(*mcp.TextContent)
+	require.True(t, ok)
+	require.Contains(t, text.Text, `"code":"permission_denied"`)
+	require.NotContains(t, text.Text, "setup_url")
+}
