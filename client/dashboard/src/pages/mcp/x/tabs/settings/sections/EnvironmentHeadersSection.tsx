@@ -30,7 +30,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { type ComponentProps, useState } from "react";
 import { toast } from "sonner";
 
-export const MCP_ENVIRONMENT_HEADERS_SECTION_ID = "environment-headers";
+const MCP_ENVIRONMENT_HEADERS_SECTION_ID = "environment-headers";
 
 // Radix Select disallows an empty-string value, so "no environment" needs a
 // sentinel that maps back to an unlinked server when saved.
