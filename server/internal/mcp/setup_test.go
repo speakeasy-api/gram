@@ -183,7 +183,7 @@ func newTestMCPServiceWithoutTemporal(t *testing.T) (context.Context, *testInsta
 		false,
 		mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: 0, AutoVerifyWait: 0},
 		testenv.NewTracerProvider(t),
-		nil, nil,
+		nil, nil, nil,
 	)
 }
 
@@ -367,7 +367,7 @@ func newTestMCPServiceWithPoolConfig(
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestMCPServiceWithPoolConfigAndTemporal(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, true, metaRuntime, testenv.NewTracerProvider(t), nil, nil, guardianOpts...)
+	return newTestMCPServiceWithPoolConfigAndTemporal(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, true, metaRuntime, testenv.NewTracerProvider(t), nil, nil, nil, guardianOpts...)
 }
 
 func newTestMCPServiceWithPoolConfigAndTemporal(
@@ -383,6 +383,9 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	tracerProvider trace.TracerProvider,
 	funcs functions.ToolCaller,
 	callerAssertions *mcpauthz.Issuer,
+	// embeddings replaces the client the tool-search index embeds queries
+	// with; nil keeps the development OpenRouter client.
+	embeddings openrouter.CompletionClient,
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
@@ -435,7 +438,11 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	billingStub := billing.NewStubClient(logger, tracerProvider)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
 	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, &openrouter.PlatformKeyResolver{Provisioner: devProvisioner}, nil, nil, nil, nil)
-	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
+	var embeddingClient openrouter.CompletionClient = chatClient
+	if embeddings != nil {
+		embeddingClient = embeddings
+	}
+	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, embeddingClient)
 	chatSessions := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 	featClient := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -582,7 +589,7 @@ func newTestMCPServiceWithScanSpans(t *testing.T, callers ...functions.ToolCalle
 			MaxRequestLifetime: 0,
 		}, nil, nil, false, mcp.MetaRuntimeConfig{
 			MemberCallTimeout: 0, ValidationTimeout: 0, AutoVerifyWait: 0, RecheckInterval: 0,
-		}, provider, caller, nil)
+		}, provider, caller, nil, nil)
 	return ctx, ti, recorder
 }
 
@@ -803,7 +810,7 @@ func requireTelemetryRowCount(t *testing.T, where string, want uint64, args ...a
 
 func newTestMCPServiceWithCallerAssertions(t *testing.T, issuer *mcpauthz.Issuer) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestMCPServiceWithPoolConfigAndTemporal(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, issuer)
+	return newTestMCPServiceWithPoolConfigAndTemporal(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, issuer, nil)
 }
 
 // createTestUser stores a user so authentication can resolve its profile, as

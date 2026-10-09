@@ -1539,6 +1539,21 @@ BEGIN
      NULL, demo.det_uuid('gram-demo-remotemcp-github'),
      demo.det_uuid('gram-demo-issuer-workforce'), 'private');
 
+  -- Recorded Slack tool metadata, as the Inspect tab records it from a live
+  -- listing. Support Desk's read-only rule on Slack reaches only the
+  -- read-only tools: annotation rules never reach a tool with no recorded
+  -- annotation, such as slack_send_message here.
+  INSERT INTO mcp_server_tool_metadata (id, project_id, mcp_server_id, tool_name,
+                                        title, read_only_hint, destructive_hint)
+  SELECT demo.det_uuid('gram-demo-slack-tool-' || t.tool_name), proj_a,
+         demo.det_uuid('gram-demo-mcpserver-slack'), t.tool_name, t.title,
+         t.read_only, t.destructive
+  FROM (VALUES
+    ('slack_search_messages', 'Search messages', TRUE, FALSE),
+    ('slack_read_channel', 'Read channel history', TRUE, FALSE),
+    ('slack_send_message', 'Send message', NULL::boolean, NULL::boolean)
+  ) AS t(tool_name, title, read_only, destructive);
+
   -- Every toolset with an MCP slug owns a canonical hosted wrapper (id = the
   -- toolset id) and one endpoint at its address, mirroring its hosting
   -- columns. The fresh-id servers above stay separate servers over the same
@@ -3477,6 +3492,13 @@ Channel context stays in the Raw view.
                          s.tunneled_mcp_server_id, s.unproxied_mcp_server_id) <> 1);
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % gateway members are not servable', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM mcp_server_tool_metadata
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND mcp_server_id = demo.det_uuid('gram-demo-mcpserver-slack');
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 3 recorded Slack tools, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM session_quarantines

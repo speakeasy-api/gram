@@ -131,10 +131,26 @@ func handleToolsList(
 		mode = ToolModeStatic
 	}
 
+	enforced := toolAuthzEnforced(authzEngine, payload, toolset)
+
 	var tools []*toolListEntry
 	switch mode {
 	case ToolModeDynamic:
-		tools, err = buildDynamicSessionTools(ctx, logger, toolset, vectorToolStore)
+		// The facade's search_tools, describe_tools and execute_tool are
+		// dispatch operations, not tools to classify: they are offered when
+		// the caller may call at least one underlying tool, and they only ever
+		// reveal those tools.
+		discovery, allowedTools, restricted, err := authorizedDiscoveryToolset(ctx, authzEngine, payload, toolset)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for tools/list").LogError(ctx, logger)
+		}
+		if enforced && allowedTools == 0 {
+			tools = []*toolListEntry{}
+			break
+		}
+		// Search tags come from the whole toolset's index, so they are left
+		// out when some tools are withheld from this caller.
+		tools, err = buildDynamicSessionTools(ctx, logger, discovery, vectorToolStore, !restricted)
 		if err != nil {
 			if errors.Is(err, errToolSearchIndexUnavailable) {
 				return nil, oops.E(oops.CodeUnavailable, err, "tool search is temporarily unavailable; try again later").LogError(ctx, logger)
@@ -144,35 +160,34 @@ func handleToolsList(
 	case ToolModeStatic:
 		fallthrough
 	default:
-		tools, err = buildToolListEntries(ctx, logger, guardianPolicy, db, env, payload, toolset, platformExtras)
+		var routesToProxy func(string) bool
+		tools, routesToProxy, err = buildToolListEntries(ctx, logger, guardianPolicy, db, env, payload, toolset, platformExtras)
 		if err != nil {
 			return nil, err
 		}
-	}
 
-	// Filter tools by RBAC grants. Private authenticated MCPs enforce
-	// per-tool mcp:connect checks — the same dimensions used by tools/call.
-	// Public MCPs skip this (open to everyone, matching the connection guard).
-	// Both the privacy read and the resource id follow the wrapper when one
-	// fronts the request.
-	if payload.authenticated && authzEngine != nil && payload.effectiveMCPPrivate(toolset.McpIsPublic) {
-		allowed := make([]*toolListEntry, 0, len(tools))
-		for _, t := range tools {
-			disposition := dispositionFromAnnotations(t.Annotations)
-			if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(payload.mcpConnectResourceID(toolset.ID), authz.MCPToolCallDimensions{
-				Tool:        t.Name,
-				Disposition: disposition,
-				ProjectID:   payload.projectID.String(),
-			})); err != nil {
-				var oopsErr *oops.ShareableError
-				if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
-					continue
+		// Filter tools by RBAC grants with the dimensions tools/call uses. A
+		// name tools/call dispatches to an external MCP proxy is authorized as
+		// unclassified: a live passthrough tool's annotations are the
+		// upstream's own claim, which tools/call cannot see, so they are shown
+		// to the client but never matched by an annotation rule.
+		if enforced {
+			allowed := make([]*toolListEntry, 0, len(tools))
+			for _, t := range tools {
+				disposition := dispositionFromAnnotations(t.Annotations)
+				if routesToProxy(t.Name) {
+					disposition = ""
 				}
-				return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for tools/list").LogError(ctx, logger)
+				ok, err := toolAllowed(ctx, authzEngine, payload, toolset, t.Name, disposition)
+				if err != nil {
+					return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for tools/list").LogError(ctx, logger)
+				}
+				if ok {
+					allowed = append(allowed, t)
+				}
 			}
-			allowed = append(allowed, t)
+			tools = allowed
 		}
-		tools = allowed
 	}
 
 	toolsetProjectID, err := uuid.Parse(toolset.ProjectID)
@@ -223,12 +238,12 @@ func buildToolListEntries(
 	payload *mcpInputs,
 	toolset *types.Toolset,
 	platformExtras []platformtools.ExternalTool,
-) ([]*toolListEntry, error) {
+) (entries []*toolListEntry, routesToProxy func(string) bool, err error) {
 	toolsetHelpers := toolsets.NewToolsets(db, platformExtras...)
 
 	toolsetID, err := uuid.Parse(toolset.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse toolset ID").LogError(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "failed to parse toolset ID").LogError(ctx, logger)
 	}
 
 	userConfig := toolconfig.CIEnvFrom(payload.mcpEnvVariables)
@@ -263,7 +278,7 @@ func buildToolListEntries(
 
 		proxyTools, err := executor.DoList(ctx, payload.projectID, userConfig, oauthToken, loadSystemEnv, resolve)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to list proxy tools").LogError(ctx, logger)
+			return nil, nil, oops.E(oops.CodeUnexpected, err, "failed to list proxy tools").LogError(ctx, logger)
 		}
 
 		for _, extTool := range proxyTools {
@@ -284,7 +299,7 @@ func buildToolListEntries(
 		}
 	}
 
-	return tools, nil
+	return tools, executor.Routes, nil
 }
 
 func toolToListEntry(tool *types.Tool) *toolListEntry {

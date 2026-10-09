@@ -84,6 +84,17 @@ const (
 	executeToolToolName   = "execute_tool"
 )
 
+// isDynamicFacadeTool reports whether name is one of the dynamic-mode
+// facade's dispatch tools rather than a concrete tool.
+func isDynamicFacadeTool(name string) bool {
+	switch name {
+	case searchToolsToolName, describeToolsToolName, executeToolToolName:
+		return true
+	default:
+		return false
+	}
+}
+
 func handleToolsCall(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -153,12 +164,23 @@ func handleToolsCall(
 		dynamicFacade = false
 	}
 
-	if dynamicFacade {
+	if dynamicFacade && isDynamicFacadeTool(params.Name) {
+		// The facade only ever reveals the tools this caller may call, and is
+		// not offered at all when there are none — refused before any search
+		// work, exactly as tools/list omits it.
+		discovery, allowedTools, _, err := authorizedDiscoveryToolset(ctx, authzEngine, payload, toolset)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for dynamic tools").LogError(ctx, logger)
+		}
+		if toolAuthzEnforced(authzEngine, payload, toolset) && allowedTools == 0 {
+			return nil, fmt.Errorf("authorize dynamic MCP tools: %w", mcpaccess.ToolPermissionDenied(oops.C(oops.CodeForbidden)))
+		}
+
 		switch params.Name {
 		case searchToolsToolName:
-			return handleSearchToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore)
+			return handleSearchToolsCall(ctx, logger, req.ID, params.Arguments, discovery, vectorToolStore)
 		case describeToolsToolName:
-			return handleDescribeToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
+			return handleDescribeToolsCall(ctx, logger, req.ID, params.Arguments, discovery)
 		case executeToolToolName:
 			proxyName, proxyArgs, err := processExecuteToolCall(ctx, logger, params.Arguments)
 			if err != nil {

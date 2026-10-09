@@ -108,8 +108,11 @@ func TestServePublic_PrivateHosted_DispositionGrantExcludesUnannotatedTools(t *t
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.Equal(t, []string{"reader"}, toolNames(parseToolsListResponse(t, w.Body.Bytes())))
 
-	require.Contains(t, hostedCallOutcome(t, ti, toolset.McpSlug.String, bearer, "eraser"), "permission")
-	require.NotContains(t, hostedCallOutcome(t, ti, toolset.McpSlug.String, bearer, "reader"), "permission")
+	denied := hostedCallOutcome(t, ti, toolset.McpSlug.String, bearer, "eraser")
+	require.Contains(t, denied, "permission")
+	require.NotContains(t, denied, executionFailed)
+	// Allowed calls reach execution, which fails only for want of an upstream.
+	require.Contains(t, hostedCallOutcome(t, ti, toolset.McpSlug.String, bearer, "reader"), executionFailed)
 }
 
 // Naming an unannotated tool still reaches it.
@@ -125,6 +128,6 @@ func TestServePublic_PrivateHosted_NamedGrantReachesUnannotatedTool(t *testing.T
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.Equal(t, []string{"eraser"}, toolNames(parseToolsListResponse(t, w.Body.Bytes())))
 
-	require.NotContains(t, hostedCallOutcome(t, ti, toolset.McpSlug.String, bearer, "eraser"), "permission")
+	require.Contains(t, hostedCallOutcome(t, ti, toolset.McpSlug.String, bearer, "eraser"), executionFailed)
 	require.Contains(t, hostedCallOutcome(t, ti, toolset.McpSlug.String, bearer, "writer"), "permission")
 }

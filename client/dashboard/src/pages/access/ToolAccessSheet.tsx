@@ -422,6 +422,42 @@ function AnnotationChecklist({
         d === disposition ? on : selected.includes(d),
       ),
     );
+  const unclassified = tools?.filter((tool) => !toolDisposition(tool)).length;
+  return (
+    <div className="flex flex-col gap-2">
+      <AnnotationChecklistRows
+        tools={tools}
+        selected={selected}
+        toggle={toggle}
+      />
+      <Text muted small>
+        {unclassifiedNote(unclassified)}
+      </Text>
+    </div>
+  );
+}
+
+/**
+ * Annotation rules reach only tools Speakeasy has classified, so selecting
+ * every annotation still is not the whole server. The count covers only the
+ * tools known here; a server listing its tools live may have more.
+ */
+function unclassifiedNote(count: number | undefined): string {
+  if (count === undefined || count === 0) {
+    return "Tools without an annotation aren't included, even with every annotation selected.";
+  }
+  return `${count} known ${count === 1 ? "tool has" : "tools have"} no annotation and ${count === 1 ? "isn't" : "aren't"} included, even with every annotation selected.`;
+}
+
+function AnnotationChecklistRows({
+  tools,
+  selected,
+  toggle,
+}: {
+  tools: ServerTool[] | undefined;
+  selected: Disposition[];
+  toggle: (disposition: Disposition, on: boolean) => void;
+}): JSX.Element {
   return (
     <div className={LIST_FRAME}>
       {DISPOSITIONS.map((disposition) => {
