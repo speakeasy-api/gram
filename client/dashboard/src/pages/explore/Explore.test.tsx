@@ -747,15 +747,15 @@ describe("Explore", () => {
     expect(screen.getByRole("combobox", { name: "Dataset" }).textContent).toBe(
       "sessions",
     );
-    // The description and grain live behind the info icon, not in the row.
+    // The description lives behind the info icon, not in the row.
     expect(screen.queryByText("One row per agent session.")).toBeNull();
     expect(
       screen.getByRole("button", { name: "About this dataset" }),
     ).toBeTruthy();
     expect(
       screen.getByRole("combobox", { name: "Aggregation" }).textContent,
-    ).toBe("count");
-    expect(screen.getByText("of all rows")).toBeTruthy();
+    ).toBe("Count of");
+    expect(screen.getByText("all rows")).toBeTruthy();
     // The summary field is the opening breakdown.
     expect(screen.getByText("user")).toBeTruthy();
   });
@@ -856,10 +856,10 @@ describe("Explore", () => {
       screen.getAllByRole("button", { name: "Remove measure" })[0]!,
     );
     expect(screen.queryByRole("combobox", { name: "Aggregation" })).toBeNull();
-    expect(screen.getByText(/Nothing measured/)).toBeTruthy();
+    expect(screen.getByText("rows")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Add measure" })).toBeTruthy();
 
-    // With nothing measured the query asks for rows at the dataset's grain.
+    // With nothing measured the query asks for the rows themselves.
     fireEvent.click(screen.getByRole("button", { name: "Run query" }));
     const last = testState.bodies.at(-1);
     expect(last?.ungrouped).toBe(true);
