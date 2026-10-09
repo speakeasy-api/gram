@@ -26,7 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
-// Synthetic values; assertions compare against them and never print them.
+// Synthetic values, never real credentials. A failing assertion may print them.
 const (
 	headerTestSecret      = "synthetic-tunnel-header-secret"
 	headerTestChatSession = "synthetic-chat-session"
@@ -232,6 +232,7 @@ func TestTunnelConfiguredHeaders_PrivateDirect(t *testing.T) {
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Authorization", "Bearer "+bearer)
 	request.Header.Set("Gram-Chat-Session", headerTestChatSession)
+	request.Header.Set("Gram-Key", headerTestAPIKey)
 	request.Header.Set("Gram-Project", "spoofed-project")
 	request.Header.Set("X-Gram-Tunnel-Require-Active", "1")
 	request.Header.Set("X-Upstream-Token", "client-fallback")

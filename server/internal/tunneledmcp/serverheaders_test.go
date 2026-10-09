@@ -754,5 +754,5 @@ func TestHeadersUpdateRefusesToKeepValueOnPlainRow(t *testing.T) {
 		SetValue: false, Value: pgtype.Text{String: "", Valid: false}, ValueFromRequestHeader: pgtype.Text{String: "", Valid: false},
 		ID: uuid.MustParse(created.ID), ProjectID: *authCtx.ProjectID,
 	})
-	require.Error(t, err)
+	require.ErrorContains(t, err, "only a secret header can keep its stored value")
 }

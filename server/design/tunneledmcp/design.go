@@ -499,7 +499,7 @@ var ListServersResult = Type("ListTunneledMcpServersResult", func() {
 var CreateServerHeaderForm = Type("CreateTunneledMcpServerHeaderForm", func() {
 	Meta("openapi:typename", "CreateTunneledMcpServerHeaderForm")
 
-	Description("Form for creating a header on a tunneled MCP server. Exactly one of value or value_from_request_header must be provided. The header applies to every MCP server backed by the tunnel. Names are stored in canonical HTTP form and compared case-insensitively, with underscores treated as dashes. Internal tunnel and request-control headers, MCP protocol, hop-by-hop, cookie and Speakeasy credential headers are reserved, and Speakeasy credential headers (including Authorization) cannot be passed through.")
+	Description("Form for creating a header on a tunneled MCP server. Exactly one of value or value_from_request_header must be provided. The header applies to every MCP server backed by the tunnel. Names are stored in canonical HTTP form and compared case-insensitively, with underscores treated as dashes. Internal tunnel and request-control headers, MCP protocol, hop-by-hop, cookie and other Speakeasy credential headers are reserved. Inbound Speakeasy credential headers, including Authorization, cannot be passed through, though Authorization may be configured with a static value.")
 
 	Attribute("tunneled_mcp_server_id", String, "The ID of the tunneled MCP server to add the header to", func() {
 		Format(FormatUUID)

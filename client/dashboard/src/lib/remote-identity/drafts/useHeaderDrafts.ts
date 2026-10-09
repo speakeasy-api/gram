@@ -341,7 +341,9 @@ function useHeaderDraftsFor({
     managedHeaderId,
     policy,
   );
-  const isDirty = !draftsEqual(drafts, initialDrafts);
+  // Measured against the baseline the rows were last reconciled with, so a
+  // save whose writes landed but whose refresh failed leaves a clean form.
+  const isDirty = !draftsEqual(drafts, syncedRef.current);
   const writing = writes.isPending;
   // A failed load must not open an empty form: saving it would read as
   // deleting every header the source really has.
