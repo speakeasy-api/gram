@@ -40,7 +40,6 @@ export {
 export type { AgentCredentialFields } from "./drafts/useCredentialDraft";
 
 export {
-  displayUrl,
   issuerDisplayName,
   useUserIdentityDraft,
 } from "./drafts/useIdentityDraft";

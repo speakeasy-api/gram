@@ -263,7 +263,7 @@ function hostOf(url: string | undefined | null): string {
 }
 
 /** Host plus path, minus the scheme — how the mock renders an issuer URL. */
-export function displayUrl(url: string): string {
+function displayUrl(url: string): string {
   return url.replace(/^https?:\/\//, "").replace(/\/$/, "");
 }
 
@@ -308,6 +308,8 @@ export type UserIdentityDraft = {
   connected: boolean;
   /** The connected client, once the provider's client list has loaded. */
   connectedClient: ClientOption | null;
+  /** The connected client's id, known before the client list loads. */
+  connectedClientId: string | null;
   /** People signed in through the connected client; null while unknown. */
   signedIn: number | null;
   /** The server had a client and the operator cleared it. Save replaces it. */
@@ -938,6 +940,7 @@ export function useUserIdentityDraft({
 
     connected,
     connectedClient,
+    connectedClientId: connected ? linkedClientId : null,
     signedIn,
     cleared,
     clear: (): void => {

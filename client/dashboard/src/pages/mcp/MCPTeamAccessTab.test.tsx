@@ -22,6 +22,10 @@ const state = vi.hoisted(() => ({
   admin: true,
   failed: false,
   query: vi.fn(),
+  scopes: vi.fn(),
+}));
+vi.mock("@gram/client/react-query/getRemoteMcpServerScopes.js", () => ({
+  useGetRemoteMcpServerScopes: (...args: unknown[]) => state.scopes(...args),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasAnyScope: () => state.admin }),
@@ -111,4 +115,9 @@ it("does not present failed audience reads as an empty distribution", () => {
   render(<MCPTeamAccessTab resourceId="server-1" checkAccess={false} />);
   expect(screen.getByText(/Access rules could not be loaded/)).toBeDefined();
   expect(screen.queryByText("Tools")).toBeNull();
+});
+
+it("does not read the server's requested scopes", () => {
+  render(<MCPTeamAccessTab resourceId="server-1" checkAccess={false} />);
+  expect(state.scopes).not.toHaveBeenCalled();
 });
