@@ -1734,7 +1734,7 @@ BEGIN
   -- reads decrypt secret values, and a fake ciphertext would fail them.
   INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix, status)
   VALUES
-    (demo.det_uuid('gram-demo-tunhdr-tunnel'), proj_a, 'JAMF (on-prem)',
+    (demo.det_uuid('gram-demo-tunhdr-tunnel'), proj_a, 'JAMF Headers (on-prem)',
      'demo-nonfunctional-' || demo.det_uuid('gram-demo-tunhdr-tunnel')::text,
      'gram_tunnel_demo', 'created');
 
@@ -1753,7 +1753,7 @@ BEGIN
   INSERT INTO mcp_servers (id, project_id, name, slug, tunneled_mcp_server_id,
                            user_session_issuer_id, visibility)
   VALUES
-    (demo.det_uuid('gram-demo-tunhdr-mcpserver'), proj_a, 'JAMF', 'jamf',
+    (demo.det_uuid('gram-demo-tunhdr-mcpserver'), proj_a, 'JAMF Headers', 'jamf-headers',
      demo.det_uuid('gram-demo-tunhdr-tunnel'),
      demo.det_uuid('gram-demo-issuer-workforce'), 'private');
 
@@ -1793,7 +1793,7 @@ BEGIN
     (demo.det_uuid('gram-demo-endpoint-slack'), proj_a, NULL,
      demo.det_uuid('gram-demo-mcpserver-slack'), 'acme-demo-slack'),
     (demo.det_uuid('gram-demo-tunhdr-endpoint'), proj_a, NULL,
-     demo.det_uuid('gram-demo-tunhdr-mcpserver'), 'acme-demo-jamf');
+     demo.det_uuid('gram-demo-tunhdr-mcpserver'), 'acme-demo-jamf-headers');
 
   -- Live connections spread across the MCP servers, not pooled on one issuer.
   -- The identity page's connections tab groups by MCP server, and every
@@ -3774,13 +3774,16 @@ Channel context stays in the Raw view.
     RAISE EXCEPTION 'demo seed postflight: expected 1 Remote MCP Service Account header, found %', stray;
   END IF;
 
+  -- Scoped to this fixture's own tunnel, so other tunneled fixtures in the
+  -- project never change the count.
   SELECT count(*) INTO stray
   FROM tunneled_mcp_server_headers header
   JOIN tunneled_mcp_servers tunnel ON tunnel.id = header.tunneled_mcp_server_id
-  WHERE tunnel.project_id = proj_a AND tunnel.deleted IS FALSE
+  WHERE tunnel.id = demo.det_uuid('gram-demo-tunhdr-tunnel')
+    AND tunnel.project_id = proj_a AND tunnel.deleted IS FALSE
     AND header.deleted IS FALSE AND header.is_secret IS FALSE;
   IF stray <> 2 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 2 non-secret tunneled MCP headers, found %', stray;
+    RAISE EXCEPTION 'demo seed postflight: expected 2 non-secret headers on the tunhdr tunnel, found %', stray;
   END IF;
 
   -- Managed-agent credentials are a separate surface from ordinary MCP
