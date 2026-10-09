@@ -404,3 +404,55 @@ func TestServePublic_WrapperGovernance_FallbackAttributionLog(t *testing.T) {
 		require.Equal(t, want.customDomain, got[string(attr.McpFallbackToolsetCustomDomainKey)])
 	}
 }
+
+func TestWellKnown_FallbackAttributionLogsSlugOnce(t *testing.T) {
+	t.Parallel()
+	buf := &syncBuffer{}
+	ctx, ti := newTestMCPServiceWithLogger(t, slog.New(slog.NewJSONHandler(buf, nil)))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "well-known-log-"+uuid.NewString()[:8])
+	for _, handler := range []func(http.ResponseWriter, *http.Request) error{
+		ti.service.HandleGetProtectedResource,
+		ti.service.HandleGetAuthorizationServer,
+	} {
+		req := httptest.NewRequest(http.MethodGet, "/.well-known/test/mcp/"+toolset.McpSlug.String, nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+		req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+		// This ungated toolset has no OAuth metadata, but its fallback
+		// resolution is still logged before that rejection.
+		_ = handler(httptest.NewRecorder(), req)
+	}
+	require.Len(t, fallbackLogLines(t, buf), 2)
+	for line := range strings.SplitSeq(buf.String(), "\n") {
+		if strings.Contains(line, "mcp request served via legacy toolset slug fallback") {
+			require.Equal(t, 1, strings.Count(line, `"`+string(attr.ToolsetMCPSlugKey)+`":`), line)
+		}
+	}
+}
+
+func TestLegacyFallback_DisabledCanonicalWrapper(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, "disabled-legacy-"+uuid.NewString()[:8])
+	createToolsetMcpEndpointWithID(t, ctx, ti.conn, toolset.ID, *authCtx.ProjectID, toolset.ID, "canonical-"+uuid.NewString(), "disabled", uuid.NullUUID{}, uuid.Nil)
+	// Another enabled wrapper must not resurrect the canonical legacy route.
+	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, "alternate-"+uuid.NewString(), "public", uuid.NullUUID{}, uuid.Nil)
+	_, err := servePublicHTTP(t, context.Background(), ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
+	require.Error(t, err)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeNotFound, shareable.Code)
+	for _, handler := range []func(http.ResponseWriter, *http.Request) error{
+		ti.service.HandleGetProtectedResource,
+		ti.service.HandleGetAuthorizationServer,
+	} {
+		_, err := runMCPWellKnown(t, ctx, handler, toolset.McpSlug.String)
+		require.ErrorAs(t, err, &shareable)
+		require.Equal(t, oops.CodeNotFound, shareable.Code)
+	}
+}

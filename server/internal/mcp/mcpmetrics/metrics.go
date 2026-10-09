@@ -76,9 +76,9 @@ const (
 )
 
 // Metrics is the mcp service's full instrument set. A nil *Metrics is valid —
-// every Record method becomes a no-op — and each method is also
-// nil-instrument-safe, so a partially constructed value still records what
-// it can.
+// metric recording becomes a no-op, but RecordToolsetSlugFallback still emits
+// attribution logs when a logger is supplied. Each method is also
+// nil-instrument-safe, so a partially constructed value still records what it can.
 type Metrics struct {
 	// mcpInitializeCounter is the unsampled census of observed handshakes by
 	// protocol revision. A counter rather than a span attribute because traces

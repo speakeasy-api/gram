@@ -28,6 +28,7 @@ import (
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -2961,5 +2962,55 @@ func installTargetTemplateHTML(t *testing.T, body, target string) string {
 			return body[templateStart : abs+endRel]
 		}
 		searchFrom = abs + len(marker)
+	}
+}
+
+// Legacy install pages must enforce the same canonical-wrapper gate as serving.
+func TestServeInstallPage_LegacyCanonicalWrapper(t *testing.T) {
+	t.Parallel()
+	for _, visibility := range []string{mcpservers.VisibilityPublic, mcpservers.VisibilityPrivate, mcpservers.VisibilityDisabled} {
+		t.Run(visibility, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPMetadataService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			require.NotNil(t, authCtx.ProjectID)
+			slug := "legacy-install-" + uuid.NewString()
+			toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+				OrganizationID: authCtx.ActiveOrganizationID,
+				ProjectID:      *authCtx.ProjectID,
+				Name:           "Legacy Install Fixture",
+				Slug:           slug,
+				McpSlug:        conv.ToPGText(slug),
+				McpEnabled:     true,
+			})
+			require.NoError(t, err)
+			require.NoError(t, ti.toolsetRepo.SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+				ID: toolset.ID, ProjectID: toolset.ProjectID, McpIsPublic: true,
+			}))
+			// No endpoint row: force lookup through the legacy slug, with the
+			// canonical wrapper ID equal to the toolset ID.
+			_, err = mcpservers_repo.New(ti.conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
+				ID:                toolset.ID,
+				ProjectID:         toolset.ProjectID,
+				Name:              conv.ToPGText("Canonical Wrapper"),
+				Slug:              conv.ToPGText("wrapper-" + slug),
+				ToolsetID:         uuid.NullUUID{UUID: toolset.ID, Valid: true},
+				Visibility:        visibility,
+				NetworkAccessMode: networkaccess.Storage(networkaccess.ModePublicOnly),
+			})
+			require.NoError(t, err)
+			req := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/install", nil)
+			rctx := chi.NewRouteContext()
+			rctx.URLParams.Add("mcpSlug", slug)
+			req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+			rr := httptest.NewRecorder()
+			require.NoError(t, ti.service.ServeInstallPage(rr, req))
+			if visibility == mcpservers.VisibilityPublic {
+				require.Equal(t, http.StatusOK, rr.Code)
+			} else {
+				require.Equal(t, http.StatusNotFound, rr.Code)
+			}
+		})
 	}
 }

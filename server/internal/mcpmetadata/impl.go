@@ -1235,7 +1235,7 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 	wrapper, serverErr := s.mcpServersRepo.GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
 	if serverErr == nil {
 		mode, modeErr := networkaccess.Effective(wrapper.NetworkAccessMode)
-		if modeErr != nil || !mode.Allows(networkaccess.SurfacePublic) {
+		if modeErr != nil || !mode.Allows(networkaccess.SurfacePublic) || !CanonicalWrapperMatchesToolset(&wrapper, toolset) {
 			return nil, fmt.Errorf("%w: endpoint is not available on this network surface", errToolsetNotFound)
 		}
 	} else if !errors.Is(serverErr, pgx.ErrNoRows) {

@@ -55,7 +55,8 @@ const (
 
 // LegacyFallbackCounter owns the two migration merge-gate instruments for the
 // toolsets → mcp_servers cutover (AIS-633). A nil *LegacyFallbackCounter is
-// valid — every Record becomes a no-op — so callers never nil-check.
+// valid: metric recording becomes a no-op, but RecordToolsetSlugFallback
+// still emits attribution logs when a logger is supplied.
 type LegacyFallbackCounter struct {
 	slugFallback     metric.Int64Counter
 	audienceAccepted metric.Int64Counter
