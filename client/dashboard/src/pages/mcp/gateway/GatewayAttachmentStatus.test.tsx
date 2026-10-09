@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { GatewayAttachmentStatus } from "./GatewayAttachmentStatus";
 import type { GatewayCreationFlow } from "./useGatewayCreation";
@@ -59,4 +60,20 @@ it("offers no retry once the gateway refused the server for good", () => {
   );
   expect(screen.getByRole("alert").textContent).toContain("Same backend");
   expect(screen.queryByRole("button")).toBeNull();
+});
+it("links to the created server once the gateway refused it", () => {
+  render(
+    <MemoryRouter>
+      <GatewayAttachmentStatus
+        flow={flow({
+          attachmentError: "Same backend",
+          attachmentRefused: true,
+        })}
+        serverHref={(id) => `/mcp/x/${id}`}
+      />
+    </MemoryRouter>,
+  );
+  expect(
+    screen.getByRole("link", { name: "Open MCP server" }).getAttribute("href"),
+  ).toBe("/mcp/x/server");
 });
