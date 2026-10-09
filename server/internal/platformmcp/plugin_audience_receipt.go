@@ -29,7 +29,7 @@ func NewPluginAssignmentMutationReceiptStore(db *pgxpool.Pool) *PluginAssignment
 	return &PluginAssignmentMutationReceiptStore{db: db, now: time.Now}
 }
 
-func (s *PluginAssignmentMutationReceiptStore) Execute(ctx context.Context, principal Principal, project ResolvedProject, idempotencyKey string, normalized normalizedSetPluginAssignments, mutate PluginAssignmentMutationTransaction) (OperationReceipt, error) {
+func (s *PluginAssignmentMutationReceiptStore) Execute(ctx context.Context, principal Principal, project ResolvedProject, idempotencyKey string, normalized normalizedSetPluginAssignments, charge func(context.Context) error, mutate PluginAssignmentMutationTransaction) (OperationReceipt, error) {
 	if s == nil || s.db == nil || s.now == nil || mutate == nil || principal.OrganizationID == "" || principal.UserID == "" || project.ID == uuid.Nil || project.Slug == "" || idempotencyKey == "" || len(idempotencyKey) > 128 {
 		return OperationReceipt{}, pluginAssignmentMutationInvalid("The plugin assignment receipt request is invalid.")
 	}
@@ -37,7 +37,7 @@ func (s *PluginAssignmentMutationReceiptStore) Execute(ctx context.Context, prin
 	if err != nil {
 		return OperationReceipt{}, pluginAssignmentMutationInvalid("The plugin assignment request could not be normalized.")
 	}
-	return executeMutationReceipt(ctx, mutationReceiptExecution[SetPluginAssignmentsReceiptResult]{
+	return executeChargedMutationReceipt(ctx, charge, mutationReceiptExecution[SetPluginAssignmentsReceiptResult]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operationSetPluginAssignments, IdempotencyKey: idempotencyKey, InputHash: inputHash, Label: "plugin assignment",
 		Invalid: func(cause error) error {
 			return &PluginAssignmentMutationError{Code: "invalid_request", Message: "The plugin assignment caller identity is invalid.", Cause: fmt.Errorf("%w: %w", ErrPluginAssignmentMutationInvalid, cause)}

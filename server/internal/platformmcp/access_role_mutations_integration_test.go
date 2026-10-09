@@ -44,6 +44,24 @@ func (f *roleAdmissionOutsideTransactionFlags) EvaluateFlag(ctx context.Context,
 	return evaluation, nil
 }
 
+// countingRoleBackend counts the provider reconciliations a role write sends
+// after its receipt commits.
+type countingRoleBackend struct {
+	*access.RoleManager
+	identityReconciles int
+	memberReconciles   int
+}
+
+func (b *countingRoleBackend) ReconcileRoleIdentity(ctx context.Context, workosOrgID, slug, name, description string, create bool) {
+	b.identityReconciles++
+	b.RoleManager.ReconcileRoleIdentity(ctx, workosOrgID, slug, name, description, create)
+}
+
+func (b *countingRoleBackend) ReconcileMemberRoles(ctx context.Context, reconciliation access.MemberRoleReconciliation) {
+	b.memberReconciles++
+	b.RoleManager.ReconcileMemberRoles(ctx, reconciliation)
+}
+
 func TestAccessRoleMutationsCreateWithoutGrantsAndReplay(t *testing.T) {
 	t.Parallel()
 
@@ -130,7 +148,8 @@ func TestAccessRoleMutationsCommitReplayAndPreserveOtherGrants(t *testing.T) {
 	reads := NewAccessReadService(logger, conn, allowBudget(), "access-role-integration-key")
 	admissionFlags := &roleAdmissionOutsideTransactionFlags{Provider: flags, t: t, db: conn, evaluated: false}
 	manager := access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger(), plugins.PublicationRequests{Enabled: false}, admission.NewGuard(admissionFlags, nil))
-	service, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "access-role-integration-key", manager)
+	backend := &countingRoleBackend{RoleManager: manager, identityReconciles: 0, memberReconciles: 0}
+	service, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "access-role-integration-key", backend)
 	require.NoError(t, err)
 
 	createAuditsBefore, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionAccessRoleCreate)
@@ -172,6 +191,18 @@ func TestAccessRoleMutationsCommitReplayAndPreserveOtherGrants(t *testing.T) {
 	createAuditsReplayed, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionAccessRoleCreate)
 	require.NoError(t, err)
 	require.Equal(t, createAuditsAfter, createAuditsReplayed)
+	require.Equal(t, 2, backend.identityReconciles, "a replay within the allowance re-runs reconciliation, so a failed sync recovers")
+
+	// The replay itself stays free once the allowance is spent, but its
+	// provider reconciliation is charged, so a retry loop cannot send
+	// unbounded provider work.
+	restore := withSpentBudget(t, &service.budget)
+	spent, err := service.Create(ctx, principal, createInput)
+	require.NoError(t, err, "a replay must not be refused over a spent allowance")
+	require.True(t, spent.Receipt.Replayed)
+	require.Equal(t, 2, backend.identityReconciles, "a replay over a spent allowance must not reconcile again")
+	require.Equal(t, "rate_limited", spent.Reconciliation, "the skipped reconciliation is reported")
+	restore()
 
 	projectSelector := authz.NewSelector(authz.ScopeProjectRead, project.ID.String())
 	encodedProjectSelector, err := projectSelector.MarshalJSON()

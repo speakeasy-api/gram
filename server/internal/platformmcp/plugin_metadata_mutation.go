@@ -15,7 +15,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
 )
@@ -390,19 +389,9 @@ func (s *PluginsService) executePluginMetadataMutation(ctx context.Context, prin
 	}
 	digest := sha256.Sum256(append([]byte("platform-mcp-plugin-metadata-v1\x00"+operation+"\x00"), payload...))
 	inputHash := hex.EncodeToString(digest[:])
-	// A retry of a change that already committed is answered from its receipt
-	// without spending the allowance. The lookup and the charge both run
-	// outside any transaction, because the limiter is a network round trip
-	// and must not hold a database connection or the receipt lock while it
-	// waits. Two concurrent first attempts can both miss here and both pay;
-	// the executor's locked re-check still replays the second one.
-	if receipt := s.completedPluginMetadataReceipt(ctx, principal, project, operation, key, inputHash); receipt != nil {
-		return s.finishPluginMetadataMutation(ctx, principal, project, *receipt)
-	}
-	if err := s.chargePluginMetadataMutation(ctx, principal); err != nil {
-		return PluginMetadataMutationOutput{}, err
-	}
-	receipt, err := executeMutationReceipt(ctx, mutationReceiptExecution[PluginMetadataReceiptResult]{
+	// A retry of a change that already committed replays its receipt without
+	// spending the allowance; see executeChargedMutationReceipt.
+	receipt, err := executeChargedMutationReceipt(ctx, func(ctx context.Context) error { return s.chargePluginMetadataMutation(ctx, principal) }, mutationReceiptExecution[PluginMetadataReceiptResult]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operation,
 		IdempotencyKey: key, InputHash: inputHash, Label: "plugin metadata",
 		Invalid: func(error) error {
@@ -429,26 +418,6 @@ func (s *PluginsService) executePluginMetadataMutation(ctx context.Context, prin
 		return PluginMetadataMutationOutput{}, err
 	}
 	return s.finishPluginMetadataMutation(ctx, principal, project, receipt)
-}
-
-// completedPluginMetadataReceipt reads, without a transaction or lock, a
-// completed and unexpired receipt for exactly this request, or nil. Anything
-// else — no receipt, a different input, an incomplete or expired one, or a
-// failed read — is left to executeMutationReceipt, which decides it under its
-// lock.
-func (s *PluginsService) completedPluginMetadataReceipt(ctx context.Context, principal Principal, project ResolvedProject, operation, key, inputHash string) *OperationReceipt {
-	stored, err := platformrepo.New(s.db).GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
-		OrganizationID: principal.OrganizationID, UserID: conv.ToPGText(principal.UserID), SubjectUrn: userSubjectURN(principal.UserID),
-		ProjectID: project.ID, Operation: operation, IdempotencyKey: key,
-	})
-	if err != nil || stored.InputHash != inputHash || stored.Status != receiptStatusSucceeded || !validPluginMetadataReceiptPayload(stored.ResultPayload) {
-		return nil
-	}
-	if !stored.ExpiresAt.Valid || !stored.ExpiresAt.Time.After(s.now()) {
-		return nil
-	}
-	receipt := operationReceiptFromRow(stored, true)
-	return &receipt
 }
 
 func (s *PluginsService) finishPluginMetadataMutation(ctx context.Context, principal Principal, project ResolvedProject, receipt OperationReceipt) (PluginMetadataMutationOutput, error) {
