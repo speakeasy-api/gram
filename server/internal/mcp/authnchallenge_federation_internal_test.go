@@ -130,6 +130,7 @@ func TestFederatedCallbackMisroutedOrigin(t *testing.T) {
 		{"invalid origin", "://", "origin_mismatch"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			req := httptest.NewRequest(http.MethodGet, callback, nil)
 			require.Equal(t, test.reason, federatedCallbackMisrouted(req, federation, clientID.String(), test.origin))
 		})
@@ -150,6 +151,7 @@ func TestFederatedCallbackTrustedPlatformPort(t *testing.T) {
 		{"malformed authority", "https://callback.example:8443", "callback.example:invalid", "origin_mismatch"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			callback := test.callbackOrigin + "/mcp/idp_callback/" + clientID.String()
 			req := httptest.NewRequest(http.MethodGet, callback, nil)
 			req.Host = test.host
