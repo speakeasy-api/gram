@@ -108,7 +108,9 @@ func admitCredential(header http.Header, assertion callerAssertion, now time.Tim
 		}
 		admitted.expiresAt = time.Unix(unix, 0)
 		if !now.Before(admitted.expiresAt) {
-			return none, errCredentialExpired
+			// The credential is otherwise valid: callers still compare its
+			// grant context, so return it with the error.
+			return admitted, errCredentialExpired
 		}
 	}
 	return admitted, nil
@@ -230,7 +232,10 @@ func (s *stdioSession) publishLocked(cred admittedCredential) error {
 }
 
 // sendCredentialed publishes the request's token and forwards msgs while
-// holding the gate. Any failure after admission ends the session.
+// holding the gate. A token or assertion that expired while the request
+// waited is refused without ending the session: a stale request says nothing
+// about the session's newest token, and the deadline still bounds it. Any
+// other failure after admission ends the session.
 func (s *stdioSession) sendCredentialed(ctx context.Context, msgs []rpcMessage, cred admittedCredential) error {
 	if !s.enterGate(ctx) {
 		if ctx.Err() != nil {
@@ -243,9 +248,10 @@ func (s *stdioSession) sendCredentialed(ctx context.Context, msgs []rpcMessage, 
 		return errStdioSessionClosed
 	}
 	if err := s.publishLocked(cred); err != nil {
-		if !errors.Is(err, errCredentialExpired) {
-			s.logger.Warn("tunnel stdio session token could not be written; stopping server", slog.Any("error", err))
+		if errors.Is(err, errCredentialExpired) {
+			return err
 		}
+		s.logger.Warn("tunnel stdio session token could not be written; stopping server", slog.Any("error", err))
 		s.close()
 		return err
 	}
