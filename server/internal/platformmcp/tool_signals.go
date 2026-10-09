@@ -35,6 +35,7 @@ type findSensorsOutput struct {
 }
 
 type sensorSummary struct {
+	Enabled         bool     `json:"enabled"`
 	ID              string   `json:"id"`
 	Name            string   `json:"name"`
 	Slug            string   `json:"slug"`
@@ -75,7 +76,7 @@ func registerSignalTools(reg *Registrar, service *SignalAuthoringService) {
 	writeMeta := ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectWrite}
 
 	for _, operation := range []string{"create_sensor", "create_signal", "update_sensor", "update_signal"} {
-		addTool(reg, signalManifest(operation, strings.ReplaceAll(operation, "_", " "), "Author project-scoped signals intelligence. Call confirmed:false to validate and preview. Creation IDs in previews are provisional. Show the complete normalized proposal and affected sensors, obtain explicit confirmation, then resend the identical proposal with expected_version, preview_token, confirmed:true and a stable idempotency_key. Sensor creation atomically creates inline signals and ordered memberships; updates preserve omitted fields and replace supplied memberships. Shared signal changes affect every referencing sensor. Version covers the entire bounded project configuration. Returns current post-commit state, or the committed receipt with snapshot_scope=verification_unavailable when the fresh read fails; keep retry inputs and key unchanged. Receipt replay does not prove a target still exists; target_available=false only establishes absence in a current_configuration snapshot. Requires signals_intelligence and project:write plus project:read. Readiness is configuration only, never proof of active evaluation. External users only.", false), writeMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input signalAuthoringInput) (*mcp.CallToolResult, signalAuthoringOutput, error) {
+		addTool(reg, signalManifest(operation, strings.ReplaceAll(operation, "_", " "), "Author project-scoped signals intelligence. Call confirmed:false to validate and preview. Creation IDs in previews are provisional. Show the complete normalized proposal and affected sensors, obtain explicit confirmation, then resend the identical proposal with expected_version, preview_token, confirmed:true and a stable idempotency_key. Sensor creation atomically creates inline signals and ordered memberships; updates preserve omitted fields and replace supplied memberships. Sensor proposal.enabled defaults to true on creation; false pauses new evaluations while preserving editable configuration. Evaluations already in progress may finish. Shared signal changes affect every referencing sensor. Version covers the entire bounded project configuration. Returns current post-commit state, or the committed receipt with snapshot_scope=verification_unavailable when the fresh read fails; keep retry inputs and key unchanged. Receipt replay does not prove a target still exists; target_available=false only establishes absence in a current_configuration snapshot. Requires signals_intelligence and project:write plus project:read. Readiness is configuration only, never proof of active evaluation. External users only.", false), writeMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input signalAuthoringInput) (*mcp.CallToolResult, signalAuthoringOutput, error) {
 			return principalToolCall(ctx, signalToolError, func(principal Principal) (signalAuthoringOutput, error) {
 				return service.author(ctx, principal, operation, input)
 			})
@@ -137,7 +138,7 @@ func registerSignalTools(reg *Registrar, service *SignalAuthoringService) {
 					break
 				}
 				value := projectSensor(sensor, projections)
-				out.Sensors = append(out.Sensors, sensorSummary{ID: value.ID, Name: value.Name, Slug: value.Slug, Mode: value.Mode, MatchExpression: value.MatchExpression, SignalCount: len(value.Signals), Ready: value.Ready, Issues: value.Issues})
+				out.Sensors = append(out.Sensors, sensorSummary{ID: value.ID, Name: value.Name, Slug: value.Slug, Mode: value.Mode, MatchExpression: value.MatchExpression, Enabled: value.Enabled, SignalCount: len(value.Signals), Ready: value.Ready, Issues: value.Issues})
 			}
 
 			return out, nil

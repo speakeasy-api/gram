@@ -39,3 +39,13 @@ preview. This layer introduces no new persisted configuration shape or dashboard
 data, so it uses those existing fixtures. Atomicity, replay, version conflicts,
 permissions, feature gating, typed tool contracts, and byte-identical shipped
 workflow content are covered by focused tests.
+
+# Sensor enablement
+
+Existing sensor authoring tools support `proposal.enabled` for authorized external
+project writers. Creation defaults to enabled; omitted updates preserve the current
+state. Discovery, previews, and live reads include `enabled`. Use the same preview,
+confirmation, version, and idempotency workflow to pause or resume a selected sensor.
+Verify the committed state with `get_sensor`. Disabled sensors remain configurable
+and can be configuration-ready, but are excluded from new evaluations. Evaluations
+already in progress may finish. No separate lifecycle tool is needed for this outcome.

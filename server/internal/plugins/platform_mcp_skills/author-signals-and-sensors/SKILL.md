@@ -27,7 +27,10 @@ scores. Sensors perform classification; they do not enforce access policies.
 4. Agree the mode: `multi_label` evaluates independent labels; `exclusive` chooses
    one option; `ordered_score` uses two to ten levels ordered from low to high,
    each with classifier criteria. Agree instructions, display names, optional
-   slugs, and reusable signal definitions.
+   slugs, and reusable signal definitions. Agree whether the sensor should be
+   enabled. `proposal.enabled` defaults to true on creation; omission on update
+   preserves the current state. Disabled sensors remain visible and editable but
+   skip new evaluations; evaluations already in progress may finish.
 5. Agree the matching expression. Omission on creation defaults to
    `message.role == "user"`. Only `message.role` is exposed; do not invent actor,
    department, cohort, replay, or tool fields. Conversation ingestion currently
@@ -46,7 +49,7 @@ scores. Sensors perform classification; they do not enforce access policies.
    fields or ordered membership, and `update_signal` to deliberately change a
    shared definition. Set `proposal.operation` to the tool name.
 8. Call with `confirmed:false`. Show the normalized configuration, matching
-   expression, complete signal order, draft reasons, and every affected sensor
+   expression, enabled state, complete signal order, draft reasons, and every affected sensor
    returned for a shared-signal update. Preview creation IDs are provisional and
    are not committed resources. Omitted update fields are preserved; a supplied
    signals list replaces the entire membership, and an empty list clears it.
@@ -61,7 +64,7 @@ scores. Sensors perform classification; they do not enforce access policies.
 
 10. For a sensor, call `get_sensor` using the committed ID. For a standalone
     signal, call `find_signals` and verify its exact ID and definition. Report
-    committed state and configuration readiness separately from active inference
+    committed enabled state and configuration readiness separately from active inference
     or observed readings, which these tools cannot prove.
 11. A committed receipt with `snapshot_scope: verification_unavailable` means the
     write succeeded but the fresh read failed. Keep the same retry key and inputs;

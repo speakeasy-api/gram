@@ -229,7 +229,7 @@ func TestSignalToolDiscoveryAndSensorUpdate(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, second.ID, page.Signals[0].ID)
 	require.Empty(t, page.NextCursor)
-	input := signalAuthoringInput{ProjectID: f.project.ID.String(), Proposal: sigint.AuthoringInput{Operation: "update_sensor", ID: sensor.ID, MatchExpression: new(`message.role == "assistant"`), Signals: &[]sigint.SignalReference{{ID: second.ID}, {ID: first.ID}}}}
+	input := signalAuthoringInput{ProjectID: f.project.ID.String(), Proposal: sigint.AuthoringInput{Operation: "update_sensor", ID: sensor.ID, Enabled: new(false), MatchExpression: new(`message.role == "assistant"`), Signals: &[]sigint.SignalReference{{ID: second.ID}, {ID: first.ID}}}}
 	mutation := descriptorByName(t, reg, "update_sensor")
 
 	data, err = json.Marshal(input)
@@ -240,6 +240,7 @@ func TestSignalToolDiscoveryAndSensorUpdate(t *testing.T) {
 
 	preview, ok := value.(signalAuthoringOutput)
 	require.True(t, ok)
+	require.False(t, preview.Sensor.Enabled)
 	input.Confirmed, input.ExpectedVersion, input.PreviewToken, input.IdempotencyKey = true, preview.Version, preview.PreviewToken, "update-sensor-request"
 
 	data, err = json.Marshal(input)
@@ -257,6 +258,7 @@ func TestSignalToolDiscoveryAndSensorUpdate(t *testing.T) {
 	live, ok := value.(signalAuthoringOutput)
 	require.True(t, ok)
 	require.Equal(t, `message.role == "assistant"`, live.Sensor.MatchExpression)
+	require.False(t, live.Sensor.Enabled)
 	require.Equal(t, second.ID, live.Sensor.Signals[0].ID)
 	require.Equal(t, first.ID, live.Sensor.Signals[1].ID)
 	require.True(t, live.Sensor.Ready)
@@ -270,6 +272,7 @@ func TestSignalToolDiscoveryAndSensorUpdate(t *testing.T) {
 	summaries, ok := value.(findSensorsOutput)
 	require.True(t, ok)
 	require.Len(t, summaries.Sensors, 1)
+	require.False(t, summaries.Sensors[0].Enabled)
 	require.Equal(t, 2, summaries.Sensors[0].SignalCount)
 }
 

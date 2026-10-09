@@ -63,6 +63,7 @@ type signalConfiguration struct {
 }
 
 type sensorConfiguration struct {
+	Enabled         bool                  `json:"enabled"`
 	ID              string                `json:"id"`
 	Name            string                `json:"name"`
 	Slug            string                `json:"slug"`
@@ -322,7 +323,7 @@ func signalProjections(state sigint.AuthoringState) map[string]signalConfigurati
 }
 
 func projectSensor(sensor *types.SigintSensor, signals map[string]signalConfiguration) sensorConfiguration {
-	result := sensorConfiguration{ID: sensor.ID, Name: sensor.Name, Slug: string(sensor.Slug), Description: sensor.Description, Instructions: sensor.Instructions, Mode: string(sensor.Mode), MatchExpression: sensor.MatchExpression, Signals: []signalConfiguration{}, Ready: true, Issues: []string{}}
+	result := sensorConfiguration{ID: sensor.ID, Name: sensor.Name, Slug: string(sensor.Slug), Description: sensor.Description, Instructions: sensor.Instructions, Mode: string(sensor.Mode), MatchExpression: sensor.MatchExpression, Enabled: sensor.Enabled, Signals: []signalConfiguration{}, Ready: true, Issues: []string{}}
 	for _, id := range sensor.SignalIds {
 		if signal, ok := signals[id]; ok {
 			result.Signals = append(result.Signals, signal)
