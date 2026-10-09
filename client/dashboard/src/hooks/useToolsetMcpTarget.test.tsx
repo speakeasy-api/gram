@@ -1,16 +1,20 @@
-import { cleanup, renderHook } from "@testing-library/react";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 import { useToolsetMcpTarget } from "./useToolsetUrl";
 
-const mocks = vi.hoisted(() => ({ server: vi.fn() }));
+const mocks = vi.hoisted(() => ({ server: vi.fn(), lookup: vi.fn() }));
 vi.mock("@/contexts/Auth", () => ({ useProject: () => ({ slug: "project" }) }));
 vi.mock("@/lib/utils", () => ({
   getServerURL: () => "https://platform.example",
 }));
 vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
-  useGetMcpServer: mocks.server,
+  buildGetMcpServerQuery: mocks.lookup,
 }));
+vi.mock("@gram/client/react-query/_context.js", () => ({
+  useGramContext: () => ({}),
+}));
+vi.mock("@tanstack/react-query", () => ({ useQuery: mocks.server }));
 vi.mock("@gram/client/react-query/listDomains.js", () => ({
   useListDomains: vi.fn(),
 }));
@@ -47,6 +51,7 @@ function serviceError(status: number) {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.lookup.mockReturnValue({ queryKey: ["server"], queryFn: vi.fn() });
   mocks.server.mockReturnValue({
     data: selected,
     isLoading: false,
@@ -58,10 +63,12 @@ afterEach(cleanup);
 describe("useToolsetMcpTarget", () => {
   it("returns identity, endpoint and issuer from one authoritative lookup", () => {
     const { result } = renderHook(() => useToolsetMcpTarget(toolset));
+    expect(mocks.lookup).toHaveBeenCalledWith({}, { toolsetId: "T" });
     expect(mocks.server).toHaveBeenCalledWith(
-      { toolsetId: "T" },
-      undefined,
-      expect.objectContaining({ enabled: true }),
+      expect.objectContaining({
+        enabled: true,
+        queryKey: ["server", "connectionTarget"],
+      }),
     );
     expect(result.current).toMatchObject({
       url: "https://platform.example/mcp/selected",
@@ -127,8 +134,8 @@ describe("useToolsetMcpTarget", () => {
     expect(result.current.status).toBe(expectedStatus);
     if (state === "loading") expect(result.current.isLoading).toBe(true);
   });
-  it("allows legacy routing only for a typed no-wrapper 404", () => {
-    mocks.server.mockReturnValue({ isError: true, error: serviceError(404) });
+  it("allows legacy routing for the normalized no-wrapper result", () => {
+    mocks.server.mockReturnValue({ data: null });
     expect(
       renderHook(() => useToolsetMcpTarget(toolset)).result.current,
     ).toMatchObject({
@@ -144,11 +151,15 @@ describe("useToolsetMcpTarget", () => {
       const { result, rerender } = renderHook(() =>
         useToolsetMcpTarget(toolset),
       );
-      mocks.server.mockReturnValue({
-        data: selected,
-        isError: true,
-        error: serviceError(status),
-      });
+      mocks.server.mockReturnValue(
+        status === 404
+          ? { data: null }
+          : {
+              data: selected,
+              isError: true,
+              error: serviceError(status),
+            },
+      );
       rerender();
       expect(result.current.serverId).toBeUndefined();
       expect(result.current.userSessionIssuerId).toBe(
@@ -172,7 +183,7 @@ describe("useToolsetMcpTarget", () => {
     expect(result.current.status).toBe("ready");
     expect(result.current.userSessionIssuerId).toBeUndefined();
   });
-  it("retries lookup without reviving retained identity and then accepts the new target", () => {
+  it("retries lookup without reviving retained identity and then accepts the new target", async () => {
     const refetch = vi.fn().mockResolvedValue({});
     mocks.server.mockReturnValue({
       data: selected,
@@ -182,7 +193,7 @@ describe("useToolsetMcpTarget", () => {
     });
     const { result, rerender } = renderHook(() => useToolsetMcpTarget(toolset));
     expect(result.current.status).toBe("error");
-    result.current.refetch();
+    act(() => result.current.refetch());
     expect(refetch).toHaveBeenCalledOnce();
     expect(refetch).toHaveBeenCalledWith({
       throwOnError: false,
@@ -208,7 +219,7 @@ describe("useToolsetMcpTarget", () => {
       },
       refetch,
     });
-    rerender();
+    await act(async () => rerender());
     expect(result.current).toMatchObject({
       status: "ready",
       serverId: "S2",
@@ -219,10 +230,29 @@ describe("useToolsetMcpTarget", () => {
   it.each([
     { ...selected, visibility: "disabled" },
     { ...selected, platformEndpointSlug: undefined },
-  ])("shows loading while retrying an unusable cached target", (data) => {
+  ])("preserves settled unusable targets during background refresh", (data) => {
     mocks.server.mockReturnValue({ data, isFetching: true });
     const { result } = renderHook(() => useToolsetMcpTarget(toolset));
-    expect(result.current.status).toBe("loading");
+    expect(result.current.status).toBe(
+      data.visibility === "disabled" ? "unavailable" : "ready",
+    );
+  });
+  it("does not carry a settled legacy fallback into another selection", () => {
+    mocks.server.mockReturnValue({ data: null });
+    const { result, rerender } = renderHook(
+      ({ id }) => useToolsetMcpTarget({ ...toolset, id }),
+      { initialProps: { id: "T" } },
+    );
+    expect(result.current.legacy).toBe(true);
+    mocks.server.mockReturnValue({
+      isPending: true,
+      isLoading: true,
+      isFetching: true,
+    });
+    rerender({ id: "T2" });
+    expect(result.current).toMatchObject({ legacy: false, status: "loading" });
+    expect(result.current.url).toBeUndefined();
+    expect(result.current.userSessionIssuerId).toBeUndefined();
   });
   it("keeps healthy cached targets ready during background refresh", () => {
     mocks.server.mockReturnValue({ data: selected, isFetching: true });
@@ -236,7 +266,7 @@ describe("useToolsetMcpTarget", () => {
     const refetch = vi.fn();
     mocks.server.mockReturnValue({ refetch });
     const { result } = renderHook(() => useToolsetMcpTarget(undefined));
-    result.current.refetch();
+    act(() => result.current.refetch());
     expect(refetch).not.toHaveBeenCalled();
   });
   it("updates the complete selected tuple together", () => {

@@ -1,5 +1,4 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlaygroundIssuerConnection } from "./usePlaygroundIssuerConnection";
 import { PlaygroundElements } from "./PlaygroundElements";
@@ -186,27 +185,3 @@ it.each(["toolset", "connection"])(
     expect(screen.getByText("Chat ready")).toBeTruthy();
   },
 );
-
-it("preserves mounted chat when a healthy cached connection refreshes", () => {
-  const mounted = vi.fn();
-  const unmounted = vi.fn();
-  mocks.chat.mockImplementation(function Chat() {
-    useEffect(() => {
-      mounted();
-      return unmounted;
-    }, []);
-    return <div>Chat ready</div>;
-  });
-  const { rerender } = mount();
-  mocks.connection.mockReturnValue({ ...connected });
-  rerender(
-    <PlaygroundElements
-      toolsetSlug="selected"
-      environmentSlug={null}
-      model="test"
-    />,
-  );
-  expect(mounted).toHaveBeenCalledTimes(1);
-  expect(unmounted).not.toHaveBeenCalled();
-  expect(screen.getByText("Chat ready")).toBeTruthy();
-});

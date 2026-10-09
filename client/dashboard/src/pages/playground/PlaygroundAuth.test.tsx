@@ -43,8 +43,16 @@ vi.mock("@/routes", () => ({
   useRoutes: () => ({
     mcp: {
       details: {
-        Link: ({ children }: { children: React.ReactNode }) => (
-          <a href="/mcp/legacy-t#authentication">{children}</a>
+        Link: ({
+          children,
+          params,
+          hash,
+        }: {
+          children: React.ReactNode;
+          params: [string];
+          hash?: string;
+        }) => (
+          <a href={`/mcp/${params[0]}${hash ? `#${hash}` : ""}`}>{children}</a>
         ),
       },
     },
@@ -223,7 +231,7 @@ describe("independent environment configuration", () => {
         screen
           .getByRole("link", { name: "Configure auth" })
           .getAttribute("href"),
-      ).toContain("#authentication");
+      ).toBe("/mcp/legacy-t#authentication");
       const save = screen.getByRole("button", {
         name: "Save",
       }) as HTMLButtonElement;
@@ -256,6 +264,19 @@ describe("independent environment configuration", () => {
         );
     },
   );
+
+  it("updates Configure auth navigation when the toolset changes", () => {
+    const { rerender } = render(<PlaygroundAuth toolset={toolset} />);
+    expect(
+      screen.getByRole("link", { name: "Configure auth" }).getAttribute("href"),
+    ).toBe("/mcp/legacy-t#authentication");
+    rerender(
+      <PlaygroundAuth toolset={{ ...toolset, slug: "another-toolset" }} />,
+    );
+    expect(
+      screen.getByRole("link", { name: "Configure auth" }).getAttribute("href"),
+    ).toBe("/mcp/another-toolset#authentication");
+  });
 
   it("keeps Save disabled while saving", () => {
     mocks.target.status = "error";

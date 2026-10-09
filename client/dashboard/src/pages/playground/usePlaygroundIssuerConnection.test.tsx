@@ -26,7 +26,13 @@ vi.mock("@/lib/utils", () => ({
     url ? `${url}/connect/first-party` : undefined,
 }));
 vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
-  useGetMcpServer: mocks.server,
+  buildGetMcpServerQuery: () => ({
+    queryKey: ["selected-server"],
+    queryFn: mocks.server,
+  }),
+}));
+vi.mock("@gram/client/react-query/_context.js", () => ({
+  useGramContext: () => ({}),
 }));
 vi.mock("@gram/client/react-query/listDomains.js", () => ({
   useListDomains: vi.fn(),
@@ -66,7 +72,7 @@ function mount() {
 }
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.server.mockReturnValue({ data: selected });
+  mocks.server.mockResolvedValue(selected);
   mocks.mint.mockResolvedValue({ accessToken: "token-S" });
   mocks.probe.mockReturnValue({
     tools: [],
@@ -137,23 +143,22 @@ describe("usePlaygroundIssuerConnection selected target alignment", () => {
     ["error", "Unable to load"],
     ["disabled", "disabled"],
     ["noAddress", "no platform address"],
-  ])("distinguishes the %s target state", (state, message) => {
-    mocks.server.mockReturnValue(
-      state === "loading"
-        ? { isLoading: true }
-        : state === "error"
-          ? { isError: true, error: new Error("lookup failed") }
-          : {
-              data: {
-                ...selected,
-                ...(state === "disabled"
-                  ? { visibility: "disabled" }
-                  : { platformEndpointSlug: undefined }),
-              },
-            },
-    );
+  ])("distinguishes the %s target state", async (state, message) => {
+    if (state === "loading")
+      mocks.server.mockReturnValue(new Promise(() => {}));
+    else if (state === "error")
+      mocks.server.mockRejectedValue(new Error("lookup failed"));
+    else
+      mocks.server.mockResolvedValue({
+        ...selected,
+        ...(state === "disabled"
+          ? { visibility: "disabled" }
+          : { platformEndpointSlug: undefined }),
+      });
     const { result } = mount();
-    expect(result.current.isLoading).toBe(state === "loading");
+    await waitFor(() =>
+      expect(result.current.isLoading).toBe(state === "loading"),
+    );
     expect(result.current.isError).toBe(state !== "loading");
     if (message) expect(result.current.errorMessage).toContain(message);
     else expect(result.current.errorMessage).toBeUndefined();
@@ -200,11 +205,17 @@ describe("usePlaygroundIssuerConnection selected target alignment", () => {
     expect(result.current.connected).toBe(true);
   });
 
-  it("does not gate or mint for an ungated S even when T has an issuer", () => {
-    mocks.server.mockReturnValue({
-      data: { ...selected, userSessionIssuerId: undefined },
+  it("does not gate or mint for an ungated S even when T has an issuer", async () => {
+    mocks.server.mockResolvedValue({
+      ...selected,
+      userSessionIssuerId: undefined,
     });
     const { result } = mount();
+    await waitFor(() =>
+      expect(result.current.mcpUrl).toBe(
+        "https://platform.example/mcp/selected",
+      ),
+    );
     expect(result.current.isIssuerGated).toBe(false);
     expect(result.current.accessToken).toBeUndefined();
     expect(mocks.mint).not.toHaveBeenCalled();
@@ -216,24 +227,24 @@ describe("usePlaygroundIssuerConnection selected target alignment", () => {
 
   it.each(["disabled", "loading", "error", "missingEndpoint", "customOnly"])(
     "does not mint, probe or connect for %s",
-    (state) => {
+    async (state) => {
       if (state === "disabled")
-        mocks.server.mockReturnValue({
-          data: { ...selected, visibility: "disabled" },
-        });
+        mocks.server.mockResolvedValue({ ...selected, visibility: "disabled" });
       if (state === "loading")
-        mocks.server.mockReturnValue({ isLoading: true });
+        mocks.server.mockReturnValue(new Promise(() => {}));
       if (state === "error")
-        mocks.server.mockReturnValue({
-          isError: true,
-          error: new Error("lookup failed"),
-        });
+        mocks.server.mockRejectedValue(new Error("lookup failed"));
       // Both missing and custom-only endpoints omit the platform address in the API.
       if (state === "missingEndpoint" || state === "customOnly")
-        mocks.server.mockReturnValue({
-          data: { ...selected, platformEndpointSlug: undefined },
+        mocks.server.mockResolvedValue({
+          ...selected,
+          platformEndpointSlug: undefined,
         });
       const { result } = mount();
+      if (state !== "loading") {
+        await waitFor(() => expect(result.current.isError).toBe(true));
+      }
+      expect(result.current.isLoading).toBe(state === "loading");
       expect(result.current.mcpUrl).toBeUndefined();
       expect(result.current.canConnect).toBe(false);
       expect(mocks.mint).not.toHaveBeenCalled();
@@ -261,7 +272,7 @@ describe("usePlaygroundIssuerConnection selected target alignment", () => {
         body: "",
       },
     );
-    mocks.server.mockReturnValue({ isError: true, error });
+    mocks.server.mockRejectedValue(error);
     const { result, client } = mount();
     await waitFor(() => expect(result.current.accessToken).toBe("token-S"));
     expect(mocks.mint).toHaveBeenCalledWith(
@@ -290,19 +301,31 @@ describe("usePlaygroundIssuerConnection selected target alignment", () => {
     );
   });
   it("changes mint identity and issuer when authoritative selection changes", async () => {
-    const { result, rerender, client } = mount();
+    const { result, client } = mount();
     await waitFor(() => expect(result.current.accessToken).toBe("token-S"));
-    mocks.server.mockReturnValue({
-      data: {
-        ...selected,
-        id: "S2",
-        userSessionIssuerId: "issuer-S2",
-        platformEndpointSlug: "selected-2",
-      },
+    mocks.server.mockResolvedValue({
+      ...selected,
+      id: "S2",
+      userSessionIssuerId: "issuer-S2",
+      platformEndpointSlug: "selected-2",
     });
-    mocks.mint.mockResolvedValue({ accessToken: "token-S2" });
-    rerender();
+    let finishMint!: (value: { accessToken: string }) => void;
+    mocks.mint.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishMint = resolve;
+        }),
+    );
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ["selected-server"] });
+    });
+    await waitFor(() =>
+      expect(result.current.mcpUrl).toBe(
+        "https://platform.example/mcp/selected-2",
+      ),
+    );
     expect(result.current.accessToken).toBeUndefined();
+    await act(async () => finishMint({ accessToken: "token-S2" }));
     await waitFor(() => expect(result.current.accessToken).toBe("token-S2"));
     expect(mocks.mint).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -346,16 +369,8 @@ describe("usePlaygroundIssuerConnection selected target alignment", () => {
 // Exercise query transitions, not only static status mocks: the hooks keep
 // cached data after refresh errors and refetch must not restart earlier stages.
 function liveQueries() {
-  const lookup = vi.fn().mockResolvedValue(selected);
+  const lookup = mocks.server;
   const probe = vi.fn().mockResolvedValue({});
-  mocks.server.mockImplementation(function useServer() {
-    return useQuery({
-      queryKey: ["selected-server"],
-      queryFn: lookup,
-      retry: false,
-      throwOnError: false,
-    });
-  });
   mocks.probe.mockImplementation(function useProbe(
     url: string | undefined,
     options: { enabled: boolean; headers?: { Authorization: string } },

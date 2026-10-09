@@ -5,8 +5,10 @@ import type { DomainDNSConfig } from "@gram/client/models/components/domaindnsco
 import { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useListDomains } from "@gram/client/react-query/listDomains.js";
-import { useCallback, useMemo } from "react";
-import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { useCallback, useMemo, useState } from "react";
+import { buildGetMcpServerQuery } from "@gram/client/react-query/getMcpServer.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { useQuery } from "@tanstack/react-query";
 import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 
 export function useCustomDomain(enabled = true): {
@@ -220,7 +222,23 @@ export function useToolsetMcpTarget(
   refetch: () => void;
 } {
   const project = useProject();
-  const server = useGetMcpServer({ toolsetId: toolset?.id }, undefined, {
+  const sdk = useGramContext();
+  const lookup = buildGetMcpServerQuery(sdk, { toolsetId: toolset?.id });
+  const server = useQuery({
+    // Keep the nullable result separate from the generated SDK's server cache,
+    // while retaining its key prefix for normal server invalidation.
+    queryKey: [...lookup.queryKey, "connectionTarget"],
+    queryFn: async (context) => {
+      try {
+        return await lookup.queryFn(context);
+      } catch (error) {
+        // Absence is a settled result, not a transient error. Caching it gives
+        // every observer the same legacy classification throughout refetches.
+        if (error instanceof ServiceError && error.statusCode === 404)
+          return null;
+        throw error;
+      }
+    },
     enabled: !!toolset?.id,
     retry: false,
     throwOnError: false,
@@ -229,17 +247,15 @@ export function useToolsetMcpTarget(
   const selected = toolset && !server.isError ? server.data : undefined;
   const enabledServer =
     selected?.visibility !== "disabled" ? selected : undefined;
-  const legacy =
-    !!toolset &&
-    server.error instanceof ServiceError &&
-    server.error.statusCode === 404;
+  const [retrying, setRetrying] = useState<{ id: string }>();
+  const legacy = !!toolset && !server.isError && server.data === null;
   const status = !toolset
     ? "idle"
     : server.isLoading ||
-        (server.isFetching &&
-          (server.isError || !enabledServer?.platformEndpointSlug))
+        retrying?.id === toolset.id ||
+        (server.isFetching && server.isError)
       ? "loading"
-      : server.isError && !legacy
+      : server.isError
         ? "error"
         : selected?.visibility === "disabled"
           ? "unavailable"
@@ -248,8 +264,14 @@ export function useToolsetMcpTarget(
             : "loading";
   const refetchServer = server.refetch;
   const refetch = useCallback(() => {
-    if (toolset?.id)
-      void refetchServer({ throwOnError: false, cancelRefetch: false });
+    if (!toolset?.id) return;
+    const retry = { id: toolset.id };
+    setRetrying(retry);
+    void refetchServer({ throwOnError: false, cancelRefetch: false }).finally(
+      () => {
+        setRetrying((current) => (current === retry ? undefined : current));
+      },
+    );
   }, [toolset?.id, refetchServer]);
   const platformSlug = enabledServer?.platformEndpointSlug;
   // Playground/connect require the platform origin (session cookie and CSP).
