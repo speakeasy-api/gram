@@ -168,7 +168,7 @@ func (s *Service) auditSourceBinding(ctx context.Context, q *repo.Queries, dbtx 
 	}
 	err := auditBindingChange(ctx, q, *authCtx.ProjectID, previous, next,
 		func(env urn.Environment, name, envSlug string) error {
-			return s.audit.LogEnvironmentSourceUnlink(ctx, dbtx, event(env, name, envSlug))
+			return s.audit.LogEnvironmentSourceUnlink(ctx, dbtx, audit.LogEnvironmentSourceUnlinkEvent(event(env, name, envSlug)))
 		},
 		func(env urn.Environment, name, envSlug string) error {
 			return s.audit.LogEnvironmentSourceLink(ctx, dbtx, event(env, name, envSlug))
@@ -195,7 +195,7 @@ func (s *Service) auditToolsetBinding(ctx context.Context, q *repo.Queries, dbtx
 	}
 	err := auditBindingChange(ctx, q, *authCtx.ProjectID, previous, next,
 		func(env urn.Environment, name, envSlug string) error {
-			return s.audit.LogEnvironmentToolsetUnlink(ctx, dbtx, event(env, name, envSlug))
+			return s.audit.LogEnvironmentToolsetUnlink(ctx, dbtx, audit.LogEnvironmentToolsetUnlinkEvent(event(env, name, envSlug)))
 		},
 		func(env urn.Environment, name, envSlug string) error {
 			return s.audit.LogEnvironmentToolsetLink(ctx, dbtx, event(env, name, envSlug))

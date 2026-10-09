@@ -179,9 +179,25 @@ func (l *Logger) LogEnvironmentSourceLink(ctx context.Context, dbtx repo.DBTX, e
 		map[string]any{"source_kind": event.SourceKind, "source_slug": event.SourceSlug})
 }
 
+type LogEnvironmentSourceUnlinkEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	EnvironmentURN  urn.Environment
+	EnvironmentName string
+	EnvironmentSlug string
+
+	SourceKind string
+	SourceSlug string
+}
+
 // LogEnvironmentSourceUnlink records a source's binding to an environment
 // being removed or replaced.
-func (l *Logger) LogEnvironmentSourceUnlink(ctx context.Context, dbtx repo.DBTX, event LogEnvironmentSourceLinkEvent) error {
+func (l *Logger) LogEnvironmentSourceUnlink(ctx context.Context, dbtx repo.DBTX, event LogEnvironmentSourceUnlinkEvent) error {
 	return l.logEnvironmentBinding(ctx, dbtx, ActionEnvironmentSourceUnlink, event.OrganizationID, event.ProjectID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.EnvironmentURN, event.EnvironmentName, event.EnvironmentSlug,
 		map[string]any{"source_kind": event.SourceKind, "source_slug": event.SourceSlug})
 }
@@ -207,9 +223,24 @@ func (l *Logger) LogEnvironmentToolsetLink(ctx context.Context, dbtx repo.DBTX, 
 		map[string]any{"toolset_id": event.ToolsetURN.ID.String()})
 }
 
+type LogEnvironmentToolsetUnlinkEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	EnvironmentURN  urn.Environment
+	EnvironmentName string
+	EnvironmentSlug string
+
+	ToolsetURN urn.Toolset
+}
+
 // LogEnvironmentToolsetUnlink records a toolset's binding to an environment
 // being removed or replaced.
-func (l *Logger) LogEnvironmentToolsetUnlink(ctx context.Context, dbtx repo.DBTX, event LogEnvironmentToolsetLinkEvent) error {
+func (l *Logger) LogEnvironmentToolsetUnlink(ctx context.Context, dbtx repo.DBTX, event LogEnvironmentToolsetUnlinkEvent) error {
 	return l.logEnvironmentBinding(ctx, dbtx, ActionEnvironmentToolsetUnlink, event.OrganizationID, event.ProjectID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.EnvironmentURN, event.EnvironmentName, event.EnvironmentSlug,
 		map[string]any{"toolset_id": event.ToolsetURN.ID.String()})
 }
