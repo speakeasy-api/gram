@@ -518,6 +518,108 @@ func (q *Queries) ListEnvironments(ctx context.Context, projectID uuid.UUID) ([]
 	return items, nil
 }
 
+const listMCPHeaderEnvironmentEntries = `-- name: ListMCPHeaderEnvironmentEntries :many
+SELECT
+    e.id AS environment_id,
+    e.name AS environment_name,
+    e.slug AS environment_slug,
+    ee.name AS entry_name,
+    ee.value AS entry_value,
+    ee.is_secret AS entry_is_secret
+FROM environments e
+LEFT JOIN environment_entries ee
+    ON ee.environment_id = e.id AND ee.name LIKE 'MCP\_HEADER\_%'
+WHERE e.id = $1
+  AND e.project_id = $2
+  AND e.deleted IS FALSE
+ORDER BY ee.name
+`
+
+type ListMCPHeaderEnvironmentEntriesParams struct {
+	EnvironmentID uuid.UUID
+	ProjectID     uuid.UUID
+}
+
+type ListMCPHeaderEnvironmentEntriesRow struct {
+	EnvironmentID   uuid.UUID
+	EnvironmentName string
+	EnvironmentSlug string
+	EntryName       pgtype.Text
+	EntryValue      pgtype.Text
+	EntryIsSecret   pgtype.Bool
+}
+
+// Reads a live environment of a project together with only its MCP_HEADER_
+// entries, in one statement so a concurrent delete yields either the earlier
+// mapping or no environment row, never a live environment missing its
+// entries. An environment with no such entries yields one row with NULL entry
+// columns; a deleted, missing or foreign environment yields no rows.
+func (q *Queries) ListMCPHeaderEnvironmentEntries(ctx context.Context, arg ListMCPHeaderEnvironmentEntriesParams) ([]ListMCPHeaderEnvironmentEntriesRow, error) {
+	rows, err := q.db.Query(ctx, listMCPHeaderEnvironmentEntries, arg.EnvironmentID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMCPHeaderEnvironmentEntriesRow
+	for rows.Next() {
+		var i ListMCPHeaderEnvironmentEntriesRow
+		if err := rows.Scan(
+			&i.EnvironmentID,
+			&i.EnvironmentName,
+			&i.EnvironmentSlug,
+			&i.EntryName,
+			&i.EntryValue,
+			&i.EntryIsSecret,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMCPHeaderNearMissEntryNames = `-- name: ListMCPHeaderNearMissEntryNames :many
+SELECT ee.name
+FROM environment_entries ee
+JOIN environments e ON e.id = ee.environment_id
+WHERE e.id = $1
+  AND e.project_id = $2
+  AND e.deleted IS FALSE
+  AND ee.name NOT LIKE 'MCP\_HEADER\_%'
+  AND (LOWER(ee.name) LIKE 'mcp\_header\_%' OR LOWER(ee.name) LIKE 'header\_%')
+ORDER BY ee.name
+`
+
+type ListMCPHeaderNearMissEntryNamesParams struct {
+	EnvironmentID uuid.UUID
+	ProjectID     uuid.UUID
+}
+
+// Names, never values, of entries in a live environment of a project that look
+// like an attempt at the MCP_HEADER_ prefix but do not match it exactly.
+func (q *Queries) ListMCPHeaderNearMissEntryNames(ctx context.Context, arg ListMCPHeaderNearMissEntryNamesParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listMCPHeaderNearMissEntryNames, arg.EnvironmentID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		items = append(items, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockSourceEnvironmentBinding = `-- name: LockSourceEnvironmentBinding :one
 SELECT environment_id
 FROM source_environments

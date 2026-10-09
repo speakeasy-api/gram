@@ -234,3 +234,37 @@ FROM toolset_environments
 WHERE toolset_id = @toolset_id
   AND project_id = @project_id
 FOR UPDATE;
+
+-- name: ListMCPHeaderEnvironmentEntries :many
+-- Reads a live environment of a project together with only its MCP_HEADER_
+-- entries, in one statement so a concurrent delete yields either the earlier
+-- mapping or no environment row, never a live environment missing its
+-- entries. An environment with no such entries yields one row with NULL entry
+-- columns; a deleted, missing or foreign environment yields no rows.
+SELECT
+    e.id AS environment_id,
+    e.name AS environment_name,
+    e.slug AS environment_slug,
+    ee.name AS entry_name,
+    ee.value AS entry_value,
+    ee.is_secret AS entry_is_secret
+FROM environments e
+LEFT JOIN environment_entries ee
+    ON ee.environment_id = e.id AND ee.name LIKE 'MCP\_HEADER\_%'
+WHERE e.id = @environment_id
+  AND e.project_id = @project_id
+  AND e.deleted IS FALSE
+ORDER BY ee.name;
+
+-- name: ListMCPHeaderNearMissEntryNames :many
+-- Names, never values, of entries in a live environment of a project that look
+-- like an attempt at the MCP_HEADER_ prefix but do not match it exactly.
+SELECT ee.name
+FROM environment_entries ee
+JOIN environments e ON e.id = ee.environment_id
+WHERE e.id = @environment_id
+  AND e.project_id = @project_id
+  AND e.deleted IS FALSE
+  AND ee.name NOT LIKE 'MCP\_HEADER\_%'
+  AND (LOWER(ee.name) LIKE 'mcp\_header\_%' OR LOWER(ee.name) LIKE 'header\_%')
+ORDER BY ee.name;

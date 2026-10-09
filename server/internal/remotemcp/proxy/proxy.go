@@ -248,6 +248,14 @@ type Proxy struct {
 	// checked against HeaderPolicy.
 	Headers []ConfiguredHeader
 
+	// EnvironmentHeaders are the headers mapped from the environment linked
+	// to the MCP server, already validated by [EnvironmentHeaderRows]. Each
+	// one replaces every row of Headers that addresses the same field before
+	// any row is resolved, and owns every spelling of its name upstream.
+	// Headers is left whole so redirects still strip the credentials a
+	// replaced row would have read.
+	EnvironmentHeaders []ConfiguredHeader
+
 	// RoutingHeaders are Speakeasy's own transport headers, such as the
 	// tunnel forwarding fields. They are applied after Headers, bypass
 	// HeaderPolicy and so always win. Upstream retries replace them.
