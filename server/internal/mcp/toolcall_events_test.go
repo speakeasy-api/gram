@@ -19,15 +19,13 @@ import (
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-// hostedToolFixture is a public hosted MCP server with one HTTP tool whose
-// upstream the test controls.
+// hostedToolFixture is a public hosted MCP server with one HTTP tool.
 type hostedToolFixture struct {
 	slug     string
 	serverID uuid.UUID
 	upstream *httptest.Server
 	status   atomic.Int32
-	// contentType is what the upstream answers with; one the gateway cannot
-	// format makes the call fail after the tool ran.
+	// contentType the gateway cannot format fails the call after the tool ran.
 	contentType atomic.Pointer[string]
 }
 
@@ -73,8 +71,6 @@ func (f *hostedToolFixture) call(t *testing.T, ctx context.Context, ti *testInst
 	return isError
 }
 
-// callExpectingFailure makes the call and returns the JSON-RPC error the
-// gateway answered with.
 func (f *hostedToolFixture) callExpectingFailure(t *testing.T, ctx context.Context, ti *testInstance, toolName string) json.RawMessage {
 	t.Helper()
 
@@ -158,8 +154,7 @@ func TestToolsCall_CompletedRecordCarriesAFailureAfterTheToolRan(t *testing.T) {
 
 	ctx, ti := newTestMCPService(t)
 	fixture := seedHostedTool(t, ctx, ti, "list_repos")
-	// The tool answers, but with a body the gateway cannot turn into a
-	// result, so the call fails after the started record went out.
+	// The call fails after the started record went out.
 	fixture.contentType.Store(new("application/x-unknown"))
 
 	fixture.callExpectingFailure(t, ctx, ti, "list_repos")

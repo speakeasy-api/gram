@@ -244,15 +244,8 @@ func (h *LogRelayHandler) recordFailedLogs(ctx context.Context, count int, reaso
 	h.recordsFailed.Add(ctx, int64(count), metric.WithAttributes(attr.Reason(string(reason))))
 }
 
-// withoutGatewayToolCallRecords drops the records the MCP gateway emits for
-// the tool calls it runs. Those calls already reach a customer destination
-// once, through the tool-call log relay off telemetry_logs; relaying the
-// started and completed records here as well would deliver every hosted
-// tool call three times to a project with both exports configured. The
-// exclusion goes away with DNO-1310, when telemetry_logs and its relay
-// retire and the pipeline's records become the one copy. The transform
-// keeps the producer's scope under its own attribute, which is how a
-// gateway record is told apart from a producer's.
+// withoutGatewayToolCallRecords drops gateway tool call records: the tool-call
+// log relay off telemetry_logs already delivers those calls, until DNO-1310.
 func withoutGatewayToolCallRecords(messages []logRelayMessage) ([]logRelayMessage, int) {
 	kept := messages[:0]
 	excluded := 0
@@ -266,8 +259,7 @@ func withoutGatewayToolCallRecords(messages []logRelayMessage) ([]logRelayMessag
 	return kept, excluded
 }
 
-// logOriginalScopeName is the producer's instrumentation scope as the
-// transform preserved it, or "" when the record carries none.
+// logOriginalScopeName is the producer's scope as the transform preserved it.
 func logOriginalScopeName(record *otelv1.LogRecord) string {
 	for _, kv := range record.GetAttributes() {
 		if kv.GetKey() == string(enrich.OriginalInstrumentationScopeNameKey) {

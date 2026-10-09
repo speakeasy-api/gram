@@ -133,9 +133,7 @@ type testInstance struct {
 	// clientCredentials serves self clients from the production minter;
 	// tests replace it to control the upstream credential.
 	clientCredentials *testClientCredentials
-	// toolCallRecords stands in for the inbound log topic the gateway emits
-	// its tool call records to.
-	toolCallRecords *toolCallRecorder
+	toolCallRecords   *toolCallRecorder
 }
 
 // testClientCredentials is the challenge manager's client credential source.
@@ -165,9 +163,7 @@ func (c *testClientCredentials) use(source remotesessions.ClientCredentialSource
 	c.source = source
 }
 
-// toolCallRecorder is the publisher behind the service's tool call logger:
-// it keeps every record the gateway emits so a test can read it back, and
-// can refuse publishes to show that a lost record never fails the call.
+// toolCallRecorder keeps every tool call record the gateway publishes.
 type toolCallRecorder struct {
 	mu      sync.Mutex
 	records []*otelv1.InboundLogRecord
@@ -186,14 +182,12 @@ func (r *toolCallRecorder) Publish(_ context.Context, record *otelv1.InboundLogR
 
 func (*toolCallRecorder) Stop(context.Context) error { return nil }
 
-// all is every record published so far, in order.
 func (r *toolCallRecorder) all() []*otelv1.InboundLogRecord {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.records)
 }
 
-// failWith makes every later publish fail with err.
 func (r *toolCallRecorder) failWith(err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -578,8 +572,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	})
 	tunnelRoutes := route.NewRouteTable()
 	toolCallRecords := &toolCallRecorder{}
-	// The resource names the server the way production does, so the source
-	// the pipeline derives for gateway records is the same here.
+	// Named as in production, so the pipeline derives the same source.
 	toolCallLogs := otelpub.NewLogger(toolCallRecords, resource.NewSchemaless(semconv.ServiceNameKey.String("gram-server")), dialect.GramGatewayLogScope)
 	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, toolCallLogs, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime)
 	require.NoError(t, err)

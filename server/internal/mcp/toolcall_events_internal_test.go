@@ -22,8 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
 )
 
-// toolCallEventsFixture is a toolCallEvents over a publisher that keeps
-// what reached the topic, with a clock the test moves by hand.
+// toolCallEventsFixture records what was published, with a hand-moved clock.
 type toolCallEventsFixture struct {
 	events    *toolCallEvents
 	published *[]*otelv1.InboundLogRecord
@@ -139,7 +138,7 @@ func TestToolCallEventsNeverFailTheCall(t *testing.T) {
 
 	fixture := newToolCallEventsFixture(t, gcp.NewErrPublishResult(errors.New("pubsub unavailable")), toolCallIdentity{callID: "call-3"})
 
-	// The publisher refuses both acks; each loss is a warning, never an error for the call.
+	// Each lost record is a warning, never an error for the call.
 	fixture.events.started(t.Context())
 	fixture.events.completed(t.Context(), http.StatusOK, false, nil)
 	require.Len(t, *fixture.published, 2, "both records were handed to the publisher before it refused them")

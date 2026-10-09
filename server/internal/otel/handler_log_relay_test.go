@@ -537,10 +537,6 @@ func relayRequestLogEventNames(request *collectorlogsv1.ExportLogsServiceRequest
 	return names
 }
 
-// A hosted tool call reaches a customer destination through the tool-call
-// log relay; the two records the gateway emits for it into the pipeline
-// must not go out again through the product log relay, while a producer's
-// record beside them does.
 func TestLogRelayHandlerLeavesGatewayToolCallRecordsToTheToolCallRelay(t *testing.T) {
 	t.Parallel()
 

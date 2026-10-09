@@ -413,9 +413,7 @@ func handleToolsCall(
 
 	callerID, callerEmail := toolCallCaller(ctx, payload, descriptor.OrganizationID, gramEmail)
 
-	// One id names the call on its telemetry_logs row and on the pair of
-	// records that becomes its agent_events rows. The tenant is the tool's
-	// own organization and project, as the telemetry row records them.
+	// One id names the call on its telemetry_logs row and its agent_events rows.
 	events := newToolCallEvents(toolCallLogger, logger, toolCallTenant{
 		organizationID: descriptor.OrganizationID,
 		projectID:      descriptor.ProjectID,
@@ -508,11 +506,8 @@ func handleToolsCall(
 		telemLogger.Log(ctx, params)
 	}()
 
-	// From here the call is running: the started record goes out before
-	// the request is scanned, so a call the scan stops still shows, and the
-	// completed record once the response is built, whatever happened in
-	// between. Each record waits for the Pub/Sub ack, so this is two publishes
-	// on the call's path; a publish that fails never fails the call.
+	// The started record goes out before the scan, so a call the scan stops
+	// still shows. A publish that fails never fails the call.
 	events.started(ctx)
 	defer func() { events.completed(ctx, rw.statusCode, rw.resultIsError, rw.failure) }()
 
@@ -590,8 +585,7 @@ func handleToolsCall(
 			recordToolCallErrorStatus(ctx, rw, failure)
 			return nil, failure
 		}
-		// The result goes to the client untouched, with the upstream's own
-		// isError verdict in it; the call's records follow that verdict.
+		// The call's records follow the upstream's own isError verdict.
 		rw.resultIsError = mcpResultIsError(rw.body.Bytes())
 		bs, err := json.Marshal(result[json.RawMessage]{
 			ID:             req.ID,
@@ -820,14 +814,10 @@ type toolCallResponseWriter struct {
 	statusCode int
 	headers    http.Header
 	body       *bytes.Buffer
-	// failure is the error the gateway answered the client with when the
-	// call failed before or while running, as recorded alongside its
-	// status. Nil when the tool produced the response itself, however it
-	// went.
+	// failure is the error the gateway answered with; nil when the tool
+	// produced the response itself.
 	failure *oops.ShareableError
-	// resultIsError is the upstream's own isError verdict on a passthrough
-	// result the gateway forwards untouched. The client reads that verdict,
-	// so the call's records follow it too.
+	// resultIsError is the upstream's isError on a forwarded result.
 	resultIsError bool
 }
 

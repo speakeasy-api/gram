@@ -173,9 +173,7 @@ type Service struct {
 	billingRepository billing.Repository
 	toolsetCache      cache.TypedCacheObject[mv.ToolsetBaseContents]
 	telemLogger       *tm.Logger
-	// toolCallLogger emits the started and completed records of every tool
-	// call the gateway runs into the OTel pipeline, where they become
-	// agent_events rows.
+	// toolCallLogger emits tool call records into the OTel pipeline.
 	toolCallLogger         *otelpub.Logger
 	vectorToolStore        *rag.ToolsetVectorStore
 	assistantTokens        *assistanttokens.Manager
