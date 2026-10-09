@@ -326,7 +326,7 @@ export function ToolsetAttachedUserSessions({
   return toolset.userSessionIssuerId ? (
     <AttachedUserSessions
       issuerId={toolset.userSessionIssuerId}
-      connectUrl={firstPartyConnectUrl(url, { runtimePath: "mcp" })}
+      connectUrl={firstPartyConnectUrl(url)}
     />
   ) : null;
 }
