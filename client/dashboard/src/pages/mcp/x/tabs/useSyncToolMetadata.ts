@@ -135,7 +135,7 @@ export function useSyncToolMetadata({
   const add = useAddMcpServerToolMetadataBatchMutation({
     onSuccess: refresh,
     onError: async (error) => {
-      if (error instanceof GramError && error.statusCode === 409) {
+      if (isConflict(error)) {
         await refresh();
         return;
       }
@@ -152,10 +152,14 @@ export function useSyncToolMetadata({
     onError: (error) => handleAPIError(error, "Failed to sync tool metadata"),
   });
 
+  // A 409 means the tool already has a stored entry, typically because the
+  // automatic pass recorded it while the row's Record button was showing. The
+  // click wanted exactly that, so reload the list without reporting an error.
   const recordOne = useAddMcpServerToolMetadataBatchMutation({
     onSuccess: refresh,
     onError: async (error) => {
       await refresh();
+      if (isConflict(error)) return;
       handleAPIError(error, "Failed to record tool metadata");
     },
   });
@@ -298,4 +302,8 @@ export function useSyncToolMetadata({
     isSyncing: set.isPending,
     toolActions,
   };
+}
+
+function isConflict(error: unknown): boolean {
+  return error instanceof GramError && error.statusCode === 409;
 }

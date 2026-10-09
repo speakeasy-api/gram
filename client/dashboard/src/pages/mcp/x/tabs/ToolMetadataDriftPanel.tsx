@@ -322,6 +322,8 @@ function RemoveStoredToolDialog({
         <ul className="text-muted-foreground list-disc space-y-1 py-2 pl-5 text-sm">
           <li>
             It wasn&rsquo;t in your listing, but other people may still see it.
+            If someone who can edit this server lists it, it&rsquo;s recorded
+            again with the annotations their listing reports.
           </li>
           <li>
             Annotation rules stop reaching it for everyone: allow rules no
