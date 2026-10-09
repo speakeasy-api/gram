@@ -94,7 +94,12 @@ export function TunnelKeySection({
   // it re-checks both before offering the destructive action.
   const { hasScope, isLoading: rbacLoading } = useRBAC();
   const canWrite =
-    !rbacLoading && hasScope("mcp:write", tunneledMcpServer.projectId);
+    !rbacLoading &&
+    hasScope(
+      "mcp:write",
+      tunneledMcpServer.projectId,
+      tunneledMcpServer.projectId,
+    );
   const lock = useSourceDestinationLock({
     projectId: tunneledMcpServer.projectId,
     environmentLinked: tunneledMcpServer.environmentLinked,
@@ -165,6 +170,7 @@ export function TunnelKeySection({
             <RequireScope
               scope="mcp:write"
               resourceId={tunneledMcpServer.projectId}
+              projectId={tunneledMcpServer.projectId}
               level="component"
             >
               {lock.reason !== null ? (
@@ -204,6 +210,11 @@ export function TunnelKeySection({
                 Running agents using the old key will be disconnected shortly
                 and must be restarted with the replacement key.
               </Alert>
+              {!rbacLoading && !canWrite && (
+                <Alert variant="error" dismissible={false}>
+                  Rotating the key needs mcp:write on this project.
+                </Alert>
+              )}
               {lock.reason !== null && (
                 <Alert variant="error" dismissible={false}>
                   {lock.reason}

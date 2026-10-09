@@ -41,3 +41,15 @@ export function useSourceDestinationLock(source: {
     reason: source.environmentLinked ? SOURCE_DESTINATION_LOCK_REASON : null,
   };
 }
+
+/**
+ * A source query whose refetch failed still holds its last good row, but that
+ * row's environmentLinked can no longer be trusted: drop it so the lock falls
+ * back to unknown. Everything else is kept so forms do not reset.
+ */
+export function withUnconfirmedEnvironmentLink<
+  T extends { environmentLinked?: boolean | undefined },
+>(source: T | undefined, failed: boolean): T | undefined {
+  if (!source || !failed) return source;
+  return { ...source, environmentLinked: undefined };
+}

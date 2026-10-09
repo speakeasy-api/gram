@@ -12,7 +12,10 @@ import {
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GeneralSection } from "./GeneralSection";
-import { SOURCE_DESTINATION_LOCK_REASON } from "./useSourceDestinationLock";
+import {
+  SOURCE_DESTINATION_LOCK_REASON,
+  SOURCE_DESTINATION_UNKNOWN_REASON,
+} from "./useSourceDestinationLock";
 import type { UpstreamUrlDraft } from "./useUpstreamUrlDraft";
 
 const mocks = vi.hoisted(() => ({
@@ -135,12 +138,15 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("GeneralSection with a locked remote URL", () => {
-  it("does not start a combined save that would be refused part way", () => {
+  it.each([
+    ["linked", SOURCE_DESTINATION_LOCK_REASON],
+    ["unconfirmed", SOURCE_DESTINATION_UNKNOWN_REASON],
+  ])("does not start a combined save on a %s source", (_, reason) => {
     mocks.brandingDirty = true;
     mocks.upstream = {
       dirty: true,
       draft: "https://example.com/moved",
-      lockedReason: SOURCE_DESTINATION_LOCK_REASON,
+      lockedReason: reason,
     };
     renderSection();
     fireEvent.change(screen.getByLabelText("Display Name"), {
