@@ -3,17 +3,18 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Text } from "@/components/ui/Text";
 import { Button } from "@/components/ui/Button";
 
-// ConfirmDialog is a small reusable confirmation surface for the org-admin
-// Remote Identity Providers UI. It optionally renders an authoritative impact
-// summary (counts + affected MCP server names) sourced from a server-side
-// pre-flight endpoint so destructive actions are never confirmed against
-// client-composed estimates.
+// ConfirmDialog is the shared confirm-before-acting surface. It stays open and
+// uncloseable while the action runs, can show an inline error the user must
+// read, and optionally renders an authoritative impact summary (counts +
+// affected names) sourced from a server-side pre-flight endpoint so
+// destructive actions are never confirmed against client-composed estimates.
 export function ConfirmDialog({
   open,
   onOpenChange,
   title,
   description,
   confirmLabel,
+  pendingLabel = "Working…",
   onConfirm,
   isPending,
   impact,
@@ -26,6 +27,9 @@ export function ConfirmDialog({
   title: string;
   description: React.ReactNode;
   confirmLabel: string;
+  // Shown on the confirm button while the action runs. Name the action in
+  // progress ("Deleting…") rather than leaving the generic default.
+  pendingLabel?: string;
   onConfirm: () => void;
   isPending?: boolean;
   impact?: {
@@ -40,8 +44,9 @@ export function ConfirmDialog({
   // Rendered inline above the footer, for refusals the operator has to read and
   // act on rather than dismiss. A toast is the wrong surface for those: it
   // vanishes, and the dialog it describes is still open. Callers that only need
-  // "something went wrong" should keep using a toast.
-  error?: string | null;
+  // "something went wrong" should keep using a toast. Accepts a node so the
+  // refusal can carry the link that fixes it.
+  error?: React.ReactNode;
   // Blocks the action outright, for a preflight that predicts a refusal rather
   // than merely describing consequences. The impact summary still renders, so
   // the operator can read what is in the way; there is just nothing useful to
@@ -116,7 +121,7 @@ export function ConfirmDialog({
             onClick={onConfirm}
             disabled={isPending || impact?.isLoading || confirmDisabled}
           >
-            <Button.Text>{isPending ? "Working…" : confirmLabel}</Button.Text>
+            <Button.Text>{isPending ? pendingLabel : confirmLabel}</Button.Text>
           </Button>
         </Dialog.Footer>
       </Dialog.Content>

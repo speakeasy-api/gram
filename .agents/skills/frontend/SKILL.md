@@ -1,435 +1,223 @@
 ---
 name: frontend
-description: Rules and best practices when working on the dashboard React frontend codebase (including the inlined Speakeasy Elements code)
+description: Use when building, designing, redesigning, or reviewing any UI in the dashboard React frontend (client/dashboard, including the inlined Speakeasy Elements code) — a new page, tab, card, table, form, dialog, sheet, empty or error state, settings section, or UI copy — and when addressing design feedback or Gutternote comments on a preview. Triggers: "build a page for", "add UI for", "make this look better", "redesign", "the UX is confusing", "layout shift", "overflow", "add a tab", "dashboard component".
 metadata:
   relevant_files:
     - "client/dashboard/**"
 ---
 
-## React & Frontend Coding Guidelines
+# Dashboard frontend
 
-### Verification Commands
+Good UI does not come from a better first prompt. It comes from running a short loop several times. Most dashboard UI that needs rework failed the same way: it was built from the backend model outward and never judged on screen. Each pattern below came up in several recent PRs and needed follow-up PRs to fix. Code hygiene was rarely the problem.
 
-Use `aube` package scripts for frontend checks. From the repo root, prefer `aube run -F <package> <script>` so commands run against the right frontend package without `cd`. Do not run `npm exec`, `npx`, bare `vitest`, bare `eslint`, bare `oxfmt`, or bare `tsc` unless you are debugging the package script itself.
+## Designing UI (read first)
 
-| Need                | Dashboard                           | Whole workspace                                 |
-| ------------------- | ----------------------------------- | ----------------------------------------------- |
-| Package lint gate   | `aube run -F dashboard lint`        | `aube run lint`                                 |
-| Type-check only     | `aube run -F dashboard type-check`  | `aube run type-check`                           |
-| Tests once          | `aube run -F dashboard test`        | Run the touched package's `aube run test`       |
-| Tests in watch mode | `aube run -F dashboard test:watch`  | Run the touched package's `aube run test:watch` |
-| ESLint only         | `aube run -F dashboard lint:eslint` | Run the touched package's script                |
-| Format check only   | `aube run -F dashboard lint:format` | Run the touched package's script                |
+### Size the loop to the change
 
-For small edits, run the narrowest package script that proves the change. For shared or cross-package frontend changes, run the root `aube run lint` and `aube run type-check` scripts.
+| Change                                                                              | Do                                                  |
+| ----------------------------------------------------------------------------------- | --------------------------------------------------- |
+| One label or string                                                                 | Law 1 check; view it once in the running app        |
+| Bug fix or style fix on an existing surface                                         | Step 4, only for the states you touched             |
+| New card, section, column, dialog, or state; rework of an existing table or section | Steps 1, 2 (repo precedent only), 4, 5              |
+| New page, tab, nav item, or flow; anything that adds a concept to the UI            | All steps; stop after step 3 for the user to choose |
 
-### General Guidelines
+Working with no user to choose? Pick your recommended direction, put the other two in the PR description, and go on. If the request names a new page but the job belongs on an existing one, make the existing page your recommended direction and say why.
 
-- Name the actual state or behavior in identifiers and UI copy, not relative labels such as `legacy` or `modern`. For example, use `agentIdentityIsNotConfigured` for an assistant without an agent identity. Choose the name from the actual condition. Preserve externally contracted values, including metric labels used by queries or alerts, unless the change includes a compatibility plan.
+### The loop
 
-- Use the `aube` package manager
-- When interacting with the server, use the `@gram/client` package (this is an alias to `client/dashboard/src/sdk/src/...`)
-- The document `client/dashboard/src/sdk/REACT_QUERY.md` is very helpful for understanding how to use React Query hooks that come with the SDK.
-- For data fetching and server state, use `@tanstack/react-query` instead of manual `useEffect`/`useState` patterns
-- When invalidating React Query caches after mutations, invalidate ALL relevant query keys — not just the most specific one. Different hooks may use different query key prefixes for the same data (e.g., `queryKeyInstance` vs `toolsets.getBySlug`). Use broad invalidation helpers like `invalidateAllToolset(queryClient)` to ensure all consumers refresh.
+1. **Frame the job.** Before any code, write this in your reply:
 
-### Telemetry & observability data fetching
+   ```
+   Who:       <role> opening this page, and what just happened that sent them here
+   Job:       <one sentence, no table, API, or field names>
+   Flow:      1. … 2. … 3. …   (steps to the goal; fewer is better)
+   Words:     <backend term> → <user word>   (one line per term the UI could leak)
+   Lives on:  <page>, because that is where the user changes it
+   Scope:     what this applies to (org / project / server) and how the user sees and picks it
+   Next:      for each state and each row type, the one thing the user does next
+   ```
 
-Observability surfaces — Tool Logs, insights/analytics, summary cards, counts, and filter dropdowns — are served from **pre-aggregated ClickHouse summary views** behind endpoints like `telemetry.getToolUsageSummary`, `telemetry.listToolUsageTraces`, and `telemetry.query`. **Default to these summary-backed endpoints; they're fast and are the right choice for almost every view.**
+   `principal` → "person or agent", `toolset` → "MCP server", `grain` → drop it. Put information where the user _changes_ it, not where it loosely relates.
 
-Per-log detail is the rare exception. Free-text search over log bodies, arbitrary custom-attribute filters (e.g. `@user.region`), and inspecting an individual log/trace fall back to scanning the raw `telemetry_logs` table, which is slow. Only reach for those when detailed telemetry is genuinely what the user needs — not for default lists, summaries, or filter options.
+2. **Find two precedents.** One page in our app and one outside product that already solve this job. Name the exact detail you will copy — "the Polar sidebar's white active state and track", not "like Polar". Start from the [reference shelf](#reference-shelf). Precedents may predate these rules: copy the pattern, not its violations.
+3. **Show three directions.** ASCII sketches before code or data-model changes. Directions must differ in _structure_ (where it lives, what pattern, what the user does first), not in styling. At least one removes a step, a field, or a tab. Recommend one and say why.
+4. **Build on real data, then critique.** Seed realistic volume and edge cases (`gram-demo-seed` skill): long names, many rows, zero rows, failures. Screenshot each state with `mise run playwright` (`gram-playwright-cli` skill): loading, empty, error, full, longest real value, 400px wide. Then critique — see [How to critique](#how-to-critique). Fix, re-screenshot, repeat until a round finds nothing. Expect several rounds; strong surfaces here took dozens. No browser? Critique the code against the checklist, list the screenshots you would take, and say they are not taken.
+5. **Subtract, then systemise.** Remove at least one thing you built: a repeated heading, an intro that restates the title, a control nobody needs, a column nobody reads. If you built the same pattern twice, make it a component.
+6. **Ship and close the feedback loop.** Open the PR with Gutternote review steps (`pull-request` skill). Reviewers comment on the preview with [Gutternote](#gutternote-feedback); address the comments through its MCP and repeat step 4 on what changed.
 
-When you add a control that triggers the raw-log path (a free-text search box, a custom-attribute filter), tell the user it may be slower — see `SlowSearchNotice` in `LogsTools.tsx`, shown only while such a filter is active — and keep the structured filters (server, user, agent, type, date) on the fast summary path. Don't build a default-on view whose first paint requires a raw-log scan.
+### Three laws
 
-### Component Structure and Reuse
+**1. Speak the user's words, not the schema.** If a label, header, badge, legend, tooltip, or toast names a table, enum, scope, protocol field, slug, or ID, rewrite it.
 
-**The core rule: every UI pattern that appears in more than two places must be centralized so it can be changed in a single location.**
+| Wrote                                 | Ship                                        |
+| ------------------------------------- | ------------------------------------------- |
+| `principal`                           | person / agent                              |
+| `tool:connect, selector=*`            | Can connect to all tools                    |
+| Re-publish                            | Sync                                        |
+| `organization:enterprise_trial_armed` | Enterprise trial started                    |
+| Token Endpoint Authentication Methods | (behind "Technical details")                |
+| `{"name":"not_found", …}`             | Server not found. It may have been removed. |
 
-#### Check `components/` before writing anything
+**2. Design the outcome; records are how you get there.** Shape the page around the user's decision, not the API's records. Count the steps to the goal; every row should lead to a next action.
 
-Before writing any JSX for a UI element, check `client/dashboard/src/components/` for an existing component. This includes layout wrappers, table headers, empty states, filter pill groups, search inputs, badges, cards — anything. Reuse what exists. Never create a one-off `<div className="...">` when a named component already exists for that purpose.
+| Record-shaped                                  | Outcome-shaped                                         |
+| ---------------------------------------------- | ------------------------------------------------------ |
+| Policy form with block / flag options          | One toggle that creates or deletes the policy          |
+| Add servers to a plugin, then press Re-publish | Servers distribute automatically                       |
+| Audit log of access denials                    | A Grant button on each row                             |
+| Save, then find out it's broken                | Save stays locked until the connection is verified     |
+| Three API records → three panels               | One panel, because the admin thinks of it as one thing |
+| One row per grant, so roles repeat             | One row per role                                       |
+| Widgets get their own tab next to Dashboards   | Widgets are a step inside building a dashboard         |
 
-If no component exists and you expect the pattern to appear in more than a few places across the app, **create one** in `client/dashboard/src/components/` before using it. Name it for what it _is_, not where it happens to appear first (e.g., `PageTabsTrigger`, not `SourceDetailTabTrigger`).
+A primary feature gets a sidebar item, not a sub-tab of another page.
 
-#### No duplicated className strings
+**3. Reuse what we have; borrow what we don't.** Use the [reference shelf](#reference-shelf) and [Building a page](#building-a-page). A fourth drawer slightly different from the other three is a defect, as are a page-level `.css` file, a custom breakpoint, a hand-rolled card, or a bespoke heading. For anything we lack, copy a named detail from a named product.
 
-If the same Tailwind className string (or any meaningful substring of one) appears on 3+ elements anywhere in the codebase, extract it to:
+### Choosing a pattern
 
-- A component's built-in styling
-- A `cva` variant
-- A named `const` used in `cn()`
+Pick the container by what the user is doing, then use the one component we have for it.
 
-The symptom to watch for: copy-pasting a `className` prop. That is always wrong.
+| The user is…                                   | Use                                                                                                                                                                                                                                                                  | Not                                                          |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Browsing or comparing many of a thing          | List page (`ResourceListPage`) with `Page.Toolbar` + `Table`                                                                                                                                                                                                         | Cards, when there are more than ~8                           |
+| Looking at a few rich things                   | Card grid                                                                                                                                                                                                                                                            | A table with one wide column                                 |
+| Understanding or configuring one thing         | Detail page (`DetailPage`), sections in order of use                                                                                                                                                                                                                 | A tab per API sub-resource                                   |
+| Doing a short task without losing their place  | `Sheet` (side panel)                                                                                                                                                                                                                                                 | A new page or a nested dialog                                |
+| Confirming or making one decision              | `ConfirmDialog` / `Dialog`                                                                                                                                                                                                                                           | A sheet, an alert, `window.confirm`                          |
+| Following a multi-step setup                   | `WizardPage`, steps in user words                                                                                                                                                                                                                                    | One long form                                                |
+| Editing one field in place                     | Inline edit                                                                                                                                                                                                                                                          | A dialog for one field                                       |
+| Changing settings in a panel                   | One save model per panel: everything applies at once (simple, reversible toggles), or everything waits for Save (anything that changes production behavior — then a checkbox or "Enable" field inside the form, not a switch). Warn before discarding unsaved edits. | A switch that saves at once beside fields that wait for Save |
+| Needing rare or technical detail               | `Collapsible` "Technical details" / "Advanced", closed                                                                                                                                                                                                               | Showing it by default                                        |
+| Seeing a short hint                            | Tooltip — never the only place a next step lives                                                                                                                                                                                                                     | A paragraph above the control                                |
+| Being told something happened                  | Toast for done/failed; inline `Alert` for what they must act on                                                                                                                                                                                                      | A toast for an error they must fix                           |
+| Switching between different things on one page | Page tabs (`TabbedPage`) — only for genuinely different jobs                                                                                                                                                                                                         | Tabs that split one job into pieces                          |
+| Deleting                                       | `DangerSettingsSection` at the end of the detail page + `ConfirmDialog`                                                                                                                                                                                              | A one-click overflow-menu item                               |
 
-#### No duplicated JSX blocks
+### Visual hierarchy
 
-If you find yourself copy-pasting a JSX structure — even with minor variations — stop and extract a parameterized component. Three near-identical blocks is the threshold.
+The eye should land on the answer first. In each block:
 
-#### No IIFEs in JSX
+- **One primary action per view.** One solid button; everything else is secondary or tertiary. Two solid buttons means you have not decided what the page is for.
+- **Weight follows importance.** The state or number the user came for is the biggest thing. Labels are `text-eyebrow`; metadata is muted. If everything is bold, nothing is.
+- **Scan order.** Identity on the left, status and actions on the right. The answer sits top-left; diagnostics and history sit below the primary task.
+- **Group by space, not boxes.** Related items share a tight gap; groups are separated by a larger gap or a hairline. Never a card inside a card.
+- **Color means something.** Status uses colored text, a dot, or a badge on a neutral surface. Nothing is colored for decoration.
+- **Quiet when healthy.** The normal state shows no badge, no warning, no "No issues" filler. Only exceptions draw the eye.
+- **Room to breathe.** Generous padding, consistent gaps, one main thing per block. Pixels are free; do not cram to fit above the fold.
+- **Same thing, same look.** A status, an empty state, a filter bar looks identical on every page. If yours differs, you are wrong or the shared one needs changing — change it in one place.
 
-Never use immediately-invoked function expressions inside JSX (`{(() => { ... })()} `). Extract to a named sub-component or a variable above the return statement.
+### Reference shelf
 
-#### No multi-line or nested ternaries
+| Need                  | In our app                        | Outside — copy this exact detail                |
+| --------------------- | --------------------------------- | ----------------------------------------------- |
+| Search/filter a list  | `Page.Toolbar` (`page-toolbar`)   | Vercel log explorer: filters as chips, one row  |
+| Do a task in a panel  | `Sheet`                           | Granola: assistant docked beside the work       |
+| Show numbers          | `StatRow` / `MetricCard`          | Stripe: one number, one delta, one label        |
+| Nothing yet           | `InlineEmptyState` / `EmptyState` | Linear: empty state names the first action      |
+| Confirm               | `ConfirmDialog`                   | GitHub: type-to-confirm only for irreversible   |
+| Roles and access      | Team Access page                  | GitHub: roles as named bundles, not scope lists |
+| Build a rule or query | —                                 | PostHog rule builder; Datadog one-row query bar |
+| Navigation            | App sidebar                       | Polar: white active state and track             |
 
-A ternary that wraps onto multiple lines, or chains a second `?:` inside a branch, is unreadable. Reach for one of these instead:
+### How to critique
 
-- A `switch` statement when mapping a discriminator (e.g. a `kind` / `type` string) to one of several values.
-- A small **named helper function**, hoisted to module scope when the mapping is pure (e.g. converting a frontend enum to a backend constant). The helper labels the intent at the call site and the JSX stays flat.
-- An object lookup when the keys are statically known and the values are simple constants.
+Critique is where taste comes from; do not skip it or do it in your head.
 
-```tsx
-// ❌ wrong — nested multi-line ternary
-attachmentType={
-  sourceKind === "function"
-    ? "functions"
-    : sourceKind === "externalmcp" || sourceKind === "remotemcp"
-      ? "external_mcp"
-      : "openapi"
-}
+1. Open each screenshot with the Read tool and look at it. Do not critique from the code.
+2. Better: hand the screenshots to a fresh subagent with no knowledge of how you built it, with this prompt:
 
-// ✅ right — hoisted helper with a switch
-function attachmentTypeForSourceKind(sourceKind: string | undefined): string {
-  switch (sourceKind) {
-    case "function":
-      return "functions";
-    case "externalmcp":
-    case "remotemcp":
-      return "external_mcp";
-    default:
-      return "openapi";
-  }
-}
+   ```
+   Critique these screenshots of <page> like a picky design lead. The user's job is: <job>.
+   Look for: internal jargon; CRUD where one action would do; technical detail before state;
+   layout shift between states; overflow from long values; dead-end badges or errors;
+   repeated information; unrelated things on one page; cramped spacing; competing primary
+   actions; anything that looks different from the rest of the app.
+   Return one line per issue: <element> → <exact fix>. Most important first.
+   ```
 
-attachmentType={attachmentTypeForSourceKind(sourceKind)}
+3. Check the result against the [critique checklist](#critique-checklist). Fix, re-screenshot, and run it again with a new subagent.
+
+### Critique checklist
+
+Each line is a sign the feature still describes the backend, not the outcome. Implementation for each lives in `references/ui-states.md`.
+
+**Words**
+
+- [ ] No table, enum, scope, protocol field, slug, or ID in primary UI. Technical detail sits behind "Technical details".
+- [ ] The header says what the user gets ("See what your team's agents do"), not how it works ("Configure PreToolUse hook ingestion endpoints").
+- [ ] Errors say what happened in plain words and what to do next. Server text is never the main message.
+- [ ] No ID or ID fragment in visible text — not `agt_01J9…`, not "Person 3f9a12bc", not "Unnamed agent 9f3a2c". Show the name; when there is none, a plain noun ("Unnamed agent", "Former member") with the ID in a tooltip or copy button, and report missing names as a backend gap. Dates read "14 Aug" or "2h ago".
+- [ ] Each idea is explained once, next to where it applies. No intro that repeats the heading below it.
+- [ ] Sentence case for titles, labels, buttons, and alert titles.
+- [ ] Logic the user must know is spelled out (do these conditions combine with AND or OR?).
+- [ ] Every count, chart, and history names its time window ("in the last 7 days"), and one surface uses one window. "42 refused" alone means nothing.
+- [ ] One word per concept everywhere — tab, heading, button, toast ("cap" or "budget", not both).
+
+**Outcome**
+
+- [ ] I can say the user's job in one sentence without naming a table.
+- [ ] The primary task is first on the page; diagnostics and history come after it.
+- [ ] Every card reads: state → what it means → next action → details.
+- [ ] Every warning, error, and blocked state names the next step as a button or link — or the person to ask. Not prose; not only a tooltip.
+- [ ] Empty state leads with the outcome and one first action, not "No records" + Create.
+- [ ] No control that does nothing. Rare settings sit under "Advanced".
+- [ ] One page, one topic. Unrelated concepts (keys, branding, billing, sync) live on their own pages.
+- [ ] The main outcome takes the fewest possible steps.
+- [ ] Every table row leads somewhere — for every role that can see it, not only admins: the name links to its detail or activity, or the row has an action that fixes what it shows. Use one action label for every row. A log the user can only read is a dead end.
+- [ ] Evidence comes before a destructive action: show what will be affected, then the button that breaks it.
+- [ ] State-changing actions (publish, deprecate, pause) sit where the state is shown, not only in a Settings tab.
+- [ ] Settings show who last changed them and when ("Changed by Priya Raman · 3 Oct").
+- [ ] One detail surface per object. Extending an existing page beats adding a sheet or page that duplicates it.
+- [ ] Permissions are handled the same way everywhere for an action: hide write controls the user cannot use, and say once, at the section, who can change it ("Only org admins can change this").
+- [ ] A setting that needs a number shows the data to choose it next to the input ("Busiest caller peaked at 6 calls a second this week").
+- [ ] Important state shows where users already look — the list row or overview — not only on the settings tab that changes it.
+
+**Look**
+
+- [ ] One primary action per view, in the same slot in every state ("Set cap" ↔ "Edit cap"); the eye lands on the answer first.
+- [ ] One fact, one place — no number shown twice in a tile and a caption.
+- [ ] When you extend an existing page, subtract too: a table carries only the columns its decision needs.
+- [ ] Color is never the only signal; a dot or tint also has text or a label.
+- [ ] Nothing jumps between loading, empty, filtered, and loaded. Every region holds its loaded height from first paint: toolbars and child sections render while the page loads, and empty states are the same height as their skeleton.
+- [ ] The longest real value fits: truncated with the full value on hover, badges wrap, nothing spills out of its card.
+- [ ] Columns sized to content: the name takes the free space, numbers right-aligned, no ID nobody reads.
+- [ ] Controls stay compact: at most three pinned filters; a query builder does not push results below the fold.
+- [ ] Room to breathe; no card inside a card (options inside a section are plain radio rows, not bordered radio cards); healthy states are quiet.
+- [ ] Every pattern matches the rest of the app (status, empty state, filter bar, dialog, heading).
+
+**Ship**
+
+- [ ] Every tab, route, and empty/error branch was clicked in the running app.
+- [ ] I compared three directions and two references, and removed at least one thing I first built.
+- [ ] Screenshots of each affected state are on the PR, and the PR has Gutternote review steps.
+
+### Gutternote feedback
+
+Preview apps for UI PRs load the [Gutternote](https://gutternote.com) widget, so reviewers comment directly on the page. Install its MCP once so your coding agent can read those comments and address them.
+
+Claude Code:
+
+```bash
+claude plugin marketplace add gutternote/gutternote-plugins
+claude plugin install gutternote@gutternote-plugins
 ```
 
-Single-line, single-branch ternaries (`isOpen ? "x" : "y"`) are fine.
+Then run `/mcp`, choose `gutternote`, and approve the connection in your browser.
 
-#### Keep components focused
+Codex:
 
-A component that has grown past ~150 lines of JSX is doing too much. Break it up. If a page has multiple tabs, each tab's content is its own component.
-
-#### Page headers and subtext are a common duplication trap
-
-Many pages render the same `<h1>` + `<p>` header block in 2–3 conditional render paths (loading skeleton, empty state, populated state). Examples observed: `InsightsTools.tsx`, `LogsTools.tsx`, `LogsAgents.tsx`, `SecurityOverview.tsx`, `PolicyCenter.tsx`. Symptoms: a copy change touches the same string in 3 places; `Edit` with `replace_all` fails because indentation differs between the duplicates.
-
-When adding or editing page headers, lift the title and subtitle into a small `<PageHeader title="…" subtitle="…" />` (or pass them as props to a shared shell), not into each render branch. When editing existing duplicated copy, target a unique trailing fragment of the string (e.g. `"in chat messages."`) so a single `replace_all` covers every copy regardless of indentation — and file a follow-up to extract a shared header.
-
-#### Shared empty states: props with defaults, not forks
-
-When the same empty-state component is reused across pages but needs different copy per caller (e.g. `HooksEmptyState` rendered from both `/insights/tools` and `/logs/tools`), add optional `title` / `subtitle` props with sensible defaults rather than forking the component:
-
-```tsx
-export function HooksEmptyState({
-  title = "No logs captured",
-  subtitle = "Install Observability plugin in your AI agent to start capturing tool execution logs",
-}: { title?: string; subtitle?: string } = {}) {
-  /* … */
-}
+```bash
+codex plugin marketplace add gutternote/gutternote-plugins
+codex plugin add gutternote@gutternote-plugins
+codex mcp login gutternote
 ```
 
-Backwards-compatible callers stay `<HooksEmptyState />`; only the variant caller passes overrides. Avoids divergent copies of the surrounding scaffolding (provider cards, setup dialogs, etc.).
+When Gutternote comments arrive on your PR's preview: fetch them with the MCP, fix each one, re-run step 4 on the affected screens, push, and reply on the comment with what changed. If the MCP is not installed, tell the user and give them the commands above rather than skipping the feedback.
 
-### Tables
+## Building a page
 
-Use the design system `Table` from `@/components/ui/Table` for dashboard tables. Do **not** add new shadcn table wrappers or hand-roll table styling with raw `<table>` markup when `Table` can express the UI. If you find a lingering legacy table pattern, migrate it when touched.
-
-```tsx
-import { Column, Table } from "@/components/ui/Table";
-```
-
-For normal data tables, prefer the declarative `columns` / `data` / `rowKey` API. Define `Column<T>[]` near the component so render functions stay typed, use `render` for rich cells, and use `width` for stable layouts instead of ad hoc cell class widths.
-
-```tsx
-const columns: Column<Role>[] = [
-  {
-    key: "name",
-    header: "Name",
-    width: "180px",
-    render: (role) => <Type className="font-medium">{role.name}</Type>,
-  },
-  {
-    key: "members",
-    header: "Members",
-    width: "100px",
-    render: (role) => <Type>{role.memberCount}</Type>,
-  },
-];
-
-<Table columns={columns} data={roles} rowKey={(row) => row.id} />;
-```
-
-For empty and loading states, use the Table's built-in empty surface and the shared `SkeletonTable` from `@/components/ui/skeleton`. Do not rebuild a one-off empty `<tbody>` or skeleton table.
-
-```tsx
-<Table
-  columns={columns}
-  data={filteredKeys}
-  rowKey={(row) => row.id}
-  className="max-h-[500px] overflow-y-auto"
-  noResultsMessage={<Type>No matching API keys</Type>}
-/>
-```
-
-Search and filter controls are siblings above the table. On pages, wrap them in `Page.Toolbar` (see the `page-toolbar` skill); the bare `Stack` form below is for non-page surfaces like dialogs and sheets. Keep filter state outside the table, derive filtered rows with `useMemo`, and pass the result to `data`. Use existing controls such as `SearchBar`, `MultiSelect`, `Select`, or page-specific filter pills; do not put form controls inside `Table.Header` unless they are truly column headers. If the table is paginated, reset the page index when filters change.
-
-```tsx
-const [search, setSearch] = useState("");
-const [selectedTags, setSelectedTags] = useState<string[]>([]);
-
-const filteredRows = useMemo(() => {
-  const normalizedSearch = search.trim().toLowerCase();
-
-  return rows.filter((row) => {
-    const matchesSearch =
-      normalizedSearch.length === 0 ||
-      row.name.toLowerCase().includes(normalizedSearch);
-    const matchesTags =
-      selectedTags.length === 0 ||
-      row.tags.some((tag) => selectedTags.includes(tag));
-
-    return matchesSearch && matchesTags;
-  });
-}, [rows, search, selectedTags]);
-
-<Stack direction="horizontal" gap={2} className="mb-4 h-fit">
-  <SearchBar
-    value={search}
-    onChange={(value) => {
-      setSearch(value);
-      setPage(0);
-    }}
-    placeholder="Search tools"
-    className="w-64"
-  />
-  <MultiSelect
-    options={tagOptions}
-    defaultValue={selectedTags}
-    onValueChange={(value) => {
-      setSelectedTags(value);
-      setPage(0);
-    }}
-    placeholder="Filter by tag"
-    autoSize
-  />
-</Stack>
-
-<Table
-  columns={columns}
-  data={filteredRows}
-  rowKey={(row) => row.id}
-  noResultsMessage={<Type>No matching tools</Type>}
-/>;
-```
-
-Footers that summarize, paginate, or load more rows should usually be sibling bars immediately below the table. The table API does not require a special footer component for this; keep the table declarative and put pagination/load-more controls after it.
-
-```tsx
-<Table columns={columns} data={visibleRows} rowKey={(row) => row.id} />;
-
-{
-  totalPages > 1 && (
-    <div className="flex items-center justify-between border-t px-4 py-3">
-      <Type className="text-muted-foreground text-sm">
-        {pageStart}-{pageEnd} of {filteredRows.length}
-      </Type>
-      <div className="flex items-center gap-1">
-        <Button
-          variant="tertiary"
-          size="sm"
-          onClick={() => setPage((page) => page - 1)}
-          disabled={page === 0}
-        >
-          Previous
-        </Button>
-        <Button
-          variant="tertiary"
-          size="sm"
-          onClick={() => setPage((page) => page + 1)}
-          disabled={page >= totalPages - 1}
-        >
-          Next
-        </Button>
-      </div>
-    </div>
-  );
-}
-```
-
-Use the compound API only when the body needs custom structure that the declarative API cannot express, such as mixed rows, a full-width CTA row, or a custom no-results branch. Keep the design system wrapper, header, row, and cell components as the default primitives.
-
-```tsx
-<Table columns={columns}>
-  <Table.Header columns={columns} />
-  {items.length === 0 ? (
-    <Table.NoResultsMessage>No results found.</Table.NoResultsMessage>
-  ) : (
-    <Table.Body>
-      {items.map((item) => (
-        <Table.Row key={item.id} row={item} columns={columns} />
-      ))}
-    </Table.Body>
-  )}
-  <Table.Row>
-    <div className="border-border bg-muted/20 col-span-full border-t py-5 text-center">
-      <Type className="text-muted-foreground text-sm">
-        Want to grant new members access?
-      </Type>
-      <Button variant="tertiary" size="sm" className="mt-2">
-        Configure Roles
-      </Button>
-    </div>
-  </Table.Row>
-</Table>
-```
-
-Use grouped or expandable rows through the table props instead of nesting unrelated cards or custom accordions around a table. Current patterns use `hideHeader` for grouped parent rows and `renderExpandedContent` for nested details.
-
-```tsx
-<Table
-  columns={groupColumns}
-  data={groups}
-  rowKey={(row) => row.key}
-  hideHeader
-  renderExpandedContent={(group) => (
-    <Table
-      columns={childColumns}
-      data={group.items}
-      rowKey={(row) => row.id}
-      hideHeader
-    />
-  )}
-/>
-```
-
-Raw `<tr>` / `<td>` should be rare and stay inside a `<Table.Body>` only when native table semantics are needed and `Table` does not expose them, such as a `colSpan` overflow row. If the row is a normal data row, use `<Table.Row row={row} columns={columns} />` or the declarative `data` prop.
-
-### React Performance Patterns
-
-These patterns were established in the audit log (#2140) and deployment log (#2167) redesigns. Apply them whenever building search, filtering, or keyboard navigation.
-
-#### Hoist RegExp creation
-
-Never create `new RegExp()` inside a render callback (e.g., `highlightMatch`). Extract it to a `useMemo` keyed on the search query:
-
-```typescript
-const searchRegex = useMemo(() => {
-  if (!searchQuery) return null;
-  const escaped = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(${escaped})`, "gi");
-}, [searchQuery]);
-```
-
-Then use `searchRegex` inside `useCallback`-wrapped functions.
-
-#### Defer expensive search computations
-
-Wrap search queries with `useDeferredValue` before passing them to expensive `useMemo` computations (e.g., filtering all logs). This keeps the input responsive while React defers the downstream recomputation:
-
-```typescript
-const deferredSearchQuery = useDeferredValue(searchQuery);
-const filteredIndices = useMemo(() => { /* expensive filter */ }, [deferredSearchQuery, ...]);
-```
-
-#### Derive state during render, not via useEffect
-
-If a value can be computed from current state, derive it inline — don't sync it via `useEffect`. This prevents a flash of stale values between renders:
-
-```typescript
-// DO: derive during render
-const effectiveSearchIndex =
-  searchMatchIndices.length > 0
-    ? Math.min(currentSearchIndex, searchMatchIndices.length - 1)
-    : 0;
-
-// DON'T: clamp via useEffect (causes stale render flash)
-useEffect(() => {
-  if (currentSearchIndex >= searchMatchIndices.length) setCurrentSearchIndex(0);
-}, [searchMatchIndices.length]);
-```
-
-#### Reset navigation state on data changes
-
-When a component has keyboard navigation (j/k/g/G) with a `currentIndex` state, reset it when the underlying data changes (filters, pagination, data refresh):
-
-```typescript
-useEffect(() => {
-  setCurrentLogIndex(null);
-}, [logs]); // or parsedLogs, depending on the component
-```
-
-### Tooltip Usage
-
-`App.tsx` wraps the entire app in a global `TooltipProvider`. **Never add another `TooltipProvider` inside a component** — doing so creates a redundant Radix context per instance and contributes to `ResizeObserver loop completed with undelivered notifications` errors in the browser.
-
-Use `<Tooltip>`, `<TooltipTrigger>`, and `<TooltipContent>` directly — they inherit the global provider automatically. For simple cases use the existing `<SimpleTooltip tooltip="...">` wrapper from `@/components/ui/tooltip`.
-
-```tsx
-// ✅ correct
-<Tooltip>
-  <TooltipTrigger asChild>{button}</TooltipTrigger>
-  <TooltipContent>Hello</TooltipContent>
-</Tooltip>
-
-// ❌ wrong — TooltipProvider already exists at the app root
-<TooltipProvider>
-  <Tooltip>
-    <TooltipTrigger asChild>{button}</TooltipTrigger>
-    <TooltipContent>Hello</TooltipContent>
-  </Tooltip>
-</TooltipProvider>
-```
-
-### Navigation and Links
-
-Use the right primitive for the link type — mixing them causes full-page reloads, broken multi-tenancy, or missing security headers.
-
-**Internal navigation (any URL inside the dashboard):** Use the route helpers from `client/dashboard/src/routes.tsx`. Top-level routes _and_ subpages expose `.Link`, `.href()`, and `.goTo()`:
-
-```tsx
-// Wrap a child node with .Link
-<routes.sources.Link>
-  <Button>Connect a Source</Button>
-</routes.sources.Link>
-
-// Subpages get .Link too — use it instead of building strings
-<routes.insights.tools.Link>
-  <Button>Track AI usage</Button>
-</routes.insights.tools.Link>
-
-// Plain react-router Link with .href() when you need a className or are inside <p>
-<Link to={routes.plugins.href()} className="underline underline-offset-2">
-  Observability plugin
-</Link>
-```
-
-Never hardcode org/project slugs in an `href` (e.g. `https://app.getgram.ai/speakeasy-team/projects/default/plugins`). The route helpers resolve the current `:orgSlug` / `:projectSlug` from the URL, so the same call works for every tenant.
-
-**External links (anywhere outside the dashboard):** Use a plain `<a>` with `target="_blank"` and `rel="noopener noreferrer"`. This matches the existing pattern (`AddServerDialog.tsx:1162`, `CatalogDetail.tsx:229`) and the security attributes are mandatory — `noopener` blocks `window.opener` access; `noreferrer` strips the Referer header.
-
-```tsx
-<a
-  href="https://www.speakeasy.com/product/mcp-gateway/catalog"
-  target="_blank"
-  rel="noopener noreferrer"
-  className="underline underline-offset-2 hover:text-foreground"
->
-  MCP Registry
-</a>
-```
-
-The `@/components/ui/link` wrapper sets `target="_blank"` when `external` is true but also injects an icon — fine for nav rows, too heavy for inline links inside subtext. Reach for the plain `<a>` for inline external links.
-
-### Editing copy
-
-- **Always use American (US) English spelling in user-visible copy.** Every string the user reads — labels, headings, buttons, tooltips, placeholders, empty states, toasts, error messages — uses American spelling, per the Speakeasy brand style guide. Highest-frequency cases: `color` not `colour`, `canceled`/`canceling` not `cancelled`/`cancelling`, `behavior` not `behaviour`, `license` (noun and verb) not `licence`, `catalog` not `catalogue`, `gray` not `grey`, `center` not `centre`, `analyze` not `analyse`, and `-ize`/`-ization` endings (`organize`, `customize`, `authorization`, `synchronization`) not `-ise`/`-isation`. This applies only to what the user reads — leave code identifiers, API field names, and third-party tokens alone even when they use British spelling (e.g. an upstream `colour` field stays `colour`; only the visible label is Americanized).
-- **Preserve dynamic tokens.** Page subtext often interpolates state like `{rangeLabel}`, `{periodUsage.credits}`, or `{projectName}`. When rewording copy that contains a token, keep the token in place — replace it with the literal current value (e.g. "the last 30 days") only when the data fetch itself is locked to that value. Otherwise the copy starts lying as soon as the user changes a filter.
-- **Don't fight the Tailwind class sorter.** Prettier's `prettier-plugin-tailwindcss` reorders classes on save. Write classes in any order; the formatter will normalize them and the diff stays clean across the codebase.
-- **AI context strings shadow user-visible names.** When renaming a chart or card (e.g. "Most Used LLM Clients" → "Most Used Agents"), search for the old name in nearby `contextInfo=` / `suggestions=` props passed to `ExploreWithAI` / `InsightsConfig`. Those strings are sent to the LLM as analytical context; if they drift from the visible label, the AI assistant talks about a card the user can't see.
-
-### Building a new page (required pattern)
-
-**First choice: a page template.** Do not hand-roll the `Page` frame. Pick the template that matches the page's shape from `@/components/page-templates` and fill in data — it owns the frame, breadcrumbs, scope gate, the single header, and the loading/empty/error branches (which is what stops the "three-branch header" duplication). Full recipes: `client/dashboard/src/components/page-templates/README.md`.
+**First choice: a page template.** Do not hand-roll the `Page` frame. Pick the template that matches the page's shape from `@/components/page-templates` and fill in data — it owns the frame, breadcrumbs, scope gate, the single header, and the loading/empty branches (which is what stops the "three-branch header" duplication). Full recipes: `client/dashboard/src/components/page-templates/README.md`.
 
 | Page shape                                                                 | Template                       |
 | -------------------------------------------------------------------------- | ------------------------------ |
@@ -459,8 +247,8 @@ export default function Environments(): JSX.Element {
 }
 
 function EnvironmentsInner(): JSX.Element {
-  const q = useEnvironments(); // runs only after the page gate above passes
-  const rows = q.data ?? [];
+  const q = useListEnvironments(); // SDK query hook; runs only after the page gate passes
+  const rows = q.data?.environments ?? [];
   // Write affordances get their OWN component-level gate — the page scope is
   // read, so an any-of page scope must never be what hides a write button.
   const newButton = (
@@ -474,14 +262,22 @@ function EnvironmentsInner(): JSX.Element {
       description="One-line purpose."
       primaryAction={rows.length > 0 ? newButton : undefined}
       isLoading={q.isPending}
-      isEmpty={rows.length === 0}
+      isEmpty={!q.isError && rows.length === 0} // unfiltered rows: isEmpty hides the toolbar
       empty={{
         icon: "blocks",
         heading: "No environments yet",
         action: newButton,
       }}
     >
-      <Table columns={columns} data={rows} rowKey={(r) => r.id} />
+      {q.isError ? (
+        <InlineEmptyState
+          icon="triangle-alert"
+          heading="Couldn't load environments"
+          action={<Button onClick={() => q.refetch()}>Retry</Button>}
+        />
+      ) : (
+        <Table columns={columns} data={rows} rowKey={(r) => r.id} />
+      )}
     </ResourceListPage>
   );
 }
@@ -539,12 +335,14 @@ Checklist for the content below the title:
 - List/filter controls → `Page.Toolbar` (see the `page-toolbar` skill), mono uppercase segments for mode switches.
 - Empty states → **`InlineEmptyState`** from `@/components/inline-empty-state` (`icon`/`graphic` + `heading` + `description` + `action`, `orientation="horizontal"` variant) for empty regions inside a page; `EmptyState` from `@/components/page-layout` for full-page voids. **Never hand-roll** the `border-dashed` + `rounded-full` icon-blob block — `InlineEmptyState` is the square-hairline-tile idiom and the templates' `empty` prop routes through it.
 - Chart/summary panels → `ChartCard` from `@/components/chart/ChartCard` (titled panel with loading/error states); the detail-column width wrapper is `DetailBody` from `@/components/detail-body` (never re-type `max-w-[1270px] px-8 py-8`).
+- Delete and other destructive actions → a `DangerSettingsSection` at the end of the detail page (its destructive tint is the one allowed wash), gated by the write scope; never a one-click overflow-menu item. On success, invalidate the list query and go to the list route.
+- Confirm-before-acting → `ConfirmDialog` from `@/components/ui/ConfirmDialog`. It locks itself while `isPending` (pass `pendingLabel`, e.g. "Deleting…", to name the action in progress), shows an inline `error` the user must read, and can show a pre-flight `impact` list. Never hand-roll a confirm from raw `Dialog` parts. Show a specific refusal inline in its `error` (a node, so it can link to the fix) by branching on `error instanceof GramError && error.statusCode === 409` (`@gram/client/models/errors/gramerror.js`); toast everything else with `handleError`.
 - Loading → content-shaped skeletons (`SkeletonTable`, geometry-matched rows), never a lone spinner or a premature empty state.
 - Cards white (`bg-card`), page gutter gray, hairline borders, no shadows/gradients/washes, square corners — per the styling rules below.
 
 A page that renders its own `<h1>` instead of this pattern is a defect; if a custom header is unavoidable, it must still render `<PageEyebrow />` + `text-display-sm font-thin`.
 
-### Design-system inventory (consolidated — don't import the removed ones)
+## Design-system inventory (consolidated — don't import the removed ones)
 
 The primitive shelf was consolidated; these imports are gone or moved. Reaching for a removed one is a defect:
 
@@ -555,7 +353,7 @@ The primitive shelf was consolidated; these imports are gone or moved. Reaching 
 - **`Modal` / `IconButton`** — removed. Use `Dialog` for modals; `Button` with the `icon` prop for icon-only buttons.
 - **Detail-page shared bones** live in `@/components/detail/`: `SettingsSection`/`DangerSettingsSection` (`settings-section`, also re-exported from the `page-templates` barrel) and `DetailSidebarNav`/`DetailSidebarInfoLabel` (`detail-sidebar-nav`) — not under `pages/mcp/...` and not `Mcp`-prefixed.
 
-### Styling and Design System
+## Styling and Design System
 
 The dashboard follows an editorial, print-like design language. The load-bearing rules:
 
@@ -573,133 +371,49 @@ The dashboard follows an editorial, print-like design language. The load-bearing
 - `@tailwindcss/typography` must remain in `devDependencies` — the dashboard uses `prose` and `not-prose` classes directly (e.g. `CatalogDetail.tsx`, `tool.tsx`) which are provided by this plugin.
 - Tailwind v4's Vite plugin registers classes from NEW files only at server start — restart the dev server / Storybook after adding a file with arbitrary classes, or they silently emit nothing.
 
-### Release Stage Badges (Preview / Beta)
+## Editing copy
 
-Pre-GA features get a `Preview` or `Beta` badge wherever the user would otherwise mistake the feature for being GA. The same `ReleaseStageBadge` component renders on every surface, so labels never drift.
+- **Always use American (US) English spelling in user-visible copy.** Every string the user reads — labels, headings, buttons, tooltips, placeholders, empty states, toasts, error messages — uses American spelling, per the Speakeasy brand style guide. Highest-frequency cases: `color` not `colour`, `canceled`/`canceling` not `cancelled`/`cancelling`, `behavior` not `behaviour`, `license` (noun and verb) not `licence`, `catalog` not `catalogue`, `gray` not `grey`, `center` not `centre`, `analyze` not `analyse`, and `-ize`/`-ization` endings (`organize`, `customize`, `authorization`, `synchronization`) not `-ise`/`-isation`. This applies only to what the user reads — leave code identifiers, API field names, and third-party tokens alone even when they use British spelling (e.g. an upstream `colour` field stays `colour`; only the visible label is Americanized).
+- **Preserve dynamic tokens.** Page subtext often interpolates state like `{rangeLabel}`, `{periodUsage.credits}`, or `{projectName}`. When rewording copy that contains a token, keep the token in place — replace it with the literal current value (e.g. "the last 30 days") only when the data fetch itself is locked to that value. Otherwise the copy starts lying as soon as the user changes a filter.
+- **Don't fight the Tailwind class sorter.** Prettier's `prettier-plugin-tailwindcss` reorders classes on save. Write classes in any order; the formatter will normalize them and the diff stays clean across the codebase.
+- **AI context strings shadow user-visible names.** When renaming a chart or card (e.g. "Most Used LLM Clients" → "Most Used Agents"), search for the old name in nearby `contextInfo=` / `suggestions=` props passed to `ExploreWithAI` / `InsightsConfig`. Those strings are sent to the LLM as analytical context; if they drift from the visible label, the AI assistant talks about a card the user can't see.
 
-**Source of truth:** `client/dashboard/src/components/release-stage-badge.tsx` — exports `ReleaseStageBadge` and the `ReleaseStage = "preview" | "beta"` type.
+## Code rules
 
-**Underlying primitive:** the design system `<Badge>` (`@/components/ui/Badge`). `ReleaseStageBadge` composes it with `background` enabled — this is the source of truth for shape (mono, uppercase, tracked, hairline-bordered, square). Do **not** override these classes; the design system owns them. The wrapper just picks a semantic variant and adds a tooltip.
+### Verification Commands
 
-**Variant → stage mapping** (variant names are hooks, not literal semantics):
+Use `aube` package scripts for frontend checks. From the repo root, prefer `aube run -F <package> <script>` so commands run against the right frontend package without `cd`. Do not run `npm exec`, `npx`, bare `vitest`, bare `eslint`, bare `oxfmt`, or bare `tsc` unless you are debugging the package script itself.
 
-- `preview` → the `warning` variant (amber).
-- `beta` → the `information` variant (Speakeasy brand blue).
+| Need                | Dashboard                           | Whole workspace                                 |
+| ------------------- | ----------------------------------- | ----------------------------------------------- |
+| Package lint gate   | `aube run -F dashboard lint`        | `aube run lint`                                 |
+| Type-check only     | `aube run -F dashboard type-check`  | `aube run type-check`                           |
+| Tests once          | `aube run -F dashboard test`        | Run the touched package's `aube run test`       |
+| Tests in watch mode | `aube run -F dashboard test:watch`  | Run the touched package's `aube run test:watch` |
+| ESLint only         | `aube run -F dashboard lint:eslint` | Run the touched package's script                |
+| Format check only   | `aube run -F dashboard lint:format` | Run the touched package's script                |
 
-> The badge variants (`neutral | destructive | information | success | warning`) are tuned for alert/feedback contexts, but the names are just hooks — `warning` here means "experimental, use with caution," not "alert." That's the intended way to reuse the palettes; don't invent new variants without design buy-in.
+For small edits, run the narrowest package script that proves the change. For shared or cross-package frontend changes, run the root `aube run lint` and `aube run type-check` scripts.
 
-**Never hardcode Tailwind colors** (no `bg-violet-500`, no raw `bg-warning-softest` spans). If you find yourself reaching for raw classes for a new badge use case, that's a signal to either pick an existing variant or add one to `@/components/ui/Badge`.
+### General Guidelines
 
-#### Surface 1 — sidebar nav (route-driven)
+- Name the actual state or behavior in identifiers and UI copy, not relative labels such as `legacy` or `modern`. For example, use `agentIdentityIsNotConfigured` for an assistant without an agent identity. Choose the name from the actual condition. Preserve externally contracted values, including metric labels used by queries or alerts, unless the change includes a compatibility plan.
 
-Set `stage` on the route declaration. `app-sidebar.tsx` forwards `item.stage` through `ScopeGatedNavItem → NavButton`, which renders the badge with a hover tooltip explaining what the stage means. The badge auto-hides in collapsed-icon mode.
+- Use the `aube` package manager
+- When interacting with the server, use the `@gram/client` package (this is an alias to `client/dashboard/src/sdk/src/...`)
+- The document `client/dashboard/src/sdk/REACT_QUERY.md` is very helpful for understanding how to use React Query hooks that come with the SDK.
+- For data fetching and server state, use `@tanstack/react-query` instead of manual `useEffect`/`useState` patterns
+- When invalidating React Query caches after mutations, invalidate ALL relevant query keys — not just the most specific one. Different hooks may use different query key prefixes for the same data (e.g., `queryKeyInstance` vs `toolsets.getBySlug`). Use broad invalidation helpers like `invalidateAllToolset(queryClient)` to ensure all consumers refresh.
 
-```tsx
-// client/dashboard/src/routes.tsx
-assistants: {
-  title: "Assistants",
-  url: "assistants",
-  icon: "bot",
-  stage: "preview", // ← sidebar pill appears automatically
-  component: AssistantsRoot,
-},
-```
+### References
 
-> **Gotcha**: if you ever introduce another sidebar wrapper that calls `NavButton` directly (instead of going through `NavMenuButton`), you must forward `stage={item.stage}` explicitly. `app-sidebar.tsx`'s `ScopeGatedNavItem` does this — copy that pattern.
+Read the matching file before writing that kind of code:
 
-#### Surface 2 — page section title
-
-Pass `stage` on the **primary** `Page.Section.Title` for the page (usually the first `Page.Section` under `Page.Body`). Don't put it on secondary section titles like "Recent Chats" — the badge labels the whole feature, not individual sections.
-
-```tsx
-<Page.Section>
-  <Page.Section.Title stage="beta">Risk Overview</Page.Section.Title>
-  <Page.Section.Description>…</Page.Section.Description>
-</Page.Section>
-```
-
-> **Gotcha**: pages with multiple render branches (loading / empty / populated) must include the title — and therefore the `stage` — in **every** branch. `PolicyCenter.tsx` and `SecurityOverview.tsx` are the reference for this pattern.
-
-#### Surface 3 — tab nav (sub-route tabs)
-
-For `ObserveTabNav`-style tab strips, add `stage` to the local tab descriptor and render `<ReleaseStageBadge size="xs" noTooltip>` inline. Use `inline-flex items-center gap-2` on the tab `<Link>` so the badge tracks the label without disrupting the active-tab underline.
-
-```tsx
-// client/dashboard/src/components/observe/ObserveTabNav.tsx
-type Tab = { label: string; href: string; stage?: ReleaseStage };
-const tabs: Tab[] = [
-  { label: "Employees", href: `${baseSlug}/employees`, stage: "preview" },
-];
-```
-
-#### Surface 4 — raw `<h1>` headings (pages that don't use Page.Section.Title)
-
-A handful of pages render their own `<h1 className="text-xl font-semibold">…</h1>` instead of `Page.Section.Title` (e.g., `InsightsEmployees`, `InsightsAgents`). Wrap the heading and the badge in a `flex items-center gap-2` div:
-
-```tsx
-<div className="flex items-center gap-2">
-  <h1 className="text-xl font-semibold">AI Agent Costs</h1>
-  <ReleaseStageBadge stage="preview" />
-</div>
-```
-
-> Consider migrating these pages to `Page.Section.Title` in a follow-up — but don't bundle that refactor with the badge addition.
-
-#### Which surfaces does a given feature need?
-
-- **Default**: every surface where the user encounters the feature's name. If it has a sidebar entry **and** a page heading, badge both.
-- **Tab-only feature**: badge the tab. The parent route's nav entry stays clean since the parent isn't itself pre-GA.
-- **Hidden behind a feature flag**: still badge the visible surfaces. The flag controls visibility; the badge communicates stage to users who can see it.
-
-#### Removing a badge (feature ships GA)
-
-Grep `stage="preview"` and `stage="beta"` and delete every match:
-
-- `routes.tsx` — remove the `stage:` field on the route entry
-- `Page.Section.Title stage="…"` — drop the prop
-- `ObserveTabNav` (or similar) tab descriptors — drop the `stage` field
-- Inline `<ReleaseStageBadge>` usages — delete the element and unwrap the `flex items-center gap-2` div
-
-There's no other cleanup. The component itself stays in place for the next pre-GA feature.
-
-### Drawer Component Usage
-
-`DrawerContent` requires `DrawerTitle` (and optionally `DrawerDescription`) inside it. Omitting them generates a console error and breaks screen reader accessibility. `DrawerHeader` and `DrawerFooter` are optional layout wrappers.
-
-```tsx
-<Drawer>
-  <DrawerTrigger>Open</DrawerTrigger>
-  <DrawerContent>
-    <DrawerTitle>Session Details</DrawerTitle>
-    <DrawerDescription>Viewing trace for this chat.</DrawerDescription>
-    {/* content */}
-  </DrawerContent>
-</Drawer>
-```
-
-If the title is visually redundant, hide it from sighted users while keeping it for screen readers:
-
-```tsx
-<DrawerTitle className="sr-only">Details</DrawerTitle>
-```
-
-### Dialog Component Usage
-
-`DialogContent` requires `DialogTitle` (and optionally `DialogDescription`) inside it. Omitting them generates a console error and breaks screen reader accessibility. `DialogHeader` and `DialogFooter` are optional layout wrappers.
-
-```tsx
-<Dialog>
-  <DialogTrigger>Open</DialogTrigger>
-  <DialogContent>
-    <DialogTitle>Confirm Action</DialogTitle>
-    <DialogDescription>This cannot be undone.</DialogDescription>
-    {/* content */}
-  </DialogContent>
-</Dialog>
-```
-
-If the title is visually redundant, hide it from sighted users while keeping it for screen readers:
-
-```tsx
-<DialogTitle className="sr-only">Details</DialogTitle>
-```
+| Writing                                                                            | Read                                 |
+| ---------------------------------------------------------------------------------- | ------------------------------------ |
+| Any component; shared className/JSX; ternaries; page headers; empty states         | `references/code-structure.md`       |
+| A table, its filters, pagination, grouped or expandable rows                       | `references/tables.md`               |
+| Telemetry/observability fetching, search, filtering, keyboard navigation           | `references/data-and-performance.md` |
+| Tooltips, internal/external links, drawers, dialogs                                | `references/overlays-and-links.md`   |
+| A Preview/Beta badge, or removing one at GA                                        | `references/release-stage-badges.md` |
+| Errors, empty/loading states, IDs, dates, truncation, sizing (checklist mechanics) | `references/ui-states.md`            |
