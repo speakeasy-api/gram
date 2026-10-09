@@ -13,6 +13,7 @@ import type { TunneledMcpServer } from "@gram/client/models/components/tunneledm
 import { KeyRound, Loader2, RotateCcw } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useSourceDestinationLock } from "./useSourceDestinationLock";
 
 export const MCP_TUNNEL_KEY_SECTION_ID = "tunnel-key";
@@ -89,10 +90,14 @@ export function TunnelKeySection({
   // Whoever holds the new key operates the tunnel's destination, so the
   // server refuses rotation without environment authority while any MCP
   // server on the tunnel has a linked environment.
+  // The confirmation lives in a portal, outside the trigger's scope gates, so
+  // it re-checks both before offering the destructive action.
+  const { hasScope, isLoading: rbacLoading } = useRBAC();
+  const canWrite =
+    !rbacLoading && hasScope("mcp:write", tunneledMcpServer.projectId);
   const lock = useSourceDestinationLock({
-    kind: "tunneled",
-    id: tunneledMcpServer.id,
     projectId: tunneledMcpServer.projectId,
+    environmentLinked: tunneledMcpServer.environmentLinked,
   });
   // Tracks the open dialog so a rotation that resolves after Cancel is
   // dropped instead of repopulating the cleared state.
@@ -109,6 +114,9 @@ export function TunnelKeySection({
   };
 
   const handleRotate = async () => {
+    // The dialog can stay open while the lock appears (a refetch reported a
+    // linked server, or grants changed); refuse rather than submit.
+    if (!canWrite || lock.reason !== null) return;
     setRotateError(undefined);
     try {
       const result = await rotate.mutateAsync({
@@ -196,6 +204,11 @@ export function TunnelKeySection({
                 Running agents using the old key will be disconnected shortly
                 and must be restarted with the replacement key.
               </Alert>
+              {lock.reason !== null && (
+                <Alert variant="error" dismissible={false}>
+                  {lock.reason}
+                </Alert>
+              )}
               {rotateError !== undefined && (
                 <Alert variant="error" dismissible={false}>
                   {rotateError}
@@ -212,7 +225,9 @@ export function TunnelKeySection({
                 <Button
                   variant="destructive-primary"
                   onClick={() => void handleRotate()}
-                  disabled={rotate.isPending}
+                  disabled={
+                    rotate.isPending || !canWrite || lock.reason !== null
+                  }
                 >
                   {rotate.isPending ? (
                     <Button.LeftIcon>

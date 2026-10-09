@@ -1,10 +1,7 @@
 import { useRBAC } from "@/hooks/useRBAC";
-import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 
 export type SourceDestinationLock = {
-  /** True when the caller may not move this source's destination. */
-  locked: boolean;
-  /** Why, for the disabled control's hint; null when unlocked. */
+  /** Why the caller may not move this source's destination; null when it may. */
   reason: string | null;
 };
 
@@ -21,41 +18,26 @@ export const SOURCE_DESTINATION_UNKNOWN_REASON =
  * environment:read. The server stays authoritative; this only explains a
  * refusal before the user tries.
  *
- * The sibling list is complete for anyone who can make these changes at all:
- * both need mcp:write across the project, which lists every server in it.
- * While the list is loading or failed, a caller without the grant is treated
- * as locked rather than offered a change the server may refuse.
+ * environmentLinked comes from the source's getServer response, which checks
+ * every server on the source, including ones this caller cannot list. When it
+ * is missing, a caller without the grant is treated as locked rather than
+ * offered a change the server may refuse.
  */
-export function useSourceDestinationLock(
-  source:
-    | { kind: "remote"; id: string; projectId: string }
-    | { kind: "tunneled"; id: string; projectId: string },
-): SourceDestinationLock {
-  const { hasScope, isLoading: rbacLoading } = useRBAC();
-  const canReadEnvironments =
-    !rbacLoading &&
-    hasScope("environment:read", source.projectId, source.projectId);
-
-  const siblings = useMcpServers(
-    source.kind === "remote"
-      ? { remoteMcpServerId: source.id }
-      : { tunneledMcpServerId: source.id },
-    undefined,
-    { throwOnError: false, enabled: !rbacLoading && !canReadEnvironments },
-  );
-
-  if (canReadEnvironments) return { locked: false, reason: null };
-  if (rbacLoading || siblings.isLoading || siblings.isError || !siblings.data) {
-    return { locked: true, reason: SOURCE_DESTINATION_UNKNOWN_REASON };
+export function useSourceDestinationLock(source: {
+  projectId: string;
+  environmentLinked: boolean | undefined;
+}): SourceDestinationLock {
+  const { hasScope, isLoading } = useRBAC();
+  if (
+    !isLoading &&
+    hasScope("environment:read", source.projectId, source.projectId)
+  ) {
+    return { reason: null };
   }
-  const linked = siblings.data.mcpServers.some(
-    (server) =>
-      !!server.environmentId &&
-      (source.kind === "remote"
-        ? server.remoteMcpServerId === source.id
-        : server.tunneledMcpServerId === source.id),
-  );
-  return linked
-    ? { locked: true, reason: SOURCE_DESTINATION_LOCK_REASON }
-    : { locked: false, reason: null };
+  if (isLoading || source.environmentLinked === undefined) {
+    return { reason: SOURCE_DESTINATION_UNKNOWN_REASON };
+  }
+  return {
+    reason: source.environmentLinked ? SOURCE_DESTINATION_LOCK_REASON : null,
+  };
 }

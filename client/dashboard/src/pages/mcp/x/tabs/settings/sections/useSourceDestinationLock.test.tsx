@@ -20,30 +20,18 @@ import {
 
 const PROJECT = "project-1";
 
-type Sibling = {
-  id: string;
-  environmentId?: string;
-  remoteMcpServerId?: string;
-  tunneledMcpServerId?: string;
-  visibility: string;
-};
-
 const mocks = vi.hoisted(() => ({
-  // Whether the caller holds project-wide environment:read. mcp:write is
-  // always held, so only the environment rule decides.
+  // Whether the caller holds project-wide environment:read. mcp:write is held
+  // unless canWrite is cleared, so only the environment rule decides.
   canReadEnvironments: false,
+  canWrite: true,
   rbacLoading: false,
-  siblings: {
-    data: undefined as { mcpServers: Sibling[] } | undefined,
-    isLoading: false,
-    isError: false,
-  },
-  listArgs: vi.fn(),
+  rotate: vi.fn(),
 }));
 
 vi.mock("@/hooks/useRBAC", () => {
   const has = (scope: string, resourceId?: string, projectId?: string) => {
-    if (scope === "mcp:write") return true;
+    if (scope === "mcp:write") return mocks.canWrite;
     // The lock must ask for the project-wide grant, not one environment.
     return (
       scope === "environment:read" &&
@@ -70,127 +58,51 @@ vi.mock("@/hooks/useRBAC", () => {
   };
 });
 
-vi.mock("@gram/client/react-query/mcpServers.js", () => ({
-  useMcpServers: (request: unknown, _security: unknown, options: unknown) => {
-    mocks.listArgs(request, options);
-    return mocks.siblings;
-  },
-}));
-
 vi.mock("@/pages/sources/tunneled-mcp/hooks", () => ({
   useRotateTunneledMcpServerKey: () => ({
-    mutateAsync: vi.fn(),
-    reset: vi.fn(),
+    mutateAsync: mocks.rotate,
+    reset: vi.fn(() => {}),
     isPending: false,
   }),
 }));
 
-function siblings(list: Sibling[]) {
-  mocks.siblings = {
-    data: { mcpServers: list },
-    isLoading: false,
-    isError: false,
-  };
-}
-
 beforeEach(() => {
   mocks.canReadEnvironments = false;
+  mocks.canWrite = true;
   mocks.rbacLoading = false;
-  siblings([]);
-  mocks.listArgs.mockReset();
+  mocks.rotate.mockReset();
 });
 
 afterEach(cleanup);
 
-const tunneled = {
-  kind: "tunneled",
-  id: "tunnel-1",
-  projectId: PROJECT,
-} as const;
-const remote = { kind: "remote", id: "remote-1", projectId: PROJECT } as const;
+function lockFor(environmentLinked: boolean | undefined) {
+  return renderHook(() =>
+    useSourceDestinationLock({ projectId: PROJECT, environmentLinked }),
+  ).result.current;
+}
 
 describe("useSourceDestinationLock", () => {
-  it("locks a source when a disabled sibling has a linked environment", () => {
-    siblings([
-      { id: "a", tunneledMcpServerId: "tunnel-1", visibility: "private" },
-      {
-        id: "b",
-        tunneledMcpServerId: "tunnel-1",
-        environmentId: "env-1",
-        visibility: "disabled",
-      },
-    ]);
-    const { result } = renderHook(() => useSourceDestinationLock(tunneled));
-    expect(result.current).toEqual({
-      locked: true,
-      reason: SOURCE_DESTINATION_LOCK_REASON,
-    });
-    expect(mocks.listArgs).toHaveBeenCalledWith(
-      { tunneledMcpServerId: "tunnel-1" },
-      expect.objectContaining({ enabled: true }),
-    );
+  it("locks a linked source for a caller without project-wide environment:read", () => {
+    expect(lockFor(true)).toEqual({ reason: SOURCE_DESTINATION_LOCK_REASON });
   });
 
-  it("filters remote sources by their own id", () => {
-    siblings([
-      {
-        id: "a",
-        remoteMcpServerId: "remote-1",
-        environmentId: "env-1",
-        visibility: "private",
-      },
-    ]);
-    const { result } = renderHook(() => useSourceDestinationLock(remote));
-    expect(result.current.locked).toBe(true);
-    expect(mocks.listArgs).toHaveBeenCalledWith(
-      { remoteMcpServerId: "remote-1" },
-      expect.anything(),
-    );
+  it("leaves an unlinked source unlocked", () => {
+    expect(lockFor(false)).toEqual({ reason: null });
   });
 
-  it("leaves a source with no linked server unlocked", () => {
-    siblings([
-      { id: "a", tunneledMcpServerId: "tunnel-1", visibility: "private" },
-      // A linked server on another source does not count.
-      {
-        id: "b",
-        tunneledMcpServerId: "tunnel-2",
-        environmentId: "env-1",
-        visibility: "private",
-      },
-    ]);
-    const { result } = renderHook(() => useSourceDestinationLock(tunneled));
-    expect(result.current).toEqual({ locked: false, reason: null });
-  });
-
-  it("unlocks a caller with project-wide environment:read without listing", () => {
+  it("unlocks a linked source for a caller with environment authority", () => {
     mocks.canReadEnvironments = true;
-    siblings([
-      {
-        id: "a",
-        tunneledMcpServerId: "tunnel-1",
-        environmentId: "env-1",
-        visibility: "private",
-      },
-    ]);
-    const { result } = renderHook(() => useSourceDestinationLock(tunneled));
-    expect(result.current).toEqual({ locked: false, reason: null });
-    expect(mocks.listArgs).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ enabled: false }),
-    );
+    expect(lockFor(true)).toEqual({ reason: null });
   });
 
-  it("stays locked while the sibling list is loading or failed", () => {
-    mocks.siblings = { data: undefined, isLoading: true, isError: false };
-    expect(
-      renderHook(() => useSourceDestinationLock(tunneled)).result.current,
-    ).toEqual({ locked: true, reason: SOURCE_DESTINATION_UNKNOWN_REASON });
-    mocks.siblings = { data: undefined, isLoading: false, isError: true };
-    expect(
-      renderHook(() => useSourceDestinationLock(tunneled)).result.current
-        .locked,
-    ).toBe(true);
+  it("stays locked while the source or grants are unknown", () => {
+    expect(lockFor(undefined)).toEqual({
+      reason: SOURCE_DESTINATION_UNKNOWN_REASON,
+    });
+    mocks.rbacLoading = true;
+    expect(lockFor(false)).toEqual({
+      reason: SOURCE_DESTINATION_UNKNOWN_REASON,
+    });
   });
 });
 
@@ -202,50 +114,93 @@ function renderWithProviders(ui: React.ReactElement) {
   );
 }
 
-const tunnel = {
-  id: "tunnel-1",
-  projectId: PROJECT,
-  name: "jamf",
-  keyPrefix: "gram_tun_",
-} as unknown as TunneledMcpServer;
+function tunnel(environmentLinked: boolean | undefined): TunneledMcpServer {
+  return {
+    id: "tunnel-1",
+    projectId: PROJECT,
+    name: "jamf",
+    keyPrefix: "gram_tun_",
+    environmentLinked,
+  } as unknown as TunneledMcpServer;
+}
+
+function openRotateDialog() {
+  fireEvent.click(screen.getByRole("button", { name: /rotate key/i }));
+}
 
 describe("TunnelKeySection", () => {
   it("blocks rotation while a linked server needs environment authority", () => {
-    siblings([
-      {
-        id: "a",
-        tunneledMcpServerId: "tunnel-1",
-        environmentId: "env-1",
-        visibility: "private",
-      },
-    ]);
-    renderWithProviders(<TunnelKeySection tunneledMcpServer={tunnel} />);
-    fireEvent.click(screen.getByRole("button", { name: /rotate key/i }));
+    renderWithProviders(<TunnelKeySection tunneledMcpServer={tunnel(true)} />);
+    openRotateDialog();
     expect(screen.queryByText("Rotate Tunnel Key")).toBeNull();
   });
 
   it("allows rotation for a caller with environment authority", () => {
     mocks.canReadEnvironments = true;
-    siblings([
-      {
-        id: "a",
-        tunneledMcpServerId: "tunnel-1",
-        environmentId: "env-1",
-        visibility: "private",
-      },
-    ]);
-    renderWithProviders(<TunnelKeySection tunneledMcpServer={tunnel} />);
-    fireEvent.click(screen.getByRole("button", { name: /rotate key/i }));
+    renderWithProviders(<TunnelKeySection tunneledMcpServer={tunnel(true)} />);
+    openRotateDialog();
     expect(screen.getByText("Rotate Tunnel Key")).toBeTruthy();
   });
 
   it("allows rotation when no server on the tunnel is linked", () => {
-    siblings([
-      { id: "a", tunneledMcpServerId: "tunnel-1", visibility: "private" },
-    ]);
-    renderWithProviders(<TunnelKeySection tunneledMcpServer={tunnel} />);
-    fireEvent.click(screen.getByRole("button", { name: /rotate key/i }));
+    renderWithProviders(<TunnelKeySection tunneledMcpServer={tunnel(false)} />);
+    openRotateDialog();
     expect(screen.getByText("Rotate Tunnel Key")).toBeTruthy();
+  });
+
+  it("disables an open confirmation once the source becomes locked", () => {
+    const view = renderWithProviders(
+      <TunnelKeySection tunneledMcpServer={tunnel(false)} />,
+    );
+    openRotateDialog();
+    const confirm = () => screen.getByRole("button", { name: /^rotate$/i });
+    expect((confirm() as HTMLButtonElement).disabled).toBe(false);
+
+    for (const [linked, reason] of [
+      [true, SOURCE_DESTINATION_LOCK_REASON],
+      [undefined, SOURCE_DESTINATION_UNKNOWN_REASON],
+    ] as const) {
+      view.rerender(
+        <QueryClientProvider client={new QueryClient()}>
+          <TooltipProvider>
+            <TunnelKeySection tunneledMcpServer={tunnel(linked)} />
+          </TooltipProvider>
+        </QueryClientProvider>,
+      );
+      expect((confirm() as HTMLButtonElement).disabled).toBe(true);
+      expect(screen.getByText(reason)).toBeTruthy();
+      fireEvent.click(confirm());
+      expect(mocks.rotate).not.toHaveBeenCalled();
+    }
+
+    // A confirmed unlinked source can be rotated again.
+    view.rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <TooltipProvider>
+          <TunnelKeySection tunneledMcpServer={tunnel(false)} />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+    expect((confirm() as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("disables an open confirmation once mcp:write is lost", () => {
+    const view = renderWithProviders(
+      <TunnelKeySection tunneledMcpServer={tunnel(false)} />,
+    );
+    openRotateDialog();
+    mocks.canWrite = false;
+    view.rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <TooltipProvider>
+          <TunnelKeySection tunneledMcpServer={tunnel(false)} />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+    const confirm = screen.getByRole("button", { name: /^rotate$/i });
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(confirm);
+    expect(mocks.rotate).not.toHaveBeenCalled();
   });
 });
 

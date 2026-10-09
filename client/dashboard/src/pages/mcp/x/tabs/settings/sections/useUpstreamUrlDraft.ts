@@ -45,9 +45,8 @@ export function useUpstreamUrlDraft(
   const update = useUpdateRemoteMcpServerMutation();
   const verify = useVerifyRemoteMcpUrl(draft);
   const lock = useSourceDestinationLock({
-    kind: "remote",
-    id: remoteMcpServer.id,
     projectId: remoteMcpServer.projectId,
+    environmentLinked: remoteMcpServer.environmentLinked,
   });
 
   const urlError = validateMcpServerUrl(draft);
