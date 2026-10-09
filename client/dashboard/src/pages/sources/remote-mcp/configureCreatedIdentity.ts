@@ -1,10 +1,7 @@
 import { isNotFoundError } from "@/lib/errors";
 import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
 import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
-import {
-  preferredScopes,
-  serverIdentityAuthMethod,
-} from "@/lib/remote-identity/model/clientConfiguration";
+import { serverIdentityAuthMethod } from "@/lib/remote-identity/model/clientConfiguration";
 import type { Gram } from "@gram/client";
 import type { RequestOptions } from "@gram/client/lib/sdks.js";
 import type { CommitServerIdentityConfigurationResult } from "@gram/client/models/components/commitserveridentityconfigurationresult.js";
@@ -220,16 +217,11 @@ export async function configureCreatedRemoteMcpIdentity({
   }
 
   // Capabilities come from whichever side actually knows them.
-  const issuerScopes = provider?.scopesSupported ?? draft?.scopesSupported;
   const issuerAuthMethods =
     provider?.tokenEndpointAuthMethodsSupported ??
     draft?.tokenEndpointAuthMethodsSupported ??
     [];
 
-  const scopes = preferredScopes(
-    protectedResource.metadata?.scopesSupported,
-    issuerScopes,
-  );
   let result: CommitServerIdentityConfigurationResult;
   try {
     result = await client.remoteSessions.commitServerIdentityConfiguration(
@@ -241,7 +233,9 @@ export async function configureCreatedRemoteMcpIdentity({
             provider || !draft ? undefined : providerForm(draft, mcpServer),
           clientMode: "auto",
           clientConfiguration: {
-            scope: scopes.length > 0 ? scopes : undefined,
+            // No copied scope: the server discovers what to request at
+            // each sign-in, so nothing stored here can go stale.
+            scope: undefined,
             tokenEndpointAuthMethod:
               serverIdentityAuthMethod(issuerAuthMethods),
           },

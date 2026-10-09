@@ -1,5 +1,4 @@
 import { useSdkClient } from "@/contexts/Sdk";
-import type { Gram } from "@gram/client";
 import { slugify } from "@/lib/constants";
 import {
   deriveRemoteSessionIssuerNameFromUrl,
@@ -28,7 +27,6 @@ import { toast } from "sonner";
 import {
   advertisedScopes,
   normalizeScopes,
-  preferredScopes,
   serverIdentityAuthMethod,
 } from "../model/clientConfiguration";
 import { useAllRemoteSessionClients } from "../queries/useAllRemoteSessionClients";
@@ -172,25 +170,6 @@ function clientOptionHint(
 function sameSite(issuerHost: string, upstreamHost: string): boolean {
   if (issuerHost === "" || upstreamHost === "") return false;
   return issuerHost === upstreamHost || upstreamHost.endsWith(`.${issuerHost}`);
-}
-
-// The probe only runs up front while a provider is being discovered. A server
-// that already matched one still needs the resource's scopes at save time, so
-// read them then. A failed probe is not fatal: the issuer's list is the
-// fallback preferredScopes already defines.
-async function protectedResourceScopes(
-  client: Gram,
-  remoteMcpServerId: string,
-): Promise<string[] | undefined> {
-  if (!remoteMcpServerId) return undefined;
-  try {
-    const result = await client.remoteMcp.discoverProtectedResourceMetadata({
-      discoverProtectedResourceMetadataRequestBody: { remoteMcpServerId },
-    });
-    return result.available ? result.metadata?.scopesSupported : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 type ProviderTierQuery = {
@@ -794,20 +773,10 @@ export function useUserIdentityDraft({
 
       let clientConfiguration: ServerIdentityClientConfiguration | undefined;
       if (choice !== "existing") {
-        // A new client asks for what this server's protected resource
-        // advertises, exactly as the create flow does. Left empty, the server
-        // falls back to every scope the issuer advertises — the request that
-        // broke Salesforce logins. Scopes chosen for a manual client win.
-        const chosenScopes = manualNeeded ? scopes : [];
-        const requestedScopes =
-          chosenScopes.length > 0
-            ? chosenScopes
-            : preferredScopes(
-                prm.metadata?.scopesSupported ??
-                  resourceScopes ??
-                  (await protectedResourceScopes(client, remoteMcpServerId)),
-                selectedIssuer?.scopesSupported ?? draft?.scopesSupported,
-              );
+        // Only scopes an operator picked for a manual client are stored. An
+        // automatic client sends none: the server discovers what to request
+        // at each sign-in, so nothing copied here can go stale.
+        const requestedScopes = manualNeeded ? scopes : [];
         const secret = manualNeeded ? clientSecret.trim() : "";
         clientConfiguration = {
           clientId: manualNeeded ? clientId.trim() : undefined,

@@ -55,7 +55,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { AuthTarget } from "./authTarget";
-import { IssuerScopeOverrideAlert } from "@/pages/remote-identity-providers/clientAlerts";
 import {
   ClientTypeFields,
   EndpointsFields,
@@ -709,7 +708,6 @@ export function AttachRemoteIdentityProviderSheet({
           audienceOverride={audienceOverride}
           onScopeOverrideChange={setScopeOverride}
           onAudienceOverrideChange={setAudienceOverride}
-          scopeWarning={<IssuerScopeOverrideAlert issuer={selectedIssuer} />}
         />
       </Stack>
     );
