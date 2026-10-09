@@ -24,7 +24,6 @@ import {
 } from "@/components/ui/Command";
 import { Icon } from "@/components/ui/Icon";
 import type { IconName } from "@/components/ui/Icon/names";
-import { Input } from "@/components/ui/Input";
 import {
   Popover,
   PopoverContent,
@@ -149,7 +148,6 @@ interface Query {
   groupBy: string[];
   limit: string;
   rollup: string;
-  alias: string;
 }
 
 interface State {
@@ -172,7 +170,6 @@ const INITIAL: State = {
       groupBy: ["user"],
       limit: "10",
       rollup: "auto",
-      alias: "",
     },
   ],
   chart: "line",
@@ -225,7 +222,6 @@ export function ExploreV2Prototype(): JSX.Element {
                   {
                     ...last,
                     letter: LETTERS[state.queries.length] ?? "z",
-                    alias: "",
                   },
                 ],
               });
@@ -329,10 +325,6 @@ function QueryBlock({
             onChange={(filters) => onChange({ filters })}
           />
         </div>
-        <AliasInput
-          value={query.alias}
-          onChange={(alias) => onChange({ alias })}
-        />
         {canRemove ? (
           <Button
             variant="tertiary"
@@ -758,34 +750,6 @@ function FilterEditor({
   );
 }
 
-function AliasInput({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-}): JSX.Element {
-  const [editing, setEditing] = useState(false);
-  if (!editing && value === "") {
-    return (
-      <Button variant="tertiary" size="sm" onClick={() => setEditing(true)}>
-        as…
-      </Button>
-    );
-  }
-  return (
-    <Input
-      autoFocus={editing}
-      value={value}
-      placeholder="Name"
-      aria-label="Query name"
-      onChange={onChange}
-      onBlur={() => setEditing(false)}
-      className="h-8 w-32"
-    />
-  );
-}
-
 // ── Results: chart type, window and Run on the panel's header ─────────────
 
 function Results({
@@ -998,9 +962,7 @@ function dummyResult(state: State): DummyResult {
   const seeds: string[] = [];
   for (const query of visible) {
     const agg = AGGS.find((a) => a.value === query.agg)?.label ?? query.agg;
-    const name =
-      query.alias ||
-      `${query.letter}: ${agg} ${query.field || `all ${datasetOf(query.dataset).noun}`}`;
+    const name = `${query.letter}: ${agg} ${query.field || `all ${datasetOf(query.dataset).noun}`}`;
     const key = JSON.stringify(query.filters) + query.rollup;
     const group = query.groupBy[0];
     if (!group) {
