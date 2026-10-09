@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -188,8 +189,30 @@ func validateFederatedCallbackRoute(r *http.Request, callback string, clientID u
 }
 
 // federatedCallbackMisrouted reports, before state is consumed, a federated challenge arriving off its recorded callback.
-func federatedCallbackMisrouted(r *http.Request, federation *FederatedChallenge, routeClientID string) string {
-	if _, err := recordedIDPCallbackOrigin(federation.CallbackURL, federation.ClientID); err != nil {
+func federatedCallbackMisrouted(r *http.Request, federation *FederatedChallenge, routeClientID, requestBaseURL string) string {
+	recorded, err := recordedIDPCallbackOrigin(federation.CallbackURL, federation.ClientID)
+	if err != nil {
+		return "origin_mismatch"
+	}
+	// The middleware establishes the trusted scheme and hostname, but extra
+	// platform origins omit the request port. Recover only that validated
+	// authority's port; Host cannot replace the trusted hostname or scheme.
+	actual, err := url.Parse(requestBaseURL)
+	if err != nil {
+		return "origin_mismatch"
+	}
+	if origin, ok := requestorigin.FromContext(r.Context()); ok && origin.Surface == requestorigin.SurfacePlatform && actual.Port() == "" {
+		host, err := requestorigin.CanonicalHost(r.Host)
+		if err != nil || !strings.EqualFold(host, actual.Hostname()) {
+			return "origin_mismatch"
+		}
+		authority, err := url.Parse("https://" + r.Host)
+		if err != nil {
+			return "origin_mismatch"
+		}
+		actual.Host = authority.Host
+	}
+	if requestorigin.URLOrigin(recorded.String()) != requestorigin.URLOrigin(actual.String()) {
 		return "origin_mismatch"
 	}
 	if validateFederatedCallbackRoute(r, federation.CallbackURL, federation.ClientID, routeClientID) != nil {

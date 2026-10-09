@@ -193,9 +193,29 @@ func (s *Service) clientView(row repo.RemoteSessionClient, userSessionIssuerIDs 
 	if err != nil {
 		return nil, fmt.Errorf("build remote session client view: %w", err)
 	}
-	view.CallbackURL = new(s.origins.ClientCallbackURL(row.CallbackBaseUrl))
+	view.CallbackURL = s.clientCallbackURL(row)
 	view.FederatedCallbackURL = s.origins.ClientFederatedCallbackURL(row)
 	return view, nil
+}
+
+// clientCallbackURL is the redirect URI a client registers upstream. A self
+// client never sends a browser to its issuer, so it has none.
+func (s *Service) clientCallbackURL(row repo.RemoteSessionClient) *string {
+	if CredentialOwner(row.CredentialOwner) == CredentialOwnerSelf {
+		return nil
+	}
+
+	return new(s.origins.ClientCallbackURL(row.CallbackBaseUrl))
+}
+
+// newClientCallbackBaseURL is the callback_base_url a client created now
+// records. A self client records none, because it has no callback.
+func (s *Service) newClientCallbackBaseURL(owner CredentialOwner) pgtype.Text {
+	if owner == CredentialOwnerSelf {
+		return pgtype.Text{String: "", Valid: false}
+	}
+
+	return s.origins.NewClientBaseURL(true)
 }
 
 func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.CreateRemoteSessionClientPayload) (*types.RemoteSessionClient, error) {
@@ -225,7 +245,21 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		return nil, oops.E(oops.CodeBadRequest, nil, "client_id is required").LogError(ctx, logger)
 	}
 
-	if err := requirePrivateKeyJWTKeySet(payload.TokenEndpointAuthMethod, uuid.NullUUID{UUID: uuid.Nil, Valid: false}); err != nil {
+	owner, err := parseCreateCredentialOwner(ctx, logger, payload.CredentialOwner)
+	if err != nil {
+		return nil, err
+	}
+
+	authMethod := selfClientCreateAuthMethod(owner, payload.TokenEndpointAuthMethod)
+	hasSecret := payload.ClientSecret != nil && *payload.ClientSecret != ""
+
+	if err := requireSelfClientCredential(clientCredentialState{
+		owner:             owner,
+		method:            conv.PtrValOr(authMethod, ""),
+		hasSecret:         hasSecret,
+		hasKeySet:         payload.JSONWebKeySetID != nil,
+		legacyCallbackURL: false,
+	}); err != nil {
 		return nil, err
 	}
 
@@ -235,7 +269,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 	}
 
 	var secretCiphertext pgtype.Text
-	if payload.ClientSecret != nil && *payload.ClientSecret != "" {
+	if hasSecret {
 		encrypted, encErr := s.enc.Encrypt([]byte(*payload.ClientSecret))
 		if encErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, encErr, "encrypt client secret").LogError(ctx, logger)
@@ -251,7 +285,21 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 
 	txRepo := repo.New(dbtx)
 
-	if _, err := s.validateNewClientIssuers(ctx, logger, dbtx, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, issuerID, userIssuerIDs); err != nil {
+	issuer, err := s.validateNewClientIssuers(ctx, logger, dbtx, txRepo, *authCtx.ProjectID, authCtx.ActiveOrganizationID, issuerID, userIssuerIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := requireSelfClientIssuer(owner, issuer); err != nil {
+		return nil, err
+	}
+
+	keySetID, err := s.resolveCreateKeySet(ctx, logger, txRepo, payload.JSONWebKeySetID, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := requirePrivateKeyJWTKeySet(authMethod, keySetID); err != nil {
 		return nil, err
 	}
 
@@ -263,14 +311,16 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		ClientSecretEncrypted:           secretCiphertext,
 		ClientIDIssuedAt:                provenance.clientIDIssuedAt,
 		ClientSecretExpiresAt:           provenance.clientSecretExpiresAt,
-		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
+		TokenEndpointAuthMethod:         conv.PtrToPGText(authMethod),
 		TokenEndpointAuthAudienceFormat: conv.PtrToPGText(payload.TokenEndpointAuthAudienceFormat),
 		Scope:                           payload.Scope,
 		Audience:                        conv.PtrToPGText(payload.Audience),
 		LegacyCallbackUrl:               false,
-		JsonWebKeySetID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		JsonWebKeySetID:                 keySetID,
 		IdentityProviderConnectionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		CallbackBaseUrl:                 s.origins.NewClientBaseURL(true),
+		CallbackBaseUrl:                 s.newClientCallbackBaseURL(owner),
+		GrantTypes:                      clientCreateGrantTypes(owner),
+		CredentialOwner:                 conv.ToPGText(string(owner)),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").LogError(ctx, logger)
@@ -442,6 +492,11 @@ func (s *Service) finalizeClientCreate(
 		}
 	}
 
+	snapshot, err := mv.BuildRemoteSessionClientView(created, userIssuerIDs)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
+	}
+
 	if err := s.auditLogger.LogRemoteSessionClientCreate(ctx, dbtx, audit.LogRemoteSessionClientCreateEvent{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
@@ -450,6 +505,7 @@ func (s *Service) finalizeClientCreate(
 		ActorSlug:              nil,
 		RemoteSessionClientURN: urn.NewRemoteSessionClient(created.ID),
 		ClientID:               created.ClientID,
+		SnapshotAfter:          snapshot,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log remote session client creation").LogError(ctx, logger)
 	}
@@ -546,6 +602,10 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 		secretCiphertext = conv.ToPGText(encrypted)
 	}
 
+	if err := requireSelfClientCredential(updatedClientCredentialState(existing.RemoteSessionClient, payload.TokenEndpointAuthMethod, secretCiphertext.Valid, payload.LegacyCallbackURL)); err != nil {
+		return nil, err
+	}
+
 	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, clientID); err != nil {
 		return nil, err
 	}
@@ -592,7 +652,7 @@ func (s *Service) UpdateRemoteSessionClient(ctx context.Context, payload *gen.Up
 	}
 
 	// Set after the audit snapshot so it matches the snapshot before.
-	afterView.CallbackURL = new(s.origins.ClientCallbackURL(updated.CallbackBaseUrl))
+	afterView.CallbackURL = s.clientCallbackURL(updated)
 	afterView.FederatedCallbackURL = s.origins.ClientFederatedCallbackURL(updated)
 	return afterView, nil
 }

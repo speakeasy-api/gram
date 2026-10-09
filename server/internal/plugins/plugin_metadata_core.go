@@ -13,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -227,6 +228,7 @@ func (c *PluginMetadataCore) CreateInTransaction(ctx context.Context, tx pgx.Tx,
 			PluginID:       plugin.ID,
 			OrganizationID: mutation.OrganizationID,
 			PrincipalUrn:   urn.PrincipalWildcard,
+			InstallMode:    string(installmode.Default),
 		}); err != nil {
 			return PluginMetadataResult{}, fmt.Errorf("assign new plugin to org: %w", err)
 		}

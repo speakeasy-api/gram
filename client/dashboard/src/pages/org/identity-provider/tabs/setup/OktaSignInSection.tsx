@@ -351,7 +351,7 @@ function OktaSignInBody({
     throwOnError: false,
     retry: false,
   });
-  const managedSetIds = managedKeySetIds(clients, agentId);
+  const managedSetIds = managedKeySetIds(clients, connection.clientId);
   const allSets = setsQuery.data?.sets ?? [];
   const sets = allSets.filter((set) => !managedSetIds.has(set.id));
   const managedKeyIds = managedExternalKeyIds(allSets, managedSetIds);

@@ -272,7 +272,7 @@
                   >
                   {{end}}
                   {{else if .Chained}}
-                  <span class="text-xs text-muted-foreground" data-card-status data-identity-chained
+                  <span class="text-xs text-default-success" data-card-status data-identity-chained
                     >Managed by your identity provider</span
                   >
                   {{else if .Expired}}
@@ -335,11 +335,11 @@
                   type="submit"
                   name="action"
                   value="connect"
-                  class="interact:bg-accent flex h-8 items-center border px-3 text-sm"
+                  class="text-muted-foreground interact:text-foreground interact:underline flex h-8 cursor-pointer items-center px-1 text-xs underline-offset-2"
                   data-connect-link
                   data-connect-fallback
                 >
-                  Connect manually
+                  Use a separate sign-in instead
                 </button>
                 {{else}}
                 <button

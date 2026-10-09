@@ -167,6 +167,16 @@ func TestRepublishPluginSignalsTheProjectWhenEmissionIsDisabled(t *testing.T) {
 	require.Equal(t, got.Receipt.ID, replayed.Receipt.ID)
 	require.Equal(t, PluginRepublishEnqueued, replayed.Outcome)
 	require.Len(t, signaler.recorded(), 2, "a replay re-signals so a retry after a failed signal recovers; the publish debounce collapses it")
+
+	// Over a spent allowance the replay still answers with its stored result,
+	// but does not signal again and says so.
+	withSpentBudget(t, &service.republishBudget)
+	spent, err := service.RepublishPlugin(ctx, principal, input)
+	require.NoError(t, err, "a replay must not be refused over a spent allowance")
+	require.True(t, spent.Receipt.Replayed)
+	require.Equal(t, PluginRepublishEnqueued, spent.Outcome)
+	require.Equal(t, pluginRepublishSignalSkippedNote, spent.Note)
+	require.Len(t, signaler.recorded(), 2, "a replay over a spent allowance must not signal again")
 }
 
 func TestRepublishPluginEnqueuesADurableRequestForAConnectedMarketplace(t *testing.T) {

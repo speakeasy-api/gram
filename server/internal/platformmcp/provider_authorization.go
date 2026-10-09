@@ -3,10 +3,12 @@ package platformmcp
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -18,6 +20,48 @@ const (
 	providerAuthorizationFingerprintDomain = "platform-mcp-provider-authorization-v1"
 	assistantReadinessFingerprintDomain    = "platform-mcp-assistant-readiness-v1"
 )
+
+// ProviderAuthorizationClientCredential is the Absence of an identity whose
+// authorization is the credential a self remote session client holds for
+// itself. No subject grant exists, so the client and its issuer identify it,
+// and a replaced credential is the same authorization.
+const ProviderAuthorizationClientCredential = "client_credential"
+
+// ProviderAuthorizationAbsence is the Absence for a resolved authorization:
+// none for a subject's grant, ProviderAuthorizationClientCredential for a self
+// client's own credential.
+func ProviderAuthorizationAbsence(authorization remotesessions.ResolvedAuthorization) string {
+	if authorization.CredentialOwner == remotesessions.CredentialOwnerSelf {
+		return ProviderAuthorizationClientCredential
+	}
+	return ""
+}
+
+// ClientCredentialReadiness classifies a failure to obtain a self client's
+// own credential. Nothing the member authorizes repairs it, so it never asks
+// the member to authorize: an outage is unreachable, anything else needs an
+// administrator. ok is false for any other error.
+func ClientCredentialReadiness(err error) (state ReadinessState, evidence string, ok bool) {
+	switch {
+	case errors.Is(err, remotesessions.ErrClientCredentialUnavailable):
+		return ReadinessUnreachable, "upstream_client_credential_unavailable", true
+	case errors.Is(err, remotesessions.ErrClientCredentialMisconfigured):
+		return ReadinessNeedsConfiguration, "upstream_client_credential_misconfigured", true
+	default:
+		return "", "", false
+	}
+}
+
+// ClientCredentialProbeReadiness keeps a probe the upstream refused from
+// asking the member to sign in when the refused credential is a self
+// client's own: only an administrator repairs it. Any other result passes
+// through.
+func ClientCredentialProbeReadiness(authorization remotesessions.ResolvedAuthorization, state ReadinessState, evidence string) (ReadinessState, string) {
+	if authorization.CredentialOwner == remotesessions.CredentialOwnerSelf && state == ReadinessUnauthorized {
+		return ReadinessNeedsConfiguration, "upstream_client_credential_rejected"
+	}
+	return state, evidence
+}
 
 // ProviderAuthorizationIdentity contains the durable, non-secret identity of
 // the shared provider authorization used for one Platform MCP registration.
@@ -61,6 +105,13 @@ func ProviderAuthorizationFingerprint(identity ProviderAuthorizationIdentity) (s
 		payload += "active_session\x00" +
 			identity.RemoteSessionID.String() + "\x00" +
 			identity.RemoteSessionUpdatedAt.UTC().Format(time.RFC3339Nano) + "\x00" +
+			identity.RemoteSessionClientID.String() + "\x00" +
+			identity.RemoteSessionIssuerID.String()
+	case ProviderAuthorizationClientCredential:
+		if identity.RemoteSessionID != uuid.Nil || !identity.RemoteSessionUpdatedAt.IsZero() || identity.RemoteSessionClientID == uuid.Nil || identity.RemoteSessionIssuerID == uuid.Nil {
+			return "", ErrReadinessInvalid
+		}
+		payload += ProviderAuthorizationClientCredential + "\x00" +
 			identity.RemoteSessionClientID.String() + "\x00" +
 			identity.RemoteSessionIssuerID.String()
 	case "no_client", "no_session", "anonymous", ProviderAuthorizationIdentityChaining:

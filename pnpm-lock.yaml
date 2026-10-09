@@ -375,9 +375,6 @@ importers:
       nanoid:
         specifier: ^6.0.0
         version: 6.0.0
-      next-themes:
-        specifier: ^0.4.6
-        version: 0.4.6(react@19.3.0)(react-dom@19.3.0(react@19.3.0))
       nuqs:
         specifier: ^2.9.0
         version: 2.9.0(@tanstack/react-router@1.170.29(react@19.3.0)(react-dom@19.3.0(react@19.3.0)))(react@19.3.0)(react-router@8.4.0(react@19.3.0)(react-dom@19.3.0(react@19.3.0)))
@@ -6349,12 +6346,6 @@ packages:
   negotiator@1.0.0:
     resolution: {integrity: sha512-8Ofs/AUQh8MaEcrlq5xOX0CQ9ypTF5dl78mjlMNfOK08fzpgTHQRQPBxcPlEtIw0yRpws+Zo/3r+5WRby7u3Gg==}
     engines: {node: '>= 0.6'}
-
-  next-themes@0.4.6:
-    resolution: {integrity: sha512-pZvgD5L0IEvX5/9GWyHMf3m8BKiVQwsCMHfoFosXtXBMnaS0ZnIJ9ST4b4NqLVKDEm8QBxoNNGNaBv2JNF6XNA==}
-    peerDependencies:
-      react: ^16.8 || ^17 || ^18 || ^19 || ^19.0.0-rc
-      react-dom: ^16.8 || ^17 || ^18 || ^19 || ^19.0.0-rc
 
   node-releases@2.0.51:
     resolution: {integrity: sha512-wRNIrw4DmVLKQlbgOMdkMx27Wrpzes2hh5Jtbi2bjPd+4wJstWIqP5A+lscnqbm0xxmT5Bpg8Lec5ItEBwx6BQ==}
@@ -13501,11 +13492,6 @@ snapshots:
   nanoid@6.0.1: {}
 
   negotiator@1.0.0: {}
-
-  next-themes@0.4.6(react@19.3.0)(react-dom@19.3.0(react@19.3.0)):
-    dependencies:
-      react: 19.3.0
-      react-dom: 19.3.0(react@19.3.0)
 
   node-releases@2.0.51: {}
 

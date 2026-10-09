@@ -57,12 +57,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	"github.com/speakeasy-api/gram/server/internal/sigint"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
 type platformMCPConfig struct {
 	AssistantIdentity      platformmcp.AssistantIdentityManagement
+	SignalAuthoring        *sigint.Service
 	Logger                 *slog.Logger
 	MeterProvider          metric.MeterProvider
 	TracerProvider         trace.TracerProvider
@@ -155,6 +157,9 @@ type platformMCPConfig struct {
 	// inventory behind search_tool_calls and list_attribute_keys. Nil keeps
 	// both visible as unavailable.
 	ToolCallSearch platformmcp.ToolCallSearchReader
+	// Analytics is the engine behind the three analytics tools, shared with
+	// the analytics RPC. Nil keeps them visible as unavailable.
+	Analytics platformmcp.AnalyticsEngine
 
 	// WorkflowRun delivers shipped-workflow run reports to Speakeasy's own
 	// analytics. Nil registers record_workflow_run as a stub, so the tool
@@ -483,6 +488,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey)).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
+	// Metered on the diagnostics allowance, like the other aggregate reads.
+	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics))
 	attachShadowInventory(platformReader, config, budgets.SensitiveDiagnostics)
 	attachShadowAI(platformReader, config, authorizer, budgets.SensitiveDiagnostics)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
@@ -534,6 +541,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		accessReads,
 		accessRoleMutations,
 		platformmcp.NewAssistantIdentityService(config.AssistantIdentity, platformReader, config.FeatureFlags),
+		platformmcp.NewSignalAuthoringService(config.SignalAuthoring, platformReader, config.Authz, config.JWTSigningKey),
 		newPlatformMCPConnectionMutations(config),
 	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry)
 	oauth.Attach(config.Mux)
@@ -1071,6 +1079,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, budgets.SensitiveDiagnostics, config.JWTSigningKey)).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
+	// Metered on the diagnostics allowance, like the other aggregate reads.
+	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics))
 	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)
 	if shadowErr != nil {
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(shadowErr))
@@ -1133,6 +1143,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		accessReads,
 		accessRoleMutations,
 		platformmcp.NewAssistantIdentityService(config.AssistantIdentity, platformReader, config.FeatureFlags),
+		platformmcp.NewSignalAuthoringService(config.SignalAuthoring, platformReader, config.Authz, config.JWTSigningKey),
 		newPlatformMCPConnectionMutations(config),
 	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry)
 	oauth.Attach(config.Mux)

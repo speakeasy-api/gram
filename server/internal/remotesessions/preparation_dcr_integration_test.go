@@ -205,6 +205,7 @@ func TestPreparationDCRIntegration_EffectiveGrantsAndNarrowedScopePersist(t *tes
 			afterAudit, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientCreate)
 			require.NoError(t, err)
 			require.Equal(t, beforeAudit+1, afterAudit, "one durable DCR registration emits one create audit, including after idempotent retries")
+			requireLatestClientCreateSnapshot(t, ctx, ti, result.ClientID.String())
 			assertPreparationInteractiveUntouched(t, ctx, ti, interactive, in.UserSessionIssuerID)
 		})
 	}

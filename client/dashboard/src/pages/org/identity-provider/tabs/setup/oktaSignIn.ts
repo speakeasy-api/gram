@@ -72,11 +72,11 @@ export function staleSignInClientIds(
 /** Sets owned by the connection's managed clients; the server refuses to attach them elsewhere. */
 export function managedKeySetIds(
   clients: RemoteSessionClient[],
-  agentId: string,
+  managedClientId: string | undefined,
 ): Set<string> {
   return new Set(
     clients
-      .filter((client) => client.clientId !== agentId)
+      .filter((client) => client.clientId === managedClientId)
       .map((client) => client.jsonWebKeySetId)
       .filter((id): id is string => id != null),
   );

@@ -37,6 +37,18 @@ describe("formatPlatform", () => {
     expect(formatPlatform("aws-bedrock")).toBe("AWS Bedrock");
   });
 
+  it("distinguishes Copilot CLI from Microsoft Copilot", () => {
+    for (const source of [
+      "copilot",
+      "github-copilot",
+      "copilot-cli",
+      "GitHub Copilot CLI",
+    ]) {
+      expect(formatPlatform(source)).toBe("Copilot CLI");
+    }
+    expect(formatPlatform("microsoft-copilot")).toBe("Microsoft Copilot");
+  });
+
   it("title-cases unknown delimited sources", () => {
     expect(formatPlatform("new_agent-client")).toBe("New Agent Client");
   });

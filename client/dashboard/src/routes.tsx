@@ -58,7 +58,13 @@ import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
 import Costs from "./pages/costs/Costs";
+import {
+  DashboardRoute,
+  DashboardsIndex,
+  DashboardsRoot,
+} from "./pages/explore/Dashboards";
 import Explore from "./pages/explore/Explore";
+import SignalsIntelligenceRoute from "./components/signals-intelligence-route";
 import IdentitiesIndex, {
   IdentityDetailIndexRedirect,
   IdentitiesRoot,
@@ -366,6 +372,13 @@ const ROUTE_STRUCTURE = {
         component: AssistantPage,
       },
     },
+  },
+  signalsIntelligence: {
+    title: "Signals intelligence",
+    url: "signals-intelligence",
+    icon: "radio",
+    stage: "preview",
+    component: SignalsIntelligenceRoute,
   },
   skills: {
     title: "Skills",
@@ -703,7 +716,12 @@ const ROUTE_STRUCTURE = {
           overview: { title: "Overview", url: "overview" },
           mcpServers: { title: "MCP Servers", url: "mcp-servers" },
           sessions: { title: "Sessions", url: "sessions" },
-          settings: { title: "Settings", url: "settings" },
+          // Merged into Overview; RemoteSessionClientDetail redirects it there.
+          settings: {
+            title: "Settings",
+            url: "settings",
+            legacyRedirect: true,
+          },
         },
       },
     },
@@ -825,6 +843,21 @@ const ROUTE_STRUCTURE = {
     icon: "telescope",
     component: Explore,
     stage: "preview",
+  },
+  dashboards: {
+    title: "Dashboards",
+    url: "dashboards",
+    icon: "layout-grid",
+    component: DashboardsRoot,
+    indexComponent: DashboardsIndex,
+    stage: "preview",
+    subPages: {
+      detail: {
+        title: "Dashboard",
+        url: ":dashboardId",
+        component: DashboardRoute,
+      },
+    },
   },
   logs: {
     title: "Tool Logs",

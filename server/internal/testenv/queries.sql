@@ -546,6 +546,21 @@ UPDATE platform_mcp_setup_handoffs
 SET expires_at = clock_timestamp() - interval '1 second'
 WHERE id = @id;
 
+-- name: ExpirePlatformMCPOperationReceiptFixture :one
+-- Test-only fixture expiring an idempotency receipt by the database clock,
+-- the clock both the replay pre-check and the locked path judge expiry with.
+UPDATE platform_mcp_operation_receipts
+SET expires_at = clock_timestamp() - interval '1 second'
+WHERE id = @id
+RETURNING expires_at;
+
+-- name: ListPlatformMCPOperationReceiptIDsFixture :many
+-- Test-only inspection of which receipts an organization still holds.
+SELECT id
+FROM platform_mcp_operation_receipts
+WHERE organization_id = @organization_id
+ORDER BY id;
+
 -- name: GetPlatformMCPReadinessFingerprintFixture :one
 -- Test-only inspection of the non-secret identity fingerprint persisted by Platform MCP.
 SELECT provider_authorization_fingerprint
@@ -1495,6 +1510,21 @@ WHERE id = @id
 UPDATE remote_session_clients
 SET client_secret_expires_at = sqlc.narg('client_secret_expires_at'),
     upstream_rejected_at = sqlc.narg('upstream_rejected_at'),
+    updated_at = clock_timestamp()
+WHERE remote_session_clients.id = @id
+  AND remote_session_clients.deleted IS FALSE
+  AND remote_session_clients.project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid
+  AND (remote_session_clients.organization_id IS NULL OR remote_session_clients.organization_id = @organization_id)
+  AND (remote_session_clients.organization_id = @organization_id AND remote_session_clients.project_id IS NULL
+    OR EXISTS (SELECT 1 FROM projects p WHERE p.id = remote_session_clients.project_id AND p.organization_id = @organization_id));
+
+-- name: ForceRemoteSessionClientCredentialOwnerFixture :execrows
+-- Test fixture: sets who owns a client's upstream credential, which no
+-- application query changes after creation. A 'self' owner must satisfy
+-- remote_session_clients_credential_owner_check, so the client needs a
+-- confidential token endpoint auth method first.
+UPDATE remote_session_clients
+SET credential_owner = @credential_owner,
     updated_at = clock_timestamp()
 WHERE remote_session_clients.id = @id
   AND remote_session_clients.deleted IS FALSE

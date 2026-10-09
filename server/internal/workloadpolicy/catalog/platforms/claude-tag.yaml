@@ -86,10 +86,6 @@ setup:
           href: https://claude.ai/admin-settings/claude-tag/federated-cloud-access
           label: Open Claude Tag federated access settings
         - type: computed_status
-        # TODO(AIM-402): remove once the shared token endpoint accepts workload grants.
-        - type: text
-          markdown: |
-            **Not ready yet:** Speakeasy's token endpoint can't accept Claude's token until workload sign-in reaches shared authorization servers. You can save these values in Claude now, but sign-in fails until then.
         - type: checklist_item
           label: Token endpoint
           value: token_endpoint
@@ -114,18 +110,18 @@ setup:
         - type: text
           markdown: |
             In **Add authorization server to a bundle**, fill in each field below and tick it off as you go.
-        # TODO: the workload grant requires resource to be the MCP server's canonical URL, exactly as its protected resource metadata publishes it, so this should show that URL per MCP server rather than "Leave empty".
         - type: checklist_item
           label: Resource (optional)
-          markdown: Leave empty.
+          markdown: Leave empty. Claude Tag's token then works at every MCP server of this authorization server that the agent assigned to Claude Tag may connect to.
         - type: checklist_item
           label: Scope (optional)
           markdown: Leave empty.
-        # TODO(AIM-415): the MCP host is also the token endpoint's host until shared authorization servers move to the authentication host; confirm the path format Claude expects.
+        # TODO(AIM-422): drop the path guidance once shared authorization servers are created on the authentication host by default, so the token endpoint never shares the MCP host.
+        # TODO(AIM-419): confirm the path format Claude expects.
         - type: checklist_item
           label: Allowed API hosts
           value: mcp_host
-          help: This is also the token endpoint's host, so Claude asks for the API paths it may call too. List your MCP servers' paths, such as /mcp/your-server.
+          help: When the token endpoint above is on this same host, Claude asks for the API paths it may call too. List the paths of the MCP servers Claude Tag should use, such as /mcp/your-server.
         - type: checklist_item
           label: Access bundle
           markdown: Choose the bundle assigned to the channels Claude Tag should work in, or create one with **New bundle**.

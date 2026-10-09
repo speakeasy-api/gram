@@ -655,8 +655,8 @@ type CreateGlobalClientResponseBody struct {
 	// Identifier used as the aud claim in private_key_jwt assertions. Null
 	// resolves to issuer.
 	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
-	// The organization JSON Web Key Set attached to this client, managed through
-	// attachKeySet and detachKeySet. Null when no key set is attached.
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
@@ -668,8 +668,14 @@ type CreateGlobalClientResponseBody struct {
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
 	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner string `form:"credential_owner" json:"credential_owner" xml:"credential_owner"`
 	// The redirect URI this client registers with its upstream provider. It never
-	// changes after the client is created. Absent on global clients.
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
 	// The redirect URI to register in the customer identity provider's app when
 	// this client is a user session issuer's trusted sign-in client. Present only
@@ -728,8 +734,8 @@ type GetGlobalClientResponseBody struct {
 	// Identifier used as the aud claim in private_key_jwt assertions. Null
 	// resolves to issuer.
 	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
-	// The organization JSON Web Key Set attached to this client, managed through
-	// attachKeySet and detachKeySet. Null when no key set is attached.
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
@@ -741,8 +747,14 @@ type GetGlobalClientResponseBody struct {
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
 	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner string `form:"credential_owner" json:"credential_owner" xml:"credential_owner"`
 	// The redirect URI this client registers with its upstream provider. It never
-	// changes after the client is created. Absent on global clients.
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
 	// The redirect URI to register in the customer identity provider's app when
 	// this client is a user session issuer's trusted sign-in client. Present only
@@ -793,8 +805,8 @@ type UpdateGlobalClientResponseBody struct {
 	// Identifier used as the aud claim in private_key_jwt assertions. Null
 	// resolves to issuer.
 	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
-	// The organization JSON Web Key Set attached to this client, managed through
-	// attachKeySet and detachKeySet. Null when no key set is attached.
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
@@ -806,8 +818,14 @@ type UpdateGlobalClientResponseBody struct {
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
 	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner string `form:"credential_owner" json:"credential_owner" xml:"credential_owner"`
 	// The redirect URI this client registers with its upstream provider. It never
-	// changes after the client is created. Absent on global clients.
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
 	// The redirect URI to register in the customer identity provider's app when
 	// this client is a user session issuer's trusted sign-in client. Present only
@@ -4110,8 +4128,8 @@ type RemoteSessionClientResponseBody struct {
 	// Identifier used as the aud claim in private_key_jwt assertions. Null
 	// resolves to issuer.
 	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
-	// The organization JSON Web Key Set attached to this client, managed through
-	// attachKeySet and detachKeySet. Null when no key set is attached.
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
@@ -4123,8 +4141,14 @@ type RemoteSessionClientResponseBody struct {
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
 	LegacyCallbackURL bool `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner string `form:"credential_owner" json:"credential_owner" xml:"credential_owner"`
 	// The redirect URI this client registers with its upstream provider. It never
-	// changes after the client is created. Absent on global clients.
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
 	// The redirect URI to register in the customer identity provider's app when
 	// this client is a user session issuer's trusted sign-in client. Present only
@@ -4567,6 +4591,7 @@ func NewCreateGlobalClientResponseBody(res *types.RemoteSessionClient) *CreateGl
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
 		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CredentialOwner:                 res.CredentialOwner,
 		CallbackURL:                     res.CallbackURL,
 		FederatedCallbackURL:            res.FederatedCallbackURL,
 		CreatedAt:                       res.CreatedAt,
@@ -4635,6 +4660,7 @@ func NewGetGlobalClientResponseBody(res *types.RemoteSessionClient) *GetGlobalCl
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
 		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CredentialOwner:                 res.CredentialOwner,
 		CallbackURL:                     res.CallbackURL,
 		FederatedCallbackURL:            res.FederatedCallbackURL,
 		CreatedAt:                       res.CreatedAt,
@@ -4682,6 +4708,7 @@ func NewUpdateGlobalClientResponseBody(res *types.RemoteSessionClient) *UpdateGl
 		JSONWebKeySetID:                 res.JSONWebKeySetID,
 		Audience:                        res.Audience,
 		LegacyCallbackURL:               res.LegacyCallbackURL,
+		CredentialOwner:                 res.CredentialOwner,
 		CallbackURL:                     res.CallbackURL,
 		FederatedCallbackURL:            res.FederatedCallbackURL,
 		CreatedAt:                       res.CreatedAt,

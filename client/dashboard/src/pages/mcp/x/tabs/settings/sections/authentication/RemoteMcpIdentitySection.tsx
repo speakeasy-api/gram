@@ -21,7 +21,10 @@ import type { UserSessionIssuer } from "@gram/client/models/components/usersessi
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
-import { invalidateAllGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes.js";
+import {
+  invalidateAllGetRemoteMcpServerScopes,
+  useGetRemoteMcpServerScopes,
+} from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import type { GetServerIdentityImpactRequest } from "@gram/client/models/operations/getserveridentityimpact.js";
 import {
@@ -50,6 +53,7 @@ import { AgentIdentityRow } from "@/lib/remote-identity";
 import { identityModeCards } from "@/lib/remote-identity";
 import { useAgentCredentialDraft } from "@/lib/remote-identity";
 import { AuthRow } from "./AuthRow";
+import { RequestedScopesSummary } from "./RequestedScopesSummary";
 import { ResourceScopePinField } from "./ResourceScopePinField";
 import { useResourceScopePin } from "./resourceScopePin";
 import { IdentityChainingField } from "./IdentityChainingField";
@@ -235,16 +239,37 @@ export function RemoteMcpIdentitySectionBody({
     updateHeader,
   });
 
-  // The scope pin belongs to the server's protected resource, and reading it
-  // needs mcp:write, so it is only fetched for a writer with a bound client.
+  // The pin belongs to the server's protected resource; the panel shows it to
+  // writers with a bound client, and scopes.canPin says if they may change it.
   const scopePin = useResourceScopePin({
     mcpServerId: target.permissionResourceId,
     enabled: canWrite && identityResolved && actualMode === "user",
   });
   const scopePinSlot =
     canWrite && selectedMode === "user" && userDraft.connected;
-  const showScopePin = scopePinSlot && !!scopePin.data;
+  // Pinning is off for the org, so the picker can do nothing.
+  const scopePinUnusable = !!scopePin.data && !scopePin.data.discoveryEnabled;
+  const showScopePin = scopePinSlot && !!scopePin.data && !scopePinUnusable;
   const scopePinDirty = showScopePin && scopePin.dirty;
+  // Writers get the same answer in the pin's status line when the pin shows.
+  // mcp:write satisfies mcp:read, but a read block applies independently.
+  const canRead =
+    !rbacLoading && hasScope("mcp:read", target.permissionResourceId);
+  const showScopesSummary =
+    canRead &&
+    (!scopePinSlot || scopePinUnusable) &&
+    identityResolved &&
+    actualMode === "user" &&
+    selectedMode === "user" &&
+    userDraft.connectedClientId !== null;
+  const scopesSummaryQuery = useGetRemoteMcpServerScopes(
+    { mcpServerId: target.permissionResourceId },
+    undefined,
+    {
+      enabled: showScopesSummary && target.permissionResourceId !== "",
+      throwOnError: false,
+    },
+  );
 
   const detachIssuer = useDetachUserSessionIssuerMutation();
 
@@ -640,20 +665,29 @@ export function RemoteMcpIdentitySectionBody({
                         )
                         ?.name?.trim() ?? ""
                     }
-                    // The pin has its own lock: the server checks write
-                    // access to every server sharing the resource.
-                    disabled={!canWrite || savePending}
+                    // Changing it needs write access to every server sharing the resource.
+                    disabled={!canWrite || !scopePin.data.canPin || savePending}
                   />
                 </div>
               ) : scopePinSlot && scopePin.isError ? (
                 <Text muted small className="mt-4 block pl-[52px]">
-                  {scopePin.forbidden
-                    ? "Pinned scopes are shared by every MCP server that uses this URL. You need edit access to all of them to view or change the pin."
-                    : "Couldn't load pinned scopes."}
+                  Couldn't load pinned scopes.
                 </Text>
-              ) : scopePinSlot ? (
+              ) : scopePinSlot && !scopePin.data ? (
                 <Text muted small className="mt-4 block pl-[52px]">
                   Loading pinned scopes…
+                </Text>
+              ) : null}
+              {showScopesSummary && scopesSummaryQuery.data ? (
+                <div className="mt-4 pl-[52px] empty:hidden">
+                  <RequestedScopesSummary
+                    scopes={scopesSummaryQuery.data}
+                    connectedClientId={userDraft.connectedClientId}
+                  />
+                </div>
+              ) : showScopesSummary && scopesSummaryQuery.isError ? (
+                <Text muted small className="mt-4 block pl-[52px]">
+                  Couldn't load requested scopes.
                 </Text>
               ) : null}
             </div>

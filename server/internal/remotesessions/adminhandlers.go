@@ -481,6 +481,10 @@ func (s *Service) updateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 		}
 	}
 
+	if err := requireIssuerTokenEndpointForSelfClients(ctx, logger, txRepo, updated); err != nil {
+		return nil, err
+	}
+
 	if err := validateTrustedIdentityProviderIssuerClients(ctx, txRepo, updated); err != nil {
 		if errors.Is(err, errTrustedIdentityProviderClientIneligible) {
 			return nil, oops.E(oops.CodeBadRequest, err, "update would make a client ineligible for identity-provider login: %v", err).LogError(ctx, logger)
@@ -1078,7 +1082,7 @@ func (s *Service) CreateGlobalClient(ctx context.Context, payload *adminrsgen.Cr
 		return nil, oops.E(oops.CodeUnexpected, err, "get global remote session issuer").LogError(ctx, logger)
 	}
 
-	if err := requirePrivateKeyJWTKeySet(payload.TokenEndpointAuthMethod, uuid.NullUUID{UUID: uuid.Nil, Valid: false}); err != nil {
+	if err := refuseGlobalPrivateKeyJWT(payload.TokenEndpointAuthMethod); err != nil {
 		return nil, err
 	}
 
@@ -1100,6 +1104,10 @@ func (s *Service) CreateGlobalClient(ctx context.Context, payload *adminrsgen.Cr
 		// Global clients are shared across organizations and stay on the
 		// pinned outbound callback origin.
 		CallbackBaseUrl: pgtype.Text{String: "", Valid: false},
+		// Global clients have no organization, so the credential_owner
+		// constraint keeps them subject.
+		GrantTypes:      nil,
+		CredentialOwner: pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create global remote session client").LogError(ctx, logger)
@@ -1214,7 +1222,7 @@ func (s *Service) UpdateGlobalClient(ctx context.Context, payload *adminrsgen.Up
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	if err := requirePrivateKeyJWTKeySet(payload.TokenEndpointAuthMethod, uuid.NullUUID{UUID: uuid.Nil, Valid: false}); err != nil {
+	if err := refuseGlobalPrivateKeyJWT(payload.TokenEndpointAuthMethod); err != nil {
 		return nil, err
 	}
 

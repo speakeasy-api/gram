@@ -194,10 +194,14 @@ mise clickhouse:migrate
 
 echo -e "\n✅ All set up!"
 
-# Use local:start if it's defined, otherwise fall back to the default start task.
+# Use local:start if configured. Otherwise, paused stacks need wake, not start.
+# When called by wake, use start directly: wake already holds the startup lock.
 start_task="start"
 if mise tasks info local:start &>/dev/null; then
     start_task="local:start"
+elif [ -z "${GRAM_STACK_LOCK_OWNER:-}" ] &&
+    [ -f "$(git rev-parse --absolute-git-dir)/gram-stack-paused" ]; then
+    start_task="wake"
 fi
 
 started=false

@@ -155,6 +155,7 @@ import (
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
+	"github.com/speakeasy-api/gram/server/internal/sigint"
 	"github.com/speakeasy-api/gram/server/internal/skillefficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
@@ -604,6 +605,7 @@ func mcpRuntimeFlags() []cli.Flag {
 			EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
 			Required: false,
 		},
+		internalCatalogFlag(),
 		&cli.PathFlag{
 			Name:     "config-file",
 			Usage:    "Path to a config file to load. Supported formats are JSON, TOML and YAML.",
@@ -1624,6 +1626,8 @@ func newStartCommand() *cli.Command {
 			plugins.Attach(mux, pluginsSvc)
 			launcher.Attach(mux, launcher.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, openRouter, typesafe.NewClient(guardianPolicy.PooledClient(), logger, typesafe.WithTracerProvider(tracerProvider))))
 			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine, auditLogger))
+			sigintSvc := sigint.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures)
+			sigint.Attach(mux, sigintSvc)
 			skillefficacy.Attach(mux, skillefficacy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger, telemetryrepo.New(chDB)))
 			// The manual trigger bypasses the write-throttled signaler on purpose:
 			// an admin pressing "run now" wants the coordinator woken immediately,
@@ -1804,6 +1808,7 @@ func newStartCommand() *cli.Command {
 			riskFindings := riskchrepo.New(chDB)
 			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPConfig{
 				AssistantIdentity:         assistantsSvc,
+				SignalAuthoring:           sigintSvc,
 				Logger:                    logger,
 				MeterProvider:             meterProvider,
 				TracerProvider:            tracerProvider,
@@ -1852,6 +1857,7 @@ func newStartCommand() *cli.Command {
 				ToolUsage:                 telemetryrepo.New(chDB),
 				ToolCallSearch:            telemetryrepo.New(chDB),
 				TelemetryDrilldown:        telemetryrepo.New(chDB),
+				Analytics:                 analyticsSvc.Engine(),
 				WorkflowRun:               posthogClient,
 				CanonicalIdentity:         telemSvc,
 				RecentToolCalls:           telemetryrepo.New(chDB),

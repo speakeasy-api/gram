@@ -617,6 +617,7 @@ func NewTemporalWorker(
 	// Publish outbox relay activities
 	temporalWorker.RegisterActivity(activities.DrainPublishOutbox)
 	temporalWorker.RegisterActivity(activities.GCPublishOutboxDeadLetters)
+	temporalWorker.RegisterActivity(activities.GCExpiredPlatformMCPReceipts)
 	// Plugin publishing activities
 	temporalWorker.RegisterActivity(activities.ListPluginPublishCandidates)
 	temporalWorker.RegisterActivity(activities.RepairOrphanedAPIKeyCreators)
@@ -753,6 +754,7 @@ func NewTemporalWorker(
 	// Publish outbox -> Pub/Sub workflow and dead letter GC
 	temporalWorker.RegisterWorkflow(PublishOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(PublishOutboxGCWorkflow)
+	temporalWorker.RegisterWorkflow(PlatformMCPReceiptGCWorkflow)
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
 	temporalWorker.RegisterWorkflow(PluginPublishWorkflow)
 	temporalWorker.RegisterWorkflow(PluginPublishWorkflowDebounced)
@@ -922,6 +924,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddPublishOutboxGCSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add publish outbox gc schedule", attr.SlogError(err))
+	}
+
+	if err := AddPlatformMCPReceiptGCSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add platform mcp receipt gc schedule", attr.SlogError(err))
 	}
 
 	if err := AddStagedTelemetrySweepSchedule(ctx, env); err != nil {
