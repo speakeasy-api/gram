@@ -4,11 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
+	redisserver "github.com/alicebob/miniredis/v2/server"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -207,4 +211,55 @@ func TestTunnelStatusIsIndependentOfDisabledServer(t *testing.T) {
 	encoded, err := json.Marshal(mcp)
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), tunnelStatusSentinel)
+}
+
+// The production runtime store is go-redis without ContextTimeoutEnabled, so a
+// socket read ignores the caller's deadline. A Redis reply slower than the
+// remaining budget must still yield unknown, at the deadline rather than when
+// the reply finally arrives.
+func TestTunnelStatusEnforcesDeadlineOnRedisRuntimeStore(t *testing.T) {
+	t.Parallel()
+
+	const (
+		// redisReplyDelay is longer than the caller's remaining budget and
+		// shorter than the client's read timeout, so only the enrichment
+		// deadline can cut the read short.
+		redisReplyDelay = 250 * time.Millisecond
+		callerBudget    = 100 * time.Millisecond
+	)
+
+	fixture := seedTunnelStatusFixture(t, "platform_mcp_tunnel_status_redis_deadline")
+	fixture.grantProjectSourceRead(t)
+	server := miniredis.RunT(t)
+	// The options newRedisClient uses in production, ContextTimeoutEnabled
+	// left off.
+	client := redis.NewClient(&redis.Options{
+		Addr:            server.Addr(),
+		DialTimeout:     time.Second,
+		ReadTimeout:     300 * time.Millisecond,
+		WriteTimeout:    time.Second,
+		DisableIdentity: true,
+	})
+	t.Cleanup(func() { _ = client.Close() })
+	store := route.NewRedis(client)
+	require.NoError(t, store.PublishConnections(t.Context(), fixture.tunnelID.String(), "gateway", []route.Connection{{GatewaySessionID: "session"}}, time.Minute))
+
+	reader, ctx := fixture.reader(t, store)
+	connected := fixture.getMCP(t, reader, ctx, fixture.wrapperID)
+	require.Equal(t, &MCPTunnel{ConnectionStatus: TunnelConnectionConnected}, connected.Tunnel, "the real store reports the published agent")
+
+	server.Server().SetPreHook(func(_ *redisserver.Peer, cmd string, _ ...string) bool {
+		if strings.EqualFold(cmd, "HGETALL") {
+			<-time.NewTimer(redisReplyDelay).C
+		}
+		return false
+	})
+	bounded, cancel := context.WithTimeout(ctx, callerBudget)
+	defer cancel()
+	started := time.Now()
+
+	status := reader.tunnelStatus.Status(bounded, fixture.principal, fixture.project.ID, fixture.wrapperID)
+
+	require.Equal(t, &MCPTunnel{ConnectionStatus: TunnelConnectionUnknown}, status, "a reply after the deadline is never classified")
+	require.Less(t, time.Since(started), redisReplyDelay, "the read is abandoned at the deadline, not when Redis replies")
 }

@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -119,7 +120,7 @@ func (s *TunnelStatusService) Status(ctx context.Context, principal Principal, p
 	if s.connections == nil {
 		return &MCPTunnel{ConnectionStatus: TunnelConnectionUnknown}
 	}
-	connections, err := s.connections.Connections(ctx, source.ID.String())
+	connections, err := s.readConnections(ctx, source.ID.String())
 	if err != nil {
 		s.logger.WarnContext(ctx, "read tunnel connections for tunnel status", attr.SlogError(err), attr.SlogTunneledMCPServerID(source.ID.String()))
 		return &MCPTunnel{ConnectionStatus: TunnelConnectionUnknown}
@@ -127,4 +128,34 @@ func (s *TunnelStatusService) Status(ctx context.Context, principal Principal, p
 
 	status := mv.ClassifyTunneledMcpConnection(source.Status, source.EverSeen, len(connections))
 	return &MCPTunnel{ConnectionStatus: TunnelConnectionStatus(status)}
+}
+
+type tunnelConnectionsResult struct {
+	connections []route.Connection
+	err         error
+}
+
+// readConnections enforces the enrichment deadline whether or not the reader
+// honours its context: the production Redis client does not apply context
+// deadlines to socket reads. When the deadline passes first the read is
+// abandoned and finishes in the background, bounded by the client's own read
+// timeout; a reply that arrives after the deadline is never classified.
+func (s *TunnelStatusService) readConnections(ctx context.Context, tunnelID string) ([]route.Connection, error) {
+	result := make(chan tunnelConnectionsResult, 1)
+	go func() {
+		connections, err := s.connections.Connections(ctx, tunnelID)
+		result <- tunnelConnectionsResult{connections: connections, err: err}
+	}()
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf("read tunnel connections: %w", ctx.Err())
+	case read := <-result:
+		if read.err != nil {
+			return nil, fmt.Errorf("read tunnel connections: %w", read.err)
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("read tunnel connections after deadline: %w", err)
+		}
+		return read.connections, nil
+	}
 }
