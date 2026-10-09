@@ -18,7 +18,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/audience"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -61,19 +65,8 @@ var audienceLockoutLevels = []string{audienceLevelBlockedView}
 // The levels whose scope keeps this page readable: manage implies view.
 var audienceViewLevels = []string{audienceLevelView, audienceLevelManage}
 
-// Every block level. Blocking the administrator role is guarded at all three:
-// the caller guard above only protects whoever is writing, and an administrator
-// is not usually the one restricting a server. Blocking the role that exists to
-// undo such a rule leaves nobody who can, so it is refused whichever capability
-// it names.
-var audienceBlockLevels = []string{
-	audienceLevelBlocked,
-	audienceLevelBlockedView,
-	audienceLevelBlockedManage,
-}
-
 // Agent restrictions use the same server-local exclusions as other principals.
-// They constrain live parent policy, not the allow-only delegated credential.
+// They constrain live parent policy and are carried into delegated credentials.
 var agentAudienceLevels = []string{audienceLevelUse, audienceLevelView, audienceLevelManage, audienceLevelBlocked, audienceLevelBlockedView, audienceLevelBlockedManage}
 
 // Widest first: a principal holding several scopes is reported at its highest
@@ -143,7 +136,24 @@ func (s *Service) ListResourceAudience(ctx context.Context, payload *gen.ListRes
 		return nil, err
 	}
 
-	return &gen.ResourceAudienceResult{Entries: entries, Version: version}, nil
+	principals := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Kind == "role" {
+			principals = append(principals, entry.PrincipalUrn)
+		}
+	}
+	matches, err := plugins.RolePluginsForResource(ctx, s.db, s.authz, ac.ActiveOrganizationID, uuid.MustParse(projectID), uuid.MustParse(payload.ResourceID), principals)
+	if err != nil {
+		return nil, fmt.Errorf("read audience role plugins: %w", err)
+	}
+	var rolePlugins []*gen.ResourceAudienceRolePlugin
+	if matches != nil {
+		rolePlugins = make([]*gen.ResourceAudienceRolePlugin, 0, len(matches))
+	}
+	for _, match := range matches {
+		rolePlugins = append(rolePlugins, &gen.ResourceAudienceRolePlugin{PrincipalUrn: match.PrincipalUrn, PluginID: match.PluginID.String(), Name: match.Name, Slug: match.Slug})
+	}
+	return &gen.ResourceAudienceResult{Entries: entries, Version: version, RolePlugins: rolePlugins}, nil
 }
 
 // SetResourceAudience replaces the rules that name one resource. Rules that
@@ -249,8 +259,8 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 	}
 
 	// Lockout guardrail: the administrator role is what undoes a rule written
-	// here, so a block naming it takes the server's access away from everyone
-	// who could give it back. The caller guard below does not catch this — the
+	// here, so a view block naming it takes this page away from everyone who
+	// could give it back. The caller guard below does not catch this — the
 	// person restricting a server is rarely an administrator themselves.
 	if err := s.rejectAdminRoleBlocks(ctx, ac.ActiveOrganizationID, principalsByLevel); err != nil {
 		return nil, err
@@ -294,6 +304,11 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		}
 	}
 
+	ctx, err = s.roleMgr.PrepareRoleUpdate(ctx, ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "prepare role delivery admission").LogError(ctx, s.logger)
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin resource audience transaction").LogError(ctx, s.logger)
@@ -311,12 +326,61 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock resource audience").LogError(ctx, s.logger)
 	}
+	// Capture both removed and proposed roles before replacing any level. Lock
+	// role rows before delivery acquires project admission and plugin locks,
+	// matching the role editor's ordering.
+	roles := map[string]struct{}{}
+	for level, scope := range audienceLevelScopes {
+		grants, err := authz.ListGrantsForResource(ctx, tx, authz.Resource{
+			OrganizationID: ac.ActiveOrganizationID,
+			Scope:          scope,
+			ResourceID:     payload.ResourceID,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list resource roles").LogError(ctx, s.logger)
+		}
+		for _, grant := range grants {
+			if strings.HasPrefix(grant.PrincipalUrn, "role:") {
+				roles[grant.PrincipalUrn] = struct{}{}
+			}
+		}
+		for _, entry := range principalsByLevel[level] {
+			if entry.Principal.Type == urn.PrincipalTypeRole {
+				roles[entry.Principal.String()] = struct{}{}
+			}
+		}
+	}
+	roleURNs := make([]string, 0, len(roles))
+	for role := range roles {
+		roleURNs = append(roleURNs, role)
+	}
+	sort.Strings(roleURNs)
+	for _, role := range roleURNs {
+		roleID, err := uuid.Parse(role[strings.LastIndex(role, ":")+1:])
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "parse resource role ID").LogError(ctx, s.logger)
+		}
+		if _, err := accessrepo.New(tx).LockOrganizationRoleByID(ctx, accessrepo.LockOrganizationRoleByIDParams{
+			OrganizationID: ac.ActiveOrganizationID, ID: roleID,
+		}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock resource role").LogError(ctx, s.logger)
+		}
+	}
 	current, err := s.audienceFingerprint(ctx, tx, ac.ActiveOrganizationID, payload.ResourceID)
 	if err != nil {
 		return nil, err
 	}
 	if current != payload.ExpectedVersion {
 		return nil, oops.E(oops.CodeFailedPrecondition, nil, "access for this server changed while you were editing; reload and try again")
+	}
+
+	before := make(map[string][]authz.Grant, len(roleURNs))
+	for _, role := range roleURNs {
+		grants, err := roledelivery.Snapshot(ctx, tx, ac.ActiveOrganizationID, role)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "snapshot role delivery grants").LogError(ctx, s.logger)
+		}
+		before[role] = grants
 	}
 
 	// Every level is rewritten, including the ones nobody was given, so a
@@ -334,6 +398,28 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		}
 	}
 
+	// Lock the complete project union before delivering any role. Role order
+	// need not match project order, and RoleChanged holds locks until commit.
+	if err := lockAudienceRoleDeliveryProjects(ctx, tx, ac.ActiveOrganizationID, roleURNs); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock audience role delivery projects").LogError(ctx, s.logger)
+	}
+
+	changedProjects := map[uuid.UUID]struct{}{}
+	for _, role := range roleURNs {
+		projects, err := roledelivery.RoleChanged(ctx, tx, ac.ActiveOrganizationID, role, before[role], s.roleMgr.roleDeliveryGuard)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "update role audience plugin servers").LogError(ctx, s.logger)
+		}
+		for _, projectID := range projects {
+			changedProjects[projectID] = struct{}{}
+		}
+	}
+	for projectID := range changedProjects {
+		if err := s.roleMgr.roleDeliveryPublication.Project(ctx, tx, ac.ActiveOrganizationID, projectID, ac.UserID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "request role delivery publication").LogError(ctx, s.logger)
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit resource audience").LogError(ctx, s.logger)
 	}
@@ -343,7 +429,36 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		return nil, err
 	}
 
-	return &gen.ResourceAudienceResult{Entries: entries, Version: version}, nil
+	return &gen.ResourceAudienceResult{Entries: entries, Version: version, RolePlugins: nil}, nil
+}
+
+// lockAudienceRoleDeliveryProjects follows RoleChanged's project ordering across
+// the entire audience edit, rather than acquiring each role's projects in turn.
+// The caller must already hold all affected role locks.
+func lockAudienceRoleDeliveryProjects(ctx context.Context, tx pgx.Tx, organizationID string, roles []string) error {
+	projects := map[uuid.UUID]struct{}{}
+	for _, role := range roles {
+		plugins, err := pluginsrepo.New(tx).ListRoleDeliveryPlugins(ctx, pluginsrepo.ListRoleDeliveryPluginsParams{
+			OrganizationID: organizationID, PrincipalUrn: role,
+		})
+		if err != nil {
+			return fmt.Errorf("list role delivery plugins: %w", err)
+		}
+		for _, plugin := range plugins {
+			projects[plugin.ProjectID] = struct{}{}
+		}
+	}
+	projectIDs := make([]uuid.UUID, 0, len(projects))
+	for projectID := range projects {
+		projectIDs = append(projectIDs, projectID)
+	}
+	slices.SortFunc(projectIDs, func(a, b uuid.UUID) int { return strings.Compare(a.String(), b.String()) })
+	for _, projectID := range projectIDs {
+		if err := admission.LockProject(ctx, tx, projectID); err != nil {
+			return fmt.Errorf("lock role delivery project admission: %w", err)
+		}
+	}
+	return nil
 }
 
 // ListAudienceOptions lists the principals an administrator can give access
@@ -584,16 +699,16 @@ func audienceSelectors(scope authz.Scope, resourceID string, tools, dispositions
 	return selectors, nil
 }
 
-// rejectAdminRoleBlocks refuses a save that would block the administrator role
-// on this resource. Restricting a server to one team is normally written as
-// "everyone else: no access", which stores a block — and a role block outranks
-// every grant except one made to a person by name for this resource, so naming
-// the administrator role there locks administrators out of the page that could
-// undo it. Roles other than admin are left alone: taking a team off a server is
-// the point of this surface.
+// rejectAdminRoleBlocks refuses a save that would block the administrator
+// role's view of this resource. A role block outranks every grant except one
+// made to a person by name for this resource, so blocking the administrator
+// role's read locks administrators out of the page that could undo it. Blocks
+// on connect and manage leave the page readable, so administrators can still
+// be taken off a server's use or management. Roles other than admin are left
+// alone: taking a team off a server is the point of this surface.
 func (s *Service) rejectAdminRoleBlocks(ctx context.Context, organizationID string, principalsByLevel map[string][]authz.PrincipalSelectors) error {
 	blocked := make(map[string]struct{})
-	for _, level := range audienceBlockLevels {
+	for _, level := range audienceLockoutLevels {
 		for _, entry := range principalsByLevel[level] {
 			if entry.Principal.Type == urn.PrincipalTypeRole {
 				blocked[entry.Principal.String()] = struct{}{}
@@ -613,7 +728,7 @@ func (s *Service) rejectAdminRoleBlocks(ctx context.Context, organizationID stri
 			continue
 		}
 		if _, ok := blocked[role.RoleUrn]; ok {
-			return oops.E(oops.CodeInvalid, nil, "blocking the %s role would take this server away from every administrator, including the ones who could give it back; remove its access instead of blocking it", role.WorkosName)
+			return oops.E(oops.CodeInvalid, nil, "blocking the %s role from viewing this server would take its access page away from every administrator, including the ones who could give it back; block its use or management instead", role.WorkosName)
 		}
 	}
 	return nil

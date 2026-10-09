@@ -117,6 +117,37 @@ describe("ConnectionChecklist", () => {
     ).toBe("https://acme-admin.okta.com");
   });
 
+  it("renders the OIN steps with an API Service Integrations link and a secret field", () => {
+    renderChecklist(
+      makeConnection({
+        listingMode: "oin",
+        jwksUrl: undefined,
+        clientIdSubmitted: false,
+        checklist: [
+          item("add_oin_app", "connect"),
+          item("grant_scopes", "connect"),
+          item("assign_admin_roles", "connect"),
+          item("submit_client_id", "connect", false),
+          item("record_ai_agent", "cross_app_access"),
+        ],
+      }),
+    );
+    expect(screen.getByText("Step add_oin_app")).toBeTruthy();
+    expect(screen.queryByText("Step public_key_auth")).toBeNull();
+    expect(
+      screen
+        .getByRole("link", { name: "Open API Service Integrations in Okta" })
+        .getAttribute("href"),
+    ).toBe("https://acme-admin.okta.com/admin/apps/api-service-integrations");
+    expect(screen.getByLabelText("Client secret")).toBeTruthy();
+    const scopes = screen.getByText("Step grant_scopes").closest("li")!;
+    const credentials = screen
+      .getByText("Step submit_client_id")
+      .closest("li")!;
+    expect(scopes.textContent).toContain("Not checked");
+    expect(credentials.textContent).toContain("Needs attention");
+  });
+
   it("expands the agent phase once verified and ticks observed steps", () => {
     renderChecklist(
       connectionWith("verified", [

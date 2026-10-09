@@ -8,11 +8,11 @@ import (
 var _ = Service("about", func() {
 	Meta("openapi:generate", "false")
 
-	Description("Information about the Gram platform and its components.")
+	Description("Information about the Speakeasy platform and its components.")
 	shared.DeclareErrorResponses()
 
 	Method("openapi", func() {
-		Description("The OpenAPI description of the Gram API.")
+		Description("The OpenAPI description of the Speakeasy API.")
 
 		Result(func() {
 			Attribute("contentType", String, "The content type of the OpenAPI document")

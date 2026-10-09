@@ -16,6 +16,7 @@ import (
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -63,11 +64,12 @@ type PluginAssignmentMutationPlugin struct {
 }
 
 type SetPluginAssignmentsReceiptResult struct {
-	ProjectID         string                          `json:"project_id"`
-	Plugin            PluginAssignmentMutationPlugin  `json:"plugin"`
-	AssignmentVersion string                          `json:"assignment_version"`
-	Assignments       []PluginAssignmentSummaryResult `json:"assignments"`
-	ResultCategory    string                          `json:"result_category"`
+	ProjectID          string                          `json:"project_id"`
+	Plugin             PluginAssignmentMutationPlugin  `json:"plugin"`
+	AssignmentVersion  string                          `json:"assignment_version"`
+	Assignments        []PluginAssignmentSummaryResult `json:"assignments"`
+	ResultCategory     string                          `json:"result_category"`
+	PublicationRequest string                          `json:"publication_request,omitempty"`
 }
 
 type SetPluginAssignmentsOutput struct {
@@ -143,6 +145,7 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 	var rollout admission.RolloutConfig
 	var rolloutErr error
 	rollout, rolloutErr = s.distributionAdmission.Resolve(ctx, principal.OrganizationID, organizationSlug, project.Slug)
+	ctx = roledelivery.WithProjectAdmission(ctx, principal.OrganizationID, project.ID, rollout, rolloutErr)
 	if err := s.mutationBudget.AllowConnectionOrOrganization(ctx, principal); err != nil {
 		if errors.Is(err, ErrOperationRateLimited) {
 			return SetPluginAssignmentsOutput{}, &PluginAssignmentMutationError{Code: "rate_limited", Message: "The plugin assignment mutation rate limit was reached.", Cause: err}
@@ -182,6 +185,7 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 			ActorDisplayName: nil,
 			ActorSlug:        nil,
 		}, pluginassignments.Dependencies{
+			DeliveryGuard: s.distributionAdmission,
 			Guard: func(ctx context.Context, tx pgx.Tx, plugin pluginsrepo.Plugin, current, desired []string) error {
 				if pluginassignments.IsSubset(desired, current) {
 					return nil
@@ -211,11 +215,21 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 			switch {
 			case errors.Is(err, pluginassignments.ErrNotFound):
 				return SetPluginAssignmentsReceiptResult{}, pluginAssignmentMutationNotFound()
+			case errors.Is(err, admission.ErrApprovalRequired), errors.Is(err, admission.ErrPrivateGatewayAudience), errors.Is(err, admission.ErrDistributionDisabled), errors.Is(err, admission.ErrUnavailable):
+				return SetPluginAssignmentsReceiptResult{}, pluginAssignmentAdmissionError(err)
 			case errors.Is(err, pluginassignments.ErrInvalid):
 				return SetPluginAssignmentsReceiptResult{}, pluginAssignmentMutationInvalid("The selected plugin assignments are no longer valid.")
 			default:
 				return SetPluginAssignmentsReceiptResult{}, fmt.Errorf("replace plugin assignments: %w", err)
 			}
+		}
+		var publicationRequest string
+		if result.ContentChanged {
+			outcome, err := s.publicationRequests.ProjectWithOutcome(ctx, tx, principal.OrganizationID, project.ID, principal.UserID)
+			if err != nil {
+				return SetPluginAssignmentsReceiptResult{}, fmt.Errorf("request role audience publication: %w", err)
+			}
+			publicationRequest = string(outcome)
 		}
 		row, err := platformrepo.New(tx).GetPlatformMCPPluginInventoryItem(ctx, platformrepo.GetPlatformMCPPluginInventoryItemParams{
 			PluginID: target.ID, ProjectID: project.ID, OrganizationID: principal.OrganizationID,
@@ -233,9 +247,10 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 				ID: inventory.ID, Name: inventory.Name, Slug: inventory.Slug, IsDefault: inventory.IsDefault,
 				Assignments: *inventory.Assignments, Publication: inventory.Publication,
 			},
-			AssignmentVersion: pluginAssignmentVersion(s.assignmentVersionKey, project.ID, target.ID, result.PrincipalURNs),
-			Assignments:       summaries,
-			ResultCategory:    "updated",
+			AssignmentVersion:  pluginAssignmentVersion(s.assignmentVersionKey, project.ID, target.ID, result.PrincipalURNs),
+			Assignments:        summaries,
+			ResultCategory:     "updated",
+			PublicationRequest: publicationRequest,
 		}, nil
 	})
 	if err != nil {

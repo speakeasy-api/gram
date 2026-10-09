@@ -25,6 +25,8 @@ type Server struct {
 	GetServer                         http.Handler
 	UpdateServer                      http.Handler
 	DiscoverProtectedResourceMetadata http.Handler
+	GetServerScopes                   http.Handler
+	SetServerScopePin                 http.Handler
 	ProbeURL                          http.Handler
 	VerifyURL                         http.Handler
 	DeleteServer                      http.Handler
@@ -68,6 +70,8 @@ func New(
 			{"GetServer", "GET", "/rpc/remoteMcp.getServer"},
 			{"UpdateServer", "POST", "/rpc/remoteMcp.updateServer"},
 			{"DiscoverProtectedResourceMetadata", "POST", "/rpc/remoteMcp.discoverProtectedResourceMetadata"},
+			{"GetServerScopes", "GET", "/rpc/remoteMcp.getServerScopes"},
+			{"SetServerScopePin", "POST", "/rpc/remoteMcp.setServerScopePin"},
 			{"ProbeURL", "POST", "/rpc/remoteMcp.probeURL"},
 			{"VerifyURL", "POST", "/rpc/remoteMcp.verifyURL"},
 			{"DeleteServer", "DELETE", "/rpc/remoteMcp.deleteServer"},
@@ -83,6 +87,8 @@ func New(
 		GetServer:                         NewGetServerHandler(e.GetServer, mux, decoder, encoder, errhandler, formatter),
 		UpdateServer:                      NewUpdateServerHandler(e.UpdateServer, mux, decoder, encoder, errhandler, formatter),
 		DiscoverProtectedResourceMetadata: NewDiscoverProtectedResourceMetadataHandler(e.DiscoverProtectedResourceMetadata, mux, decoder, encoder, errhandler, formatter),
+		GetServerScopes:                   NewGetServerScopesHandler(e.GetServerScopes, mux, decoder, encoder, errhandler, formatter),
+		SetServerScopePin:                 NewSetServerScopePinHandler(e.SetServerScopePin, mux, decoder, encoder, errhandler, formatter),
 		ProbeURL:                          NewProbeURLHandler(e.ProbeURL, mux, decoder, encoder, errhandler, formatter),
 		VerifyURL:                         NewVerifyURLHandler(e.VerifyURL, mux, decoder, encoder, errhandler, formatter),
 		DeleteServer:                      NewDeleteServerHandler(e.DeleteServer, mux, decoder, encoder, errhandler, formatter),
@@ -105,6 +111,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetServer = m(s.GetServer)
 	s.UpdateServer = m(s.UpdateServer)
 	s.DiscoverProtectedResourceMetadata = m(s.DiscoverProtectedResourceMetadata)
+	s.GetServerScopes = m(s.GetServerScopes)
+	s.SetServerScopePin = m(s.SetServerScopePin)
 	s.ProbeURL = m(s.ProbeURL)
 	s.VerifyURL = m(s.VerifyURL)
 	s.DeleteServer = m(s.DeleteServer)
@@ -126,6 +134,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetServerHandler(mux, h.GetServer)
 	MountUpdateServerHandler(mux, h.UpdateServer)
 	MountDiscoverProtectedResourceMetadataHandler(mux, h.DiscoverProtectedResourceMetadata)
+	MountGetServerScopesHandler(mux, h.GetServerScopes)
+	MountSetServerScopePinHandler(mux, h.SetServerScopePin)
 	MountProbeURLHandler(mux, h.ProbeURL)
 	MountVerifyURLHandler(mux, h.VerifyURL)
 	MountDeleteServerHandler(mux, h.DeleteServer)
@@ -438,6 +448,112 @@ func NewDiscoverProtectedResourceMetadataHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "discoverProtectedResourceMetadata")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteMcp")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetServerScopesHandler configures the mux to serve the "remoteMcp"
+// service "getServerScopes" endpoint.
+func MountGetServerScopesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/remoteMcp.getServerScopes", f)
+}
+
+// NewGetServerScopesHandler creates a HTTP handler which loads the HTTP
+// request and calls the "remoteMcp" service "getServerScopes" endpoint.
+func NewGetServerScopesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetServerScopesRequest(mux, decoder)
+		encodeResponse = EncodeGetServerScopesResponse(encoder)
+		encodeError    = EncodeGetServerScopesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getServerScopes")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteMcp")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetServerScopePinHandler configures the mux to serve the "remoteMcp"
+// service "setServerScopePin" endpoint.
+func MountSetServerScopePinHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/remoteMcp.setServerScopePin", f)
+}
+
+// NewSetServerScopePinHandler creates a HTTP handler which loads the HTTP
+// request and calls the "remoteMcp" service "setServerScopePin" endpoint.
+func NewSetServerScopePinHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetServerScopePinRequest(mux, decoder)
+		encodeResponse = EncodeSetServerScopePinResponse(encoder)
+		encodeError    = EncodeSetServerScopePinError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setServerScopePin")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteMcp")
 		payload, err := decodeRequest(r)
 		if err != nil {

@@ -68,8 +68,12 @@ export function WidgetView({
   widget: ViewableWidget;
   /** The window and filters of the page the widget sits on. */
   page?: PageContext;
-  /** The body's height in pixels; the chart type decides when unset. */
-  height?: number;
+  /**
+   * The body's height in pixels; the chart type decides when unset. "fill"
+   * makes the card as tall as its container and gives the body the rest, for
+   * a grid that sizes its cells.
+   */
+  height?: number | "fill";
   /**
    * Open in Explore yourself, in place of the link, for a caller that has
    * to check something first, such as edits not yet saved. It is handed
@@ -92,14 +96,16 @@ export function WidgetView({
       : null;
   const chartType =
     saved?.chartType ?? (widget.visualization.type as ChartType);
-  const bodyHeight = height ?? widgetBodyHeight(chartType);
+  const fill = height === "fill";
+  const bodyHeight = fill ? undefined : (height ?? widgetBodyHeight(chartType));
   // A number tile is only as tall as its figure, so it grows to fit a
   // failure in its place rather than clipping the reason; anything drawn to
-  // a height keeps it.
-  const bodyStyle =
-    height === undefined && chartType === "number"
-      ? { minHeight: bodyHeight }
-      : { height: bodyHeight };
+  // a height keeps it, and a filled body takes what the card leaves.
+  let bodyStyle: { height: number } | { minHeight: number } | undefined;
+  if (fill) bodyStyle = undefined;
+  else if (height === undefined && chartType === "number") {
+    bodyStyle = { minHeight: bodyHeight ?? 0 };
+  } else bodyStyle = { height: bodyHeight ?? 0 };
 
   let body: JSX.Element;
   if (saved === null) {
@@ -145,7 +151,11 @@ export function WidgetView({
   }
 
   return (
-    <section aria-label={widget.name} className={cn(CARD_CLASSES, className)}>
+    <section
+      aria-label={widget.name}
+      className={cn(CARD_CLASSES, fill && "h-full", className)}
+    >
+      {/* The header is what a dashboard grid drags a card by. */}
       <WidgetHeader
         name={widget.name}
         spec={headerSpec}
@@ -160,7 +170,10 @@ export function WidgetView({
           cannot filter on.
         </p>
       )}
-      <div className="flex min-h-0 flex-col overflow-auto" style={bodyStyle}>
+      <div
+        className={cn("flex min-h-0 flex-col overflow-auto", fill && "flex-1")}
+        style={bodyStyle}
+      >
         {body}
       </div>
     </section>

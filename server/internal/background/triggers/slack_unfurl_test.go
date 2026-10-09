@@ -14,7 +14,7 @@ import (
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
 )
 
-// linkSharedWebhookBody is a Slack event_callback envelope carrying one Gram
+// linkSharedWebhookBody is a Slack event_callback envelope carrying one Speakeasy
 // dashboard link and one foreign link, as delivered to the trigger webhook.
 const linkSharedWebhookBody = `{
 	"type": "event_callback",

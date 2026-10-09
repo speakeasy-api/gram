@@ -1,43 +1,13 @@
 package remotemcp
 
 import (
-	"context"
-	"fmt"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
-
-func TestProtectedResourceDataErrorClassification(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name string
-		err  error
-		want bool
-	}{
-		{name: "raw JSON Unicode", err: &pgconn.PgError{Code: pgerrcode.UntranslatableCharacter}, want: true},
-		{name: "extracted text NUL", err: &pgconn.PgError{Code: pgerrcode.CharacterNotInRepertoire}, want: true},
-		{name: "JSON syntax", err: &pgconn.PgError{Code: pgerrcode.InvalidTextRepresentation}, want: true},
-		{name: "JSON number overflow", err: &pgconn.PgError{Code: pgerrcode.NumericValueOutOfRange}, want: true},
-		{name: "wrapped representation error", err: fmt.Errorf("write: %w", &pgconn.PgError{Code: pgerrcode.UntranslatableCharacter}), want: true},
-		{name: "connection failure", err: &pgconn.PgError{Code: pgerrcode.ConnectionException}, want: false},
-		{name: "constraint failure", err: &pgconn.PgError{Code: pgerrcode.ForeignKeyViolation}, want: false},
-		{name: "timeout", err: context.DeadlineExceeded, want: false},
-		{name: "no error", err: nil, want: false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			require.Equal(t, tc.want, isProtectedResourceDataError(tc.err))
-		})
-	}
-}
 
 func TestCompareScopes(t *testing.T) {
 	t.Parallel()
@@ -144,22 +114,4 @@ func TestProtectedResourceRejectsMismatchedIdentifier(t *testing.T) {
 			require.False(t, doc.ValidForResource(tc.probed))
 		})
 	}
-}
-
-func TestProbeProtectedResourceOnUseSkipsPlainHTTP(t *testing.T) {
-	t.Parallel()
-
-	// A nil database and policy prove no probe is started.
-	f := &ProxyManager{protectedResourceProbes: newProtectedResourceProbeState()}
-	started := make(chan struct{}, 1)
-	f.afterProtectedResourceProbe = func() { started <- struct{}{} }
-
-	f.probeProtectedResourceOnUse(t.Context(), testenv.NewLogger(t), uuid.New(), "org", "http://rs.example.test/mcp")
-
-	require.Empty(t, f.protectedResourceProbes.slots)
-	f.protectedResourceProbes.checked.Range(func(key, _ any) bool {
-		require.Fail(t, "unexpected debounce entry", "%v", key)
-		return true
-	})
-	require.Empty(t, started)
 }

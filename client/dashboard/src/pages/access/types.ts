@@ -61,8 +61,7 @@ export function isProjectSelectableResourceType(
 /**
  * Resource types whose grants narrow to projects through the `projectId`
  * selector (`{ resourceId: "*", projectId }`) rather than storing the project
- * id as the resource id. Grants naming one resource of these kinds are made
- * through the API; the role editor offers only the project picker.
+ * id as the resource id, or name one resource by its own id.
  */
 export function isProjectFilteredResourceType(
   resourceType: ResourceType,

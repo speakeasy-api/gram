@@ -58,6 +58,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -75,6 +76,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -1151,6 +1153,7 @@ func newTriggersApp(
 	platformHosts map[string]string,
 	slackClient *slack_client.SlackClient,
 	cacheImpl cache.Cache,
+	identities *assistantidentity.Service,
 ) *bgtriggers.App {
 	envEntries := environments.NewEnvironmentEntries(logger, db, enc, nil)
 	return bgtriggers.NewApp(
@@ -1185,8 +1188,19 @@ func newTriggersApp(
 		platformHosts,
 		slackClient,
 		cacheImpl,
+		identities,
 		bgtriggers.NewNoopDispatcher(logger),
 	)
+}
+
+// newAssistantIdentities binds assistant trigger workloads to the deployment's
+// Speakeasy signing issuer, the same origin mcpauthz.New takes.
+func newAssistantIdentities(c *cli.Context, auditLogger *audit.Logger) *assistantidentity.Service {
+	issuerURL := c.String("authz-issuer-url")
+	inv.Require("assistant identity issuer",
+		"authz-issuer-url is a Speakeasy issuer origin", mcpauthz.ValidateIssuerOrigin(issuerURL, c.String("environment") == "local"),
+	)
+	return assistantidentity.New(issuerURL, auditLogger)
 }
 
 func newAuditLogger() *audit.Logger {
@@ -1493,7 +1507,7 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 // cloud account authenticate through.
 //
 // Local development gets a stub. The real resolver screens every customer
-// supplied service account against Gram's own project, which requires Gram to be
+// supplied service account against Speakeasy's own project, which requires Speakeasy to be
 // running as a user managed service account. A developer machine authenticates
 // with a personal Google login instead, so the screening cannot be evaluated and
 // every credential and key write fails closed. Stubbing the resolver is what
@@ -1522,7 +1536,7 @@ const defaultLocalSigningAlgorithm = jose.RS256
 //
 // The algorithm it signs with is configurable, and deliberately independent of
 // what any key records. Reporting back whatever the caller expected would make
-// the stand-in agree with Gram by construction, and agreeing by construction is
+// the stand-in agree with Speakeasy by construction, and agreeing by construction is
 // precisely what the verify probe exists to disprove: comparing the key's real
 // algorithm against the recorded one is the check that catches a key pointed at
 // the wrong row. Keeping the two independent is what leaves the mismatch outcome

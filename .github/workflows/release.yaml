@@ -86,11 +86,13 @@ jobs:
   release-cli:
     needs: [release]
     if: needs.release.outputs.published == 'true' && contains(fromJSON(needs.release.outputs.publishedPackages).*.name, 'cli')
-    name: Release Gram CLI
+    name: Release speakeasy CLI
+    # npm trusted publishing for @speakeasy-api/cli requires a GitHub-hosted
+    # runner.
     runs-on: ubuntu-latest
     permissions:
       contents: write # to push tags
-      id-token: write # for cosign keyless signing
+      id-token: write # for cosign keyless signing and npm trusted publishing
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -103,7 +105,18 @@ jobs:
           cache: false
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-      - name: Generate GitHub App Token for Gram Bot
+      # GoReleaser publishes @speakeasy-api/cli with the npm CLI. npm trusted
+      # publishing needs npm 11.5.1 or later, which the mise-pinned Node ships.
+      - name: Setup Node
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          install_args: node
+          cache: true
+          cache_key_prefix: mise-github-v1
+          env: false
+      - name: Generate GitHub App Token for Speakeasy Bot
         id: bot-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
@@ -133,7 +146,7 @@ jobs:
   release-tunnel-agent:
     needs: [release]
     if: needs.release.outputs.published == 'true' && contains(fromJSON(needs.release.outputs.publishedPackages).*.name, 'tunnel')
-    name: Release Gram Tunnel Agent image
+    name: Release Speakeasy Tunnel Agent image
     runs-on: ubuntu-latest
     env:
       IMAGE: ghcr.io/speakeasy-api/gram-tunnel-agent
@@ -172,7 +185,7 @@ jobs:
             ${{ env.IMAGE }}:latest
           labels: |
             org.opencontainers.image.source=https://github.com/speakeasy-api/gram
-            org.opencontainers.image.description=Gram tunnel agent: connects a local MCP server to the Gram tunnel gateway
+            org.opencontainers.image.description=Speakeasy tunnel agent: connects a local MCP server to the Speakeasy tunnel gateway
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=AGPL-3.0

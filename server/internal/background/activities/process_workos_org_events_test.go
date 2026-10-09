@@ -173,7 +173,7 @@ func TestProcessWorkOSOrganizationEvents_CreatesOrgAndUpdatesWorkOSExternalIDWhe
 	const workosOrgID = "org_01HZTESTBAD"
 	organizationID := orgid.FromWorkOSID(workosOrgID)
 
-	// The first event has no external_id, so Gram creates the org with a
+	// The first event has no external_id, so Speakeasy creates the org with a
 	// deterministic ID and updates WorkOS after commit. The second event still
 	// updates the existing workos_id-linked org even if its payload carries a
 	// different external_id.
@@ -1964,7 +1964,7 @@ func TestProcessWorkOSOrganizationEvents_ConnectionEventUnknownOrgNoError(t *tes
 
 	const workosOrgID = "org_01HZSSOUNKORG"
 
-	// connection.activated for a workos org that has no matching Gram org — UPDATE
+	// connection.activated for a workos org that has no matching Speakeasy org — UPDATE
 	// matches 0 rows, which is fine (no error).
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{newWorkOSConnectionEvent(t, "connection.activated", "event_01HZSSOUNK", workosOrgID)},

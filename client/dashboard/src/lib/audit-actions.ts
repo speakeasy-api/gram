@@ -40,6 +40,7 @@ export const AUDIT_ACTIONS = [
   "api_key:create",
   "api_key:revoke",
   "asset:create",
+  "assistant:identity_provision",
   "assistant:tool_call",
   "aws_iam_credential:create",
   "aws_iam_credential:delete",
@@ -60,6 +61,10 @@ export const AUDIT_ACTIONS = [
   "custom_domains:create",
   "custom_domains:delete",
   "custom_domains:update",
+  "dashboard:create",
+  "dashboard:delete",
+  "dashboard:layout",
+  "dashboard:update",
   "data_export_route:create",
   "data_export_route:delete",
   "data_export_route:pause",
@@ -88,6 +93,8 @@ export const AUDIT_ACTIONS = [
   "gcp_kms_key:update",
   "identity-provider-connection:create",
   "identity-provider-connection:record-agent",
+  "identity-provider-connection:replace-client-secret",
+  "identity-provider-connection:set-setup-method",
   "identity-provider-connection:revoke",
   "identity-provider-connection:submit-client-id",
   "identity-provider-connection:sync-applications",
@@ -113,6 +120,7 @@ export const AUDIT_ACTIONS = [
   "mcp-server:create",
   "mcp-server:delete",
   "mcp-server:update",
+  "mcp-server:update-scope-pin",
   "mcp-server:update-tool-metadata",
   "mcp_approval_request:approve",
   "mcp_approval_request:create",
@@ -230,6 +238,7 @@ export const AUDIT_ACTIONS = [
   "risk_policy:update",
   "risk_result:dismiss",
   "risk_result:restore",
+  "risk_result:reveal_payload",
   "risk_result:unmask",
   "session_quarantine:open",
   "session_quarantine:release",
@@ -386,6 +395,8 @@ export function staticActionPhrase(action: AuditAction): string {
 
     case "asset:create":
       return "uploaded asset";
+    case "assistant:identity_provision":
+      return "gave a dedicated agent to assistant";
     case "assistant:tool_call":
       return "ran assistant tool";
 
@@ -417,6 +428,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "connected identity provider";
     case "identity-provider-connection:submit-client-id":
       return "submitted client ID for identity provider";
+    case "identity-provider-connection:replace-client-secret":
+      return "replaced client secret for identity provider";
+    case "identity-provider-connection:set-setup-method":
+      return "changed setup method for identity provider";
     case "identity-provider-connection:verify":
       return "verified identity provider connection to";
     case "identity-provider-connection:record-agent":
@@ -576,6 +591,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated MCP server";
     case "mcp-server:delete":
       return "deleted MCP server";
+    case "mcp-server:update-scope-pin":
+      return "updated pinned scopes on MCP server";
     case "mcp-server:update-tool-metadata":
       return "updated tool metadata on MCP server";
 
@@ -722,6 +739,14 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated widget";
     case "widget:delete":
       return "deleted widget";
+    case "dashboard:create":
+      return "created dashboard";
+    case "dashboard:update":
+      return "updated dashboard";
+    case "dashboard:layout":
+      return "laid out dashboard";
+    case "dashboard:delete":
+      return "deleted dashboard";
 
     case "remote-mcp:create":
       return "added remote MCP server";
@@ -805,6 +830,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "dismissed risk finding";
     case "risk_result:restore":
       return "restored risk finding";
+    case "risk_result:reveal_payload":
+      return "revealed risk finding payload";
     case "risk_result:unmask":
       return "unmasked risk finding";
 

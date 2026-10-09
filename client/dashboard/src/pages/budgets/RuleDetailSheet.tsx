@@ -251,7 +251,7 @@ function RuleDetail({
 }
 
 /**
- * The link target for a budget actor. The Gram user id names the person the
+ * The link target for a budget actor. The Speakeasy user id names the person the
  * server matched; an address only names them if no alias of theirs resolves
  * first, so it is the fallback rather than the key.
  */

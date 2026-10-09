@@ -16,7 +16,7 @@ var AssistantMCPServerRef = Type("AssistantMCPServerRef", func() {
 
 	Attribute("mcp_server_slug", String, "The MCP server slug exposed to the assistant. Covers remote- and tunnelled-backed MCP servers, which have no toolset to attach.")
 	Attribute("environment_slug", String, "Optional environment slug used when connecting to the MCP server.")
-	Attribute("endpoint_slug", String, "The slug of the server's Gram-hosted MCP endpoint (/mcp/{endpoint_slug}). Populated on reads; ignored on writes. Absent when the server has no Gram-hosted endpoint.")
+	Attribute("endpoint_slug", String, "The slug of the server's Speakeasy-hosted MCP endpoint (/mcp/{endpoint_slug}). Populated on reads; ignored on writes. Absent when the server has no Speakeasy-hosted endpoint.")
 
 	Required("mcp_server_slug")
 })
@@ -41,6 +41,10 @@ var Assistant = Type("Assistant", func() {
 		Format(FormatUUID)
 	})
 	Attribute("created_by_user_id", String, "The ID of the user who created the assistant, if known.")
+	Attribute("identity_state", String, "NEVER_CONFIGURED when the assistant has no dedicated agent, ACTIVE when its dedicated agent is usable, and UNAVAILABLE when that agent is suspended, revoked, or deleted. This is configuration state, not permission to execute.", func() {
+		Enum("NEVER_CONFIGURED", "ACTIVE", "UNAVAILABLE")
+	})
+	Attribute("agent_id", String, "The assistant's dedicated agent ID, when it has one.", func() { Format(FormatUUID) })
 	Attribute("name", String, "The assistant name.")
 	Attribute("model", String, "The model identifier used by the assistant.")
 	Attribute("instructions", String, "The system instructions for the assistant.")

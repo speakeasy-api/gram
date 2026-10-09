@@ -60,7 +60,7 @@ export type PluginsDownloadObservabilityPluginQueryError =
  * downloadObservabilityPlugin plugins
  *
  * @remarks
- * Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
+ * Download a ZIP of the per-org observability plugin (Speakeasy hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
  */
 export function usePluginsDownloadObservabilityPlugin(
   request: DownloadObservabilityPluginRequest,
@@ -89,7 +89,7 @@ export function usePluginsDownloadObservabilityPlugin(
  * downloadObservabilityPlugin plugins
  *
  * @remarks
- * Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
+ * Download a ZIP of the per-org observability plugin (Speakeasy hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.
  */
 export function usePluginsDownloadObservabilityPluginSuspense(
   request: DownloadObservabilityPluginRequest,

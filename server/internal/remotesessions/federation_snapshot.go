@@ -34,6 +34,7 @@ type federatedClientSnapshot struct {
 	ResourceTosUri                  pgtype.Text        `json:"ResourceTosUri"`
 	UpstreamRejectedAt              pgtype.Timestamptz `json:"UpstreamRejectedAt"`
 	IdentityProviderConnectionID    uuid.NullUUID      `json:"IdentityProviderConnectionID"`
+	CredentialOwner                 string             `json:"CredentialOwner"`
 	CreatedAt                       pgtype.Timestamptz `json:"CreatedAt"`
 	UpdatedAt                       pgtype.Timestamptz `json:"UpdatedAt"`
 	DeletedAt                       pgtype.Timestamptz `json:"DeletedAt"`
@@ -76,6 +77,7 @@ type federatedIssuerSnapshot struct {
 	BackchannelLogoutSupported                 pgtype.Bool        `json:"BackchannelLogoutSupported"`
 	AuthorizationResponseIssParameterSupported pgtype.Bool        `json:"AuthorizationResponseIssParameterSupported"`
 	ScopeOverride                              []string           `json:"ScopeOverride"`
+	OmitScopeFallback                          pgtype.Bool        `json:"OmitScopeFallback"`
 	ResourceIndicatorSupported                 pgtype.Bool        `json:"ResourceIndicatorSupported"`
 	Oidc                                       bool               `json:"Oidc"`
 	Passthrough                                bool               `json:"Passthrough"`

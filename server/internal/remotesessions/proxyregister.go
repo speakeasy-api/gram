@@ -70,7 +70,7 @@ type ProxyRegisterResponse struct {
 // for the shared automatic registration HTTP error.
 type DynamicClientRegistrationError = registration.HTTPError
 
-// DCRRequest is the RFC 7591 Dynamic Client Registration request Gram sends to
+// DCRRequest is the RFC 7591 Dynamic Client Registration request Speakeasy sends to
 // an upstream provider on the caller's behalf.
 type DCRRequest struct {
 	RedirectURIs            []string `json:"redirect_uris"`
@@ -82,7 +82,7 @@ type DCRRequest struct {
 	Scope                   string   `json:"scope,omitempty"`
 }
 
-// DCRResponse is the subset of the RFC 7591 registration response Gram reads.
+// DCRResponse is the subset of the RFC 7591 registration response Speakeasy reads.
 type DCRResponse struct {
 	ClientID                string   `json:"client_id"`
 	ClientSecret            string   `json:"client_secret,omitempty"`

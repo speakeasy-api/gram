@@ -1154,6 +1154,30 @@ func (q *Queries) ResetSlackDirectorySnapshot(ctx context.Context, arg ResetSlac
 	return err
 }
 
+const resolveSlackMappingUser = `-- name: ResolveSlackMappingUser :one
+SELECT im.user_id
+FROM slack_identity_mappings im
+JOIN slack_directory_connections c ON c.organization_id = im.organization_id AND c.slack_team_id = im.slack_team_id
+WHERE im.organization_id = $1
+  AND im.slack_team_id = $2
+  AND im.slack_user_id = $3
+  AND im.revoked_at IS NULL AND c.disconnected_at IS NULL
+`
+
+type ResolveSlackMappingUserParams struct {
+	OrganizationID string
+	SlackTeamID    string
+	SlackUserID    string
+}
+
+// Mapping resolution is tenant/workspace scoped. Authorization happens after selection.
+func (q *Queries) ResolveSlackMappingUser(ctx context.Context, arg ResolveSlackMappingUserParams) (string, error) {
+	row := q.db.QueryRow(ctx, resolveSlackMappingUser, arg.OrganizationID, arg.SlackTeamID, arg.SlackUserID)
+	var user_id string
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
 const revokeSlackIdentityMapping = `-- name: RevokeSlackIdentityMapping :exec
 UPDATE slack_identity_mappings SET revoked_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE organization_id = $1 AND slack_team_id = $2 AND slack_user_id = $3 AND revoked_at IS NULL

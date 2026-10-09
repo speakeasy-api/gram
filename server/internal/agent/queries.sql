@@ -13,9 +13,11 @@
 --
 -- Each project resolves to a marketplace name the way the publish path does:
 -- the per-project override (project_marketplace_settings.marketplace_name) when
--- set, else the org-derived default (computed in the view). Projects with
--- distinct names surface as distinct marketplaces; projects that share a name
--- (e.g. several on the org default) still collapse to one in the view.
+-- set, else the name it last published under (recorded in
+-- published_hooks_config), else the org-derived default (computed in the view).
+-- Projects with distinct names surface as distinct marketplaces; projects that
+-- share a name (e.g. several on the org default) still collapse to one in the
+-- view.
 --
 -- Rows put the org's default project first, then use creation order and id for
 -- deterministic grouping. When projects share a name and the view collapses
@@ -30,7 +32,9 @@ SELECT
   pgc.updated_at AS marketplace_updated_at,
   -- The hooks subtree may be pinned by the rollout gate under a pre-rename org
   -- name; the view derives the observability slug from this snapshot so devices
-  -- install the plugin that actually exists in the published repo.
+  -- install the plugin that actually exists in the published repo. The snapshot
+  -- also records the marketplace name the repo was published under, which the
+  -- view emits so the name stays frozen.
   pgc.published_hooks_config,
   pms.marketplace_name AS marketplace_name_override,
   -- NULL (no settings row, or the column unset) means enabled: observability

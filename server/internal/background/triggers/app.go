@@ -19,9 +19,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
@@ -140,6 +142,7 @@ func (l *triggerDeliveryLogger) LogTriggerDelivery(
 }
 
 type App struct {
+	identities     AssistantIdentityLifecycle
 	logger         *slog.Logger
 	db             *pgxpool.Pool
 	repo           *triggerrepo.Queries
@@ -206,6 +209,7 @@ func NewApp(
 	platformHosts map[string]string,
 	slackClient *slackclient.SlackClient,
 	cacheImpl cache.Cache,
+	identities AssistantIdentityLifecycle,
 	dispatchers ...Dispatcher,
 ) *App {
 	logger = logger.With(attr.SlogComponent("background_triggers"))
@@ -216,6 +220,7 @@ func NewApp(
 	}
 
 	return &App{
+		identities:     identities,
 		logger:         logger,
 		db:             db,
 		repo:           triggerrepo.New(db),
@@ -302,6 +307,10 @@ func (a *App) Create(ctx context.Context, params CreateParams, hooks ...Instance
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("create trigger instance: %w", err)
 	}
 
+	if err := a.identities.BindRootTrigger(ctx, tx, item.ProjectID, item.ID); err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("bind trigger workload identity: %w", err)
+	}
+
 	for _, hook := range hooks {
 		if err := hook(ctx, tx, item); err != nil {
 			return triggerrepo.TriggerInstance{}, fmt.Errorf("trigger create hook: %w", err)
@@ -313,11 +322,8 @@ func (a *App) Create(ctx context.Context, params CreateParams, hooks ...Instance
 	}
 
 	if err := a.reconcileSchedule(ctx, item, definition, config); err != nil {
-		_, _ = a.repo.DeleteTriggerInstance(ctx, triggerrepo.DeleteTriggerInstanceParams{
-			ID:        item.ID,
-			ProjectID: params.ProjectID,
-		})
-		return triggerrepo.TriggerInstance{}, err
+		cleanupErr := a.compensateCreate(ctx, item)
+		return triggerrepo.TriggerInstance{}, errors.Join(err, cleanupErr)
 	}
 
 	return item, nil
@@ -332,14 +338,6 @@ func (a *App) Update(ctx context.Context, params UpdateParams, hooks ...Instance
 	}
 	if params.Config == nil {
 		params.Config = map[string]any{}
-	}
-
-	existing, err := a.GetInstance(ctx, params.ProjectID, params.ID)
-	if err != nil {
-		return triggerrepo.TriggerInstance{}, err
-	}
-	if existing.DefinitionSlug != params.DefinitionSlug {
-		return triggerrepo.TriggerInstance{}, fmt.Errorf("trigger %s is %q, expected %q", existing.ID.String(), existing.DefinitionSlug, params.DefinitionSlug)
 	}
 
 	definition, config, err := a.validateInstance(ctx, params.ProjectID, nullUUIDToUUID(params.EnvironmentID), params.DefinitionSlug, params.Config)
@@ -361,6 +359,17 @@ func (a *App) Update(ctx context.Context, params UpdateParams, hooks ...Instance
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
+	if err := a.identities.LockTarget(ctx, tx, params.ProjectID, params.TargetKind, params.TargetRef); err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("lock trigger target: %w", err)
+	}
+	existing, err := triggerrepo.New(tx).GetTriggerInstanceByIDForUpdate(ctx, triggerrepo.GetTriggerInstanceByIDForUpdateParams{ID: params.ID, ProjectID: params.ProjectID})
+	if err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("lock trigger before update: %w", err)
+	}
+	if existing.DefinitionSlug != params.DefinitionSlug {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("trigger %s is %q, expected %q", existing.ID.String(), existing.DefinitionSlug, params.DefinitionSlug)
+	}
+
 	item, err := triggerrepo.New(tx).UpdateTriggerInstance(ctx, triggerrepo.UpdateTriggerInstanceParams{
 		Name:                conv.ToPGText(params.Name),
 		UpdateEnvironmentID: true,
@@ -375,6 +384,12 @@ func (a *App) Update(ctx context.Context, params UpdateParams, hooks ...Instance
 	})
 	if err != nil {
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("update trigger instance: %w", err)
+	}
+
+	if existing.TargetKind != item.TargetKind || existing.TargetRef != item.TargetRef {
+		if err := a.identities.RetargetRootTrigger(ctx, tx, item.ProjectID, item.ID); err != nil {
+			return triggerrepo.TriggerInstance{}, fmt.Errorf("rebind trigger workload identity: %w", err)
+		}
 	}
 
 	for _, hook := range hooks {
@@ -395,35 +410,62 @@ func (a *App) Update(ctx context.Context, params UpdateParams, hooks ...Instance
 }
 
 func (a *App) Delete(ctx context.Context, projectID uuid.UUID, id uuid.UUID, hooks ...InstanceDBHook) error {
+	item, err := a.deleteInstance(ctx, projectID, id, hooks...)
+	if err != nil {
+		return err
+	}
+	return a.deleteSchedule(ctx, item)
+}
+
+// compensateCreate retains binding history even when external scheduling fails.
+// A cancelled request must not prevent revocation of the committed identity.
+func (a *App) compensateCreate(ctx context.Context, item triggerrepo.TriggerInstance) error {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	_, err := a.deleteInstance(cleanupCtx, item.ProjectID, item.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("compensate trigger creation: %w", err)
+	}
+	return nil
+}
+
+func (a *App) deleteInstance(ctx context.Context, projectID uuid.UUID, id uuid.UUID, hooks ...InstanceDBHook) (triggerrepo.TriggerInstance, error) {
 	tx, err := a.db.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin trigger delete transaction: %w", err)
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("begin trigger delete transaction: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+
+	existing, err := triggerrepo.New(tx).GetTriggerInstanceByIDForUpdate(ctx, triggerrepo.GetTriggerInstanceByIDForUpdateParams{ID: id, ProjectID: projectID})
+	if err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("lock trigger before deletion: %w", err)
+	}
+	if err := a.identities.TombstoneTrigger(ctx, tx, existing.ProjectID, existing.ID); err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("withdraw trigger workload identity: %w", err)
+	}
 
 	item, err := triggerrepo.New(tx).DeleteTriggerInstance(ctx, triggerrepo.DeleteTriggerInstanceParams{
 		ID:        id,
 		ProjectID: projectID,
 	})
 	if err != nil {
-		return fmt.Errorf("delete trigger instance: %w", err)
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("delete trigger instance: %w", err)
 	}
 
 	for _, hook := range hooks {
 		if err := hook(ctx, tx, item); err != nil {
-			return fmt.Errorf("trigger delete hook: %w", err)
+			return triggerrepo.TriggerInstance{}, fmt.Errorf("trigger delete hook: %w", err)
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit trigger delete transaction: %w", err)
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("commit trigger delete transaction: %w", err)
 	}
 
-	if err := a.deleteSchedule(ctx, item); err != nil {
-		return err
-	}
-
-	return nil
+	return item, nil
 }
 
 func (a *App) SetStatus(ctx context.Context, projectID uuid.UUID, id uuid.UUID, status string, hooks ...InstanceDBHook) (triggerrepo.TriggerInstance, error) {
@@ -493,9 +535,40 @@ func (a *App) CreateWakeInstance(ctx context.Context, params CreateWakeInstanceP
 		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: %w", ErrBadRequest, err)
 	}
 
+	owner, err := assistantrepo.New(a.db).GetAssistant(ctx, assistantrepo.GetAssistantParams{ProjectID: params.ProjectID, AssistantID: params.AssistantID})
+	if err != nil {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("resolve wake owner: %w", err)
+	}
+	if owner.OrganizationID != params.OrganizationID {
+		return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: wake organization mismatch", ErrBadRequest)
+	}
+	userID := owner.CreatedByUserID.String
+	credential, hasCredential := contextvalues.PrincipalCredentialAuthorization(ctx)
+	if auth, ok := contextvalues.GetAuthContext(ctx); ok && auth != nil {
+		if auth.ActiveOrganizationID != params.OrganizationID {
+			return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: wake requester organization mismatch", ErrBadRequest)
+		}
+		switch {
+		case hasCredential:
+			userID = credential.AuthorizerUserID
+		case auth.UserID != "":
+			userID = auth.UserID
+		}
+	}
+
 	configMap := map[string]any{
 		"fire_at":        params.FireAt.UTC().Format(time.RFC3339Nano),
 		"correlation_id": params.CorrelationID,
+	}
+	// A wake scheduled under a principal credential acts for the credential's
+	// authorizing user. One with no authorizing user, such as a workload,
+	// records no requester and later runs the same way.
+	if !hasCredential || userID != "" {
+		if userID == "" {
+			return triggerrepo.TriggerInstance{}, fmt.Errorf("%w: wake requester is unavailable", ErrBadRequest)
+		}
+		configMap["requester_user_id"] = userID
+		configMap["identity_version"] = 1
 	}
 	if params.Note != nil {
 		configMap["note"] = *params.Note
@@ -545,11 +618,8 @@ func (a *App) CreateWakeInstance(ctx context.Context, params CreateWakeInstanceP
 	if err := ExecuteTriggerWakeWorkflow(ctx, a.temporalEnv, item.ID, params.FireAt); err != nil {
 		// Roll back the DB row so the caller can retry cleanly. The audit
 		// log entry stays — it records the attempt regardless of outcome.
-		_, _ = a.repo.DeleteTriggerInstance(ctx, triggerrepo.DeleteTriggerInstanceParams{
-			ID:        item.ID,
-			ProjectID: params.ProjectID,
-		})
-		return triggerrepo.TriggerInstance{}, fmt.Errorf("start wake workflow: %w", err)
+		cleanupErr := a.compensateCreate(ctx, item)
+		return triggerrepo.TriggerInstance{}, errors.Join(fmt.Errorf("start wake workflow: %w", err), cleanupErr)
 	}
 
 	return item, nil
@@ -1178,4 +1248,15 @@ func nullUUIDToUUID(value uuid.NullUUID) uuid.UUID {
 		return uuid.Nil
 	}
 	return value.UUID
+}
+
+// AssistantIdentityLifecycle binds root triggers to assistant workload
+// identities inside the trigger's own transaction. Implementations must leave
+// triggers that do not target an identity-backed assistant unchanged.
+// LockTarget runs before an existing trigger row is locked for an update.
+type AssistantIdentityLifecycle interface {
+	LockTarget(ctx context.Context, tx pgx.Tx, projectID uuid.UUID, targetKind, targetRef string) error
+	BindRootTrigger(ctx context.Context, tx pgx.Tx, projectID, triggerID uuid.UUID) error
+	RetargetRootTrigger(ctx context.Context, tx pgx.Tx, projectID, triggerID uuid.UUID) error
+	TombstoneTrigger(ctx context.Context, tx pgx.Tx, projectID, triggerID uuid.UUID) error
 }

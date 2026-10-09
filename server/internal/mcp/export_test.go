@@ -37,7 +37,7 @@ func AdmitWorkloadAssertion(
 		identities: workloadIdentityStoreLookup(db),
 		verifier:   verifier,
 	}
-	_, err := admitWorkloadAssertion(ctx, grant, endpoint, audiences, raw)
+	_, err := admitWorkloadAssertion(ctx, grant, endpoint.workloadTenancy(), audiences, raw)
 	return err
 }
 

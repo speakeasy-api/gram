@@ -1,106 +1,85 @@
 package customruleanalyzer
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/celeval"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 )
 
 func TestEvaluator_ReusesCompiledProgram(t *testing.T) {
 	t.Parallel()
-
 	e, err := newEvaluator(8)
 	require.NoError(t, err)
-
-	msg := celenv.Message{Content: "here is a secret value", Type: "user_message", Tools: nil}
 	const expr = `content.matchRegex("secret")`
-
-	_, matched, err := e.execute(expr, msg)
+	first, err := e.compiler.Compile(expr)
+	require.NoError(t, err)
+	second, err := e.compiler.Compile(expr)
+	require.NoError(t, err)
+	require.Same(t, first, second)
+	spans, matched, err := e.execute(expr, celenv.Message{Content: "a secret", Type: "user_message"})
 	require.NoError(t, err)
 	require.True(t, matched)
-	require.Equal(t, 1, e.cache.Len())
-
-	// Second call with the same expression is a cache hit: no new entry.
-	_, matched, err = e.execute(expr, msg)
+	require.Equal(t, []celenv.Span{{Target: "content", Start: 2, End: 8, Value: "secret"}}, spans)
+	_, matched, err = e.execute(`content.matchRegex("other")`, celenv.Message{Content: "a secret"})
 	require.NoError(t, err)
-	require.True(t, matched)
-	require.Equal(t, 1, e.cache.Len())
-
-	// A distinct expression compiles and caches under its own key.
-	_, _, err = e.execute(`content.matchRegex("other")`, msg)
-	require.NoError(t, err)
-	require.Equal(t, 2, e.cache.Len())
+	require.False(t, matched)
 }
 
-// Concurrent cold misses for the same expression must resolve to a single cached
-// program (no duplicate compilations, no races). Run with -race to catch unsafe
-// access to the engine or cache.
-func TestEvaluator_ConcurrentMissesCompileOnce(t *testing.T) {
+func TestEvaluator_ConcurrentSpanIsolation(t *testing.T) {
 	t.Parallel()
-
 	e, err := newEvaluator(8)
 	require.NoError(t, err)
-
-	msg := celenv.Message{Content: "here is a secret value", Type: "user_message", Tools: nil}
-	const expr = `content.matchRegex("secret")`
-
-	// Each goroutine writes its own slot, so the slices are race-free without a
-	// mutex, and require assertions run on the test goroutine after Wait.
 	const goroutines = 32
 	errs := make([]error, goroutines)
+	spans := make([][]celenv.Span, goroutines)
 	matches := make([]bool, goroutines)
 	var wg sync.WaitGroup
-	wg.Add(goroutines)
 	for i := range goroutines {
-		go func(i int) {
-			defer wg.Done()
-			_, matched, err := e.execute(expr, msg)
-			errs[i] = err
-			matches[i] = matched
-		}(i)
+		wg.Go(func() {
+			spans[i], matches[i], errs[i] = e.execute(`content.matchRegex("value[0-9]+")`,
+				celenv.Message{Content: fmt.Sprintf("value%d", i), Type: "user_message"})
+		})
 	}
 	wg.Wait()
-
 	for i := range goroutines {
-		require.NoErrorf(t, errs[i], "goroutine %d", i)
-		require.Truef(t, matches[i], "goroutine %d", i)
+		require.NoError(t, errs[i])
+		require.True(t, matches[i])
+		value := fmt.Sprintf("value%d", i)
+		require.Equal(t, []celenv.Span{{Target: "content", Start: 0, End: len(value), Value: value}}, spans[i])
 	}
-
-	// A single expression yields a single cache entry regardless of contention.
-	require.Equal(t, 1, e.cache.Len())
 }
 
-func TestEvaluator_EvictsLeastRecentlyUsed(t *testing.T) {
+func TestEvaluator_FailureHandling(t *testing.T) {
 	t.Parallel()
-
-	e, err := newEvaluator(2)
-	require.NoError(t, err)
-
-	msg := celenv.Message{Content: "abc", Type: "user_message", Tools: nil}
-	for _, expr := range []string{
-		`content.matchRegex("a")`,
-		`content.matchRegex("b")`,
-		`content.matchRegex("c")`,
+	for _, tc := range []struct {
+		name    string
+		expr    string
+		wantErr error
+	}{
+		{name: "compile", expr: `private_invalid_name`, wantErr: celeval.ErrCompile},
+		{name: "boolean", expr: `42`, wantErr: celeval.ErrResultType},
+		{name: "runtime", expr: `1 / 0 == 0`, wantErr: celeval.ErrEvaluation},
+		{name: "invalid regex is nonmatch", expr: `content.matchRegex("[")`},
+		{name: "false discards spans", expr: `content.matchText("abc") && false`},
 	} {
-		_, _, err := e.execute(expr, msg)
-		require.NoError(t, err)
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			e, err := newEvaluator(8)
+			require.NoError(t, err)
+			spans, matched, err := e.execute(tc.expr, celenv.Message{Content: "abc"})
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
+				require.NotContains(t, err.Error(), tc.expr)
+			} else {
+				require.NoError(t, err)
+			}
+			require.False(t, matched)
+			require.Empty(t, spans)
+		})
 	}
-
-	// Capacity is 2, so the oldest entry has been evicted.
-	require.Equal(t, 2, e.cache.Len())
-}
-
-func TestEvaluator_CompileErrorNotCached(t *testing.T) {
-	t.Parallel()
-
-	e, err := newEvaluator(8)
-	require.NoError(t, err)
-
-	msg := celenv.Message{Content: "abc", Type: "user_message", Tools: nil}
-	_, _, err = e.execute(`this is not valid cel !!!`, msg)
-	require.Error(t, err)
-	require.Equal(t, 0, e.cache.Len())
 }

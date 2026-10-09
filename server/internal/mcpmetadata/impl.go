@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
@@ -95,6 +96,19 @@ type securityInput struct {
 	SystemName  string
 	DisplayName string
 	Sensitive   bool
+}
+
+// speakeasyAIEnvironmentInput is the security input that selects the
+// environment of a Speakeasy-key MCP server. Its header keeps the "AI"
+// initialism that the generic title-casing in toolconfig.ToHTTPHeader drops.
+const speakeasyAIEnvironmentInput = "speakeasy_ai_environment"
+
+// HTTPHeader returns the HTTP header the input is sent as.
+func (i securityInput) HTTPHeader() string {
+	if i.SystemName == speakeasyAIEnvironmentInput {
+		return "Speakeasy-AI-Environment"
+	}
+	return toolconfig.ToHTTPHeader(i.SystemName)
 }
 
 type IDEInstallLinkConfig struct {
@@ -349,6 +363,22 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		attr.SlogProjectID(authCtx.ProjectID.String()),
 		attr.SlogProjectSlug(conv.PtrValOr(authCtx.ProjectSlug, "")),
 	)
+
+	// A user-provided variable is supplied through an MCP-<name> request
+	// header (or MCP-<display name>), and the hosted runtime never reads a
+	// standard MCP request header such as Mcp-Name as a variable, so such a
+	// name could never receive a value.
+	for _, config := range payload.EnvironmentConfigs {
+		if config == nil || config.ProvidedBy != providedByUser {
+			continue
+		}
+		if httpheaders.IsReservedVariableHeaderName(config.VariableName) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "variable name %q is reserved: its %s request header is a standard MCP protocol header", config.VariableName, httpheaders.VariableHeaderName(config.VariableName)).LogWarn(ctx, logger)
+		}
+		if config.HeaderDisplayName != nil && httpheaders.IsReservedVariableHeaderName(*config.HeaderDisplayName) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "header display name %q for variable %q is reserved: its %s request header is a standard MCP protocol header", *config.HeaderDisplayName, config.VariableName, httpheaders.VariableHeaderName(*config.HeaderDisplayName)).LogWarn(ctx, logger)
+		}
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -658,7 +688,7 @@ func (s *Service) ExportMcpMetadata(ctx context.Context, payload *gen.ExportMcpM
 	authHeaders := make([]*types.McpExportAuthHeader, 0, len(securityInputs))
 	for _, input := range securityInputs {
 		authHeaders = append(authHeaders, &types.McpExportAuthHeader{
-			Name:        toolconfig.ToHTTPHeader(input.SystemName),
+			Name:        input.HTTPHeader(),
 			DisplayName: input.DisplayName,
 		})
 	}
@@ -883,7 +913,7 @@ func buildCursorInstallURL(toolsetName, mcpURL string, inputs []securityInput) (
 	}
 
 	for _, input := range inputs {
-		headerKey := toolconfig.ToHTTPHeader(input.SystemName)
+		headerKey := input.HTTPHeader()
 		config.Headers[headerKey] = fmt.Sprintf("{{%s}}", input.DisplayName)
 	}
 
@@ -913,7 +943,7 @@ func buildVSCodeInstallURL(toolsetName, mcpURL string, inputs []securityInput) (
 	}
 
 	for _, input := range inputs {
-		headerKey := toolconfig.ToHTTPHeader(input.SystemName)
+		headerKey := input.HTTPHeader()
 		config.Headers[headerKey] = fmt.Sprintf("your-%s-value", input.DisplayName)
 	}
 
@@ -1066,7 +1096,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 			attr.SlogError(metadataErr))
 	}
 
-	// Private installs must keep using the authenticated Gram-hosted renderer:
+	// Private installs must keep using the authenticated Speakeasy-hosted renderer:
 	// an external override cannot securely derive the live organization ingress.
 	if !privateNetworkInstall && metadataRecord != nil {
 		if overrideURL := conv.FromPGText[string](metadataRecord.InstallationOverrideUrl); overrideURL != nil && *overrideURL != "" {
@@ -1590,7 +1620,7 @@ func (s *Service) renderRemoteMcpInstallPage(ctx context.Context, w http.Respons
 	tunneledPublic := mcpServer.TunneledMcpServerID.Valid && mcpServer.Visibility == mcpservers.VisibilityPublic
 
 	return s.writeInstallPage(ctx, w, hostedPageRenderInputs{
-		// Remote-MCP-backed installs don't expose Gram-side env vars or a tools
+		// Remote-MCP-backed installs don't expose Speakeasy-side env vars or a tools
 		// list yet: the page renders the URL + branding only.
 		MCPName:        conv.FromPGTextOrEmpty[string](mcpServer.Name),
 		MCPSlug:        endpoint.Slug,
@@ -1613,7 +1643,7 @@ func (s *Service) renderRemoteMcpInstallPage(ctx context.Context, w http.Respons
 
 // renderMetaMcpInstallPage renders the install page for a gateway
 // (meta_mcp_servers) endpoint. Gateways carry no branding metadata and expose
-// no Gram-side env vars or tool list, so the page is the URL plus defaults.
+// no Speakeasy-side env vars or tool list, so the page is the URL plus defaults.
 func (s *Service) renderMetaMcpInstallPage(ctx context.Context, w http.ResponseWriter, ic *installContext) error {
 	metaServer := ic.metaServer
 	endpoint := ic.mcpEndpoint
@@ -1984,7 +2014,7 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 // resolveSecurityMode determines the security mode based on toolset and
 // mcp_server configuration. OAuth wins regardless of public/private: when
 // OAuth applies, identity auth is delegated to the OAuth flow and the install
-// instructions must not ask the user for an Authorization/GRAM_KEY header.
+// instructions must not ask the user for an Authorization/SPEAKEASY_AI_API_KEY header.
 //
 // When an mcp_servers row is present (server non-nil) it governs: OAuth is
 // decided by the wrapper's user_session_issuer with the toolset's external
@@ -2026,13 +2056,13 @@ func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails 
 	case securityModeGram:
 		return []securityInput{
 			{
-				SystemName:  "gram_environment",
-				DisplayName: "gram-environment",
+				SystemName:  speakeasyAIEnvironmentInput,
+				DisplayName: "speakeasy-ai-environment",
 				Sensitive:   false,
 			},
 			{
 				SystemName:  "authorization",
-				DisplayName: "gram-key",
+				DisplayName: "speakeasy-ai-api-key",
 				Sensitive:   true,
 			},
 		}

@@ -93,7 +93,7 @@ export type ListChatsRequest = {
    */
   externalUserId?: string | undefined;
   /**
-   * Filter by Gram user ID
+   * Filter by Speakeasy user ID
    */
   userId?: string | undefined;
   /**

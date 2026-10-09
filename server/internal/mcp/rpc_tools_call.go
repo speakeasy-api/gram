@@ -196,9 +196,10 @@ func handleToolsCall(
 	}
 
 	// Legacy /mcp/<toolset slug> calls do not carry the wrapper server id in
-	// their route payload. Attribute only when exactly one enabled wrapper
-	// exists. Disabled wrappers do not serve, and choosing among multiple live
-	// wrappers would apply an arbitrary server's policy and telemetry identity.
+	// their route payload. Attribute to the toolset's canonical wrapper, else
+	// only when exactly one enabled wrapper exists. Disabled wrappers do not
+	// serve, and choosing among multiple live wrappers would apply an arbitrary
+	// server's policy and telemetry identity.
 	// Keep the payload unchanged because its nil server id still identifies the
 	// legacy authorization path.
 	attributedMCPServerID := payload.mcpServerID
@@ -601,7 +602,7 @@ func handleToolsCall(
 // — arguments naming a resource that does not exist, a payload an upstream
 // rejected as malformed, a scope the configured credential never had — with a
 // bad request logged at warn, and reports true. It reports false for a failure
-// that Gram or an upstream is answerable for, which the caller then reports as
+// that Speakeasy or an upstream is answerable for, which the caller then reports as
 // the server fault it is.
 //
 // Caller mistakes are ordinary and arrive in volume: a single misconfigured
@@ -635,8 +636,8 @@ func resolveUserConfiguration(
 ) (*toolconfig.CaseInsensitiveEnv, error) {
 	userConfig := toolconfig.NewCaseInsensitiveEnv()
 
-	// IMPORTANT: we must only attach gram environments to authenticated payloads. Gram environments contain
-	// secrets owned by Gram projects and should not be usable by public clients
+	// IMPORTANT: we must only attach gram environments to authenticated payloads. Speakeasy environments contain
+	// secrets owned by Speakeasy projects and should not be usable by public clients
 	if payload.environment != "" && payload.authenticated {
 		storedEnvVars, err := env.Load(ctx, payload.projectID, toolconfig.Slug(payload.environment))
 		switch {

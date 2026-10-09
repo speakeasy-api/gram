@@ -15,8 +15,15 @@ import { useVerifyIdentityProviderConnectionMutation } from "@gram/client/react-
 import { STEP_AFFORDANCES } from "./checklistAffordances";
 import { ConnectionChecklist } from "./ConnectionChecklist";
 import { ConnectionSetupProgress } from "./ConnectionSetupProgress";
-import { ConnectionFacts, ConnectionScopes } from "./OktaConnectionDetails";
-import { CreateConnectionForm } from "./OktaConnectionForms";
+import {
+  ConnectionFacts,
+  ConnectionScopes,
+  ReplaceClientSecretButton,
+} from "./OktaConnectionDetails";
+import {
+  CreateConnectionForm,
+  SetupMethodChooser,
+} from "./OktaConnectionForms";
 import { RevokeConnectionButton } from "./RevokeConnectionButton";
 import {
   CONNECTION_STATUS,
@@ -24,6 +31,7 @@ import {
   isConnected,
   LAST_ERROR_LABELS,
   VERIFICATION_REASON_LABELS,
+  usesClientSecret,
   type ConnectionStep,
   type LiveConnection,
 } from "../../connectionView";
@@ -87,6 +95,23 @@ const FOOTER_HINTS: Record<ConnectionStep, string> = {
   verify: "Verify once the app is set up to use the public key URL (JWKS).",
   submit_client_id: "Verification runs after the client ID is submitted.",
 };
+
+const CLIENT_SECRET_VERIFY_HINT =
+  "Verify once the app’s client secret is submitted and its permissions are granted.";
+
+function footerHint(connection: LiveConnection, step: ConnectionStep): string {
+  if (step === "verify" && usesClientSecret(connection)) {
+    return CLIENT_SECRET_VERIFY_HINT;
+  }
+  return FOOTER_HINTS[step];
+}
+
+function connectionDescription(connection: LiveConnection): string {
+  if (usesClientSecret(connection)) {
+    return "Speakeasy uses this API Services app, installed from the Okta Integration Network, to connect to Okta. It authenticates with the app’s client ID and client secret; the secret is stored encrypted and can be replaced below.";
+  }
+  return "Speakeasy uses this API Services app to connect to Okta. Okta reads public keys from the public key URL (JWKS) below to check that requests come from Speakeasy. Private keys stay with Speakeasy.";
+}
 
 const SECTION_LINK = "text-sm underline underline-offset-4";
 
@@ -160,9 +185,7 @@ function ConnectionCard({
           </Badge>
         </div>
         <SettingsSection.Description>
-          Speakeasy uses this API Services app to connect to Okta. Okta reads
-          public keys from the public key URL (JWKS) below to check that
-          requests come from Speakeasy. Private keys stay with Speakeasy.
+          {connectionDescription(connection)}
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
@@ -184,7 +207,7 @@ function ConnectionCard({
                   ? "Next: fix the connection issues"
                   : "Next: verify your connection"
               }
-              body={`Check the app's permissions (scopes), admin role, and public key settings in Okta, then verify access.${
+              body={`Check the app's permissions (scopes), admin role, and ${usesClientSecret(connection) ? "client secret" : "public key"} settings in Okta, then verify access.${
                 step === "repair"
                   ? " Application sync is paused until verification passes."
                   : ""
@@ -207,10 +230,13 @@ function ConnectionCard({
         </SettingsSection.Body>
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>
-            {FOOTER_HINTS[step]}
+            {footerHint(connection, step)}
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <RevokeConnectionButton connection={connection} />
+            {usesClientSecret(connection) && connection.clientIdSubmitted && (
+              <ReplaceClientSecretButton connection={connection} />
+            )}
             {step === "connected" && (
               <Button
                 variant="secondary"
@@ -259,6 +285,9 @@ export function OktaConnectionTab({
   return (
     <div className="flex flex-col gap-10">
       <ConnectionSetupProgress connection={connection} />
+      {connection.status === "pending" && !connection.clientIdSubmitted && (
+        <SetupMethodChooser connection={connection} />
+      )}
       <ChecklistSection connection={connection} />
       <ConnectionCard connection={connection} />
     </div>

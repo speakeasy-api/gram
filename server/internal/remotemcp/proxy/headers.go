@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -38,6 +39,13 @@ const (
 //
 // Authorization is end-to-end and is handled separately by
 // [Proxy.applyRequestHeaders] based on [Proxy.AuthorizationOverride].
+//
+// The MCP 2026-07-28 standard request headers (Mcp-Method, Mcp-Name, and the
+// Mcp-Param-{Name} family) must never be added here, and configured headers
+// never override them ([Proxy.applyRequestHeaders]). The specification
+// requires an intermediary to forward them, including any Mcp-Param-{Name}
+// header it does not recognize, and the upstream validates them against the
+// body; stripping one would make a conforming request fail upstream.
 func isSkippedRequestHeader(name string) bool {
 	if mcpauthz.ReservedHeader(name) {
 		return true
@@ -57,10 +65,10 @@ func isSkippedRequestHeader(name string) bool {
 		"referer",
 		// Sec-Fetch-* describe the dashboard's own fetch, not the caller's
 		// intent toward the upstream, and are dropped for the same reason as
-		// Origin above. Forwarding them is doubly wrong now that Gram enforces
+		// Origin above. Forwarding them is doubly wrong now that Speakeasy enforces
 		// the same protection inbound: "cross-site" 403s any upstream running
 		// net/http.CrossOriginProtection, while "same-origin" would falsely
-		// satisfy that upstream's check on Gram's behalf.
+		// satisfy that upstream's check on Speakeasy's behalf.
 		"sec-fetch-dest",
 		"sec-fetch-mode",
 		"sec-fetch-site",
@@ -80,6 +88,12 @@ func isSkippedRequestHeader(name string) bool {
 // ResponseWriter, and Transfer-Encoding would double-encode.
 func isSkippedResponseHeader(name string) bool {
 	if mcpauthz.ReservedHeader(name) {
+		return true
+	}
+	// The CORS middleware owns the browser-facing policy. An upstream's own
+	// Access-Control-* values would sit beside it, and a browser rejects a
+	// response carrying two Access-Control-Allow-Origin values.
+	if strings.HasPrefix(strings.ToLower(name), "access-control-") {
 		return true
 	}
 	switch strings.ToLower(name) {
@@ -122,7 +136,7 @@ func isSkippedResponseHeader(name string) bool {
 // mutations are silently dropped.
 func applyResponseHeaders(w http.ResponseWriter, remoteResp *http.Response, wwwAuthenticate string) {
 	// Marks the access log's gram.http.response.external attribute so relayed
-	// upstream statuses (including 5xx) are distinguishable from Gram faults.
+	// upstream statuses (including 5xx) are distinguishable from Speakeasy faults.
 	w.Header().Set(constants.HeaderProxiedResponse, "1")
 	replaceChallenge := wwwAuthenticate != "" &&
 		(remoteResp.StatusCode == http.StatusUnauthorized || remoteResp.StatusCode == http.StatusForbidden)
@@ -172,8 +186,8 @@ func (p *Proxy) stripConfiguredCredentials(header http.Header) {
 // headers from the user request and overlaying the configured static and
 // pass-through headers. Configured headers win on conflict.
 //
-// The user's Authorization header is always dropped — Gram-issued
-// credentials (API keys, Gram-managed OAuth tokens, chat-session JWTs)
+// The user's Authorization header is always dropped — Speakeasy-issued
+// credentials (API keys, Speakeasy-managed OAuth tokens, chat-session JWTs)
 // are not meaningful upstream. When [Proxy.AuthorizationOverride] is
 // non-empty, the proxy emits its own "Authorization: Bearer <override>"
 // upstream after configured headers are resolved so per-user identity wins a
@@ -190,6 +204,12 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 
 	for _, h := range p.Headers {
 		if mcpauthz.ReservedHeader(h.Name) || mcpauthz.ReservedHeader(h.ValueFromRequestHeader) {
+			continue
+		}
+		// A configured header must not set or delete a standard MCP request
+		// header: the client's value is forwarded untouched, as the
+		// specification requires of an intermediary.
+		if httpheaders.IsStandardMCPRequestHeader(h.Name) {
 			continue
 		}
 		value, err := h.Resolve(userReq)

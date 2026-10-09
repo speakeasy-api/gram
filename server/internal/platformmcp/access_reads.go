@@ -23,6 +23,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -115,7 +116,14 @@ type MCPAccessTarget struct {
 	ToolsTruncated       bool            `json:"tools_truncated"`
 }
 
+type MCPMatchingPlugin struct {
+	PluginID string `json:"plugin_id"`
+	Name     string `json:"name"`
+	Slug     string `json:"slug"`
+}
+
 type MCPRoleCoverage struct {
+	MatchingPlugins     []MCPMatchingPlugin        `json:"matching_plugins,omitzero" jsonschema:"live plugins assigned to this exact role containing this MCP; not authorization or installation evidence"`
 	Name                string                     `json:"name"`
 	Type                string                     `json:"type"`
 	MemberCount         SubjectCount               `json:"member_count"`
@@ -168,7 +176,7 @@ func NewAccessReadService(logger *slog.Logger, db *pgxpool.Pool, budget Operatio
 	return &AccessReadService{
 		logger:     logger,
 		db:         db,
-		roles:      access.NewRoleManager(logger, db, nil, nil),
+		roles:      access.NewRoleManager(logger, db, nil, nil, plugins.PublicationRequests{Enabled: false}, nil),
 		budget:     budget,
 		references: references,
 		now:        time.Now,
@@ -374,6 +382,23 @@ func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principa
 	if err != nil {
 		return GetMCPAccessOutput{}, fmt.Errorf("list roles for platform mcp access: %w", err)
 	}
+	principals := make([]string, 0, len(roles.Roles))
+	for _, role := range roles.Roles {
+		principals = append(principals, role.PrincipalUrn)
+	}
+	matches, err := plugins.RolePluginsForResource(ctx, s.db, authz.NewEngine(s.logger, s.db, nil, nil), principal.OrganizationID, projectID, mcpID, principals)
+	if err != nil {
+		return GetMCPAccessOutput{}, fmt.Errorf("read MCP role plugins: %w", err)
+	}
+	byRole := make(map[string][]MCPMatchingPlugin)
+	if matches != nil {
+		for _, role := range roles.Roles {
+			byRole[role.PrincipalUrn] = []MCPMatchingPlugin{}
+		}
+	}
+	for _, match := range matches {
+		byRole[match.PrincipalUrn] = append(byRole[match.PrincipalUrn], MCPMatchingPlugin{PluginID: match.PluginID.String(), Name: match.Name, Slug: match.Slug})
+	}
 	now := s.now().UTC()
 	output := GetMCPAccessOutput{
 		ProjectID: projectID.String(),
@@ -413,6 +438,7 @@ func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principa
 			return GetMCPAccessOutput{}, fmt.Errorf("version MCP access role: %w", err)
 		}
 		output.Roles = append(output.Roles, MCPRoleCoverage{
+			MatchingPlugins:     byRole[role.PrincipalUrn],
 			Name:                role.Name,
 			Type:                accessRoleType(role),
 			MemberCount:         NewSubjectCount(int64(role.MemberCount)),

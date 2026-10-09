@@ -4,7 +4,7 @@ import type { ExternalMCPRemoteHeader } from "@gram/client/models/components/ext
 
 // Pulse MCP registry specifier for Figma's official remote MCP server.
 // Installing this catalog entry creates an unproxied MCP server (see
-// useRemoteMcpInstallWorkflow) instead of a Gram-proxied remote one, since
+// useRemoteMcpInstallWorkflow) instead of a Speakeasy-proxied remote one, since
 // Speakeasy never needs to manage OAuth for it.
 const FIGMA_REGISTRY_SPECIFIER = "com.figma.mcp/mcp";
 

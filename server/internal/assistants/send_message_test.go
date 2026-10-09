@@ -91,7 +91,7 @@ func TestSendMessageEnqueues(t *testing.T) {
 	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message")
 	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID))
 
-	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test", true)
 	require.NoError(t, err)
 
 	ingestor := &fakeDashboardIngestor{core: svc.core, assistantID: managed.ID}
@@ -120,7 +120,7 @@ func TestSendMessageAllowedWithAssistantReadOnly(t *testing.T) {
 	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_read_only")
 	ctx = authztest.WithExactGrants(t, ctx, assistantReadGrant(projectID))
 
-	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test", true)
 	require.NoError(t, err)
 	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core, assistantID: managed.ID})
 
@@ -138,7 +138,7 @@ func TestSendMessageIncludesSelectedSkillContent(t *testing.T) {
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_send_message_skills")
 	ctx = authztest.WithExactGrants(t, ctx, assistantReadGrant(projectID), skillReadGrant(projectID))
 
-	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test", true)
 	require.NoError(t, err)
 	skill, version := createSkillAttachmentFixture(t, conn, projectID, managed.ID, "selected-skill", "user-test")
 
@@ -169,7 +169,7 @@ func TestSendMessageRejectsUnavailableSelectedSkill(t *testing.T) {
 
 	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_missing_skill")
 	ctx = authztest.WithExactGrants(t, ctx, assistantReadGrant(projectID), skillReadGrant(projectID))
-	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test", true)
 	require.NoError(t, err)
 	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core, assistantID: managed.ID})
 
@@ -186,7 +186,7 @@ func TestSendMessageRejectsOversizedSelectedSkillContext(t *testing.T) {
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_send_message_large_skills")
 	ctx = authztest.WithExactGrants(t, ctx, assistantReadGrant(projectID), skillReadGrant(projectID))
-	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test", true)
 	require.NoError(t, err)
 	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core, assistantID: managed.ID})
 
@@ -231,7 +231,7 @@ func TestSendMessageNewConversationsGetDistinctChats(t *testing.T) {
 	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_distinct")
 	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID))
 
-	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test", true)
 	require.NoError(t, err)
 	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core, assistantID: managed.ID})
 
@@ -261,7 +261,7 @@ func TestSendMessageContinuesByChatID(t *testing.T) {
 	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_chatid")
 	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID))
 
-	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test", true)
 	require.NoError(t, err)
 	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core, assistantID: managed.ID})
 
@@ -336,7 +336,7 @@ func TestSendMessageCarriesAttachments(t *testing.T) {
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_send_message_attachments")
 	ctx = authztest.WithExactGrants(t, ctx, assistantReadGrant(projectID))
 
-	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test", true)
 	require.NoError(t, err)
 	assetID := createChatAttachmentFixture(t, conn, projectID, "diagram.png", "image/png")
 
@@ -365,7 +365,7 @@ func TestSendMessageRejectsUnknownAttachment(t *testing.T) {
 
 	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_missing_attachment")
 	ctx = authztest.WithExactGrants(t, ctx, assistantReadGrant(projectID))
-	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test", true)
 	require.NoError(t, err)
 	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core, assistantID: managed.ID})
 
@@ -382,7 +382,7 @@ func TestSendMessageRejectsEmptyMessageWithoutAttachments(t *testing.T) {
 
 	svc, ctx, projectID, _ := newRBACServiceWithConn(t, "assistants_send_message_empty")
 	ctx = authztest.WithExactGrants(t, ctx, assistantReadGrant(projectID))
-	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test", true)
 	require.NoError(t, err)
 	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core, assistantID: managed.ID})
 
@@ -400,7 +400,7 @@ func TestSendMessageRejectsCrossProjectAttachment(t *testing.T) {
 
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_send_message_cross_project")
 	ctx = authztest.WithExactGrants(t, ctx, assistantReadGrant(projectID))
-	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test", true)
 	require.NoError(t, err)
 	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core, assistantID: managed.ID})
 

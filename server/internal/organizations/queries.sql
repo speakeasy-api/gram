@@ -37,10 +37,6 @@ ON CONFLICT (id) DO UPDATE SET
     -- URLs to another host.
     updated_at = clock_timestamp()
 RETURNING *, (xmax = 0) AS inserted
-), enabled AS (
-    INSERT INTO organization_features (organization_id, feature_name)
-    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
-    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
@@ -146,7 +142,7 @@ SELECT EXISTS(
 ) AS exists;
 
 -- name: HasActiveOrganizationUser :one
--- Returns whether a Gram user is an active member of the organization.
+-- Returns whether a Speakeasy user is an active member of the organization.
 SELECT EXISTS(
   SELECT 1
   FROM users
@@ -189,7 +185,7 @@ WHERE our.organization_id = @organization_id
   AND u.deleted_at IS NULL;
 
 -- name: ListActiveOrganizationUserIDs :many
--- Returns the Gram user IDs of active members of the organization. Used to
+-- Returns the Speakeasy user IDs of active members of the organization. Used to
 -- suppress challenges raised by users outside the organization (e.g. Speakeasy
 -- staff impersonating a customer org) from the Challenge UI.
 SELECT u.id
@@ -200,7 +196,7 @@ WHERE our.organization_id = @organization_id
   AND u.deleted_at IS NULL;
 
 -- name: FilterOrganizationMemberUserIDs :many
--- Returns the subset of the given Gram user IDs that are active members of
+-- Returns the subset of the given Speakeasy user IDs that are active members of
 -- the organization. Used to mask Speakeasy staff identities in customer-facing
 -- audit feeds.
 SELECT user_id::text AS user_id
@@ -431,10 +427,6 @@ WITH written AS (
 INSERT INTO organization_metadata (id, name, slug, default_host)
 VALUES (@id, @name, @slug, sqlc.narg('default_host')::text)
 RETURNING *, TRUE AS inserted
-), enabled AS (
-    INSERT INTO organization_features (organization_id, feature_name)
-    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
-    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
@@ -580,7 +572,7 @@ UNION ALL
 SELECT user_id FROM inserted;
 
 -- name: SyncUserOrganizationRoleAssignments :exec
--- Declaratively set all WorkOS role assignments for a known Gram user in an
+-- Declaratively set all WorkOS role assignments for a known Speakeasy user in an
 -- org. Role slugs are resolved from role sync tables and stale assignments for
 -- this WorkOS user are removed.
 WITH input_role_urns AS (
@@ -617,7 +609,7 @@ upserted AS (
         @workos_last_event_id
     FROM input_role_urns
     ON CONFLICT (organization_id, workos_user_id, role_urn) WHERE deleted_at IS NULL DO UPDATE SET
-        -- COALESCE preserves a backfilled user_id if the sync fires before the Gram user exists.
+        -- COALESCE preserves a backfilled user_id if the sync fires before the Speakeasy user exists.
         user_id = COALESCE(EXCLUDED.user_id, organization_role_assignments.user_id),
         workos_membership_id = EXCLUDED.workos_membership_id,
         workos_updated_at = EXCLUDED.workos_updated_at,
@@ -731,7 +723,7 @@ WHERE organization_id = @organization_id
   AND deleted_at IS NULL;
 
 -- name: ReassignOrganizationUserWorkOSID :exec
--- Login reuses a Gram user after WorkOS delete-and-signup, so membership
+-- Login reuses a Speakeasy user after WorkOS delete-and-signup, so membership
 -- rows still pointing at a previous WorkOS user id must follow the new one.
 -- Matches any leftover id so a retry after overwrite still converges.
 UPDATE organization_user_relationships
@@ -803,9 +795,9 @@ ORDER BY role_urn;
 SELECT pg_advisory_xact_lock(hashtext(@slug));
 
 -- name: CreateOrganizationMetadataFromWorkOSWithRequests :one
--- Create a Gram organization row from a WorkOS organization event. The caller
--- chooses the Gram org ID from WorkOS external_id or a deterministic fallback.
--- Slug is a Gram-owned initial value and is never updated by WorkOS sync.
+-- Create a Speakeasy organization row from a WorkOS organization event. The caller
+-- chooses the Speakeasy org ID from WorkOS external_id or a deterministic fallback.
+-- Slug is a Speakeasy-owned initial value and is never updated by WorkOS sync.
 WITH written AS (
 INSERT INTO organization_metadata (
     id,
@@ -827,10 +819,6 @@ INSERT INTO organization_metadata (
     sqlc.narg('default_host')::text
 )
 RETURNING *, (xmax = 0) AS inserted
-), enabled AS (
-    INSERT INTO organization_features (organization_id, feature_name)
-    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
-    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
@@ -857,9 +845,9 @@ SELECT
 FROM written;
 
 -- name: UpsertOrganizationMetadataFromWorkOSWithRequests :one
--- Upsert a Gram organization row from a WorkOS organization event.
--- The caller must only use this when WorkOS external_id is set and is the Gram
--- org ID. Slug is a Gram-owned initial value chosen by the caller and is never
+-- Upsert a Speakeasy organization row from a WorkOS organization event.
+-- The caller must only use this when WorkOS external_id is set and is the Speakeasy
+-- org ID. Slug is a Speakeasy-owned initial value chosen by the caller and is never
 -- updated by WorkOS sync after creation.
 WITH written AS (
 INSERT INTO organization_metadata (
@@ -888,10 +876,6 @@ ON CONFLICT (id) DO UPDATE SET
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     updated_at = clock_timestamp()
 RETURNING *, (xmax = 0) AS inserted
-), enabled AS (
-    INSERT INTO organization_features (organization_id, feature_name)
-    SELECT id, 'automatic-role-distribution' FROM written WHERE inserted
-    ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 )
 SELECT
     (SELECT COALESCE(jsonb_agg(jsonb_build_object('bootstrap_organization_id', id)), '[]'::jsonb) FROM written WHERE inserted)::jsonb AS requests,
@@ -919,8 +903,8 @@ FROM written;
 
 -- name: UpdateOrganizationMetadataFromWorkOS :one
 -- Update an existing organization row from a WorkOS organization event. Caller
--- must have already resolved the Gram organization and passed the row through
--- ShouldProcessEvent. WorkOS does not own Gram slugs, so this only updates
+-- must have already resolved the Speakeasy organization and passed the row through
+-- ShouldProcessEvent. WorkOS does not own Speakeasy slugs, so this only updates
 -- WorkOS-owned metadata and cursor columns.
 UPDATE organization_metadata
 SET name = @name,

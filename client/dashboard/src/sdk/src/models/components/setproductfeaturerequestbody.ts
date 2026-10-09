@@ -29,7 +29,6 @@ export const FeatureName = {
   ConsentToolFiltering: "consent_tool_filtering",
   SessionPortability: "session_portability",
   NetworkIngress: "network_ingress",
-  AutomaticRoleDistribution: "automatic-role-distribution",
 } as const;
 /**
  * Name of the feature to update

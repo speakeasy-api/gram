@@ -10,11 +10,9 @@ import (
 type Feature string
 
 const (
-	// FeatureAutomaticRoleDistribution is the temporary staff-only role-plugin rollout.
-	FeatureAutomaticRoleDistribution Feature = "automatic-role-distribution"
-	FeatureLogs                      Feature = "logs"
-	FeatureToolIOLogs                Feature = "tool_io_logs"
-	FeatureSessionCapture            Feature = "session_capture"
+	FeatureLogs           Feature = "logs"
+	FeatureToolIOLogs     Feature = "tool_io_logs"
+	FeatureSessionCapture Feature = "session_capture"
 	// FeatureSessionPortability gates agent session portability: the device
 	// agent's "continue this session in another harness" flow and the agent
 	// service endpoints backing it (getSessionMeta, reportSessionMoved).
@@ -35,7 +33,7 @@ const (
 	FeaturePlatformMCP Feature = "platform_mcp"
 
 	// FeatureCustomerManagedEncryptionKeys gates the organization's ability to bring its
-	// own cloud KMS keys: the external credentials Gram uses to reach them and,
+	// own cloud KMS keys: the external credentials Speakeasy uses to reach them and,
 	// later, the keys themselves. Distinct from FeatureCustomModelKeys, which
 	// covers model provider API keys.
 	FeatureCustomerManagedEncryptionKeys Feature = "customer_managed_encryption_keys"

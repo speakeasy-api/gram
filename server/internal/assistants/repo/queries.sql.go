@@ -846,7 +846,7 @@ func (q *Queries) DeleteProjectManagedAssistant(ctx context.Context, projectID u
 	return err
 }
 
-const enableMCPForToolsets = `-- name: EnableMCPForToolsets :exec
+const enableMCPForToolsets = `-- name: EnableMCPForToolsets :many
 UPDATE toolsets
 SET mcp_enabled = TRUE,
     updated_at = clock_timestamp()
@@ -855,6 +855,7 @@ WHERE id = ANY($1::UUID[])
   AND mcp_enabled IS FALSE
   AND mcp_slug IS NOT NULL
   AND deleted IS FALSE
+RETURNING id
 `
 
 type EnableMCPForToolsetsParams struct {
@@ -867,9 +868,24 @@ type EnableMCPForToolsetsParams struct {
 // startup config to build; we enable on attach so users don't have to do it
 // separately. mcp_slug is required for an MCP-reachable toolset, so we skip
 // rows that lack one.
-func (q *Queries) EnableMCPForToolsets(ctx context.Context, arg EnableMCPForToolsetsParams) error {
-	_, err := q.db.Exec(ctx, enableMCPForToolsets, arg.ToolsetIds, arg.ProjectID)
-	return err
+func (q *Queries) EnableMCPForToolsets(ctx context.Context, arg EnableMCPForToolsetsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, enableMCPForToolsets, arg.ToolsetIds, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const failAssistantThreadEvent = `-- name: FailAssistantThreadEvent :exec
@@ -2340,9 +2356,9 @@ type LoadAssistantMcpServersRow struct {
 }
 
 // Hydrates assistant_mcp_servers with the fronting mcp_servers row, its
-// Gram-hosted endpoint slug (custom_domain_id IS NULL), and the bound
+// Speakeasy-hosted endpoint slug (custom_domain_id IS NULL), and the bound
 // environment. Soft-deleted servers are skipped so the runtime never targets a
-// dead endpoint; a row whose server has no Gram-hosted endpoint yields a NULL
+// dead endpoint; a row whose server has no Speakeasy-hosted endpoint yields a NULL
 // endpoint_slug and is filtered out in Go. Visibility is returned rather than
 // filtered here so API reads still show disabled attachments while the runtime
 // resolver skips them. Mirrors LoadAssistantToolsets: one read supplies
@@ -3287,22 +3303,25 @@ const resetAssistantThreadEventToPending = `-- name: ResetAssistantThreadEventTo
 UPDATE assistant_thread_events
 SET
   status = $1,
-  last_error = $2,
+  attempts = GREATEST(0, attempts - CASE WHEN $2::boolean THEN 1 ELSE 0 END),
+  last_error = $3,
   updated_at = clock_timestamp()
-WHERE id = $3
-  AND project_id = $4
+WHERE id = $4
+  AND project_id = $5
 `
 
 type ResetAssistantThreadEventToPendingParams struct {
-	PendingStatus string
-	LastError     pgtype.Text
-	EventID       uuid.UUID
-	ProjectID     uuid.UUID
+	PendingStatus  string
+	RestoreAttempt bool
+	LastError      pgtype.Text
+	EventID        uuid.UUID
+	ProjectID      uuid.UUID
 }
 
 func (q *Queries) ResetAssistantThreadEventToPending(ctx context.Context, arg ResetAssistantThreadEventToPendingParams) error {
 	_, err := q.db.Exec(ctx, resetAssistantThreadEventToPending,
 		arg.PendingStatus,
+		arg.RestoreAttempt,
 		arg.LastError,
 		arg.EventID,
 		arg.ProjectID,
@@ -3450,7 +3469,7 @@ type ResolveMcpServersForWriteRow struct {
 // Besides resolving slugs to ids, this returns everything attach-time
 // validation needs to reject servers the assistant runtime cannot reach:
 // the backend kind (tunnelled servers have no serving path), visibility,
-// and whether a Gram-hosted endpoint exists to build the /mcp/{slug} URL.
+// and whether a Speakeasy-hosted endpoint exists to build the /mcp/{slug} URL.
 func (q *Queries) ResolveMcpServersForWrite(ctx context.Context, arg ResolveMcpServersForWriteParams) ([]ResolveMcpServersForWriteRow, error) {
 	rows, err := q.db.Query(ctx, resolveMcpServersForWrite, arg.ProjectID, arg.Slugs)
 	if err != nil {
@@ -4043,7 +4062,7 @@ type UpsertAssistantChatParams struct {
 
 // user_id is the conversation owner — stamped on first insert so reads can
 // scope to the user who started the chat. The dashboard source passes the
-// Gram user id; external-source turns (Slack/cron/wake) pass NULL. On conflict
+// Speakeasy user id; external-source turns (Slack/cron/wake) pass NULL. On conflict
 // the existing user_id is preserved when already set so a later NULL-user-id
 // retry doesn't unclaim the chat; pre-existing rows with NULL user_id are
 // backfilled on first owned send so dashboard ownership checks accept the

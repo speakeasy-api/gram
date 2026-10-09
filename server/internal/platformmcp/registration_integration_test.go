@@ -45,7 +45,8 @@ import (
 var platformMCPInfra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	infra, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
+	// ClickHouse backs the analytics tools' end-to-end test.
+	infra, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
 	if err != nil {
 		log.Fatalf("launch test infrastructure: %v", err)
 	}
@@ -1198,16 +1199,14 @@ func seedRegistrationLifecycle(t *testing.T, ctx context.Context, conn *pgxpool.
 	})
 	require.NoError(t, err)
 
-	return Principal{
+	principal := Principal{
 		UserID:         userID,
 		OrganizationID: organizationID,
 		ConnectionID:   connectionID.String(),
 		Generation:     generation.String(),
-	}, ResolvedProject{
-		ID:   projectRow.ID,
-		Name: projectRow.Name,
-		Slug: projectRow.Slug,
 	}
+	project := ResolvedProject{ID: projectRow.ID, Name: projectRow.Name, Slug: projectRow.Slug}
+	return principal, project
 }
 
 func TestPlatformMCPInventoryReturnsDashboardManagedRemoteUpstreamURL(t *testing.T) {

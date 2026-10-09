@@ -11,7 +11,7 @@ import (
 )
 
 type dashboardSourceRef struct {
-	// UserID is the Gram dashboard user driving the conversation (attribution).
+	// UserID is the Speakeasy dashboard user driving the conversation (attribution).
 	// The conversation thread is keyed by the caller-supplied correlation id,
 	// not the user id, so a user can start a fresh thread at will.
 	UserID string `json:"user_id"`
@@ -33,7 +33,7 @@ func (dashboardAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 	}
 	var b bytes.Buffer
 	b.WriteString("## Conversation context\n\n")
-	b.WriteString("Conversation originated on: Gram dashboard\n")
+	b.WriteString("Conversation originated on: Speakeasy dashboard\n")
 	if ref.UserID != "" {
 		fmt.Fprintf(&b, "UserID: %s\n", ref.UserID)
 	}
@@ -43,13 +43,13 @@ func (dashboardAdapter) ThreadContext(sourceRefJSON []byte) (string, error) {
 func (dashboardAdapter) OutputChannelGuidance() string {
 	return `## Dashboard output preferences
 
-You are answering a Gram user in the web dashboard's side panel. Your reply text is shown to the user directly — just answer in Markdown, conversationally and concisely; prefer compact tables and short summaries over long prose. This is an analyst's side panel, not a chat app.
+You are answering a Speakeasy user in the web dashboard's side panel. Your reply text is shown to the user directly — just answer in Markdown, conversationally and concisely; prefer compact tables and short summaries over long prose. This is an analyst's side panel, not a chat app.
 
 When relaying an "assistant_mcp_auth_required" AuthURL, render it as a clickable Markdown link in your reply (e.g. ` + "`[Authorize](<AuthURL>)`" + `) — the dashboard reader IS the owner, no tool call is needed.
 
 ## Linking entities
 
-Your reply renders in the Gram dashboard, which turns Markdown links written as [label](gram:<type>/<id>) into clickable links to that entity's page (opened in a new tab). Whenever you mention a specific entity, link it this way using its id from the tool result, with a human-readable label (a name or title, not the raw id) — including the name cell in tables. Never leave a bare id like 9399393 as plain text when you can link it instead; a bare id is a dead end for the reader.
+Your reply renders in the Speakeasy dashboard, which turns Markdown links written as [label](gram:<type>/<id>) into clickable links to that entity's page (opened in a new tab). Whenever you mention a specific entity, link it this way using its id from the tool result, with a human-readable label (a name or title, not the raw id) — including the name cell in tables. Never leave a bare id like 9399393 as plain text when you can link it instead; a bare id is a dead end for the reader.
 
 Id values come from the tool results (their JSON field names are PascalCase). Use:
 - Chat / agent session: [Title](gram:chat/<ID>) — the chat's ID, or ChatID from the risk tools

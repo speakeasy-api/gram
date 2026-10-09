@@ -287,7 +287,7 @@ func TestProxyManager_RecordsChallengeScopes(t *testing.T) {
 
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	manager := remotemcp.NewProxyManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	manager := remotemcp.NewProxyManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	written := make(chan struct{}, 8)
 	manager.SetAfterChallengeScopes(func() { written <- struct{}{} })
 	probed := make(chan struct{}, 8)
@@ -346,7 +346,7 @@ func TestProxyManager_ChallengeScopesLatestWins(t *testing.T) {
 
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	manager := remotemcp.NewProxyManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	manager := remotemcp.NewProxyManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	written := make(chan struct{}, 8)
 	manager.SetAfterChallengeScopes(func() { written <- struct{}{} })
 
@@ -394,7 +394,7 @@ func TestProxyManager_ChallengeScopesWithoutRowIsNoop(t *testing.T) {
 	ctx, ti := newTestServiceForProbe(t)
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	manager := remotemcp.NewProxyManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	manager := remotemcp.NewProxyManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	written := make(chan struct{}, 1)
 	manager.SetAfterChallengeScopes(func() { written <- struct{}{} })
 	probed := make(chan struct{}, 1)
@@ -470,7 +470,7 @@ func newProbingManager(t *testing.T, ti *testInstance) (*remotemcp.ProxyManager,
 	t.Helper()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	manager := remotemcp.NewProxyManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	manager := remotemcp.NewProxyManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	probed := make(chan struct{}, 8)
 	manager.SetAfterProtectedResourceProbe(func() { probed <- struct{}{} })
 	return manager, probed
@@ -602,7 +602,7 @@ func TestProxyManager_ProtectedResourceProbeRecordsAnotherResourceAsError(t *tes
 	require.EqualValues(t, 1, hits.Load())
 
 	row := loadProtectedResource(t, ctx, ti, upstream.URL)
-	require.Equal(t, "The metadata document resource or location does not match the requested resource.", row.MetadataLastError.String)
+	require.Equal(t, "The metadata document names the resource https://other.example.test/mcp, not the requested one.", row.MetadataLastError.String)
 	require.True(t, row.MetadataLastErrorAt.Valid)
 	require.False(t, row.MetadataFetchedAt.Valid)
 	require.Nil(t, row.AuthorizationServers)

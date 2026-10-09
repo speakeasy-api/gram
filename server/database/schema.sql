@@ -2359,6 +2359,10 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   -- Operator-pinned scope request, sent verbatim in place of the discovered
   -- scope set. NULL is unset; an empty array on create or update clears it.
   scope_override TEXT[],
+  -- When true, a login that would otherwise fall back to scopes_supported
+  -- omits the scope parameter so the authorization server applies its
+  -- default. NULL or false sends the list.
+  omit_scope_fallback BOOLEAN,
   -- Whether the issuer accepts the RFC 8707 resource parameter. NULL until
   -- learned. False once a login succeeded only after the resource parameter
   -- was dropped, or when an operator states it.
@@ -2554,6 +2558,20 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   -- this client; its mutation guards refuse edits to marked rows.
   identity_provider_connection_id uuid,
 
+  -- Who the upstream access credential belongs to. This describes the token
+  -- Speakeasy presents to the upstream resource, not the client's own secret or
+  -- key material, which always belongs to the client.
+  --
+  --   subject  the credential belongs to a session subject (a user), obtained
+  --            through a per-user flow; every row created before this column
+  --            existed reads as subject
+  --   self     the credential belongs to the client itself, e.g. obtained with
+  --            the client_credentials grant
+  --
+  -- The allowed values are validated in application code. The owner is fixed
+  -- at creation: no update query sets this column.
+  credential_owner TEXT NOT NULL DEFAULT 'subject',
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -2590,6 +2608,22 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
       client_id_metadata_uri <> ''
       AND client_secret_encrypted IS NULL
       AND client_id = client_id_metadata_uri
+    )
+  ),
+  -- Structural rules for a client that owns its upstream credential: it must
+  -- be project or organization scoped (no platform-global shared credential),
+  -- must not publish a CIMD document or use the legacy callback, and must
+  -- authenticate at the token endpoint with an explicit method other than
+  -- none. Required key material depends on the authentication method, not the
+  -- owner, so it is not part of this check.
+  CONSTRAINT remote_session_clients_credential_owner_check CHECK (
+    credential_owner <> 'self'
+    OR (
+      (project_id IS NOT NULL OR organization_id IS NOT NULL)
+      AND client_id_metadata_uri IS NULL
+      AND legacy_callback_url IS FALSE
+      AND token_endpoint_auth_method IS NOT NULL
+      AND token_endpoint_auth_method NOT IN ('', 'none')
     )
   )
 );
@@ -3632,6 +3666,10 @@ WHERE mcp_slug IS NOT NULL AND custom_domain_id IS NOT NULL AND deleted IS FALSE
 CREATE UNIQUE INDEX IF NOT EXISTS toolsets_mcp_slug_null_custom_domain_id_key
 ON toolsets (mcp_slug)
 WHERE mcp_slug IS NOT NULL AND custom_domain_id IS NULL AND deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS toolsets_user_session_issuer_id_idx
+ON toolsets (user_session_issuer_id)
+WHERE user_session_issuer_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS toolset_versions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
@@ -6420,6 +6458,12 @@ CREATE TABLE IF NOT EXISTS remote_protected_resources (
   dpop_signing_alg_values_supported TEXT[],
   tls_client_certificate_bound_access_tokens BOOLEAN,
 
+  -- Operator-pinned scopes for logins to this resource, sent as written plus
+  -- the feature scopes the issuer advertises. Beats every discovered source;
+  -- scopes the resource no longer advertises are flagged, not dropped. NULL
+  -- is unset. Written by its own upsert, never by discovery.
+  scope_override TEXT[],
+
   -- The scope parameter of the last WWW-Authenticate challenge the resource
   -- answered with (RFC 6750 §3), and when. NULL until one is seen.
   challenge_scopes TEXT[],
@@ -7048,6 +7092,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugin_servers_plugin_id_meta_mcp_server_id_ke
 CREATE INDEX IF NOT EXISTS plugin_servers_meta_mcp_server_id_idx
   ON plugin_servers (meta_mcp_server_id);
 
+-- Every other mcp_server_id index leads with plugin_id. Not partial on
+-- deleted: the RESTRICT FK check ignores it and would fall back to a scan.
+CREATE INDEX IF NOT EXISTS plugin_servers_mcp_server_id_idx
+  ON plugin_servers (mcp_server_id)
+  WHERE mcp_server_id IS NOT NULL;
+
 -- Controls who receives a plugin. Reuses the RBAC principal URN pattern
 -- (role:slug, user:id, or * for all org members).
 CREATE TABLE IF NOT EXISTS plugin_assignments (
@@ -7055,6 +7105,10 @@ CREATE TABLE IF NOT EXISTS plugin_assignments (
   plugin_id uuid NOT NULL,
   organization_id TEXT NOT NULL,
   principal_urn TEXT NOT NULL,
+  -- How the device agent installs the plugin for this audience: 'required'
+  -- (on, can't be turned off), 'default' (on, user can turn it off) or
+  -- 'available' (off, user can turn it on). Validated in application code.
+  install_mode TEXT NOT NULL DEFAULT 'default',
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -9464,6 +9518,13 @@ WHERE user_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS platform_mcp_operation_receipts_expires_at_idx
 ON platform_mcp_operation_receipts (expires_at);
 
+-- Replay lookup for an operation that creates its own project: it has no
+-- project to key on yet, so it finds its receipt by user, operation and key
+-- across the organization. The unique key above leads with project_id and
+-- cannot serve that lookup without scanning the user's whole receipt range.
+CREATE INDEX IF NOT EXISTS platform_mcp_operation_receipts_user_operation_idx
+ON platform_mcp_operation_receipts (organization_id, user_id, operation, idempotency_key);
+
 CREATE INDEX IF NOT EXISTS platform_mcp_operation_receipts_organization_connection_idx
 ON platform_mcp_operation_receipts (organization_id, connection_id);
 
@@ -10469,6 +10530,88 @@ CREATE TABLE IF NOT EXISTS widgets (
 
 CREATE INDEX IF NOT EXISTS widgets_project_id_updated_at_idx
 ON widgets (project_id, updated_at DESC) WHERE deleted IS FALSE;
+
+-- Dashboards are a project's layouts of saved widgets. A dashboard owns its
+-- placements but not its widgets: a widget is linked onto any number of
+-- dashboards, and editing it changes it everywhere. Built-in pages such as
+-- MCP & Tools are dashboards too, but their layouts ship in code and are
+-- never rows here; duplicating one copies its cards into saved widgets and
+-- a row here.
+-- filters is the date range and filter values the dashboard opens on, in
+-- the shape the dashboards service reads; changes in the bar are a
+-- personal view until someone saves them here.
+CREATE TABLE IF NOT EXISTS dashboards (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  created_by_user_id TEXT,
+
+  -- Name and description lengths are checked by the dashboards service, so
+  -- the limits can move without a migration.
+  name TEXT NOT NULL,
+  description TEXT,
+  filters jsonb NOT NULL DEFAULT '{}'::jsonb,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT dashboards_pkey PRIMARY KEY (id),
+  CONSTRAINT dashboards_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS dashboards_project_id_updated_at_idx
+ON dashboards (project_id, updated_at DESC) WHERE deleted IS FALSE;
+
+-- The target of a card's tenant-pinned link to its dashboard.
+CREATE UNIQUE INDEX IF NOT EXISTS dashboards_project_id_id_key
+ON dashboards (project_id, id);
+
+-- The target of a card's tenant-pinned link to its widget.
+CREATE UNIQUE INDEX IF NOT EXISTS widgets_project_id_id_key
+ON widgets (project_id, id);
+
+-- A placement is one card on a dashboard: the widget it links to and where
+-- it sits on the dashboard's 12-column grid. Placements are structural
+-- rather than content, so they are replaced wholesale as a layout is edited
+-- and go with their dashboard or widget rather than being soft deleted. The
+-- same widget may be placed on a dashboard more than once.
+CREATE TABLE IF NOT EXISTS dashboard_widgets (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  dashboard_id uuid NOT NULL,
+  widget_id uuid NOT NULL,
+
+  -- Grid position and size, in columns and rows. The dashboards service
+  -- keeps them on the grid and above each chart type's minimum.
+  x integer NOT NULL,
+  y integer NOT NULL,
+  w integer NOT NULL,
+  h integer NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT dashboard_widgets_pkey PRIMARY KEY (id),
+  -- The columns are NOT NULL, so a physical delete of a project, dashboard
+  -- or widget has to remove its cards first; the services do. The dashboard
+  -- and widget links carry the project, so a card cannot point across one.
+  CONSTRAINT dashboard_widgets_organization_id_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL,
+  CONSTRAINT dashboard_widgets_project_id_dashboard_id_fkey FOREIGN KEY (project_id, dashboard_id) REFERENCES dashboards (project_id, id) ON DELETE SET NULL,
+  CONSTRAINT dashboard_widgets_project_id_widget_id_fkey FOREIGN KEY (project_id, widget_id) REFERENCES widgets (project_id, id) ON DELETE SET NULL
+);
+
+-- Loading a dashboard's cards, and asking which dashboards a widget is on.
+CREATE INDEX IF NOT EXISTS dashboard_widgets_dashboard_id_idx
+ON dashboard_widgets (dashboard_id);
+CREATE INDEX IF NOT EXISTS dashboard_widgets_widget_id_idx
+ON dashboard_widgets (widget_id);
+
+-- The widgets list asks which dashboards each of a project's widgets is on.
+CREATE INDEX IF NOT EXISTS dashboard_widgets_project_id_widget_id_idx
+ON dashboard_widgets (project_id, widget_id);
 
 -- Observed conversation participants are independent of message ownership and
 -- billing attribution. Directory resolution is a snapshot, not an auth grant.

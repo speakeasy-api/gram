@@ -95,11 +95,13 @@ func newInterruptTestCore(t *testing.T, conn *pgxpool.Pool, backend testRuntimeB
 		nil,
 		backend,
 		nil,
-		assistanttokens.New("test-jwt-secret", conn, nil),
+		assistanttokens.New("test-jwt-secret", conn, nil, nil, nil),
 		nil,
 		telemetry.NewStub(logger),
 		nil,
 		newTestAuditLogger(),
+		testIdentityService,
+		newTestAuthzEngine(t, conn),
 	)
 }
 

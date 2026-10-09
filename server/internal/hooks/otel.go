@@ -498,7 +498,7 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 				}
 
 				// Attribute usage to the owning employee. For a team session the
-				// resolved Gram user id and the email agree; for a personal
+				// resolved Speakeasy user id and the email agree; for a personal
 				// session the email won't resolve but the device bridge may have
 				// supplied the owner's user id, so personal usage rolls up under
 				// the employee while account_type=personal preserves the split.

@@ -53,6 +53,7 @@ import (
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
@@ -88,7 +89,7 @@ type GitHubPublisher interface {
 	GetFileContent(ctx context.Context, installationID int64, owner, repo, branch, path string) ([]byte, error)
 }
 
-// GitHubConfig holds the configured GitHub client and the Gram-owned org
+// GitHubConfig holds the configured GitHub client and the Speakeasy-owned org
 // where plugin repos are created. Nil means GitHub publishing is disabled.
 type GitHubConfig struct {
 	Client         GitHubPublisher
@@ -831,10 +832,11 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	// Serialize all backend representations with role delivery before checking identity.
+	if err := lockDistributionAdmission(ctx, tx, *ac.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, s.logger)
+	}
 	if backend.mcpServerID.Valid || backend.metaMcpServerID.Valid {
-		if err := lockDistributionAdmission(ctx, tx, *ac.ProjectID); err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, s.logger)
-		}
 		if backend.metaMcpServerID.Valid {
 			gateway, gatewayErr := s.repo.WithTx(tx).GetGatewayForPluginServer(ctx, repo.GetGatewayForPluginServerParams{
 				MetaMcpServerID: backend.metaMcpServerID.UUID,
@@ -864,6 +866,20 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 				return nil, mapDistributionAdmissionError(err)
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "check direct-remote distribution admission").LogError(ctx, s.logger)
+		}
+	}
+
+	if !backend.metaMcpServerID.Valid {
+		exists, err := s.repo.WithTx(tx).HasRoleDeliveryMembership(ctx, repo.HasRoleDeliveryMembershipParams{
+			PluginID: pluginID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
+			ToolsetID: backend.toolsetID, McpServerID: backend.mcpServerID,
+			LegacyToolsetID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, PreserveRemoval: false,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check plugin server identity").LogError(ctx, s.logger)
+		}
+		if exists {
+			return nil, oops.E(oops.CodeConflict, nil, "this server has already been added to the plugin")
 		}
 	}
 
@@ -1197,6 +1213,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 	var rollout admission.RolloutConfig
 	var rolloutErr error
 	rollout, rolloutErr = s.distributionRollout(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectID)
+	ctx = roledelivery.WithProjectAdmission(ctx, ac.ActiveOrganizationID, *ac.ProjectID, rollout, rolloutErr)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
@@ -1221,7 +1238,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		ActorDisplayName: ac.Email,
 		ActorSlug:        nil,
-	}, pluginassignments.Dependencies{Guard: s.assignmentAdmissionGuard(rollout, rolloutErr), BeforeReplace: nil})
+	}, pluginassignments.Dependencies{Guard: s.assignmentAdmissionGuard(rollout, rolloutErr), BeforeReplace: nil, DeliveryGuard: s.distributionAdmission})
 	if err != nil {
 		switch {
 		case errors.Is(err, pluginassignments.ErrNotFound):
@@ -1232,6 +1249,11 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 			return nil, mapDistributionAdmissionError(err)
 		default:
 			return nil, oops.E(oops.CodeUnexpected, err, "set plugin assignments").LogError(ctx, s.logger)
+		}
+	}
+	if result.ContentChanged {
+		if err := s.publicationRequests.Project(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "request role audience publication").LogError(ctx, s.logger)
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -1294,7 +1316,11 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 	if ac.ProjectSlug != nil {
 		projectSlug = *ac.ProjectSlug
 	}
-	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, projectSlug, *ac.ProjectID)
+	publishedHooksConfig, err := s.publishedHooksConfig(ctx, *ac.ProjectID)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "read published marketplace name").LogError(ctx, s.logger)
+	}
+	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, projectSlug, *ac.ProjectID, publishedHooksConfig)
 
 	files, err := GenerateSinglePluginPackage(*pluginInfo, cfg, payload.Platform)
 	if err != nil {
@@ -1337,6 +1363,11 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "observability plugin is disabled for this project")
 	}
 
+	publishedHooksConfig, err := s.publishedHooksConfig(ctx, *ac.ProjectID)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "read published marketplace name").LogError(ctx, s.logger)
+	}
+
 	candidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks-download")
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "build hooks api key").LogError(ctx, s.logger)
@@ -1346,7 +1377,7 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "persist hooks api key").LogError(ctx, s.logger)
 	}
 
-	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectSlug, *ac.ProjectID)
+	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectSlug, *ac.ProjectID, publishedHooksConfig)
 	cfg.HooksAPIKey = candidate.fullKey
 
 	files, err := GenerateObservabilityPluginPackage(cfg, payload.Platform)
@@ -1418,7 +1449,7 @@ func (s *Service) DownloadCodexInstallScript(ctx context.Context, payload *gen.D
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "build hooks api key").LogError(ctx, s.logger)
 	}
 
-	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, conv.PtrValOr(ac.ProjectSlug, ""), *ac.ProjectID)
+	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, conv.PtrValOr(ac.ProjectSlug, ""), *ac.ProjectID, conn.PublishedHooksConfig)
 	cfg.HooksAPIKey = candidate.fullKey
 	// The script's plugin key and hook approvals must name the codex plugin as
 	// it exists in the published repo, which a rollout-gated carry may have
@@ -1595,8 +1626,9 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 				marketplaceURL := fmt.Sprintf("%s%s%s.git", s.serverURL, marketplace.RoutePrefix, conn.MarketplaceToken.String)
 				result.MarketplaceURL = &marketplaceURL
 			}
-			// The connection row is only ever written by a successful publish, so
-			// updated_at is a faithful last-published timestamp.
+			// Only a successful publish moves updated_at (recording or dropping
+			// the published marketplace name leaves it alone), so it is a
+			// faithful last-published timestamp.
 			if conn.UpdatedAt.Valid {
 				lastPublishedAt := formatTime(conn.UpdatedAt)
 				result.LastPublishedAt = &lastPublishedAt
@@ -1796,7 +1828,7 @@ func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthCon
 		return nil
 	}
 
-	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, projectSlug, *ac.ProjectID)
+	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, projectSlug, *ac.ProjectID, conn.PublishedHooksConfig)
 	publishedMCPFingerprints := decodeMCPFingerprints(conn.PublishedMcpFingerprints)
 
 	observabilityEnabled, err := s.projectObservabilityEnabled(ctx, *ac.ProjectID)
@@ -1997,7 +2029,7 @@ func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput)
 		return nil, fmt.Errorf("github publishing is not configured")
 	}
 
-	actorDisplayName := "Gram"
+	actorDisplayName := "Speakeasy"
 	result, err := s.publishProject(ctx, publishProjectInput{
 		ProjectID:        project.ProjectID,
 		ProjectName:      project.ProjectName,
@@ -2155,7 +2187,17 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		projectName = project.Name
 	}
 
-	cfg := s.generateConfig(ctx, input.OrganizationID, input.OrganizationSlug, input.ProjectSlug, input.ProjectID)
+	existing, connErr := s.repo.GetGitHubConnection(ctx, input.ProjectID)
+	if connErr != nil && !errors.Is(connErr, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeUnexpected, connErr, "get github connection").LogError(ctx, s.logger)
+	}
+	firstPublish := errors.Is(connErr, pgx.ErrNoRows)
+	publishedMCPFingerprints := decodeMCPFingerprints(existing.PublishedMcpFingerprints)
+
+	// The stored snapshot carries the marketplace name the repo was last
+	// published under, so cfg.MarketplaceName stays frozen across org renames,
+	// project slug changes, and default-project changes.
+	cfg := s.generateConfig(ctx, input.OrganizationID, input.OrganizationSlug, input.ProjectSlug, input.ProjectID, existing.PublishedHooksConfig)
 
 	// GitHub repo owner/name are case-insensitive. Normalize at the boundary
 	// so the rows we persist round-trip cleanly through the case-insensitive
@@ -2163,13 +2205,6 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	repoOwner := strings.ToLower(s.github.Org)
 	repoName := strings.ToLower(input.OrganizationSlug + "-" + input.ProjectSlug + "-plugins")
 	repoURL := fmt.Sprintf("https://github.com/%s/%s", repoOwner, repoName)
-
-	existing, connErr := s.repo.GetGitHubConnection(ctx, input.ProjectID)
-	if connErr != nil && !errors.Is(connErr, pgx.ErrNoRows) {
-		return nil, oops.E(oops.CodeUnexpected, connErr, "get github connection").LogError(ctx, s.logger)
-	}
-	firstPublish := errors.Is(connErr, pgx.ErrNoRows)
-	publishedMCPFingerprints := decodeMCPFingerprints(existing.PublishedMcpFingerprints)
 
 	// Package admission is available before the first Platform MCP connection,
 	// but placement remains restricted to the organization's default-project
@@ -2237,10 +2272,13 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	if !observabilityEnabled {
 		// Omit the hooks subtree entirely. An empty published version is the
 		// disabled project's target so later unchanged publishes skip, and
-		// re-enabling looks like a first hooks publish.
+		// re-enabling looks like a first hooks publish. The stored config then
+		// holds only the recorded marketplace name, so config never decides a
+		// disabled project's hooks change: a leftover published hooks version is
+		// what marks a subtree still to remove.
 		targetHooksVersion = ""
 		targetHooksConfigJSON = nil
-		targetHooksConfigHash = ""
+		targetHooksConfigHash = publishedHooksConfigHash
 		hooksConfigDeferred = false
 	}
 	// A credential rotation regenerates the hooks subtree, which always lands on
@@ -2288,6 +2326,30 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		publishedHooksConfigHash != targetHooksConfigHash
 
 	if input.SkipIfUnchanged && !mcpChanged && !hooksChanged {
+		// The shared MCP fingerprint hashes the marketplace manifests, so a match
+		// proves the repo already carries the resolved name. Record it without a
+		// republish: this freezes the name of a project that last published
+		// before names were recorded. Best effort, since the next sweep retries.
+		//
+		// Only the computed name is recorded. An override fixes the name by
+		// itself, and clearing a published override returns to the computed
+		// name whether or not it was recorded. Recording an override could also
+		// land just after an admin cleared it, when the clear found no recorded
+		// name to forget, and so freeze the cleared name.
+		recorded := naming.PublishedMarketplaceName(existing.PublishedHooksConfig)
+		computed := naming.MarketplaceName(cfg.OrgName, cfg.ProjectSlug, cfg.IsDefaultProject)
+		if recorded == "" && cfg.MarketplaceName == computed {
+			if err := s.repo.RecordPublishedMarketplaceName(ctx, repo.RecordPublishedMarketplaceNameParams{
+				MarketplaceName:         cfg.MarketplaceName,
+				ProjectID:               input.ProjectID,
+				RecordedMarketplaceName: conv.ToPGTextEmpty(recorded),
+			}); err != nil {
+				s.logger.WarnContext(ctx, "record published marketplace name for unchanged publish",
+					attr.SlogProjectID(input.ProjectID.String()),
+					attr.SlogError(err),
+				)
+			}
+		}
 		return &publishOutcome{RepoURL: repoURL, Skipped: true, HooksConfigDeferred: hooksConfigDeferred, HooksKeyPublished: false}, nil
 	}
 
@@ -2407,6 +2469,16 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		hooksConfigDeferred = false
 	}
 
+	// Record the name the shared manifests below are pushed under, whichever
+	// way the hooks subtree went. A carried snapshot would otherwise keep the
+	// name from its last hooks regeneration, and a disabled project would
+	// record none. The key sits outside the hashed hooks config fields, so
+	// stamping it never changes what the next publish treats as a hooks change.
+	persistedHooksConfigJSON, err := naming.WithPublishedMarketplaceName(targetHooksConfigJSON, cfg.MarketplaceName)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "record published marketplace name").LogError(ctx, s.logger)
+	}
+
 	// Shared files (marketplace manifests + README) reference both components but
 	// embed no per-publish secret or version, so they're always regenerated from
 	// a config with non-empty key sentinels: only key presence matters here (it
@@ -2494,7 +2566,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// credentials when GitHub fails. If this transaction itself fails, the
 	// published repo contains key strings with no DB records — re-publish
 	// overwrites them with fresh valid keys.
-	if err := s.persistPluginAPIKeys(ctx, input, candidates, projectName, repoOwner, repoName, pluginSlugs, mcpFingerprintsJSON, targetHooksVersion, targetHooksConfigJSON); err != nil {
+	if err := s.persistPluginAPIKeys(ctx, input, candidates, projectName, repoOwner, repoName, pluginSlugs, mcpFingerprintsJSON, targetHooksVersion, persistedHooksConfigJSON); err != nil {
 		if errors.Is(err, ErrGitHubRepoConflict) {
 			return nil, oops.E(oops.CodeConflict, err, "persist plugin api keys").LogWarn(ctx, s.logger)
 		}
@@ -2586,11 +2658,9 @@ func (s *Service) GetMarketplaceSettings(ctx context.Context, payload *gen.GetMa
 		return nil, oops.E(oops.CodeUnexpected, err, "get marketplace settings").LogError(ctx, s.logger)
 	}
 
-	defaultName := s.resolveDefaultMarketplaceName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectID)
-
-	effective := override
-	if effective == "" {
-		effective = defaultName
+	defaultName, effective, err := s.resolveMarketplaceNames(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectID, override)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve marketplace name").LogError(ctx, s.logger)
 	}
 
 	return &gen.MarketplaceSettingsResult{
@@ -2657,6 +2727,23 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 		return nil, oops.E(oops.CodeUnexpected, err, "upsert marketplace settings").LogError(ctx, s.logger)
 	}
 
+	// Clearing an override is an explicit rename back to the project's default
+	// name, the one the dashboard showed before the save. If the override
+	// already published, the recorded published name is that override rather
+	// than a default, so drop it and let the project return to its computed
+	// name. If it never published, the recorded name is still live in the repo
+	// and stays frozen. Done here, in the settings transaction, so the outcome
+	// does not hang on the republish below succeeding.
+	clearedOverride := conv.FromPGTextOrEmpty[string](current.MarketplaceName)
+	if clearedOverride != "" && conv.FromPGTextOrEmpty[string](settings.MarketplaceName) == "" {
+		if err := txRepo.ForgetPublishedMarketplaceName(ctx, repo.ForgetPublishedMarketplaceNameParams{
+			ProjectID:       *ac.ProjectID,
+			ClearedOverride: clearedOverride,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "forget published marketplace name").LogError(ctx, s.logger)
+		}
+	}
+
 	// A re-save that lands on the values already stored is not a change: an
 	// audit entry whose snapshots match would read as one.
 	after := marketplaceSettingsSnapshot(settings)
@@ -2714,9 +2801,9 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 				// marketplace manifests while the Codex hooks are carried and catch
 				// up once eligible; the outcome reports that so we can tell the user.
 				// A re-save that changed nothing falls back to the freshness check,
-				// which still republishes real drift (an org rename moves the
-				// default name without touching these settings) but spares the
-				// marketplace a commit for a no-op save.
+				// which still republishes real drift (an org rename changes the
+				// manifests' owner name without touching these settings) but
+				// spares the marketplace a commit for a no-op save.
 				SkipIfUnchanged:   !settingsChanged,
 				RotateHooksKey:    false,
 				HooksKeyCandidate: nil,
@@ -2733,11 +2820,9 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 		}
 	}
 
-	defaultName := s.resolveDefaultMarketplaceName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectID)
-
-	effective := override
-	if effective == "" {
-		effective = defaultName
+	defaultName, effective, err := s.resolveMarketplaceNames(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, *ac.ProjectID, override)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve marketplace name").LogError(ctx, s.logger)
 	}
 
 	return &gen.UpdateMarketplaceSettingsResult{
@@ -2791,27 +2876,51 @@ func (s *Service) projectObservabilityEnabled(ctx context.Context, projectID uui
 	}
 }
 
-// resolveDefaultMarketplaceName mirrors generateConfig's name resolution: prefer
-// the human-readable org name from organization_metadata so the displayed
-// default matches what the publish flow actually generates, falling back to the
-// org slug from the auth context if the lookup fails. The project slug and
-// default-ness are read from the project row (not the auth context, which some
-// flows like project-scoped API keys leave unset) so non-default projects get
-// their correct project-scoped name.
-func (s *Service) resolveDefaultMarketplaceName(ctx context.Context, orgID, orgSlug string, projectID uuid.UUID) string {
+// resolveMarketplaceNames returns a project's default marketplace name (the
+// one it publishes under without an override, and so returns to when its
+// override is cleared) and its effective name. Both come from the shared
+// naming resolver over the same inputs generateConfig uses, so the dashboard
+// shows exactly the name the publish path writes and the device agent emits.
+// The org name comes from organization_metadata, falling back to the auth
+// context slug. The project slug and default-ness are read from the project
+// row (not the auth context, which some flows like project-scoped API keys
+// leave unset) so a non-default project gets its project-scoped name.
+func (s *Service) resolveMarketplaceNames(ctx context.Context, orgID, orgSlug string, projectID uuid.UUID, override string) (defaultName, effectiveName string, err error) {
+	publishedHooksConfig, err := s.publishedHooksConfig(ctx, projectID)
+	if err != nil {
+		return "", "", err
+	}
 	orgName := s.resolveOrganizationName(ctx, orgID, orgSlug)
 
 	pctx, err := s.repo.GetProjectMarketplaceNameContext(ctx, projectID)
 	if err != nil {
-		// Without the project row we can't safely scope the name; the bare
-		// org-derived default is the least-surprising fallback for display.
+		// Without the project row we can't safely scope the computed name; the
+		// bare org-derived name is the least-surprising fallback for display.
 		s.logger.WarnContext(ctx, "failed to resolve project marketplace context, falling back to org default name",
 			attr.SlogProjectID(projectID.String()),
 			attr.SlogError(err),
 		)
-		return DefaultMarketplaceName(orgName, "", true)
+		pctx = repo.GetProjectMarketplaceNameContextRow{ProjectSlug: "", IsDefaultProject: true}
 	}
-	return DefaultMarketplaceName(orgName, pctx.ProjectSlug, pctx.IsDefaultProject)
+
+	defaultName = naming.DefaultMarketplaceName(override, publishedHooksConfig, orgName, pctx.ProjectSlug, pctx.IsDefaultProject)
+	effectiveName = naming.ResolveMarketplaceName(override, publishedHooksConfig, orgName, pctx.ProjectSlug, pctx.IsDefaultProject)
+	return defaultName, effectiveName, nil
+}
+
+// publishedHooksConfig returns the project's stored published hooks config
+// snapshot, which records the marketplace name the project last published
+// under. Nil when the project has never published.
+func (s *Service) publishedHooksConfig(ctx context.Context, projectID uuid.UUID) ([]byte, error) {
+	conn, err := s.repo.GetGitHubConnection(ctx, projectID)
+	switch {
+	case err == nil:
+		return conn.PublishedHooksConfig, nil
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, nil
+	default:
+		return nil, fmt.Errorf("get github connection: %w", err)
+	}
 }
 
 // resolveOrganizationName returns the org's display name, falling back to the
@@ -3206,7 +3315,7 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, p
 		// only checks project ownership, not backend type), and mcp_servers'
 		// own backend-exclusivity check doesn't cover mcp_endpoints either.
 		// An unproxied-backed server's URL always wins so it's never routed
-		// through a Gram endpoint it can't actually be served from.
+		// through a Speakeasy endpoint it can't actually be served from.
 		mcpURL := ""
 		isOAuth := m.McpServerIsOauth
 		isUnproxied := false
@@ -3332,7 +3441,11 @@ func (s *Service) resolveAgentPluginCompatibility(ctx context.Context, projectID
 	return result, nil
 }
 
-func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlug string, projectID uuid.UUID) GenerateConfig {
+// generateConfig builds the org- and project-level configuration for package
+// generation. publishedHooksConfig is the project's stored published hooks
+// config snapshot (nil before its first publish); it carries the marketplace
+// name the project last published under, which freezes the resolved name.
+func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlug string, projectID uuid.UUID, publishedHooksConfig []byte) GenerateConfig {
 	cfg := GenerateConfig{
 		OrgName:     orgSlug,
 		OrgEmail:    "",
@@ -3362,16 +3475,18 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 			attr.SlogError(err),
 		)
 	}
+	override := ""
 	settings, err := s.repo.GetMarketplaceSettings(ctx, projectID)
 	switch {
 	case err == nil:
-		cfg.MarketplaceName = conv.FromPGTextOrEmpty[string](settings.MarketplaceName)
+		override = conv.FromPGTextOrEmpty[string](settings.MarketplaceName)
 	case !errors.Is(err, pgx.ErrNoRows):
 		s.logger.WarnContext(ctx, "failed to fetch marketplace settings, falling back to default",
 			attr.SlogProjectID(projectID.String()),
 			attr.SlogError(err),
 		)
 	}
+	cfg.MarketplaceName = naming.ResolveMarketplaceName(override, publishedHooksConfig, cfg.OrgName, projectSlug, cfg.IsDefaultProject)
 	// hooks_browser_login is the org-level opt-in for the interactive browser
 	// token exchange. Off (or unreadable), the generated plugin never opens a
 	// browser: senders authenticate through env credentials, a previously

@@ -25,7 +25,7 @@ type MCPToolOutcomeBreakdownRow struct {
 // so a caller that already knows a server is failing can find which of its
 // tools accounts for it.
 //
-// Tool names are Gram-side configuration, not caller-supplied content, which is
+// Tool names are Speakeasy-side configuration, not caller-supplied content, which is
 // why they may be projected where arguments and results may not.
 func (q *Queries) GetMCPToolOutcomeBreakdown(ctx context.Context, arg GetMCPToolOutcomeBreakdownParams) ([]MCPToolOutcomeBreakdownRow, error) {
 	if len(arg.GramProjectIDs) == 0 {

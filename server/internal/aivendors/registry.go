@@ -1,6 +1,6 @@
 package aivendors
 
-// registry is Gram's curated list of AI products.
+// registry is Speakeasy's curated list of AI products.
 //
 // Every Document here becomes a CIMD admission entry. A MISSING one is a hard,
 // unrecoverable auth failure: MCP clients pick CIMD over dynamic registration
@@ -8,8 +8,9 @@ package aivendors
 // no recourse. Be generous — an extra document costs a string comparison.
 //
 // Verify every document live before it lands (HTTP 200, valid JSON, client_id
-// equal to URL, token_endpoint_auth_method "none") and record the date above
-// the product. Every product with Signatures is also a scan target.
+// equal to URL, token_endpoint_auth_method "none" or absent OR
+// "private_key_jwt" with exactly one of jwks or jwks_uri) and record the date
+// above the product. Every product with Signatures is also a scan target.
 //
 // Declaration order is load-bearing: wildcards match in order, so reordering
 // can change which entry a client_id is attributed to.
@@ -280,7 +281,7 @@ var registry = []Product{
 			{
 				// The stable shared Codex document. Verified 2026-09: Codex
 				// CLI 0.154.0 presents this one, not the per-server document
-				// above, when it authorizes against a Gram MCP server.
+				// above, when it authorizes against a Speakeasy MCP server.
 				// OpenAI's docs tie that switch to authorization servers
 				// advertising RFC 9207. Both forms stay registered: older
 				// CLIs still mint a document per server, and which one a
@@ -493,8 +494,33 @@ var registry = []Product{
 		}},
 	},
 
+	// Verified 2026-10-05: HTTP 200, self-referential client_id,
+	// token_endpoint_auth_method "private_key_jwt" with jwks_uri. This is a
+	// wildcard: Vercel Connect mints one document per connector, with
+	// server-generated IDs (scl_...). Sibling paths return 404 (/connectors,
+	// /connectors/a/b), so the namespace is bounded. The single redirect_uri
+	// is Vercel's own /callback. client_name is user-chosen (the connector
+	// owner's chosen name); the consent page shows it alongside the
+	// connect.vercel.com origin, which is the verifiable trust anchor. The
+	// catalog DisplayName ("Vercel Connect") attributes the client in the
+	// dashboard.
+	{
+		ID:              "vercel-connect",
+		VendorKey:       "vercel",
+		DisplayName:     "Vercel Connect",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Documents: []Document{{
+			URL:         "https://connect.vercel.com/connectors/*",
+			DisplayName: "Vercel Connect (connectors)",
+			Enabled:     true,
+		}},
+	},
+
 	// Products below publish no CIMD document. They register dynamically or
-	// do not speak MCP to Gram at all, so an access decision about them is
+	// do not speak MCP to Speakeasy at all, so an access decision about them is
 	// recorded and enforces nothing — the dashboard says so rather than
 	// implying the gateway turns them away. They carry reported client names
 	// for attribution only.
@@ -915,7 +941,7 @@ var registry = []Product{
 		Documents:       nil,
 	},
 
-	// Local model runtimes. They never speak MCP to Gram, so they carry no
+	// Local model runtimes. They never speak MCP to Speakeasy, so they carry no
 	// documents and no reported names: there is no caller to recognize.
 	// Bundle id and data path verified 2026-09-11 from the Homebrew cask. Jan
 	// is both a runtime and a chat UI; filed as a runtime because that is the

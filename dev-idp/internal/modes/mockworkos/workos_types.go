@@ -4,7 +4,7 @@ import "encoding/json"
 
 // WorkOS-shaped wire types served by the mock-workos mode's
 // /user_management/*, /organizations/*, and /authorization/* endpoints.
-// Field names + JSON tags mirror workos-go/v6 SDK types so Gram-side's
+// Field names + JSON tags mirror workos-go/v6 SDK types so Speakeasy-side's
 // `*workos.Client` can decode our responses with zero changes when its
 // base URL is pointed at us instead of api.workos.com.
 

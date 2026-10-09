@@ -215,7 +215,7 @@ describe("AttachedUserSessions container", () => {
           userSessionIssuerId: "source-issuer",
           upstreamDisplayName: "Example upstream user",
           upstreamEmail: "upstream@example.test",
-          subjectDisplayName: "Gram subject",
+          subjectDisplayName: "Speakeasy subject",
         },
       },
     ]);
@@ -227,7 +227,7 @@ describe("AttachedUserSessions container", () => {
       }),
     ).toBeTruthy();
     expect(
-      screen.queryByText(/Gram subject|source-issuer|target-issuer/),
+      screen.queryByText(/Speakeasy subject|source-issuer|target-issuer/),
     ).toBeNull();
   });
   it("does not label a tombstone as active when a new grant reuses its session ID", async () => {

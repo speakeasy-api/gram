@@ -113,7 +113,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
 
 12. **External OAuth settings** — open **MCP → Acme OAuth Discovery →
     Authentication** (`/mcp/acme-oauth-discovery/authentication`). The page
-    shows the existing Gram-hosted metadata configuration, recommends
+    shows the existing Speakeasy-hosted metadata configuration, recommends
     provider-hosted metadata, and offers **Review update**. Opening the review
     starts with the fictional `https://auth.example.com` issuer; live discovery
     does not need to succeed for this seeded-page check.
@@ -229,7 +229,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       The result shows the secret once and the selected server endpoints.
       Select individual member servers for Meta MCP: aggregate membership is
       not yet a supported agent consent/delegation target. Unproxied servers
-      cannot receive Gram credential grants.
+      cannot receive Speakeasy credential grants.
       Leaving setup must not delete connected accounts; start setup for the
       same or another eligible agent and confirm owned accounts are offered.
     - **Agent OAuth consent:** select an agent, finish required third-party
@@ -477,6 +477,14 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     tool_calls dataset, a 7-day window and a table ordered by p95 duration,
     runs it, and returns rows; the bar names the widget with Priya Raman as
     its creator and **Save** stays disabled until something is edited.
+    Still on the Explore tab, switch the dataset to `skills`: the builder
+    opens grouped by `skill` with a count, and the description beside the
+    grain says which producers report skills. Run, and the table shows
+    `review-pr`, `write-tests` and `release-notes` with counts and no empty
+    group, since a call that named no skill is not a row. Add a filter on
+    `skill`: the values picker offers those three names with counts and
+    never an empty value. Then flip the Explore row in `PAGES.md` from
+    `[~]` to `[x]`.
 27. **Check access** — open MCP → **GitHub** → Team Access and pick Mateo
     Alvarez in Check access. Connect is **Blocked**: the Contractors block
     wins, Engineer's grants show as blocked, and his own grant covering
@@ -485,6 +493,16 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     admin. View and Manage stay allowed, since the block covers Connect
     only. Pick Priya Raman: Connect is **Allowed** because her grant naming
     GitHub overrides the Contractors block, which shows as overridden.
+28. **Role editor: MCP access** — open Team → Roles & Permissions and edit
+    **Support Desk**. MCP access opens on Specific servers with the Default
+    project expanded: Acme Support Tools is ticked with no badge, and Slack
+    is ticked with a **Read-Only Tools** badge that opens its tool access
+    sheet on By annotation. Edit **Contractors**: GitHub sits in the
+    Forbidden section with Remove. Edit **Engineer**: every server row is
+    ticked and locked, and the lock's card links to Platform access, where
+    `mcp:read` and `mcp:write` carry the note that they also connect. Edit
+    **Read-only Tools**: All servers is chosen with a Read-Only Tools badge.
+    Save stays disabled on each until something is edited.
 
 ## On failure
 
@@ -511,3 +529,14 @@ Open Amara Okafor's identity and select Accounts & devices. Work identities shou
 Repeat in the seeded local organization. An employee can read their own mapped accounts and sees contact-admin guidance, without a link to the members table. Another employee's profile must not request these accounts. Verify the empty state for a person without mappings and retry after a failed read. Following Open in Slack members must not create a mapping or change its revision. Seed data demonstrates navigation and retained mappings; live OAuth requires the configured Slack app.
 
 In shared Explore Demo, verify the mapping dialog shows its read-only notice and disables Personnel selection and Confirm. Verify Sync members is disabled. In the retargeted local organization, personnel changes remain available.
+
+## Assistant identity fixtures
+
+1. Open Assistants. Confirm the identity-bound and legacy examples are listed.
+2. Inspect the bound example and its dedicated managed agent. Confirm the agent
+   has no grants and there is one stable dashboard root, not one per delivery.
+3. Inspect API identity configuration: the bound example reports its agent and
+   generation, while the legacy example reports `NEVER_CONFIGURED`.
+4. Do not run workloads using the illustrative issuer/JWKS URLs: these fixtures
+   are display-only, not usable credentials. Leave the page marked `[~]` until
+   the browser checks above are performed.

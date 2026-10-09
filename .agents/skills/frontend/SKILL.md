@@ -1,6 +1,6 @@
 ---
 name: frontend
-description: Rules and best practices when working on the dashboard React frontend codebase (including the inlined Gram Elements code)
+description: Rules and best practices when working on the dashboard React frontend codebase (including the inlined Speakeasy Elements code)
 metadata:
   relevant_files:
     - "client/dashboard/**"
@@ -24,6 +24,8 @@ Use `aube` package scripts for frontend checks. From the repo root, prefer `aube
 For small edits, run the narrowest package script that proves the change. For shared or cross-package frontend changes, run the root `aube run lint` and `aube run type-check` scripts.
 
 ### General Guidelines
+
+- Name the actual state or behavior in identifiers and UI copy, not relative labels such as `legacy` or `modern`. For example, use `agentIdentityIsNotConfigured` for an assistant without an agent identity. Choose the name from the actual condition. Preserve externally contracted values, including metric labels used by queries or alerts, unless the change includes a compatibility plan.
 
 - Use the `aube` package manager
 - When interacting with the server, use the `@gram/client` package (this is an alias to `client/dashboard/src/sdk/src/...`)

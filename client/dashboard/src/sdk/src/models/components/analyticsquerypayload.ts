@@ -61,7 +61,7 @@ export type AnalyticsQueryPayload = {
    */
   grain?: Grain | undefined;
   /**
-   * Maximum rows. Defaults to 100, at most 1000.
+   * Maximum rows. Defaults to 100; at most 1000 for a grouped result and 200 for ungrouped rows.
    */
   limit?: number | undefined;
   /**

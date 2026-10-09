@@ -732,6 +732,34 @@ type CustomDomain struct {
 	Deleted                  bool
 }
 
+type Dashboard struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID pgtype.Text
+	Name            string
+	Description     pgtype.Text
+	Filters         []byte
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
+type DashboardWidget struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	DashboardID    uuid.UUID
+	WidgetID       uuid.UUID
+	X              int32
+	Y              int32
+	W              int32
+	H              int32
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type DataExportRoute struct {
 	ID                uuid.UUID
 	OrganizationID    string
@@ -2426,6 +2454,7 @@ type PluginAssignment struct {
 	PluginID       uuid.UUID
 	OrganizationID string
 	PrincipalUrn   string
+	InstallMode    string
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 }
@@ -2647,6 +2676,7 @@ type RemoteProtectedResource struct {
 	DpopBoundAccessTokensRequired         pgtype.Bool
 	DpopSigningAlgValuesSupported         []string
 	TlsClientCertificateBoundAccessTokens pgtype.Bool
+	ScopeOverride                         []string
 	ChallengeScopes                       []string
 	ChallengeScopesSeenAt                 pgtype.Timestamptz
 	Metadata                              []byte
@@ -2715,6 +2745,7 @@ type RemoteSessionClient struct {
 	ResourceTosUri                  pgtype.Text
 	UpstreamRejectedAt              pgtype.Timestamptz
 	IdentityProviderConnectionID    uuid.NullUUID
+	CredentialOwner                 string
 	CreatedAt                       pgtype.Timestamptz
 	UpdatedAt                       pgtype.Timestamptz
 	DeletedAt                       pgtype.Timestamptz
@@ -2806,6 +2837,7 @@ type RemoteSessionIssuer struct {
 	BackchannelLogoutSupported                 pgtype.Bool
 	AuthorizationResponseIssParameterSupported pgtype.Bool
 	ScopeOverride                              []string
+	OmitScopeFallback                          pgtype.Bool
 	ResourceIndicatorSupported                 pgtype.Bool
 	Oidc                                       bool
 	Passthrough                                bool

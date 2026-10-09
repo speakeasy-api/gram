@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -18,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	dashboardsrepo "github.com/speakeasy-api/gram/server/internal/dashboards/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/widgets"
 	widgetsrepo "github.com/speakeasy-api/gram/server/internal/widgets/repo"
@@ -92,6 +94,23 @@ func TestCreateWidget(t *testing.T) {
 		ctx, ti := newTestService(t)
 		_, err := ti.service.CreateWidget(ctx, createPayload("new chart", validQuery(), map[string]any{"type": "heatmap"}))
 		require.NoError(t, err, "the client owns the chart vocabulary")
+	})
+
+	t.Run("it saves a distinct count over a dimension and refuses one over a measure", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+		query := validQuery()
+		query["measures"] = []any{map[string]any{"op": "count_distinct", "field": "user", "alias": "people"}}
+		created, err := ti.service.CreateWidget(ctx, createPayload("people", query, barChart()))
+		require.NoError(t, err)
+		require.Nil(t, created.InvalidReason)
+
+		query = validQuery()
+		query["measures"] = []any{map[string]any{"op": "count_distinct", "field": "tool_call_count"}}
+		_, err = ti.service.CreateWidget(ctx, createPayload("distinct counts", query, barChart()))
+		requireOopsCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, "unsupported_aggregation")
+		require.ErrorContains(t, err, "measures[0].op")
 	})
 
 	t.Run("it rejects a query the catalog cannot plan, naming the field", func(t *testing.T) {
@@ -547,4 +566,129 @@ func withQuery(query map[string]any, key string, value any) map[string]any {
 // rowsQuery asks for rows at the dataset's grain: nothing measured.
 func rowsQuery() map[string]any {
 	return map[string]any{"window": "24h", "grain": "none", "dimensions": []any{"user"}, "ungrouped": true}
+}
+
+func TestWidgetDashboards(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created, err := ti.service.CreateWidget(ctx, createPayload("placed", validQuery(), barChart()))
+	require.NoError(t, err)
+	require.Empty(t, created.Dashboards, "a new widget is on no dashboard")
+	widgetID := uuid.MustParse(created.ID)
+
+	// Two dashboards, written directly: this is about what the widget says.
+	dashboards := dashboardsrepo.New(ti.conn)
+	newDashboard := func(name string) dashboardsrepo.Dashboard {
+		row, err := dashboards.CreateDashboard(ctx, dashboardsrepo.CreateDashboardParams{
+			ProjectID: ti.projectID, OrganizationID: ti.orgID, CreatedByUserID: pgtype.Text{String: ti.userID, Valid: true},
+			Name: name, Description: pgtype.Text{String: "", Valid: false}, Filters: []byte("{}"),
+		})
+		require.NoError(t, err)
+		return row
+	}
+	place := func(dashboard dashboardsrepo.Dashboard, x int32) {
+		_, err := dashboards.InsertPlacement(ctx, dashboardsrepo.InsertPlacementParams{
+			ProjectID: ti.projectID, OrganizationID: ti.orgID, DashboardID: dashboard.ID, WidgetID: widgetID, X: x, Y: 0, W: 4, H: 3,
+		})
+		require.NoError(t, err)
+	}
+	alpha, beta := newDashboard("Alpha"), newDashboard("Beta")
+	place(alpha, 0)
+	place(alpha, 4)
+	place(beta, 0)
+
+	got, err := ti.service.GetWidget(ctx, &gen.GetWidgetPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Equal(t, []*gen.WidgetDashboard{{ID: alpha.ID.String(), Name: "Alpha"}, {ID: beta.ID.String(), Name: "Beta"}}, got.Dashboards, "each dashboard once, however many cards show the widget")
+
+	listed, err := ti.service.ListWidgets(ctx, &gen.ListWidgetsPayload{SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Len(t, listed.Widgets, 1)
+	require.Equal(t, got.Dashboards, listed.Widgets[0].Dashboards)
+
+	updated, err := ti.service.UpdateWidget(ctx, &gen.UpdateWidgetPayload{ID: created.ID, Name: "renamed", Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart(), SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Equal(t, got.Dashboards, updated.Dashboards, "an edit says where it reached")
+
+	// A deleted dashboard no longer counts.
+	_, err = dashboards.DeleteDashboard(ctx, dashboardsrepo.DeleteDashboardParams{ProjectID: ti.projectID, ID: beta.ID})
+	require.NoError(t, err)
+	got, err = ti.service.GetWidget(ctx, &gen.GetWidgetPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Equal(t, []*gen.WidgetDashboard{{ID: alpha.ID.String(), Name: "Alpha"}}, got.Dashboards)
+
+	// Deleting the widget takes it off the dashboard; the dashboard stays.
+	// Read through the widgets repo's dashboards query, which joins dashboards
+	// only and so does not hide a deleted widget's cards: rows left behind
+	// would show.
+	require.NoError(t, ti.service.DeleteWidget(ctx, &gen.DeleteWidgetPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil}))
+	left, err := widgetsrepo.New(ti.conn).ListDashboardsForWidget(ctx, widgetsrepo.ListDashboardsForWidgetParams{ProjectID: ti.projectID, WidgetID: uuid.MustParse(created.ID)})
+	require.NoError(t, err)
+	require.Empty(t, left)
+
+	// The dashboard it came off is touched and its history says why the
+	// cards went; the widget's own event names the dashboard.
+	touched, err := dashboards.GetDashboard(ctx, dashboardsrepo.GetDashboardParams{ProjectID: ti.projectID, ID: alpha.ID})
+	require.NoError(t, err)
+	require.True(t, touched.UpdatedAt.Time.After(alpha.UpdatedAt.Time), "the dashboard moves up the list")
+	layout, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionDashboardLayout)
+	require.NoError(t, err)
+	require.Equal(t, alpha.ID.String(), layout.SubjectID)
+	require.NotEmpty(t, layout.BeforeSnapshot)
+	require.JSONEq(t, "[]", string(layout.AfterSnapshot))
+	deleted, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionWidgetDelete)
+	require.NoError(t, err)
+	metadata, err := audittest.DecodeAuditData(deleted.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, []any{"dashboard:" + alpha.ID.String()}, metadata["removed_from"])
+	_, err = dashboards.GetDashboard(ctx, dashboardsrepo.GetDashboardParams{ProjectID: ti.projectID, ID: alpha.ID})
+	require.NoError(t, err)
+}
+
+func TestDeleteWidgetWaitsForALayoutHoldingTheWidget(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created, err := ti.service.CreateWidget(ctx, createPayload("held", validQuery(), barChart()))
+	require.NoError(t, err)
+	widgetID := uuid.MustParse(created.ID)
+	dashboards := dashboardsrepo.New(ti.conn)
+	dashboard, err := dashboards.CreateDashboard(ctx, dashboardsrepo.CreateDashboardParams{
+		ProjectID: ti.projectID, OrganizationID: ti.orgID, CreatedByUserID: pgtype.Text{String: ti.userID, Valid: true},
+		Name: "Held", Description: pgtype.Text{String: "", Valid: false}, Filters: []byte("{}"),
+	})
+	require.NoError(t, err)
+
+	// A layout save reads the widget for share and places a card on it,
+	// and holds both until it commits.
+	holding, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: a transaction held open to pin down the lock a layout save takes
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = holding.Rollback(ctx) })
+	_, err = dashboardsrepo.New(holding).GetWidgetForPlacement(ctx, dashboardsrepo.GetWidgetForPlacementParams{ProjectID: ti.projectID, ID: widgetID})
+	require.NoError(t, err)
+	_, err = dashboardsrepo.New(holding).InsertPlacement(ctx, dashboardsrepo.InsertPlacementParams{
+		ProjectID: ti.projectID, OrganizationID: ti.orgID, DashboardID: dashboard.ID, WidgetID: widgetID, X: 0, Y: 0, W: 4, H: 3,
+	})
+	require.NoError(t, err)
+
+	// Deleting the widget meanwhile waits for the layout, so the card it
+	// placed is taken off with the rest rather than left behind.
+	done := make(chan error, 1)
+	go func() {
+		done <- ti.service.DeleteWidget(ctx, &gen.DeleteWidgetPayload{ID: created.ID, SessionToken: nil, ProjectSlugInput: nil})
+	}()
+	select {
+	case err := <-done:
+		t.Fatalf("the delete did not wait for the layout: %v", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+	require.NoError(t, holding.Commit(ctx))
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("the delete did not finish once the layout had committed")
+	}
+	left, err := widgetsrepo.New(ti.conn).ListDashboardsForWidget(ctx, widgetsrepo.ListDashboardsForWidgetParams{ProjectID: ti.projectID, WidgetID: widgetID})
+	require.NoError(t, err)
+	require.Empty(t, left)
 }

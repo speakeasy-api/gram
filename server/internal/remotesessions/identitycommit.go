@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -233,7 +234,7 @@ func ManualClient(credentials ClientCredentials) ClientChoice {
 	return ClientChoice{kind: clientManual, linkID: uuid.Nil, credentials: credentials, policy: RegistrationPolicy{}} //nolint:exhaustruct // Unused for a manual client.
 }
 
-// RegisterClient obtains a client from the provider: a Gram-hosted Client ID
+// RegisterClient obtains a client from the provider: a Speakeasy-hosted Client ID
 // Metadata Document when the policy allows one and the provider supports it,
 // otherwise dynamic client registration.
 func RegisterClient(policy RegistrationPolicy) ClientChoice {
@@ -1152,7 +1153,7 @@ func (c *IdentityCommit) linkClient(ctx context.Context, tx *IdentityTx) (repo.R
 	return existing.RemoteSessionClient, existing.UserSessionIssuerIds, nil
 }
 
-// createCIMDClient creates a client identified by a Gram-hosted Client ID
+// createCIMDClient creates a client identified by a Speakeasy-hosted Client ID
 // Metadata Document.
 func (c *IdentityCommit) createCIMDClient(ctx context.Context, tx *IdentityTx) (repo.RemoteSessionClient, error) {
 	// Generated here so the document URL, which embeds the id, can be the
@@ -1215,6 +1216,8 @@ func (c *IdentityCommit) createClient(ctx context.Context, tx *IdentityTx, crede
 		Audience:                     conv.PtrToPGText(credentials.Audience),
 		LegacyCallbackUrl:            false,
 		CallbackBaseUrl:              c.newClientBaseURL(),
+		GrantTypes:                   nil,
+		CredentialOwner:              pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return repo.RemoteSessionClient{}, fmt.Errorf("create client: %w", err)
@@ -1272,6 +1275,13 @@ func (c *IdentityCommit) attach(ctx context.Context, tx *IdentityTx, client repo
 }
 
 func (c *IdentityCommit) auditClientCreate(ctx context.Context, tx *IdentityTx, client repo.RemoteSessionClient) error {
+	// The client is audited before attach binds it, and the binding records
+	// its own event, so the snapshot carries no user session issuers.
+	snapshot, err := mv.BuildRemoteSessionClientView(client, nil)
+	if err != nil {
+		return fmt.Errorf("build created client view: %w", err)
+	}
+
 	if err := c.committer.audit.LogRemoteSessionClientCreate(ctx, tx.tx, audit.LogRemoteSessionClientCreateEvent{
 		OrganizationID:         c.plan.Scope.OrganizationID,
 		ProjectID:              c.plan.Scope.ProjectID,
@@ -1280,6 +1290,7 @@ func (c *IdentityCommit) auditClientCreate(ctx context.Context, tx *IdentityTx, 
 		ActorSlug:              nil,
 		RemoteSessionClientURN: urn.NewRemoteSessionClient(client.ID),
 		ClientID:               client.ClientID,
+		SnapshotAfter:          snapshot,
 	}); err != nil {
 		return fmt.Errorf("audit client creation: %w", err)
 	}

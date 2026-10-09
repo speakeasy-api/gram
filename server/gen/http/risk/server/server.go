@@ -32,6 +32,7 @@ type Server struct {
 	ListRiskResults                http.Handler
 	ListRiskResultsForAgent        http.Handler
 	UnmaskRiskResult               http.Handler
+	RevealRiskResultPayload        http.Handler
 	ListRiskResultsByChat          http.Handler
 	MarkRiskResultsFalsePositive   http.Handler
 	UnmarkRiskResultsFalsePositive http.Handler
@@ -114,6 +115,7 @@ func New(
 			{"ListRiskResults", "GET", "/rpc/risk.listResults"},
 			{"ListRiskResultsForAgent", "GET", "/rpc/risk.listResultsForAgent"},
 			{"UnmaskRiskResult", "POST", "/rpc/risk.unmaskResult"},
+			{"RevealRiskResultPayload", "POST", "/rpc/risk.revealResultPayload"},
 			{"ListRiskResultsByChat", "GET", "/rpc/risk.listResultsByChat"},
 			{"MarkRiskResultsFalsePositive", "POST", "/rpc/risk.markResultsFalsePositive"},
 			{"UnmarkRiskResultsFalsePositive", "POST", "/rpc/risk.unmarkResultsFalsePositive"},
@@ -168,6 +170,7 @@ func New(
 		ListRiskResults:                NewListRiskResultsHandler(e.ListRiskResults, mux, decoder, encoder, errhandler, formatter),
 		ListRiskResultsForAgent:        NewListRiskResultsForAgentHandler(e.ListRiskResultsForAgent, mux, decoder, encoder, errhandler, formatter),
 		UnmaskRiskResult:               NewUnmaskRiskResultHandler(e.UnmaskRiskResult, mux, decoder, encoder, errhandler, formatter),
+		RevealRiskResultPayload:        NewRevealRiskResultPayloadHandler(e.RevealRiskResultPayload, mux, decoder, encoder, errhandler, formatter),
 		ListRiskResultsByChat:          NewListRiskResultsByChatHandler(e.ListRiskResultsByChat, mux, decoder, encoder, errhandler, formatter),
 		MarkRiskResultsFalsePositive:   NewMarkRiskResultsFalsePositiveHandler(e.MarkRiskResultsFalsePositive, mux, decoder, encoder, errhandler, formatter),
 		UnmarkRiskResultsFalsePositive: NewUnmarkRiskResultsFalsePositiveHandler(e.UnmarkRiskResultsFalsePositive, mux, decoder, encoder, errhandler, formatter),
@@ -229,6 +232,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListRiskResults = m(s.ListRiskResults)
 	s.ListRiskResultsForAgent = m(s.ListRiskResultsForAgent)
 	s.UnmaskRiskResult = m(s.UnmaskRiskResult)
+	s.RevealRiskResultPayload = m(s.RevealRiskResultPayload)
 	s.ListRiskResultsByChat = m(s.ListRiskResultsByChat)
 	s.MarkRiskResultsFalsePositive = m(s.MarkRiskResultsFalsePositive)
 	s.UnmarkRiskResultsFalsePositive = m(s.UnmarkRiskResultsFalsePositive)
@@ -289,6 +293,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListRiskResultsHandler(mux, h.ListRiskResults)
 	MountListRiskResultsForAgentHandler(mux, h.ListRiskResultsForAgent)
 	MountUnmaskRiskResultHandler(mux, h.UnmaskRiskResult)
+	MountRevealRiskResultPayloadHandler(mux, h.RevealRiskResultPayload)
 	MountListRiskResultsByChatHandler(mux, h.ListRiskResultsByChat)
 	MountMarkRiskResultsFalsePositiveHandler(mux, h.MarkRiskResultsFalsePositive)
 	MountUnmarkRiskResultsFalsePositiveHandler(mux, h.UnmarkRiskResultsFalsePositive)
@@ -1004,6 +1009,59 @@ func NewUnmaskRiskResultHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "unmaskRiskResult")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRevealRiskResultPayloadHandler configures the mux to serve the "risk"
+// service "revealRiskResultPayload" endpoint.
+func MountRevealRiskResultPayloadHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/risk.revealResultPayload", f)
+}
+
+// NewRevealRiskResultPayloadHandler creates a HTTP handler which loads the
+// HTTP request and calls the "risk" service "revealRiskResultPayload" endpoint.
+func NewRevealRiskResultPayloadHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRevealRiskResultPayloadRequest(mux, decoder)
+		encodeResponse = EncodeRevealRiskResultPayloadResponse(encoder)
+		encodeError    = EncodeRevealRiskResultPayloadError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "revealRiskResultPayload")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
 		payload, err := decodeRequest(r)
 		if err != nil {

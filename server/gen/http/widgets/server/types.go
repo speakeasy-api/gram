@@ -85,8 +85,12 @@ type GetWidgetResponseBody struct {
 	// catalog dropped, or a chart that cannot draw the question. A catalog change
 	// fails visibly rather than returning wrong numbers.
 	InvalidReason *string `form:"invalid_reason,omitempty" json:"invalid_reason,omitempty" xml:"invalid_reason,omitempty"`
-	CreatedAt     string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt     string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The dashboards this widget is placed on, each once, by name. Widgets are
+	// linked, not copied: an edit reaches all of them, and a delete removes it
+	// from all of them.
+	Dashboards []*WidgetDashboardResponseBody `form:"dashboards" json:"dashboards" xml:"dashboards"`
+	CreatedAt  string                         `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt  string                         `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // CreateWidgetResponseBody is the type of the "widgets" service "createWidget"
@@ -114,8 +118,12 @@ type CreateWidgetResponseBody struct {
 	// catalog dropped, or a chart that cannot draw the question. A catalog change
 	// fails visibly rather than returning wrong numbers.
 	InvalidReason *string `form:"invalid_reason,omitempty" json:"invalid_reason,omitempty" xml:"invalid_reason,omitempty"`
-	CreatedAt     string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt     string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The dashboards this widget is placed on, each once, by name. Widgets are
+	// linked, not copied: an edit reaches all of them, and a delete removes it
+	// from all of them.
+	Dashboards []*WidgetDashboardResponseBody `form:"dashboards" json:"dashboards" xml:"dashboards"`
+	CreatedAt  string                         `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt  string                         `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // UpdateWidgetResponseBody is the type of the "widgets" service "updateWidget"
@@ -143,8 +151,12 @@ type UpdateWidgetResponseBody struct {
 	// catalog dropped, or a chart that cannot draw the question. A catalog change
 	// fails visibly rather than returning wrong numbers.
 	InvalidReason *string `form:"invalid_reason,omitempty" json:"invalid_reason,omitempty" xml:"invalid_reason,omitempty"`
-	CreatedAt     string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt     string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The dashboards this widget is placed on, each once, by name. Widgets are
+	// linked, not copied: an edit reaches all of them, and a delete removes it
+	// from all of them.
+	Dashboards []*WidgetDashboardResponseBody `form:"dashboards" json:"dashboards" xml:"dashboards"`
+	CreatedAt  string                         `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt  string                         `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // DuplicateWidgetResponseBody is the type of the "widgets" service
@@ -172,8 +184,12 @@ type DuplicateWidgetResponseBody struct {
 	// catalog dropped, or a chart that cannot draw the question. A catalog change
 	// fails visibly rather than returning wrong numbers.
 	InvalidReason *string `form:"invalid_reason,omitempty" json:"invalid_reason,omitempty" xml:"invalid_reason,omitempty"`
-	CreatedAt     string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt     string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The dashboards this widget is placed on, each once, by name. Widgets are
+	// linked, not copied: an edit reaches all of them, and a delete removes it
+	// from all of them.
+	Dashboards []*WidgetDashboardResponseBody `form:"dashboards" json:"dashboards" xml:"dashboards"`
+	CreatedAt  string                         `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt  string                         `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ListWidgetsUnauthorizedResponseBody is the type of the "widgets" service
@@ -1289,8 +1305,18 @@ type WidgetResponseBody struct {
 	// catalog dropped, or a chart that cannot draw the question. A catalog change
 	// fails visibly rather than returning wrong numbers.
 	InvalidReason *string `form:"invalid_reason,omitempty" json:"invalid_reason,omitempty" xml:"invalid_reason,omitempty"`
-	CreatedAt     string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt     string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The dashboards this widget is placed on, each once, by name. Widgets are
+	// linked, not copied: an edit reaches all of them, and a delete removes it
+	// from all of them.
+	Dashboards []*WidgetDashboardResponseBody `form:"dashboards" json:"dashboards" xml:"dashboards"`
+	CreatedAt  string                         `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt  string                         `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// WidgetDashboardResponseBody is used to define fields on response body types.
+type WidgetDashboardResponseBody struct {
+	ID   string `form:"id" json:"id" xml:"id"`
+	Name string `form:"name" json:"name" xml:"name"`
 }
 
 // NewListWidgetsResponseBody builds the HTTP response body from the result of
@@ -1343,6 +1369,18 @@ func NewGetWidgetResponseBody(res *widgets.Widget) *GetWidgetResponseBody {
 			body.Visualization[tk] = tv
 		}
 	}
+	if res.Dashboards != nil {
+		body.Dashboards = make([]*WidgetDashboardResponseBody, len(res.Dashboards))
+		for i, val := range res.Dashboards {
+			if val == nil {
+				body.Dashboards[i] = nil
+				continue
+			}
+			body.Dashboards[i] = marshalWidgetsWidgetDashboardToWidgetDashboardResponseBody(val)
+		}
+	} else {
+		body.Dashboards = []*WidgetDashboardResponseBody{}
+	}
 	return body
 }
 
@@ -1376,6 +1414,18 @@ func NewCreateWidgetResponseBody(res *widgets.Widget) *CreateWidgetResponseBody 
 			tv := val
 			body.Visualization[tk] = tv
 		}
+	}
+	if res.Dashboards != nil {
+		body.Dashboards = make([]*WidgetDashboardResponseBody, len(res.Dashboards))
+		for i, val := range res.Dashboards {
+			if val == nil {
+				body.Dashboards[i] = nil
+				continue
+			}
+			body.Dashboards[i] = marshalWidgetsWidgetDashboardToWidgetDashboardResponseBody(val)
+		}
+	} else {
+		body.Dashboards = []*WidgetDashboardResponseBody{}
 	}
 	return body
 }
@@ -1411,6 +1461,18 @@ func NewUpdateWidgetResponseBody(res *widgets.Widget) *UpdateWidgetResponseBody 
 			body.Visualization[tk] = tv
 		}
 	}
+	if res.Dashboards != nil {
+		body.Dashboards = make([]*WidgetDashboardResponseBody, len(res.Dashboards))
+		for i, val := range res.Dashboards {
+			if val == nil {
+				body.Dashboards[i] = nil
+				continue
+			}
+			body.Dashboards[i] = marshalWidgetsWidgetDashboardToWidgetDashboardResponseBody(val)
+		}
+	} else {
+		body.Dashboards = []*WidgetDashboardResponseBody{}
+	}
 	return body
 }
 
@@ -1444,6 +1506,18 @@ func NewDuplicateWidgetResponseBody(res *widgets.Widget) *DuplicateWidgetRespons
 			tv := val
 			body.Visualization[tk] = tv
 		}
+	}
+	if res.Dashboards != nil {
+		body.Dashboards = make([]*WidgetDashboardResponseBody, len(res.Dashboards))
+		for i, val := range res.Dashboards {
+			if val == nil {
+				body.Dashboards[i] = nil
+				continue
+			}
+			body.Dashboards[i] = marshalWidgetsWidgetDashboardToWidgetDashboardResponseBody(val)
+		}
+	} else {
+		body.Dashboards = []*WidgetDashboardResponseBody{}
 	}
 	return body
 }

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
-  title: Gram API Description
-  description: Gram is the tools platform for AI agents
+  title: Speakeasy API Description
+  description: Speakeasy is the tools platform for AI agents
   version: 0.0.1
 servers:
   - url: /
@@ -1695,7 +1695,7 @@ paths:
       tags:
         - admin
       summary: createOrganization admin
-      description: 'Creates an organization in WorkOS and in Gram, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Gram ID is derived from the WorkOS ID, so both writers converge on one row.'
+      description: 'Creates an organization in WorkOS and in Speakeasy, so an operator does not have to leave the admin app for the WorkOS dashboard. The organization starts with no members, is not whitelisted, and gets no trial. Idempotent against the WorkOS organization webhook: the Speakeasy ID is derived from the WorkOS ID, so both writers converge on one row.'
       operationId: adminCreateOrganization
       requestBody:
         required: true
@@ -3755,6 +3755,94 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: bulkUpdateAccountType
+  /admin/organizations.customerUsage:
+    get:
+      description: 'Returns estimated usage at current PAYG list prices for every active paying organization: enterprise organizations not on a running or ending trial, and pro or payg organizations that never trialled.'
+      operationId: adminListCustomerUsage
+      parameters:
+        - allowEmptyValue: true
+          description: Chart bucketing. monthly gives one bucket per billing cycle over the last six cycles. daily and weekly bucket the current cycle.
+          in: query
+          name: interval
+          schema:
+            default: monthly
+            description: Chart bucketing. monthly gives one bucket per billing cycle over the last six cycles. daily and weekly bucket the current cycle.
+            enum:
+              - daily
+              - weekly
+              - monthly
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCustomerUsageResponse'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      summary: listCustomerUsage admin
+      tags:
+        - admin
+      x-speakeasy-name-override: listCustomerUsage
   /admin/organizations.getMeterUsage:
     get:
       tags:
@@ -5863,7 +5951,7 @@ paths:
       x-speakeasy-name-override: migrateToGlobalIssuer
   /admin/remote-session-issuers.refreshGlobalIssuerMetadata:
     post:
-      description: Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.
+      description: Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Speakeasy behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.
       operationId: adminRefreshGlobalIssuerMetadata
       requestBody:
         content:
@@ -6937,6 +7025,107 @@ components:
           format: int64
       required:
         - projects_signaled
+    AdminCustomerUsage:
+      type: object
+      properties:
+        account_type:
+          type: string
+          enum:
+            - enterprise
+            - pro
+            - payg
+        current_cycle:
+          $ref: '#/components/schemas/MeterUsageWindow'
+        error:
+          type: string
+          description: Why this organization's usage could not be read. products is empty when set.
+        name:
+          type: string
+        organization_id:
+          type: string
+        previous_period:
+          $ref: '#/components/schemas/MeterUsageWindow'
+        previous_period_costs:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminCustomerUsageProductCost'
+          description: Per-product costs over previous_period. Empty when previous_period is absent.
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/SpendProduct'
+          description: 'The three metered products in stable display order. quantity and cost_usd cover the current cycle to date. buckets are the chart buckets for the requested interval: billing cycles for monthly, days or Monday-start weeks of the current cycle otherwise.'
+        slug:
+          type: string
+        trial_state:
+          type: string
+          enum:
+            - none
+            - running
+            - ending_soon
+            - expired
+            - demoted
+            - converted
+        window:
+          $ref: '#/components/schemas/MeterUsageWindow'
+      description: One paying organization's estimated usage at current PAYG list prices.
+      required:
+        - organization_id
+        - name
+        - slug
+        - account_type
+        - trial_state
+        - current_cycle
+        - window
+        - products
+        - previous_period_costs
+    AdminCustomerUsageProductCost:
+      type: object
+      properties:
+        cost_usd:
+          type: string
+          description: Exact estimated cost at current PAYG list prices
+        product_id:
+          type: string
+          enum:
+            - agent_session_storage
+            - risk_content_scans
+            - mcp_egress
+      required:
+        - product_id
+        - cost_usd
+    AdminCustomerUsageResponse:
+      type: object
+      properties:
+        currency:
+          type: string
+          enum:
+            - USD
+        customers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminCustomerUsage'
+          description: Every qualifying organization, ordered by name
+        interval:
+          type: string
+          enum:
+            - daily
+            - weekly
+            - monthly
+        pricing_basis:
+          type: string
+          enum:
+            - current_payg_list_price
+        queried_at:
+          type: string
+          description: Retrieval timestamp used to distinguish current and future buckets
+          format: date-time
+      required:
+        - interval
+        - currency
+        - pricing_basis
+        - queried_at
+        - customers
     AdminInferenceKey:
       type: object
       properties:
@@ -7263,13 +7452,16 @@ components:
           description: Display name of the issuer.
         networking:
           type: string
-          description: Whether Gram reaches the issuer over the public internet or a tunnel.
+          description: Whether Speakeasy reaches the issuer over the public internet or a tunnel.
           enum:
             - public
             - tunneled
         oidc:
           type: boolean
           description: Whether the issuer is treated as an OpenID Connect provider.
+        omit_scope_fallback:
+          type: boolean
+          description: Whether a login with no other scope source sends no scope instead of the issuer's whole scopes_supported. Absent when unset, which behaves as false.
         passthrough:
           type: boolean
           description: Whether upstream tokens are passed through to the server.
@@ -7379,7 +7571,7 @@ components:
       properties:
         client_id:
           type: string
-          description: The remote session client ID Gram uses with the trusted issuer.
+          description: The remote session client ID Speakeasy uses with the trusted issuer.
         issuer_id:
           type: string
           description: The trusted remote session issuer ID.
@@ -7567,7 +7759,7 @@ components:
           type: integer
           description: Length of the window in days.
           format: int64
-      description: 'One MCP server''s tool calls over a window, discriminated on type. logging:disabled carries nothing else: the organization''s logs are off, so calls were never recorded. logging:enabled carries every other field. Outcomes also count hook-observed calls; the daily series counts only calls that reached Gram directly.'
+      description: 'One MCP server''s tool calls over a window, discriminated on type. logging:disabled carries nothing else: the organization''s logs are off, so calls were never recorded. logging:enabled carries every other field. Outcomes also count hook-observed calls; the daily series counts only calls that reached Speakeasy directly.'
       required:
         - type
     AdminMdmVendorOption:
@@ -7886,7 +8078,7 @@ components:
       properties:
         account_type:
           type: string
-          description: Gram account type (e.g. free, pro, payg, enterprise).
+          description: Speakeasy account type (e.g. free, pro, payg, enterprise).
         created_at:
           type: string
           description: The creation date of the organization.
@@ -8778,6 +8970,9 @@ components:
         oidc:
           type: boolean
           description: When true, may unlock OIDC-aware behaviour. Default false.
+        omit_scope_fallback:
+          type: boolean
+          description: 'When true, a login that would otherwise request the authorization server''s whole scopes_supported omits the scope parameter so the server applies its default. Omit to leave it unset: such a login requests the provider''s whole scopes_supported.'
         op_policy_uri:
           type: string
           description: RFC 8414 op_policy_uri; the issuer's client data-usage policy. Discovered from the issuer metadata document; rejected unless an absolute http(s) URL.
@@ -9166,9 +9361,6 @@ components:
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
-        automatic_role_distribution:
-          type: boolean
-          description: Whether the staff rollout for automatic role plugin setup is enabled
         consent_tool_filtering_enabled:
           type: boolean
           description: Whether MCP consent screens offer the tool filtering picker for the organization
@@ -9195,7 +9387,7 @@ components:
           description: Whether the organization has the staff-managed private network ingress entitlement
         platform_mcp_enabled:
           type: boolean
-          description: Whether the organization can use the Gram Platform MCP capability
+          description: Whether the organization can use the Speakeasy Platform MCP capability
         remote_session_auto_refresh_enabled:
           type: boolean
           description: Whether consent screens expose automatic remote-session refresh for the organization
@@ -9243,7 +9435,6 @@ components:
         - consent_tool_filtering_enabled
         - session_portability_enabled
         - network_ingress_enabled
-        - automatic_role_distribution
         - device_agent
     RearmTrialRequestBody:
       type: object
@@ -9331,7 +9522,7 @@ components:
           format: date-time
         jwks_fetched_at:
           type: string
-          description: When Gram last successfully fetched or revalidated the JWK Set. Null until the first successful refresh.
+          description: When Speakeasy last successfully fetched or revalidated the JWK Set. Null until the first successful refresh.
           format: date-time
         jwks_uri:
           type: string
@@ -9346,6 +9537,9 @@ components:
         oidc:
           type: boolean
           description: When true, may unlock OIDC-aware behaviour.
+        omit_scope_fallback:
+          type: boolean
+          description: When true, a login that would otherwise request the authorization server's whole scopes_supported omits the scope parameter so the server applies its default. Null when unset.
         op_policy_uri:
           type: string
           description: RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not advertised.
@@ -9407,7 +9601,7 @@ components:
         userinfo_endpoint:
           type: string
           description: OpenID Connect userinfo endpoint. Null when not advertised or not yet captured by discovery.
-      description: A remote_session_issuer record — upstream Authorization Server identity that Gram speaks OAuth to.
+      description: A remote_session_issuer record — upstream Authorization Server identity that Speakeasy speaks OAuth to.
       required:
         - id
         - project_id
@@ -9696,7 +9890,6 @@ components:
             - consent_tool_filtering
             - session_portability
             - network_ingress
-            - automatic-role-distribution
           maxLength: 60
         organization_id:
           type: string
@@ -10195,6 +10388,9 @@ components:
           description: Set or clear the display name. An empty string clears it to NULL.
         oidc:
           type: boolean
+        omit_scope_fallback:
+          type: boolean
+          description: When true, a login that would otherwise request the authorization server's whole scopes_supported omits the scope parameter so the server applies its default. Omit or send null to keep the stored value; false restores the default.
         op_policy_uri:
           type: string
           description: Set or clear RFC 8414 op_policy_uri. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
@@ -10280,11 +10476,11 @@ components:
       in: header
     chat_sessions_token_header_Gram-Chat-Session:
       type: http
-      description: Gram Chat Sessions token based auth.
+      description: Speakeasy Chat Sessions token based auth.
       scheme: bearer
     function_token_header_Authorization:
       type: http
-      description: Gram Functions token based auth.
+      description: Speakeasy Functions token based auth.
       scheme: bearer
     project_slug_header_Gram-Project:
       type: apiKey

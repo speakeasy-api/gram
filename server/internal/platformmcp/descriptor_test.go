@@ -241,6 +241,8 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 		"list_skill_feedback", "list_skill_suggestions", "list_skill_suggestion_feedback",
 		"create_skill", "add_skill_version", "update_skill_metadata", "list_skill_distributions",
 		"list_my_sessions", "continue_session",
+		// The analytics reads hold the caller to project:read in the handler.
+		describeAnalyticsCatalogToolName, listAnalyticsDimensionValuesToolName, runAnalyticsQueryToolName,
 	} {
 		require.Equal(t, ExternalAuthorizationMember, byName[name], name)
 	}
@@ -411,6 +413,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	// get_xaa_readiness reads an org-wide snapshot under live member org-admin
 	// authority, which managed assistants do not have; it stays external-only.
 	for _, name := range []string{
+		upgradeAssistantIdentityToolName,
 		"get_network_ingress",
 		"get_xaa_readiness",
 		"distribute_mcp_to_plugin",
@@ -493,6 +496,9 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"mark_risk_findings_false_positive",
 		"unmark_risk_findings_false_positive",
 		listProjectToolsToolName,
+		describeAnalyticsCatalogToolName,
+		listAnalyticsDimensionValuesToolName,
+		runAnalyticsQueryToolName,
 	} {
 		require.True(t, admitted[name], "tool %q works without a connection and should serve the assistant", name)
 	}

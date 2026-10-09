@@ -25,6 +25,9 @@ import type { ResourceAudienceEntry } from "@gram/client/models/components/resou
 import { invalidateAllExplainResourceAccess } from "@gram/client/react-query/explainResourceAccess.js";
 import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { useSetResourceAudienceMutation } from "@gram/client/react-query/setResourceAudience.js";
+import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
+import { invalidateAllPlugin } from "@gram/client/react-query/plugin.js";
+import { invalidateAllPlugins } from "@gram/client/react-query/plugins.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -34,6 +37,7 @@ import {
   Pencil,
   PencilOff,
   Plus,
+  Shield,
   Trash2,
   User,
 } from "lucide-react";
@@ -46,6 +50,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useMemo, useState, type JSX } from "react";
 import { toast } from "sonner";
+import { RolePluginLinks } from "./RolePluginLinks";
+import type { ResourceAudienceRolePlugin } from "@gram/client/models/components/resourceaudienceroleplugin.js";
 import { AddAudienceDialog } from "./AddAudienceDialog";
 import { RemoveAudienceDialog } from "./RemoveAudienceDialog";
 import type { ToolSelectionTool } from "@/components/tool-selection/ToolSelectionPanel";
@@ -75,7 +81,7 @@ import {
   type AudienceWrite,
 } from "./accessWrites";
 import { PrincipalBadge } from "./PrincipalBadge";
-import { RoleLink } from "./RoleLink";
+import { RoleLink } from "@/components/role-link";
 import { isUnnarrowed, ownRules, LEVEL_VERB } from "./serverAudience";
 
 /** Narrowing the tool dialog is currently editing, and the row it belongs to. */
@@ -105,6 +111,7 @@ export function ManageAccess({
   version,
   toolCatalog,
   isLoading,
+  rolePlugins,
 }: {
   resourceId: string;
   resourceName?: string;
@@ -114,6 +121,7 @@ export function ManageAccess({
   /** The server's tools, when this backend exposes a catalogue. */
   toolCatalog?: ToolSelectionTool[];
   isLoading: boolean;
+  rolePlugins?: ResourceAudienceRolePlugin[];
 }): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const queryClient = useQueryClient();
@@ -123,11 +131,10 @@ export function ManageAccess({
   // same gate as a disabled state so it cannot be clicked without the scope.
   const { hasAnyScope } = useRBAC();
   const canManage = hasAnyScope(["org:admin"]);
+  const showPlugins = canManage && rolePlugins !== undefined;
   const [page, setPage] = useState(0);
-  // Which kind of principal the picker is open for. People and agents are
-  // different enough — one is a person in the directory, one is a credentialed
-  // agent — that the button asks first rather than mixing them in one list.
-  const [adding, setAdding] = useState<"user" | "agent" | null>(null);
+  // Which kind of principal the picker is open for.
+  const [adding, setAdding] = useState<"user" | "agent" | "role" | null>(null);
   const [narrowing, setNarrowing] = useState<NarrowingTarget | null>(null);
   // The row whose removal is waiting to be confirmed, when the write is not
   // the plain deletion the button looks like.
@@ -189,6 +196,9 @@ export function ManageAccess({
       await Promise.all([
         invalidateAllResourceAudience(queryClient),
         invalidateAllExplainResourceAccess(queryClient),
+        invalidateAllRoles(queryClient),
+        invalidateAllPlugin(queryClient),
+        invalidateAllPlugins(queryClient),
       ]);
       setAdding(null);
     },
@@ -302,10 +312,8 @@ export function ManageAccess({
     <div>
       <Card.Dashboard
         title="Manage access to this server"
-        // Rows run edge to edge under the header, like the dashboard's other
-        // list cards, and the title bar sits tight above them.
+        // Rows run edge to edge under the header.
         bodyClassName="p-0"
-        headerClassName="py-2.5"
         action={
           <RequireScope
             scope="org:admin"
@@ -334,6 +342,10 @@ export function ManageAccess({
                   <User className="h-4 w-4" />
                   Person
                 </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setAdding("role")}>
+                  <Shield className="h-4 w-4" />
+                  Role
+                </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => setAdding("agent")}>
                   <Bot className="h-4 w-4" />
                   Agent
@@ -350,11 +362,27 @@ export function ManageAccess({
             </Text>
           </div>
         ) : (
-          <div className="grid grid-cols-[minmax(0,18rem)_minmax(0,1fr)_auto_auto]">
+          <div
+            className={cn(
+              "grid",
+              showPlugins
+                ? "grid-cols-[auto_repeat(3,minmax(0,1fr))_max-content_auto]"
+                : "grid-cols-[auto_repeat(2,minmax(0,1fr))_max-content_auto]",
+            )}
+          >
+            <div className="text-muted-foreground border-border col-span-full grid grid-cols-subgrid items-center gap-x-6 border-b px-4 py-2 text-xs">
+              <span>Type</span>
+              <span>Name</span>
+              <span>Access</span>
+              {showPlugins && <span>Distributed via</span>}
+              <span>Members</span>
+              <span />
+            </div>
             {visible.map((row) => (
               <PrincipalRow
                 key={row.principalUrn}
                 row={row}
+                rolePlugins={showPlugins ? rolePlugins : undefined}
                 faces={row.memberIds
                   .map((id) => facesById.get(id))
                   .filter((member) => member !== undefined)}
@@ -441,11 +469,19 @@ export function ManageAccess({
 
       {adding && (
         <AddAudienceDialog
-          title={adding === "agent" ? "Grant agent access" : "Grant access"}
+          title={
+            adding === "agent"
+              ? "Grant agent access"
+              : adding === "role"
+                ? "Grant role access"
+                : "Grant access"
+          }
           description={
             adding === "agent"
               ? `Give agents access to ${resourceName ?? "this server"} only. An agent still cannot do more here than its own policy and its owner allow.`
-              : `Give people access to ${resourceName ?? "this server"} only. To give a role access, edit the role.`
+              : adding === "role"
+                ? `Give roles access to ${resourceName ?? "this server"} only.`
+                : `Give people access to ${resourceName ?? "this server"} only.`
           }
           kinds={[adding]}
           alreadyAdded={direct.map((entry) => entry.principalUrn)}
@@ -484,6 +520,7 @@ export function ManageAccess({
  */
 function PrincipalRow({
   row,
+  rolePlugins,
   faces,
   catalog,
   onAllow,
@@ -497,6 +534,7 @@ function PrincipalRow({
   pending,
 }: {
   row: AccessRow;
+  rolePlugins?: ResourceAudienceRolePlugin[];
   /** The people a role reaches, for the facepile on its row. */
   faces: FacepileMember[];
   /** The server's tools, for resolving what a rule and a block leave. */
@@ -523,9 +561,11 @@ function PrincipalRow({
   return (
     <div className="border-border col-span-full grid grid-cols-subgrid border-b last:border-b-0">
       <div className="col-span-full grid grid-cols-subgrid items-center gap-x-6 px-4 py-3">
-        <div className="flex min-w-0 items-center gap-2">
+        <div>
           <PrincipalBadge kind={row.kind} />
-          <span className="truncate font-medium">
+        </div>
+        <div className="min-w-0">
+          <span className="block truncate font-medium">
             {userId ? (
               <IdentityLink identifier={{ userId }}>
                 {row.displayName}
@@ -543,6 +583,19 @@ function PrincipalRow({
         <Text muted small className="min-w-0 truncate">
           {accessSummary(row, catalog)}
         </Text>
+
+        {canManage && rolePlugins !== undefined && (
+          <div className="min-w-0">
+            {row.kind === "role" ? (
+              <RolePluginLinks
+                principalUrn={row.principalUrn}
+                plugins={rolePlugins}
+              />
+            ) : (
+              <span className="text-muted-foreground text-sm">—</span>
+            )}
+          </div>
+        )}
 
         {/* Who a role reaches, as the faces themselves: an administrator
             checks that before changing what the role can do, and "2 members"

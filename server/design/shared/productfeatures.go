@@ -11,7 +11,7 @@ var ProductFeatureName = Type("ProductFeatureName", String, func() {
 		"ai_platform_push_integrations", "platform_mcp",
 		"customer_managed_encryption_keys", "remote_session_auto_refresh",
 		"remote_session_auto_refresh_enforced", "consent_tool_filtering",
-		"session_portability", "network_ingress", "automatic-role-distribution",
+		"session_portability", "network_ingress",
 	)
 })
 
@@ -28,14 +28,13 @@ var ProductFeatures = ResultType("application/vnd.product-features", func() {
 	Attribute("skills_enabled", Boolean, "Whether the Skills page is enabled for the organization")
 	Attribute("skill_capture_metadata_only", Boolean, "Whether skill capture stores activation metadata without requesting manifest content")
 	Attribute("ai_platform_push_integrations_enabled", Boolean, "Whether the organization can provision push integrations for AI platforms")
-	Attribute("platform_mcp_enabled", Boolean, "Whether the organization can use the Gram Platform MCP capability")
+	Attribute("platform_mcp_enabled", Boolean, "Whether the organization can use the Speakeasy Platform MCP capability")
 	Attribute("customer_managed_encryption_keys_enabled", Boolean, "Whether the organization can manage the external credentials and cloud KMS keys backing customer-managed encryption")
 	Attribute("remote_session_auto_refresh_enabled", Boolean, "Whether consent screens expose automatic remote-session refresh for the organization")
 	Attribute("remote_session_auto_refresh_enforced_enabled", Boolean, "Whether automatic remote-session refresh is enforced as the organization default: forced on for every user, shown locked on consent screens, and applied by the keepalive regardless of per-session preference")
 	Attribute("consent_tool_filtering_enabled", Boolean, "Whether MCP consent screens offer the tool filtering picker for the organization")
 	Attribute("session_portability_enabled", Boolean, "Whether agent session portability is enabled for the organization: session sharing links, move reporting with lineage, and picker title enrichment via the device agent")
 	Attribute("network_ingress_enabled", Boolean, "Whether the organization has the staff-managed private network ingress entitlement")
-	Attribute("automatic_role_distribution", Boolean, "Whether the staff rollout for automatic role plugin setup is enabled")
 	Attribute("device_agent", Boolean, "Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.")
-	Required("logs_enabled", "tool_io_logs_enabled", "session_capture_enabled", "authz_challenge_logging_enabled", "sso_enabled", "scim_enabled", "hooks_browser_login_enabled", "hooks_fail_open_enabled", "custom_model_keys_enabled", "skills_enabled", "skill_capture_metadata_only", "ai_platform_push_integrations_enabled", "platform_mcp_enabled", "customer_managed_encryption_keys_enabled", "remote_session_auto_refresh_enabled", "remote_session_auto_refresh_enforced_enabled", "consent_tool_filtering_enabled", "session_portability_enabled", "network_ingress_enabled", "automatic_role_distribution", "device_agent")
+	Required("logs_enabled", "tool_io_logs_enabled", "session_capture_enabled", "authz_challenge_logging_enabled", "sso_enabled", "scim_enabled", "hooks_browser_login_enabled", "hooks_fail_open_enabled", "custom_model_keys_enabled", "skills_enabled", "skill_capture_metadata_only", "ai_platform_push_integrations_enabled", "platform_mcp_enabled", "customer_managed_encryption_keys_enabled", "remote_session_auto_refresh_enabled", "remote_session_auto_refresh_enforced_enabled", "consent_tool_filtering_enabled", "session_portability_enabled", "network_ingress_enabled", "device_agent")
 })
