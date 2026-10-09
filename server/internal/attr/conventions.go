@@ -685,6 +685,14 @@ const (
 	HookServerNameOverrideIDKey = attribute.Key("gram.hook.server_name_override_id")
 	HookHasPluginAuthKey        = attribute.Key("gram.hook.has_plugin_auth")
 	HookHostnameKey             = attribute.Key("gram.hook.hostname")
+	// The hooks ingest endpoint stamps these on the copy of a hook row it
+	// republishes into the OTel pipeline, so the row says where it came
+	// from and what Speakeasy decided without a join back to the request.
+	HookAdapterKey            = attribute.Key("gram.hook.adapter")
+	HookRawEventNameKey       = attribute.Key("gram.hook.raw_event_name")
+	HookCanonicalEventTypeKey = attribute.Key("gram.hook.canonical_event_type")
+	HookPermissionTypeKey     = attribute.Key("gram.hook.permission_type")
+	HookTurnIDKey             = attribute.Key("gram.hook.turn_id")
 	// HookRiskScannedKey marks hook duration metrics where a risk enforcement
 	// scan actually executed (as opposed to short-circuiting on missing
 	// context or no policies), so gating latency can be separated from the

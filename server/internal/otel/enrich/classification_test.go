@@ -90,6 +90,41 @@ func TestLogClassificationNamesWhatARecordIs(t *testing.T) {
 
 		require.Equal(t, "claude-code", enriched(t, enricher, record)[AgentSourceKey].AsString())
 	})
+
+	t.Run("a hook row the hooks endpoint republished is typed by its hook event, on the hook source", func(t *testing.T) {
+		t.Parallel()
+		record := inboundTestLog(dialect.HooksLogScopeName, "codex", "PostToolUse",
+			logStringAttribute("gram.hook.source", "codex"),
+			logStringAttribute("gram.tool.name", "shell"),
+		)
+
+		attrs := enriched(t, enricher, record)
+		require.Equal(t, dialect.EventTypeToolCallResult, attrs[AgentEventTypeKey].AsString())
+		require.Equal(t, "PostToolUse", attrs[AgentRawEventNameKey].AsString())
+		require.Equal(t, "codex", attrs[AgentSourceKey].AsString())
+		require.Equal(t, "openai", attrs[AgentProviderKey].AsString())
+		require.Equal(t, "codex", attrs[AgentSurfaceKey].AsString())
+	})
+}
+
+// A session lifecycle hook row has no type in the vocabulary, whichever
+// surface sent it, while a tool hook row on the same source is typed.
+func TestLogClassificationLeavesLifecycleHookRowsUntyped(t *testing.T) {
+	t.Parallel()
+
+	enricher := &logClassification{}
+
+	attrs := enriched(t, enricher, inboundTestLog(dialect.HooksLogScopeName, "claude-code", "SessionStart", logStringAttribute("gram.hook.source", "claude-code")))
+	require.NotContains(t, attrs, AgentEventTypeKey)
+	require.Equal(t, "SessionStart", attrs[AgentRawEventNameKey].AsString())
+	require.Equal(t, "claude-code", attrs[AgentSurfaceKey].AsString())
+
+	attrs = enriched(t, enricher, inboundTestLog(dialect.HooksLogScopeName, "x", "SessionStart", logStringAttribute("gram.hook.source", "my-custom-agent-7")))
+	require.NotContains(t, attrs, AgentEventTypeKey)
+	require.Equal(t, "my-custom-agent-7", attrs[AgentSurfaceKey].AsString(), "the surface is whatever the endpoint resolved")
+
+	attrs = enriched(t, enricher, inboundTestLog(dialect.HooksLogScopeName, "codex", "PostToolUse", logStringAttribute("gram.hook.source", "codex")))
+	require.Equal(t, dialect.EventTypeToolCallResult, attrs[AgentEventTypeKey].AsString())
 }
 
 func TestSpanClassificationNamesWhatASpanIs(t *testing.T) {

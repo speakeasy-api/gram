@@ -62,9 +62,13 @@ type Service struct {
 	// Optional: when nil, hooks OTLP ingestion behaves exactly as before and
 	// nothing is republished.
 	otelLogPublisher gcp.Publisher[*otelv1.InboundLogRecord]
-	// otelTeeDrains tracks in-flight tee ack-drain goroutines so tests can
-	// await them deterministically.
+	// otelTeeDrains counts the tees still waiting on a publish ack, so
+	// Shutdown and tests can wait for them. otelTeeMu orders a tee's Add
+	// against Shutdown's Wait: once otelTeeDraining is set under the lock no
+	// tee starts, so an Add from zero never races the Wait.
 	otelTeeDrains      sync.WaitGroup
+	otelTeeMu          sync.Mutex
+	otelTeeDraining    bool
 	auth               authorizer
 	authz              *authz.Engine
 	audit              *audit.Logger
@@ -104,6 +108,27 @@ type Service struct {
 	// relative to the attribute_metrics_summaries MV cutoff. Defaults to
 	// time.Now via NewService; access through now() for nil-safety.
 	nowFunc func() time.Time
+}
+
+// Shutdown waits for the hook rows still being republished into the OTel
+// pipeline, bounded by ctx, so a deploy does not cut an ack short and lose a
+// row the endpoint already acknowledged to the agent.
+func (s *Service) Shutdown(ctx context.Context) error {
+	s.otelTeeMu.Lock()
+	s.otelTeeDraining = true
+	s.otelTeeMu.Unlock()
+
+	drained := make(chan struct{})
+	go func() {
+		s.otelTeeDrains.Wait()
+		close(drained)
+	}()
+	select {
+	case <-drained:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("wait for hooks event feed tees: %w", ctx.Err())
+	}
 }
 
 // now returns the current time via the injected clock, falling back to
@@ -289,6 +314,8 @@ func NewService(
 		telemetryLogger:    telemetryLogger,
 		otelLogPublisher:   otelLogPublisher,
 		otelTeeDrains:      sync.WaitGroup{},
+		otelTeeMu:          sync.Mutex{},
+		otelTeeDraining:    false,
 		auth:               auth.New(logger, db, sessionsMgr, authz),
 		authz:              authz,
 		audit:              auditLogger,
