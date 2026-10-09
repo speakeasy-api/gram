@@ -120,7 +120,7 @@ func UsageCommands() []string {
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|sync-directory-groups|set-directory-role-mapping|delete-directory-role-mapping|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
-		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
+		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff|mint-mcp-credential)",
 		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"analytics (query|describe|dimension-values)",
@@ -509,6 +509,10 @@ func ParseEndpoint(
 		agentCreateSessionHandoffApikeyTokenFlag  = agentCreateSessionHandoffFlags.String("apikey-token", "", "")
 		agentCreateSessionHandoffSerialNumberFlag = agentCreateSessionHandoffFlags.String("serial-number", "", "")
 		agentCreateSessionHandoffHostnameFlag     = agentCreateSessionHandoffFlags.String("hostname", "", "")
+
+		agentMintMcpCredentialFlags           = flag.NewFlagSet("mint-mcp-credential", flag.ExitOnError)
+		agentMintMcpCredentialBodyFlag        = agentMintMcpCredentialFlags.String("body", "REQUIRED", "")
+		agentMintMcpCredentialApikeyTokenFlag = agentMintMcpCredentialFlags.String("apikey-token", "", "")
 
 		agentsFlags = flag.NewFlagSet("agents", flag.ContinueOnError)
 
@@ -5027,6 +5031,7 @@ func ParseEndpoint(
 	agentReportSessionMovedFlags.Usage = agentReportSessionMovedUsage
 	agentReportAIScanFlags.Usage = agentReportAIScanUsage
 	agentCreateSessionHandoffFlags.Usage = agentCreateSessionHandoffUsage
+	agentMintMcpCredentialFlags.Usage = agentMintMcpCredentialUsage
 
 	agentsFlags.Usage = agentsUsage
 	agentsListSessionsFlags.Usage = agentsListSessionsUsage
@@ -6415,6 +6420,9 @@ func ParseEndpoint(
 
 			case "create-session-handoff":
 				epf = agentCreateSessionHandoffFlags
+
+			case "mint-mcp-credential":
+				epf = agentMintMcpCredentialFlags
 
 			}
 
@@ -9413,6 +9421,9 @@ func ParseEndpoint(
 			case "create-session-handoff":
 				endpoint = c.CreateSessionHandoff()
 				data, err = agentc.BuildCreateSessionHandoffPayload(*agentCreateSessionHandoffBodyFlag, *agentCreateSessionHandoffApikeyTokenFlag, *agentCreateSessionHandoffSerialNumberFlag, *agentCreateSessionHandoffHostnameFlag)
+			case "mint-mcp-credential":
+				endpoint = c.MintMcpCredential()
+				data, err = agentc.BuildMintMcpCredentialPayload(*agentMintMcpCredentialBodyFlag, *agentMintMcpCredentialApikeyTokenFlag)
 			}
 		case "agents":
 			c := agentsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -13286,6 +13297,7 @@ func agentUsage() {
 	fmt.Fprintln(os.Stderr, `    report-session-moved: Record that a captured agent session was moved to another harness on a device (session portability). Carries no session content — only the session identity, the target harness, and device attribution — and lands as a chat_session:move audit event so organizations retain governance visibility over local-first moves. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report moves. Fire-and-forget from the agent's perspective: the daemon must never fail a move because this call failed.`)
 	fmt.Fprintln(os.Stderr, `    report-ai-scan: Report the result of a device-agent AI scan: which AI tools from the served scan target catalog (or the list embedded in the agent as a fallback) were found installed or running on the device. A scan with zero matches still reports, so organizations can prove a device was scanned and came back clean. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report scans. Fire-and-forget from the agent's perspective: the daemon must never block on this call.`)
 	fmt.Fprintln(os.Stderr, `    create-session-handoff: Mint a short-lived capability URL for a rendered session-handoff document (session portability). The device agent uploads the handoff it rendered from the local transcript; the returned URL serves the markdown exactly once (burn-after-read) until expiry, so a cloud agent or another machine can continue the session. Content transits the server only for this purpose and stops being served at first read or expiry, whichever comes first. Requires a per-user key: the fleet-shared org install key is refused because minting a fetch-by-token URL for uploaded content is a per-user, content-bearing surface (the same DNO-383 blast-radius rule as getSessionMeta).`)
+	fmt.Fprintln(os.Stderr, `    mint-mcp-credential: Mint the credential an agent identity's device agent writes into its AI tools' MCP server entries. Authenticated by the device's enrollment agent key, it returns a separate key for the same agent that carries only mcp:connect, so revoking it does not unenroll the device and it cannot poll policy. Asking again revokes the previous credential. The credential stops working when its parent key is revoked or expires.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s agent COMMAND --help\n", os.Args[0])
@@ -13524,6 +13536,26 @@ func agentCreateSessionHandoffUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent create-session-handoff --body '{\n      \"content\": \"aaa\",\n      \"session_id\": \"aaa\",\n      \"source_surface\": \"aaa\",\n      \"ttl_seconds\": 900\n   }' --apikey-token \"abc123\" --serial-number \"abc123\" --hostname \"abc123\"")
+}
+
+func agentMintMcpCredentialUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agent mint-mcp-credential", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Mint the credential an agent identity's device agent writes into its AI tools' MCP server entries. Authenticated by the device's enrollment agent key, it returns a separate key for the same agent that carries only mcp:connect, so revoking it does not unenroll the device and it cannot poll policy. Asking again revokes the previous credential. The credential stops working when its parent key is revoked or expires.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent mint-mcp-credential --body '{\n      \"expires_at\": \"1970-01-01T00:00:01Z\"\n   }' --apikey-token \"abc123\"")
 }
 
 // agentsUsage displays the usage of the agents command and its subcommands.

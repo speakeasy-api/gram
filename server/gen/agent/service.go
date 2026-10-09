@@ -102,6 +102,13 @@ type Service interface {
 	// a fetch-by-token URL for uploaded content is a per-user, content-bearing
 	// surface (the same DNO-383 blast-radius rule as getSessionMeta).
 	CreateSessionHandoff(context.Context, *CreateSessionHandoffPayload) (res *CreateSessionHandoffResult, err error)
+	// Mint the credential an agent identity's device agent writes into its AI
+	// tools' MCP server entries. Authenticated by the device's enrollment agent
+	// key, it returns a separate key for the same agent that carries only
+	// mcp:connect, so revoking it does not unenroll the device and it cannot poll
+	// policy. Asking again revokes the previous credential. The credential stops
+	// working when its parent key is revoked or expires.
+	MintMcpCredential(context.Context, *MintMcpCredentialPayload) (res *MintMcpCredentialResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -124,7 +131,7 @@ const ServiceName = "agent"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [11]string{"getPlugins", "listSyncedUsers", "getConfiguration", "updateConfiguration", "listAiScanTargets", "upsertAiScanTarget", "deleteAiScanTarget", "getSessionMeta", "reportSessionMoved", "reportAIScan", "createSessionHandoff"}
+var MethodNames = [12]string{"getPlugins", "listSyncedUsers", "getConfiguration", "updateConfiguration", "listAiScanTargets", "upsertAiScanTarget", "deleteAiScanTarget", "getSessionMeta", "reportSessionMoved", "reportAIScan", "createSessionHandoff", "mintMcpCredential"}
 
 // One AI detection target a device-agent scan matched.
 type AIScanMatch struct {
@@ -440,6 +447,30 @@ type ListSyncedUsersPayload struct {
 type ListSyncedUsersResult struct {
 	// Emails seen syncing the device agent, most recently active first.
 	Users []*SyncedAgentUser
+}
+
+// MintMcpCredentialPayload is the payload type of the agent service
+// mintMcpCredential method.
+type MintMcpCredentialPayload struct {
+	ApikeyToken *string
+	// When the credential expires. Defaults to 90 days from now and is capped at
+	// the parent key's expiry.
+	ExpiresAt *string
+}
+
+// MintMcpCredentialResult is the result type of the agent service
+// mintMcpCredential method.
+type MintMcpCredentialResult struct {
+	// ID of the minted credential.
+	ID string
+	// The credential. Returned only once; write it into the tool's MCP server
+	// entry as a bearer token.
+	Key string
+	// Non-secret prefix of the credential, for identifying it without reading the
+	// secret.
+	KeyPrefix string
+	// When the credential stops working.
+	ExpiresAt string
 }
 
 // ReportAIScanPayload is the payload type of the agent service reportAIScan

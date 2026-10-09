@@ -182,6 +182,9 @@ func (s *Service) RotateKey(ctx context.Context, payload *gen.RotateKeyPayload) 
 	if err := s.logAgentKeyRevoke(ctx, tx, human, revoked); err != nil {
 		return nil, err
 	}
+	if err := s.revokeChildAgentKeys(ctx, tx, human, revoked.ID); err != nil {
+		return nil, err
+	}
 	created, err := s.createPreparedAgentKey(ctx, tx, human, prepared)
 	if err != nil {
 		return nil, err
@@ -208,7 +211,25 @@ func (s *Service) revokeLoadedAgentKey(ctx context.Context, tx pgx.Tx, key repo.
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "revoke agent API key").LogError(ctx, s.logger)
 	}
-	return s.logAgentKeyRevoke(ctx, tx, human, revoked)
+	if err := s.logAgentKeyRevoke(ctx, tx, human, revoked); err != nil {
+		return err
+	}
+	return s.revokeChildAgentKeys(ctx, tx, human, revoked.ID)
+}
+
+// revokeChildAgentKeys retires the credentials a revoked key minted. They
+// already fail authentication with the parent gone; this keeps listings honest.
+func (s *Service) revokeChildAgentKeys(ctx context.Context, tx pgx.Tx, human agentmanagement.HumanContext, parentID uuid.UUID) error {
+	children, err := repo.New(tx).RevokeChildAPIKeys(ctx, repo.RevokeChildAPIKeysParams{OrganizationID: human.Auth.ActiveOrganizationID, ParentApiKeyID: uuid.NullUUID{UUID: parentID, Valid: true}})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "revoke credentials minted by agent API key").LogError(ctx, s.logger)
+	}
+	for _, child := range children {
+		if err := s.logAgentKeyRevoke(ctx, tx, human, child); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Service) prepareAgentKey(ctx context.Context, agentIDRaw, name string, versionRaw int, requestedForms []*gen.AgentPolicyGrantForm, expiryRaw *string) (preparedAgentKey, error) {

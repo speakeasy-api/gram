@@ -471,3 +471,28 @@ func BuildCreateSessionHandoffPayload(agentCreateSessionHandoffBody string, agen
 
 	return v, nil
 }
+
+// BuildMintMcpCredentialPayload builds the payload for the agent
+// mintMcpCredential endpoint from CLI flags.
+func BuildMintMcpCredentialPayload(agentMintMcpCredentialBody string, agentMintMcpCredentialApikeyToken string) (*agent.MintMcpCredentialPayload, error) {
+	var err error
+	var body MintMcpCredentialRequestBody
+	{
+		err = json.Unmarshal([]byte(agentMintMcpCredentialBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"expires_at\": \"1970-01-01T00:00:01Z\"\n   }'")
+		}
+	}
+	var apikeyToken *string
+	{
+		if agentMintMcpCredentialApikeyToken != "" {
+			apikeyToken = &agentMintMcpCredentialApikeyToken
+		}
+	}
+	v := &agent.MintMcpCredentialPayload{
+		ExpiresAt: body.ExpiresAt,
+	}
+	v.ApikeyToken = apikeyToken
+
+	return v, nil
+}

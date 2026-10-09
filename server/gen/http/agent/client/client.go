@@ -61,6 +61,10 @@ type Client struct {
 	// createSessionHandoff endpoint.
 	CreateSessionHandoffDoer goahttp.Doer
 
+	// MintMcpCredential Doer is the HTTP client used to make requests to the
+	// mintMcpCredential endpoint.
+	MintMcpCredentialDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -92,6 +96,7 @@ func NewClient(
 		ReportSessionMovedDoer:   doer,
 		ReportAIScanDoer:         doer,
 		CreateSessionHandoffDoer: doer,
+		MintMcpCredentialDoer:    doer,
 		RestoreResponseBody:      restoreBody,
 		scheme:                   scheme,
 		host:                     host,
@@ -359,6 +364,30 @@ func (c *Client) CreateSessionHandoff() goa.Endpoint {
 		resp, err := c.CreateSessionHandoffDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("agent", "createSessionHandoff", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// MintMcpCredential returns an endpoint that makes HTTP requests to the agent
+// service mintMcpCredential server.
+func (c *Client) MintMcpCredential() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeMintMcpCredentialRequest(c.encoder)
+		decodeResponse = DecodeMintMcpCredentialResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildMintMcpCredentialRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.MintMcpCredentialDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "mintMcpCredential", err)
 		}
 		return decodeResponse(resp)
 	}

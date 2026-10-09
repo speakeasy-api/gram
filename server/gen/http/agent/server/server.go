@@ -30,6 +30,7 @@ type Server struct {
 	ReportSessionMoved   http.Handler
 	ReportAIScan         http.Handler
 	CreateSessionHandoff http.Handler
+	MintMcpCredential    http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -70,6 +71,7 @@ func New(
 			{"ReportSessionMoved", "POST", "/rpc/agent.reportSessionMoved"},
 			{"ReportAIScan", "POST", "/rpc/agent.reportAIScan"},
 			{"CreateSessionHandoff", "POST", "/rpc/agent.createSessionHandoff"},
+			{"MintMcpCredential", "POST", "/rpc/agent.mintMcpCredential"},
 		},
 		GetPlugins:           NewGetPluginsHandler(e.GetPlugins, mux, decoder, encoder, errhandler, formatter),
 		ListSyncedUsers:      NewListSyncedUsersHandler(e.ListSyncedUsers, mux, decoder, encoder, errhandler, formatter),
@@ -82,6 +84,7 @@ func New(
 		ReportSessionMoved:   NewReportSessionMovedHandler(e.ReportSessionMoved, mux, decoder, encoder, errhandler, formatter),
 		ReportAIScan:         NewReportAIScanHandler(e.ReportAIScan, mux, decoder, encoder, errhandler, formatter),
 		CreateSessionHandoff: NewCreateSessionHandoffHandler(e.CreateSessionHandoff, mux, decoder, encoder, errhandler, formatter),
+		MintMcpCredential:    NewMintMcpCredentialHandler(e.MintMcpCredential, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -101,6 +104,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ReportSessionMoved = m(s.ReportSessionMoved)
 	s.ReportAIScan = m(s.ReportAIScan)
 	s.CreateSessionHandoff = m(s.CreateSessionHandoff)
+	s.MintMcpCredential = m(s.MintMcpCredential)
 }
 
 // MethodNames returns the methods served.
@@ -119,6 +123,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountReportSessionMovedHandler(mux, h.ReportSessionMoved)
 	MountReportAIScanHandler(mux, h.ReportAIScan)
 	MountCreateSessionHandoffHandler(mux, h.CreateSessionHandoff)
+	MountMintMcpCredentialHandler(mux, h.MintMcpCredential)
 }
 
 // Mount configures the mux to serve the agent endpoints.
@@ -686,6 +691,59 @@ func NewCreateSessionHandoffHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createSessionHandoff")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountMintMcpCredentialHandler configures the mux to serve the "agent"
+// service "mintMcpCredential" endpoint.
+func MountMintMcpCredentialHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/agent.mintMcpCredential", f)
+}
+
+// NewMintMcpCredentialHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agent" service "mintMcpCredential" endpoint.
+func NewMintMcpCredentialHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeMintMcpCredentialRequest(mux, decoder)
+		encodeResponse = EncodeMintMcpCredentialResponse(encoder)
+		encodeError    = EncodeMintMcpCredentialError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "mintMcpCredential")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
 		payload, err := decodeRequest(r)
 		if err != nil {

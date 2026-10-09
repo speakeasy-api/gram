@@ -1166,6 +1166,19 @@ func (q *Queries) EnablePreparationFixtureCIMD(ctx context.Context, arg EnablePr
 	return err
 }
 
+const expireAPIKeyFixture = `-- name: ExpireAPIKeyFixture :exec
+UPDATE api_keys
+SET created_at = clock_timestamp() - INTERVAL '2 hours',
+    expires_at = clock_timestamp() - INTERVAL '1 hour'
+WHERE id = $1
+`
+
+// Backdates a key so it is already expired without breaking its profile.
+func (q *Queries) ExpireAPIKeyFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, expireAPIKeyFixture, id)
+	return err
+}
+
 const expirePlatformMCPOperationReceiptFixture = `-- name: ExpirePlatformMCPOperationReceiptFixture :one
 UPDATE platform_mcp_operation_receipts
 SET expires_at = clock_timestamp() - interval '1 second'

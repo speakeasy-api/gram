@@ -53,24 +53,51 @@ RETURNING *;
 SELECT api_keys.*, users.email
 FROM api_keys
 JOIN users ON users.id = api_keys.created_by_user_id
-WHERE key_hash = @key_hash
-  AND deleted IS FALSE
-  AND (expires_at IS NULL OR expires_at > clock_timestamp());
+WHERE api_keys.key_hash = @key_hash
+  AND api_keys.deleted IS FALSE
+  AND (api_keys.expires_at IS NULL OR api_keys.expires_at > clock_timestamp())
+  -- A minted child authenticates only while its parent does.
+  AND (
+    api_keys.parent_api_key_id IS NULL
+    OR EXISTS (
+      SELECT 1
+      FROM api_keys parent
+      WHERE parent.id = api_keys.parent_api_key_id
+        AND parent.organization_id = api_keys.organization_id
+        AND parent.subject_urn = api_keys.subject_urn
+        AND parent.parent_api_key_id IS NULL
+        AND parent.deleted IS FALSE
+        AND parent.expires_at > clock_timestamp()
+    )
+  );
 
 -- name: GetActivePrincipalAPIKeyForAdmission :one
-SELECT id
+SELECT api_keys.id
 FROM api_keys
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND deleted IS FALSE
-  AND cardinality(scopes) = 0
-  AND subject_urn = @subject_urn
-  AND created_by_user_id = @authorizer_user_id
-  AND delegated_grants = @delegated_grants::jsonb
-  AND delegated_grants_version = @delegated_grants_version
-  AND expires_at > statement_timestamp()
-  AND expires_at > created_at
-  AND expires_at <= created_at + INTERVAL '365 days';
+WHERE api_keys.id = @id
+  AND api_keys.organization_id = @organization_id
+  AND api_keys.deleted IS FALSE
+  AND cardinality(api_keys.scopes) = 0
+  AND api_keys.subject_urn = @subject_urn
+  AND api_keys.created_by_user_id = @authorizer_user_id
+  AND api_keys.delegated_grants = @delegated_grants::jsonb
+  AND api_keys.delegated_grants_version = @delegated_grants_version
+  AND api_keys.expires_at > statement_timestamp()
+  AND api_keys.expires_at > api_keys.created_at
+  AND api_keys.expires_at <= api_keys.created_at + INTERVAL '365 days'
+  AND (
+    api_keys.parent_api_key_id IS NULL
+    OR EXISTS (
+      SELECT 1
+      FROM api_keys parent
+      WHERE parent.id = api_keys.parent_api_key_id
+        AND parent.organization_id = api_keys.organization_id
+        AND parent.subject_urn = api_keys.subject_urn
+        AND parent.parent_api_key_id IS NULL
+        AND parent.deleted IS FALSE
+        AND parent.expires_at > clock_timestamp()
+    )
+  );
 
 -- name: CurrentDatabaseTime :one
 -- The database clock, used as the cutoff a credential rotation retires keys
@@ -226,6 +253,47 @@ SET deleted_at = clock_timestamp(),
 WHERE id = @id
   AND organization_id = @organization_id
   AND subject_urn = @subject_urn
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: CreateChildAgentAPIKey :one
+-- A credential an agent key mints for itself. It inherits the parent's
+-- subject and authorizer so admission treats it as the same agent.
+INSERT INTO api_keys (
+    organization_id
+  , project_id
+  , created_by_user_id
+  , name
+  , key_prefix
+  , key_hash
+  , scopes
+  , subject_urn
+  , delegated_grants
+  , delegated_grants_version
+  , expires_at
+  , parent_api_key_id
+) VALUES (
+    @organization_id
+  , NULL
+  , @created_by_user_id
+  , @name
+  , @key_prefix
+  , @key_hash
+  , ARRAY[]::text[]
+  , @subject_urn
+  , @delegated_grants::jsonb
+  , @delegated_grants_version
+  , @expires_at
+  , @parent_api_key_id
+)
+RETURNING *;
+
+-- name: RevokeChildAPIKeys :many
+UPDATE api_keys
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND parent_api_key_id = @parent_api_key_id
   AND deleted IS FALSE
 RETURNING *;
 

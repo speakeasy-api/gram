@@ -62,6 +62,7 @@ type Service struct {
 	audit           *audit.Logger
 	productFeatures ProductFeaturesClient
 	serverURL       string
+	keyPrefix       string
 	blobStore       assets.BlobStore
 	telemetry       *telemetry.Logger
 	growth          *growthsignals.Emitter
@@ -82,6 +83,7 @@ func NewService(
 	auditLogger *audit.Logger,
 	productFeatures ProductFeaturesClient,
 	serverURL string,
+	env string,
 	blobStore assets.BlobStore,
 	telemetryLogger *telemetry.Logger,
 	growthEmitter *growthsignals.Emitter,
@@ -97,6 +99,7 @@ func NewService(
 		audit:           auditLogger,
 		productFeatures: productFeatures,
 		serverURL:       serverURL,
+		keyPrefix:       auth.APIKeyPrefix(env),
 		blobStore:       blobStore,
 		telemetry:       telemetryLogger,
 		growth:          growthEmitter,
@@ -125,8 +128,9 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 		return ctx, nil
 	}
 
-	// Agent-principal keys may only poll plugins, and only with an explicit grant.
-	if method, _ := ctx.Value(goa.MethodKey).(string); method != "getPlugins" {
+	// Agent-principal keys may only poll plugins and mint their MCP credential,
+	// and only with an explicit device-sync grant.
+	if method, _ := ctx.Value(goa.MethodKey).(string); method != "getPlugins" && method != "mintMcpCredential" {
 		return ctx, oops.C(oops.CodeForbidden)
 	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

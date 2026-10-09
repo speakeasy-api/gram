@@ -104,6 +104,7 @@ trackedFiles:
   src/funcs/agentGetSessionMeta.ts: {}
   src/funcs/agentListAiScanTargets.ts: {}
   src/funcs/agentListSyncedUsers.ts: {}
+  src/funcs/agentMintMcpCredential.ts: {}
   src/funcs/agentReportAIScan.ts: {}
   src/funcs/agentReportSessionMoved.ts: {}
   src/funcs/agentUpdateConfiguration.ts: {}
@@ -1450,6 +1451,8 @@ trackedFiles:
   src/models/components/migrateorganizationusersessionissuerresult.ts: {}
   src/models/components/migrateremotesessionissuerrequestbody.ts: {}
   src/models/components/migrateremotesessionissuerresult.ts: {}
+  src/models/components/mintmcpcredentialrequestbody.ts: {}
+  src/models/components/mintmcpcredentialresult.ts: {}
   src/models/components/mintusersessionrequestbody.ts: {}
   src/models/components/mintusersessionresponsebody.ts: {}
   src/models/components/modelproviderkey.ts: {}
@@ -2539,6 +2542,7 @@ trackedFiles:
   src/models/operations/migrateorganizationremotesessionissuer.ts: {}
   src/models/operations/migrateorganizationusersessionissuer.ts: {}
   src/models/operations/migratetoglobalremotesessionissuer.ts: {}
+  src/models/operations/mintagentmcpcredential.ts: {}
   src/models/operations/mintusersession.ts: {}
   src/models/operations/moveorganizationremotesessionissuer.ts: {}
   src/models/operations/moveorganizationusersessionissuer.ts: {}
@@ -2805,6 +2809,7 @@ trackedFiles:
   src/react-query/admitWorkloadSubject.ts: {}
   src/react-query/agent.core.ts: {}
   src/react-query/agent.ts: {}
+  src/react-query/agentMintMcpCredential.ts: {}
   src/react-query/agentPlugins.core.ts: {}
   src/react-query/agentPlugins.ts: {}
   src/react-query/agentSessionMeta.core.ts: {}
@@ -10484,6 +10489,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  mintAgentMcpCredential:
+    speakeasy-default-mint-agent-mcp-credential:
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"expires_at": "2024-10-06T10:25:29.031Z", "id": "a46faf60-13b9-40a3-a15c-434b5288ca6c", "key": "<key>", "key_prefix": "<value>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   mintUserSession:
     speakeasy-default-mint-user-session:
       requestBody:

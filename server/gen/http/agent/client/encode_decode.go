@@ -2602,6 +2602,240 @@ func DecodeCreateSessionHandoffResponse(decoder func(*http.Response) goahttp.Dec
 	}
 }
 
+// BuildMintMcpCredentialRequest instantiates a HTTP request object with method
+// and path set to call the "agent" service "mintMcpCredential" endpoint
+func (c *Client) BuildMintMcpCredentialRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: MintMcpCredentialAgentPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agent", "mintMcpCredential", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeMintMcpCredentialRequest returns an encoder for requests sent to the
+// agent mintMcpCredential server.
+func EncodeMintMcpCredentialRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agent.MintMcpCredentialPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agent", "mintMcpCredential", "*agent.MintMcpCredentialPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		body := NewMintMcpCredentialRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("agent", "mintMcpCredential", err)
+		}
+		return nil
+	}
+}
+
+// DecodeMintMcpCredentialResponse returns a decoder for responses returned by
+// the agent mintMcpCredential endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeMintMcpCredentialResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeMintMcpCredentialResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body MintMcpCredentialResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "mintMcpCredential", err)
+			}
+			err = ValidateMintMcpCredentialResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "mintMcpCredential", err)
+			}
+			res := NewMintMcpCredentialResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body MintMcpCredentialUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "mintMcpCredential", err)
+			}
+			err = ValidateMintMcpCredentialUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "mintMcpCredential", err)
+			}
+			return nil, NewMintMcpCredentialUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body MintMcpCredentialForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "mintMcpCredential", err)
+			}
+			err = ValidateMintMcpCredentialForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "mintMcpCredential", err)
+			}
+			return nil, NewMintMcpCredentialForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body MintMcpCredentialBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "mintMcpCredential", err)
+			}
+			err = ValidateMintMcpCredentialBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "mintMcpCredential", err)
+			}
+			return nil, NewMintMcpCredentialBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body MintMcpCredentialNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "mintMcpCredential", err)
+			}
+			err = ValidateMintMcpCredentialNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "mintMcpCredential", err)
+			}
+			return nil, NewMintMcpCredentialNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body MintMcpCredentialConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "mintMcpCredential", err)
+			}
+			err = ValidateMintMcpCredentialConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "mintMcpCredential", err)
+			}
+			return nil, NewMintMcpCredentialConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body MintMcpCredentialUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "mintMcpCredential", err)
+			}
+			err = ValidateMintMcpCredentialUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "mintMcpCredential", err)
+			}
+			return nil, NewMintMcpCredentialUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body MintMcpCredentialInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "mintMcpCredential", err)
+			}
+			err = ValidateMintMcpCredentialInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "mintMcpCredential", err)
+			}
+			return nil, NewMintMcpCredentialInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body MintMcpCredentialInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "mintMcpCredential", err)
+				}
+				err = ValidateMintMcpCredentialInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "mintMcpCredential", err)
+				}
+				return nil, NewMintMcpCredentialInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body MintMcpCredentialUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "mintMcpCredential", err)
+				}
+				err = ValidateMintMcpCredentialUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "mintMcpCredential", err)
+				}
+				return nil, NewMintMcpCredentialUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agent", "mintMcpCredential", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body MintMcpCredentialGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "mintMcpCredential", err)
+			}
+			err = ValidateMintMcpCredentialGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "mintMcpCredential", err)
+			}
+			return nil, NewMintMcpCredentialGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agent", "mintMcpCredential", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAgentMarketplaceResponseBodyToAgentAgentMarketplace builds a value
 // of type *agent.AgentMarketplace from a value of type
 // *AgentMarketplaceResponseBody.

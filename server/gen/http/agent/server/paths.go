@@ -61,3 +61,8 @@ func ReportAIScanAgentPath() string {
 func CreateSessionHandoffAgentPath() string {
 	return "/rpc/agent.createSessionHandoff"
 }
+
+// MintMcpCredentialAgentPath returns the URL path to the agent service mintMcpCredential HTTP endpoint.
+func MintMcpCredentialAgentPath() string {
+	return "/rpc/agent.mintMcpCredential"
+}

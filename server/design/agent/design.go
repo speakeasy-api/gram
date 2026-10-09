@@ -423,6 +423,33 @@ var _ = Service("agent", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "createSessionHandoff")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateAgentSessionHandoff"}`)
 	})
+
+	Method("mintMcpCredential", func() {
+		Description("Mint the credential an agent identity's device agent writes into its AI tools' MCP server entries. Authenticated by the device's enrollment agent key, it returns a separate key for the same agent that carries only mcp:connect, so revoking it does not unenroll the device and it cannot poll policy. Asking again revokes the previous credential. The credential stops working when its parent key is revoked or expires.")
+
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+			Attribute("expires_at", String, func() {
+				Description("When the credential expires. Defaults to 90 days from now and is capped at the parent key's expiry.")
+				Format(FormatDateTime)
+			})
+		})
+
+		Result(MintMcpCredentialResult)
+
+		HTTP(func() {
+			POST("/rpc/agent.mintMcpCredential")
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "mintAgentMcpCredential")
+		Meta("openapi:extension:x-speakeasy-name-override", "mintMcpCredential")
+	})
 })
 
 // --- Types ---
@@ -625,6 +652,19 @@ var CreateSessionHandoffResult = Type("CreateSessionHandoffResult", func() {
 	Attribute("url", String, "Capability URL serving the uploaded handoff markdown. Unauthenticated by design — the unguessable token is the credential — and dead after the first read or expiry.")
 	Attribute("expires_at", String, func() {
 		Description("When the link stops being served regardless of reads.")
+		Format(FormatDateTime)
+	})
+})
+
+var MintMcpCredentialResult = Type("MintMcpCredentialResult", func() {
+	Required("id", "key", "key_prefix", "expires_at")
+	Attribute("id", String, "ID of the minted credential.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("key", String, "The credential. Returned only once; write it into the tool's MCP server entry as a bearer token.")
+	Attribute("key_prefix", String, "Non-secret prefix of the credential, for identifying it without reading the secret.")
+	Attribute("expires_at", String, func() {
+		Description("When the credential stops working.")
 		Format(FormatDateTime)
 	})
 })
