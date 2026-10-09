@@ -313,20 +313,20 @@ func TestServePublic_PrivateTunneled_ServersSharingATunnelAuthorizeIndependently
 		{"tool_name":"wipe_device","read_only_hint":true}
 	]`)
 	seedMockUserMCPGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, readOnly.serverID, map[string]string{authz.SelectorKeyDisposition: authz.DispositionReadOnly})
-	seedMockUserMCPGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, inverted.serverID, map[string]string{authz.SelectorKeyTool: "ping"})
+	seedMockUserMCPGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, inverted.serverID, map[string]string{authz.SelectorKeyDisposition: authz.DispositionReadOnly})
 
 	readOnlySession := initializePrivateTunnel(t, ti, readOnly)
 	require.Equal(t, []string{"list_devices"}, listPrivateTunnelTools(t, ti, readOnly, readOnlySession))
 	requireToolCallAllowed(t, ti, readOnly, readOnlySession, gateway, "list_devices")
 	requireToolCallDenied(t, ti, readOnly, readOnlySession, gateway, "ping")
 
+	// The same read-only grant reaches the opposite tool on the second
+	// server, because its own stored metadata decides.
 	invertedSession := initializePrivateTunnel(t, ti, inverted)
-	require.Equal(t, []string{"ping"}, listPrivateTunnelTools(t, ti, inverted, invertedSession))
-	requireToolCallAllowed(t, ti, inverted, invertedSession, gateway, "ping")
-	// read_only on the first server, but the second server's metadata and
-	// grant decide here.
-	requireToolCallDenied(t, ti, inverted, invertedSession, gateway, "wipe_device")
+	require.Equal(t, []string{"wipe_device"}, listPrivateTunnelTools(t, ti, inverted, invertedSession))
+	requireToolCallAllowed(t, ti, inverted, invertedSession, gateway, "wipe_device")
 	requireToolCallDenied(t, ti, inverted, invertedSession, gateway, "list_devices")
+	requireToolCallDenied(t, ti, inverted, invertedSession, gateway, "ping")
 }
 
 // A private tunneled member of a meta gateway is authorized by its own
