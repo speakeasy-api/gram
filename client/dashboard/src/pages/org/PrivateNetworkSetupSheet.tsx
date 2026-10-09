@@ -143,7 +143,7 @@ export function PrivateNetworkSetupSheet({
               id="private-hostname"
               value={hostname}
               onChange={(value) => setHostname(value.toLowerCase())}
-              placeholder="acme-gram"
+              placeholder="acme-speakeasy"
               validate={(value) =>
                 HOSTNAME_PATTERN.test(value.toLowerCase()) ||
                 "Use a lowercase DNS label containing letters, numbers, or hyphens."
