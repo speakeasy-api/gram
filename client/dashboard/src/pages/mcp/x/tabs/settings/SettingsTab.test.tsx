@@ -57,6 +57,9 @@ vi.mock("./sections/ResourceIdentifierSection", () => ({
 vi.mock("./sections/TunneledHeadersSection", () => ({
   TunneledHeadersSection: () => <h2>Upstream Headers</h2>,
 }));
+vi.mock("./sections/EnvironmentHeadersSection", () => ({
+  EnvironmentHeadersSection: () => <h2>Environment Headers</h2>,
+}));
 vi.mock("./sections/CallerIdentitySection", () => ({
   CallerIdentitySection: () => <h2>Caller Identity</h2>,
 }));
@@ -157,6 +160,7 @@ describe("SettingsTab", () => {
       // Upstream headers are the Identity panel's Custom Headers disclosure
       // not a section of their own.
       "Identity",
+      "Environment Headers",
       "Server URL",
       "Network Access",
       "Sessions",
@@ -175,6 +179,7 @@ describe("SettingsTab", () => {
       "Authentication",
       "Resource Identifier",
       "Upstream Headers",
+      "Environment Headers",
       "Caller Identity",
       "Public Access",
       "Public Rate Limits",
