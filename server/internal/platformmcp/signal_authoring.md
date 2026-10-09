@@ -40,7 +40,31 @@ data, so it uses those existing fixtures. Atomicity, replay, version conflicts,
 permissions, feature gating, typed tool contracts, and byte-identical shipped
 workflow content are covered by focused tests.
 
-# Sensor enablement
+## Sensor enablement decision
+
+- **Outcome and target:** pause or resume evaluation for an existing sensor selected
+  by exact sensor ID in an explicitly selected project, while retaining its editable
+  definition and memberships. Creation can also start a sensor disabled.
+- **Actor:** an authenticated external member with live organization membership,
+  `project:read` and `project:write` on the selected project, and the
+  `signals_intelligence` feature. Managed assistants remain excluded under the
+  user-actor audit constraint above.
+- **Comparison and decision:** update `create_sensor` and `update_sensor` with
+  `proposal.enabled`, and expose the state through `find_sensors`, `get_sensor`,
+  previews, and committed results. A separate enable/disable tool would duplicate
+  the existing sensor mutation workflow and its authorization and confirmation
+  controls, so none is added.
+- **Rationale:** enablement is part of the same versioned sensor configuration.
+  Reusing authoring preserves atomic audits, proposal-bound confirmation,
+  concurrency protection, idempotency, and post-mutation verification.
+- **Success evidence:** `TestSignalToolDiscoveryAndSensorUpdate` confirms a disabled
+  proposal and verifies `enabled: false` in the preview, committed live read, and
+  discovery result while configuration readiness remains true.
+  `TestSensorEnabledLifecycle` covers default-on creation, explicitly disabled
+  creation, disabling, omitted-field preservation, and re-enabling.
+  `TestDisabledSensorExcludedFromEvaluation` proves disabling removes a sensor from
+  evaluation selection and re-enabling restores it. These checks establish saved
+  configuration and eligibility, not observed inference or reading publication.
 
 Existing sensor authoring tools support `proposal.enabled` for authorized external
 project writers. Creation defaults to enabled; omitted updates preserve the current
