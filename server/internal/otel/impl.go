@@ -28,8 +28,8 @@ import (
 const maxOTLPExportBytes = 20 * constants.MiB
 
 // ProvenanceSource is the provenance source stamped on every record entering
-// the OTel pipeline through a Speakeasy-operated ingest edge (/otel/v1/*, the
-// hooks OTLP tee and otelpub).
+// the OTel pipeline through a Speakeasy-operated ingest edge (/otel/v1/* and the
+// hooks OTLP tee).
 const ProvenanceSource = "speakeasy"
 
 // FeatureChecker reports whether a product feature is enabled for an

@@ -14,7 +14,7 @@ import (
 
 func (s *Service) Traces(ctx context.Context, payload *gen.TracesPayload, body io.ReadCloser) error {
 	return ingestOTLPExport(ctx, s.logger, otlpIngestSpec[*otelv1.InboundSpan]{
-		signal:          SignalTrace,
+		signal:          "trace",
 		contentEncoding: payload.ContentEncoding,
 		body:            body,
 		decode: func(raw []byte, tenant otlpIngestTenant) ([]*otelv1.InboundSpan, error) {

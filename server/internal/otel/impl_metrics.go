@@ -18,7 +18,7 @@ const maxOTLPMetricsPerExport = 10_000
 func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload, body io.ReadCloser) error {
 	var export *collectormetricsv1.ExportMetricsServiceRequest
 	err := ingestOTLPExport(ctx, s.logger, otlpIngestSpec[*otelv1.InboundMetric]{
-		signal:          SignalMetric,
+		signal:          "metric",
 		contentEncoding: payload.ContentEncoding,
 		body:            body,
 		decode: func(raw []byte, tenant otlpIngestTenant) ([]*otelv1.InboundMetric, error) {

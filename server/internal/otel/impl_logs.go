@@ -18,7 +18,7 @@ import (
 func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload, body io.ReadCloser) error {
 	var export *collectorlogsv1.ExportLogsServiceRequest
 	err := ingestOTLPExport(ctx, s.logger, otlpIngestSpec[*otelv1.InboundLogRecord]{
-		signal:          SignalLog,
+		signal:          "log",
 		contentEncoding: payload.ContentEncoding,
 		body:            body,
 		decode: func(raw []byte, tenant otlpIngestTenant) ([]*otelv1.InboundLogRecord, error) {

@@ -23,7 +23,7 @@ type otlpIngestTenant struct {
 }
 
 type otlpIngestSpec[M any] struct {
-	signal          Signal
+	signal          string
 	contentEncoding *string
 	body            io.ReadCloser
 	decode          func([]byte, otlpIngestTenant) ([]M, error)
@@ -81,11 +81,28 @@ func ingestOTLPExport[M any](ctx context.Context, logger *slog.Logger, spec otlp
 		return oops.E(oops.CodeBadRequest, err, "invalid OTLP %s export", spec.signal).LogError(ctx, logger)
 	}
 
-	if err := Publish(ctx, spec.signal, spec.publisher, spec.validate, items); err != nil {
-		if errors.Is(err, ErrInvalid) {
+	for _, item := range items {
+		if err := spec.validate(item); err != nil {
 			return oops.E(oops.CodeBadRequest, err, "invalid OTLP %s export", spec.signal).LogError(ctx, logger)
 		}
-		return oops.E(oops.CodeUnexpected, err, "unable to accept OTLP %s export", spec.signal).LogError(ctx, logger)
+	}
+
+	// Enqueue the complete export before settling results so the publisher can
+	// flush it as one batch. Waiting for every result makes Pub/Sub durability a
+	// precondition of acknowledging the OTLP exporter.
+	results := make([]gcp.PublishResult, 0, len(items))
+	for _, item := range items {
+		results = append(results, spec.publisher.Publish(ctx, item))
+	}
+
+	var publishErr error
+	for _, result := range results {
+		if _, err := result.Get(ctx); err != nil {
+			publishErr = errors.Join(publishErr, err)
+		}
+	}
+	if publishErr != nil {
+		return oops.E(oops.CodeUnexpected, publishErr, "unable to accept OTLP %s export", spec.signal).LogError(ctx, logger)
 	}
 
 	return nil
