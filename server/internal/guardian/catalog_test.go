@@ -35,7 +35,7 @@ func TestCatalogConfiguration(t *testing.T) {
 	} {
 		t.Run(tc.cidr, func(t *testing.T) {
 			t.Parallel()
-			_, err := WithInternalCatalogCIDR(tc.cidr)
+			_, err := WithHostedMCPFrontEndCIDR(tc.cidr)
 			if tc.valid {
 				require.NoError(t, err)
 			} else {
@@ -76,7 +76,7 @@ func TestCatalogURLValidation(t *testing.T) {
 				}
 				return ips, nil
 			}})
-			option, err := WithInternalCatalogCIDR("10.23.45.67/32")
+			option, err := WithHostedMCPFrontEndCIDR("10.23.45.67/32")
 			require.NoError(t, err)
 			policy := NewDefaultPolicy(noop.NewTracerProvider(), option, WithResolver(resolver)) //nolint:forbidigo // testenv imports guardian through its identity fixtures, causing an import cycle.
 			_, err = policy.ValidateHTTPURL(t.Context(), tc.url, WithInternalCatalog())
@@ -103,7 +103,7 @@ func TestCatalogRequiresConfigurationAndClientOptIn(t *testing.T) {
 				}})
 				policy := NewDefaultPolicy(noop.NewTracerProvider(), WithResolver(resolver)) //nolint:forbidigo // testenv imports guardian through its identity fixtures, causing an import cycle.
 				if configured {
-					option, err := WithInternalCatalogCIDR("10.23.45.67/32")
+					option, err := WithHostedMCPFrontEndCIDR("10.23.45.67/32")
 					require.NoError(t, err)
 					option(policy)
 				}
@@ -129,7 +129,7 @@ func TestCatalogRequiresConfigurationAndClientOptIn(t *testing.T) {
 
 func TestCatalogRebindingRejectedByClient(t *testing.T) {
 	t.Parallel()
-	option, err := WithInternalCatalogCIDR("10.23.45.67/32")
+	option, err := WithHostedMCPFrontEndCIDR("10.23.45.67/32")
 	require.NoError(t, err)
 	resolver := dns.NewMockResolver(dns.MockResolverConfig{LookupIPFunc: func(context.Context, string, string) ([]net.IP, error) {
 		return []net.IP{net.ParseIP("10.23.45.67")}, nil

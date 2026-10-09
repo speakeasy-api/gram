@@ -16,7 +16,7 @@ func TestValidateRemoteMCPCatalogURL(t *testing.T) {
 	resolver := dns.NewMockResolver(dns.MockResolverConfig{LookupIPFunc: func(context.Context, string, string) ([]net.IP, error) {
 		return []net.IP{net.ParseIP("10.23.45.67")}, nil
 	}})
-	option, err := guardian.WithInternalCatalogCIDR("10.23.45.67/32")
+	option, err := guardian.WithHostedMCPFrontEndCIDR("10.23.45.67/32")
 	require.NoError(t, err)
 	policy := guardian.NewDefaultPolicy(testenv.NewTracerProvider(t), guardian.WithResolver(resolver), option)
 	for _, tc := range []struct {

@@ -138,7 +138,7 @@ func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace
 		logger.WarnContext(c.Context, "ignoring remote MCP catalog CIDR allowance outside the dev environment")
 		catalogCIDR = ""
 	}
-	catalogOption, err := guardian.WithInternalCatalogCIDR(catalogCIDR)
+	catalogOption, err := guardian.WithHostedMCPFrontEndCIDR(catalogCIDR)
 	if err != nil {
 		return nil, fmt.Errorf("configure remote MCP catalog: %w", err)
 	}

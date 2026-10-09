@@ -5,10 +5,10 @@ import (
 	"net"
 )
 
-// WithInternalCatalogCIDR configures the catalog destination without granting
+// WithHostedMCPFrontEndCIDR configures the catalog destination without granting
 // access to ordinary clients. Empty disables it; only a private IPv4 /32 is
 // accepted. MCP clients must also opt in with WithInternalCatalog.
-func WithInternalCatalogCIDR(cidr string) (func(*Policy), error) {
+func WithHostedMCPFrontEndCIDR(cidr string) (func(*Policy), error) {
 	var block *net.IPNet
 	if cidr != "" {
 		ip, parsed, err := net.ParseCIDR(cidr)

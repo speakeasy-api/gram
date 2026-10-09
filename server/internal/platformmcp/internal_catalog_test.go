@@ -59,7 +59,7 @@ func TestDirectRemoteInternalCatalogRejectsPrivateRedirect(t *testing.T) {
 		}
 		http.Redirect(w, r, "https://private.example.test/mcp", http.StatusTemporaryRedirect)
 	}))
-	option, err := guardian.WithInternalCatalogCIDR("10.23.45.67/32")
+	option, err := guardian.WithHostedMCPFrontEndCIDR("10.23.45.67/32")
 	require.NoError(t, err)
 	resolver := dns.NewMockResolver(dns.MockResolverConfig{LookupIPFunc: func(_ context.Context, _, host string) ([]net.IP, error) {
 		if host == "private.example.test" {
@@ -103,7 +103,7 @@ func TestRemoteMCPReadinessInternalCatalogDeniesPrivateDNS(t *testing.T) {
 
 func internalCatalogTestPolicy(t *testing.T, cidr, ip string) *guardian.Policy {
 	t.Helper()
-	option, err := guardian.WithInternalCatalogCIDR(cidr)
+	option, err := guardian.WithHostedMCPFrontEndCIDR(cidr)
 	require.NoError(t, err)
 	resolver := dns.NewMockResolver(dns.MockResolverConfig{LookupIPFunc: func(context.Context, string, string) ([]net.IP, error) {
 		return []net.IP{net.ParseIP(ip)}, nil
