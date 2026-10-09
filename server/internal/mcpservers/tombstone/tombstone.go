@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -19,6 +20,8 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/risk/policylifecycle"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -28,8 +31,13 @@ type Locked struct {
 	RootEndpoints []mcpendpointsrepo.McpEndpoint
 }
 
-// Lock takes the domain -> endpoint -> server locks; pgx.ErrNoRows means the server is gone.
+// Lock takes the project admission -> domain -> endpoint -> server locks;
+// pgx.ErrNoRows means the server is gone. Tombstone's risk policy cleanup needs
+// the admission lock, and other writers take it before the server row lock.
 func Lock(ctx context.Context, tx pgx.Tx, organizationID string, projectID, serverID uuid.UUID) (Locked, error) {
+	if err := admission.LockProject(ctx, tx, projectID); err != nil {
+		return Locked{}, fmt.Errorf("lock project admission: %w", err)
+	}
 	endpoints := mcpendpointsrepo.New(tx)
 	domainIDs, err := endpoints.ListCustomDomainIDsByMCPServerID(ctx, mcpendpointsrepo.ListCustomDomainIDsByMCPServerIDParams{McpServerID: serverID, ProjectID: projectID})
 	if err != nil {
@@ -62,17 +70,22 @@ type Input struct {
 	ProjectID      uuid.UUID
 	ActorUserID    string
 	ActorEmail     *string
+
+	// TracerProvider traces the risk policy cleanup the delete runs.
+	TracerProvider trace.TracerProvider
 }
 
-// Result is the tombstoned server and how many plugin attachments it lost.
+// Result is the tombstoned server, how many plugin attachments it lost, and
+// the risk policies deleted with it, whose results the caller cleans post-commit.
 type Result struct {
 	Server                repo.McpServer
 	DetachedPluginServers int
+	DeletedRiskPolicies   []uuid.UUID
 }
 
 // Tombstone soft-deletes a locked server and its attachments; the caller audits the server delete.
 func Tombstone(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, locked Locked, input Input) (Result, error) {
-	if tx == nil || auditLogger == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || !ActorPresent(ctx, input.ActorUserID) {
+	if tx == nil || auditLogger == nil || input.TracerProvider == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || !ActorPresent(ctx, input.ActorUserID) {
 		return Result{}, errors.New("invalid MCP server tombstone input")
 	}
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID)
@@ -84,6 +97,14 @@ func Tombstone(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, locked
 	}
 	if err := servers.DeleteAssistantMCPServersByMCPServer(ctx, repo.DeleteAssistantMCPServersByMCPServerParams{McpServerID: deleted.ID, ProjectID: input.ProjectID}); err != nil {
 		return Result{}, fmt.Errorf("detach assistant mcp servers: %w", err)
+	}
+	deletedPolicies, err := policylifecycle.NewCleaner(input.TracerProvider, auditLogger).SoftDeleteForMCPServer(ctx, tx, input.OrganizationID, input.ProjectID, deleted.ID, policylifecycle.Actor{
+		Principal:   actor,
+		DisplayName: input.ActorEmail,
+		Slug:        nil,
+	})
+	if err != nil {
+		return Result{}, fmt.Errorf("clean up mcp server risk policies: %w", err)
 	}
 
 	// The endpoint FK only cascades on hard deletes.
@@ -158,7 +179,7 @@ func Tombstone(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, locked
 		}
 	}
 
-	return Result{Server: deleted, DetachedPluginServers: len(detachedPluginServers)}, nil
+	return Result{Server: deleted, DetachedPluginServers: len(detachedPluginServers), DeletedRiskPolicies: deletedPolicies}, nil
 }
 
 // ActorPresent reports whether a write has an actor: a user id, or an agent
