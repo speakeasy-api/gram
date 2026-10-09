@@ -6,7 +6,7 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
 /**
- * Form for creating a header on a tunneled MCP server. Exactly one of value or value_from_request_header must be provided. The header applies to every MCP server backed by the tunnel. Names are stored in canonical HTTP form and compared case-insensitively. Tunnel transport, MCP protocol, hop-by-hop, cookie and Speakeasy credential headers are reserved, and Speakeasy credential headers (including Authorization) cannot be passed through.
+ * Form for creating a header on a tunneled MCP server. Exactly one of value or value_from_request_header must be provided. The header applies to every MCP server backed by the tunnel. Names are stored in canonical HTTP form and compared case-insensitively, with underscores treated as dashes. Internal tunnel and request-control headers, MCP protocol, hop-by-hop, cookie and Speakeasy credential headers are reserved, and Speakeasy credential headers (including Authorization) cannot be passed through.
  */
 export type CreateTunneledMcpServerHeaderForm = {
   /**

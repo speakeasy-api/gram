@@ -683,7 +683,7 @@ func (s *Service) serveTunneledPublicSession(
 		},
 	)
 
-	configured, err := m.configuredHeaders(ctx, mcpServer.TunneledMcpServerID.UUID)
+	configured, err := m.configuredHeaders(ctx, endpoint.ProjectID, mcpServer.TunneledMcpServerID.UUID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "load tunneled mcp server headers").LogError(ctx, logger)
 	}

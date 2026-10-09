@@ -205,7 +205,7 @@ func (s *Service) CreateServerHeader(ctx context.Context, payload *gen.CreateSer
 		return nil, oops.E(oops.CodeUnexpected, err, "lock tunneled mcp server").LogError(ctx, logger)
 	}
 
-	if err := s.requireUniqueHeaderName(ctx, txRepo, server.ID, write.name, uuid.Nil); err != nil {
+	if err := requireUniqueHeaderName(ctx, logger, txRepo, server, write.name, uuid.Nil); err != nil {
 		return nil, err
 	}
 
@@ -288,7 +288,7 @@ func (s *Service) UpdateServerHeader(ctx context.Context, payload *gen.UpdateSer
 	}
 	setValue := write.value != nil || write.valueFromRequestHeader != ""
 
-	if err := s.requireUniqueHeaderName(ctx, txRepo, server.ID, write.name, existing.ID); err != nil {
+	if err := requireUniqueHeaderName(ctx, logger, txRepo, server, write.name, existing.ID); err != nil {
 		return nil, err
 	}
 
@@ -434,19 +434,20 @@ func (s *Service) lockHeader(ctx context.Context, logger *slog.Logger, txRepo *r
 
 // requireUniqueHeaderName rejects a name already used, in any letter case, by
 // another live header on the tunnel. Callers hold the tunnel lock.
-func (s *Service) requireUniqueHeaderName(ctx context.Context, txRepo *repo.Queries, serverID uuid.UUID, name string, excludeID uuid.UUID) error {
+func requireUniqueHeaderName(ctx context.Context, logger *slog.Logger, txRepo *repo.Queries, server repo.TunneledMcpServer, name string, excludeID uuid.UUID) error {
 	_, err := txRepo.FindLiveServerHeaderByName(ctx, repo.FindLiveServerHeaderByNameParams{
-		TunneledMcpServerID: serverID,
+		TunneledMcpServerID: server.ID,
+		ProjectID:           server.ProjectID,
 		Name:                name,
 		ExcludeID:           excludeID,
 	})
 	switch {
 	case err == nil:
-		return oops.E(oops.CodeConflict, nil, headerConflictMessage).LogWarn(ctx, s.logger)
+		return oops.E(oops.CodeConflict, nil, headerConflictMessage).LogWarn(ctx, logger)
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil
 	default:
-		return oops.E(oops.CodeUnexpected, err, "check tunneled mcp server header name").LogError(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "check tunneled mcp server header name").LogError(ctx, logger)
 	}
 }
 

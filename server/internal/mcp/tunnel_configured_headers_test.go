@@ -243,8 +243,7 @@ func TestTunnelConfiguredHeaders_PrivateDirect(t *testing.T) {
 	require.NoError(t, ti.service.ServePublic(response, request))
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 
-	headers, _ := tunnelForwards(gateway)
-	forwarded := headers[len(headers)-1]
+	forwarded := gateway.lastForward()
 	requireConfiguredHeadersForwarded(t, forwarded, "tenant-1")
 	requireNoSpeakeasyCredentialsForwarded(t, forwarded)
 	require.NotContains(t, forwarded.Get("Authorization"), bearer)
@@ -284,8 +283,7 @@ func TestTunnelConfiguredHeaders_ConsentTransport(t *testing.T) {
 	extra := map[string]string{"X-Client-Region": "eu-west"}
 	init := serveConsentMCPRequest(t, ctx, ti, endpoint, stateID, csrf, attempt, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`, extra)
 	require.Contains(t, init.Body.String(), "serverInfo")
-	headers, _ := tunnelForwards(gateway)
-	forwarded := headers[len(headers)-1]
+	forwarded := gateway.lastForward()
 	requireConfiguredHeadersForwarded(t, forwarded, "tenant-1")
 	for _, name := range []string{"Gram-Consent-State", "Gram-Consent-Csrf", "Gram-Consent-Inventory-Attempt"} {
 		require.Empty(t, forwarded.Values(name), name)
@@ -295,8 +293,7 @@ func TestTunnelConfiguredHeaders_ConsentTransport(t *testing.T) {
 	extra[mcpversions.HTTPHeader] = "2025-06-18"
 	list := serveConsentMCPRequest(t, ctx, ti, endpoint, stateID, csrf, attempt, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`, extra)
 	require.Contains(t, list.Body.String(), "tools")
-	headers, _ = tunnelForwards(gateway)
-	requireConfiguredHeadersForwarded(t, headers[len(headers)-1], "tenant-1")
+	requireConfiguredHeadersForwarded(t, gateway.lastForward(), "tenant-1")
 }
 
 // A gateway member dispatches through the same tunnel build.

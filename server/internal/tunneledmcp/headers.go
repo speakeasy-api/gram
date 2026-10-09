@@ -2,6 +2,7 @@ package tunneledmcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -31,11 +32,14 @@ func NewHeaders(logger *slog.Logger, db repo.DBTX, enc *encryption.Client) *Head
 }
 
 // ConfiguredHeaders reads a tunnel's headers, decrypted, in the form the MCP
-// proxy applies. It is not project-scoped: the proxy calls it after resolving
-// the tunnel through a project-scoped mcp_servers row. Management callers
-// must use ListServerHeaders.
-func (h *Headers) ConfiguredHeaders(ctx context.Context, tunneledMcpServerID uuid.UUID) ([]proxy.ConfiguredHeader, error) {
-	rows, err := repo.New(h.db).ListHeadersByServerID(ctx, tunneledMcpServerID)
+// proxy applies. projectID is the project of the MCP server being served; a
+// tunnel outside it yields no headers. Management callers must use
+// ListServerHeaders.
+func (h *Headers) ConfiguredHeaders(ctx context.Context, projectID uuid.UUID, tunneledMcpServerID uuid.UUID) ([]proxy.ConfiguredHeader, error) {
+	rows, err := repo.New(h.db).ListHeadersByServerID(ctx, repo.ListHeadersByServerIDParams{
+		TunneledMcpServerID: tunneledMcpServerID,
+		ProjectID:           projectID,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list tunneled mcp server headers: %w", err)
 	}
@@ -70,11 +74,7 @@ func (h *Headers) ListServerHeaders(ctx context.Context, tunneledMcpServerID uui
 
 	result := make([]repo.TunneledMcpServerHeader, len(rows))
 	for i, row := range rows {
-		revealed, err := h.revealHeader(row, true)
-		if err != nil {
-			return nil, err
-		}
-		result[i] = revealed
+		result[i] = redactHeader(row)
 	}
 
 	return result, nil
@@ -88,7 +88,7 @@ func (h *Headers) GetServerHeader(ctx context.Context, id uuid.UUID, projectID u
 		return repo.TunneledMcpServerHeader{}, fmt.Errorf("get server header: %w", err)
 	}
 
-	return h.revealHeader(row, true)
+	return redactHeader(row), nil
 }
 
 // CreateServerHeader encrypts a secret value and inserts the header, returning
@@ -105,13 +105,18 @@ func (h *Headers) CreateServerHeader(ctx context.Context, params repo.CreateServ
 		return repo.TunneledMcpServerHeader{}, fmt.Errorf("create server header: %w", err)
 	}
 
-	return h.revealHeader(row, true)
+	return redactHeader(row), nil
 }
 
 // UpdateServerHeader replaces a header's mutable fields, returning it
 // redacted. When params.SetValue is false the stored value is left in place
 // and nothing is encrypted; that is how an existing secret is preserved.
 func (h *Headers) UpdateServerHeader(ctx context.Context, params repo.UpdateServerHeaderParams) (repo.TunneledMcpServerHeader, error) {
+	// Only a secret's stored ciphertext may be kept; keeping it on a plain
+	// row would send ciphertext upstream as the header's value.
+	if !params.SetValue && !params.IsSecret {
+		return repo.TunneledMcpServerHeader{}, errors.New("update server header: only a secret header can keep its stored value")
+	}
 	if params.SetValue {
 		value, err := h.encryptValue(params.IsSecret, params.Value)
 		if err != nil {
@@ -127,11 +132,12 @@ func (h *Headers) UpdateServerHeader(ctx context.Context, params repo.UpdateServ
 		return repo.TunneledMcpServerHeader{}, fmt.Errorf("update server header: %w", err)
 	}
 
-	return h.revealHeader(row, true)
+	return redactHeader(row), nil
 }
 
 // redactHeader replaces a secret header's stored value with a placeholder
-// without decrypting it, for rows that are only being reported.
+// without decrypting it, for rows that are only being reported, so one
+// undecryptable row cannot fail a management read.
 func redactHeader(header repo.TunneledMcpServerHeader) repo.TunneledMcpServerHeader {
 	if header.IsSecret && header.Value.Valid {
 		header.Value = pgtype.Text{String: redactValue(header.Value.String), Valid: true}

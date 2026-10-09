@@ -24,7 +24,7 @@ import (
 // tunnelHeaderSource loads the operator-configured headers of a tunnel,
 // decrypted, for the proxy to apply.
 type tunnelHeaderSource interface {
-	ConfiguredHeaders(ctx context.Context, tunneledMcpServerID uuid.UUID) ([]proxy.ConfiguredHeader, error)
+	ConfiguredHeaders(ctx context.Context, projectID uuid.UUID, tunneledMcpServerID uuid.UUID) ([]proxy.ConfiguredHeader, error)
 }
 
 type tunnelManager struct {
@@ -124,7 +124,7 @@ func (m *tunnelManager) buildProxy(
 		return nil, oops.E(oops.CodeGatewayError, err, "tunnel route is invalid").LogError(ctx, logger)
 	}
 
-	configured, err := m.configuredHeaders(ctx, mcpServer.TunneledMcpServerID.UUID)
+	configured, err := m.configuredHeaders(ctx, params.ProjectID, mcpServer.TunneledMcpServerID.UUID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load tunneled mcp server headers").LogError(ctx, logger)
 	}
@@ -176,11 +176,11 @@ func (m *tunnelManager) buildProxy(
 }
 
 // configuredHeaders loads the tunnel's operator-configured headers.
-func (m *tunnelManager) configuredHeaders(ctx context.Context, tunneledMcpServerID uuid.UUID) ([]proxy.ConfiguredHeader, error) {
+func (m *tunnelManager) configuredHeaders(ctx context.Context, projectID uuid.UUID, tunneledMcpServerID uuid.UUID) ([]proxy.ConfiguredHeader, error) {
 	if m.headers == nil {
 		return nil, nil
 	}
-	headers, err := m.headers.ConfiguredHeaders(ctx, tunneledMcpServerID)
+	headers, err := m.headers.ConfiguredHeaders(ctx, projectID, tunneledMcpServerID)
 	if err != nil {
 		return nil, fmt.Errorf("load tunnel headers: %w", err)
 	}

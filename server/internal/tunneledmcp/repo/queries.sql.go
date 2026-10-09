@@ -287,17 +287,20 @@ func (q *Queries) DeleteServerHeader(ctx context.Context, arg DeleteServerHeader
 }
 
 const findLiveServerHeaderByName = `-- name: FindLiveServerHeaderByName :one
-SELECT id
+SELECT tunneled_mcp_server_headers.id
 FROM tunneled_mcp_server_headers
-WHERE tunneled_mcp_server_id = $1
-    AND deleted IS FALSE
-    AND replace(lower(name), '_', '-') = replace(lower($2::text), '_', '-')
-    AND id <> $3::uuid
+JOIN tunneled_mcp_servers ON tunneled_mcp_servers.id = tunneled_mcp_server_headers.tunneled_mcp_server_id
+WHERE tunneled_mcp_server_headers.tunneled_mcp_server_id = $1
+    AND tunneled_mcp_servers.project_id = $2
+    AND tunneled_mcp_server_headers.deleted IS FALSE
+    AND replace(lower(tunneled_mcp_server_headers.name), '_', '-') = replace(lower($3::text), '_', '-')
+    AND tunneled_mcp_server_headers.id <> $4::uuid
 LIMIT 1
 `
 
 type FindLiveServerHeaderByNameParams struct {
 	TunneledMcpServerID uuid.UUID
+	ProjectID           uuid.UUID
 	Name                string
 	ExcludeID           uuid.UUID
 }
@@ -308,7 +311,12 @@ type FindLiveServerHeaderByNameParams struct {
 // X-Foo. Runs with the parent row locked, so a concurrent writer to the same
 // tunnel cannot slip in between the check and the write.
 func (q *Queries) FindLiveServerHeaderByName(ctx context.Context, arg FindLiveServerHeaderByNameParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, findLiveServerHeaderByName, arg.TunneledMcpServerID, arg.Name, arg.ExcludeID)
+	row := q.db.QueryRow(ctx, findLiveServerHeaderByName,
+		arg.TunneledMcpServerID,
+		arg.ProjectID,
+		arg.Name,
+		arg.ExcludeID,
+	)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -443,21 +451,27 @@ SELECT tunneled_mcp_server_headers.id, tunneled_mcp_server_headers.tunneled_mcp_
 FROM tunneled_mcp_server_headers
 JOIN tunneled_mcp_servers ON tunneled_mcp_servers.id = tunneled_mcp_server_headers.tunneled_mcp_server_id
 WHERE tunneled_mcp_server_headers.tunneled_mcp_server_id = $1
+    AND tunneled_mcp_servers.project_id = $2
     AND tunneled_mcp_server_headers.deleted IS FALSE
     AND tunneled_mcp_servers.deleted IS FALSE
 ORDER BY tunneled_mcp_server_headers.name
 `
+
+type ListHeadersByServerIDParams struct {
+	TunneledMcpServerID uuid.UUID
+	ProjectID           uuid.UUID
+}
 
 // Tunneled MCP Server Headers
 //
 // tunneled_mcp_server_headers has no project_id column. Every management
 // query pins the project through the parent tunneled_mcp_servers row so a
 // caller cannot address another project's header by guessing its id.
-// Not project-scoped. Serves the MCP proxy, which has already resolved the
-// tunnel through a project-scoped mcp_servers row and needs the stored values
-// to inject into outbound requests. Management reads use ListServerHeaders.
-func (q *Queries) ListHeadersByServerID(ctx context.Context, tunneledMcpServerID uuid.UUID) ([]TunneledMcpServerHeader, error) {
-	rows, err := q.db.Query(ctx, listHeadersByServerID, tunneledMcpServerID)
+// Serves the MCP proxy, which needs the stored values to inject into outbound
+// requests. Scoped to the project of the MCP server being served, so a tunnel
+// id from anywhere else yields nothing. Management reads use ListServerHeaders.
+func (q *Queries) ListHeadersByServerID(ctx context.Context, arg ListHeadersByServerIDParams) ([]TunneledMcpServerHeader, error) {
+	rows, err := q.db.Query(ctx, listHeadersByServerID, arg.TunneledMcpServerID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}

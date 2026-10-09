@@ -64,7 +64,7 @@ func getHeader(t *testing.T, ctx context.Context, ti *testInstance, id string) *
 
 func configuredValue(t *testing.T, ctx context.Context, ti *testInstance, serverID uuid.UUID, name string) (string, bool) {
 	t.Helper()
-	headers, err := NewHeaders(ti.service.logger, ti.conn, ti.service.enc).ConfiguredHeaders(ctx, serverID)
+	headers, err := NewHeaders(ti.service.logger, ti.conn, ti.service.enc).ConfiguredHeaders(ctx, *requireAuthContext(t, ctx).ProjectID, serverID)
 	require.NoError(t, err)
 	for _, h := range headers {
 		if h.Name == name {
@@ -199,6 +199,9 @@ func TestServerHeaderAuditIsRedacted(t *testing.T) {
 	require.Equal(t, created.ID, createRecord.SubjectID)
 	require.Equal(t, "X-Api-Key", createRecord.SubjectDisplay)
 
+	before, err := repo.New(ti.conn).GetServerHeader(ctx, repo.GetServerHeaderParams{ID: uuid.MustParse(created.ID), ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+
 	update := updateHeaderPayload(created.ID, "X-Api-Key")
 	update.IsSecret = new(true)
 	update.Value = new(syntheticSecret + "-rotated")
@@ -211,9 +214,13 @@ func TestServerHeaderAuditIsRedacted(t *testing.T) {
 	require.NotContains(t, string(updateRecord.AfterSnapshot), syntheticSecret)
 	require.Contains(t, string(updateRecord.AfterSnapshot), "***")
 
-	stored, err := repo.New(ti.conn).GetServerHeader(ctx, repo.GetServerHeaderParams{ID: uuid.MustParse(created.ID), ProjectID: *authCtx.ProjectID})
+	after, err := repo.New(ti.conn).GetServerHeader(ctx, repo.GetServerHeaderParams{ID: uuid.MustParse(created.ID), ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
-	require.NotContains(t, string(updateRecord.BeforeSnapshot), stored.Value.String, "ciphertext never reaches the audit log")
+	require.NotEqual(t, before.Value.String, after.Value.String)
+	for _, ciphertext := range []string{before.Value.String, after.Value.String} {
+		require.NotContains(t, string(updateRecord.BeforeSnapshot), ciphertext, "ciphertext never reaches the audit log")
+		require.NotContains(t, string(updateRecord.AfterSnapshot), ciphertext, "ciphertext never reaches the audit log")
+	}
 
 	err = ti.service.DeleteServerHeader(ctx, &gen.DeleteServerHeaderPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, ID: created.ID})
 	require.NoError(t, err)
@@ -510,6 +517,7 @@ func TestServerHeaderPolicyRejections(t *testing.T) {
 		{name: "speakeasy key source", header: "X-Upstream-Token", source: new("gram-key")},
 		{name: "chat session source", header: "X-Upstream-Token", source: new("Gram-Chat-Session")},
 		{name: "cookie source", header: "X-Upstream-Token", source: new("Cookie")},
+		{name: "proxy authorization source", header: "X-Upstream-Token", source: new("Proxy-Authorization")},
 		{name: "assertion alias source", header: "X-Upstream-Token", source: new("X_Speakeasy_Identity")},
 		{name: "invalid source name", header: "X-Upstream-Token", source: new("X Client")},
 		{name: "no value or source", header: "X-Tenant"},
@@ -628,7 +636,7 @@ func TestServerHeaderOnDeletedServerIsNotFound(t *testing.T) {
 	_, err = ti.service.CreateServerHeader(ctx, createHeaderPayload(server.ID, "X-New"))
 	requireOopsCode(t, err, oops.CodeNotFound)
 
-	configured, err := NewHeaders(ti.service.logger, ti.conn, ti.service.enc).ConfiguredHeaders(ctx, server.ID)
+	configured, err := NewHeaders(ti.service.logger, ti.conn, ti.service.enc).ConfiguredHeaders(ctx, *authCtx.ProjectID, server.ID)
 	require.NoError(t, err)
 	require.Empty(t, configured)
 }

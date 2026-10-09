@@ -552,14 +552,12 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 		return oops.E(oops.CodeUnexpected, err, "delete tunneled mcp server headers").LogError(ctx, logger)
 	}
 
+	// The row is locked and live, so the delete always matches it.
 	deleted, err := txRepo.DeleteServer(ctx, repo.DeleteServerParams{
 		ID:        serverID,
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil
-		}
 		return oops.E(oops.CodeUnexpected, err, "delete tunneled mcp server").LogError(ctx, logger)
 	}
 

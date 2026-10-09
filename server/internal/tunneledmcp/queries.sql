@@ -96,13 +96,14 @@ RETURNING *;
 -- caller cannot address another project's header by guessing its id.
 
 -- name: ListHeadersByServerID :many
--- Not project-scoped. Serves the MCP proxy, which has already resolved the
--- tunnel through a project-scoped mcp_servers row and needs the stored values
--- to inject into outbound requests. Management reads use ListServerHeaders.
+-- Serves the MCP proxy, which needs the stored values to inject into outbound
+-- requests. Scoped to the project of the MCP server being served, so a tunnel
+-- id from anywhere else yields nothing. Management reads use ListServerHeaders.
 SELECT tunneled_mcp_server_headers.*
 FROM tunneled_mcp_server_headers
 JOIN tunneled_mcp_servers ON tunneled_mcp_servers.id = tunneled_mcp_server_headers.tunneled_mcp_server_id
 WHERE tunneled_mcp_server_headers.tunneled_mcp_server_id = @tunneled_mcp_server_id
+    AND tunneled_mcp_servers.project_id = @project_id
     AND tunneled_mcp_server_headers.deleted IS FALSE
     AND tunneled_mcp_servers.deleted IS FALSE
 ORDER BY tunneled_mcp_server_headers.name;
@@ -132,12 +133,14 @@ WHERE tunneled_mcp_server_headers.id = @id
 -- with underscores read as dashes, since some upstream servers fold X_Foo into
 -- X-Foo. Runs with the parent row locked, so a concurrent writer to the same
 -- tunnel cannot slip in between the check and the write.
-SELECT id
+SELECT tunneled_mcp_server_headers.id
 FROM tunneled_mcp_server_headers
-WHERE tunneled_mcp_server_id = @tunneled_mcp_server_id
-    AND deleted IS FALSE
-    AND replace(lower(name), '_', '-') = replace(lower(@name::text), '_', '-')
-    AND id <> @exclude_id::uuid
+JOIN tunneled_mcp_servers ON tunneled_mcp_servers.id = tunneled_mcp_server_headers.tunneled_mcp_server_id
+WHERE tunneled_mcp_server_headers.tunneled_mcp_server_id = @tunneled_mcp_server_id
+    AND tunneled_mcp_servers.project_id = @project_id
+    AND tunneled_mcp_server_headers.deleted IS FALSE
+    AND replace(lower(tunneled_mcp_server_headers.name), '_', '-') = replace(lower(@name::text), '_', '-')
+    AND tunneled_mcp_server_headers.id <> @exclude_id::uuid
 LIMIT 1;
 
 -- name: CreateServerHeader :one
