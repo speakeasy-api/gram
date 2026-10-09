@@ -683,3 +683,76 @@ func TestServerHeaderRBAC(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, ti.service.DeleteServerHeader(writer, deletePayload))
 }
+
+// The proxy read is scoped to the served project: a tunnel id from another
+// project yields no header values.
+func TestConfiguredHeadersIgnoresTunnelFromAnotherProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx := requireAuthContext(t, ctx)
+	slug := "other-" + uuid.NewString()[:8]
+	other, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: slug, Slug: slug, OrganizationID: authCtx.ActiveOrganizationID})
+	require.NoError(t, err)
+	foreignServer := seedTunneledMcpServer(t, ctx, ti.conn, other.ID)
+	_, err = repo.New(ti.conn).CreateServerHeader(ctx, repo.CreateServerHeaderParams{
+		Name: "X-Foreign", Description: pgtype.Text{String: "", Valid: false}, IsRequired: false, IsSecret: false,
+		Value: conv.ToPGText("foreign"), ValueFromRequestHeader: pgtype.Text{String: "", Valid: false},
+		TunneledMcpServerID: foreignServer.ID, ProjectID: other.ID,
+	})
+	require.NoError(t, err)
+
+	headers := NewHeaders(ti.service.logger, ti.conn, ti.service.enc)
+	configured, err := headers.ConfiguredHeaders(ctx, *authCtx.ProjectID, foreignServer.ID)
+	require.NoError(t, err)
+	require.Empty(t, configured)
+
+	configured, err = headers.ConfiguredHeaders(ctx, other.ID, foreignServer.ID)
+	require.NoError(t, err)
+	require.Len(t, configured, 1)
+}
+
+// A secret whose stored value cannot be decrypted still lists and reads
+// redacted through the management API, while the proxy refuses to load it
+// rather than sending a request without it.
+func TestUndecryptableSecretStaysReadableButFailsServing(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx := requireAuthContext(t, ctx)
+	server := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
+	broken, err := repo.New(ti.conn).CreateServerHeader(ctx, repo.CreateServerHeaderParams{
+		Name: "X-Api-Key", Description: pgtype.Text{String: "", Valid: false}, IsRequired: true, IsSecret: true,
+		Value: conv.ToPGText("not-a-valid-ciphertext"), ValueFromRequestHeader: pgtype.Text{String: "", Valid: false},
+		TunneledMcpServerID: server.ID, ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	list, err := ti.service.ListServerHeaders(ctx, &gen.ListServerHeadersPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, TunneledMcpServerID: server.ID.String()})
+	require.NoError(t, err)
+	require.Len(t, list.Headers, 1)
+	require.Equal(t, "***", *list.Headers[0].Value)
+	require.Equal(t, "***", *getHeader(t, ctx, ti, broken.ID.String()).Value)
+
+	_, err = NewHeaders(ti.service.logger, ti.conn, ti.service.enc).ConfiguredHeaders(ctx, *authCtx.ProjectID, server.ID)
+	require.Error(t, err)
+}
+
+// Only a secret row may keep its stored value: keeping it on a plain row
+// would send the ciphertext upstream.
+func TestHeadersUpdateRefusesToKeepValueOnPlainRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx := requireAuthContext(t, ctx)
+	server := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
+	created, err := ti.service.CreateServerHeader(ctx, createHeaderPayload(server.ID, "X-Tenant"))
+	require.NoError(t, err)
+
+	_, err = NewHeaders(ti.service.logger, ti.conn, ti.service.enc).UpdateServerHeader(ctx, repo.UpdateServerHeaderParams{
+		Name: "X-Tenant", Description: pgtype.Text{String: "", Valid: false}, IsRequired: false, IsSecret: false,
+		SetValue: false, Value: pgtype.Text{String: "", Valid: false}, ValueFromRequestHeader: pgtype.Text{String: "", Valid: false},
+		ID: uuid.MustParse(created.ID), ProjectID: *authCtx.ProjectID,
+	})
+	require.Error(t, err)
+}
