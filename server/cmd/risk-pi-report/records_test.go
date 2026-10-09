@@ -18,7 +18,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/scanners"
 	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -38,7 +37,7 @@ func TestCaseHashUsesTheFixtureLine(t *testing.T) {
 			require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(`{"id": "`+name+`", "label": "benign", "text": "`+name+`", "source": "x"}`+"\n"), 0o600))
 		}
 	}
-	corpus, err := loadCorpus(dir, "")
+	corpus, err := loadCorpus(dir)
 	require.NoError(t, err)
 	var loaded labeledCase
 	for _, c := range corpus {
@@ -53,30 +52,30 @@ func TestCaseHashUsesTheFixtureLine(t *testing.T) {
 func TestRecordFromOutcomeStatuses(t *testing.T) {
 	t.Parallel()
 
-	finding := []scanners.Finding{{RuleID: "pi"}}
-	flagged := decisionObservation{Calls: []callObservation{{Rationale: "overrides the system prompt"}}}
-	cleared := decisionObservation{Calls: []callObservation{{Rationale: "asks to list deployments"}}}
-	failed := decisionObservation{Calls: []callObservation{{Err: errors.New("parse judge response")}}}
-	unfunded := decisionObservation{Calls: []callObservation{{Err: &openrouter.HTTPError{StatusCode: http.StatusPaymentRequired, Err: openrouter.ErrInsufficientCredits}}}}
+	attack := piopenrouter.Verdict{DirectiveKind: piopenrouter.DirectiveInstructionOverride, Target: piopenrouter.TargetGuardedAgent, Operational: true, Rationale: "overrides the system prompt"}
+	benign := piopenrouter.Verdict{DirectiveKind: piopenrouter.DirectiveNone, Target: piopenrouter.TargetNone, Operational: false, Rationale: "asks to list deployments"}
+	unfunded := &openrouter.HTTPError{StatusCode: http.StatusPaymentRequired, Err: openrouter.ErrInsufficientCredits}
 	tests := []struct {
 		name       string
 		outcome    caseOutcome
 		want       caseStatus
 		wantDetail string
 	}{
-		{name: "flagged", outcome: caseOutcome{findings: finding, verdict: piopenrouter.Stabilized{IsInjection: true, Rationale: "overrides the system prompt"}, observation: flagged}, want: statusFlagged, wantDetail: "overrides the system prompt"},
-		{name: "clear", outcome: caseOutcome{observation: cleared}, want: statusClear, wantDetail: "asks to list deployments"},
-		{name: "no verdict", outcome: caseOutcome{observation: failed}, want: statusNoVerdict, wantDetail: "parse judge response"},
-		{name: "out of credit", outcome: caseOutcome{observation: unfunded}, want: statusOutOfCredit, wantDetail: "OpenRouter returned 402: out of credit"},
+		{name: "flagged", outcome: caseOutcome{verdict: attack, costUSD: 0.002, latency: 900 * time.Millisecond}, want: statusFlagged, wantDetail: "overrides the system prompt"},
+		{name: "clear", outcome: caseOutcome{verdict: benign, costUSD: 0.002, latency: 900 * time.Millisecond}, want: statusClear, wantDetail: "asks to list deployments"},
+		{name: "no verdict", outcome: caseOutcome{verdict: emptyTypedVerdict, costUSD: 0.002, latency: 900 * time.Millisecond, err: errors.New("parse judge response")}, want: statusNoVerdict, wantDetail: "parse judge response"},
+		{name: "out of credit", outcome: caseOutcome{verdict: emptyTypedVerdict, costUSD: 0.002, latency: 900 * time.Millisecond, err: unfunded}, want: statusOutOfCredit, wantDetail: "OpenRouter returned 402: out of credit"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			rec := recordFromOutcome(recordsCase("a", "malicious"), "google/gemini", tc.outcome)
+			rec := recordFromOutcome(recordsCase("a", "malicious"), tc.outcome)
 			require.Equal(t, tc.want, rec.Status)
 			require.Equal(t, tc.wantDetail, rec.Detail)
 			require.Equal(t, "s::a", rec.Key)
-			require.Equal(t, "google/gemini", rec.Model)
+			require.Equal(t, piopenrouter.Model, rec.Model)
+			require.InDelta(t, 0.002, rec.CostUSD, 1e-9)
+			require.InDelta(t, 900.0, rec.LatencyMS, 1e-9)
 		})
 	}
 }
@@ -174,44 +173,49 @@ func writeManifestFile(t *testing.T, dir string, m runManifest) []byte {
 	return raw
 }
 
-func TestClaimRunDirAcceptsTheSameDetectorAtAnotherRef(t *testing.T) {
+var (
+	mainCommit    = runCommit{SHA: "1a2b3c4d5e6f", Subject: "chore: main", Uncommitted: false}
+	fixtureCommit = runCommit{SHA: "6f5e4d3c2b1a", Subject: "chore: edit a fixture", Uncommitted: false}
+)
+
+func TestClaimRunDirListsEachCommitOnce(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeManifestFile(t, dir, newManifest(options{label: "old", ref: "origin/main @ 123", judgeModel: piopenrouter.Model}, time.Now().Add(-time.Hour)))
-
+	require.NoError(t, claimRunDir(dir, mainCommit, time.Now().Add(-time.Hour)))
 	now := time.Now()
-	require.NoError(t, claimRunDir(dir, newManifest(options{label: "main", ref: "origin/main @ abc", judgeModel: piopenrouter.Model}, now)))
+	require.NoError(t, claimRunDir(dir, fixtureCommit, now))
+	require.NoError(t, claimRunDir(dir, mainCommit, now))
+
 	got, err := readManifest(filepath.Join(dir, manifestFile))
 	require.NoError(t, err)
-	require.Equal(t, "main", got.Label)
-	require.Equal(t, "origin/main @ abc", got.Ref)
+	require.Equal(t, currentDetector(), got.Detector)
+	require.Equal(t, []runCommit{mainCommit, fixtureCommit}, got.Commits)
 	require.WithinDuration(t, now, got.Updated, time.Second)
 }
 
 func TestClaimRunDirRefusesAnotherDetector(t *testing.T) {
 	t.Parallel()
 
-	current := newManifest(options{label: "main", ref: "origin/main @ abc", judgeModel: piopenrouter.Model}, time.Now())
 	tests := []struct {
 		name   string
-		change func(*runManifest)
+		change func(*runDetector)
 	}{
-		{name: "confirmation model", change: func(m *runManifest) { m.ConfirmationModel = "other/model" }},
-		{name: "confirmation prompt", change: func(m *runManifest) { m.ConfirmationPromptSHA256 = "0123456789ab" }},
-		{name: "prefilter model", change: func(m *runManifest) { m.PrefilterModel = "other/prefilter" }},
-		{name: "prefilter threshold", change: func(m *runManifest) { m.PrefilterThreshold = 0.5 }},
-		{name: "prefilter questions", change: func(m *runManifest) { m.PrefilterQuestionsSHA256 = "0123456789ab" }},
+		{name: "confirmation model", change: func(d *runDetector) { d.ConfirmationModel = "other/model" }},
+		{name: "confirmation prompt", change: func(d *runDetector) { d.ConfirmationPromptSHA256 = "0123456789ab" }},
+		{name: "prefilter model", change: func(d *runDetector) { d.PrefilterModel = "other/prefilter" }},
+		{name: "prefilter threshold", change: func(d *runDetector) { d.PrefilterThreshold = 0.5 }},
+		{name: "prefilter questions", change: func(d *runDetector) { d.PrefilterQuestionsSHA256 = "0123456789ab" }},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
-			existing := current
-			tc.change(&existing)
-			before := writeManifestFile(t, dir, existing)
+			other := currentDetector()
+			tc.change(&other)
+			before := writeManifestFile(t, dir, runManifest{Detector: other, Commits: []runCommit{mainCommit}, Updated: time.Now()})
 
-			require.ErrorContains(t, claimRunDir(dir, current), "holds another detector's results")
+			require.ErrorContains(t, claimRunDir(dir, mainCommit, time.Now()), "holds another detector's results")
 			after, err := os.ReadFile(filepath.Join(dir, manifestFile))
 			require.NoError(t, err)
 			require.Equal(t, before, after, "a refused run dir keeps its manifest")
@@ -228,17 +232,19 @@ func TestRunRecordsRefusesAnotherDetectorsRecords(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, appendRecord(file, caseRecord{Key: caseKey(attack), Hash: caseHash(attack), Status: statusFlagged}))
 	require.NoError(t, file.Close())
-	writeManifestFile(t, dir, newManifest(options{label: "main", judgeModel: "other/model"}, time.Now()))
+	other := currentDetector()
+	other.ConfirmationModel = "other/model"
+	writeManifestFile(t, dir, runManifest{Detector: other, Commits: nil, Updated: time.Now()})
 
-	err = runRecords(t.Context(), options{runDir: dir, label: "main", judgeModel: piopenrouter.Model}, []labeledCase{attack})
-	require.ErrorContains(t, err, "use a new -run-dir")
+	err = runRecords(t.Context(), options{runDir: dir, commit: mainCommit}, []labeledCase{attack})
+	require.ErrorContains(t, err, "run this tool from the checkout it was built from")
 }
 
 func TestRunRecordsRefusesDuplicateCaseKeys(t *testing.T) {
 	t.Parallel()
 
 	first, repeat := recordsCase("a", "benign"), recordsCase("a", "malicious")
-	err := runRecords(t.Context(), options{runDir: t.TempDir(), label: "main"}, []labeledCase{first, repeat})
+	err := runRecords(t.Context(), options{runDir: t.TempDir(), commit: mainCommit}, []labeledCase{first, repeat})
 	require.ErrorContains(t, err, `two cases share the key "s::a"`)
 }
 
@@ -260,23 +266,28 @@ func (c *blockingClient) GetCompletion(context.Context, openrouter.CompletionReq
 func TestScanJudgeStartsNoCaseAfterACancelWhileWaitingForASlot(t *testing.T) {
 	t.Parallel()
 
-	client := &blockingClient{started: make(chan struct{}, 2), release: make(chan struct{})}
+	corpus := make([]labeledCase, judgeConcurrency+1)
+	for i := range corpus {
+		corpus[i] = recordsCase(fmt.Sprint(i), "malicious")
+	}
+	client := &blockingClient{started: make(chan struct{}, len(corpus)), release: make(chan struct{})}
 	ctx, cancel := context.WithCancel(t.Context())
-	opts := options{judgeConcurrency: 1, samples: 1, judgeModel: piopenrouter.Model, reasoning: piopenrouter.ReasoningEffort}
-	finished := make(chan int, 1)
+	finished := make(chan int32, 1)
 	go func() {
-		cases := 0
-		_, _, _ = scanJudge(ctx, opts, client, []labeledCase{recordsCase("a", "malicious"), recordsCase("b", "malicious")}, func(int, caseOutcome) { cases++ })
-		finished <- cases
+		var cases atomic.Int32
+		scanJudge(ctx, client, corpus, func(int, caseOutcome) { cases.Add(1) })
+		finished <- cases.Load()
 	}()
 
-	// The first case holds the only slot, so the loop waits for it when the
-	// run is cancelled.
-	<-client.started
+	// The first cases hold every slot, so the loop waits for one when the run
+	// is cancelled.
+	for range judgeConcurrency {
+		<-client.started
+	}
 	cancel()
 	close(client.release)
-	require.Equal(t, 1, <-finished)
-	require.Equal(t, int32(1), client.calls.Load())
+	require.Equal(t, int32(judgeConcurrency), <-finished)
+	require.Equal(t, int32(judgeConcurrency), client.calls.Load())
 }
 
 func TestRunRecordsReusesAFinishedRunWithoutCalls(t *testing.T) {
@@ -295,14 +306,12 @@ func TestRunRecordsReusesAFinishedRunWithoutCalls(t *testing.T) {
 		lines = append(lines, string(raw))
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(dir, casesFile), []byte(strings.Join(lines, "\n")), 0o600))
-	opts := options{runDir: dir, label: "main", ref: "origin/main @ abc", judgeModel: piopenrouter.Model}
-
-	require.NoError(t, runRecords(t.Context(), opts, []labeledCase{benign, attack}))
+	require.NoError(t, runRecords(t.Context(), options{runDir: dir, commit: mainCommit}, []labeledCase{benign, attack}))
 	manifest, err := readManifest(filepath.Join(dir, manifestFile))
 	require.NoError(t, err)
-	require.Equal(t, "main", manifest.Label)
-	require.Equal(t, piopenrouter.Model, manifest.ConfirmationModel)
-	require.Empty(t, manifest.PrefilterModel)
+	require.Equal(t, []runCommit{mainCommit}, manifest.Commits)
+	require.Equal(t, piopenrouter.Model, manifest.Detector.ConfirmationModel)
+	require.Empty(t, manifest.Detector.PrefilterModel)
 	require.WithinDuration(t, time.Now(), manifest.Updated, time.Minute)
 }
 
@@ -310,16 +319,8 @@ func TestRunRecordsNeedsAKeyForNewCases(t *testing.T) {
 	t.Setenv("OPENROUTER_DEV_KEY", "")
 	t.Setenv("OPENROUTER_API_KEY", "")
 
-	err := runRecords(t.Context(), options{runDir: t.TempDir(), label: "main"}, []labeledCase{recordsCase("new", "benign")})
+	err := runRecords(t.Context(), options{runDir: t.TempDir(), commit: mainCommit}, []labeledCase{recordsCase("new", "benign")})
 	require.ErrorContains(t, err, "set OPENROUTER_DEV_KEY")
-}
-
-func TestExcludeSourcesDropsMatchingCases(t *testing.T) {
-	t.Parallel()
-
-	keep, drop := labeledCase{ID: "a", Source: "deepset"}, labeledCase{ID: "b", Source: "cascade_context"}
-	require.Equal(t, []labeledCase{keep}, excludeSources([]labeledCase{keep, drop}, "cascade_context"))
-	require.Equal(t, []labeledCase{keep, drop}, excludeSources([]labeledCase{keep, drop}, ""))
 }
 
 func TestFirstEnvSkipsTheMisePlaceholder(t *testing.T) {
