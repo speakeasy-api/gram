@@ -338,7 +338,7 @@ tunnel, choose **Existing tunnel**: `JAMF Inventory` is listed with its
 you can view", and no key is shown. Open the settings of either JAMF
 Inventory server: Agent Setup lists both servers inline. Open the
 confirmations behind Resource Identifier (Save), Public Access, the
-Anonymous Rate Limit (Save) and Tunnel Key (Rotate key): each lists both
+Anonymous Rate Limit (Save limit) and Tunnel Key (Rotate key): each lists both
 servers, with the public-sibling warning, and keeps its confirm button
 disabled until that list loads. Cancel each one. The Danger Zone offers
 both **Delete this MCP server** and **Delete tunnel and its MCP
