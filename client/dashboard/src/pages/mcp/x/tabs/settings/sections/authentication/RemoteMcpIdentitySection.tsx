@@ -230,11 +230,8 @@ export function RemoteMcpIdentitySectionBody({
   });
   const scopePinSlot =
     canWrite && selectedMode === "user" && userDraft.connected;
-  // Pinning off and nothing pinned: the picker can do nothing, so hide it.
-  const scopePinUnusable =
-    !!scopePin.data &&
-    !scopePin.data.discoveryEnabled &&
-    scopePin.data.pinnedScopes.length === 0;
+  // Pinning is off for the org, so the picker can do nothing.
+  const scopePinUnusable = !!scopePin.data && !scopePin.data.discoveryEnabled;
   const showScopePin = scopePinSlot && !!scopePin.data && !scopePinUnusable;
   const scopePinDirty = showScopePin && scopePin.dirty;
   // Writers get the same answer in the pin's status line when the pin shows.

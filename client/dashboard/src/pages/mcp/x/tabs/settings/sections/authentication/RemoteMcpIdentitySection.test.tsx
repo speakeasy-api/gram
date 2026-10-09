@@ -2138,7 +2138,6 @@ describe("RemoteMcpIdentitySectionBody", () => {
       connectClient();
       mocks.scopes.mockReturnValue({
         data: serverScopes({
-          discoveryEnabled: false,
           clients: [
             {
               clientId: "client-1",
@@ -2156,7 +2155,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
       expect(
         screen.getByText(
-          "Not used: pinned scopes are not enabled for your organization. Sign-ins request read, set by the identity provider's override.",
+          "Not used for this connection. Sign-ins request read, set by the identity provider's override.",
         ),
       ).toBeDefined();
       expect(screen.queryByText("Requested at sign-in")).toBeNull();
@@ -2180,7 +2179,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       connectClient();
       mocks.scopes.mockReturnValue({
         data: serverScopes({
-          discoveryEnabled: false,
+          pinnedScopes: [],
           clients: [
             {
               clientId: "client-1",
@@ -2203,12 +2202,11 @@ describe("RemoteMcpIdentitySectionBody", () => {
       ).toBeDefined();
     });
 
-    it("hides the unusable pin picker and shows a writer the summary", () => {
+    it("hides the pin picker with the flag off and shows a writer the summary", () => {
       connectClient();
       mocks.scopes.mockReturnValue({
         data: serverScopes({
           discoveryEnabled: false,
-          pinnedScopes: [],
           clients: [
             {
               clientId: "client-1",
@@ -2598,36 +2596,6 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
       const save = screen.getByRole("button", { name: "Save" });
       expect((save as HTMLButtonElement).disabled).toBe(true);
-    });
-
-    it("saves a cleared pin with the flag off", async () => {
-      connectClient();
-      mocks.scopes.mockReturnValue({
-        data: serverScopes({ discoveryEnabled: false }),
-        isError: false,
-      });
-
-      renderIdentity();
-      const field = screen.getByRole("combobox", { name: "Pinned scopes" });
-      expect((field as HTMLButtonElement).disabled).toBe(true);
-      const save = screen.getByRole("button", { name: "Save" });
-      expect((save as HTMLButtonElement).disabled).toBe(true);
-
-      fireEvent.click(
-        screen.getByRole("button", { name: "Clear pinned scopes" }),
-      );
-      expect((save as HTMLButtonElement).disabled).toBe(false);
-      fireEvent.click(save);
-
-      await waitFor(() => expect(mocks.setPin).toHaveBeenCalledOnce());
-      expect(mocks.setPin).toHaveBeenCalledWith({
-        request: {
-          setServerScopePinRequestBody: {
-            mcpServerId: "mcp-server-1",
-            scopes: [],
-          },
-        },
-      });
     });
 
     it("drops a draft edited back to the saved pin", () => {
