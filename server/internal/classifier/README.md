@@ -78,8 +78,11 @@ bare model ID to its `typesafe/` namespace. The adapter sends structured
 entries directly and maps opaque question/option keys to numeric wire identifiers.
 Jev requires non-null state, 1–255 Choice options, and 2–10 Score levels.
 
-Use `jev.WithEndpoint(server.URL)` with `httptest.NewServer` to exercise the
-adapter against a test HTTP server. The option accepts the complete endpoint URL.
+`jev.New` returns a classifier and an error. Endpoint overrides must use HTTPS,
+include a hostname, and contain no userinfo or fragment; invalid endpoints fail
+construction before any request can disclose input or credentials. For tests, use
+`jev.WithEndpoint(server.URL)` with `httptest.NewTLSServer` and trust its certificate
+through `guardian.WithTLSRootCAs`.
 
 The complete batch is sent first, with no local token estimation or upfront
 partitioning. HTTP 413 responses and HTTP 400 responses with
@@ -95,8 +98,11 @@ If a single-question request receives either size rejection, its outcome is inpu
 and `result.Err()` matches `errors.Is(result.Err(), classifier.ErrRequestTooLarge)`.
 Other questions still run, and successful answers and known usage remain in the
 returned result. This error does not distinguish oversized input from an oversized
-question; it means the pair cannot fit. If cancellation also occurs, both errors
-remain identifiable through `errors.Is`.
+question; it means the pair cannot fit. Once a singleton size failure is recorded,
+concurrent cancellation leaves both errors identifiable through `errors.Is`.
+Cancellation during subdivision can stop execution before a singleton rejection
+is observed; a parent batch rejection alone does not establish that any individual
+input/question pair is too large.
 
 Each instance bounds concurrency to four physical requests across all calls,
 with a 60-second per-request timeout. Rate limits and transient failures are
@@ -123,8 +129,9 @@ before any provider requests. Provider size rejections become question failures.
 
 On normal completion, every question has exactly one answer or failure, in the
 original order. A failed partition does not discard successful answers from other
-partitions. Callers can retry failed questions and decide which combinations of
-answers constitute a complete domain result.
+partitions. Retry failed questions only when `Failure.Retryable` is true; permanent
+provider and singleton-size rejections are not retryable. Callers decide which
+combinations of answers constitute a complete domain result.
 
 Cancellation or an operation-wide failure may yield a partial result with a
 non-nil `result.Err()`. Missing outcomes do not prove the provider did no work. Usage includes only

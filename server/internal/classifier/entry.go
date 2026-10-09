@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 )
 
 // Entry contains a JSON string, object, array, or null. Nested objects and arrays
@@ -29,7 +30,7 @@ func Text(value string) Entry {
 // returns a zero-valued entry and an error.
 func ParseEntry(data []byte) (Entry, error) {
 	data = bytes.Trim(data, " \t\r\n")
-	if !json.Valid(data) {
+	if !utf8.Valid(data) || !json.Valid(data) {
 		return Entry{raw: nil}, fmt.Errorf("parse classifier entry: invalid JSON")
 	}
 	switch data[0] {

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"time"
@@ -40,7 +41,8 @@ var _ classifier.Classifier = (*Classifier)(nil)
 type Option func(*Classifier)
 
 // WithEndpoint overrides the full System One endpoint URL, including its path.
-// An empty URL leaves the default endpoint unchanged.
+// An empty URL leaves the default endpoint unchanged. New requires HTTPS and a
+// hostname, and rejects userinfo and fragments before any request can be sent.
 func WithEndpoint(url string) Option {
 	return func(c *Classifier) {
 		if url != "" {
@@ -52,7 +54,7 @@ func WithEndpoint(url string) Option {
 // New constructs a classifier for OpenRouter's System One API with an OpenRouter API key.
 // A policy is required. Requests have a 60-second timeout and are not automatically
 // retried; callers own retries using per-question failures and RetryAfter.
-func New(guardianPolicy *guardian.Policy, key conv.Secret, options ...Option) *Classifier {
+func New(guardianPolicy *guardian.Policy, key conv.Secret, options ...Option) (*Classifier, error) {
 	c := &Classifier{
 		client: guardianPolicy.PooledClient(
 			guardian.WithCheckRedirect(func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }),
@@ -70,7 +72,13 @@ func New(guardianPolicy *guardian.Policy, key conv.Secret, options ...Option) *C
 	for _, option := range options {
 		option(c)
 	}
-	return c
+
+	u, err := url.Parse(c.endpoint)
+	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.Fragment != "" {
+		return nil, errors.New("jev: endpoint must be an HTTPS URL with a hostname and no userinfo or fragment")
+	}
+
+	return c, nil
 }
 
 // Classify sends the validated batch whole and splits only after HTTP 413 or

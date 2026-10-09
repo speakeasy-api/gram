@@ -70,7 +70,8 @@ func TestGuardianDenialPreservesRetryHint(t *testing.T) {
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithLimiter(&limiter))
 	require.NoError(t, err)
 
-	c := New(policy, conv.NewSecret([]byte("test-key")))
+	c, err := New(policy, conv.NewSecret([]byte("test-key")))
+	require.NoError(t, err)
 	result := c.Classify(t.Context(), classifier.NewRequest(classifier.Text("state")).Ask(classifier.Noul("a", classifier.Text("a"))))
 	require.Len(t, result.Outcomes, 1)
 	require.Equal(t, classifier.FailureRateLimited, result.Outcomes[0].Failure.Code)

@@ -14,6 +14,7 @@ func TestEntryRoundTripsAllowedShapes(t *testing.T) {
 	t.Parallel()
 	for _, input := range []string{
 		`"instructions"`,
+		`{"unicode":"日本語"}`,
 		`null`,
 		`{}`,
 		`[]`,
@@ -32,7 +33,7 @@ func TestEntryRoundTripsAllowedShapes(t *testing.T) {
 
 func TestEntryRejectsInvalidShapesWithoutChangingReceiver(t *testing.T) {
 	t.Parallel()
-	for _, input := range []string{"", " ", "true", "false", "42", "1.5", `{"x":}`, `[] null`, `{"x":NaN}`, "\u00a0null", "{}\u2003", "\v[]"} {
+	for _, input := range []string{"", " ", "true", "false", "42", "1.5", `{"x":}`, `[] null`, `{"x":NaN}`, "\u00a0null", "{}\u2003", "\v[]", "\"\xff\"", "{\"key\":\"\xc0\xaf\"}", "[\"\xe2\x82\"]"} {
 		_, err := classifier.ParseEntry([]byte(input))
 		require.Error(t, err, input)
 

@@ -2,6 +2,7 @@ package jev
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -22,16 +23,44 @@ import (
 
 func testClient(t *testing.T, handler http.HandlerFunc) *Classifier {
 	t.Helper()
-	server := httptest.NewServer(handler)
+	server := httptest.NewTLSServer(handler)
 	t.Cleanup(server.Close)
+	roots := x509.NewCertPool()
+	roots.AddCert(server.Certificate())
 
-	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithTLSRootCAs(roots))
 	require.NoError(t, err)
 
-	return New(policy, conv.NewSecret([]byte("test-key")), WithEndpoint(server.URL))
+	c, err := New(policy, conv.NewSecret([]byte("test-key")), WithEndpoint(server.URL))
+	require.NoError(t, err)
+	return c
 }
 
 type mockLimiter struct{ mock.Mock }
+
+func TestNewRejectsUnsafeEndpoints(t *testing.T) {
+	t.Parallel()
+	for _, endpoint := range []string{
+		"http://example.test/systemone",
+		"https:///systemone",
+		"https://:443/systemone",
+		"https://user:private@example.test/systemone",
+		"https://example.test/systemone#fragment",
+		"https://%zz/systemone",
+		"/systemone",
+	} {
+		t.Run(endpoint, func(t *testing.T) {
+			t.Parallel()
+			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+			require.NoError(t, err)
+
+			c, err := New(policy, conv.NewSecret([]byte("test-key")), WithEndpoint(endpoint))
+			require.ErrorContains(t, err, "endpoint must be an HTTPS URL")
+			require.NotContains(t, err.Error(), "private")
+			require.Nil(t, c)
+		})
+	}
+}
 
 func (m *mockLimiter) AllowN(ctx context.Context, key guardian.Partition, limit guardian.Limit, n uint32) (guardian.RateLimitResult, error) {
 	args := m.Called(ctx, key, limit, n)
@@ -45,11 +74,13 @@ func (m *mockLimiter) AllowN(ctx context.Context, key guardian.Partition, limit 
 func TestGuardianLimitsEverySplitAttempt(t *testing.T) {
 	t.Parallel()
 	var calls atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		calls.Add(1)
 		w.WriteHeader(413)
 	}))
 	t.Cleanup(server.Close)
+	roots := x509.NewCertPool()
+	roots.AddCert(server.Certificate())
 	var limiter mockLimiter
 	limiter.Test(t)
 	t.Cleanup(func() { limiter.AssertExpectations(t) })
@@ -59,10 +90,11 @@ func TestGuardianLimitsEverySplitAttempt(t *testing.T) {
 	admitted.Allowed = 1
 	limiter.On("AllowN", mock.Anything, mock.Anything, limit, uint32(1)).Return(admitted, nil).Times(3)
 
-	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithLimiter(&limiter))
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithLimiter(&limiter), guardian.WithTLSRootCAs(roots))
 	require.NoError(t, err)
 
-	c := New(policy, conv.NewSecret([]byte("test-key")), WithEndpoint(server.URL))
+	c, err := New(policy, conv.NewSecret([]byte("test-key")), WithEndpoint(server.URL))
+	require.NoError(t, err)
 	req := classifier.NewRequest(classifier.Text("state")).Ask(classifier.Noul("a", classifier.Text("a"))).Ask(classifier.Noul("b", classifier.Text("b")))
 	result := c.Classify(t.Context(), req)
 	require.ErrorIs(t, result.Err(), classifier.ErrRequestTooLarge)
