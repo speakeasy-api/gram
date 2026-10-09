@@ -313,7 +313,6 @@ func TestCredentialsLostCredentialEndsSession(t *testing.T) {
 		"no claim":        func(c *credentialCall) { c.noCredential = true },
 		"digest mismatch": func(c *credentialCall) { c.vouched = testTokenB },
 		"malformed claim": func(c *credentialCall) { c.rawCredential = map[string]any{"owner": "subject"} },
-		"expired token":   func(c *credentialCall) { c.expiresAt = time.Unix(1, 0) },
 		"self owned client": func(c *credentialCall) {
 			c.rawCredential = map[string]any{"owner": "self", "client_id": defaultTestGrant.clientID, "token_sha256": identity.TokenSHA256(testTokenA)}
 		},
@@ -516,34 +515,99 @@ func TestCredentialsTerminationOrdersAfterAdmittedWrite(t *testing.T) {
 	c.requireSessionEnds(t, call.sid)
 }
 
-func TestCredentialsTokenExpiringWhileQueuedIsNotWritten(t *testing.T) {
+func TestCredentialsExpiryWhileQueuedIsRefusedWithoutTeardown(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		expiresIn time.Duration
+		advance   time.Duration
+	}{
+		"token expires":     {expiresIn: 10 * time.Second, advance: 15 * time.Second},
+		"assertion expires": {expiresIn: 0, advance: 2 * time.Minute},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			c := newCredentialTestServer(t, credentialServerOptions{})
+			call := credentialCall{token: testTokenA}
+			call.sid = c.initialize(t, call)
+			sess := c.bridge.session(call.sid)
+			_, writes, _ := c.store.counts()
+
+			require.True(t, sess.enterGate(t.Context()))
+			generation := sess.cred.generation
+			status := make(chan int, 1)
+			go func() {
+				queued := call
+				queued.token = testTokenB
+				if tc.expiresIn > 0 {
+					queued.expiresAt = c.clock.Now().Add(tc.expiresIn)
+				}
+				queued.body = `{"jsonrpc":"2.0","id":7,"method":"tools/list"}`
+				status <- c.do(t, queued).StatusCode
+			}()
+			// Wait until the request is queued behind the gate.
+			require.Eventually(t, func() bool {
+				sess.mu.Lock()
+				defer sess.mu.Unlock()
+				return sess.inflight > 0
+			}, 10*time.Second, 10*time.Millisecond)
+			c.clock.Advance(tc.advance)
+			sess.leaveGate()
+
+			require.Equal(t, http.StatusUnauthorized, <-status)
+			_, writesAfter, _ := c.store.counts()
+			require.Equal(t, writes, writesAfter, "nothing is published")
+			require.True(t, sess.enterGate(t.Context()))
+			require.Equal(t, generation, sess.cred.generation, "the deadline is not renewed")
+			sess.leaveGate()
+			require.False(t, sess.closing.Load(), "a stale request does not end the session")
+			require.Equal(t, identity.TokenSHA256(testTokenA), c.toolText(t, call, "token-sha"))
+		})
+	}
+}
+
+func TestCredentialsDelayedExpiredTokenKeepsNewerToken(t *testing.T) {
 	t.Parallel()
 	c := newCredentialTestServer(t, credentialServerOptions{})
 	call := credentialCall{token: testTokenA}
 	call.sid = c.initialize(t, call)
-	sess := c.bridge.session(call.sid)
-	_, writes, _ := c.store.counts()
 
-	require.True(t, sess.enterGate(t.Context()))
-	status := make(chan int, 1)
-	go func() {
-		call.token = testTokenB
-		call.expiresAt = c.clock.Now().Add(10 * time.Second)
-		call.body = `{"jsonrpc":"2.0","id":7,"method":"tools/list"}`
-		status <- c.do(t, call).StatusCode
-	}()
-	// Wait until the request is queued behind the gate.
-	require.Eventually(t, func() bool {
-		sess.mu.Lock()
-		defer sess.mu.Unlock()
-		return sess.inflight > 0
-	}, 10*time.Second, 10*time.Millisecond)
-	c.clock.Advance(time.Minute)
-	sess.leaveGate()
+	call.token = testTokenB
+	require.Equal(t, identity.TokenSHA256(testTokenB), c.toolText(t, call, "token-sha"))
 
-	require.Equal(t, http.StatusUnauthorized, <-status)
-	_, writesAfter, _ := c.store.counts()
-	require.Equal(t, writes, writesAfter)
+	delayed := call
+	delayed.token, delayed.expiresAt = testTokenA, time.Unix(1, 0)
+	delayed.body = `{"jsonrpc":"2.0","id":8,"method":"tools/list"}`
+	require.Equal(t, http.StatusUnauthorized, c.do(t, delayed).StatusCode)
+	require.Equal(t, identity.TokenSHA256(testTokenB), c.toolText(t, call, "token-sha"), "the newer token stays")
+}
+
+func TestCredentialsExpiredRequestsDoNotPostponeTheDeadline(t *testing.T) {
+	t.Parallel()
+	c := newCredentialTestServer(t, credentialServerOptions{maxAge: time.Second})
+	call := credentialCall{token: testTokenA}
+	call.sid = c.initialize(t, call)
+
+	expired := call
+	expired.expiresAt = time.Unix(1, 0)
+	expired.body = `{"jsonrpc":"2.0","method":"notifications/initialized"}`
+	deadline := time.Now().Add(20 * time.Second)
+	for c.bridge.session(call.sid) != nil && time.Now().Before(deadline) {
+		require.Contains(t, []int{http.StatusUnauthorized, http.StatusNotFound}, c.do(t, expired).StatusCode)
+		time.Sleep(100 * time.Millisecond)
+	}
+	c.requireSessionEnds(t, call.sid)
+}
+
+func TestCredentialsExpiredTokenFromAnotherGrantEndsSession(t *testing.T) {
+	t.Parallel()
+	c := newCredentialTestServer(t, credentialServerOptions{})
+	call := credentialCall{token: testTokenA}
+	call.sid = c.initialize(t, call)
+
+	call.grant = testGrant{clientID: defaultTestGrant.clientID, grantID: defaultTestGrant.grantID, generation: 2}
+	call.token, call.expiresAt = testTokenB, time.Unix(1, 0)
+	call.body = `{"jsonrpc":"2.0","id":8,"method":"tools/list"}`
+	require.Equal(t, http.StatusNotFound, c.do(t, call).StatusCode)
 	c.requireSessionEnds(t, call.sid)
 }
 

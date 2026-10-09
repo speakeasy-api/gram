@@ -422,10 +422,16 @@ func (b *stdioBridge) ownedSession(w http.ResponseWriter, sid string, assertion 
 // admitSessionCredential admits a POST to the caller's own session. The
 // principal is proven, so a missing or invalid credential ends the session:
 // the user's upstream access is gone. A credential from another grant
-// context also ends it, so the client starts over with a fresh server.
+// context also ends it, so the client starts over with a fresh server. An
+// expired token from the session's own grant is only refused: it is a stale
+// request, not a lost credential, and the session's deadline still applies.
 func (b *stdioBridge) admitSessionCredential(w http.ResponseWriter, r *http.Request, sess *stdioSession, assertion callerAssertion, msgs []rpcMessage) (admittedCredential, bool) {
 	cred, err := admitCredential(r.Header, assertion, b.creds.now())
-	if err != nil {
+	if errors.Is(err, errCredentialExpired) && cred.context == sess.cred.context {
+		writeUnauthorized(w)
+		return cred, false
+	}
+	if err != nil && !errors.Is(err, errCredentialExpired) {
 		sess.logger.Info("tunnel stdio session credential no longer admitted; stopping server", slog.String("reason", err.Error()))
 		writeUnauthorized(w)
 		go sess.terminate()
@@ -578,7 +584,7 @@ func (b *stdioBridge) reap(ctx context.Context) {
 			b.mu.Lock()
 			idle := make([]*stdioSession, 0)
 			for _, sess := range b.sessions {
-				if sess.idleSince(now) > b.idleTimeout {
+				if !sess.closing.Load() && sess.idleSince(now) > b.idleTimeout {
 					idle = append(idle, sess)
 				}
 			}
