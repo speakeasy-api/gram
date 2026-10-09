@@ -4,7 +4,10 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/Collapsible";
 import { Button } from "@/components/ui/Button";
-import { ensureToolsetWrapper } from "@/pages/mcp/gateway/ensureToolsetWrapper";
+import {
+  ensureToolsetWrapper,
+  memberWrappers,
+} from "@/pages/mcp/gateway/ensureToolsetWrapper";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools } from "@/hooks/toolTypes";
@@ -166,9 +169,11 @@ export default function DeployStep({
               "Source updated. Select the intended existing server from the gateway; its source association could not be determined uniquely.",
             );
           }
-          const { mcpServers } = await client.mcpServers.list({
-            toolsetId: matches[0].id,
-          });
+          const mcpServers = memberWrappers(
+            (await client.mcpServers.list({ toolsetId: matches[0].id }))
+              .mcpServers,
+            matches[0].id,
+          );
           if (!mounted.current) return;
           if (mcpServers.length !== 1 || !mcpServers[0]) {
             throw new Error(

@@ -39,10 +39,21 @@ type LogRemoteSessionClientCreateEvent struct {
 
 	RemoteSessionClientURN urn.RemoteSessionClient
 	ClientID               string //nolint:glint // auditeventurnnaming: RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+
+	// SnapshotAfter is the created client, recording its credential owner and
+	// authentication settings. Nil when the caller records the create without
+	// one.
+	SnapshotAfter *types.RemoteSessionClient
 }
 
 func (l *Logger) LogRemoteSessionClientCreate(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientCreateEvent) error {
 	action := ActionRemoteSessionClientCreate
+
+	afterSnapshot, err := marshalAuditPayload(event.SnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
+	}
+
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
@@ -60,7 +71,7 @@ func (l *Logger) LogRemoteSessionClientCreate(ctx context.Context, dbtx repo.DBT
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
 		BeforeSnapshot: nil,
-		AfterSnapshot:  nil,
+		AfterSnapshot:  afterSnapshot,
 		Metadata:       nil,
 	}
 

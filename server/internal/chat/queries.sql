@@ -1265,7 +1265,8 @@ WHERE chat_id = @chat_id AND project_id = @project_id::uuid;
 -- is in view. Each message maps to exactly one entry, mirroring the client's
 -- getTraceEntryType precedence: a message carrying a non-empty tool_calls array
 -- is a tool call regardless of role, otherwise the role decides. risk_findings
--- counts messages with an active (found, non-suppressed) risk result.
+-- counts messages with an active (found, non-suppressed) risk result on the
+-- message or on an attachment hanging off it.
 WITH ordered AS (
   SELECT
     cm.id,
@@ -1284,6 +1285,22 @@ WITH ordered AS (
   WHERE cm.chat_id = @chat_id
     AND cm.project_id = @project_id::uuid
     AND cm.generation = @generation::integer
+),
+-- Prompts whose attachments hold an active finding. Such a finding has no
+-- chat_message_id, so it flags the prompt the attachment hangs off.
+attachment_risk_prompts AS (
+  SELECT ccp.parent_chat_message_id AS id
+  FROM chat_content_parts ccp
+  JOIN risk_results rr ON rr.chat_content_part_id = ccp.id
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+  WHERE ccp.chat_id = @chat_id
+    AND ccp.project_id = @project_id::uuid
+    AND ccp.deleted IS FALSE
+    AND ccp.parent_chat_message_id IS NOT NULL
+    AND rr.project_id = @project_id::uuid
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.false_positive_at IS NULL
 )
 SELECT
   COUNT(*) FILTER (WHERE has_tool_calls OR role IN ('user', 'assistant', 'tool'))::bigint AS total,
@@ -1304,6 +1321,7 @@ SELECT
         AND rr.excluded_at IS NULL
         AND rr.false_positive_at IS NULL
     )
+    OR o.id IN (SELECT id FROM attachment_risk_prompts)
   )::bigint AS risk_findings
 FROM ordered;
 
@@ -1418,6 +1436,22 @@ WITH ordered AS (
     AND cm.project_id = @project_id::uuid
     AND cm.generation = @generation::integer
 ),
+-- Prompts whose attachments hold an active finding. Such a finding has no
+-- chat_message_id, so it flags the prompt the attachment hangs off.
+attachment_risk_prompts AS (
+  SELECT ccp.parent_chat_message_id AS id
+  FROM chat_content_parts ccp
+  JOIN risk_results rr ON rr.chat_content_part_id = ccp.id
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+  WHERE ccp.chat_id = @chat_id
+    AND ccp.project_id = @project_id::uuid
+    AND ccp.deleted IS FALSE
+    AND ccp.parent_chat_message_id IS NOT NULL
+    AND rr.project_id = @project_id::uuid
+    AND rr.found IS TRUE
+    AND rr.excluded_at IS NULL
+    AND rr.false_positive_at IS NULL
+),
 risk_rns AS (
   SELECT o.rn FROM ordered o
   WHERE EXISTS (
@@ -1432,6 +1466,7 @@ risk_rns AS (
       AND rr.excluded_at IS NULL
       AND rr.false_positive_at IS NULL
   )
+  OR o.id IN (SELECT id FROM attachment_risk_prompts)
 )
 SELECT
   o.*,
@@ -1939,6 +1974,17 @@ INSERT INTO risk_results (
 VALUES (
     @project_id, @organization_id, @risk_policy_id, 1,
     @chat_message_id, 'test', @found
+);
+
+-- name: SeedContentPartRiskResult :exec
+-- Test fixture: insert a risk result linking a chat content part to a risk policy.
+INSERT INTO risk_results (
+    project_id, organization_id, risk_policy_id, risk_policy_version,
+    chat_content_part_id, source, found
+)
+VALUES (
+    @project_id, @organization_id, @risk_policy_id, 1,
+    @chat_content_part_id, 'test', TRUE
 );
 
 -- name: SeedAssistant :one

@@ -16,6 +16,31 @@ func tokenEndpointAuthAudienceFormatEnum() {
 	Enum("issuer", "token_endpoint")
 }
 
+func credentialOwnerEnum() {
+	Enum("subject", "self")
+}
+
+// credentialOwnerAttribute declares the create-only credential_owner field
+// shared by the project and organization create forms. It is not on
+// UpdateRemoteSessionClientForm: the owner decides whether sessions exist for
+// the client at all, so changing it would strand or invent them.
+func credentialOwnerAttribute() {
+	Attribute("credential_owner", String, "Who the upstream access credential belongs to, fixed at creation. subject (the default) means each caller connects their own upstream account through the client. self means the client obtains a credential for itself with the client_credentials grant and every caller shares it; it requires token_endpoint_auth_method client_secret_basic, client_secret_post (both with client_secret) or private_key_jwt (with json_web_key_set_id), and an issuer with a token_endpoint.", func() {
+		credentialOwnerEnum()
+		Default("subject")
+	})
+}
+
+// createKeySetAttribute declares the optional json_web_key_set_id a create form
+// carries so a private_key_jwt client can be created in one call. It is gated
+// on the customer-managed keys entitlement when present, the same as
+// attachKeySet.
+func createKeySetAttribute() {
+	Attribute("json_web_key_set_id", String, "Organization JSON Web Key Set to sign private_key_jwt assertions with. Required when token_endpoint_auth_method is private_key_jwt and optional otherwise, as with attachKeySet. Must belong to the caller's organization, which needs the customer-managed encryption keys entitlement.", func() {
+		Format(FormatUUID)
+	})
+}
+
 // scopePattern matches RFC 6749 §3.3 scope-token: printable ASCII
 // excluding space, double-quote, and backslash.
 const scopePattern = `^[!#-[\]-~]+$`
@@ -768,10 +793,12 @@ var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func()
 	Attribute("client_secret", String, "client_secret supplied by the caller. Speakeasy encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
 	Attribute("token_endpoint_auth_audience_format", String, "Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.", tokenEndpointAuthAudienceFormatEnum)
+	createKeySetAttribute()
 	Attribute("scope", ArrayOf(String), func() {
 		ScopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
 	})
 	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", AudienceAttribute)
+	credentialOwnerAttribute()
 	RegistrationProvenanceAttributes()
 	Required("remote_session_issuer_id", "client_id")
 })
@@ -810,7 +837,7 @@ var CreateCimdForm = Type("CreateCimdForm", func() {
 })
 
 var UpdateRemoteSessionClientForm = Type("UpdateRemoteSessionClientForm", func() {
-	Description("Form for updating a remote_session_client. All non-id fields are optional patches.")
+	Description("Form for updating a remote_session_client. All non-id fields are optional patches. credential_owner is fixed at creation and cannot be changed.")
 
 	Attribute("id", String, "The remote_session_client id.", func() {
 		Format(FormatUUID)
@@ -829,13 +856,12 @@ var UpdateRemoteSessionClientForm = Type("UpdateRemoteSessionClientForm", func()
 
 // AttachKeySetForm backs the attachKeySet methods on both tenant client
 // services; detachKeySet needs no body and takes the id as a query parameter.
-// The link lives on its own pair of methods rather than on the create and
-// update forms for two reasons: the
-// entitlement gate applies to this link alone and would otherwise have to fire
-// conditionally on a field's presence inside handlers the rest of the
-// organization can use ungated; the private_key_jwt coupling rule needs to tell
-// "leave unchanged" from "clear", which a Format(FormatUUID) patch attribute
-// cannot express (an empty string fails validation before a handler sees it).
+// After creation the link lives on its own pair of methods rather than on the
+// update form, because the private_key_jwt coupling rule needs to tell "leave
+// unchanged" from "clear", which a Format(FormatUUID) patch attribute cannot
+// express (an empty string fails validation before a handler sees it). The
+// create forms carry it too, gated on the entitlement only when present, so a
+// private_key_jwt client can be created in one call.
 var AttachKeySetForm = Type("AttachKeySetForm", func() {
 	Description("Form for attaching an organization JSON Web Key Set to a remote_session_client.")
 
@@ -912,18 +938,20 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 	})
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.", tokenEndpointAuthMethodEnum)
 	Attribute("token_endpoint_auth_audience_format", String, "Identifier used as the aud claim in private_key_jwt assertions. Null resolves to issuer.", tokenEndpointAuthAudienceFormatEnum)
-	// Read-only here. The link is mutated through attachKeySet / detachKeySet
-	// rather than the create and update forms: it is entitlement-gated where the
-	// rest of client CRUD is not, it is coupled to token_endpoint_auth_method in
-	// a way a field patch cannot express, and it is invalid by construction on
-	// the global clients that share UpdateRemoteSessionClientForm.
-	Attribute("json_web_key_set_id", String, "The organization JSON Web Key Set attached to this client, managed through attachKeySet and detachKeySet. Null when no key set is attached.", func() {
+	// Changed through attachKeySet / detachKeySet rather than the update form:
+	// it is entitlement-gated where the rest of client CRUD is not, it is
+	// coupled to token_endpoint_auth_method in a way a field patch cannot
+	// express, and it is invalid by construction on the global clients that
+	// share UpdateRemoteSessionClientForm. The create forms may set it, because
+	// a create has no "leave unchanged" to tell apart from "clear".
+	Attribute("json_web_key_set_id", String, "The organization JSON Web Key Set attached to this client, set on create or through attachKeySet and detachKeySet. Null when no key set is attached.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("scope", ArrayOf(String), "Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.")
 	Attribute("audience", String, "Upstream OAuth audience sent on the authorize redirect and token exchange. Null omits the audience parameter.")
 	Attribute("legacy_callback_url", Boolean, "Whether the client was registered upstream with the legacy callback URL. The authorize leg then sends that URL and a JSON state instead of the current callback. Cleared when the client is rotated.")
-	Attribute("callback_url", String, "The redirect URI this client registers with its upstream provider. It never changes after the client is created. Absent on global clients.", func() {
+	Attribute("credential_owner", String, "Who the upstream access credential belongs to. subject means each caller connects their own upstream account; self means the client holds one credential for itself, obtained with the client_credentials grant, that every caller shares.", credentialOwnerEnum)
+	Attribute("callback_url", String, "The redirect URI this client registers with its upstream provider. It never changes after the client is created. Absent on global clients and on clients with credential_owner self, which have no callback.", func() {
 		Format(FormatURI)
 	})
 	Attribute("federated_callback_url", String, "The redirect URI to register in the customer identity provider's app when this client is a user session issuer's trusted sign-in client. Present only on organization-owned clients outside any project and not managed by an identity provider connection, the only clients a user session issuer can trust.", func() {
@@ -936,7 +964,7 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "organization_id", "remote_session_issuer_id", "user_session_issuer_ids", "client_id", "legacy_callback_url", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "remote_session_issuer_id", "user_session_issuer_ids", "client_id", "legacy_callback_url", "credential_owner", "created_at", "updated_at")
 })
 
 var NewClientCallbackURLResult = Type("NewClientCallbackUrlResult", func() {

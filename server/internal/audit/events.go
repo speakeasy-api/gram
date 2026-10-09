@@ -64,6 +64,8 @@ const (
 	subjectTypeRiskPolicy                  subjectType = "risk_policy"
 	subjectTypeRiskResult                  subjectType = "risk_result"
 	subjectTypeSessionQuarantine           subjectType = "session_quarantine"
+	subjectTypeSigintSensor                subjectType = "sigint_sensor"
+	subjectTypeSigintSignal                subjectType = "sigint_signal"
 	subjectTypeSkill                       subjectType = "skill"
 	subjectTypeSkillEfficacySettings       subjectType = "skill_efficacy_settings"
 	subjectTypeSlackDirectoryConnection    subjectType = "slack_directory_connection"

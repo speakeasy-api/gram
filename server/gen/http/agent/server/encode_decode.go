@@ -2346,6 +2346,9 @@ func marshalAgentAgentPluginToAgentPluginResponseBody(v *agent.AgentPlugin) *Age
 	res := &AgentPluginResponseBody{
 		Slug:            v.Slug,
 		MarketplaceName: v.MarketplaceName,
+		InstallMode:     v.InstallMode,
+		Name:            v.Name,
+		Description:     v.Description,
 	}
 
 	return res

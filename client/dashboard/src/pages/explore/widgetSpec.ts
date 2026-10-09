@@ -8,6 +8,7 @@ import {
   isMeasureOp,
   isRowsMode,
   MAX_LIMIT,
+  MAX_ROWS_LIMIT,
   measureAlias,
   queryDimensions,
   type ChartType,
@@ -67,7 +68,11 @@ export function widgetFromSpec(spec: ExploreSpec): WidgetState {
         !rows && !timeseries && aliases.includes(spec.orderBy)
           ? [{ measure: spec.orderBy, direction: "desc" }]
           : [],
-      limit: timeseries ? MAX_LIMIT : spec.limit,
+      limit: timeseries
+        ? MAX_LIMIT
+        : rows
+          ? Math.min(spec.limit, MAX_ROWS_LIMIT)
+          : spec.limit,
     },
     visualization: { type: chart, options: {} },
   };

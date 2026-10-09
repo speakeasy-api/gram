@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/stretchr/testify/require"
 )
 
@@ -111,6 +112,51 @@ func TestFederatedCallbackRoute(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestFederatedCallbackMisroutedOrigin(t *testing.T) {
+	t.Parallel()
+	clientID := uuid.New()
+	callback := "https://callback.example/mcp/idp_callback/" + clientID.String()
+	federation := &FederatedChallenge{CallbackURL: callback, ClientID: clientID}
+	for _, test := range []struct{ name, origin, reason string }{
+		{"recorded host", "https://callback.example", ""},
+		{"other host", "https://other.example", "origin_mismatch"},
+		{"wrong scheme", "http://callback.example", "origin_mismatch"},
+		{"wrong port", "https://callback.example:8443", "origin_mismatch"},
+		{"missing origin", "", "origin_mismatch"},
+		{"invalid origin", "://", "origin_mismatch"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, callback, nil)
+			require.Equal(t, test.reason, federatedCallbackMisrouted(req, federation, clientID.String(), test.origin))
+		})
+	}
+}
+
+func TestFederatedCallbackTrustedPlatformPort(t *testing.T) {
+	t.Parallel()
+	clientID := uuid.New()
+	for _, test := range []struct{ name, callbackOrigin, host, want string }{
+		{"non-default port", "https://callback.example:8443", "callback.example:8443", ""},
+		{"default port", "https://callback.example:443", "callback.example", ""},
+		{"explicit request default port", "https://callback.example", "callback.example:443", ""},
+		{"wrong port", "https://callback.example:8443", "callback.example:9443", "origin_mismatch"},
+		{"missing port", "https://callback.example:8443", "callback.example", "origin_mismatch"},
+		{"unexpected port", "https://callback.example", "callback.example:8443", "origin_mismatch"},
+		{"wrong host", "https://callback.example:8443", "other.example:8443", "origin_mismatch"},
+		{"malformed authority", "https://callback.example:8443", "callback.example:invalid", "origin_mismatch"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			callback := test.callbackOrigin + "/mcp/idp_callback/" + clientID.String()
+			req := httptest.NewRequest(http.MethodGet, callback, nil)
+			req.Host = test.host
+			req.Header.Set("X-Forwarded-Host", "callback.example:8443")
+			origin := requestorigin.Origin{Surface: requestorigin.SurfacePlatform, BaseURL: "https://callback.example"}
+			req = req.WithContext(requestorigin.WithContext(req.Context(), origin))
+			require.Equal(t, test.want, federatedCallbackMisrouted(req, &FederatedChallenge{CallbackURL: callback, ClientID: clientID}, clientID.String(), origin.BaseURL))
 		})
 	}
 }

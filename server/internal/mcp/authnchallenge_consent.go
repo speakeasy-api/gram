@@ -594,7 +594,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	agentSetupURL := ""
 	var agentOptions []consentAgentOption
 	if !challengeState.FirstParty && challengeState.AuthorizerUserID != "" {
-		if enabled, setupURL, _ := s.agentAuthorizationRollout(ctx, logger, endpoint); enabled {
+		if enabled, setupURL, _ := s.agentAuthorizationRollout(ctx, logger, endpoint.OrganizationID); enabled {
 			options, aerr := s.eligibleConsentAgents(ctx, challengeState, endpoint)
 			if aerr != nil {
 				logger.WarnContext(ctx, "eligible agent selection unavailable", attr.SlogError(aerr))
@@ -822,7 +822,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return oops.E(oops.CodeBadRequest, nil, "agent approval action and selection do not match").LogError(ctx, logger)
 	}
 	if selectedAgentID != "" {
-		if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, endpoint); !enabled {
+		if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, endpoint.OrganizationID); !enabled {
 			return oops.E(oops.CodeForbidden, nil, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
 		selectedAgent, err := s.authorizeConsentAgent(ctx, challengeState, endpoint, selectedAgentID)
@@ -939,7 +939,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 			return oops.E(oops.CodeForbidden, ferr, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
-		if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, finalEndpoint); !enabled {
+		if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, finalEndpoint.OrganizationID); !enabled {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 			return oops.E(oops.CodeForbidden, nil, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
@@ -1403,6 +1403,7 @@ func (s *Service) buildRemoteSessionCards(
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
 	}
+	clients = subjectConnectedClients(clients)
 	if len(clients) == 0 {
 		return nil, nil
 	}
@@ -1624,10 +1625,11 @@ func (s *Service) maybeAutoConnect(
 		return false, nil
 	}
 
-	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+	bound, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 	if err != nil {
 		return false, oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
 	}
+	clients := subjectConnectedClients(bound)
 	var client *remotesessions.Client
 	for i := range clients {
 		if clients[i].ID.String() == cards[0].ClientID {
@@ -1664,7 +1666,7 @@ func (s *Service) maybeAutoConnect(
 	// autoRefresh is nil: the subject has not been shown the control yet, so
 	// there is no choice to record. The page's own Connect action is what
 	// authors a stored preference.
-	challengeURL, hop, err := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, clients, nil)
+	challengeURL, hop, err := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, bound, nil)
 	if err != nil {
 		// Already logged. Render the page so the user can connect manually
 		// rather than seeing an error for a step they did not take.

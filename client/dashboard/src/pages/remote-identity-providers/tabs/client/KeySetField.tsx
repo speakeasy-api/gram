@@ -44,12 +44,14 @@ export function KeySetField({
   client,
   issuerId,
   onPendingChange,
+  disabled = false,
 }: {
   client: RemoteSessionClient;
   issuerId: string;
   // Lets the enclosing form hold its own Save until this link has settled, so
   // an update that depends on the attach cannot overtake it.
   onPendingChange?: (pending: boolean) => void;
+  disabled?: boolean;
 }): JSX.Element | null {
   const organization = useOrganization();
   const gramClient = useGramContext();
@@ -163,11 +165,11 @@ export function KeySetField({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <Label>Signing key set</Label>
+      <Label>Signing Key Set</Label>
       <Select
         value={selected}
         onValueChange={handleChange}
-        disabled={setsPending || pending}
+        disabled={disabled || setsPending || pending}
       >
         <SelectTrigger>
           <SelectValue placeholder={setsPending ? "Loading…" : "None"} />

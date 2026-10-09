@@ -54428,7 +54428,7 @@ paths:
                 name: GetRemoteMcpServerHeader
     /rpc/remoteMcp.getServerScopes:
         get:
-            description: 'Report the scope state of the protected resource a remote-backed MCP server''s logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization''s resource scope discovery flag, and what a login through each bound client would request now. Reads cached state only; never contacts the resource.'
+            description: 'Report the scope state of the protected resource a remote-backed MCP server''s logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization''s resource scope discovery flag, and what a login through each bound client would request now. Requires read access to the server only. Reads cached state only; never contacts the resource.'
             operationId: getRemoteMcpServerScopes
             parameters:
                 - allowEmptyValue: true
@@ -64428,6 +64428,1100 @@ paths:
             x-speakeasy-react-hook:
                 name: RiskSaveEvalReview
                 type: mutation
+    /rpc/sigint.createSensor:
+        post:
+            description: Create a sensor. multi_label permits independently applicable labels, exclusive makes attached signals compete and permits at most 255, and ordered_score uses ordered levels and permits at most 10. Empty and one-signal sensors are valid drafts. Omitted signal_ids creates an empty sensor; [] is explicitly empty. Repeated, deleted, missing, or cross-project signal IDs are rejected atomically.
+            operationId: createSigintSensor
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateSigintSensorForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SigintSensor'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: createSensor sigint
+            tags:
+                - sigint
+            x-speakeasy-name-override: createSensor
+            x-speakeasy-react-hook:
+                name: CreateSigintSensor
+    /rpc/sigint.createSignal:
+        post:
+            description: Create a reusable custom signal. Names are trimmed and must contain 1 to 200 characters. Description and classifier criteria are optional authoring metadata; an empty string clears either field.
+            operationId: createSigintSignal
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateSigintSignalForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SigintSignal'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: createSignal sigint
+            tags:
+                - sigint
+            x-speakeasy-name-override: createSignal
+            x-speakeasy-react-hook:
+                name: CreateSigintSignal
+    /rpc/sigint.deleteSensor:
+        delete:
+            description: Soft-delete a sensor and its memberships. Shared custom signals remain active.
+            operationId: deleteSigintSensor
+            parameters:
+                - allowEmptyValue: true
+                  description: Sensor ID
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: Sensor ID
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SigintSensor'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: deleteSensor sigint
+            tags:
+                - sigint
+            x-speakeasy-name-override: deleteSensor
+            x-speakeasy-react-hook:
+                name: DeleteSigintSensor
+    /rpc/sigint.deleteSignal:
+        delete:
+            description: Soft-delete a custom signal and detach it from every sensor in the selected project. Surviving sensor signal order is compacted; sensors may remain incomplete drafts.
+            operationId: deleteSigintSignal
+            parameters:
+                - allowEmptyValue: true
+                  description: Custom signal ID
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: Custom signal ID
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SigintSignal'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: deleteSignal sigint
+            tags:
+                - sigint
+            x-speakeasy-name-override: deleteSignal
+            x-speakeasy-react-hook:
+                name: DeleteSigintSignal
+    /rpc/sigint.getSensor:
+        get:
+            description: Get an active sensor with its ordered signal_ids. The collection is always returned and is [] when no signals are attached.
+            operationId: getSigintSensor
+            parameters:
+                - allowEmptyValue: true
+                  description: Sensor ID
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: Sensor ID
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SigintSensor'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getSensor sigint
+            tags:
+                - sigint
+            x-speakeasy-name-override: getSensor
+            x-speakeasy-react-hook:
+                name: GetSigintSensor
+    /rpc/sigint.getSignal:
+        get:
+            description: Get an active custom signal by ID in the selected project.
+            operationId: getSigintSignal
+            parameters:
+                - allowEmptyValue: true
+                  description: Custom signal ID
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: Custom signal ID
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SigintSignal'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getSignal sigint
+            tags:
+                - sigint
+            x-speakeasy-name-override: getSignal
+            x-speakeasy-react-hook:
+                name: GetSigintSignal
+    /rpc/sigint.listSensors:
+        get:
+            description: List active sensors in deterministic ID order with each sensor's ordered signal_ids from one consistent database snapshot. The collection is [] for an unattached sensor.
+            operationId: listSigintSensors
+            parameters:
+                - allowEmptyValue: true
+                  description: Sensor ID after which to continue
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Sensor ID after which to continue
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: Page size
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSigintSensorsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listSensors sigint
+            tags:
+                - sigint
+            x-speakeasy-name-override: listSensors
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: SigintSensors
+    /rpc/sigint.listSignals:
+        get:
+            description: List active custom signals in deterministic ID order. The cursor is the final ID from the previous page.
+            operationId: listSigintSignals
+            parameters:
+                - allowEmptyValue: true
+                  description: Signal ID after which to continue
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Signal ID after which to continue
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: Page size
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSigintSignalsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listSignals sigint
+            tags:
+                - sigint
+            x-speakeasy-name-override: listSignals
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: SigintSignals
+    /rpc/sigint.updateSensor:
+        post:
+            description: 'Partially update a sensor. Omitted fields and JSON null preserve stored values. Empty optional text clears it. Omitted signal_ids preserves membership, while [] clears it and a non-empty array replaces and reorders it atomically. Mode changes validate the final membership: exclusive permits at most 255 signals and ordered_score at most 10; incomplete drafts remain valid.'
+            operationId: updateSigintSensor
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateSigintSensorForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SigintSensor'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: updateSensor sigint
+            tags:
+                - sigint
+            x-speakeasy-name-override: updateSensor
+            x-speakeasy-react-hook:
+                name: UpdateSigintSensor
+    /rpc/sigint.updateSignal:
+        post:
+            description: Partially update a custom signal. Omitted fields and JSON null leave existing values unchanged. Supplying an empty optional-text value clears it. A supplied name is trimmed and must contain 1 to 200 characters.
+            operationId: updateSigintSignal
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateSigintSignalForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SigintSignal'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: updateSignal sigint
+            tags:
+                - sigint
+            x-speakeasy-name-override: updateSignal
+            x-speakeasy-react-hook:
+                name: UpdateSigintSignal
     /rpc/skillEfficacy.getSettings:
         get:
             description: Get effective organization-wide skill efficacy sampling settings.
@@ -82721,6 +83815,103 @@ paths:
             x-speakeasy-name-override: admitSubject
             x-speakeasy-react-hook:
                 name: AdmitWorkloadSubject
+    /rpc/workloadIdentities.getCustomFlows:
+        get:
+            description: 'Get the forms for trusting a platform the catalog does not list and allowing its workloads: registering and editing a trusted platform, and allowing and editing access. The same for every organization. Requires workload:read.'
+            operationId: getWorkloadCustomFlows
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/WorkloadCustomFlows'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getCustomFlows workloadIdentities
+            tags:
+                - workloadIdentities
+            x-speakeasy-name-override: getCustomFlows
+            x-speakeasy-react-hook:
+                name: WorkloadCustomFlows
     /rpc/workloadIdentities.list:
         get:
             description: 'Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project''s tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.'
@@ -86526,15 +87717,29 @@ components:
         AgentPlugin:
             type: object
             properties:
+                description:
+                    type: string
+                    description: Short description of the plugin, when one is set.
+                install_mode:
+                    type: string
+                    description: 'How the agent installs the plugin. `required`: installed, and the user can''t turn it off. `default`: installed, and the user can turn it off. `available`: not installed until the user turns it on. Agents that predate this field install every listed plugin.'
+                    enum:
+                        - required
+                        - default
+                        - available
                 marketplace_name:
                     type: string
                     description: Name of the marketplace this plugin lives in. Always equals the `name` of one of the marketplaces in the same response.
+                name:
+                    type: string
+                    description: Display name of the plugin. Absent for the synthesized observability plugin.
                 slug:
                     type: string
-                    description: Plugin slug. Combined with marketplace_name, this identifies the plugin the agent enables in the managed tool.
+                    description: Plugin slug. Combined with marketplace_name, this identifies the plugin in the managed tool.
             required:
                 - slug
                 - marketplace_name
+                - install_mode
         AgentPolicyGrant:
             type: object
             properties:
@@ -86957,11 +88162,16 @@ components:
                     type: array
                     items:
                         type: string
-                    description: Ops a measure admits
+                    description: 'Ops a field admits: aggregations on a measure, count_distinct on a dimension'
                 default:
                     type: boolean
                     description: 'Part of the query the dataset opens on: a default dimension is in the opening group-by'
                     example: true
+                description:
+                    type: string
+                    description: What the field is and which producers fill it, when the catalog has something to say beyond the name
+                lookup:
+                    $ref: '#/components/schemas/AnalyticsLookup'
                 name:
                     type: string
                     example: user
@@ -87015,6 +88225,19 @@ components:
                 - field
                 - operator
                 - values
+        AnalyticsLookup:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: What the map is and where it is set
+                name:
+                    type: string
+                    example: mcp_server_display_names
+            description: 'A per-project map a dimension reads through at query time: a reported value with an entry shows as its target, the rest show as reported.'
+            required:
+                - name
+                - description
         AnalyticsMeasure:
             type: object
             properties:
@@ -87024,14 +88247,15 @@ components:
                     example: tool_calls
                 field:
                     type: string
-                    description: Measure field the op applies to. Absent for count.
+                    description: 'Field the op applies to: a dimension for count_distinct, a measure otherwise. Absent for count.'
                     example: tool_call_count
                 op:
                     type: string
-                    description: Aggregation to apply. count takes no field; every other op needs a measure field that admits it, per describe.
+                    description: Aggregation to apply. count takes no field; count_distinct takes a dimension that admits it; every other op needs a measure field that admits it, per describe.
                     example: sum
                     enum:
                         - count
+                        - count_distinct
                         - sum
                         - avg
                         - min
@@ -87091,7 +88315,7 @@ components:
                         - month
                 limit:
                     type: integer
-                    description: Maximum rows. Defaults to 100, at most 1000.
+                    description: Maximum rows. Defaults to 100; at most 1000 for a grouped result and 200 for ungrouped rows.
                     default: 100
                     format: int64
                     minimum: 1
@@ -90495,6 +91719,17 @@ components:
                     type: string
                     description: When the issuer reported the client secret expires (RFC 7591 client_secret_expires_at). Omit when the issuer reported no expiry.
                     format: date-time
+                credential_owner:
+                    type: string
+                    description: Who the upstream access credential belongs to, fixed at creation. subject (the default) means each caller connects their own upstream account through the client. self means the client obtains a credential for itself with the client_credentials grant and every caller shares it; it requires token_endpoint_auth_method client_secret_basic, client_secret_post (both with client_secret) or private_key_jwt (with json_web_key_set_id), and an issuer with a token_endpoint.
+                    default: subject
+                    enum:
+                        - subject
+                        - self
+                json_web_key_set_id:
+                    type: string
+                    description: Organization JSON Web Key Set to sign private_key_jwt assertions with. Required when token_endpoint_auth_method is private_key_jwt and optional otherwise, as with attachKeySet. Must belong to the caller's organization, which needs the customer-managed encryption keys entitlement.
+                    format: uuid
                 project_id:
                     type: string
                     description: Owning project id for the new client; the project must belong to the caller's organization. Omit to inherit a project-specific issuer's project, or to create an organization-level client (no project, attachable by every project) under an organization-level issuer.
@@ -90812,6 +92047,17 @@ components:
                     type: string
                     description: When the issuer reported the client secret expires (RFC 7591 client_secret_expires_at). Omit when the issuer reported no expiry.
                     format: date-time
+                credential_owner:
+                    type: string
+                    description: Who the upstream access credential belongs to, fixed at creation. subject (the default) means each caller connects their own upstream account through the client. self means the client obtains a credential for itself with the client_credentials grant and every caller shares it; it requires token_endpoint_auth_method client_secret_basic, client_secret_post (both with client_secret) or private_key_jwt (with json_web_key_set_id), and an issuer with a token_endpoint.
+                    default: subject
+                    enum:
+                        - subject
+                        - self
+                json_web_key_set_id:
+                    type: string
+                    description: Organization JSON Web Key Set to sign private_key_jwt assertions with. Required when token_endpoint_auth_method is private_key_jwt and optional otherwise, as with attachKeySet. Must belong to the caller's organization, which needs the customer-managed encryption keys entitlement.
+                    format: uuid
                 remote_session_issuer_id:
                     type: string
                     description: The owning remote_session_issuer id.
@@ -91325,6 +92571,64 @@ components:
             required:
                 - url
                 - expires_at
+        CreateSigintSensorForm:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Optional description; empty stores no value
+                enabled:
+                    type: boolean
+                    description: Whether to enable evaluation; omission defaults to true
+                instructions:
+                    type: string
+                    description: Optional classification instructions; empty stores no value
+                match_expression:
+                    type: string
+                    description: Boolean CEL predicate, at most 4096 UTF-8 bytes; omission defaults to message.role == "user"
+                mode:
+                    type: string
+                    description: 'How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.'
+                    enum:
+                        - multi_label
+                        - exclusive
+                        - ordered_score
+                name:
+                    type: string
+                    description: Display name; trimmed before enforcing the 1 to 200 character limit
+                signal_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    description: Initial ordered signal IDs. Omitted and [] both create an empty sensor.
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+            required:
+                - name
+                - mode
+        CreateSigintSignalForm:
+            type: object
+            properties:
+                classifier_criteria:
+                    type: string
+                    description: Optional classifier criteria; empty stores no value
+                description:
+                    type: string
+                    description: Optional description; empty stores no value
+                name:
+                    type: string
+                    description: Display name; trimmed before enforcing the 1 to 200 character limit
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+            required:
+                - name
         CreateSignedChatAttachmentURLForm:
             type: object
             properties:
@@ -95340,7 +96644,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/AgentPlugin'
-                    description: Plugins the agent should enable. Each entry references one of the marketplaces above by name.
+                    description: 'Plugins for the caller: the observability plugin of each listed marketplace, when enabled, and the plugins assigned to the caller. Each entry''s install_mode says whether the agent installs it (`required`, `default`) or only offers it for the user to turn on (`available`). Each entry references one of the marketplaces above by name.'
                 principal:
                     $ref: '#/components/schemas/AgentPollingPrincipal'
             required:
@@ -99693,6 +100997,34 @@ components:
                         $ref: '#/components/schemas/ShadowMCPInventoryUser'
             required:
                 - users
+        ListSigintSensorsResult:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Final returned sensor ID when another page exists
+                    format: uuid
+                sensors:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SigintSensor'
+                    description: Sensors in this page
+            required:
+                - sensors
+        ListSigintSignalsResult:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Final returned signal ID when another page exists
+                    format: uuid
+                signals:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SigintSignal'
+                    description: Signals in this page
+            required:
+                - signals
         ListSkillDistributionsResult:
             type: object
             properties:
@@ -103643,12 +104975,20 @@ components:
                     type: string
                     description: Unique assignment identifier.
                     format: uuid
+                install_mode:
+                    type: string
+                    description: 'How the device agent installs the plugin for this audience. `required`: installed, and the user can''t turn it off. `default`: installed, and the user can turn it off. `available`: not installed until the user turns it on.'
+                    enum:
+                        - required
+                        - default
+                        - available
                 principal_urn:
                     type: string
                     description: Principal URN (e.g. role:organization:<uuid>, user:id, or *).
             required:
                 - id
                 - principal_urn
+                - install_mode
                 - created_at
         PluginAudience:
             type: object
@@ -104034,6 +105374,9 @@ components:
                 session_portability_enabled:
                     type: boolean
                     description: 'Whether agent session portability is enabled for the organization: session sharing links, move reporting with lineage, and picker title enrichment via the device agent'
+                signals_intelligence_enabled:
+                    type: boolean
+                    description: Whether the organization can configure signals intelligence
                 skill_capture_metadata_only:
                     type: boolean
                     description: Whether skill capture stores activation metadata without requesting manifest content
@@ -104066,6 +105409,7 @@ components:
                 - consent_tool_filtering_enabled
                 - session_portability_enabled
                 - network_ingress_enabled
+                - signals_intelligence_enabled
                 - device_agent
         Project:
             type: object
@@ -105261,6 +106605,12 @@ components:
                     type: string
                     description: The remote session client's ID.
                     format: uuid
+                issuer_name:
+                    type: string
+                    description: The configured name of the client's authorization server; absent when it has none.
+                issuer_url:
+                    type: string
+                    description: The issuer URL of the client's authorization server.
                 pin_would_decide:
                     type: boolean
                     description: 'Whether a pin, if set, decides this client''s request: discovery is on, the client owns the resource, and neither its own scope nor a challenge outranks the pin.'
@@ -105346,6 +106696,9 @@ components:
                 advertised_scopes_known:
                     type: boolean
                     description: Whether a read of the resource's metadata within the last good window captured an advertised list.
+                can_pin:
+                    type: boolean
+                    description: 'Whether the caller may change the pin: write access to this server and every server in the project with the same upstream URL.'
                 challenge_scopes:
                     type: array
                     items:
@@ -105381,6 +106734,7 @@ components:
                 - discovery_enabled
                 - clients
                 - shared_server_count
+                - can_pin
         RemoteSession:
             type: object
             properties:
@@ -105455,7 +106809,7 @@ components:
                     description: Upstream OAuth audience sent on the authorize redirect and token exchange. Null omits the audience parameter.
                 callback_url:
                     type: string
-                    description: The redirect URI this client registers with its upstream provider. It never changes after the client is created. Absent on global clients.
+                    description: The redirect URI this client registers with its upstream provider. It never changes after the client is created. Absent on global clients and on clients with credential_owner self, which have no callback.
                     format: uri
                 client_id:
                     type: string
@@ -105473,6 +106827,12 @@ components:
                 created_at:
                     type: string
                     format: date-time
+                credential_owner:
+                    type: string
+                    description: Who the upstream access credential belongs to. subject means each caller connects their own upstream account; self means the client holds one credential for itself, obtained with the client_credentials grant, that every caller shares.
+                    enum:
+                        - subject
+                        - self
                 federated_callback_url:
                     type: string
                     description: The redirect URI to register in the customer identity provider's app when this client is a user session issuer's trusted sign-in client. Present only on organization-owned clients outside any project and not managed by an identity provider connection, the only clients a user session issuer can trust.
@@ -105488,7 +106848,7 @@ components:
                     format: uuid
                 json_web_key_set_id:
                     type: string
-                    description: The organization JSON Web Key Set attached to this client, managed through attachKeySet and detachKeySet. Null when no key set is attached.
+                    description: The organization JSON Web Key Set attached to this client, set on create or through attachKeySet and detachKeySet. Null when no key set is attached.
                     format: uuid
                 legacy_callback_url:
                     type: boolean
@@ -105544,6 +106904,7 @@ components:
                 - user_session_issuer_ids
                 - client_id
                 - legacy_callback_url
+                - credential_owner
                 - created_at
                 - updated_at
         RemoteSessionIssuer:
@@ -106385,12 +107746,37 @@ components:
                     items:
                         $ref: '#/components/schemas/ResourceAudienceEntry'
                     description: Rules deciding access to this resource, widest first.
+                role_plugins:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ResourceAudienceRolePlugin'
+                    description: Live plugins containing this resource and assigned to an exact audience role. Omitted without plugin read and administrator access; not evidence of authorization or installation.
                 version:
                     type: string
                     description: Fingerprint of the rules naming this resource. Send it back when saving so a change made elsewhere is a conflict rather than a silent overwrite.
             required:
                 - entries
                 - version
+        ResourceAudienceRolePlugin:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: Plugin name.
+                plugin_id:
+                    type: string
+                    description: Plugin ID.
+                principal_urn:
+                    type: string
+                    description: Exact role assigned to the plugin.
+                slug:
+                    type: string
+                    description: Plugin slug.
+            required:
+                - principal_urn
+                - plugin_id
+                - name
+                - slug
         ResourceEntry:
             type: object
             properties:
@@ -109677,6 +111063,7 @@ components:
                         - consent_tool_filtering
                         - session_portability
                         - network_ingress
+                        - signals_intelligence
                     maxLength: 60
                 organization_id:
                     type: string
@@ -109731,6 +111118,15 @@ components:
         SetPluginAssignmentsForm:
             type: object
             properties:
+                install_modes:
+                    type: object
+                    description: Install mode per principal URN in principal_urns. A principal missing from this map keeps its current mode, or gets `default` when it is newly assigned.
+                    additionalProperties:
+                        type: string
+                        enum:
+                            - required
+                            - default
+                            - available
                 plugin_id:
                     type: string
                     format: uuid
@@ -109781,6 +111177,7 @@ components:
                         - consent_tool_filtering
                         - session_portability
                         - network_ingress
+                        - signals_intelligence
                     maxLength: 60
                 organization_id:
                     type: string
@@ -110559,6 +111956,111 @@ components:
                 - name
                 - display_name
                 - content
+                - updated_at
+        SigintSensor:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: Creation time
+                    format: date-time
+                description:
+                    type: string
+                    description: Optional author-facing description
+                enabled:
+                    type: boolean
+                    description: Whether the sensor is eligible for evaluation. Disabled sensors remain visible and editable.
+                id:
+                    type: string
+                    description: Sensor ID
+                    format: uuid
+                instructions:
+                    type: string
+                    description: Optional framing instructions for classification
+                match_expression:
+                    type: string
+                    description: Boolean CEL predicate over message.role (lowercase user, assistant, system, or tool)
+                mode:
+                    type: string
+                    description: 'How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.'
+                    enum:
+                        - multi_label
+                        - exclusive
+                        - ordered_score
+                name:
+                    type: string
+                    description: Display name
+                project_id:
+                    type: string
+                    description: Owning project ID
+                    format: uuid
+                signal_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    description: Ordered signal IDs. In ordered_score mode the zero-based array index is the score level.
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+                updated_at:
+                    type: string
+                    description: Last update time
+                    format: date-time
+            description: A project-scoped sensor with ordered live references to custom signals. signal_ids is always present, including when empty.
+            required:
+                - enabled
+                - match_expression
+                - id
+                - project_id
+                - name
+                - slug
+                - mode
+                - signal_ids
+                - created_at
+                - updated_at
+        SigintSignal:
+            type: object
+            properties:
+                classifier_criteria:
+                    type: string
+                    description: Optional criteria describing when this signal applies
+                created_at:
+                    type: string
+                    description: Creation time
+                    format: date-time
+                description:
+                    type: string
+                    description: Optional author-facing description
+                id:
+                    type: string
+                    description: Signal ID
+                    format: uuid
+                name:
+                    type: string
+                    description: Display name
+                project_id:
+                    type: string
+                    description: Owning project ID
+                    format: uuid
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+                updated_at:
+                    type: string
+                    description: Last update time
+                    format: date-time
+            description: A reusable project-scoped custom signal.
+            required:
+                - id
+                - project_id
+                - name
+                - slug
+                - created_at
                 - updated_at
         Skill:
             type: object
@@ -116493,7 +117995,7 @@ components:
                         - client_secret_post
                         - none
                         - private_key_jwt
-            description: Form for updating a remote_session_client. All non-id fields are optional patches.
+            description: Form for updating a remote_session_client. All non-id fields are optional patches. credential_owner is fixed at creation and cannot be changed.
             required:
                 - id
         UpdateRemoteSessionIssuerForm:
@@ -116938,6 +118440,71 @@ components:
                 - project_id
                 - server_url
                 - name
+        UpdateSigintSensorForm:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Replacement description; empty clears it
+                enabled:
+                    type: boolean
+                    description: Enable or disable evaluation; omission preserves the current state. Evaluations already in progress may finish.
+                id:
+                    type: string
+                    description: Sensor ID
+                    format: uuid
+                instructions:
+                    type: string
+                    description: Replacement instructions; empty clears it
+                match_expression:
+                    type: string
+                    description: Replacement boolean CEL predicate, at most 4096 UTF-8 bytes; omission preserves it
+                mode:
+                    type: string
+                    description: 'How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.'
+                    enum:
+                        - multi_label
+                        - exclusive
+                        - ordered_score
+                name:
+                    type: string
+                    description: Replacement display name; trimmed before enforcing the 1 to 200 character limit
+                signal_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    description: Authoritative ordered signal IDs. Omit or send null to preserve; send [] to clear.
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+            required:
+                - id
+        UpdateSigintSignalForm:
+            type: object
+            properties:
+                classifier_criteria:
+                    type: string
+                    description: Replacement classifier criteria; empty clears it
+                description:
+                    type: string
+                    description: Replacement description; empty clears it
+                id:
+                    type: string
+                    description: Signal ID
+                    format: uuid
+                name:
+                    type: string
+                    description: Replacement display name; trimmed before enforcing the 1 to 200 character limit
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+            required:
+                - id
         UpdateSkillRequestBody:
             type: object
             properties:
@@ -118789,6 +120356,137 @@ components:
                 - wildcard_active
                 - created_at
                 - updated_at
+        WorkloadCustomFlows:
+            type: object
+            properties:
+                allow_access:
+                    $ref: '#/components/schemas/WorkloadForm'
+                edit_access:
+                    $ref: '#/components/schemas/WorkloadForm'
+                edit_platform:
+                    $ref: '#/components/schemas/WorkloadForm'
+                register_platform:
+                    $ref: '#/components/schemas/WorkloadForm'
+            description: The forms for trusting a platform the catalog does not list and allowing its workloads.
+            required:
+                - register_platform
+                - edit_platform
+                - allow_access
+                - edit_access
+        WorkloadForm:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Shown under the title.
+                pending_label:
+                    type: string
+                    description: The submit button's label while the form submits.
+                steps:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkloadFormStep'
+                    description: The form's steps, in order.
+                submit_label:
+                    type: string
+                    description: The submit button's label.
+                title:
+                    type: string
+                    description: Heads the form.
+            description: A custom flow's form, held to the management API form it submits.
+            required:
+                - title
+                - description
+                - submit_label
+                - pending_label
+                - steps
+        WorkloadFormBlock:
+            type: object
+            properties:
+                field:
+                    type: string
+                    description: The form value an input collects. label is submitted as an admission's name.
+                    enum:
+                        - ""
+                        - name
+                        - description
+                        - issuer
+                        - jwks_uri
+                        - subject
+                        - label
+                format:
+                    type: string
+                    description: The dashboard validator an input's value must pass. The server applies the same rules when the form is submitted.
+                    enum:
+                        - ""
+                        - issuer_url
+                        - jwks_uri
+                        - platform_name
+                        - platform_description
+                        - subject_rule
+                        - none
+                help:
+                    type: string
+                    description: Markdown shown under a form control while it has no validation message. Raw HTML in it must not be rendered.
+                href:
+                    type: string
+                    description: A link's https target.
+                label:
+                    type: string
+                    description: A link's label, or a form control's.
+                markdown:
+                    type: string
+                    description: A text block's Markdown. Raw HTML in it must not be rendered.
+                multiline:
+                    type: boolean
+                    description: Whether an input is a text area.
+                placeholder:
+                    type: string
+                    description: Shown in an empty form control.
+                read_only:
+                    type: boolean
+                    description: Whether an input shows its value without letting it change. A read-only value is not submitted.
+                type:
+                    type: string
+                    description: The kind of content. wildcard_caution marks where the form warns that a wildcard rule admits more than one identity; the dashboard writes that warning, since it names the rule and the agent.
+                    enum:
+                        - text
+                        - link
+                        - input
+                        - agent_picker
+                        - tags
+                        - wildcard_caution
+            description: One piece of a custom flow's form. Which fields are set depends on type; the rest are empty.
+            required:
+                - type
+                - markdown
+                - href
+                - label
+                - field
+                - placeholder
+                - help
+                - multiline
+                - read_only
+                - format
+        WorkloadFormStep:
+            type: object
+            properties:
+                blocks:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkloadFormBlock'
+                    description: Rendered in order.
+                id:
+                    type: string
+                    description: Stable within the form.
+                title:
+                    type: string
+                    description: Heads the step.
+            description: One screen of a custom flow's form.
+            required:
+                - id
+                - title
+                - blocks
         WorkloadIdentityPolicy:
             type: object
             properties:
@@ -119283,6 +120981,8 @@ tags:
       description: Dashboard API for interacting with resources.
     - name: risk
       description: Manage risk analysis policies and view scan results.
+    - name: sigint
+      description: Manage project-scoped custom signals and sensors. Signals are reusable live definitions; sensors attach an ordered set of signals in multi-label, exclusive, or ordered-score mode.
     - name: skillEfficacy
       description: Manage organization-wide skill efficacy sampling settings.
     - name: skills

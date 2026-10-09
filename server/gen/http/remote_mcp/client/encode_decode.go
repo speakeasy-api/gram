@@ -3966,6 +3966,8 @@ func unmarshalProtectedResourceMetadataUnavailableResponseBodyToRemotemcpProtect
 func unmarshalRemoteMcpServerClientScopesResponseBodyToRemotemcpRemoteMcpServerClientScopes(v *RemoteMcpServerClientScopesResponseBody) *remotemcp.RemoteMcpServerClientScopes {
 	res := &remotemcp.RemoteMcpServerClientScopes{
 		ClientID:       *v.ClientID,
+		IssuerName:     v.IssuerName,
+		IssuerURL:      v.IssuerURL,
 		ScopeSource:    *v.ScopeSource,
 		PinWouldDecide: *v.PinWouldDecide,
 	}

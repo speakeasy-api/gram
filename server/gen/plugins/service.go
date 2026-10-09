@@ -331,7 +331,11 @@ type PluginAssignment struct {
 	ID string
 	// Principal URN (e.g. role:organization:<uuid>, user:id, or *).
 	PrincipalUrn string
-	CreatedAt    string
+	// How the device agent installs the plugin for this audience. `required`:
+	// installed, and the user can't turn it off. `default`: installed, and the
+	// user can turn it off. `available`: not installed until the user turns it on.
+	InstallMode string
+	CreatedAt   string
 }
 
 type PluginAudience struct {
@@ -497,6 +501,9 @@ type SetPluginAssignmentsPayload struct {
 	PluginID         string
 	// List of principal URNs to assign.
 	PrincipalUrns []string
+	// Install mode per principal URN in principal_urns. A principal missing from
+	// this map keeps its current mode, or gets `default` when it is newly assigned.
+	InstallModes map[string]string
 }
 
 // SetPluginAssignmentsResult is the result type of the plugins service

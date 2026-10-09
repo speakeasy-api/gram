@@ -266,6 +266,7 @@ func TestMemberMCPConnectionStatusReportsIdentityChaining(t *testing.T) {
 		serves     bool
 		usable     bool
 		noClient   bool
+		noIssuer   bool
 		multi      bool
 		statuses   map[uuid.UUID]remotesessions.RemoteSessionState
 		state      string
@@ -273,6 +274,9 @@ func TestMemberMCPConnectionStatusReportsIdentityChaining(t *testing.T) {
 		nextAction string
 		consulted  bool
 	}{
+		{name: "no issuer usable credential", noIssuer: true, serves: true, usable: true, state: MCPConnectionStateActive, reason: MCPConnectionReasonIdentityChaining, nextAction: "use_mcp", consulted: true},
+		{name: "no issuer configured without credential", noIssuer: true, serves: true, state: MCPConnectionStateNotConnected, reason: ReadinessEvidenceIdentityChainingConfigured, nextAction: "use_mcp", consulted: true},
+		{name: "no issuer not chained", noIssuer: true, state: MCPConnectionStateNotApplicable, reason: "authorization_not_required", nextAction: "use_mcp", consulted: true},
 		{name: "no session usable credential", serves: true, usable: true, state: MCPConnectionStateActive, reason: MCPConnectionReasonIdentityChaining, nextAction: "use_mcp", consulted: true},
 		{name: "expired session usable credential", serves: true, usable: true, statuses: expired, state: MCPConnectionStateActive, reason: MCPConnectionReasonIdentityChaining, nextAction: "use_mcp", consulted: true},
 		{name: "no session configured without credential", serves: true, state: MCPConnectionStateNotConnected, reason: ReadinessEvidenceIdentityChainingConfigured, nextAction: "use_mcp", consulted: true},
@@ -290,7 +294,15 @@ func TestMemberMCPConnectionStatusReportsIdentityChaining(t *testing.T) {
 		{name: "multiple clients not chained", multi: true, state: MCPConnectionStateSetupRequired, reason: "multiple_authorization_clients", nextAction: "ask_administrator", consulted: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
+			issuer := conv.ToNullUUID(remoteIssuer.ID)
+			if test.noIssuer {
+				issuer = uuid.NullUUID{}
+			}
+			stamped, err := testrepo.New(conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
+				RemoteSessionIssuerID: issuer, ID: mcpID, ProjectID: project.ID,
+			})
+			require.NoError(t, err)
+			require.EqualValues(t, 1, stamped)
 			readerClients := clients
 			if test.noClient {
 				readerClients = nil

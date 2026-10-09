@@ -120,12 +120,10 @@ deployment tooling consumes:
 mise run gen:infra
 ```
 
-This task (`.mise-tasks/gen/infra.sh`) does three things: `buf generate` (proto
-→ Go in `infra/gen/`), `buf build` (compiled `FileDescriptorSet` →
-`infra/cmd/infra/descriptors.pb`), then `go run ./infra/main.go gen-cc` to write
-`infra/gen/kcc.yaml`. The generated Go and the descriptor blob are gitignored
-(`**/descriptors.pb`) and excluded from formatting; `infra/gen/kcc.yaml` is
-committed.
+This task (`.mise-tasks/gen/infra.sh`) generates Go/Python protobuf bindings,
+`infra/gen/descriptors.pb`, `infra/gen/kcc.yaml`, the typed topic registry,
+storage schemas/encoders/manifests, isolated storage fixtures and the topology
+diagram. These artifacts are committed and CI checks regeneration for drift.
 
 ## How generation works (`infra/internal/gcp/`)
 
@@ -149,8 +147,8 @@ proto_pubsub_orchestrator` plus a `proto_message` label carrying the source
 - **Stable output**: topics and subscriptions are sorted by name so the
   generated file diffs cleanly across runs. Durations render as integer-second
   strings (e.g. `604800s`) as Config Connector expects.
-- **Separation of concerns**: the generator emits _only_ the topology under a
-  `pubsub` key (names, labels, specs). Per-resource deployment metadata
+- **Separation of concerns**: the generator emits topology under `pubsub` and
+  optional logical bucket fragments under `storage`. Per-resource deployment metadata
   (project, namespace, deletion/prune policy) is applied downstream by the
   deployment tooling, never here — so don't expect this generator to emit it.
 
@@ -311,6 +309,56 @@ in logs. It is a sanity-check harness, not a pattern to copy for real
 publishers: production code publishes from wherever the event originates (an API
 handler, a workflow activity) using `gcp.PubSubPublisherForMessage`, not from a
 loop in the streams process.
+
+## Go storage subscriptions (explicit opt-in only)
+
+Storage subscriptions are an **optional feature**. Create one only when the user
+explicitly requests durable Parquet/GCS storage for a particular event stream and
+the stated problem calls for it. Adding a topic, publisher, ordinary subscriber,
+or event schema does not imply a storage subscription. Do not automatically add
+storage markers, buckets, or runners for completeness, speculative analytics, or
+future use. If the intended storage requirement is unclear, ask the user before
+adding one.
+
+Once explicitly requested, declare `(gcp.pubsub.v1.storage_subscription)` on a
+dedicated marker, with `topic`.
+The logical `bucket` is optional and defaults to `lake`; set it explicitly to
+select another bucket. It is exclusive with ordinary subscription/topic options.
+Parquet and daily UTC ingestion-time Hive partitions are defaults; hourly and
+external attribute-based partitions are explicit modes. External mode requires
+`partition_attribute` and an ordered `partition_keys` list. Missing/malformed
+attributes are permanently acked/dropped with finite-reason metrics.
+
+`mise run gen:infra` emits deduplicated private bucket fragments plus explicit Go
+schemas/encoders and manifests under `infra/pkg/storagebindings`. Only topics with
+attached schemas qualify: no topic-name overrides, external payload types or
+recursive graphs. Generated code uses typed accessors, numeric enum values,
+explicit presence, standard LIST/MAP, oneof field-number discriminators and
+nested `__present` witnesses. Commit all generated artifacts.
+
+Inside `gram streams`, install a generated binding with
+`mustStreamToStorage(rg, storagebindings.<Marker>())` in the receiver registration
+block. `receiverGroup` supplies the shared broker, store, bucket mapping, logger
+and meter provider and owns errgroup registration and cancellation. Register
+consumers unconditionally; do not add a manual `group.Go` for each consumer.
+Local development uses `server/internal/lake.FilesystemStore`, rooted at
+`GRAM_LAKE_DIRECTORY` (mise defaults to `<repo>/local/lake`, which is gitignored), with `lake` mapped to a local bucket
+directory by default. All other environments require `GRAM_STORAGE_BUCKETS` and
+a successfully constructed GCS client or fail startup.
+
+In other Go processes, install with
+`storage.Run(ctx, storagebindings.<Marker>(), storage.Config{...})`
+in the consuming process's errgroup. Supply its broker, `storage.GCSStore`,
+logger/meter provider and `storage.ParseBucketMapping` of `GRAM_STORAGE_BUCKETS`.
+No application handler is needed. Ordinary subscriber helpers reject storage
+markers. The Go runner owns bounded batches, partition routing and per-object
+acknowledgment after durable commit. Delivery remains at least once. Python has
+no storage runtime. Encoded column pages spool to disk under `Config.TempDir`
+(default: `os.TempDir()`); per-object scratch directories are cleaned up on normal
+and error exits. Use disk-backed ephemeral storage for crash leftovers.
+`mise run demo:storage --out /tmp/opencode/storage-demo`
+provides an isolated runnable example. The complete mapping, query examples,
+limits and rollout contract are in `docs/pubsub-storage-subscriptions.md`.
 
 ## Local development
 

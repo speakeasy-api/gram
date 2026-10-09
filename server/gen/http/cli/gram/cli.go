@@ -85,6 +85,7 @@ import (
 	remotesessionsc "github.com/speakeasy-api/gram/server/gen/http/remote_sessions/client"
 	resourcesc "github.com/speakeasy-api/gram/server/gen/http/resources/client"
 	riskc "github.com/speakeasy-api/gram/server/gen/http/risk/client"
+	sigintc "github.com/speakeasy-api/gram/server/gen/http/sigint/client"
 	skillefficacyc "github.com/speakeasy-api/gram/server/gen/http/skill_efficacy/client"
 	skillsc "github.com/speakeasy-api/gram/server/gen/http/skills/client"
 	slackdirectoryconnectionsc "github.com/speakeasy-api/gram/server/gen/http/slack_directory_connections/client"
@@ -185,6 +186,7 @@ func UsageCommands() []string {
 		"remote-sessions (list-bindings|attach-binding|detach-binding|commit-server-identity-configuration|list-remote-sessions|count-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
 		"risk (create-risk-policy|list-risk-policies|list-mcp-platform-toolsets|list-risk-policies-for-mcp-server|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|reveal-risk-result-payload|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-mcp-server-counts|get-risk-analysis-status|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
+		"sigint (create-signal|get-signal|list-signals|update-signal|delete-signal|create-sensor|get-sensor|list-sensors|update-sensor|delete-sensor)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
 		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
 		"slack-directory-connections (list|sync|list-members|list-person-accounts|get-member|set-mapping|begin|disconnect)",
@@ -206,7 +208,7 @@ func UsageCommands() []string {
 		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
 		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
 		"widgets (list-widgets|get-widget|create-widget|update-widget|duplicate-widget|delete-widget)",
-		"workload-identities (list|list-platforms|list-token-endpoints|register-issuer|update-issuer|withdraw-issuer|admit-subject|update-subject|withdraw-subject)",
+		"workload-identities (list|list-platforms|get-custom-flows|list-token-endpoints|register-issuer|update-issuer|withdraw-issuer|admit-subject|update-subject|withdraw-subject)",
 		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
 	}
 }
@@ -3365,6 +3367,70 @@ func ParseEndpoint(
 		riskDeleteRiskEvalReviewSessionTokenFlag     = riskDeleteRiskEvalReviewFlags.String("session-token", "", "")
 		riskDeleteRiskEvalReviewProjectSlugInputFlag = riskDeleteRiskEvalReviewFlags.String("project-slug-input", "", "")
 
+		sigintFlags = flag.NewFlagSet("sigint", flag.ContinueOnError)
+
+		sigintCreateSignalFlags                = flag.NewFlagSet("create-signal", flag.ExitOnError)
+		sigintCreateSignalBodyFlag             = sigintCreateSignalFlags.String("body", "REQUIRED", "")
+		sigintCreateSignalSessionTokenFlag     = sigintCreateSignalFlags.String("session-token", "", "")
+		sigintCreateSignalApikeyTokenFlag      = sigintCreateSignalFlags.String("apikey-token", "", "")
+		sigintCreateSignalProjectSlugInputFlag = sigintCreateSignalFlags.String("project-slug-input", "", "")
+
+		sigintGetSignalFlags                = flag.NewFlagSet("get-signal", flag.ExitOnError)
+		sigintGetSignalIDFlag               = sigintGetSignalFlags.String("id", "REQUIRED", "")
+		sigintGetSignalSessionTokenFlag     = sigintGetSignalFlags.String("session-token", "", "")
+		sigintGetSignalApikeyTokenFlag      = sigintGetSignalFlags.String("apikey-token", "", "")
+		sigintGetSignalProjectSlugInputFlag = sigintGetSignalFlags.String("project-slug-input", "", "")
+
+		sigintListSignalsFlags                = flag.NewFlagSet("list-signals", flag.ExitOnError)
+		sigintListSignalsCursorFlag           = sigintListSignalsFlags.String("cursor", "", "")
+		sigintListSignalsLimitFlag            = sigintListSignalsFlags.String("limit", "50", "")
+		sigintListSignalsSessionTokenFlag     = sigintListSignalsFlags.String("session-token", "", "")
+		sigintListSignalsApikeyTokenFlag      = sigintListSignalsFlags.String("apikey-token", "", "")
+		sigintListSignalsProjectSlugInputFlag = sigintListSignalsFlags.String("project-slug-input", "", "")
+
+		sigintUpdateSignalFlags                = flag.NewFlagSet("update-signal", flag.ExitOnError)
+		sigintUpdateSignalBodyFlag             = sigintUpdateSignalFlags.String("body", "REQUIRED", "")
+		sigintUpdateSignalSessionTokenFlag     = sigintUpdateSignalFlags.String("session-token", "", "")
+		sigintUpdateSignalApikeyTokenFlag      = sigintUpdateSignalFlags.String("apikey-token", "", "")
+		sigintUpdateSignalProjectSlugInputFlag = sigintUpdateSignalFlags.String("project-slug-input", "", "")
+
+		sigintDeleteSignalFlags                = flag.NewFlagSet("delete-signal", flag.ExitOnError)
+		sigintDeleteSignalIDFlag               = sigintDeleteSignalFlags.String("id", "REQUIRED", "")
+		sigintDeleteSignalSessionTokenFlag     = sigintDeleteSignalFlags.String("session-token", "", "")
+		sigintDeleteSignalApikeyTokenFlag      = sigintDeleteSignalFlags.String("apikey-token", "", "")
+		sigintDeleteSignalProjectSlugInputFlag = sigintDeleteSignalFlags.String("project-slug-input", "", "")
+
+		sigintCreateSensorFlags                = flag.NewFlagSet("create-sensor", flag.ExitOnError)
+		sigintCreateSensorBodyFlag             = sigintCreateSensorFlags.String("body", "REQUIRED", "")
+		sigintCreateSensorSessionTokenFlag     = sigintCreateSensorFlags.String("session-token", "", "")
+		sigintCreateSensorApikeyTokenFlag      = sigintCreateSensorFlags.String("apikey-token", "", "")
+		sigintCreateSensorProjectSlugInputFlag = sigintCreateSensorFlags.String("project-slug-input", "", "")
+
+		sigintGetSensorFlags                = flag.NewFlagSet("get-sensor", flag.ExitOnError)
+		sigintGetSensorIDFlag               = sigintGetSensorFlags.String("id", "REQUIRED", "")
+		sigintGetSensorSessionTokenFlag     = sigintGetSensorFlags.String("session-token", "", "")
+		sigintGetSensorApikeyTokenFlag      = sigintGetSensorFlags.String("apikey-token", "", "")
+		sigintGetSensorProjectSlugInputFlag = sigintGetSensorFlags.String("project-slug-input", "", "")
+
+		sigintListSensorsFlags                = flag.NewFlagSet("list-sensors", flag.ExitOnError)
+		sigintListSensorsCursorFlag           = sigintListSensorsFlags.String("cursor", "", "")
+		sigintListSensorsLimitFlag            = sigintListSensorsFlags.String("limit", "50", "")
+		sigintListSensorsSessionTokenFlag     = sigintListSensorsFlags.String("session-token", "", "")
+		sigintListSensorsApikeyTokenFlag      = sigintListSensorsFlags.String("apikey-token", "", "")
+		sigintListSensorsProjectSlugInputFlag = sigintListSensorsFlags.String("project-slug-input", "", "")
+
+		sigintUpdateSensorFlags                = flag.NewFlagSet("update-sensor", flag.ExitOnError)
+		sigintUpdateSensorBodyFlag             = sigintUpdateSensorFlags.String("body", "REQUIRED", "")
+		sigintUpdateSensorSessionTokenFlag     = sigintUpdateSensorFlags.String("session-token", "", "")
+		sigintUpdateSensorApikeyTokenFlag      = sigintUpdateSensorFlags.String("apikey-token", "", "")
+		sigintUpdateSensorProjectSlugInputFlag = sigintUpdateSensorFlags.String("project-slug-input", "", "")
+
+		sigintDeleteSensorFlags                = flag.NewFlagSet("delete-sensor", flag.ExitOnError)
+		sigintDeleteSensorIDFlag               = sigintDeleteSensorFlags.String("id", "REQUIRED", "")
+		sigintDeleteSensorSessionTokenFlag     = sigintDeleteSensorFlags.String("session-token", "", "")
+		sigintDeleteSensorApikeyTokenFlag      = sigintDeleteSensorFlags.String("apikey-token", "", "")
+		sigintDeleteSensorProjectSlugInputFlag = sigintDeleteSensorFlags.String("project-slug-input", "", "")
+
 		skillEfficacyFlags = flag.NewFlagSet("skill-efficacy", flag.ContinueOnError)
 
 		skillEfficacyGetSettingsFlags            = flag.NewFlagSet("get-settings", flag.ExitOnError)
@@ -4823,6 +4889,11 @@ func ParseEndpoint(
 		workloadIdentitiesListPlatformsApikeyTokenFlag      = workloadIdentitiesListPlatformsFlags.String("apikey-token", "", "")
 		workloadIdentitiesListPlatformsProjectSlugInputFlag = workloadIdentitiesListPlatformsFlags.String("project-slug-input", "", "")
 
+		workloadIdentitiesGetCustomFlowsFlags                = flag.NewFlagSet("get-custom-flows", flag.ExitOnError)
+		workloadIdentitiesGetCustomFlowsSessionTokenFlag     = workloadIdentitiesGetCustomFlowsFlags.String("session-token", "", "")
+		workloadIdentitiesGetCustomFlowsApikeyTokenFlag      = workloadIdentitiesGetCustomFlowsFlags.String("apikey-token", "", "")
+		workloadIdentitiesGetCustomFlowsProjectSlugInputFlag = workloadIdentitiesGetCustomFlowsFlags.String("project-slug-input", "", "")
+
 		workloadIdentitiesListTokenEndpointsFlags                = flag.NewFlagSet("list-token-endpoints", flag.ExitOnError)
 		workloadIdentitiesListTokenEndpointsSessionTokenFlag     = workloadIdentitiesListTokenEndpointsFlags.String("session-token", "", "")
 		workloadIdentitiesListTokenEndpointsApikeyTokenFlag      = workloadIdentitiesListTokenEndpointsFlags.String("apikey-token", "", "")
@@ -5607,6 +5678,18 @@ func ParseEndpoint(
 	riskListRiskEvalReviewsFlags.Usage = riskListRiskEvalReviewsUsage
 	riskDeleteRiskEvalReviewFlags.Usage = riskDeleteRiskEvalReviewUsage
 
+	sigintFlags.Usage = sigintUsage
+	sigintCreateSignalFlags.Usage = sigintCreateSignalUsage
+	sigintGetSignalFlags.Usage = sigintGetSignalUsage
+	sigintListSignalsFlags.Usage = sigintListSignalsUsage
+	sigintUpdateSignalFlags.Usage = sigintUpdateSignalUsage
+	sigintDeleteSignalFlags.Usage = sigintDeleteSignalUsage
+	sigintCreateSensorFlags.Usage = sigintCreateSensorUsage
+	sigintGetSensorFlags.Usage = sigintGetSensorUsage
+	sigintListSensorsFlags.Usage = sigintListSensorsUsage
+	sigintUpdateSensorFlags.Usage = sigintUpdateSensorUsage
+	sigintDeleteSensorFlags.Usage = sigintDeleteSensorUsage
+
 	skillEfficacyFlags.Usage = skillEfficacyUsage
 	skillEfficacyGetSettingsFlags.Usage = skillEfficacyGetSettingsUsage
 	skillEfficacyUpsertSettingsFlags.Usage = skillEfficacyUpsertSettingsUsage
@@ -5919,6 +6002,7 @@ func ParseEndpoint(
 	workloadIdentitiesFlags.Usage = workloadIdentitiesUsage
 	workloadIdentitiesListFlags.Usage = workloadIdentitiesListUsage
 	workloadIdentitiesListPlatformsFlags.Usage = workloadIdentitiesListPlatformsUsage
+	workloadIdentitiesGetCustomFlowsFlags.Usage = workloadIdentitiesGetCustomFlowsUsage
 	workloadIdentitiesListTokenEndpointsFlags.Usage = workloadIdentitiesListTokenEndpointsUsage
 	workloadIdentitiesRegisterIssuerFlags.Usage = workloadIdentitiesRegisterIssuerUsage
 	workloadIdentitiesUpdateIssuerFlags.Usage = workloadIdentitiesUpdateIssuerUsage
@@ -6089,6 +6173,8 @@ func ParseEndpoint(
 			svcf = resourcesFlags
 		case "risk":
 			svcf = riskFlags
+		case "sigint":
+			svcf = sigintFlags
 		case "skill-efficacy":
 			svcf = skillEfficacyFlags
 		case "skills":
@@ -8152,6 +8238,40 @@ func ParseEndpoint(
 
 			}
 
+		case "sigint":
+			switch epn {
+			case "create-signal":
+				epf = sigintCreateSignalFlags
+
+			case "get-signal":
+				epf = sigintGetSignalFlags
+
+			case "list-signals":
+				epf = sigintListSignalsFlags
+
+			case "update-signal":
+				epf = sigintUpdateSignalFlags
+
+			case "delete-signal":
+				epf = sigintDeleteSignalFlags
+
+			case "create-sensor":
+				epf = sigintCreateSensorFlags
+
+			case "get-sensor":
+				epf = sigintGetSensorFlags
+
+			case "list-sensors":
+				epf = sigintListSensorsFlags
+
+			case "update-sensor":
+				epf = sigintUpdateSensorFlags
+
+			case "delete-sensor":
+				epf = sigintDeleteSensorFlags
+
+			}
+
 		case "skill-efficacy":
 			switch epn {
 			case "get-settings":
@@ -9044,6 +9164,9 @@ func ParseEndpoint(
 
 			case "list-platforms":
 				epf = workloadIdentitiesListPlatformsFlags
+
+			case "get-custom-flows":
+				epf = workloadIdentitiesGetCustomFlowsFlags
 
 			case "list-token-endpoints":
 				epf = workloadIdentitiesListTokenEndpointsFlags
@@ -11138,6 +11261,40 @@ func ParseEndpoint(
 				endpoint = c.DeleteRiskEvalReview()
 				data, err = riskc.BuildDeleteRiskEvalReviewPayload(*riskDeleteRiskEvalReviewPolicyIDFlag, *riskDeleteRiskEvalReviewChatIDFlag, *riskDeleteRiskEvalReviewApikeyTokenFlag, *riskDeleteRiskEvalReviewSessionTokenFlag, *riskDeleteRiskEvalReviewProjectSlugInputFlag)
 			}
+		case "sigint":
+			c := sigintc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create-signal":
+				endpoint = c.CreateSignal()
+				data, err = sigintc.BuildCreateSignalPayload(*sigintCreateSignalBodyFlag, *sigintCreateSignalSessionTokenFlag, *sigintCreateSignalApikeyTokenFlag, *sigintCreateSignalProjectSlugInputFlag)
+			case "get-signal":
+				endpoint = c.GetSignal()
+				data, err = sigintc.BuildGetSignalPayload(*sigintGetSignalIDFlag, *sigintGetSignalSessionTokenFlag, *sigintGetSignalApikeyTokenFlag, *sigintGetSignalProjectSlugInputFlag)
+			case "list-signals":
+				endpoint = c.ListSignals()
+				data, err = sigintc.BuildListSignalsPayload(*sigintListSignalsCursorFlag, *sigintListSignalsLimitFlag, *sigintListSignalsSessionTokenFlag, *sigintListSignalsApikeyTokenFlag, *sigintListSignalsProjectSlugInputFlag)
+			case "update-signal":
+				endpoint = c.UpdateSignal()
+				data, err = sigintc.BuildUpdateSignalPayload(*sigintUpdateSignalBodyFlag, *sigintUpdateSignalSessionTokenFlag, *sigintUpdateSignalApikeyTokenFlag, *sigintUpdateSignalProjectSlugInputFlag)
+			case "delete-signal":
+				endpoint = c.DeleteSignal()
+				data, err = sigintc.BuildDeleteSignalPayload(*sigintDeleteSignalIDFlag, *sigintDeleteSignalSessionTokenFlag, *sigintDeleteSignalApikeyTokenFlag, *sigintDeleteSignalProjectSlugInputFlag)
+			case "create-sensor":
+				endpoint = c.CreateSensor()
+				data, err = sigintc.BuildCreateSensorPayload(*sigintCreateSensorBodyFlag, *sigintCreateSensorSessionTokenFlag, *sigintCreateSensorApikeyTokenFlag, *sigintCreateSensorProjectSlugInputFlag)
+			case "get-sensor":
+				endpoint = c.GetSensor()
+				data, err = sigintc.BuildGetSensorPayload(*sigintGetSensorIDFlag, *sigintGetSensorSessionTokenFlag, *sigintGetSensorApikeyTokenFlag, *sigintGetSensorProjectSlugInputFlag)
+			case "list-sensors":
+				endpoint = c.ListSensors()
+				data, err = sigintc.BuildListSensorsPayload(*sigintListSensorsCursorFlag, *sigintListSensorsLimitFlag, *sigintListSensorsSessionTokenFlag, *sigintListSensorsApikeyTokenFlag, *sigintListSensorsProjectSlugInputFlag)
+			case "update-sensor":
+				endpoint = c.UpdateSensor()
+				data, err = sigintc.BuildUpdateSensorPayload(*sigintUpdateSensorBodyFlag, *sigintUpdateSensorSessionTokenFlag, *sigintUpdateSensorApikeyTokenFlag, *sigintUpdateSensorProjectSlugInputFlag)
+			case "delete-sensor":
+				endpoint = c.DeleteSensor()
+				data, err = sigintc.BuildDeleteSensorPayload(*sigintDeleteSensorIDFlag, *sigintDeleteSensorSessionTokenFlag, *sigintDeleteSensorApikeyTokenFlag, *sigintDeleteSensorProjectSlugInputFlag)
+			}
 		case "skill-efficacy":
 			c := skillefficacyc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -12034,6 +12191,9 @@ func ParseEndpoint(
 			case "list-platforms":
 				endpoint = c.ListPlatforms()
 				data, err = workloadidentitiesc.BuildListPlatformsPayload(*workloadIdentitiesListPlatformsSessionTokenFlag, *workloadIdentitiesListPlatformsApikeyTokenFlag, *workloadIdentitiesListPlatformsProjectSlugInputFlag)
+			case "get-custom-flows":
+				endpoint = c.GetCustomFlows()
+				data, err = workloadidentitiesc.BuildGetCustomFlowsPayload(*workloadIdentitiesGetCustomFlowsSessionTokenFlag, *workloadIdentitiesGetCustomFlowsApikeyTokenFlag, *workloadIdentitiesGetCustomFlowsProjectSlugInputFlag)
 			case "list-token-endpoints":
 				endpoint = c.ListTokenEndpoints()
 				data, err = workloadidentitiesc.BuildListTokenEndpointsPayload(*workloadIdentitiesListTokenEndpointsSessionTokenFlag, *workloadIdentitiesListTokenEndpointsApikeyTokenFlag, *workloadIdentitiesListTokenEndpointsProjectSlugInputFlag)
@@ -22031,7 +22191,7 @@ func pluginsSetPluginAssignmentsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins set-plugin-assignments --body '{\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"principal_urns\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins set-plugin-assignments --body '{\n      \"install_modes\": {\n         \"abc123\": \"default\"\n      },\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"principal_urns\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func pluginsListAudiencesUsage() {
@@ -22528,7 +22688,7 @@ func remoteMcpUsage() {
 	fmt.Fprintln(os.Stderr, `    get-server: Get a remote MCP server by ID or slug. Exactly one of id or slug must be provided.`)
 	fmt.Fprintln(os.Stderr, `    update-server: Update a remote MCP server`)
 	fmt.Fprintln(os.Stderr, `    discover-protected-resource-metadata: Probe the remote MCP server's origin for an RFC 9728 .well-known/oauth-protected-resource document and return either the parsed metadata or a typed unavailability reason. Runs server-side under guardian.Policy so production resource servers without CORS can still be inspected.`)
-	fmt.Fprintln(os.Stderr, `    get-server-scopes: Report the scope state of the protected resource a remote-backed MCP server's logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization's resource scope discovery flag, and what a login through each bound client would request now. Reads cached state only; never contacts the resource.`)
+	fmt.Fprintln(os.Stderr, `    get-server-scopes: Report the scope state of the protected resource a remote-backed MCP server's logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization's resource scope discovery flag, and what a login through each bound client would request now. Requires read access to the server only. Reads cached state only; never contacts the resource.`)
 	fmt.Fprintln(os.Stderr, `    set-server-scope-pin: Pin the scopes logins to a remote-backed MCP server's protected resource request, or clear the pin with an empty list. The pin belongs to the protected resource, so it applies to every server in the project with the same upstream URL, and the caller needs write access to all of them. Returns the scope state re-read after the write.`)
 	fmt.Fprintln(os.Stderr, `    probe-url: Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting whether MCP is available, authentication is required, the response is invalid, or the server is unreachable.`)
 	fmt.Fprintln(os.Stderr, `    verify-url: Probe a candidate remote MCP server URL and return the legacy boolean verification result.
@@ -22699,7 +22859,7 @@ func remoteMcpGetServerScopesUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Report the scope state of the protected resource a remote-backed MCP server's logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization's resource scope discovery flag, and what a login through each bound client would request now. Reads cached state only; never contacts the resource.`)
+	fmt.Fprintln(os.Stderr, `Report the scope state of the protected resource a remote-backed MCP server's logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization's resource scope discovery flag, and what a login through each bound client would request now. Requires read access to the server only. Reads cached state only; never contacts the resource.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
@@ -23084,7 +23244,7 @@ func organizationRemoteSessionClientsCreateClientUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients create-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients create-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"credential_owner\": \"self\",\n      \"json_web_key_set_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionClientsCreateCimdClientUsage() {
@@ -23358,7 +23518,7 @@ func remoteSessionClientsCreateRemoteSessionClientUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients create-remote-session-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients create-remote-session-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"credential_owner\": \"self\",\n      \"json_web_key_set_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionClientsCreateCimdUsage() {
@@ -26246,6 +26406,269 @@ func riskDeleteRiskEvalReviewUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk delete-risk-eval-review --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --chat-id \"550e8400-e29b-41d4-a716-446655440000\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// sigintUsage displays the usage of the sigint command and its subcommands.
+func sigintUsage() {
+	fmt.Fprintln(os.Stderr, `Manage project-scoped custom signals and sensors. Signals are reusable live definitions; sensors attach an ordered set of signals in multi-label, exclusive, or ordered-score mode.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] sigint COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create-signal: Create a reusable custom signal. Names are trimmed and must contain 1 to 200 characters. Description and classifier criteria are optional authoring metadata; an empty string clears either field.`)
+	fmt.Fprintln(os.Stderr, `    get-signal: Get an active custom signal by ID in the selected project.`)
+	fmt.Fprintln(os.Stderr, `    list-signals: List active custom signals in deterministic ID order. The cursor is the final ID from the previous page.`)
+	fmt.Fprintln(os.Stderr, `    update-signal: Partially update a custom signal. Omitted fields and JSON null leave existing values unchanged. Supplying an empty optional-text value clears it. A supplied name is trimmed and must contain 1 to 200 characters.`)
+	fmt.Fprintln(os.Stderr, `    delete-signal: Soft-delete a custom signal and detach it from every sensor in the selected project. Surviving sensor signal order is compacted; sensors may remain incomplete drafts.`)
+	fmt.Fprintln(os.Stderr, `    create-sensor: Create a sensor. multi_label permits independently applicable labels, exclusive makes attached signals compete and permits at most 255, and ordered_score uses ordered levels and permits at most 10. Empty and one-signal sensors are valid drafts. Omitted signal_ids creates an empty sensor; [] is explicitly empty. Repeated, deleted, missing, or cross-project signal IDs are rejected atomically.`)
+	fmt.Fprintln(os.Stderr, `    get-sensor: Get an active sensor with its ordered signal_ids. The collection is always returned and is [] when no signals are attached.`)
+	fmt.Fprintln(os.Stderr, `    list-sensors: List active sensors in deterministic ID order with each sensor's ordered signal_ids from one consistent database snapshot. The collection is [] for an unattached sensor.`)
+	fmt.Fprintln(os.Stderr, `    update-sensor: Partially update a sensor. Omitted fields and JSON null preserve stored values. Empty optional text clears it. Omitted signal_ids preserves membership, while [] clears it and a non-empty array replaces and reorders it atomically. Mode changes validate the final membership: exclusive permits at most 255 signals and ordered_score at most 10; incomplete drafts remain valid.`)
+	fmt.Fprintln(os.Stderr, `    delete-sensor: Soft-delete a sensor and its memberships. Shared custom signals remain active.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s sigint COMMAND --help\n", os.Args[0])
+}
+func sigintCreateSignalUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] sigint create-signal", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a reusable custom signal. Names are trimmed and must contain 1 to 200 characters. Description and classifier criteria are optional authoring metadata; an empty string clears either field.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "sigint create-signal --body '{\n      \"classifier_criteria\": \"abc123\",\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"slug\": \"aaa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func sigintGetSignalUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] sigint get-signal", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get an active custom signal by ID in the selected project.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "sigint get-signal --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func sigintListSignalsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] sigint list-signals", os.Args[0])
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List active custom signals in deterministic ID order. The cursor is the final ID from the previous page.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "sigint list-signals --cursor \"550e8400-e29b-41d4-a716-446655440000\" --limit 2 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func sigintUpdateSignalUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] sigint update-signal", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Partially update a custom signal. Omitted fields and JSON null leave existing values unchanged. Supplying an empty optional-text value clears it. A supplied name is trimmed and must contain 1 to 200 characters.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "sigint update-signal --body '{\n      \"classifier_criteria\": \"abc123\",\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"slug\": \"aaa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func sigintDeleteSignalUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] sigint delete-signal", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete a custom signal and detach it from every sensor in the selected project. Surviving sensor signal order is compacted; sensors may remain incomplete drafts.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "sigint delete-signal --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func sigintCreateSensorUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] sigint create-sensor", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Create a sensor. multi_label permits independently applicable labels, exclusive makes attached signals compete and permits at most 255, and ordered_score uses ordered levels and permits at most 10. Empty and one-signal sensors are valid drafts. Omitted signal_ids creates an empty sensor; [] is explicitly empty. Repeated, deleted, missing, or cross-project signal IDs are rejected atomically.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "sigint create-sensor --body '{\n      \"description\": \"abc123\",\n      \"enabled\": false,\n      \"instructions\": \"abc123\",\n      \"match_expression\": \"abc123\",\n      \"mode\": \"exclusive\",\n      \"name\": \"abc123\",\n      \"signal_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"slug\": \"aaa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func sigintGetSensorUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] sigint get-sensor", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get an active sensor with its ordered signal_ids. The collection is always returned and is [] when no signals are attached.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "sigint get-sensor --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func sigintListSensorsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] sigint list-sensors", os.Args[0])
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List active sensors in deterministic ID order with each sensor's ordered signal_ids from one consistent database snapshot. The collection is [] for an unattached sensor.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "sigint list-sensors --cursor \"550e8400-e29b-41d4-a716-446655440000\" --limit 2 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func sigintUpdateSensorUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] sigint update-sensor", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Partially update a sensor. Omitted fields and JSON null preserve stored values. Empty optional text clears it. Omitted signal_ids preserves membership, while [] clears it and a non-empty array replaces and reorders it atomically. Mode changes validate the final membership: exclusive permits at most 255 signals and ordered_score at most 10; incomplete drafts remain valid.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "sigint update-sensor --body '{\n      \"description\": \"abc123\",\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"instructions\": \"abc123\",\n      \"match_expression\": \"abc123\",\n      \"mode\": \"exclusive\",\n      \"name\": \"abc123\",\n      \"signal_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"slug\": \"aaa\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func sigintDeleteSensorUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] sigint delete-sensor", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Soft-delete a sensor and its memberships. Shared custom signals remain active.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "sigint delete-sensor --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // skillEfficacyUsage displays the usage of the skill-efficacy command and its
@@ -32746,6 +33169,7 @@ func workloadIdentitiesUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list: Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.`)
 	fmt.Fprintln(os.Stderr, `    list-platforms: List the platforms the catalog offers to trust without looking anything up, each with the guided setup that connects it. The same for every organization. Requires workload:read.`)
+	fmt.Fprintln(os.Stderr, `    get-custom-flows: Get the forms for trusting a platform the catalog does not list and allowing its workloads: registering and editing a trusted platform, and allowing and editing access. The same for every organization. Requires workload:read.`)
 	fmt.Fprintln(os.Stderr, `    list-token-endpoints: List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. Requires workload:read.`)
 	fmt.Fprintln(os.Stderr, `    register-issuer: Trust an external issuer to vouch for workloads. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.`)
 	fmt.Fprintln(os.Stderr, `    update-issuer: Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.`)
@@ -32799,6 +33223,28 @@ func workloadIdentitiesListPlatformsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities list-platforms --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func workloadIdentitiesGetCustomFlowsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] workload-identities get-custom-flows", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the forms for trusting a platform the catalog does not list and allowing its workloads: registering and editing a trusted platform, and allowing and editing access. The same for every organization. Requires workload:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities get-custom-flows --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func workloadIdentitiesListTokenEndpointsUsage() {

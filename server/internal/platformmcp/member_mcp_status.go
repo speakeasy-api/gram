@@ -123,6 +123,14 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 	}
 	output.ConnectionURL = platformBaseURL(ctx, s.serverURL).JoinPath("mcp", target.endpointSlug).String()
 	if target.remoteSessionIssuerID == uuid.Nil {
+		// Direct upstreams select chaining bindings by resource, even without an interactive issuer.
+		chained, err := s.memberMCPChainedStatus(ctx, principal, target, &output)
+		if err != nil {
+			return GetMyMCPConnectionStatusOutput{}, err
+		}
+		if chained {
+			return output, nil
+		}
 		output.State = MCPConnectionStateNotApplicable
 		output.Reason = "authorization_not_required"
 		output.NextAction = "use_mcp"
@@ -168,6 +176,14 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 		output.State = MCPConnectionStateSetupRequired
 		output.Reason = "upstream_authorization_not_configured"
 		output.NextAction = "ask_administrator"
+		return output, nil
+	}
+	if clients[0].CredentialOwner == remotesessions.CredentialOwnerSelf {
+		// The MCP server presents its own upstream credential for every
+		// caller, so the member has nothing to connect.
+		output.State = MCPConnectionStateNotApplicable
+		output.Reason = "upstream_credential_managed"
+		output.NextAction = "use_mcp"
 		return output, nil
 	}
 	clientID := clients[0].ID

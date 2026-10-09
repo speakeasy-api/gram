@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,7 +52,11 @@ func routeIDPCallback(req *http.Request) *http.Request {
 	}
 	route := chi.NewRouteContext()
 	route.URLParams.Add("clientID", clientID)
-	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, route))
+	ctx := req.Context()
+	if req.URL.IsAbs() {
+		ctx = requestorigin.WithContext(ctx, requestorigin.Origin{Surface: requestorigin.SurfacePlatform, BaseURL: req.URL.Scheme + "://" + req.URL.Host})
+	}
+	return req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, route))
 }
 
 func beginPerClientFederation(t *testing.T, advertised bool) (context.Context, *perClientFederation) {
@@ -402,4 +407,23 @@ func TestFederatedLoginRejectsSharedCallbackChallenge(t *testing.T) {
 			requireUnconsumedRejection(t, ctx, p, p.f.ti.service.HandleIDPCallback(httptest.NewRecorder(), p.callback(ctx, path, routeID, query)))
 		})
 	}
+}
+
+// A callback on another first-party host must not consume the challenge even
+// when its path and client ID match. Forwarding headers cannot repair the host.
+func TestFederatedLoginPerClientCallbackRejectsOtherHostThroughMux(t *testing.T) {
+	t.Parallel()
+	ctx, p := beginPerClientFederation(t, false)
+	p.issueCode(t)
+	handler, canonical, extra := newPlatformHostMux(t, p.f.ti)
+	query := url.Values{"state": {p.id}, "code": {"one-use-code"}}
+	headers := http.Header{"Sec-Fetch-Site": {"cross-site"}, "Sec-Fetch-Mode": {"navigate"}, "X-Forwarded-Host": {canonical.host}, "X-Forwarded-Proto": {"https"}}
+	result := serveOnHost(t, handler, http.MethodGet, extra.host, p.callbackPath+"?"+query.Encode(), nil, headers)
+	require.Equal(t, http.StatusUnauthorized, result.Code)
+	_, err := p.f.ti.authnChallengeCache.Get(ctx, "authnChallenge:"+p.id)
+	require.NoError(t, err, "wrong-host callback must leave state usable")
+	require.Zero(t, p.f.provider.exchangeCount())
+	headers.Set("Cookie", p.cookie.Name+"="+p.cookie.Value)
+	result = serveOnHost(t, handler, http.MethodGet, canonical.host, p.callbackPath+"?"+query.Encode(), nil, headers)
+	requireFederatedConsentRedirect(t, result)
 }
