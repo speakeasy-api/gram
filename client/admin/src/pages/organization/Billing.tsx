@@ -313,11 +313,13 @@ function InferenceKeyRepair({
         `${inferenceKey.key_type} repair accepted; upstream reconciliation pending. Refresh diagnostics to verify application.`,
       );
       // A refresh failure is a read failure, never a failed write. Keep the accepted cache result.
-      void qc.invalidateQueries({ queryKey }).catch(() => {
-        announce(
-          "Repair accepted; upstream reconciliation pending. Diagnostics refresh failed; reload to verify.",
-        );
-      });
+      void qc
+        .invalidateQueries({ queryKey }, { throwOnError: true })
+        .catch(() => {
+          announce(
+            "Repair accepted; upstream reconciliation pending. Diagnostics refresh failed; reload to verify.",
+          );
+        });
     },
   });
   const causes = inferenceKey.disable_causes ?? [];
@@ -706,7 +708,8 @@ export function Billing({ org }: { org: AdminOrganization }): JSX.Element {
           organizationID={org.id}
           keys={inferenceKeysResult.data}
           diagnosticsFresh={
-            !inferenceKeysResult.isError && !inferenceKeysResult.isFetching
+            !inferenceKeysResult.isError &&
+            inferenceKeysResult.fetchStatus === "idle"
           }
         />
       )}

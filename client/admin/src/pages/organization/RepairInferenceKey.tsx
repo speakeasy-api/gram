@@ -298,7 +298,7 @@ export function RepairInferenceKey({
                 <p className="font-medium">
                   {pending
                     ? "Removing selected locks…"
-                    : unclassified || remaining.length > 0
+                    : (disabled && unclassified) || remaining.length > 0
                       ? "Still disabled after repair"
                       : "Enabled after repair"}
                 </p>

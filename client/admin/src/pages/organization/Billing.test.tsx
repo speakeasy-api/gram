@@ -1,4 +1,4 @@
-import { QueryClient } from "@tanstack/react-query";
+import { onlineManager, QueryClient } from "@tanstack/react-query";
 import {
   act,
   cleanup,
@@ -518,6 +518,9 @@ it("repairs the canonical key, preserves usage and concurrent locks when the acc
       /Could not load OpenRouter keys: Refresh unavailable/,
     ),
   ).toBeTruthy();
+  expect(
+    await screen.findByText(/Diagnostics refresh failed; reload to verify/),
+  ).toBeTruthy();
   expect(screen.getByText("Billing inactive, Admin lock")).toBeTruthy();
   expect(screen.getByText("$42.75 of $100.00")).toBeTruthy();
   expect(
@@ -564,10 +567,7 @@ it("blocks repair when lifecycle metadata is absent", async () => {
   ).toBe(true);
 });
 
-it("blocks billing removal with no subscription and outdated cause metadata", async () => {
-  mocks.getStripeSubscription.mockRejectedValue(
-    new GramAdminError(404, null, "No subscription"),
-  );
+it("blocks removal with outdated cause metadata", async () => {
   mocks.getInferenceKeys.mockResolvedValue([
     { ...REPAIR_KEY, cause_diagnostics: [REPAIR_KEY.cause_diagnostics[0]] },
   ]);
@@ -583,4 +583,41 @@ it("blocks billing removal with no subscription and outdated cause metadata", as
     ).length,
   ).toBeGreaterThan(0);
   expect(mocks.repairInferenceKey).not.toHaveBeenCalled();
+});
+
+it("blocks cached removable billing locks while diagnostics refetch is paused", async () => {
+  mocks.getInferenceKeys.mockResolvedValue([
+    {
+      ...REPAIR_KEY,
+      cause_diagnostics: REPAIR_KEY.cause_diagnostics.map((cause) => ({
+        ...cause,
+        removable: true,
+      })),
+    },
+  ]);
+  const qc = await renderBilling();
+  await openRepair();
+  const checkbox = screen.getByRole("checkbox", {
+    name: "Billing inactive",
+  }) as HTMLButtonElement;
+  expect(checkbox.disabled).toBe(false);
+  try {
+    onlineManager.setOnline(false);
+    act(() => {
+      void qc.invalidateQueries({
+        queryKey: ["gram-admin-inference-keys", ORG.id],
+      });
+    });
+    await waitFor(() =>
+      expect(
+        qc.getQueryState(["gram-admin-inference-keys", ORG.id])?.fetchStatus,
+      ).toBe("paused"),
+    );
+    await waitFor(() => expect(checkbox.disabled).toBe(true));
+    fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
+    expect(mocks.repairInferenceKey).not.toHaveBeenCalled();
+  } finally {
+    await qc.cancelQueries();
+    onlineManager.setOnline(true);
+  }
 });

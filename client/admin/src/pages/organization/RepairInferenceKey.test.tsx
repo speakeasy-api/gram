@@ -182,7 +182,7 @@ it("blocks duplicate submits and closing while pending, preserves errors for ret
   fireEvent.click(screen.getByRole("checkbox", { name: "Staff lock" }));
   confirm();
   fireEvent.click(submit());
-  fireEvent.click(screen.getByRole("button", { name: "Removing locks…" }));
+  fireEvent.submit(screen.getByRole("dialog").querySelector("form")!);
   fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
   expect(screen.getByRole("dialog")).toBeTruthy();
   expect(
@@ -267,7 +267,7 @@ it("revalidates selections against refreshed metadata without removing newly blo
   expect(screen.getByRole("status").textContent).toContain(
     "Staff lock, Billing inactive",
   );
-  fireEvent.click(submit());
+  fireEvent.submit(submit().closest("form")!);
   expect(onSubmit).not.toHaveBeenCalled();
 });
 
@@ -296,9 +296,19 @@ it("shows the blocked reason without focusing, hovering or touching the tooltip"
 it("bounds the trimmed reason by UTF-8 bytes rather than characters", () => {
   setup();
   fireEvent.click(screen.getByRole("checkbox", { name: "Staff lock" }));
-  confirm(phrase, "é".repeat(1000));
+  confirm(phrase, "  " + "é".repeat(1000) + "  ");
   expect(submit().disabled).toBe(false);
   confirm(phrase, "é".repeat(1001));
   expect(submit().disabled).toBe(true);
   expect(screen.getByText(/Reason exceeds 2000 UTF-8 bytes/)).toBeTruthy();
+});
+
+it("does not describe an enabled legacy key as still disabled", () => {
+  setup({ disabled: false, classified: false, causes: [] });
+  expect(screen.getByRole("status").textContent).toContain(
+    "Enabled after repair",
+  );
+  expect(screen.getByRole("status").textContent).not.toContain(
+    "Still disabled",
+  );
 });
