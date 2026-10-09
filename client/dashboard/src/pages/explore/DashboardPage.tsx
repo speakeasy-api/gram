@@ -28,7 +28,6 @@ import { useCanEditDashboard } from "./useCanEditDashboard";
 import { useCreatorName } from "./useCreatorName";
 import { useDashboardMutations } from "./useDashboardMutations";
 import { pageFieldsFor, usePageFilters } from "./usePageFilters";
-import type { OpenInExplore } from "./WidgetView";
 
 /** What the dashboard page is told about the project around it. */
 interface DashboardPageProps {
@@ -41,13 +40,10 @@ interface DashboardPageProps {
   onRetryWidgets: () => void;
   /** Where the list of dashboards is. */
   backHref: string;
-  backState: unknown;
   /** Open another dashboard: the copy, after duplicating. */
   onOpen: (dashboard: Dashboard) => void;
   /** This dashboard was deleted. */
   onDeleted: () => void;
-  /** Open a card's question in the Explore tab. */
-  onOpenQuery: OpenInExplore;
 }
 
 /**
@@ -61,7 +57,7 @@ export function DashboardPage({
   ...props
 }: DashboardPageProps & { id: string }): JSX.Element {
   const query = useDashboard({ id });
-  const back = <BackLink href={props.backHref} state={props.backState} />;
+  const back = <BackLink href={props.backHref} />;
 
   if (query.isPending) {
     return (
@@ -97,17 +93,10 @@ export function DashboardPage({
   return <DashboardView dashboard={query.data} {...props} />;
 }
 
-function BackLink({
-  href,
-  state,
-}: {
-  href: string;
-  state: unknown;
-}): JSX.Element {
+function BackLink({ href }: { href: string }): JSX.Element {
   return (
     <Link
       to={href}
-      state={state}
       className="text-muted-foreground hover:text-foreground inline-flex w-max items-center gap-1 text-xs no-underline hover:underline"
     >
       <Icon name="arrow-left" className="size-3" aria-hidden />
@@ -123,10 +112,8 @@ function DashboardView({
   widgetsFailed,
   onRetryWidgets,
   backHref,
-  backState,
   onOpen,
   onDeleted,
-  onOpenQuery,
 }: DashboardPageProps & { dashboard: Dashboard }): JSX.Element {
   const creator = useCreatorName();
   const canEdit = useCanEditDashboard();
@@ -230,12 +217,15 @@ function DashboardView({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
-        <BackLink href={backHref} state={backState} />
+        <BackLink href={backHref} />
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 flex-col gap-1">
-            <h2 className="text-heading-lg truncate" title={dashboard.name}>
+            <h1
+              className="text-display-sm truncate font-thin"
+              title={dashboard.name}
+            >
               {dashboard.name}
-            </h2>
+            </h1>
             {dashboard.description ? (
               <p className="text-muted-foreground text-sm">
                 {dashboard.description}
@@ -326,7 +316,6 @@ function DashboardView({
             onRemove={(placementId) =>
               mutations.removeWidget(dashboard.id, placementId)
             }
-            onOpen={onOpenQuery}
           />
         </>
       )}
