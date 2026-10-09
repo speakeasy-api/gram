@@ -1,4 +1,3 @@
-import { serversMatchingFilter } from "@/pages/mcp/x/tabs/settings/sections/sourceDelete";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useEffect, useState } from "react";
@@ -12,6 +11,7 @@ export type SharedTunnelImpactState = {
    * counts.
    */
   isReady: boolean;
+  /** A read is still in flight: neither a fresh list nor a settled failure. */
   isLoading: boolean;
   isError: boolean;
   retry: () => void;
@@ -24,14 +24,15 @@ export function useSharedTunnelImpact(
   tunneledMcpServerId: string,
   { active }: { active: boolean },
 ): SharedTunnelImpactState {
-  const filter = { tunneledMcpServerId };
-  const query = useMcpServers(filter, undefined, {
-    enabled: active && tunneledMcpServerId !== "",
+  const [activatedAt, setActivatedAt] = useState(0);
+  const query = useMcpServers({ tunneledMcpServerId }, undefined, {
+    // Enabled only after the activation refetch below has started, so opening
+    // a control sends one request rather than a mount fetch plus a refetch.
+    enabled: active && activatedAt > 0 && tunneledMcpServerId !== "",
     staleTime: 0,
     // Shown inline with a retry, not thrown to the route's error boundary.
     throwOnError: false,
   });
-  const [activatedAt, setActivatedAt] = useState(0);
   const { refetch } = query;
 
   useEffect(() => {
@@ -50,11 +51,19 @@ export function useSharedTunnelImpact(
     !query.isFetching &&
     query.dataUpdatedAt >= activatedAt;
 
+  // A retry after a failure keeps the query in its error status while it
+  // fetches; that counts as loading, not as a failure.
+  const isError = query.isError && !query.isFetching;
+
   return {
-    servers: serversMatchingFilter(filter, query.data?.mcpServers ?? []),
+    // The list is filtered server-side; filtering again guards against a
+    // stale or unfiltered cache hit listing servers on another tunnel.
+    servers: (query.data?.mcpServers ?? []).filter(
+      (server) => server.tunneledMcpServerId === tunneledMcpServerId,
+    ),
     isReady,
-    isLoading: active && !isReady && !query.isError,
-    isError: query.isError && !query.isFetching,
+    isLoading: active && !isReady && !isError,
+    isError,
     retry: () => void refetch(),
   };
 }

@@ -53,6 +53,7 @@ export function ResourceIdentifierSection({
           tunneledMcpServerId={tunneledMcpServer.id}
           tunnelName={formatTunneledMcpDisplay(tunneledMcpServer)}
           currentMcpServerId={mcpServerId}
+          publicWarning={tunneledMcpServer.allowPublic}
           title={
             value ? "Change resource identifier?" : "Clear resource identifier?"
           }

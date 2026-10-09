@@ -95,12 +95,17 @@ const server = {
 
 // The status dropdown links to the source's public-access section, so these
 // renders need a router as well as the query client.
-function renderInApp(ui: ReactNode): void {
-  render(
+function inApp(ui: ReactNode) {
+  return (
     <MemoryRouter>
       <QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+}
+
+function renderInApp(ui: ReactNode): (next: ReactNode) => void {
+  const view = render(inApp(ui));
+  return (next) => view.rerender(inApp(next));
 }
 
 function renderToggle(mcpServer: McpServer = server): void {
@@ -252,6 +257,27 @@ describe("MCPServerAvailabilityToggle", () => {
       onSuccess: () => void;
     };
     act(() => options.onSuccess());
+    expect(screen.queryByText("Make this MCP server public?")).toBeNull();
+  });
+
+  it("closes the confirmation when the server became public meanwhile", () => {
+    mocks.tunneledSource.mockReturnValue({ data: { allowPublic: true } });
+    const tunneled = {
+      ...server,
+      remoteMcpServerId: undefined,
+      tunneledMcpServerId: "tunneled-source-1",
+    };
+    const rerender = renderInApp(<MCPServerStatusDropdown server={tunneled} />);
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Public/ }));
+
+    rerender(
+      <MCPServerStatusDropdown
+        server={{ ...tunneled, visibility: "public" }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Make public" }));
+
+    expect(mocks.mutate).not.toHaveBeenCalled();
     expect(screen.queryByText("Make this MCP server public?")).toBeNull();
   });
 

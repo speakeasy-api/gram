@@ -24,10 +24,7 @@ import {
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
-import {
-  formatTunneledMcpDisplay,
-  getTunneledMcpServerArgs,
-} from "@/lib/sources";
+import { getTunneledMcpServerArgs } from "@/lib/sources";
 import { SharedTunnelConfirmDialog } from "@/components/mcp/shared-tunnel-impact";
 import { invalidateAllPlugins } from "@gram/client/react-query/plugins";
 import { invalidateAllPublishStatus } from "@gram/client/react-query/publishStatus";
@@ -445,11 +442,6 @@ export function MCPServerStatusDropdown({
           open={confirmPublic}
           onOpenChange={setConfirmPublic}
           tunneledMcpServerId={server.tunneledMcpServerId}
-          tunnelName={
-            tunneledSource
-              ? formatTunneledMcpDisplay(tunneledSource)
-              : "behind this server"
-          }
           currentMcpServerId={server.id}
           title="Make this MCP server public?"
           description="Anyone who can reach its URL can call every tool it exposes, with no login."
@@ -559,7 +551,11 @@ function useMcpServerVisibilityUpdate(server: McpServer): {
     next: McpServerVisibility,
     options?: { onSuccess?: () => void },
   ) => {
-    if (next === server.visibility) return;
+    if (next === server.visibility) {
+      // Already applied, e.g. from another tab while a confirmation was open.
+      options?.onSuccess?.();
+      return;
+    }
     update.mutate(
       {
         request: {
