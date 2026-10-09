@@ -1,6 +1,7 @@
 package otelpub
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"time"
@@ -8,7 +9,8 @@ import (
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/log"
-	sdklog "go.opentelemetry.io/otel/sdk/log"
+	"go.opentelemetry.io/otel/sdk/resource"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // maxValueDepth bounds how deeply nested a log value may be. Real records
@@ -16,10 +18,10 @@ import (
 // recursing without end.
 const maxValueDepth = 32
 
-// inboundFromSDK converts an SDK log record into the inbound record type,
-// with its resource and instrumentation scope, leaving record id, observed
-// time and provenance to the caller.
-func inboundFromSDK(record *sdklog.Record) (*otelv1.InboundLogRecord, error) {
+// inboundFromRecord converts a log record, with its resource, instrumentation
+// scope and the trace context in ctx, leaving record id, observed time and
+// provenance to the caller.
+func inboundFromRecord(ctx context.Context, record *log.Record, res *resource.Resource, scope string) (*otelv1.InboundLogRecord, error) {
 	var body *otelv1.InboundLogRecord_AnyValue
 	if !record.Body().Empty() {
 		converted, err := anyValue(record.Body(), 0)
@@ -45,31 +47,30 @@ func inboundFromSDK(record *sdklog.Record) (*otelv1.InboundLogRecord, error) {
 		return nil, walkErr
 	}
 
+	span := trace.SpanContextFromContext(ctx)
 	severity := severityNumber(record.Severity())
 	severityText := record.SeverityText()
 	timestamp := unixNano(record.Timestamp())
-	flags := uint32(record.TraceFlags())
-	dropped := uint32(min(max(record.DroppedAttributes(), 0), math.MaxUint32))
+	flags := uint32(span.TraceFlags())
 	builder := &otelv1.InboundLogRecord_builder{
-		TimeUnixNano:           &timestamp,
-		SeverityNumber:         &severity,
-		SeverityText:           &severityText,
-		Body:                   body,
-		Attributes:             attributes,
-		DroppedAttributesCount: &dropped,
-		Flags:                  &flags,
+		TimeUnixNano:   &timestamp,
+		SeverityNumber: &severity,
+		SeverityText:   &severityText,
+		Body:           body,
+		Attributes:     attributes,
+		Flags:          &flags,
 	}
 	if name := record.EventName(); name != "" {
 		builder.EventName = &name
 	}
-	if traceID := record.TraceID(); traceID.IsValid() {
+	if traceID := span.TraceID(); traceID.IsValid() {
 		builder.TraceId = traceID[:]
 	}
-	if spanID := record.SpanID(); spanID.IsValid() {
+	if spanID := span.SpanID(); spanID.IsValid() {
 		builder.SpanId = spanID[:]
 	}
 
-	if res := record.Resource(); res != nil {
+	if res != nil {
 		resourceAttributes, err := attributeKeyValues(res.Attributes())
 		if err != nil {
 			return nil, fmt.Errorf("convert resource: %w", err)
@@ -80,25 +81,12 @@ func inboundFromSDK(record *sdklog.Record) (*otelv1.InboundLogRecord, error) {
 		}
 	}
 
-	scope := record.InstrumentationScope()
-	scopeAttributes, err := attributeKeyValues(scope.Attributes.ToSlice())
-	if err != nil {
-		return nil, fmt.Errorf("convert scope: %w", err)
-	}
-	scopeName, scopeVersion := scope.Name, scope.Version
-	builder.Scope = (&otelv1.InboundLogRecord_InstrumentationScope_builder{
-		Name:       &scopeName,
-		Version:    &scopeVersion,
-		Attributes: scopeAttributes,
-	}).Build()
-	if url := scope.SchemaURL; url != "" {
-		builder.ScopeSchemaUrl = &url
-	}
+	builder.Scope = (&otelv1.InboundLogRecord_InstrumentationScope_builder{Name: &scope}).Build()
 
 	return builder.Build(), nil
 }
 
-// severityNumber maps the SDK's severity onto OTLP's, which share one
+// severityNumber maps the log API's severity onto OTLP's, which share one
 // numbering from 1 (trace) to 24 (fatal4); anything outside it is unset.
 func severityNumber(severity log.Severity) otelv1.InboundLogRecord_SeverityNumber {
 	if severity < log.SeverityTrace1 || severity > log.SeverityFatal4 {
@@ -191,8 +179,7 @@ func anyValue(value log.Value, depth int) (*otelv1.InboundLogRecord_AnyValue, er
 	}
 }
 
-// attributeKeyValues converts resource and scope attributes, which the SDK
-// holds as attribute.KeyValue rather than log.KeyValue.
+// attributeKeyValues converts resource attributes, which are attribute.KeyValue rather than log.KeyValue.
 func attributeKeyValues(attrs []attribute.KeyValue) ([]*otelv1.InboundLogRecord_KeyValue, error) {
 	out := make([]*otelv1.InboundLogRecord_KeyValue, 0, len(attrs))
 	for _, kv := range attrs {
