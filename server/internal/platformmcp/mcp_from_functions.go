@@ -297,20 +297,9 @@ func (s *MCPToolExposureService) finishMCPFromFunctions(ctx context.Context, pri
 	// particular still needs it: with emission enabled it means the project
 	// has no marketplace connection yet, and the publish can create that first
 	// repository, exactly as the dashboard's first-server path does.
-	//
-	// A replay re-sends these signals only within the allowance; see
-	// chargeRerun.
-	rerun := chargeRerun(ctx, receipt, charge) == nil
+	rerunErr := chargeRerun(ctx, receipt, charge)
 	if stored.AddedToDefaultPlugin && stored.Publication != string(plugins.ProjectPublicationEnqueued) {
-		if !rerun {
-			output.PublishSignal = "rate_limited"
-		} else if s.publisher == nil {
-			output.PublishSignal = "unavailable"
-		} else if err := plugins.SignalPluginPublishAfterRequest(ctx, s.publisher, plugins.ProjectPublicationRequestOutcome(stored.Publication), project.ID, principal.UserID); err != nil {
-			output.PublishSignal = "request_failed"
-		} else {
-			output.PublishSignal = "best_effort_requested"
-		}
+		output.PublishSignal = s.publishSignal(ctx, principal, project.ID, stored.Publication, rerunErr)
 	}
 	output.PublicationRequested = stored.AddedToDefaultPlugin &&
 		(stored.Publication == string(plugins.ProjectPublicationEnqueued) || output.PublishSignal == "best_effort_requested")
@@ -318,10 +307,7 @@ func (s *MCPToolExposureService) finishMCPFromFunctions(ctx context.Context, pri
 	// a dynamic-mode server refuses tools/list outright until one exists. The
 	// target is the toolset recorded in the receipt, so a replay schedules the
 	// toolset the original wrote.
-	output.IndexSignal = "rate_limited"
-	if rerun {
-		output.IndexSignal = s.scheduleIndex(ctx, project.ID, stored.ToolsetID)
-	}
+	output.IndexSignal = s.indexSignal(ctx, project.ID, stored.ToolsetID, rerunErr)
 
 	mcpID, err := uuid.Parse(stored.MCPID)
 	if err != nil {

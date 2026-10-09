@@ -600,19 +600,12 @@ func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal
 		output.Unchanged = []string{}
 	}
 	applied := stored.Outcome == "applied"
-	// A replay re-sends the signals below only within the allowance; see
-	// chargeRerun.
-	rerun := applied && chargeRerun(ctx, receipt, charge) == nil
+	var rerunErr error
+	if applied {
+		rerunErr = chargeRerun(ctx, receipt, charge)
+	}
 	if applied && stored.Publication != string(plugins.ProjectPublicationEnqueued) {
-		if !rerun {
-			output.PublishSignal = "rate_limited"
-		} else if s.publisher == nil {
-			output.PublishSignal = "unavailable"
-		} else if err := plugins.SignalPluginPublishAfterRequest(ctx, s.publisher, plugins.ProjectPublicationRequestOutcome(stored.Publication), project.ID, principal.UserID); err != nil {
-			output.PublishSignal = "request_failed"
-		} else {
-			output.PublishSignal = "best_effort_requested"
-		}
+		output.PublishSignal = s.publishSignal(ctx, principal, project.ID, stored.Publication, rerunErr)
 	}
 	if memberships, err := s.queries.ListPlatformMCPInventoryPluginMemberships(ctx, platformrepo.ListPlatformMCPInventoryPluginMembershipsParams{
 		OrganizationID: principal.OrganizationID,
@@ -635,10 +628,8 @@ func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal
 	// concurrent repoint lands, which would rebuild one this change never
 	// touched and leave the one it did touch unindexed. Only a real change
 	// needs it — a no-op created no version.
-	if rerun {
-		output.IndexSignal = s.scheduleIndex(ctx, project.ID, stored.ToolsetID)
-	} else if applied {
-		output.IndexSignal = "rate_limited"
+	if applied {
+		output.IndexSignal = s.indexSignal(ctx, project.ID, stored.ToolsetID, rerunErr)
 	}
 	exposure, err := s.Exposure(ctx, principal, project.ID, mcpID)
 	if err != nil {
@@ -653,6 +644,37 @@ func (s *MCPToolExposureService) finish(ctx context.Context, principal Principal
 // scheduleIndex reports what happened rather than swallowing it, because a
 // rebuild that never started leaves a dynamic-mode server unable to list its
 // tools until the sweep, and the caller is the only one who can tell the user.
+// A replay re-sends a committed change's publish and index signals only when
+// chargeRerun admitted it; rerunErr is that charge's result. A charge refused
+// over the allowance reports rate_limited, any other charge failure
+// unavailable, and neither re-sends anything.
+func skippedSignal(rerunErr error) string {
+	if errors.Is(rerunErr, ErrOperationRateLimited) {
+		return "rate_limited"
+	}
+	return "unavailable"
+}
+
+func (s *MCPToolExposureService) publishSignal(ctx context.Context, principal Principal, projectID uuid.UUID, publication string, rerunErr error) string {
+	switch {
+	case rerunErr != nil:
+		return skippedSignal(rerunErr)
+	case s.publisher == nil:
+		return "unavailable"
+	case plugins.SignalPluginPublishAfterRequest(ctx, s.publisher, plugins.ProjectPublicationRequestOutcome(publication), projectID, principal.UserID) != nil:
+		return "request_failed"
+	default:
+		return "best_effort_requested"
+	}
+}
+
+func (s *MCPToolExposureService) indexSignal(ctx context.Context, projectID uuid.UUID, toolsetID string, rerunErr error) string {
+	if rerunErr != nil {
+		return skippedSignal(rerunErr)
+	}
+	return s.scheduleIndex(ctx, projectID, toolsetID)
+}
+
 func (s *MCPToolExposureService) scheduleIndex(ctx context.Context, projectID uuid.UUID, toolsetID string) string {
 	if s.index == nil {
 		return "unavailable"

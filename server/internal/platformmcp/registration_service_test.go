@@ -631,6 +631,10 @@ func allowBudget() OperationBudget {
 	return OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}
 }
 
+func denyBudget() OperationBudget {
+	return OperationBudget{Connection: denyOperationLimiter{}, Organization: denyOperationLimiter{}}
+}
+
 func newRegistrationService(catalog Catalog, gate CatalogRegistrationGateChecker, store RegistrationPersistence) *RegistrationService {
 	budget := allowBudget()
 	return NewRegistrationService(catalog, gate, store).WithOperationBudgets(OperationBudgets{

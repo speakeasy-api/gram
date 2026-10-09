@@ -197,7 +197,7 @@ func TestAccessRoleMutationsCommitReplayAndPreserveOtherGrants(t *testing.T) {
 	// provider reconciliation is charged, so a retry loop cannot send
 	// unbounded provider work.
 	budget := service.budget
-	service.budget = OperationBudget{Connection: denyOperationLimiter{}, Organization: denyOperationLimiter{}}
+	service.budget = denyBudget()
 	spent, err := service.Create(ctx, principal, createInput)
 	require.NoError(t, err, "a replay must not be refused over a spent allowance")
 	require.True(t, spent.Receipt.Replayed)

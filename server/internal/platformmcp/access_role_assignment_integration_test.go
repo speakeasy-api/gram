@@ -129,7 +129,7 @@ func TestAssignMCPAccessRolePreservesRolesAndReplays(t *testing.T) {
 	// Once the allowance is spent the replay still answers, but its provider
 	// reconciliation is not sent again.
 	budget := roles.budget
-	roles.budget = OperationBudget{Connection: denyOperationLimiter{}, Organization: denyOperationLimiter{}}
+	roles.budget = denyBudget()
 	spent, err := service.Assign(ctx, principal, input)
 	require.NoError(t, err, "a replay must not be refused over a spent allowance")
 	require.True(t, spent.Receipt.Replayed)
