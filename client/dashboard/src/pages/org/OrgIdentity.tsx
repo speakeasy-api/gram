@@ -311,7 +311,7 @@ export default function OrgIdentity(): JSX.Element {
     "tab",
     parseAsStringLiteral(IDENTITY_TABS).withDefault("sso"),
   );
-  // The only read of the rollout flag: without it (or org:admin) the tab does not exist.
+  // Without the rollout flag (or org:admin) the tab does not exist.
   const providerFlag = useFeatureFlag(FEATURE_FLAGS.oktaConnections);
   const { hasScope } = useRBAC();
   const showIdentityProviders =

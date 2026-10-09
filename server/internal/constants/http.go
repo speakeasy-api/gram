@@ -10,4 +10,7 @@ const (
 	// setup thread listable and URL-addressable like runtime assistant
 	// threads.
 	HeaderAssistantID = "Gram-Assistant-ID"
+
+	// UserAgent identifies requests Speakeasy originates to third parties.
+	UserAgent = "Speakeasy-Gram/1.0"
 )

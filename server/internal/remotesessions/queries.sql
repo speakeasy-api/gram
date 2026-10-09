@@ -5172,3 +5172,51 @@ WHERE s.subject_urn = @subject_urn AND s.remote_session_client_id = @remote_sess
  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
  AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id));
+
+-- name: ListOrganizationMCPServersForUserSessionIssuer :many
+-- Live MCP servers on one user session issuer in every project of the
+-- organization, for the binding-change impact preview.
+SELECT s.id, s.project_id, s.name, s.slug, s.toolset_id, p.name AS project_name
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id
+WHERE s.user_session_issuer_id = @user_session_issuer_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+  AND s.deleted IS FALSE
+ORDER BY p.name, s.id;
+
+-- name: ListOrganizationClientsForUserSessionIssuer :many
+-- Live clients bound to one user session issuer that some project of the
+-- organization can see: project-owned clients of the organization's projects
+-- and organization-level clients. Each server's derivation then keeps only its
+-- own project's and the organization-level ones, as
+-- ResyncMCPServerRemoteSessionIssuers does. Clients of a deleted provider stay
+-- in the list, as the commit's ListRemoteSessionClientsByProjectIDForUserSessionIssuer
+-- keeps them; provider_deleted drops them from the derivation only.
+SELECT c.id, c.project_id, c.remote_session_issuer_id, i.deleted AS provider_deleted
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS c
+  ON c.id = link.remote_session_client_id
+ AND c.deleted IS FALSE
+JOIN remote_session_issuers AS i
+  ON i.id = c.remote_session_issuer_id
+WHERE link.user_session_issuer_id = @user_session_issuer_id
+  AND ((c.project_id IS NULL AND c.organization_id = @organization_id::text)
+       OR EXISTS (SELECT 1
+                  FROM projects AS p
+                  WHERE p.id = c.project_id
+                    AND p.organization_id = @organization_id::text))
+ORDER BY c.id;
+
+-- name: ListOrganizationGatewaysForUserSessionIssuer :many
+-- Live gateways on one user session issuer in every project of the
+-- organization, for the binding-change impact preview.
+SELECT g.id, g.project_id, g.name, p.name AS project_name
+FROM meta_mcp_servers AS g
+JOIN projects AS p ON p.id = g.project_id
+WHERE g.user_session_issuer_id = @user_session_issuer_id
+  AND g.organization_id = @organization_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+  AND g.deleted IS FALSE
+ORDER BY p.name, g.id;

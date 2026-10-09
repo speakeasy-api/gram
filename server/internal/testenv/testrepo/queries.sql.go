@@ -5484,6 +5484,45 @@ func (q *Queries) SetPreparationFixtureClientSecretExpiry(ctx context.Context, a
 	return err
 }
 
+const setPreparationFixtureConfidentialClient = `-- name: SetPreparationFixtureConfidentialClient :execrows
+WITH issuer AS (
+    UPDATE remote_session_issuers
+    SET token_endpoint_auth_methods_supported = array_append(array_remove(token_endpoint_auth_methods_supported, 'private_key_jwt'), 'private_key_jwt')
+    WHERE remote_session_issuers.id = $5 AND remote_session_issuers.project_id = $4
+    RETURNING remote_session_issuers.id
+)
+UPDATE remote_session_clients
+SET token_endpoint_auth_method = 'private_key_jwt', json_web_key_set_id = $1, client_secret_encrypted = NULL,
+    organization_id = $2
+WHERE remote_session_clients.id = $3
+  AND remote_session_clients.project_id = $4
+  AND remote_session_clients.remote_session_issuer_id IN (SELECT issuer.id FROM issuer)
+`
+
+type SetPreparationFixtureConfidentialClientParams struct {
+	JsonWebKeySetID       uuid.NullUUID
+	OrganizationID        pgtype.Text
+	ID                    uuid.UUID
+	ProjectID             uuid.NullUUID
+	RemoteSessionIssuerID uuid.UUID
+}
+
+// Identity chaining refuses public clients: make a fixture client authenticate
+// with private_key_jwt against a key set, and its issuer accept that method.
+func (q *Queries) SetPreparationFixtureConfidentialClient(ctx context.Context, arg SetPreparationFixtureConfidentialClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setPreparationFixtureConfidentialClient,
+		arg.JsonWebKeySetID,
+		arg.OrganizationID,
+		arg.ID,
+		arg.ProjectID,
+		arg.RemoteSessionIssuerID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setPreparationFixtureDCREndpoint = `-- name: SetPreparationFixtureDCREndpoint :exec
 UPDATE remote_session_issuers SET registration_endpoint = $1, token_endpoint_auth_methods_supported=ARRAY['client_secret_basic'] WHERE id = $2 AND project_id = $3
 `

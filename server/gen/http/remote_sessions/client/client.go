@@ -33,6 +33,10 @@ type Client struct {
 	// requests to the commitServerIdentityConfiguration endpoint.
 	CommitServerIdentityConfigurationDoer goahttp.Doer
 
+	// GetServerIdentityImpact Doer is the HTTP client used to make requests to the
+	// getServerIdentityImpact endpoint.
+	GetServerIdentityImpactDoer goahttp.Doer
+
 	// ListRemoteSessions Doer is the HTTP client used to make requests to the
 	// listRemoteSessions endpoint.
 	ListRemoteSessionsDoer goahttp.Doer
@@ -70,6 +74,7 @@ func NewClient(
 		AttachBindingDoer:                     doer,
 		DetachBindingDoer:                     doer,
 		CommitServerIdentityConfigurationDoer: doer,
+		GetServerIdentityImpactDoer:           doer,
 		ListRemoteSessionsDoer:                doer,
 		CountRemoteSessionsDoer:               doer,
 		RevokeRemoteSessionDoer:               doer,
@@ -173,6 +178,30 @@ func (c *Client) CommitServerIdentityConfiguration() goa.Endpoint {
 		resp, err := c.CommitServerIdentityConfigurationDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("remoteSessions", "commitServerIdentityConfiguration", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetServerIdentityImpact returns an endpoint that makes HTTP requests to the
+// remoteSessions service getServerIdentityImpact server.
+func (c *Client) GetServerIdentityImpact() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetServerIdentityImpactRequest(c.encoder)
+		decodeResponse = DecodeGetServerIdentityImpactResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetServerIdentityImpactRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetServerIdentityImpactDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteSessions", "getServerIdentityImpact", err)
 		}
 		return decodeResponse(resp)
 	}

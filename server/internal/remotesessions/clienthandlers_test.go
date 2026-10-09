@@ -1109,6 +1109,14 @@ func TestDetachUserSessionIssuer(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, redetached.UserSessionIssuerIds)
 	require.Equal(t, 0, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerID))
+
+	// A missing issuer is not an absent binding: it must still return 404.
+	_, err = ti.service.DetachUserSessionIssuer(ctx, &clientsgen.DetachUserSessionIssuerPayload{
+		ID:                  created.ID,
+		UserSessionIssuerID: uuid.NewString(),
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	require.ErrorContains(t, err, "user session issuer not found")
 }
 
 func TestAttachUserSessionIssuer_RejectsDuplicateRemoteIssuerBinding(t *testing.T) {

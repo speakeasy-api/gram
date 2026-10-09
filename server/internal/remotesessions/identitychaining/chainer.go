@@ -177,10 +177,8 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 	startedAt := c.now()
 	token, outcome, grantValidated := c.acquire(attemptCtx, logger, req, sel)
 	if !outcome.Succeeded() {
-		logger.WarnContext(ctx, "identity chaining failed",
-			attr.SlogOutcome(string(outcome.Reason)),
-			attr.SlogReason(string(outcome.Stage)),
-		)
+		logAcquisitionFailure(ctx, logger, outcome)
+		outcome.providerDescription = ""
 		// Requests waiting on this attempt adopt its failure instead of timing out.
 		attemptKey := cacheKey("identityChainingAttempt", req, sel)
 		if err := c.locks.Set(context.WithoutCancel(ctx), attemptKey, attemptResult{Outcome: outcome, FinishedAt: c.now()}, attemptResultTTL); err != nil {
@@ -250,4 +248,13 @@ func cacheKey(prefix string, req Request, sel selection) string {
 		sel.clientID.String(), sel.resource, strings.Join(sel.scopes, " "),
 	}, "\n")))
 	return prefix + ":" + hex.EncodeToString(digest[:])
+}
+
+// logAcquisitionFailure logs a failed attempt with the provider's error text.
+func logAcquisitionFailure(ctx context.Context, logger *slog.Logger, outcome Outcome) {
+	logger.WarnContext(ctx, "identity chaining failed",
+		attr.SlogOutcome(string(outcome.Reason)),
+		attr.SlogReason(string(outcome.Stage)),
+		attr.SlogOAuthErrorDescription(outcome.providerDescription),
+	)
 }
