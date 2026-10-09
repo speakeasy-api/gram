@@ -9,7 +9,7 @@
 //	speakeasy-hooks pi serve [--config=<path>]               # Pi extension NDJSON stdio
 //	speakeasy-hooks login [--force] [--config=<path>]        # interactive sign-in
 //
-// The server URL, project slug, and org id come from the GRAM_HOOKS_* env vars
+// The server URL, project slug, and org id come from the SPEAKEASY_AI_HOOKS_* env vars
 // injected by the generated config, falling back to the production defaults.
 package main
 
@@ -99,7 +99,7 @@ func runInstall(args []string) int {
 		SiteURL:      *siteURL,
 		ProjectSlug:  *project,
 		OrgID:        *org,
-		HooksAPIKey:  os.Getenv("GRAM_HOOKS_ORG_KEY"),
+		HooksAPIKey:  relay.Env("HOOKS_ORG_KEY"),
 		BrowserLogin: *browserLogin,
 		BinaryPath:   binaryPath,
 	}); err != nil {

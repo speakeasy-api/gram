@@ -304,6 +304,9 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	if err != nil {
 		return nil, err
 	}
+	// The private ingress serves no authentication host routes, but must know
+	// the host to derive the shared authorization servers issuers pin there.
+	mcp.RecordAuthenticationHost(authenticationHost, mcpService)
 	r.cleanup = append(r.cleanup, func(ctx context.Context) error {
 		drainCtx, cancel := context.WithTimeout(ctx, probeDrainTimeout)
 		defer cancel()

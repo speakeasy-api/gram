@@ -52,7 +52,7 @@ end-user never sees or manages the token directly.
    (OAuth, session cookie, etc).
 
 2. **Session endpoint** (`/api/chat/session`) — A server-side route that
-   proxies to Speakeasy's session API. This keeps `GRAM_API_KEY` on the server and
+   proxies to Speakeasy's session API. This keeps `SPEAKEASY_AI_API_KEY` on the server and
    never exposes it to the client.
 
 3. **Chat** (`/chat`) — Reads the token from `localStorage` and passes it to
@@ -90,17 +90,17 @@ Copy the `.env` file and fill in your values:
 
 ```bash
 # Client-side (VITE_ prefix — bundled into the browser, so only non-secret values)
-VITE_GRAM_PROJECT_SLUG=your-project-slug
-VITE_GRAM_MCP_URL=https://app.getgram.ai/mcp/your-mcp-slug
+VITE_SPEAKEASY_AI_PROJECT_SLUG=your-project-slug
+VITE_SPEAKEASY_AI_MCP_URL=https://app.getgram.ai/mcp/your-mcp-slug
 
 # Server-side only (never sent to the browser)
-GRAM_API_KEY=your-gram-api-key
+SPEAKEASY_AI_API_KEY=your-gram-api-key
 ```
 
-- `VITE_GRAM_PROJECT_SLUG` — Your Speakeasy project slug (visible in the dashboard
+- `VITE_SPEAKEASY_AI_PROJECT_SLUG` — Your Speakeasy project slug (visible in the dashboard
   URL)
-- `VITE_GRAM_MCP_URL` — The MCP server URL from your Speakeasy dashboard
-- `GRAM_API_KEY` — Your Speakeasy API key (keep this secret — it's only used
+- `VITE_SPEAKEASY_AI_MCP_URL` — The MCP server URL from your Speakeasy dashboard
+- `SPEAKEASY_AI_API_KEY` — Your Speakeasy API key (keep this secret — it's only used
   server-side in `/api/chat/session`)
 
 ### 3. Run the dev server

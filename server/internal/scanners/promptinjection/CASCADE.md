@@ -83,26 +83,25 @@ contracts; no new tool, permission, or seed shape is needed.
 
 ## Evaluation
 
-Run `mise exec -- go run ./server/cmd/risk-pi-report -cascade` from the repository
-root with `OPENROUTER_DEV_KEY` configured. The report uses production orchestration
-and records confirmation calls, confirmation refusals, prefilter misses, total provider cost, latency, precision, and recall. Benchmark
-case latency includes all whole-case attempts and retry waits, from the first
-attempt until the final result; physical-call latency remains separate. The
-`benchmark_first_attempt_unavailable` count records unavailable first benchmark
-attempts even if a later whole-case retry succeeds. `fail_open_events` records
-only final unavailable cases after retries. A benchmark attempt includes the
-harness's confirmer retries. The gate measures recovered model accuracy, not
-production availability within the relay's five-second budget; that budget is not
-enforced or measured by this report. Run without
-`-cascade` for the baseline. JSONL cases can
+`server/cmd/risk-pi-report` scores the cascade this checkout ships, with production
+orchestration and payloads: `mise exec -- go run ./server/cmd/risk-pi-report` from
+the repository root with `OPENROUTER_DEV_KEY` configured. Each case's record holds
+its outcome, the deciding model and its rationale, whether the confirmer refused,
+cost, and latency. Case latency includes every whole-case attempt and retry wait,
+from the first attempt until the final result. The gate measures recovered model
+accuracy, not production availability within the relay's five-second budget; this
+report neither enforces nor measures that budget. The baseline is main's own build,
+which `mise run risk:pi` runs beside this change. JSONL cases can
 provide a `window` with up to five rendered messages and a `target_index`; cases
 without a window evaluate the target with its trajectory. Both Jev and the confirmer
 receive the same bounded trajectory used by the Gemini baseline. Conversation
 windows supplement that trajectory when available; historical and live window
 results must be reported separately.
 
-`-sources cascade_context -check-floors=false` runs four synthetic conversation
-smoke cases. These check transport and composition, not representative accuracy.
+`mise exec -- go run ./server/cmd/risk-pi-report -corpus-dir
+server/internal/scanners/promptinjection/testdata/cascade_smoke` runs four synthetic
+conversation smoke cases. These check transport and composition, not representative
+accuracy, so they live outside the scored corpus.
 Evaluate the complete labeled corpus and real conversation examples to measure
 precision, recall, and provider failures.
 
@@ -113,22 +112,22 @@ calls paid models: a full run costs about $2.30 per side.
 
 It runs the cascade for this change and for main (the merge-base with
 `origin/main`, built from a detached worktree) on the 2,046 cases the evaluation
-report scored: every fixture except `cascade_context`, deepset included. This
+report scored, deepset included. This
 change fails unless no benign case is flagged and at least 80% of all attacks
 are caught (780 of 975). A unit test pins the corpus size and the 169 reviewed fixtures
 tagged `well_known`. Before scoring, a refused or malformed confirmation is
 asked again, up to three calls as the report's harness did, and a case that
 failed open on throttling, a server error or a timeout runs again after 5, 10
-and 20 seconds. A confirmation still refused is a miss. The `floors.json`
-recall floors describe the single-call Gemini judge, so the gate does not check
-them.
+and 20 seconds. A confirmation still refused is a miss.
 
-Each case's result is written to `~/.cache/gram-pi-eval` as it finishes, keyed
-by the code and the case's content. A rerun resumes, runs only new or edited
-fixtures, and redoes cases OpenRouter rejected for lack of credit once the
-balance covers them. `--sources` runs a cheap slice without the gate, `--watch`
-serves a live viewer during the run, and `--view` and `--summary-md` read
-cached results. The viewer shows both runs side by side, case by case.
+Each side runs its own commit's build of the report, which writes each case's
+result to `~/.cache/gram-pi-eval/runs/<code key>` as it finishes. The code key
+hashes the commit's code outside the fixtures, so commits that change only
+fixtures share a run. A rerun resumes, runs only new or edited fixtures, and
+redoes cases a provider rejected for lack of credit once the balance covers them.
+`--watch` serves a live viewer during the run, and `--view` and `--summary-md`
+read cached results. The viewer lists every cached run and compares any two, by
+default main and this change, case by case.
 
 ## Research and rollout evidence
 

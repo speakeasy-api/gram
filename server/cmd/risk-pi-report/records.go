@@ -15,7 +15,10 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
+
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -24,25 +27,24 @@ import (
 	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	typesafe "github.com/speakeasy-api/gram/server/internal/thirdparty/typesafedecisions"
-	tracenoop "go.opentelemetry.io/otel/trace/noop"
 )
 
 // caseStatus is a case's outcome in a run record.
 type caseStatus string
 
 const (
-	// statusFlagged means the cascade reported prompt injection.
+	// statusFlagged means the detector reported prompt injection.
 	statusFlagged caseStatus = "flagged"
 
-	// statusClear means the cascade reached a verdict of no prompt injection.
+	// statusClear means the detector reached a verdict of no prompt injection.
 	statusClear caseStatus = "clear"
 
-	// statusNoVerdict means the cascade reached no verdict: both models
-	// refused, the verdict was malformed, the evidence was too large, or a
-	// provider failed. It scores as a miss for an attack.
+	// statusNoVerdict means the detector reached no verdict: a model refused,
+	// the verdict was malformed, the evidence was too large, or a provider
+	// failed. It scores as a miss for an attack.
 	statusNoVerdict caseStatus = "no_verdict"
 
-	// statusOutOfCredit means OpenRouter rejected a call for lack of credit.
+	// statusOutOfCredit means a provider rejected a call for lack of credit.
 	// The next run redoes the case once the balance covers it.
 	statusOutOfCredit caseStatus = "out_of_credit"
 )
@@ -52,6 +54,9 @@ const (
 	// its metadata.
 	casesFile    = "cases.jsonl"
 	manifestFile = "run.json"
+
+	// lockFile is held while a run writes the directory.
+	lockFile = "run.lock"
 
 	// caseHashHexLen is the length of a case's content hash. 64 bits tells
 	// apart the edits of a corpus of a few thousand cases.
@@ -79,27 +84,29 @@ const (
 )
 
 // caseRecord is one case's result in a run, written to cases.jsonl as soon as
-// the case finishes.
+// the case finishes. Other versions of this tool read the same format, so a
+// field's meaning must not change.
 type caseRecord struct {
 	// Key is the case's source and id, "<source>::<id>".
 	Key string `json:"key"`
 
-	// Hash identifies the case content. Editing a fixture changes it, so the
-	// edited case runs again.
+	// Hash identifies the case's fixture line. Editing a fixture changes it,
+	// so the edited case runs again.
 	Hash string `json:"hash"`
 
 	// Status is the case outcome.
 	Status caseStatus `json:"status"`
 
-	// Model is the model whose verdict decided the case: Jev when it cleared
-	// the case, otherwise the confirmer.
+	// Model is the model whose verdict decided the case: for the cascade, Jev
+	// when it cleared the case, otherwise the confirmer.
 	Model string `json:"model,omitempty"`
 
 	// Detail is the deciding model's rationale, or why no verdict was reached.
 	Detail string `json:"detail,omitempty"`
 
-	// Refused reports that the confirmation model refused the case, which
-	// leaves it without a verdict.
+	// Refused reports that the deciding model refused the case. A detector
+	// without a refusal signal, such as a single judge whose refusal fails to
+	// parse, never sets it and records the case as no_verdict.
 	Refused bool `json:"refused,omitempty"`
 
 	// CostUSD is the provider-reported cost of the case's calls.
@@ -109,39 +116,38 @@ type caseRecord struct {
 	LatencyMS float64 `json:"latency_ms"`
 }
 
-// runManifest describes a run directory: which code produced it and with
-// which models and prompts.
+// runManifest describes a run directory: the detector behind its verdicts and
+// the commits whose code it measured.
 type runManifest struct {
-	// EvaluatorSHA256 binds records to the compiled evaluator and its runtime settings.
-	EvaluatorSHA256 string `json:"evaluator_sha256"`
+	// Detector identifies the detector behind the run's verdicts.
+	Detector runDetector `json:"detector"`
 
-	// Label names the side of a comparison, "main" or "this change".
-	Label string `json:"label"`
+	// Commits lists the commits whose code produced the run, in the order a
+	// run first measured each. Commits that differ only in fixtures share a
+	// run.
+	Commits []runCommit `json:"commits"`
 
-	// Ref names the code, such as "fix/branch @ 1a2b3c4d5e + uncommitted".
-	Ref string `json:"ref"`
+	// Updated is when a run last wrote the manifest.
+	Updated time.Time `json:"updated"`
+}
 
-	// PrefilterModel and PrefilterThreshold describe the Jev stage.
+// runDetector identifies a detector by its models and prompts.
+type runDetector struct {
+	// PrefilterModel names a prefilter stage's model; the single judge has
+	// none.
 	PrefilterModel string `json:"prefilter_model"`
 
-	// PrefilterThreshold is the Jev probability that escalates a case.
+	// PrefilterThreshold is the prefilter probability that escalates a case.
 	PrefilterThreshold float64 `json:"prefilter_threshold"`
 
-	// ConfirmationModel confirms Jev's candidates.
+	// ConfirmationModel is the model that decides each case.
 	ConfirmationModel string `json:"confirmation_model"`
 
-	// RefusalFallbackModel preserves historical run metadata for display only.
-	// Current runs do not use a refusal fallback.
-	RefusalFallbackModel string `json:"refusal_fallback_model,omitempty"`
-
-	// ConfirmationPromptSHA256 hashes the confirmer prompt.
+	// ConfirmationPromptSHA256 hashes the deciding model's system prompt.
 	ConfirmationPromptSHA256 string `json:"confirmation_prompt_sha256"`
 
-	// PrefilterQuestionsSHA256 hashes Jev's questions.
+	// PrefilterQuestionsSHA256 hashes a prefilter's questions; empty without one.
 	PrefilterQuestionsSHA256 string `json:"prefilter_questions_sha256"`
-
-	// Updated is when the run last wrote a record.
-	Updated time.Time `json:"updated"`
 }
 
 // sideTotals summarizes a run over a corpus. Pending cases have no record for
@@ -168,13 +174,13 @@ type sideTotals struct {
 	// WellKnownCaught counts well-known attacks flagged.
 	WellKnownCaught int `json:"well_known_caught"`
 
-	// Refused counts cases the confirmation model refused.
+	// Refused counts cases the deciding model refused.
 	Refused int `json:"refused"`
 
 	// NoVerdict counts cases with no verdict.
 	NoVerdict int `json:"no_verdict"`
 
-	// OutOfCredit counts cases OpenRouter rejected for lack of credit.
+	// OutOfCredit counts cases a provider rejected for lack of credit.
 	OutOfCredit int `json:"out_of_credit"`
 
 	// Pending counts cases with no record yet.
@@ -195,11 +201,12 @@ func caseKey(c labeledCase) string {
 	return c.Source + "::" + c.ID
 }
 
-// caseHash fingerprints a case's content, so an edited fixture runs again.
+// caseHash fingerprints a case's fixture line, so every version of this tool
+// gives the same case the same hash and an edited fixture runs again. A case
+// built in code, without a fixture line, hashes its fields.
 func caseHash(c labeledCase) string {
 	raw := []byte(c.raw)
 	if c.raw == "" {
-		// A case built in code has no fixture line, so hash its fields.
 		marshalled, err := json.Marshal(c)
 		if err != nil {
 			marshalled = []byte(caseKey(c))
@@ -210,13 +217,10 @@ func caseHash(c labeledCase) string {
 	return fmt.Sprintf("%x", sum)[:caseHashHexLen]
 }
 
-// isOutOfCredit reports whether a call failed because the OpenRouter balance
+// isOutOfCredit reports whether a call failed because a provider balance
 // cannot fund it.
 func isOutOfCredit(err error) bool {
 	if openrouter.IsInsufficientCredits(err) {
-		return true
-	}
-	if status, ok := errors.AsType[*openrouter.HTTPError](err); ok && status.StatusCode == http.StatusPaymentRequired {
 		return true
 	}
 	status, ok := errors.AsType[*typesafe.StatusError](err)
@@ -230,6 +234,12 @@ type caseOutcome struct {
 	err         error
 	observation decisionObservation
 	refused     bool
+}
+
+// options is one run: where its records go and the commit it measures.
+type options struct {
+	runDir string
+	commit runCommit
 }
 
 // recordFromOutcome turns a finished case into its run record.
@@ -256,7 +266,7 @@ func recordFromOutcome(c labeledCase, o caseOutcome) caseRecord {
 	switch {
 	case outOfCredit:
 		rec.Status = statusOutOfCredit
-		rec.Detail = "OpenRouter returned 402: out of credit"
+		rec.Detail = "provider returned 402: out of credit"
 	case o.err != nil || o.verdict.Label == promptinjection.LabelUnavailable:
 		rec.Status = statusNoVerdict
 		rec.Detail = noVerdictDetail(o.refused, lastErr, o.err)
@@ -289,11 +299,11 @@ func truncateRunes(s string, n int) string {
 }
 
 // loadRecords reads a run's records by case key; a later line replaces an
-// earlier one. A missing file is an empty run. A malformed line, such as a
+// earlier one. A missing file is an empty run, and a malformed line, such as a
 // write cut short by a crash, is skipped.
 func loadRecords(path string) (map[string]caseRecord, error) {
 	out := map[string]caseRecord{}
-	f, err := os.Open(path) // #nosec G304 -- the run directory is a developer-chosen CLI path.
+	f, err := os.Open(path) // #nosec G304 -- the run directory is under the user's cache.
 	if errors.Is(err, os.ErrNotExist) {
 		return out, nil
 	}
@@ -314,6 +324,21 @@ func loadRecords(path string) (map[string]caseRecord, error) {
 		return nil, fmt.Errorf("read run records: %w", err)
 	}
 	return out, nil
+}
+
+// checkUniqueKeys fails when two cases share a key. A run keeps one record per
+// key, so such cases would overwrite each other's record and never all finish.
+// A fixture file that repeats an id holds such cases.
+func checkUniqueKeys(corpus []labeledCase) error {
+	seen := make(map[string]struct{}, len(corpus))
+	for _, c := range corpus {
+		key := caseKey(c)
+		if _, dup := seen[key]; dup {
+			return fmt.Errorf("two cases share the key %q; run records need a unique source and id per case", key)
+		}
+		seen[key] = struct{}{}
+	}
+	return nil
 }
 
 // currentRecord returns the case's record when it matches the case's current
@@ -347,24 +372,16 @@ func computeTotals(corpus []labeledCase, records map[string]caseRecord) sideTota
 	for _, c := range corpus {
 		t.Cases++
 		malicious := c.Label == "malicious"
-		if malicious {
-			t.Attacks++
-		}
-		if malicious && c.WellKnown != "" {
-			t.WellKnown++
-		}
-		if !malicious {
-			t.Benign++
-		}
+		t.Attacks += boolInt(malicious)
+		t.WellKnown += boolInt(malicious && c.WellKnown != "")
+		t.Benign += boolInt(!malicious)
 		rec, ok := currentRecord(records, c)
 		if !ok {
 			t.Pending++
 			continue
 		}
 		t.CostUSD += rec.CostUSD
-		if rec.Refused {
-			t.Refused++
-		}
+		t.Refused += boolInt(rec.Refused)
 		switch rec.Status {
 		case statusOutOfCredit:
 			t.OutOfCredit++
@@ -402,32 +419,11 @@ func percentile(values []float64, p float64) float64 {
 	return sorted[max(rank, 0)]
 }
 
-// gateTallyFromRecords scores the merge gate from a run's records.
-func gateTallyFromRecords(corpus []labeledCase, records map[string]caseRecord) gateTally {
-	var tally gateTally
-	for _, c := range corpus {
-		rec, _ := currentRecord(records, c)
-		flagged := rec.Status == statusFlagged
-		if c.Label == "benign" && flagged {
-			tally.FalsePositives++
-			tally.FalsePositiveKeys = append(tally.FalsePositiveKeys, caseKey(c))
-		}
-		if c.Label != "malicious" {
-			continue
-		}
-		tally.Attacks++
-		if flagged {
-			tally.AttacksCaught++
-		}
-	}
-	return tally
-}
-
 // formatTotals renders a run's totals as one progress or summary line.
-func formatTotals(label string, t sideTotals) string {
+func formatTotals(name string, t sideTotals) string {
 	done := t.Cases - t.Pending - t.OutOfCredit
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s: %d/%d cases · FP %d · caught %d/%d", label, done, t.Cases, t.FalsePositives, t.Caught, t.Attacks)
+	fmt.Fprintf(&b, "%s: %d/%d cases · FP %d · caught %d/%d", name, done, t.Cases, t.FalsePositives, t.Caught, t.Attacks)
 	if t.WellKnown > 0 {
 		fmt.Fprintf(&b, " · well-known %d/%d", t.WellKnownCaught, t.WellKnown)
 	}
@@ -435,69 +431,31 @@ func formatTotals(label string, t sideTotals) string {
 	return b.String()
 }
 
-// runRecorder appends records to a run directory and prints progress.
-type runRecorder struct {
-	mu      sync.Mutex
-	file    *os.File
-	corpus  []labeledCase
-	records map[string]caseRecord
-	label   string
-	done    int
-}
-
-func (r *runRecorder) add(rec caseRecord) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	line, err := json.Marshal(rec)
-	if err != nil {
-		return fmt.Errorf("marshal run record: %w", err)
-	}
-	// Separate an interrupted final line before appending this run's first record.
-	// Empty lines are ignored by the loader.
-	if r.done == 0 {
-		line = append([]byte{'\n'}, line...)
-	}
-	if _, err := r.file.Write(append(line, '\n')); err != nil {
-		return fmt.Errorf("append run record: %w", err)
-	}
-	r.records[rec.Key] = rec
-	r.done++
-	if r.done%progressEvery == 0 {
-		fmt.Fprintln(os.Stderr, formatTotals(r.label, computeTotals(r.corpus, r.records)))
-	}
-	return nil
-}
-
-// runRecords evaluates the cascade on the cases a run directory lacks, writing
-// each record as it finishes, then summarizes the whole run and applies the
-// merge gate when one is set. An out-of-credit run stops at once and keeps its
-// records, so the next run continues where it stopped.
+// runRecords evaluates the production detector on the cases a run directory
+// lacks, writing each record as it finishes. A run that runs out of credit
+// stops at once and keeps its records, so the next run continues from there.
 func runRecords(ctx context.Context, opts options, corpus []labeledCase) error {
+	if err := checkUniqueKeys(corpus); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(opts.runDir, 0o750); err != nil {
 		return fmt.Errorf("create run dir: %w", err)
+	}
+	unlock, err := lockRunDir(opts.runDir)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if err := claimRunDir(opts.runDir, opts.commit, time.Now()); err != nil {
+		return err
 	}
 	casesPath := filepath.Join(opts.runDir, casesFile)
 	records, err := loadRecords(casesPath)
 	if err != nil {
 		return err
 	}
-	manifest, err := currentManifest(opts)
-	if err != nil {
-		return err
-	}
-	previous, err := loadManifest(opts.runDir)
-	if err != nil {
-		return err
-	}
-	if len(records) > 0 && (previous.EvaluatorSHA256 == "" || previous.EvaluatorSHA256 != manifest.EvaluatorSHA256) {
-		return fmt.Errorf("run directory contains records from an incompatible evaluator; choose a new --run-dir")
-	}
-	// Publish the identity before any case is appended, including interrupted runs.
-	if err := writeManifest(opts.runDir, manifest); err != nil {
-		return err
-	}
 	todo := casesToRun(corpus, records)
-	fmt.Fprintf(os.Stderr, "%s: %d cases, %d reused, %d to run (%s)\n", opts.label, len(corpus), len(corpus)-len(todo), len(todo), opts.ref)
+	fmt.Fprintf(os.Stderr, "%s: %d cases, %d reused, %d to run (%s)\n", opts.commit.name(), len(corpus), len(corpus)-len(todo), len(todo), opts.runDir)
 	stopped := false
 	if len(todo) > 0 {
 		key := firstEnv("OPENROUTER_DEV_KEY", "OPENROUTER_API_KEY")
@@ -513,55 +471,40 @@ func runRecords(ctx context.Context, opts options, corpus []labeledCase) error {
 			return err
 		}
 	}
-	manifest.Updated = time.Now().UTC()
-	if err := writeManifest(opts.runDir, manifest); err != nil {
-		return err
-	}
-	return finishRun(opts, corpus, records, stopped)
-}
-
-// finishRun prints the run's totals and applies the merge gate when one is
-// set. A run that ran out of credit, or still has cases without a result,
-// cannot pass the gate.
-func finishRun(opts options, corpus []labeledCase, records map[string]caseRecord, stopped bool) error {
 	totals := computeTotals(corpus, records)
-	fmt.Fprintln(os.Stderr, formatTotals(opts.label, totals))
+	fmt.Fprintln(os.Stderr, formatTotals(opts.commit.name(), totals))
 	if stopped || totals.OutOfCredit > 0 {
-		return fmt.Errorf("%s: out of OpenRouter credit with %d cases left; add account credit at https://openrouter.ai/settings/credits or raise the key spending limit as appropriate, then rerun to continue", opts.label, totals.Pending+totals.OutOfCredit)
+		return fmt.Errorf("%s: out of credit with %d cases left; add account credit at https://openrouter.ai/settings/credits or raise the key spending limit as appropriate, then rerun to continue", opts.commit.name(), totals.Pending+totals.OutOfCredit)
 	}
-	if opts.maxFalsePositives == gateDisabledFalsePositives && opts.minRecall == 0 {
-		return nil
-	}
-	if totals.Pending > 0 {
-		return fmt.Errorf("%s: %d cases have no result; rerun to finish before the merge gate", opts.label, totals.Pending)
-	}
-	gate, gateErr := evaluateGate(opts.maxFalsePositives, opts.minRecall, []gateTally{gateTallyFromRecords(corpus, records)})
-	printGate(os.Stderr, gate)
-	return gateErr
+	return nil
 }
 
-// evaluateIntoRun runs the cascade on todo, appending each finished case to
+// evaluateIntoRun runs the detector on todo, appending each finished case to
 // the run. It reports whether the run stopped for lack of credit.
 func evaluateIntoRun(ctx context.Context, opts options, key string, corpus, todo []labeledCase, records map[string]caseRecord, casesPath string) (bool, error) {
-	file, err := os.OpenFile(casesPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) // #nosec G304 -- the run directory is a developer-chosen CLI path.
+	file, err := openRecordsForAppend(casesPath)
 	if err != nil {
-		return false, fmt.Errorf("open run records for append: %w", err)
+		return false, err
 	}
 	defer o11y.NoLogDefer(file.Close)
-	recorder := &runRecorder{mu: sync.Mutex{}, file: file, corpus: corpus, records: records, label: opts.label, done: 0}
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var (
-		stopMu  sync.Mutex
+		mu      sync.Mutex
 		stopped bool
+		done    int
 		addErr  error
 	)
 	onCase := func(i int, o caseOutcome) {
 		rec := recordFromOutcome(todo[i], o)
-		stopMu.Lock()
-		defer stopMu.Unlock()
-		// After a stop, calls cut short by the cancellation leave the case
-		// for the next run rather than recording a failure it did not have.
+		mu.Lock()
+		defer mu.Unlock()
+		// After a failed write, no later record can be kept either.
+		if addErr != nil {
+			return
+		}
+		// After a stop, calls cut short by the cancellation leave the case for
+		// the next run rather than recording a failure it did not have.
 		if runCtx.Err() != nil && rec.Status == statusNoVerdict {
 			return
 		}
@@ -569,96 +512,159 @@ func evaluateIntoRun(ctx context.Context, opts options, key string, corpus, todo
 			stopped = true
 			cancel()
 		}
-		addErr = errors.Join(addErr, recorder.add(rec))
-	}
-	if _, _, err := scanCascade(runCtx, opts, key, todo, onCase); err != nil {
-		if !stopped || ctx.Err() != nil || !errors.Is(err, context.Canceled) {
-			return stopped, errors.Join(addErr, err)
+		if err := appendRecord(file, rec); err != nil {
+			// Stop paying for cases whose records cannot be kept.
+			addErr = err
+			cancel()
+			return
+		}
+		records[rec.Key] = rec
+		done++
+		if done%progressEvery == 0 {
+			fmt.Fprintln(os.Stderr, formatTotals(opts.commit.name(), computeTotals(corpus, records)))
 		}
 	}
-	return stopped, addErr
+	err = scanCascade(runCtx, key, todo, onCase)
+	if addErr != nil {
+		return stopped, addErr
+	}
+	// A run this tool cancelled for lack of credit stops cleanly; any other
+	// cancellation or failure is an error.
+	if err != nil && (!stopped || ctx.Err() != nil || !errors.Is(err, context.Canceled)) {
+		return stopped, err
+	}
+	return stopped, nil
 }
 
-// currentManifest identifies the actual executable, not a user-supplied ref.
-// Rebuilding with changed evaluator code, dependencies, or prompts invalidates
-// reuse, including uncommitted edits. Conservative rebuild invalidation is safe.
-func currentManifest(opts options) (runManifest, error) {
-	var manifest runManifest
-	executable, err := os.Executable()
+// openRecordsForAppend opens a run's records for appending. A crash can cut
+// the last record short, so a last line without a newline is ended first;
+// otherwise the next record would merge into it and both would be skipped.
+func openRecordsForAppend(path string) (*os.File, error) {
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o600) // #nosec G304 -- the run directory is under the user's cache.
 	if err != nil {
-		return manifest, fmt.Errorf("locate evaluator executable: %w", err)
+		return nil, fmt.Errorf("open run records for append: %w", err)
 	}
-	file, err := os.Open(executable) // #nosec G304 -- os.Executable identifies this running binary.
-	if err != nil {
-		return manifest, fmt.Errorf("open evaluator executable: %w", err)
+	if err := endPartialLine(file); err != nil {
+		return nil, errors.Join(err, file.Close())
 	}
-	defer o11y.NoLogDefer(file.Close)
-	code := sha256.New()
-	if _, err := io.Copy(code, file); err != nil {
-		return manifest, fmt.Errorf("hash evaluator executable: %w", err)
-	}
+	return file, nil
+}
 
+// endPartialLine writes a newline when the file is non-empty and its last
+// byte is not one.
+func endPartialLine(file *os.File) error {
+	info, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("stat run records: %w", err)
+	}
+	if info.Size() == 0 {
+		return nil
+	}
+	last := make([]byte, 1)
+	if _, err := file.ReadAt(last, info.Size()-1); err != nil {
+		return fmt.Errorf("read run records tail: %w", err)
+	}
+	if last[0] == '\n' {
+		return nil
+	}
+	if _, err := file.Write([]byte{'\n'}); err != nil {
+		return fmt.Errorf("end partial run record: %w", err)
+	}
+	return nil
+}
+
+// appendRecord writes rec to the run's records as one line, in one write.
+func appendRecord(w io.Writer, rec caseRecord) error {
+	if err := json.NewEncoder(w).Encode(rec); err != nil {
+		return fmt.Errorf("append run record: %w", err)
+	}
+	return nil
+}
+
+// lockRunDir holds dir for one run until the returned func releases it.
+// Commits that share code share a run directory, so two runs at once, such as
+// main and a fixture-only change, would judge the same cases twice. The second
+// run waits, then reuses the first run's records.
+func lockRunDir(dir string) (func(), error) {
+	file, err := os.OpenFile(filepath.Join(dir, lockFile), os.O_CREATE|os.O_RDWR, 0o600) // #nosec G304 -- the run directory is under the user's cache.
+	if err != nil {
+		return nil, fmt.Errorf("open run lock: %w", err)
+	}
+	fd := int(file.Fd()) // #nosec G115 -- a file descriptor fits in an int.
+	err = syscall.Flock(fd, syscall.LOCK_EX|syscall.LOCK_NB)
+	if errors.Is(err, syscall.EWOULDBLOCK) {
+		fmt.Fprintf(os.Stderr, "waiting for another run to finish with %s\n", dir)
+		err = syscall.Flock(fd, syscall.LOCK_EX)
+	}
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("lock run dir: %w", err), file.Close())
+	}
+	return func() { o11y.NoLogDefer(file.Close) }, nil
+}
+
+// currentDetector identifies the detector this build ships: the Jev to
+// confirmer cascade, with its prompts hashed as the evaluation harness
+// registers prompt versions.
+func currentDetector() (runDetector, error) {
 	confirmationHash, questionsHash, err := registryPromptHashes()
 	if err != nil {
-		return manifest, err
+		return runDetector{}, err
 	}
-	manifest = runManifest{
-		EvaluatorSHA256:          "",
-		Label:                    opts.label,
-		Ref:                      opts.ref,
+	return runDetector{
 		PrefilterModel:           typesafe.Model,
 		PrefilterThreshold:       piopenrouter.PrefilterThreshold,
 		ConfirmationModel:        piopenrouter.ConfirmationModel,
-		RefusalFallbackModel:     "",
 		ConfirmationPromptSHA256: confirmationHash,
 		PrefilterQuestionsSHA256: questionsHash,
-		Updated:                  time.Now().UTC(),
-	}
-	manifest.EvaluatorSHA256, err = evaluatorFingerprint(manifest, fmt.Sprintf("%x", code.Sum(nil)), opts)
-	return manifest, err
+	}, nil
 }
 
-// evaluatorFingerprint excludes display metadata and gate settings, which do
-// not change a case verdict. Case content is fingerprinted separately.
-func evaluatorFingerprint(manifest runManifest, code string, opts options) (string, error) {
-	manifest.EvaluatorSHA256, manifest.Label, manifest.Ref = "", "", ""
-	manifest.Updated = time.Time{}
-	configuration, err := json.Marshal(struct {
-		Code        string      `json:"code"`
-		Manifest    runManifest `json:"manifest"`
-		Reasoning   string      `json:"reasoning"`
-		Concurrency int         `json:"concurrency"`
-	}{Code: code, Manifest: manifest, Reasoning: opts.reasoning, Concurrency: opts.judgeConcurrency})
+// claimRunDir records commit in the run's manifest before any case runs, so a
+// crashed run still names its code. It refuses a directory that holds another
+// detector's results, which happens when the binary was not built from the
+// checkout it measures.
+func claimRunDir(dir string, commit runCommit, now time.Time) error {
+	detector, err := currentDetector()
 	if err != nil {
-		return "", fmt.Errorf("marshal evaluator configuration: %w", err)
+		return err
 	}
-	return fmt.Sprintf("%x", sha256.Sum256(configuration)), nil
-}
-
-// writeManifest records which code and models produced the run.
-func writeManifest(dir string, manifest runManifest) error {
+	path := filepath.Join(dir, manifestFile)
+	manifest, err := readManifest(path)
+	if errors.Is(err, os.ErrNotExist) {
+		manifest = runManifest{Detector: detector, Commits: nil, Updated: time.Time{}}
+		err = nil
+	}
+	if err != nil {
+		return err
+	}
+	if manifest.Detector != detector {
+		return fmt.Errorf("run dir %s holds another detector's results (model %s, prompt sha256 %.12s); run this tool from the checkout it was built from",
+			dir, manifest.Detector.ConfirmationModel, manifest.Detector.ConfirmationPromptSHA256)
+	}
+	if !slices.Contains(manifest.Commits, commit) {
+		manifest.Commits = append(manifest.Commits, commit)
+	}
+	manifest.Updated = now.UTC()
 	body, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal run manifest: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, manifestFile), body, 0o600); err != nil {
+	if err := os.WriteFile(path, body, 0o600); err != nil {
 		return fmt.Errorf("write run manifest: %w", err)
 	}
 	return nil
 }
 
-// loadManifest reads a run's manifest; a missing one is empty.
-func loadManifest(dir string) (runManifest, error) {
+// readManifest reads a run directory's manifest. A missing file returns an
+// error that matches os.ErrNotExist.
+func readManifest(path string) (runManifest, error) {
 	var manifest runManifest
-	raw, err := os.ReadFile(filepath.Join(dir, manifestFile)) // #nosec G304 -- the run directory is a developer-chosen CLI path.
-	if errors.Is(err, os.ErrNotExist) {
-		return manifest, nil
-	}
+	raw, err := os.ReadFile(path) // #nosec G304 -- the run directory is under the user's cache.
 	if err != nil {
 		return manifest, fmt.Errorf("read run manifest: %w", err)
 	}
 	if err := json.Unmarshal(raw, &manifest); err != nil {
-		return manifest, fmt.Errorf("decode run manifest: %w", err)
+		return manifest, fmt.Errorf("parse run manifest %s: %w", path, err)
 	}
 	return manifest, nil
 }

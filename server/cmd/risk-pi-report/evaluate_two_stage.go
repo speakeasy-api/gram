@@ -44,30 +44,38 @@ const (
 	caseRetryBaseDelay = 5 * time.Second
 )
 
+// callObservation is one physical provider call a case made.
+type callObservation struct {
+	// CostUSD is the provider-reported cost of the call.
+	CostUSD float64
+
+	// Err is why the call failed, if it did.
+	Err error
+}
+
+// decisionObservation is every call a case made and its total time.
+type decisionObservation struct {
+	Calls   []callObservation
+	Latency time.Duration
+}
+
 // scanCascade exercises the production orchestration and payloads. The worker
 // pool bounds the number of in-flight cases. Refused or malformed
 // confirmations are asked again, and a case that failed open on a transient
-// provider error runs again, before it is scored. onCase, when set, receives
-// each case as it finishes; cancelling ctx stops new cases from starting.
-func scanCascade(ctx context.Context, opts options, key string, corpus []labeledCase, onCase func(int, caseOutcome)) ([][]scanners.Finding, evaluationStats, error) {
+// provider error runs again, before it is scored. onCase receives each case as
+// it finishes, from several goroutines at once; cancelling ctx stops new cases
+// from starting.
+func scanCascade(ctx context.Context, key string, corpus []labeledCase, onCase func(int, caseOutcome)) error {
 	policy := guardian.NewDefaultPolicy(tracenoop.NewTracerProvider())
 	jev := typesafe.New(policy.PooledClient(), func(context.Context, string) (string, error) { return key, nil })
-	return scanCascadeWithClients(ctx, opts, corpus, onCase, jev, newOpenRouterClient(key))
+	return scanCascadeWithClients(ctx, corpus, onCase, jev, newOpenRouterClient(key))
 }
 
-// scanCascadeWithClients keeps scheduling and reporting testable without providers.
-func scanCascadeWithClients(ctx context.Context, opts options, corpus []labeledCase, onCase func(int, caseOutcome), jev typesafe.Evaluator, client openrouter.CompletionClient) ([][]scanners.Finding, evaluationStats, error) {
+// scanCascadeWithClients keeps scheduling testable without providers.
+func scanCascadeWithClients(ctx context.Context, corpus []labeledCase, onCase func(int, caseOutcome), jev typesafe.Evaluator, client openrouter.CompletionClient) error {
 	tracer, meter := tracenoop.NewTracerProvider(), meternoop.NewMeterProvider()
 	logger := slog.New(slog.DiscardHandler)
-	results := make([][]scanners.Finding, len(corpus))
-	observations := make([]decisionObservation, len(corpus))
-	missed := make([]bool, len(corpus))
-	confirmations := make([]int, len(corpus))
-	refusals := make([]int, len(corpus))
-	refused := make([]bool, len(corpus))
-	failed := make([]bool, len(corpus))
-	firstUnavailable := make([]bool, len(corpus))
-	sem := make(chan struct{}, opts.judgeConcurrency)
+	sem := make(chan struct{}, judgeConcurrency)
 	var wg sync.WaitGroup
 schedule:
 	for i, row := range corpus {
@@ -86,11 +94,9 @@ schedule:
 
 		wg.Go(func() {
 			defer func() { <-sem }()
-			observation := &observations[i]
-			completion := &observedCompletion{
-				CompletionClient: client, observation: observation, calls: &confirmations[i], refusals: &refusals[i],
-				refused: &refused[i],
-			}
+			observation := &decisionObservation{Calls: nil, Latency: 0}
+			refused := false
+			completion := &observedCompletion{CompletionClient: client, observation: observation, refused: &refused}
 			prefilter := &observedPrefilter{Evaluator: jev, observation: observation}
 			load := func(_ context.Context, _, _ string, target judgemessage.Message) (judgemessage.Window, error) {
 				if row.Window == nil {
@@ -106,60 +112,29 @@ schedule:
 			}
 			cascade := piopenrouter.NewCascade(logger, tracer, meter, completion, prefilter, load)
 			scanner := promptinjection.NewScanner(logger, cascade.Classify)
-			result, verdict, err, initialUnavailable := runCascadeCase(ctx, observation, func() (scanners.Result, promptinjection.Result, error) {
-				refused[i] = false
+			result, verdict, err := runCascadeCase(ctx, observation, func() (scanners.Result, promptinjection.Result, error) {
+				refused = false
 				return scanner.ScanStrictWithVerdict(ctx, row.Text, benchOrgID, benchProjectID, "", row.judgeMessage(), row.trajectory())
 			}, time.Now, waitToRetry)
-			firstUnavailable[i] = initialUnavailable
-			results[i] = result.Findings
-			missed[i] = row.Label == "malicious" && (verdict.Model == typesafe.Model || strings.HasPrefix(verdict.Model, typesafe.Model+"-")) && verdict.Completed && verdict.Label == promptinjection.LabelSafe
-			failed[i] = err != nil || verdict.Label == promptinjection.LabelUnavailable
-			if onCase != nil {
-				onCase(i, caseOutcome{findings: result.Findings, verdict: verdict, err: err, observation: *observation, refused: refused[i]})
-			}
+			onCase(i, caseOutcome{findings: result.Findings, verdict: verdict, err: err, observation: *observation, refused: refused})
 		})
 	}
 	wg.Wait()
 	if err := ctx.Err(); err != nil {
-		return nil, evaluationStats{}, fmt.Errorf("incomplete cascade run: %w", err)
+		return fmt.Errorf("incomplete cascade run: %w", err)
 	}
-	stats := summarizeEvaluation(observations)
-	// A recovered Jev overflow is a failed physical call, not a failed scan.
-	stats.FailOpenEvents = 0
-	stats.BenchmarkCases = len(corpus)
-	for i := range observations {
-		if firstUnavailable[i] {
-			stats.BenchmarkFirstAttemptUnavailable++
-		}
-		stats.ConfirmationCalls += confirmations[i]
-		stats.ConfirmationRefusals += refusals[i]
-		if refused[i] {
-			stats.ConfirmationRefusedEvents++
-		}
-		if failed[i] {
-			stats.FailOpenEvents++
-		}
-		if missed[i] {
-			stats.PrefilterMissedAttacks++
-		}
-	}
-	return results, stats, nil
+	return nil
 }
 
 // runCascadeCase measures the complete benchmark case, including failed attempts
-// and retry waits. The first attempt includes benchmark-only confirmer retries;
-// its availability is not a measurement of the production deadline.
-func runCascadeCase(ctx context.Context, observation *decisionObservation, scan func() (scanners.Result, promptinjection.Result, error), now func() time.Time, wait func(context.Context, int) bool) (scanners.Result, promptinjection.Result, error, bool) {
+// and retry waits.
+func runCascadeCase(ctx context.Context, observation *decisionObservation, scan func() (scanners.Result, promptinjection.Result, error), now func() time.Time, wait func(context.Context, int) bool) (scanners.Result, promptinjection.Result, error) {
 	started := now()
 	defer func() { observation.Latency = now().Sub(started) }()
-	firstUnavailable := false
 	for attempt := 1; ; attempt++ {
 		firstCall := len(observation.Calls)
 		result, verdict, err := scan()
 		unavailable := err != nil || verdict.Label == promptinjection.LabelUnavailable
-		if attempt == 1 {
-			firstUnavailable = unavailable
-		}
 		if unavailable && attempt < maxCaseAttempts && slices.ContainsFunc(observation.Calls[firstCall:], transientCallFailure) && wait(ctx, attempt) {
 			continue
 		}
@@ -173,7 +148,7 @@ func runCascadeCase(ctx context.Context, observation *decisionObservation, scan 
 				observation.Calls[len(observation.Calls)-1].Err = err
 			}
 		}
-		return result, verdict, err, firstUnavailable
+		return result, verdict, err
 	}
 }
 
@@ -183,9 +158,8 @@ type observedPrefilter struct {
 }
 
 func (c *observedPrefilter) Evaluate(ctx context.Context, orgID string, state json.RawMessage, questions map[string]typesafe.Question) (typesafe.Result, error) {
-	start := time.Now()
 	result, err := c.Evaluator.Evaluate(ctx, orgID, state, questions)
-	c.observation.Calls = append(c.observation.Calls, callObservation{Latency: time.Since(start), PromptTokens: result.InputTokens, CompletionTokens: result.OutputTokens, CostUSD: result.CostUSD, Err: err})
+	c.observation.Calls = append(c.observation.Calls, callObservation{CostUSD: result.CostUSD, Err: err})
 	if err != nil {
 		return result, fmt.Errorf("observe cascade call: %w", err)
 	}
@@ -222,10 +196,6 @@ func waitToRetry(ctx context.Context, attempt int) bool {
 type observedCompletion struct {
 	openrouter.CompletionClient
 	observation *decisionObservation
-	calls       *int
-	// refusals counts safety-classifier refusals (finish_reason
-	// content_filter).
-	refusals *int
 
 	// refused records whether the confirmation model's last request ended
 	// refused after every attempt.
@@ -273,18 +243,10 @@ func hasVerdict(result *openrouter.CompletionResponse) bool {
 }
 
 func (c *observedCompletion) complete(ctx context.Context, req openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
-	*c.calls++
-	start := time.Now()
 	result, err := c.CompletionClient.GetCompletion(ctx, req)
-	if isRefusal(result) {
-		*c.refusals++
-	}
-	call := callObservation{Latency: time.Since(start), PromptTokens: 0, CompletionTokens: 0, CostUSD: 0, Err: err}
-	if result != nil {
-		call.PromptTokens, call.CompletionTokens = result.Usage.PromptTokens, result.Usage.CompletionTokens
-		if result.Usage.Cost != nil {
-			call.CostUSD = *result.Usage.Cost
-		}
+	call := callObservation{CostUSD: 0, Err: err}
+	if result != nil && result.Usage.Cost != nil {
+		call.CostUSD = *result.Usage.Cost
 	}
 	c.observation.Calls = append(c.observation.Calls, call)
 	if err != nil {

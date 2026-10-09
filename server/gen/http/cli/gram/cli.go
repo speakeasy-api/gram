@@ -206,7 +206,7 @@ func UsageCommands() []string {
 		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
 		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
 		"widgets (list-widgets|get-widget|create-widget|update-widget|duplicate-widget|delete-widget)",
-		"workload-identities (list|list-platforms|list-token-endpoints|register-issuer|update-issuer|withdraw-issuer|admit-subject|update-subject|withdraw-subject)",
+		"workload-identities (list|list-platforms|get-custom-flows|list-token-endpoints|register-issuer|update-issuer|withdraw-issuer|admit-subject|update-subject|withdraw-subject)",
 		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
 	}
 }
@@ -4823,6 +4823,11 @@ func ParseEndpoint(
 		workloadIdentitiesListPlatformsApikeyTokenFlag      = workloadIdentitiesListPlatformsFlags.String("apikey-token", "", "")
 		workloadIdentitiesListPlatformsProjectSlugInputFlag = workloadIdentitiesListPlatformsFlags.String("project-slug-input", "", "")
 
+		workloadIdentitiesGetCustomFlowsFlags                = flag.NewFlagSet("get-custom-flows", flag.ExitOnError)
+		workloadIdentitiesGetCustomFlowsSessionTokenFlag     = workloadIdentitiesGetCustomFlowsFlags.String("session-token", "", "")
+		workloadIdentitiesGetCustomFlowsApikeyTokenFlag      = workloadIdentitiesGetCustomFlowsFlags.String("apikey-token", "", "")
+		workloadIdentitiesGetCustomFlowsProjectSlugInputFlag = workloadIdentitiesGetCustomFlowsFlags.String("project-slug-input", "", "")
+
 		workloadIdentitiesListTokenEndpointsFlags                = flag.NewFlagSet("list-token-endpoints", flag.ExitOnError)
 		workloadIdentitiesListTokenEndpointsSessionTokenFlag     = workloadIdentitiesListTokenEndpointsFlags.String("session-token", "", "")
 		workloadIdentitiesListTokenEndpointsApikeyTokenFlag      = workloadIdentitiesListTokenEndpointsFlags.String("apikey-token", "", "")
@@ -5919,6 +5924,7 @@ func ParseEndpoint(
 	workloadIdentitiesFlags.Usage = workloadIdentitiesUsage
 	workloadIdentitiesListFlags.Usage = workloadIdentitiesListUsage
 	workloadIdentitiesListPlatformsFlags.Usage = workloadIdentitiesListPlatformsUsage
+	workloadIdentitiesGetCustomFlowsFlags.Usage = workloadIdentitiesGetCustomFlowsUsage
 	workloadIdentitiesListTokenEndpointsFlags.Usage = workloadIdentitiesListTokenEndpointsUsage
 	workloadIdentitiesRegisterIssuerFlags.Usage = workloadIdentitiesRegisterIssuerUsage
 	workloadIdentitiesUpdateIssuerFlags.Usage = workloadIdentitiesUpdateIssuerUsage
@@ -9045,6 +9051,9 @@ func ParseEndpoint(
 			case "list-platforms":
 				epf = workloadIdentitiesListPlatformsFlags
 
+			case "get-custom-flows":
+				epf = workloadIdentitiesGetCustomFlowsFlags
+
 			case "list-token-endpoints":
 				epf = workloadIdentitiesListTokenEndpointsFlags
 
@@ -12034,6 +12043,9 @@ func ParseEndpoint(
 			case "list-platforms":
 				endpoint = c.ListPlatforms()
 				data, err = workloadidentitiesc.BuildListPlatformsPayload(*workloadIdentitiesListPlatformsSessionTokenFlag, *workloadIdentitiesListPlatformsApikeyTokenFlag, *workloadIdentitiesListPlatformsProjectSlugInputFlag)
+			case "get-custom-flows":
+				endpoint = c.GetCustomFlows()
+				data, err = workloadidentitiesc.BuildGetCustomFlowsPayload(*workloadIdentitiesGetCustomFlowsSessionTokenFlag, *workloadIdentitiesGetCustomFlowsApikeyTokenFlag, *workloadIdentitiesGetCustomFlowsProjectSlugInputFlag)
 			case "list-token-endpoints":
 				endpoint = c.ListTokenEndpoints()
 				data, err = workloadidentitiesc.BuildListTokenEndpointsPayload(*workloadIdentitiesListTokenEndpointsSessionTokenFlag, *workloadIdentitiesListTokenEndpointsApikeyTokenFlag, *workloadIdentitiesListTokenEndpointsProjectSlugInputFlag)
@@ -22528,7 +22540,7 @@ func remoteMcpUsage() {
 	fmt.Fprintln(os.Stderr, `    get-server: Get a remote MCP server by ID or slug. Exactly one of id or slug must be provided.`)
 	fmt.Fprintln(os.Stderr, `    update-server: Update a remote MCP server`)
 	fmt.Fprintln(os.Stderr, `    discover-protected-resource-metadata: Probe the remote MCP server's origin for an RFC 9728 .well-known/oauth-protected-resource document and return either the parsed metadata or a typed unavailability reason. Runs server-side under guardian.Policy so production resource servers without CORS can still be inspected.`)
-	fmt.Fprintln(os.Stderr, `    get-server-scopes: Report the scope state of the protected resource a remote-backed MCP server's logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization's resource scope discovery flag, and what a login through each bound client would request now. Reads cached state only; never contacts the resource.`)
+	fmt.Fprintln(os.Stderr, `    get-server-scopes: Report the scope state of the protected resource a remote-backed MCP server's logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization's resource scope discovery flag, and what a login through each bound client would request now. Requires read access to the server only. Reads cached state only; never contacts the resource.`)
 	fmt.Fprintln(os.Stderr, `    set-server-scope-pin: Pin the scopes logins to a remote-backed MCP server's protected resource request, or clear the pin with an empty list. The pin belongs to the protected resource, so it applies to every server in the project with the same upstream URL, and the caller needs write access to all of them. Returns the scope state re-read after the write.`)
 	fmt.Fprintln(os.Stderr, `    probe-url: Probe a candidate remote MCP server URL by issuing an MCP initialize request and reporting whether MCP is available, authentication is required, the response is invalid, or the server is unreachable.`)
 	fmt.Fprintln(os.Stderr, `    verify-url: Probe a candidate remote MCP server URL and return the legacy boolean verification result.
@@ -22699,7 +22711,7 @@ func remoteMcpGetServerScopesUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Report the scope state of the protected resource a remote-backed MCP server's logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization's resource scope discovery flag, and what a login through each bound client would request now. Reads cached state only; never contacts the resource.`)
+	fmt.Fprintln(os.Stderr, `Report the scope state of the protected resource a remote-backed MCP server's logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization's resource scope discovery flag, and what a login through each bound client would request now. Requires read access to the server only. Reads cached state only; never contacts the resource.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
@@ -23084,7 +23096,7 @@ func organizationRemoteSessionClientsCreateClientUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients create-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-clients create-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"credential_owner\": \"self\",\n      \"json_web_key_set_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func organizationRemoteSessionClientsCreateCimdClientUsage() {
@@ -23358,7 +23370,7 @@ func remoteSessionClientsCreateRemoteSessionClientUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients create-remote-session-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients create-remote-session-client --body '{\n      \"audience\": \"aaa\",\n      \"client_id\": \"abc123\",\n      \"client_id_issued_at\": \"1970-01-01T00:00:01Z\",\n      \"client_secret\": \"abc123\",\n      \"client_secret_expires_at\": \"1970-01-01T00:00:01Z\",\n      \"credential_owner\": \"self\",\n      \"json_web_key_set_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_audience_format\": \"token_endpoint\",\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionClientsCreateCimdUsage() {
@@ -32746,6 +32758,7 @@ func workloadIdentitiesUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list: Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project's tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.`)
 	fmt.Fprintln(os.Stderr, `    list-platforms: List the platforms the catalog offers to trust without looking anything up, each with the guided setup that connects it. The same for every organization. Requires workload:read.`)
+	fmt.Fprintln(os.Stderr, `    get-custom-flows: Get the forms for trusting a platform the catalog does not list and allowing its workloads: registering and editing a trusted platform, and allowing and editing access. The same for every organization. Requires workload:read.`)
 	fmt.Fprintln(os.Stderr, `    list-token-endpoints: List the token endpoints an external platform can be pointed at: one per user session issuer in shared mode, at the organization level and in each project, with the issuer it serves. Issuers this deployment does not serve a shared authorization server for are left out. Requires workload:read.`)
 	fmt.Fprintln(os.Stderr, `    register-issuer: Trust an external issuer to vouch for workloads. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.`)
 	fmt.Fprintln(os.Stderr, `    update-issuer: Edit a trusted issuer's name, description, tags, or JWKS URI. Omitted fields are left unchanged. The issuer URL and the wildcard admission setting are fixed at registration. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.`)
@@ -32799,6 +32812,28 @@ func workloadIdentitiesListPlatformsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities list-platforms --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func workloadIdentitiesGetCustomFlowsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] workload-identities get-custom-flows", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the forms for trusting a platform the catalog does not list and allowing its workloads: registering and editing a trusted platform, and allowing and editing access. The same for every organization. Requires workload:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities get-custom-flows --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func workloadIdentitiesListTokenEndpointsUsage() {

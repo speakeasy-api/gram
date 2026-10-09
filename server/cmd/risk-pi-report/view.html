@@ -20,7 +20,7 @@ table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
 th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--soft);vertical-align:top}
 th{font-size:12px;font-weight:600;color:var(--muted);background:var(--soft)}
 td.num,th.num{text-align:right;white-space:nowrap}
-th.focus,td.focus{background:var(--focus)}
+th.focus,td.focus,tr.paired td{background:var(--focus)}
 #summary td:first-child{min-width:260px}
 .badge{display:inline-block;font-size:12px;font-weight:600;padding:2px 7px;border-radius:4px;white-space:nowrap}
 .flagged,.malicious{background:var(--pi-bg);color:var(--pi)}
@@ -32,6 +32,7 @@ th.focus,td.focus{background:var(--focus)}
 .controls{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin:12px 0}
 .controls label{display:grid;gap:4px;font-size:12px;font-weight:600}
 select,input,button{font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--fg)}
+select{max-width:360px}
 input[type=search]{min-width:260px}
 button{cursor:pointer}
 .msg{max-width:520px}
@@ -54,6 +55,10 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--soft);padding:1
 <h1>Prompt-injection benchmark</h1>
 <p id="subtitle" class="muted"></p>
 <div class="card"><table id="summary"></table></div>
+<div class="controls">
+<label>Compare<select id="pair-a"></select></label>
+<label>with<select id="pair-b"></select></label>
+</div>
 <p id="compare" class="muted"></p>
 <h2>Cases</h2>
 <div class="controls">
@@ -73,56 +78,78 @@ const PAGE = 50;
 const $ = (id) => document.getElementById(id);
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
 const STATUS = { flagged: "PI", clear: "Not PI", no_verdict: "No verdict", out_of_credit: "Out of credit", pending: "Pending" };
-const state = { f: "all", q: "", p: 0, m: "" };
+// a is the run compared with, b the run under test; "-" compares with none.
+const state = { f: "all", q: "", p: 0, m: "", a: "", b: "" };
 
 function readHash() {
   const h = new URLSearchParams(location.hash.slice(1));
   state.f = h.get("f") || "all"; state.q = h.get("q") || ""; state.p = Math.max(0, (parseInt(h.get("p") || "1", 10) || 1) - 1); state.m = h.get("m") || "";
+  state.a = h.get("a") || ""; state.b = h.get("b") || "";
 }
 function writeHash() {
   const h = new URLSearchParams();
-  if (state.f !== "all") h.set("f", state.f);
-  if (state.q) h.set("q", state.q);
+  for (const k of ["f", "q", "m", "a", "b"]) if (state[k] && !(k === "f" && state.f === "all")) h.set(k, state[k]);
   if (state.p) h.set("p", String(state.p + 1));
-  if (state.m) h.set("m", state.m);
   history.replaceState(null, "", "#" + h.toString());
 }
 
-const sides = () => DATA.sides.map((s) => s.id);
-const hasBase = () => sides().includes("base");
-const sideOf = (id) => DATA.sides.find((s) => s.id === id);
-const nameOf = (id) => (sideOf(id).manifest.label || id);
-const res = (c, id) => c[id] || null;
+const runIds = () => DATA.runs.map((r) => r.id);
+const runOf = (id) => DATA.runs.find((r) => r.id === id);
+const latest = (r) => { const cs = (r && r.manifest.commits) || []; return cs[cs.length - 1] || null; };
+function role(id) { return id === DATA.change ? "this change" : id === DATA.base ? "base" : ""; }
+function shortName(id) {
+  const c = latest(runOf(id));
+  const sha = c ? c.sha.slice(0, 10) + (c.uncommitted ? "+" : "") : id.slice(0, 10);
+  return role(id) ? `${role(id)} (${sha})` : sha;
+}
+function pair() {
+  const ids = runIds();
+  const b = ids.includes(state.b) ? state.b : ids.includes(DATA.change) ? DATA.change : ids[0] || "";
+  let a = ids.includes(state.a) ? state.a : state.a === "-" ? "" : ids.includes(DATA.base) ? DATA.base : "";
+  if (a === b) a = "";
+  return [a, b];
+}
+const res = (c, id) => (id && c.results[id]) || null;
 const flagged = (r) => !!r && r.s === "flagged";
 const final = (r) => !!r && r.s !== "out_of_credit";
 const malicious = (c) => c.label === "malicious";
 
+// filters returns [value, label, predicate, group]; per-run filters are
+// grouped under their run and carry "kind@run".
 function filters() {
-  const out = [["all", "All cases", () => true], ["wk", "Well-known attacks", (c) => !!c.well_known]];
-  if (hasBase()) {
+  const [a, b] = pair();
+  const out = [["all", "All cases", () => true, ""], ["wk", "Well-known attacks", (c) => !!c.well_known, ""]];
+  if (a && b) {
+    const A = (c) => res(c, a), B = (c) => res(c, b);
     out.push(
-      ["disagree", "Main and this change disagree", (c) => final(c.base) && final(c.change) && flagged(c.base) !== flagged(c.change)],
-      ["newly-caught", "Newly caught attacks", (c) => malicious(c) && final(c.base) && !flagged(c.base) && flagged(c.change)],
-      ["newly-missed", "Newly missed attacks", (c) => malicious(c) && flagged(c.base) && final(c.change) && !flagged(c.change)],
-      ["new-fp", "New false positives", (c) => !malicious(c) && final(c.base) && !flagged(c.base) && flagged(c.change)],
-      ["fixed-fp", "Fixed false positives", (c) => !malicious(c) && flagged(c.base) && final(c.change) && !flagged(c.change)],
+      ["disagree", "The compared runs disagree", (c) => final(A(c)) && final(B(c)) && flagged(A(c)) !== flagged(B(c)), ""],
+      ["newly-caught", "Newly caught attacks", (c) => malicious(c) && final(A(c)) && !flagged(A(c)) && flagged(B(c)), ""],
+      ["newly-missed", "Newly missed attacks", (c) => malicious(c) && flagged(A(c)) && final(B(c)) && !flagged(B(c)), ""],
+      ["new-fp", "New false positives", (c) => !malicious(c) && final(A(c)) && !flagged(A(c)) && flagged(B(c)), ""],
+      ["fixed-fp", "Fixed false positives", (c) => !malicious(c) && flagged(A(c)) && final(B(c)) && !flagged(B(c)), ""],
     );
   }
-  for (const id of sides()) {
-    const n = nameOf(id);
+  for (const id of runIds()) {
+    const g = shortName(id), r = (c) => res(c, id);
     out.push(
-      [`fp-${id}`, `${n}: false positives`, (c) => !malicious(c) && flagged(c[id])],
-      [`miss-${id}`, `${n}: missed attacks`, (c) => malicious(c) && final(c[id]) && !flagged(c[id])],
-      [`wkmiss-${id}`, `${n}: missed well-known attacks`, (c) => malicious(c) && !!c.well_known && final(c[id]) && !flagged(c[id])],
-      [`refused-${id}`, `${n}: refused by the confirmer`, (c) => !!c[id] && !!c[id].r],
-      [`nov-${id}`, `${n}: no verdict`, (c) => !!c[id] && c[id].s === "no_verdict"],
-      [`ooc-${id}`, `${n}: out of credit`, (c) => !!c[id] && c[id].s === "out_of_credit"],
-      [`pending-${id}`, `${n}: pending`, (c) => !c[id]],
+      [`fp@${id}`, "false positives", (c) => !malicious(c) && flagged(r(c)), g],
+      [`miss@${id}`, "missed attacks", (c) => malicious(c) && final(r(c)) && !flagged(r(c)), g],
+      [`wkmiss@${id}`, "missed well-known attacks", (c) => malicious(c) && !!c.well_known && final(r(c)) && !flagged(r(c)), g],
+      [`refused@${id}`, "refused by the confirmer", (c) => !!r(c) && !!r(c).r, g],
+      [`nov@${id}`, "no verdict", (c) => !!r(c) && r(c).s === "no_verdict", g],
+      [`ooc@${id}`, "out of credit", (c) => !!r(c) && r(c).s === "out_of_credit", g],
+      [`pending@${id}`, "pending", (c) => !r(c), g],
     );
   }
   return out;
 }
-function focusSide() { const m = state.f.match(/-(base|change)$/); return m ? m[1] : ""; }
+function focusRun() { const i = state.f.indexOf("@"); return i >= 0 ? state.f.slice(i + 1) : ""; }
+function columns() {
+  const cols = pair().filter(Boolean);
+  const f = focusRun();
+  if (f && !cols.includes(f)) cols.push(f);
+  return cols;
+}
 
 function link(text, f, title) {
   const a = el("a", text); a.href = "#f=" + encodeURIComponent(f); if (title) a.title = title;
@@ -140,73 +167,103 @@ function renderSummary() {
   for (const h of ["Run", "False positives", "Well-known attacks", "All attacks", "Refused", "No verdict", "Out of credit", "Decision time", "Merge gate", "Goals", "Cost"]) head.append(el("th", h, h === "Run" ? "" : "num"));
   const thead = el("thead"); thead.append(head); table.append(thead);
   const body = el("tbody");
-  for (const s of DATA.sides) {
-    const t = s.totals, tr = el("tr"), name = el("div");
-    name.append(el("strong", s.manifest.label || s.id));
-    name.append(el("div", s.manifest.ref || "", "muted"));
+  if (!DATA.runs.length) {
+    const empty = td("No runs yet. Run mise run risk:pi."); empty.colSpan = 11;
+    const tr = el("tr"); tr.append(empty); body.append(tr);
+  }
+  const paired = pair();
+  for (const s of DATA.runs) {
+    const t = s.totals, tr = el("tr", undefined, paired.includes(s.id) ? "paired" : ""), name = el("div");
+    const c = latest(s);
+    name.append(el("strong", shortName(s.id)));
+    if (c) name.append(el("div", c.subject, "muted"));
+    if ((s.manifest.commits || []).length > 1) name.append(el("div", `${s.manifest.commits.length} commits share this code`, "muted"));
     if (t.pending) name.append(el("div", `${t.pending} of ${t.cases} pending`, "muted"));
     tr.append(td(name));
-    tr.append(td(link(String(t.false_positives), `fp-${s.id}`, "Show the false positives"), "num"));
-    tr.append(td(link(`${t.well_known_caught} of ${t.well_known}`, `wkmiss-${s.id}`, "Show the well-known attacks missed"), "num"));
-    tr.append(td(link(`${t.caught} of ${t.attacks} (${pct(t.caught, t.attacks)})`, `miss-${s.id}`, "Show the attacks missed"), "num"));
-    tr.append(td(link(String(t.refused), `refused-${s.id}`), "num"));
-    tr.append(td(link(String(t.no_verdict), `nov-${s.id}`), "num"));
-    tr.append(td(link(String(t.out_of_credit), `ooc-${s.id}`), "num"));
+    tr.append(td(link(String(t.false_positives), `fp@${s.id}`, "Show the false positives"), "num"));
+    tr.append(td(link(`${t.well_known_caught} of ${t.well_known}`, `wkmiss@${s.id}`, "Show the well-known attacks missed"), "num"));
+    tr.append(td(link(`${t.caught} of ${t.attacks} (${pct(t.caught, t.attacks)})`, `miss@${s.id}`, "Show the attacks missed"), "num"));
+    tr.append(td(link(String(t.refused), `refused@${s.id}`), "num"));
+    tr.append(td(link(String(t.no_verdict), `nov@${s.id}`), "num"));
+    tr.append(td(link(String(t.out_of_credit), `ooc@${s.id}`), "num"));
     const time = el("span", secs(t.latency_p50_ms)); time.append(el("span", ` p90 ${secs(t.latency_p90_ms)}`, "chip"));
     tr.append(td(time, "num"));
     tr.append(td(s.gate_status, "num"));
     tr.append(td(s.goals_status, "num"));
     tr.append(td("$" + t.cost_usd.toFixed(2), "num"));
-    const m = s.manifest;
-    const fallback = m.refusal_fallback_model ? ` (refusal fallback: ${m.refusal_fallback_model})` : "";
-    const chain = m.prefilter_model ? `${m.prefilter_model} ≥ ${m.prefilter_threshold} → ${m.confirmation_model}` : m.confirmation_model;
-    if (m.confirmation_model) tr.title = `${chain}${fallback}\nconfirmation prompt ${(m.confirmation_prompt_sha256 || "").slice(0, 10)} · questions ${(m.prefilter_questions_sha256 || "").slice(0, 10)}`;
+    const d = s.manifest.detector;
+    const chain = d.prefilter_model ? `${d.prefilter_model} ≥ ${d.prefilter_threshold} → ${d.confirmation_model}` : d.confirmation_model;
+    tr.title = `${chain}\nconfirmation prompt ${(d.confirmation_prompt_sha256 || "").slice(0, 10)} · questions ${(d.prefilter_questions_sha256 || "").slice(0, 10)}`;
     body.append(tr);
   }
   table.append(body);
-  const cmp = $("compare"); cmp.replaceChildren();
-  if (hasBase()) {
-    cmp.append("Compared with main: ");
-    const parts = [["newly-caught", "newly caught"], ["newly-missed", "newly missed"], ["new-fp", "new false positives"], ["fixed-fp", "fixed false positives"]];
-    const all = filters();
-    parts.forEach(([f, label], i) => {
-      const n = DATA.cases.filter(all.find((x) => x[0] === f)[2]).length;
-      cmp.append(link(`${n} ${label}`, f));
-      if (i < parts.length - 1) cmp.append(" · ");
-    });
-  }
 }
 
-function badge(r, refusedMark) {
+function renderPair() {
+  const [a, b] = pair();
+  const options = (sel, value, none) => {
+    const opts = DATA.runs.map((r) => { const o = el("option", shortName(r.id)); o.value = r.id; return o; });
+    if (none) { const o = el("option", "nothing"); o.value = "-"; opts.unshift(o); }
+    sel.replaceChildren(...opts);
+    sel.value = value || (none ? "-" : "");
+  };
+  options($("pair-a"), a, true);
+  options($("pair-b"), b, false);
+  const cmp = $("compare"); cmp.replaceChildren();
+  if (!a || !b) return;
+  cmp.append(`${shortName(b)} compared with ${shortName(a)}: `);
+  const parts = [["newly-caught", "newly caught"], ["newly-missed", "newly missed"], ["new-fp", "new false positives"], ["fixed-fp", "fixed false positives"]];
+  const all = filters();
+  parts.forEach(([f, label], i) => {
+    const n = DATA.cases.filter(all.find((x) => x[0] === f)[2]).length;
+    cmp.append(link(`${n} ${label}`, f));
+    if (i < parts.length - 1) cmp.append(" · ");
+  });
+}
+
+function badge(r) {
   const span = el("span");
   const s = r ? r.s : "pending";
   const b = el("span", STATUS[s] || s, "badge " + s);
   if (r && r.d) b.title = (r.m ? r.m + ": " : "") + r.d;
   span.append(b);
-  if (refusedMark && r && r.r) span.append(el("span", "refused", "chip"));
+  if (r && r.r) span.append(el("span", "refused", "chip"));
   return span;
+}
+
+function renderFilter(all) {
+  const sel = $("filter");
+  const groups = new Map();
+  const top = [];
+  for (const [v, label, , group] of all) {
+    const o = el("option", label); o.value = v;
+    if (!group) { top.push(o); continue; }
+    if (!groups.has(group)) groups.set(group, Object.assign(el("optgroup"), { label: group }));
+    groups.get(group).append(o);
+  }
+  sel.replaceChildren(...top, ...groups.values());
+  sel.value = state.f;
 }
 
 function render() {
   if (!DATA) return;
   const all = filters();
-  const sel = $("filter");
-  sel.replaceChildren(...all.map(([v, label]) => { const o = el("option", label); o.value = v; return o; }));
   if (!all.some((x) => x[0] === state.f)) state.f = "all";
-  sel.value = state.f; $("search").value = state.q;
-  const subtitle = DATA.sides.map((s) => `${s.manifest.label || s.id}: ${s.manifest.ref || "unknown ref"}`).join(" · ");
-  $("subtitle").replaceChildren(subtitle + ` · ${DATA.cases.length} cases · generated ${new Date(DATA.generated).toLocaleString()}`);
+  renderFilter(all);
+  $("search").value = state.q;
+  $("subtitle").replaceChildren(`${DATA.runs.length} runs · ${DATA.cases.length} cases · generated ${new Date(DATA.generated).toLocaleString()}`);
   if (LIVE) $("subtitle").append(" · ", el("span", "live", "live"));
   renderSummary();
+  renderPair();
 
   const pred = all.find((x) => x[0] === state.f)[2];
   const q = state.q.toLowerCase();
   const rows = DATA.cases.filter((c) => pred(c) && (!q || c.text.toLowerCase().includes(q) || c.key.toLowerCase().includes(q)));
   const pages = Math.max(1, Math.ceil(rows.length / PAGE));
   state.p = Math.min(state.p, pages - 1);
-  const focus = focusSide();
+  const focus = focusRun(), cols = columns();
   const head = $("head"); head.replaceChildren(el("th", "Message"), el("th", "Case"), el("th", "Label"));
-  for (const id of sides()) { const th = el("th", nameOf(id)); if (id === focus) th.className = "focus"; head.append(th); }
+  for (const id of cols) head.append(el("th", shortName(id), id === focus ? "focus" : ""));
   const body = $("rows"); body.replaceChildren();
   for (const c of rows.slice(state.p * PAGE, state.p * PAGE + PAGE)) {
     const tr = el("tr");
@@ -217,10 +274,10 @@ function render() {
     const label = el("div"); label.append(el("span", c.label === "malicious" ? "Attack" : "Benign", "badge " + c.label));
     if (c.well_known) label.append(el("div", c.well_known, "chip"));
     tr.append(td(label));
-    for (const id of sides()) tr.append(td(badge(c[id], true), id === focus ? "focus" : ""));
+    for (const id of cols) tr.append(td(badge(res(c, id)), id === focus ? "focus" : ""));
     body.append(tr);
   }
-  if (!rows.length) { const empty = td("No cases match this view."); empty.colSpan = 3 + sides().length; const tr = el("tr"); tr.append(empty); body.append(tr); }
+  if (!rows.length) { const empty = td("No cases match this view."); empty.colSpan = 3 + cols.length; const tr = el("tr"); tr.append(empty); body.append(tr); }
   $("count").textContent = `${rows.length} of ${DATA.cases.length} cases`;
   $("page").textContent = `Page ${state.p + 1} of ${pages}`;
   $("prev").disabled = state.p === 0; $("next").disabled = state.p >= pages - 1;
@@ -241,9 +298,9 @@ function openCase(key) {
     body.append(el("h3", "Context"), el("pre", ctx));
   }
   const grid = el("div", undefined, "sides");
-  for (const id of sides()) {
-    const r = c[id], box = el("div");
-    box.append(el("strong", nameOf(id) + " "), badge(r, true));
+  for (const id of runIds()) {
+    const r = res(c, id), box = el("div");
+    box.append(el("strong", shortName(id) + " "), badge(r));
     if (r) {
       if (r.m) box.append(el("div", r.m, "muted"));
       if (r.d) box.append(el("p", r.d));
@@ -255,6 +312,9 @@ function openCase(key) {
   if (!$("dlg").open) $("dlg").showModal();
 }
 
+const onPair = () => { state.a = $("pair-a").value; state.b = $("pair-b").value; state.p = 0; render(); writeHash(); };
+$("pair-a").addEventListener("change", onPair);
+$("pair-b").addEventListener("change", onPair);
 $("filter").addEventListener("change", () => { state.f = $("filter").value; state.p = 0; render(); writeHash(); });
 $("search").addEventListener("input", () => { state.q = $("search").value; state.p = 0; render(); writeHash(); });
 $("prev").addEventListener("click", () => { state.p--; render(); writeHash(); });

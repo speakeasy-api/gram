@@ -47838,7 +47838,7 @@ paths:
         name: GetRemoteMcpServerHeader
   /rpc/remoteMcp.getServerScopes:
     get:
-      description: 'Report the scope state of the protected resource a remote-backed MCP server''s logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization''s resource scope discovery flag, and what a login through each bound client would request now. Reads cached state only; never contacts the resource.'
+      description: 'Report the scope state of the protected resource a remote-backed MCP server''s logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization''s resource scope discovery flag, and what a login through each bound client would request now. Requires read access to the server only. Reads cached state only; never contacts the resource.'
       operationId: getRemoteMcpServerScopes
       parameters:
         - allowEmptyValue: true
@@ -76397,6 +76397,104 @@ paths:
       x-speakeasy-name-override: admitSubject
       x-speakeasy-react-hook:
         name: AdmitWorkloadSubject
+  /rpc/workloadIdentities.getCustomFlows:
+    get:
+      description: 'Get the forms for trusting a platform the catalog does not list and allowing its workloads: registering and editing a trusted platform, and allowing and editing access. The same for every organization. Requires workload:read.'
+      operationId: getWorkloadCustomFlows
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadCustomFlows'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getCustomFlows workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: getCustomFlows
+      x-speakeasy-react-hook:
+        name: WorkloadCustomFlows
   /rpc/workloadIdentities.list:
     get:
       description: 'Read the whole trust policy: every trusted issuer and every admitted subject at the organization tier, plus the selected project''s tier when the caller names a project, with the agent each subject resolves to. Requires workload:read.'
@@ -78889,11 +78987,16 @@ components:
           type: array
           items:
             type: string
-          description: Ops a measure admits
+          description: 'Ops a field admits: aggregations on a measure, count_distinct on a dimension'
         default:
           type: boolean
           description: 'Part of the query the dataset opens on: a default dimension is in the opening group-by'
           example: true
+        description:
+          type: string
+          description: What the field is and which producers fill it, when the catalog has something to say beyond the name
+        lookup:
+          $ref: '#/components/schemas/AnalyticsLookup'
         name:
           type: string
           example: user
@@ -78942,6 +79045,19 @@ components:
         - field
         - operator
         - values
+    AnalyticsLookup:
+      type: object
+      properties:
+        description:
+          type: string
+          description: What the map is and where it is set
+        name:
+          type: string
+          example: mcp_server_display_names
+      description: 'A per-project map a dimension reads through at query time: a reported value with an entry shows as its target, the rest show as reported.'
+      required:
+        - name
+        - description
     AnalyticsMeasure:
       type: object
       properties:
@@ -78951,14 +79067,15 @@ components:
           example: tool_calls
         field:
           type: string
-          description: Measure field the op applies to. Absent for count.
+          description: 'Field the op applies to: a dimension for count_distinct, a measure otherwise. Absent for count.'
           example: tool_call_count
         op:
           type: string
-          description: Aggregation to apply. count takes no field; every other op needs a measure field that admits it, per describe.
+          description: Aggregation to apply. count takes no field; count_distinct takes a dimension that admits it; every other op needs a measure field that admits it, per describe.
           example: sum
           enum:
             - count
+            - count_distinct
             - sum
             - avg
             - min
@@ -79018,7 +79135,7 @@ components:
             - month
         limit:
           type: integer
-          description: Maximum rows. Defaults to 100, at most 1000.
+          description: Maximum rows. Defaults to 100; at most 1000 for a grouped result and 200 for ungrouped rows.
           default: 100
           format: int64
           minimum: 1
@@ -82126,6 +82243,17 @@ components:
           type: string
           description: When the issuer reported the client secret expires (RFC 7591 client_secret_expires_at). Omit when the issuer reported no expiry.
           format: date-time
+        credential_owner:
+          type: string
+          description: Who the upstream access credential belongs to, fixed at creation. subject (the default) means each caller connects their own upstream account through the client. self means the client obtains a credential for itself with the client_credentials grant and every caller shares it; it requires token_endpoint_auth_method client_secret_basic, client_secret_post (both with client_secret) or private_key_jwt (with json_web_key_set_id), and an issuer with a token_endpoint.
+          default: subject
+          enum:
+            - subject
+            - self
+        json_web_key_set_id:
+          type: string
+          description: Organization JSON Web Key Set to sign private_key_jwt assertions with. Required when token_endpoint_auth_method is private_key_jwt and optional otherwise, as with attachKeySet. Must belong to the caller's organization, which needs the customer-managed encryption keys entitlement.
+          format: uuid
         project_id:
           type: string
           description: Owning project id for the new client; the project must belong to the caller's organization. Omit to inherit a project-specific issuer's project, or to create an organization-level client (no project, attachable by every project) under an organization-level issuer.
@@ -82405,6 +82533,17 @@ components:
           type: string
           description: When the issuer reported the client secret expires (RFC 7591 client_secret_expires_at). Omit when the issuer reported no expiry.
           format: date-time
+        credential_owner:
+          type: string
+          description: Who the upstream access credential belongs to, fixed at creation. subject (the default) means each caller connects their own upstream account through the client. self means the client obtains a credential for itself with the client_credentials grant and every caller shares it; it requires token_endpoint_auth_method client_secret_basic, client_secret_post (both with client_secret) or private_key_jwt (with json_web_key_set_id), and an issuer with a token_endpoint.
+          default: subject
+          enum:
+            - subject
+            - self
+        json_web_key_set_id:
+          type: string
+          description: Organization JSON Web Key Set to sign private_key_jwt assertions with. Required when token_endpoint_auth_method is private_key_jwt and optional otherwise, as with attachKeySet. Must belong to the caller's organization, which needs the customer-managed encryption keys entitlement.
+          format: uuid
         remote_session_issuer_id:
           type: string
           description: The owning remote_session_issuer id.
@@ -96340,6 +96479,12 @@ components:
           type: string
           description: The remote session client's ID.
           format: uuid
+        issuer_name:
+          type: string
+          description: The configured name of the client's authorization server; absent when it has none.
+        issuer_url:
+          type: string
+          description: The issuer URL of the client's authorization server.
         pin_would_decide:
           type: boolean
           description: 'Whether a pin, if set, decides this client''s request: discovery is on, the client owns the resource, and neither its own scope nor a challenge outranks the pin.'
@@ -96425,6 +96570,9 @@ components:
         advertised_scopes_known:
           type: boolean
           description: Whether a read of the resource's metadata within the last good window captured an advertised list.
+        can_pin:
+          type: boolean
+          description: 'Whether the caller may change the pin: write access to this server and every server in the project with the same upstream URL.'
         challenge_scopes:
           type: array
           items:
@@ -96460,6 +96608,7 @@ components:
         - discovery_enabled
         - clients
         - shared_server_count
+        - can_pin
     RemoteSession:
       type: object
       properties:
@@ -96534,7 +96683,7 @@ components:
           description: Upstream OAuth audience sent on the authorize redirect and token exchange. Null omits the audience parameter.
         callback_url:
           type: string
-          description: The redirect URI this client registers with its upstream provider. It never changes after the client is created. Absent on global clients.
+          description: The redirect URI this client registers with its upstream provider. It never changes after the client is created. Absent on global clients and on clients with credential_owner self, which have no callback.
           format: uri
         client_id:
           type: string
@@ -96552,6 +96701,12 @@ components:
         created_at:
           type: string
           format: date-time
+        credential_owner:
+          type: string
+          description: Who the upstream access credential belongs to. subject means each caller connects their own upstream account; self means the client holds one credential for itself, obtained with the client_credentials grant, that every caller shares.
+          enum:
+            - subject
+            - self
         grant_types:
           type: array
           items:
@@ -96564,7 +96719,7 @@ components:
           format: uuid
         json_web_key_set_id:
           type: string
-          description: The organization JSON Web Key Set attached to this client, managed through attachKeySet and detachKeySet. Null when no key set is attached.
+          description: The organization JSON Web Key Set attached to this client, set on create or through attachKeySet and detachKeySet. Null when no key set is attached.
           format: uuid
         legacy_callback_url:
           type: boolean
@@ -96620,6 +96775,7 @@ components:
         - user_session_issuer_ids
         - client_id
         - legacy_callback_url
+        - credential_owner
         - created_at
         - updated_at
         - grant_types
@@ -97463,12 +97619,37 @@ components:
           items:
             $ref: '#/components/schemas/ResourceAudienceEntry'
           description: Rules deciding access to this resource, widest first.
+        role_plugins:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceAudienceRolePlugin'
+          description: Live plugins containing this resource and assigned to an exact audience role. Omitted without plugin read and administrator access; not evidence of authorization or installation.
         version:
           type: string
           description: Fingerprint of the rules naming this resource. Send it back when saving so a change made elsewhere is a conflict rather than a silent overwrite.
       required:
         - entries
         - version
+    ResourceAudienceRolePlugin:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Plugin name.
+        plugin_id:
+          type: string
+          description: Plugin ID.
+        principal_urn:
+          type: string
+          description: Exact role assigned to the plugin.
+        slug:
+          type: string
+          description: Plugin slug.
+      required:
+        - principal_urn
+        - plugin_id
+        - name
+        - slug
     ResourceEntry:
       type: object
       properties:
@@ -106706,7 +106887,7 @@ components:
             - client_secret_post
             - none
             - private_key_jwt
-      description: Form for updating a remote_session_client. All non-id fields are optional patches.
+      description: Form for updating a remote_session_client. All non-id fields are optional patches. credential_owner is fixed at creation and cannot be changed.
       required:
         - id
     UpdateRemoteSessionIssuerForm:
@@ -108811,6 +108992,137 @@ components:
         - wildcard_active
         - created_at
         - updated_at
+    WorkloadCustomFlows:
+      type: object
+      properties:
+        allow_access:
+          $ref: '#/components/schemas/WorkloadForm'
+        edit_access:
+          $ref: '#/components/schemas/WorkloadForm'
+        edit_platform:
+          $ref: '#/components/schemas/WorkloadForm'
+        register_platform:
+          $ref: '#/components/schemas/WorkloadForm'
+      description: The forms for trusting a platform the catalog does not list and allowing its workloads.
+      required:
+        - register_platform
+        - edit_platform
+        - allow_access
+        - edit_access
+    WorkloadForm:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Shown under the title.
+        pending_label:
+          type: string
+          description: The submit button's label while the form submits.
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadFormStep'
+          description: The form's steps, in order.
+        submit_label:
+          type: string
+          description: The submit button's label.
+        title:
+          type: string
+          description: Heads the form.
+      description: A custom flow's form, held to the management API form it submits.
+      required:
+        - title
+        - description
+        - submit_label
+        - pending_label
+        - steps
+    WorkloadFormBlock:
+      type: object
+      properties:
+        field:
+          type: string
+          description: The form value an input collects. label is submitted as an admission's name.
+          enum:
+            - ""
+            - name
+            - description
+            - issuer
+            - jwks_uri
+            - subject
+            - label
+        format:
+          type: string
+          description: The dashboard validator an input's value must pass. The server applies the same rules when the form is submitted.
+          enum:
+            - ""
+            - issuer_url
+            - jwks_uri
+            - platform_name
+            - platform_description
+            - subject_rule
+            - none
+        help:
+          type: string
+          description: Markdown shown under a form control while it has no validation message. Raw HTML in it must not be rendered.
+        href:
+          type: string
+          description: A link's https target.
+        label:
+          type: string
+          description: A link's label, or a form control's.
+        markdown:
+          type: string
+          description: A text block's Markdown. Raw HTML in it must not be rendered.
+        multiline:
+          type: boolean
+          description: Whether an input is a text area.
+        placeholder:
+          type: string
+          description: Shown in an empty form control.
+        read_only:
+          type: boolean
+          description: Whether an input shows its value without letting it change. A read-only value is not submitted.
+        type:
+          type: string
+          description: The kind of content. wildcard_caution marks where the form warns that a wildcard rule admits more than one identity; the dashboard writes that warning, since it names the rule and the agent.
+          enum:
+            - text
+            - link
+            - input
+            - agent_picker
+            - tags
+            - wildcard_caution
+      description: One piece of a custom flow's form. Which fields are set depends on type; the rest are empty.
+      required:
+        - type
+        - markdown
+        - href
+        - label
+        - field
+        - placeholder
+        - help
+        - multiline
+        - read_only
+        - format
+    WorkloadFormStep:
+      type: object
+      properties:
+        blocks:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadFormBlock'
+          description: Rendered in order.
+        id:
+          type: string
+          description: Stable within the form.
+        title:
+          type: string
+          description: Heads the step.
+      description: One screen of a custom flow's form.
+      required:
+        - id
+        - title
+        - blocks
     WorkloadIdentityPolicy:
       type: object
       properties:

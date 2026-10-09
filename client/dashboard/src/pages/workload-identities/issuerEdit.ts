@@ -1,4 +1,4 @@
-import type { RegisterIssuerValues } from "./RegisterIssuerSheet";
+import type { RegisterIssuerValues } from "./formValues";
 
 /** The editable fields of a trusted platform that differ from what is stored. */
 export interface IssuerChanges {

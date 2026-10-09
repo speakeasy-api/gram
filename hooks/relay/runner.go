@@ -122,7 +122,7 @@ const brokenAuthMessage = "Speakeasy hooks are configured for this workspace but
 
 const reauthNeededMessage = "Speakeasy hooks need to reconnect. Run the Speakeasy hooks login command to reconnect."
 
-const envKeyRejectedMessage = "Speakeasy hooks rejected the API key configured in GRAM_HOOKS_API_KEY. Update or unset GRAM_HOOKS_API_KEY, then run the Speakeasy hooks login command to reconnect."
+const envKeyRejectedMessage = "Speakeasy hooks rejected the API key configured in SPEAKEASY_AI_HOOKS_API_KEY (or the deprecated GRAM_HOOKS_API_KEY). Update or unset it, then run the Speakeasy hooks login command to reconnect."
 
 // deliver relays one event to the server, returning the result and the
 // credential posture. It performs no work when the machine holds no credential
@@ -428,7 +428,7 @@ func (r *Relay) onStop(ctx context.Context, e *agenthooks.StopEvent) (agenthooks
 // the browser from nagging.
 func (r *Relay) onSessionStart(ctx context.Context, e *agenthooks.SessionStartEvent) (agenthooks.SessionStartDecision, error) {
 	_, cached := readCachedAuth(r.cfg)
-	if r.cfg.BrowserLogin && strings.TrimSpace(os.Getenv("GRAM_HOOKS_API_KEY")) == "" && !cached {
+	if r.cfg.BrowserLogin && Env("HOOKS_API_KEY") == "" && !cached {
 		r.login.tryInteractive(ctx)
 	}
 	r.deliver(ctx, e)

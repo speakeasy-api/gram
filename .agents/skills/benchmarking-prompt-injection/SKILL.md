@@ -14,10 +14,10 @@ A change that can alter a verdict merges only after `mise run risk:pi` passes on
 ## Commands
 
 - `mise run zero:openrouter` once; keep about $5 of OpenRouter credit.
-- `mise run risk:pi --sources <source>`: a cheap slice while iterating, without the gate.
-- `mise run risk:pi`: full run, merge gate, `report.html`, and a Markdown summary for the PR.
+- `mise run risk:pi`: full run, merge gate, `report.html`, and a Markdown summary for the PR. A commit that changes only fixtures reuses every unedited case's result, so iterating on a draft costs only the cases it changes.
 - `--watch` serves a live viewer; `--view` opens cached results; `--summary-md` prints the PR table; `--no-main` skips main.
-- Rerun the same command to resume, including after running out of credit. A baseline without per-case recording support fails before scoring; choose a compatible `--base <ref>` or explicitly use `--no-main` for a one-sided run.
+- The viewer lists every cached run, newest first, and compares any two; it opens on main and this change.
+- Rerun the same command to resume, including after running out of credit. A base from before per-case records fails before scoring; choose a newer `--base <ref>` or explicitly use `--no-main` for a one-sided run.
 
 Agents: never read `mise.local.toml`; ask before committing and before paid runs.
 

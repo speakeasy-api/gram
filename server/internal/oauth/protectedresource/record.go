@@ -1,4 +1,4 @@
-// Package protectedresource records what Gram learns about a remote MCP
+// Package protectedresource records what Speakeasy learns about a remote MCP
 // server's RFC 9728 protected resource metadata and keeps that record fresh,
 // off the request path for proxied traffic and within a short budget for a
 // login. It is the only writer of remote_protected_resources discovery

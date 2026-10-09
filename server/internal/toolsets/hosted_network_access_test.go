@@ -33,14 +33,15 @@ func TestHostedNetworkAccessMaterializesAndDeletesCanonicalEndpoint(t *testing.T
 	servers := mcpserversrepo.New(ti.conn)
 	endpoints := mcpendpointsrepo.New(ti.conn)
 
-	_, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: projectID})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	server, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: projectID})
+	require.NoError(t, err, "creation materializes the canonical wrapper")
+	require.False(t, server.NetworkAccessMode.Valid)
 
 	mode := types.NetworkAccessMode("public_only")
 	updated, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{Slug: created.Slug, NetworkAccessMode: &mode})
 	require.NoError(t, err)
 	require.Equal(t, &mode, updated.NetworkAccessMode)
-	server, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: projectID})
+	server, err = servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.Equal(t, serverID, server.ToolsetID.UUID)
 	require.Equal(t, "public", server.Visibility)
@@ -228,6 +229,7 @@ func TestHostedNetworkAccessRejectsPrivateModeWithoutIngress(t *testing.T) {
 	require.Equal(t, types.NetworkAccessMode("public_only"), *stored.NetworkAccessMode)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	_, err = mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: uuid.MustParse(created.ID), ProjectID: *authCtx.ProjectID})
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	server, err := mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: uuid.MustParse(created.ID), ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.False(t, server.NetworkAccessMode.Valid, "the rejected mode is not stored")
 }

@@ -513,7 +513,8 @@ func lockIssuersForMigration(ctx context.Context, r *repo.Queries, issuerIDs ...
 //
 // The four guards are the reason this is shared rather than duplicated. Endpoint
 // parity is what keeps an already-authenticated session refreshing against the
-// authorization server it was established with, and the binding-conflict check
+// authorization server it was established with, and a self client's token
+// endpoint in place, and the binding-conflict check
 // is the only thing enforcing the at-most-one-client-per-(user_session_issuer,
 // remote_session_issuer) invariant, which no database constraint expresses.
 // Trusted user-session-issuer references must be explicitly unlinked or

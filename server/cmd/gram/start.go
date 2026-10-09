@@ -1334,6 +1334,7 @@ func newStartCommand() *cli.Command {
 			// handlers, tracing, or logging.
 			mux.Use(middleware.NetworkServingPolicyVersion)
 			mux.Use(middleware.StripPrivateIngressHeaders)
+			mux.Use(middleware.SpeakeasyAIHeaders(meterProvider))
 			mux.Use(func(h http.Handler) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.Method == http.MethodGet && r.URL.Path == "/healthz" {
@@ -1850,6 +1851,7 @@ func newStartCommand() *cli.Command {
 				ToolUsage:                 telemetryrepo.New(chDB),
 				ToolCallSearch:            telemetryrepo.New(chDB),
 				TelemetryDrilldown:        telemetryrepo.New(chDB),
+				Analytics:                 analyticsSvc.Engine(),
 				WorkflowRun:               posthogClient,
 				CanonicalIdentity:         telemSvc,
 				RecentToolCalls:           telemetryrepo.New(chDB),

@@ -115,6 +115,37 @@ func TestListTokenEndpoints_LeavesOutEndpointModeIssuers(t *testing.T) {
 	require.Empty(t, result.Items)
 }
 
+// A shared authorization server on the authentication host, pinned there or
+// derived for an issuer that opts in, lists its token endpoint on that host,
+// while its MCP servers stay on the server URL's host.
+func TestListTokenEndpoints_ListsAuthenticationHostTokenEndpoints(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	pinned := newOrganizationIssuer(t, ctx, ti, "pinned-issuer")
+	setShared(t, ctx, ti, pinned, testAuthenticationHostURL+authserver.SharedPath(pinned.ID))
+	optedIn := newProjectIssuer(t, ctx, ti, ti.projectID, "opted-in-issuer")
+	setShared(t, ctx, ti, optedIn, "")
+	updated, err := testrepo.New(ti.conn).SetUserSessionIssuerUseAuthenticationHostFixture(ctx, testrepo.SetUserSessionIssuerUseAuthenticationHostFixtureParams{
+		UseAuthenticationHost: true,
+		IssuerID:              optedIn.ID,
+		OrganizationID:        ti.orgID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), updated)
+
+	result, err := ti.service.ListTokenEndpoints(withoutProject(t, ctx), listTokenEndpointsPayload())
+	require.NoError(t, err)
+	require.Len(t, result.Items, 2)
+
+	for _, item := range result.Items {
+		issuerURL := testAuthenticationHostURL + "/oauth/usi/" + item.UserSessionIssuerID
+		require.Equal(t, issuerURL, item.Issuer)
+		require.Equal(t, issuerURL+"/token", item.TokenEndpoint)
+		require.Equal(t, "gram.example.com", item.McpHost)
+	}
+}
+
 // An issuer pinned to a host this deployment does not serve falls back to
 // per-endpoint authorization servers, so it has no shared token endpoint.
 func TestListTokenEndpoints_LeavesOutIssuersPinnedToAnUnservedHost(t *testing.T) {

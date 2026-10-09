@@ -6,10 +6,11 @@ import * as z from "zod/v4-mini";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
- * Aggregation to apply. count takes no field; every other op needs a measure field that admits it, per describe.
+ * Aggregation to apply. count takes no field; count_distinct takes a dimension that admits it; every other op needs a measure field that admits it, per describe.
  */
 export const Op = {
   Count: "count",
+  CountDistinct: "count_distinct",
   Sum: "sum",
   Avg: "avg",
   Min: "min",
@@ -19,7 +20,7 @@ export const Op = {
   P99: "p99",
 } as const;
 /**
- * Aggregation to apply. count takes no field; every other op needs a measure field that admits it, per describe.
+ * Aggregation to apply. count takes no field; count_distinct takes a dimension that admits it; every other op needs a measure field that admits it, per describe.
  */
 export type Op = ClosedEnum<typeof Op>;
 
@@ -32,11 +33,11 @@ export type AnalyticsMeasure = {
    */
   alias?: string | undefined;
   /**
-   * Measure field the op applies to. Absent for count.
+   * Field the op applies to: a dimension for count_distinct, a measure otherwise. Absent for count.
    */
   field?: string | undefined;
   /**
-   * Aggregation to apply. count takes no field; every other op needs a measure field that admits it, per describe.
+   * Aggregation to apply. count takes no field; count_distinct takes a dimension that admits it; every other op needs a measure field that admits it, per describe.
    */
   op: Op;
 };

@@ -1,12 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -51,9 +51,7 @@ func answer(content string) *openrouter.CompletionResponse {
 
 func newObservedCompletion(client openrouter.CompletionClient) (*observedCompletion, *bool) {
 	refused := false
-	return &observedCompletion{
-		CompletionClient: client, observation: &decisionObservation{}, calls: new(0), refusals: new(0), refused: &refused,
-	}, &refused
+	return &observedCompletion{CompletionClient: client, observation: &decisionObservation{}, refused: &refused}, &refused
 }
 
 func TestObservedCompletionAsksAgainAfterRefusalAndMalformedVerdict(t *testing.T) {
@@ -65,8 +63,6 @@ func TestObservedCompletionAsksAgainAfterRefusalAndMalformedVerdict(t *testing.T
 	require.NoError(t, err)
 	require.True(t, hasVerdict(result))
 	require.False(t, *refused)
-	require.Equal(t, 3, *observed.calls)
-	require.Equal(t, 1, *observed.refusals)
 	require.Len(t, observed.observation.Calls, 3)
 }
 
@@ -79,7 +75,7 @@ func TestObservedCompletionStopsAfterMaxVerdictAttempts(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, isRefusal(result))
 	require.True(t, *refused, "the report scores a confirmation refused three times as a refusal")
-	require.Equal(t, maxVerdictAttempts, *observed.calls)
+	require.Len(t, observed.observation.Calls, maxVerdictAttempts)
 }
 
 func TestTransientCallFailure(t *testing.T) {
@@ -115,19 +111,18 @@ func TestCascadeCaseRetryReporting(t *testing.T) {
 	transient := &typesafe.StatusError{StatusCode: http.StatusTooManyRequests}
 	permanent := &typesafe.StatusError{StatusCode: http.StatusUnauthorized}
 	for _, tc := range []struct {
-		name                   string
-		failures               []error
-		stopWait               bool
-		wantAttempts           int
-		wantLatency            time.Duration
-		wantInitialUnavailable bool
-		wantFinalUnavailable   bool
+		name                 string
+		failures             []error
+		stopWait             bool
+		wantAttempts         int
+		wantLatency          time.Duration
+		wantFinalUnavailable bool
 	}{
 		{name: "immediate success", failures: []error{nil}, wantAttempts: 1, wantLatency: time.Second},
-		{name: "recovers", failures: []error{transient, nil}, wantAttempts: 2, wantLatency: 7 * time.Second, wantInitialUnavailable: true},
-		{name: "exhausts retries", failures: []error{transient, transient, transient, transient}, wantAttempts: 4, wantLatency: 39 * time.Second, wantInitialUnavailable: true, wantFinalUnavailable: true},
-		{name: "permanent failure", failures: []error{permanent}, wantAttempts: 1, wantLatency: time.Second, wantInitialUnavailable: true, wantFinalUnavailable: true},
-		{name: "canceled retry wait", failures: []error{transient}, stopWait: true, wantAttempts: 1, wantLatency: 3 * time.Second, wantInitialUnavailable: true, wantFinalUnavailable: true},
+		{name: "recovers", failures: []error{transient, nil}, wantAttempts: 2, wantLatency: 7 * time.Second},
+		{name: "exhausts retries", failures: []error{transient, transient, transient, transient}, wantAttempts: 4, wantLatency: 39 * time.Second, wantFinalUnavailable: true},
+		{name: "permanent failure", failures: []error{permanent}, wantAttempts: 1, wantLatency: time.Second, wantFinalUnavailable: true},
+		{name: "canceled retry wait", failures: []error{transient}, stopWait: true, wantAttempts: 1, wantLatency: 3 * time.Second, wantFinalUnavailable: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -141,7 +136,7 @@ func TestCascadeCaseRetryReporting(t *testing.T) {
 				err := tc.failures[attempts]
 				attempts++
 				clock = clock.Add(time.Second)
-				observation.Calls = append(observation.Calls, callObservation{Latency: time.Second, Err: err})
+				observation.Calls = append(observation.Calls, callObservation{Err: err})
 				verdict := promptinjection.Result{Label: promptinjection.LabelSafe, Completed: true}
 				if err != nil {
 					verdict.Label = promptinjection.LabelUnavailable
@@ -158,82 +153,84 @@ func TestCascadeCaseRetryReporting(t *testing.T) {
 				clock = clock.Add(caseRetryBaseDelay << (attempt - 1))
 				return true
 			}
-			_, verdict, err, firstUnavailable := runCascadeCase(ctx, observation, scan, func() time.Time { return clock }, wait)
+			_, verdict, err := runCascadeCase(ctx, observation, scan, func() time.Time { return clock }, wait)
 			require.Equal(t, tc.wantAttempts, attempts)
 			require.Equal(t, tc.wantLatency, observation.Latency)
-			require.Equal(t, tc.wantInitialUnavailable, firstUnavailable)
 			require.Equal(t, tc.wantFinalUnavailable, err != nil || verdict.Label == promptinjection.LabelUnavailable)
 			require.Len(t, observation.Calls, attempts, "every physical attempt remains in cost/error reporting")
-			stats := summarizeEvaluation([]decisionObservation{*observation})
-			require.InDelta(t, float64(tc.wantLatency.Milliseconds()), stats.DecisionLatencyP50MS, 0.001)
-			require.Equal(t, attempts, stats.PhysicalCalls)
 		})
 	}
 }
 
-func TestBenchmarkAvailabilityReportLabels(t *testing.T) {
-	t.Parallel()
-	stats := evaluationStats{BenchmarkCases: 2, BenchmarkFirstAttemptUnavailable: 1, FailOpenEvents: 0, PhysicalCalls: 3, DecisionLatencyP50MS: 7000}
-	raw, err := json.Marshal(stats)
-	require.NoError(t, err)
-	require.Contains(t, string(raw), `"benchmark_cases":2`)
-	require.Contains(t, string(raw), `"benchmark_first_attempt_unavailable":1`)
-	require.Contains(t, string(raw), `"fail_open_events":0`)
-	var output bytes.Buffer
-	printSummary(&output, []modeSummary{{Evaluation: stats}})
-	require.Contains(t, output.String(), "benchmark_first_attempt_unavailable=1 final_unavailable=0")
-	require.Contains(t, output.String(), "benchmark attempts include confirmer retries")
-	require.Contains(t, output.String(), "total_case_latency_ms[p50=7000")
-	stats.BenchmarkFirstAttemptUnavailable = 0
-	raw, err = json.Marshal(stats)
-	require.NoError(t, err)
-	require.Contains(t, string(raw), `"benchmark_first_attempt_unavailable":0`)
-	output.Reset()
-	printSummary(&output, []modeSummary{{Evaluation: stats}})
-	require.Contains(t, output.String(), "benchmark_first_attempt_unavailable=0 final_unavailable=0")
-}
-
-// clearingPrefilter makes the scheduler tests deterministic without any network.
-type clearingPrefilter struct{ calls int }
-
-func (p *clearingPrefilter) Evaluate(_ context.Context, _ string, _ json.RawMessage, questions map[string]typesafe.Question) (typesafe.Result, error) {
-	p.calls++
+// noRisk answers every question with probability zero, so the cascade
+// clears the case without a confirmation.
+func noRisk(questions map[string]typesafe.Question) typesafe.Result {
 	probabilities := make(map[string]float64, len(questions))
 	for key := range questions {
 		probabilities[key] = 0
 	}
-	return typesafe.Result{Probabilities: probabilities, Model: typesafe.Model}, nil
+	return typesafe.Result{Probabilities: probabilities, Model: typesafe.Model}
 }
 
-func TestCascadeCancellationDoesNotScoreUnstartedCases(t *testing.T) {
-	t.Parallel()
-	for _, cancelBefore := range []bool{true, false} {
-		t.Run(fmt.Sprintf("before_%t", cancelBefore), func(t *testing.T) {
-			t.Parallel()
-			ctx, cancel := context.WithCancel(t.Context())
-			defer cancel()
-			if cancelBefore {
-				cancel()
-			}
-			prefilter := &clearingPrefilter{}
-			completion := &scriptedCompletion{}
-			completed := 0
-			results, stats, err := scanCascadeWithClients(ctx, options{judgeConcurrency: 1}, []labeledCase{recordsCase("a", "benign", ""), recordsCase("b", "benign", ""), recordsCase("c", "benign", "")}, func(_ int, outcome caseOutcome) {
-				require.Equal(t, promptinjection.LabelSafe, outcome.verdict.Label)
-				completed++
-				cancel()
-			}, prefilter, completion)
-			require.ErrorIs(t, err, context.Canceled)
-			require.Nil(t, results, "partial slots must not be scored as clean cases")
-			require.Zero(t, stats.BenchmarkCases)
-			require.Empty(t, completion.models)
-			if cancelBefore {
-				require.Zero(t, completed)
-				require.Zero(t, prefilter.calls)
-			} else {
-				require.Equal(t, 1, completed)
-				require.Equal(t, 1, prefilter.calls)
-			}
-		})
+// blockingPrefilter holds every evaluation until release closes, so a test
+// controls how many cases are in flight when it cancels.
+type blockingPrefilter struct {
+	calls   atomic.Int32
+	started chan struct{}
+	release chan struct{}
+}
+
+func (p *blockingPrefilter) Evaluate(_ context.Context, _ string, _ json.RawMessage, questions map[string]typesafe.Question) (typesafe.Result, error) {
+	p.calls.Add(1)
+	p.started <- struct{}{}
+	<-p.release
+	return noRisk(questions), nil
+}
+
+func benignCases(n int) []labeledCase {
+	cases := make([]labeledCase, n)
+	for i := range cases {
+		cases[i] = recordsCase(fmt.Sprint(i), "benign", "")
 	}
+	return cases
+}
+
+func TestCascadeCancellationStartsNoMoreCases(t *testing.T) {
+	t.Parallel()
+
+	cases := benignCases(judgeConcurrency + 2)
+	prefilter := &blockingPrefilter{started: make(chan struct{}, len(cases)), release: make(chan struct{})}
+	completion := &scriptedCompletion{}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	var completed atomic.Int32
+	done := make(chan error, 1)
+	go func() {
+		done <- scanCascadeWithClients(ctx, cases, func(int, caseOutcome) { completed.Add(1) }, prefilter, completion)
+	}()
+
+	// The first cases hold every slot, so the loop waits for one when the run
+	// is cancelled.
+	for range judgeConcurrency {
+		<-prefilter.started
+	}
+	cancel()
+	close(prefilter.release)
+	require.ErrorIs(t, <-done, context.Canceled)
+	require.Equal(t, int32(judgeConcurrency), prefilter.calls.Load(), "no case starts after the cancel")
+	require.Equal(t, int32(judgeConcurrency), completed.Load(), "every started case is handed back")
+	require.Empty(t, completion.models)
+}
+
+func TestCascadeCancelledBeforeStartJudgesNothing(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	prefilter := &blockingPrefilter{started: make(chan struct{}, 1), release: make(chan struct{})}
+	completed := 0
+	err := scanCascadeWithClients(ctx, benignCases(3), func(int, caseOutcome) { completed++ }, prefilter, &scriptedCompletion{})
+	require.ErrorIs(t, err, context.Canceled)
+	require.Zero(t, prefilter.calls.Load())
+	require.Zero(t, completed)
 }

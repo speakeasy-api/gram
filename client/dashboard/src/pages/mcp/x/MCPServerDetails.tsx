@@ -1,3 +1,4 @@
+import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { AttachedUserSessions } from "@/components/sessions/AttachedUserSessions";
@@ -177,13 +178,19 @@ export default function MCPServerDetails(): JSX.Element {
               >
                 {/* mcp_servers-backed servers grant under the same `mcp:*`
                   scope kind as toolset-backed ones (see selector.go), so
-                  MCPTeamAccessTab is reused as-is with the mcp_server's
-                  id as the resource id. No `tools` prop because the
-                  Remote MCP backend doesn't expose a Speakeasy-side tool
-                  catalog. */}
+                  MCPTeamAccessTab takes the mcp_server's id as the resource
+                  id. No `tools` prop because the Remote MCP backend doesn't
+                  expose a Speakeasy-side tool catalog. */}
                 <MCPTeamAccessTab
                   resourceId={mcpServer.id}
                   serverName={mcpServer.name ?? undefined}
+                  requestedScopes={
+                    mcpServer.remoteMcpServerId
+                      ? {
+                          editScopesHref: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`,
+                        }
+                      : undefined
+                  }
                 />
               </RequireScope>
             </RequireScope>
@@ -477,6 +484,7 @@ function useMcpServerVisibilityUpdate(server: McpServer): {
       await Promise.all([
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        invalidateAllResourceAudience(queryClient, { refetchType: "all" }),
         // Enabling a disabled server (e.g. disabled -> private) auto-attaches
         // it to the Default plugin server-side, which the plugin banner's
         // membership check and publish-freshness state need to pick up.

@@ -174,6 +174,9 @@ type FindMCPOutput struct {
 type GetMCPInput struct {
 	ProjectID string `json:"project_id" jsonschema:"project ID that owns the MCP"`
 	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID"`
+	// ToolCursor continues a paged tool_exposure read. The other fields of
+	// the result are re-read in full on every page.
+	ToolCursor string `json:"tool_cursor,omitempty" jsonschema:"tool_exposure.next_tool_cursor from the previous get_mcp read of this same server; omit for the first page"`
 }
 
 type featureUnavailableResult struct {
@@ -228,6 +231,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			"Pausing or resuming a data export changes only whether one route sends data; nothing about its destination or data source changes, and editing or deleting a destination or route stays in the dashboard. Name the exact project and route from the current data export list and wait for explicit confirmation. Before pausing, tell the user that data produced while the route is paused is dropped, not held back for later — resuming sends only new data — and that either change takes up to about a minute to reach every relay. Before resuming, show the user the route's data source and destination from the current data export list and pass exactly those back; if the route changed since that read the resume is refused, so read it again and confirm what it points at now. A route with no destination, a deleted destination, or a destination whose stored configuration can no longer be used cannot be resumed; say which and send the user to the dashboard. Speakeasy does not record when a route last delivered, so do not state one.",
 			"Dismissing Watchdog findings as false positives, or restoring them, is a mutation: name the exact project and the exact findings, wait for explicit confirmation, then report which findings changed, which were already in that state, and which were not found in the project. A dismissal suppresses only the findings named; a risk exclusion is the tool for a whole class of findings.",
 			"Project-wide chat listings are metadata only: when a conversation was active, how long it ran, which app produced it, whether risk analysis found anything, and a masked participant. Never present a listed chat's title or what was said as known, and send the administrator to the dashboard to read a transcript. Personal session recall is separate: it may present the caller's own sessions by title and their own redacted handoff digest.",
+			"Explore's analytics catalog answers questions about a project's agent sessions and tool calls through three tools, used in order. describe_analytics_catalog says which datasets exist, what one row of each is, which fields can group, filter and aggregate, the time grains, and the limits. list_analytics_dimension_values says what a dimension actually holds inside a window, so a filter names a value that exists. run_analytics_query then asks the question in exactly those names. Every call names the exact project. Never invent a dataset, field or value; when a query is refused as invalid, correct the field the refusal names from the catalog rather than retrying the same request. Report a window as dates and a count as what it counts (sessions, tool calls, people), never as a plan or table name. When these tools say analytics is not switched on for the organization, say so and stop.",
 		}, "\n\n"),
 		PageSize: 32,
 		// Declared rather than inferred. Left unset, the SDK advertises
@@ -310,6 +314,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerShadowInventoryTools(reg, postgresReader.shadowInventory)
 		registerShadowDecisionTool(reg, postgresReader.shadowDecisions)
 		registerShadowAITools(reg, postgresReader.shadowAI)
+		registerAnalyticsTools(reg, postgresReader.analytics)
 	} else {
 		registerUnavailableMCPConnectionSettingsTool(reg)
 		registerMCPConnectionMutationTools(reg, nil)
@@ -331,6 +336,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerUnavailableShadowInventoryTools(reg)
 		registerShadowDecisionTool(reg, nil)
 		registerUnavailableShadowAITools(reg)
+		registerAnalyticsTools(reg, nil)
 	}
 	registerSetupResources(reg, setupResources, time.Now)
 	if registrations == nil || !registrations.budgets.Docs.valid() {

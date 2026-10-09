@@ -196,9 +196,10 @@ func handleToolsCall(
 	}
 
 	// Legacy /mcp/<toolset slug> calls do not carry the wrapper server id in
-	// their route payload. Attribute only when exactly one enabled wrapper
-	// exists. Disabled wrappers do not serve, and choosing among multiple live
-	// wrappers would apply an arbitrary server's policy and telemetry identity.
+	// their route payload. Attribute to the toolset's canonical wrapper, else
+	// only when exactly one enabled wrapper exists. Disabled wrappers do not
+	// serve, and choosing among multiple live wrappers would apply an arbitrary
+	// server's policy and telemetry identity.
 	// Keep the payload unchanged because its nil server id still identifies the
 	// legacy authorization path.
 	attributedMCPServerID := payload.mcpServerID

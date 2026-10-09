@@ -371,6 +371,13 @@ const (
 	// but a required upstream token could not be refreshed because the issuer
 	// or client configuration is broken, which only an administrator repairs.
 	issuerGateReasonRemoteSessionMisconfigured = "remote_session_misconfigured"
+
+	// issuerGateReasonClientCredentialMisconfigured: the bearer token was
+	// accepted but the upstream credential a self client holds for itself
+	// could not be obtained, which only an administrator repairs. Separate
+	// from remote_session_misconfigured because no caller connects that
+	// credential, so the answer carries no challenge.
+	issuerGateReasonClientCredentialMisconfigured = "client_credential_misconfigured"
 )
 
 // The texts the issuer gate returns when the bearer token was accepted but a
@@ -384,6 +391,11 @@ const (
 	// remoteSessionMisconfiguredDescription tells the user that reconnecting
 	// cannot help and who can.
 	remoteSessionMisconfiguredDescription = "The upstream connection for this MCP server is misconfigured. Contact the MCP server administrator."
+
+	// selfClientMisconfiguredDescription tells the caller that the
+	// credential the MCP server presents upstream on everyone's behalf cannot
+	// be used, which nothing the caller does repairs.
+	selfClientMisconfiguredDescription = "The upstream credential this MCP server uses is misconfigured or was rejected by the upstream. Contact the MCP server administrator."
 
 	// remoteSessionUnavailableMessage tells the client the failure is
 	// temporary and the request can be retried unchanged.
@@ -423,10 +435,16 @@ func issuerGateFailureReason(err error) string {
 		return issuerGateReasonWorkloadRolloutDisabled
 	case errors.Is(err, errWorkloadRolloutUnavailable):
 		return issuerGateReasonWorkloadRolloutUnavailable
+	case errors.Is(err, errWorkloadSessionOutOfReach):
+		return issuerGateReasonWorkloadSessionOutOfReach
 	default:
 		return issuerGateReasonInvalidBearerToken
 	}
 }
+
+// issuerGateReasonWorkloadSessionOutOfReach: a live workload session minted
+// for all of its issuer's MCP servers was presented to one it does not reach.
+const issuerGateReasonWorkloadSessionOutOfReach = "workload_session_out_of_reach"
 
 // issuerGateReasonInvalidBearerToken: the presented bearer token was judged
 // unusable — bad signature, expired, revoked, wrong audience, or its principal
@@ -502,9 +520,10 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 	}
 	legacyAudience, _ := endpoint.legacyToolsetAudienceURN()
 	session, acceptedAudience, err := validateUserSessionBearerAudiences(ctx, s.userSessionSigner, s.chatSessionsManager, token, userSessionBearerAudiences{
-		Resource: resource,
-		Current:  endpoint.AudienceURN,
-		Legacy:   legacyAudience,
+		Resource:         resource,
+		Current:          endpoint.AudienceURN,
+		IssuerMCPServers: urn.NewUserSessionIssuerMCPServers(endpoint.UserSessionIssuerID).String(),
+		Legacy:           legacyAudience,
 	})
 	if err != nil {
 		// A revocation store that could not answer judged nothing; everything
@@ -514,17 +533,25 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 		}
 		return ctx, nil, nil, false, fmt.Errorf("%w: validate user-session bearer: %w", errCredentialRejected, err)
 	}
-	// Only the issuer-scoped audiences are shared across hosts; a token on the
-	// exact resource audience is already bound to this host, and is checked
-	// against a shared authorization server instead.
+	// The issuer-scoped audiences of a per-endpoint authorization server are
+	// shared across hosts, so their tokens are bound to the host that minted
+	// them. A token on the exact resource audience is already bound to this
+	// host, and one on the audience naming all of the issuer's MCP servers is
+	// bound to its shared authorization server; both are checked against that
+	// server instead.
 	sharedResourceSession := false
-	if acceptedAudience != userSessionAudienceResource {
+	switch acceptedAudience {
+	case userSessionAudienceCurrent, userSessionAudienceLegacy:
 		if err := s.checkPerEndpointTokenHost(ctx, session, endpoint, baseURL); err != nil {
 			return ctx, nil, nil, false, fmt.Errorf("%w: %w", errCredentialRejected, err)
 		}
-	} else {
+	case userSessionAudienceResource:
 		sharedResourceSession, err = s.checkSharedResourceSession(ctx, session, endpoint, baseURL)
 		if err != nil {
+			return ctx, nil, nil, false, err
+		}
+	case userSessionAudienceIssuerMCPServers:
+		if err := s.checkIssuerMCPServersSession(ctx, session, endpoint); err != nil {
 			return ctx, nil, nil, false, err
 		}
 	}
@@ -536,7 +563,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 	// including anonymous, which early-returns below before AuthContext is
 	// stamped. Load failures fail closed: a policy-store outage must never
 	// widen a restrictive session to all tools.
-	toolSelection, err := s.loadSessionToolSelection(ctx, endpoint, session.JTI())
+	toolSelection, sessionRefreshable, err := s.loadSessionPolicy(ctx, endpoint, session.JTI())
 	if err != nil {
 		return ctx, nil, nil, false, fmt.Errorf("%w: %w", errToolSelectionLoad, err)
 	}
@@ -584,11 +611,25 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 			}
 			return ctx, nil, nil, false, fmt.Errorf("%w: %w", errWorkloadSessionCredentialLoad, qerr)
 		}
-		credential, cerr := loadWorkloadSessionCredential(endpoint, subject, row.SubjectUrn, row.OrganizationID, row.DelegatedGrants, row.DelegatedGrantsVersion)
+		reach := workloadSessionReachResource
+		var credential workloadSessionCredential
+		var cerr error
+		if acceptedAudience == userSessionAudienceIssuerMCPServers {
+			// checkIssuerMCPServersSession stamped the issuer's shared
+			// authorization server.
+			reach = workloadSessionReachIssuer
+			credential, cerr = loadIssuerWorkloadSessionCredential(endpoint.OrganizationID, endpoint.sharedAuthorizationServer.projectID, subject, row.SubjectUrn, row.OrganizationID, row.DelegatedGrants, row.DelegatedGrantsVersion)
+		} else {
+			credential, cerr = loadWorkloadSessionCredential(endpoint, subject, row.SubjectUrn, row.OrganizationID, row.DelegatedGrants, row.DelegatedGrantsVersion)
+		}
 		if cerr != nil {
 			return ctx, nil, nil, false, fmt.Errorf("%w: %w", errCredentialRejected, cerr)
 		}
-		newCtx, err = s.admitWorkloadSession(newCtx, endpoint, subject, credential)
+		newCtx, err = s.admitWorkloadSession(newCtx, endpoint.OrganizationID, subject, credential)
+		if err != nil {
+			return ctx, nil, nil, false, err
+		}
+		newCtx, err = s.requireWorkloadSessionAuthorization(newCtx, endpoint, reach)
 		if err != nil {
 			return ctx, nil, nil, false, err
 		}
@@ -598,15 +639,35 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token, baseURL s
 	// token: the issuer-scoped sessions of a per-endpoint authorization
 	// server, which validate against the issuer audience, and the
 	// resource-bound sessions of a shared one. ID-JAG and workload sessions are
-	// minted for the exact resource too, and have none.
-	refreshable := acceptedAudience != userSessionAudienceResource || sharedResourceSession
+	// minted for the exact resource or for all of the issuer's MCP servers,
+	// and have none.
+	refreshable := false
+	switch acceptedAudience {
+	case userSessionAudienceCurrent, userSessionAudienceLegacy:
+		refreshable = true
+	case userSessionAudienceResource:
+		refreshable = sharedResourceSession && sessionRefreshable
+	case userSessionAudienceIssuerMCPServers:
+		refreshable = false
+	}
 	return newCtx, &subject, toolSelection, refreshable, nil
 }
 
 type userSessionBearerAudiences struct {
+	// Resource is the endpoint's exact RFC 8707 resource.
 	Resource string
-	Current  string
-	Legacy   string
+
+	// Current is the endpoint's issuer-scoped audience.
+	Current string
+
+	// IssuerMCPServers names every MCP server of the endpoint's issuer, the
+	// audience its shared authorization server mints for a grant naming no
+	// resource.
+	IssuerMCPServers string
+
+	// Legacy is the pre-migration toolset audience, or empty when the endpoint
+	// has none.
+	Legacy string
 }
 
 type userSessionAcceptedAudience uint8
@@ -614,12 +675,14 @@ type userSessionAcceptedAudience uint8
 const (
 	userSessionAudienceResource userSessionAcceptedAudience = iota
 	userSessionAudienceCurrent
+	userSessionAudienceIssuerMCPServers
 	userSessionAudienceLegacy
 )
 
 // validateUserSessionBearerAudiences applies the rollout-safe audience order:
-// exact endpoint resource first, current issuer-scoped audience second, then
-// the pre-migration toolset audience. It falls through only on an audience
+// exact endpoint resource first, current issuer-scoped audience second, the
+// audience naming all of the issuer's MCP servers third, then the
+// pre-migration toolset audience. It falls through only on an audience
 // mismatch; every other validation failure is final.
 func validateUserSessionBearerAudiences(
 	ctx context.Context,
@@ -640,7 +703,21 @@ func validateUserSessionBearerAudiences(
 	if currentErr == nil {
 		return session, userSessionAudienceCurrent, nil
 	}
-	if audiences.Legacy == "" || !errors.Is(currentErr, jwt.ErrTokenInvalidAudience) {
+	if !errors.Is(currentErr, jwt.ErrTokenInvalidAudience) {
+		return sessiontokens.ValidatedSession{}, userSessionAudienceCurrent, fmt.Errorf("validate current audience: %w", currentErr)
+	}
+
+	session, issuerErr := signer.ValidateExactAudienceBearer(ctx, token, audiences.IssuerMCPServers, revocation)
+	if issuerErr == nil {
+		return session, userSessionAudienceIssuerMCPServers, nil
+	}
+	if !errors.Is(issuerErr, jwt.ErrTokenInvalidAudience) {
+		return sessiontokens.ValidatedSession{}, userSessionAudienceIssuerMCPServers, fmt.Errorf("validate issuer MCP servers audience: %w", issuerErr)
+	}
+	if audiences.Legacy == "" {
+		// The token names none of this endpoint's audiences. Reported as the
+		// issuer-scoped mismatch, which is what most such tokens were meant
+		// for.
 		return sessiontokens.ValidatedSession{}, userSessionAudienceCurrent, fmt.Errorf("validate current audience: %w", currentErr)
 	}
 
@@ -649,6 +726,39 @@ func validateUserSessionBearerAudiences(
 		return sessiontokens.ValidatedSession{}, userSessionAudienceLegacy, fmt.Errorf("validate legacy audience: %w", legacyErr)
 	}
 	return session, userSessionAudienceLegacy, nil
+}
+
+// sessionAuthContext is the AuthContext a session acts under in an
+// organization, before its subject is stamped: the organization's metadata,
+// the project when there is one, and the session id when there is one.
+func (s *Service) sessionAuthContext(ctx context.Context, organizationID string, projectID *uuid.UUID, sessionID string) (*contextvalues.AuthContext, error) {
+	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgsRepo, s.billingRepository, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errIssuerGateOrgLookup, err)
+	}
+	authCtx := &contextvalues.AuthContext{
+		ActiveOrganizationID:  organizationID,
+		ProjectID:             projectID,
+		UserID:                "",
+		ExternalUserID:        "",
+		APIKeyID:              "",
+		APIKeyName:            "",
+		OrgWidePluginHooksKey: false,
+		SessionID:             nil,
+		OrganizationSlug:      orgMetadata.Slug,
+		Email:                 nil,
+		AccountType:           orgMetadata.GramAccountType,
+		HasActiveSubscription: orgMetadata.HasActiveSubscription,
+		Whitelisted:           orgMetadata.Whitelisted,
+		ProjectSlug:           nil,
+		APIKeyScopes:          nil,
+		IsAdmin:               false,
+		SupportOrganizationID: "",
+	}
+	if sessionID != "" {
+		authCtx.SessionID = &sessionID
+	}
+	return authCtx, nil
 }
 
 // contextForSessionSubject stamps the request context for a resolved session
@@ -686,32 +796,10 @@ func (s *Service) contextForSessionSubject(
 		return ctx, nil
 	}
 
-	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgsRepo, s.billingRepository, endpoint.OrganizationID)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errIssuerGateOrgLookup, err)
-	}
 	projectID := endpoint.ProjectID
-	authCtx := &contextvalues.AuthContext{
-		ActiveOrganizationID:  endpoint.OrganizationID,
-		ProjectID:             &projectID,
-		UserID:                "",
-		ExternalUserID:        "",
-		APIKeyID:              "",
-		APIKeyName:            "",
-		OrgWidePluginHooksKey: false,
-		SessionID:             nil,
-		OrganizationSlug:      orgMetadata.Slug,
-		Email:                 nil,
-		AccountType:           orgMetadata.GramAccountType,
-		HasActiveSubscription: orgMetadata.HasActiveSubscription,
-		Whitelisted:           orgMetadata.Whitelisted,
-		ProjectSlug:           nil,
-		APIKeyScopes:          nil,
-		IsAdmin:               false,
-		SupportOrganizationID: "",
-	}
-	if sessionID != "" {
-		authCtx.SessionID = &sessionID
+	authCtx, err := s.sessionAuthContext(ctx, endpoint.OrganizationID, &projectID, sessionID)
+	if err != nil {
+		return nil, err
 	}
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
@@ -804,6 +892,15 @@ func WriteAuthenticateChallenge(w http.ResponseWriter, protectedResourceURL, mes
 // and obtain a new one rather than retry with it.
 func writeInvalidTokenChallenge(w http.ResponseWriter, protectedResourceURL, message string) error {
 	return writeChallenge(w, bearerErrorChallengeHeader(protectedResourceURL, oautherr.CodeInvalidToken, ""), message)
+}
+
+// writeInsufficientScopeChallenge answers 403 with the RFC 6750 §3.1
+// insufficient_scope error: the access token is valid but does not grant
+// access to this resource. Unlike invalid_token, it tells the client to keep
+// the token, which still works where it does grant access.
+func writeInsufficientScopeChallenge(w http.ResponseWriter, protectedResourceURL, message string) error {
+	w.Header().Set("WWW-Authenticate", bearerErrorChallengeHeader(protectedResourceURL, oautherr.CodeInsufficientScope, ""))
+	return oops.E(oops.CodeForbidden, nil, "%s", message)
 }
 
 // bearerErrorChallengeHeader is AuthenticateChallengeHeader with the RFC 6750
@@ -953,6 +1050,9 @@ func (s *Service) authenticateIssuerGate(
 			)
 		}
 		s.metrics.RecordMCPRequestRejected(ctx, reason, mcpURL, surface)
+		if errors.Is(valErr, errWorkloadSessionOutOfReach) {
+			return ctx, nil, nil, writeInsufficientScopeChallenge(w, protectedResourceURL, "access token does not grant access to this MCP server")
+		}
 		const message = "expired or invalid access token"
 		if errors.Is(valErr, errCredentialRejected) && s.isWorkloadSessionBearer(authToken) {
 			return ctx, nil, nil, writeInvalidTokenChallenge(w, protectedResourceURL, message)
@@ -1017,6 +1117,12 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 		// the client is told to retry the same request instead.
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate deferred: upstream remote session temporarily unavailable", issuerGateReasonRemoteSessionUnavailable)
 		return remoteSessionUnavailableError(w, err)
+	case errors.Is(err, remotesessions.ErrClientCredentialMisconfigured):
+		// No authorization the caller performs supplies a self client's
+		// credential, so a challenge would only loop the client through
+		// reauthorization. Name the administrator instead.
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream client credential misconfigured", issuerGateReasonClientCredentialMisconfigured)
+		return clientCredentialMisconfiguredError(err)
 	case errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured):
 		// Reauthorizing goes through the same broken issuer or client
 		// configuration, so the challenge omits invalid_token and names who
@@ -1030,6 +1136,13 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 	default:
 		return oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
 	}
+}
+
+// clientCredentialMisconfiguredError is the answer when a self client's
+// upstream credential cannot be obtained or the upstream rejects it: a
+// precondition failure naming the administrator, never a challenge.
+func clientCredentialMisconfiguredError(err error) *oops.ShareableError {
+	return oops.E(oops.CodeFailedPrecondition, err, "%s", selfClientMisconfiguredDescription)
 }
 
 // remoteSessionUnavailableError sets Retry-After on w and returns the 503 for a
@@ -1138,7 +1251,7 @@ func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *Resolv
 	// Carried verbatim, NULL included; admission.ResolveMode is the one
 	// place that decides what an absent or unrecognized value means.
 	endpoint.CIMDAdmissionModeRaw = issuer.ClientIDMetadataAdmissionMode
-	endpoint.idJAGConfigured = !issuer.ProjectID.Valid && issuer.OrganizationID.Valid && issuer.TrustedRemoteSessionIssuerID.Valid
+	endpoint.idJAGConfigured = issuerIDJAGConfigured(issuer)
 	endpoint.useAuthenticationHost = issuer.UseAuthenticationHost
 	// A shared-mode issuer whose shared authorization server cannot be built
 	// keeps its MCP servers on their per-endpoint authorization servers, which

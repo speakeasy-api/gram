@@ -653,8 +653,8 @@ type CreateGlobalClientResponseBody struct {
 	// Identifier used as the aud claim in private_key_jwt assertions. Null
 	// resolves to issuer.
 	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
-	// The organization JSON Web Key Set attached to this client, managed through
-	// attachKeySet and detachKeySet. Null when no key set is attached.
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
@@ -666,8 +666,14 @@ type CreateGlobalClientResponseBody struct {
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
 	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner *string `form:"credential_owner,omitempty" json:"credential_owner,omitempty" xml:"credential_owner,omitempty"`
 	// The redirect URI this client registers with its upstream provider. It never
-	// changes after the client is created. Absent on global clients.
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
 	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
@@ -720,8 +726,8 @@ type GetGlobalClientResponseBody struct {
 	// Identifier used as the aud claim in private_key_jwt assertions. Null
 	// resolves to issuer.
 	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
-	// The organization JSON Web Key Set attached to this client, managed through
-	// attachKeySet and detachKeySet. Null when no key set is attached.
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
@@ -733,8 +739,14 @@ type GetGlobalClientResponseBody struct {
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
 	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner *string `form:"credential_owner,omitempty" json:"credential_owner,omitempty" xml:"credential_owner,omitempty"`
 	// The redirect URI this client registers with its upstream provider. It never
-	// changes after the client is created. Absent on global clients.
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
 	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
@@ -779,8 +791,8 @@ type UpdateGlobalClientResponseBody struct {
 	// Identifier used as the aud claim in private_key_jwt assertions. Null
 	// resolves to issuer.
 	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
-	// The organization JSON Web Key Set attached to this client, managed through
-	// attachKeySet and detachKeySet. Null when no key set is attached.
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
@@ -792,8 +804,14 @@ type UpdateGlobalClientResponseBody struct {
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
 	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner *string `form:"credential_owner,omitempty" json:"credential_owner,omitempty" xml:"credential_owner,omitempty"`
 	// The redirect URI this client registers with its upstream provider. It never
-	// changes after the client is created. Absent on global clients.
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
 	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
@@ -4090,8 +4108,8 @@ type RemoteSessionClientResponseBody struct {
 	// Identifier used as the aud claim in private_key_jwt assertions. Null
 	// resolves to issuer.
 	TokenEndpointAuthAudienceFormat *string `form:"token_endpoint_auth_audience_format,omitempty" json:"token_endpoint_auth_audience_format,omitempty" xml:"token_endpoint_auth_audience_format,omitempty"`
-	// The organization JSON Web Key Set attached to this client, managed through
-	// attachKeySet and detachKeySet. Null when no key set is attached.
+	// The organization JSON Web Key Set attached to this client, set on create or
+	// through attachKeySet and detachKeySet. Null when no key set is attached.
 	JSONWebKeySetID *string `form:"json_web_key_set_id,omitempty" json:"json_web_key_set_id,omitempty" xml:"json_web_key_set_id,omitempty"`
 	// Explicit upstream OAuth scopes the dance requests for this client. Null
 	// falls back to the issuer's scopes_supported.
@@ -4103,8 +4121,14 @@ type RemoteSessionClientResponseBody struct {
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
 	LegacyCallbackURL *bool `form:"legacy_callback_url,omitempty" json:"legacy_callback_url,omitempty" xml:"legacy_callback_url,omitempty"`
+	// Who the upstream access credential belongs to. subject means each caller
+	// connects their own upstream account; self means the client holds one
+	// credential for itself, obtained with the client_credentials grant, that
+	// every caller shares.
+	CredentialOwner *string `form:"credential_owner,omitempty" json:"credential_owner,omitempty" xml:"credential_owner,omitempty"`
 	// The redirect URI this client registers with its upstream provider. It never
-	// changes after the client is created. Absent on global clients.
+	// changes after the client is created. Absent on global clients and on clients
+	// with credential_owner self, which have no callback.
 	CallbackURL *string `form:"callback_url,omitempty" json:"callback_url,omitempty" xml:"callback_url,omitempty"`
 	CreatedAt   *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt   *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
@@ -5985,6 +6009,7 @@ func NewCreateGlobalClientRemoteSessionClientOK(body *CreateGlobalClientResponse
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
 		LegacyCallbackURL:               *body.LegacyCallbackURL,
+		CredentialOwner:                 *body.CredentialOwner,
 		CallbackURL:                     body.CallbackURL,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
@@ -6346,6 +6371,7 @@ func NewGetGlobalClientRemoteSessionClientOK(body *GetGlobalClientResponseBody) 
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
 		LegacyCallbackURL:               *body.LegacyCallbackURL,
+		CredentialOwner:                 *body.CredentialOwner,
 		CallbackURL:                     body.CallbackURL,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
@@ -6538,6 +6564,7 @@ func NewUpdateGlobalClientRemoteSessionClientOK(body *UpdateGlobalClientResponse
 		JSONWebKeySetID:                 body.JSONWebKeySetID,
 		Audience:                        body.Audience,
 		LegacyCallbackURL:               *body.LegacyCallbackURL,
+		CredentialOwner:                 *body.CredentialOwner,
 		CallbackURL:                     body.CallbackURL,
 		CreatedAt:                       *body.CreatedAt,
 		UpdatedAt:                       *body.UpdatedAt,
@@ -7632,6 +7659,9 @@ func ValidateCreateGlobalClientResponseBody(body *CreateGlobalClientResponseBody
 	if body.LegacyCallbackURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
 	}
+	if body.CredentialOwner == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -7668,6 +7698,11 @@ func ValidateCreateGlobalClientResponseBody(body *CreateGlobalClientResponseBody
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.CredentialOwner != nil {
+		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.credential_owner", *body.CredentialOwner, []any{"subject", "self"}))
+		}
 	}
 	if body.CallbackURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
@@ -7721,6 +7756,9 @@ func ValidateGetGlobalClientResponseBody(body *GetGlobalClientResponseBody) (err
 	if body.LegacyCallbackURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
 	}
+	if body.CredentialOwner == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -7757,6 +7795,11 @@ func ValidateGetGlobalClientResponseBody(body *GetGlobalClientResponseBody) (err
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.CredentialOwner != nil {
+		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.credential_owner", *body.CredentialOwner, []any{"subject", "self"}))
+		}
 	}
 	if body.CallbackURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
@@ -7794,6 +7837,9 @@ func ValidateUpdateGlobalClientResponseBody(body *UpdateGlobalClientResponseBody
 	if body.LegacyCallbackURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
 	}
+	if body.CredentialOwner == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -7830,6 +7876,11 @@ func ValidateUpdateGlobalClientResponseBody(body *UpdateGlobalClientResponseBody
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.CredentialOwner != nil {
+		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.credential_owner", *body.CredentialOwner, []any{"subject", "self"}))
+		}
 	}
 	if body.CallbackURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))
@@ -11936,6 +11987,9 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	if body.LegacyCallbackURL == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("legacy_callback_url", "body"))
 	}
+	if body.CredentialOwner == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_owner", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -11972,6 +12026,11 @@ func ValidateRemoteSessionClientResponseBody(body *RemoteSessionClientResponseBo
 	}
 	if body.JSONWebKeySetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.json_web_key_set_id", *body.JSONWebKeySetID, goa.FormatUUID))
+	}
+	if body.CredentialOwner != nil {
+		if !(*body.CredentialOwner == "subject" || *body.CredentialOwner == "self") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.credential_owner", *body.CredentialOwner, []any{"subject", "self"}))
+		}
 	}
 	if body.CallbackURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.callback_url", *body.CallbackURL, goa.FormatURI))

@@ -821,17 +821,14 @@ func TestListAppend_TTLBehavior(t *testing.T) {
 	require.NoError(t, err)
 	assert.Greater(t, ttl1.Seconds(), 0.0, "TTL should be set")
 
-	// Wait a bit
-	time.Sleep(1 * time.Second)
-
-	// Second append - should NOT reset TTL
-	err = cacheAdapter.ListAppend(ctx, key, "item2", 10*time.Second)
+	// Second append with a far longer TTL - should NOT replace the original
+	err = cacheAdapter.ListAppend(ctx, key, "item2", time.Hour)
 	require.NoError(t, err)
 
-	// Check TTL is less than original (proving it wasn't reset)
+	// Check TTL still reflects the first append (proving it wasn't reset)
 	ttl2, err := ti.redisClient.TTL(ctx, key).Result()
 	require.NoError(t, err)
-	assert.Less(t, ttl2.Seconds(), ttl1.Seconds(), "TTL should not be reset on subsequent appends")
+	assert.LessOrEqual(t, ttl2, 10*time.Second, "TTL should not be reset on subsequent appends")
 }
 
 // TestListRange_CorrectDeserialization tests that ListRange properly deserializes msgpack data

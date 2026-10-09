@@ -1,10 +1,12 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	_ "embed"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"net"
 	"net/http"
@@ -13,6 +15,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -22,11 +25,7 @@ import (
 var viewHTML string
 
 const (
-	// viewSideBase and viewSideChange name the two runs the viewer compares.
-	viewSideBase   = "base"
-	viewSideChange = "change"
-
-	// reportFile is the viewer's file name inside the run directory.
+	// reportFile is the viewer's file name, beside the runs directory.
 	reportFile = "report.html"
 
 	// wellKnownGoal is the evaluation report's second goal: the share of
@@ -37,17 +36,21 @@ const (
 	// characters tell prompt versions apart.
 	hashPrefixLen = 10
 
+	// maxViewRuns bounds the runs the viewer loads: this checkout's, the base,
+	// and the most recently updated others.
+	maxViewRuns = 12
+
 	// viewerReadHeaderTimeout bounds how long the local viewer waits for a
 	// request's headers.
 	viewerReadHeaderTimeout = 5 * time.Second
 )
 
-// viewSide is one run in the viewer.
-type viewSide struct {
-	// ID is viewSideBase or viewSideChange.
+// viewRun is one cached run in the viewer.
+type viewRun struct {
+	// ID is the run directory's name, its code key.
 	ID string `json:"id"`
 
-	// Manifest says which code and models produced the run.
+	// Manifest names the run's detector and the commits that produced it.
 	Manifest runManifest `json:"manifest"`
 
 	// Totals summarizes the run over the corpus.
@@ -55,13 +58,6 @@ type viewSide struct {
 
 	// RequiredCaught is the attack count the merge gate requires.
 	RequiredCaught int `json:"required_caught"`
-
-	// MaxFalsePositives is the gate's false-positive limit, or -1 when
-	// unenforced.
-	MaxFalsePositives int `json:"max_false_positives"`
-
-	// MinRecall is the recall threshold; zero leaves recall unenforced.
-	MinRecall float64 `json:"min_recall"`
 
 	// GateStatus is the merge gate outcome shared by HTML and Markdown.
 	GateStatus string `json:"gate_status"`
@@ -81,7 +77,7 @@ type viewResult struct {
 	// Detail is the rationale or why no verdict was reached.
 	Detail string `json:"d,omitempty"`
 
-	// Refused reports that the confirmation model refused.
+	// Refused reports that the deciding model refused.
 	Refused bool `json:"r,omitempty"`
 
 	// CostUSD is the case's cost.
@@ -91,7 +87,7 @@ type viewResult struct {
 	LatencyMS float64 `json:"t"`
 }
 
-// viewCase is a corpus case with each run's outcome; a nil outcome is pending.
+// viewCase is a corpus case with each run's outcome.
 type viewCase struct {
 	// Key is "<source>::<id>".
 	Key string `json:"key"`
@@ -114,11 +110,9 @@ type viewCase struct {
 	// Context holds the case's framing: type, tool and trajectory fields.
 	Context map[string]string `json:"context,omitempty"`
 
-	// Base is main's outcome.
-	Base *viewResult `json:"base,omitempty"`
-
-	// Change is this change's outcome.
-	Change *viewResult `json:"change,omitempty"`
+	// Results holds each run's outcome by run ID. A run without one has not
+	// judged the case's current content.
+	Results map[string]*viewResult `json:"results"`
 }
 
 // viewData is everything the viewer renders.
@@ -126,41 +120,89 @@ type viewData struct {
 	// Generated is when the data was built.
 	Generated time.Time `json:"generated"`
 
-	// Sides lists main (when compared) and then this change.
-	Sides []viewSide `json:"sides"`
+	// Change is this checkout's run ID.
+	Change string `json:"change"`
+
+	// Base is the run to compare with, or empty without one.
+	Base string `json:"base,omitempty"`
+
+	// Runs lists this checkout's run, the base and then the rest, most
+	// recently updated first.
+	Runs []viewRun `json:"runs"`
 
 	// Cases lists every corpus case in corpus order.
 	Cases []viewCase `json:"cases"`
 }
 
-// caseFlips counts how this change moved cases compared with main. Cases
-// either run has not finished are left out.
+// viewSource says where the viewer reads runs and which ones it compares.
+type viewSource struct {
+	runsDir string
+	corpus  []labeledCase
+
+	// change is this checkout's code key.
+	change string
+
+	// base is the commit to compare with; empty compares with nothing.
+	base string
+}
+
+// loadedRun is a run directory read from the cache.
+type loadedRun struct {
+	id       string
+	manifest runManifest
+	records  map[string]caseRecord
+}
+
+// caseFlips counts how one run moved cases compared with another. Cases either
+// run has not finished are left out.
 type caseFlips struct {
-	// NewlyCaught counts attacks main missed and this change flags.
+	// NewlyCaught counts attacks the base missed and the change flags.
 	NewlyCaught int
 
-	// NewlyMissed counts attacks main flagged and this change misses.
+	// NewlyMissed counts attacks the base flagged and the change misses.
 	NewlyMissed int
 
-	// NewFalsePositives counts benign cases only this change flags.
+	// NewFalsePositives counts benign cases only the change flags.
 	NewFalsePositives int
 
-	// FixedFalsePositives counts benign cases only main flags.
+	// FixedFalsePositives counts benign cases only the base flags.
 	FixedFalsePositives int
 }
 
-func runView(ctx context.Context, opts options, corpus []labeledCase) error {
-	if opts.runDir == "" {
-		return fmt.Errorf("-view requires -run-dir")
+// runView shows every cached run and returns this checkout's merge gate. Only
+// this checkout's build runs it, so its flags can change freely.
+func runView(ctx context.Context, args []string) error {
+	flags := flag.NewFlagSet("risk-pi-report view", flag.ExitOnError)
+	corpusDir := flags.String("corpus-dir", defaultCorpusDir, "directory of prompt-injection JSONL fixtures to show; defaults to this checkout's")
+	base := flags.String("base", "", "commit to compare with; its run is the one whose manifest lists it")
+	serve := flags.String("serve", "", "serve a live viewer at this loopback address, such as 127.0.0.1:0")
+	openViewer := flags.Bool("open", false, "open the viewer in the default browser")
+	summaryMD := flags.Bool("summary-md", false, "print only the summary table as Markdown")
+	_ = flags.Parse(args) // ExitOnError exits on a bad flag.
+	if flags.NArg() > 0 {
+		return fmt.Errorf("unexpected argument %q", flags.Arg(0))
 	}
-	if opts.serve != "" {
-		return serveViewer(ctx, opts, corpus)
-	}
-	data, err := buildViewData(opts, corpus, time.Now().UTC())
+	corpus, err := loadCorpus(*corpusDir)
 	if err != nil {
 		return err
 	}
-	if opts.summaryMD {
+	code, err := measuredCode(ctx, "")
+	if err != nil {
+		return err
+	}
+	runs, err := runsDir()
+	if err != nil {
+		return err
+	}
+	src := viewSource{runsDir: runs, corpus: corpus, change: code.key, base: *base}
+	if *serve != "" {
+		return serveViewer(ctx, *serve, *openViewer, src)
+	}
+	data, err := buildViewData(src, time.Now().UTC())
+	if err != nil {
+		return err
+	}
+	if *summaryMD {
 		fmt.Print(summaryMarkdown(data))
 		return nil
 	}
@@ -168,39 +210,47 @@ func runView(ctx context.Context, opts options, corpus []labeledCase) error {
 	if err != nil {
 		return err
 	}
-	path, err := filepath.Abs(filepath.Join(opts.runDir, reportFile))
-	if err != nil {
-		return fmt.Errorf("resolve viewer path: %w", err)
-	}
+	path := filepath.Join(filepath.Dir(runs), reportFile)
 	if err := os.WriteFile(path, page, 0o600); err != nil {
 		return fmt.Errorf("write viewer: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "viewer: file://%s\n", path)
-	if opts.openViewer {
+	if *openViewer {
 		openBrowser(ctx, "file://"+path)
 	}
-	return nil
+	fmt.Print(summaryMarkdown(data))
+	return changeGate(data)
 }
 
-// buildViewData joins the corpus with each run's current records.
-func buildViewData(opts options, corpus []labeledCase, now time.Time) (viewData, error) {
-	data := viewData{Generated: now, Sides: nil, Cases: make([]viewCase, 0, len(corpus))}
-	var baseRecords, changeRecords map[string]caseRecord
-	if opts.baseRunDir != "" {
-		side, records, err := loadViewSide(viewSideBase, opts.baseRunDir, opts, corpus)
-		if err != nil {
-			return data, err
-		}
-		data.Sides = append(data.Sides, side)
-		baseRecords = records
-	}
-	side, records, err := loadViewSide(viewSideChange, opts.runDir, opts, corpus)
+// buildViewData joins the corpus with the cached runs' current records.
+func buildViewData(src viewSource, now time.Time) (viewData, error) {
+	all, err := loadRuns(src.runsDir)
 	if err != nil {
-		return data, err
+		return viewData{}, err
 	}
-	data.Sides = append(data.Sides, side)
-	changeRecords = records
-	for _, c := range corpus {
+	base := runWithCommit(all, src.base)
+	runs := pickRuns(all, src.change, base)
+	data := viewData{Generated: now, Change: src.change, Base: base, Runs: make([]viewRun, 0, len(runs)), Cases: make([]viewCase, 0, len(src.corpus))}
+	for _, r := range runs {
+		totals := computeTotals(src.corpus, r.records)
+		data.Runs = append(data.Runs, viewRun{
+			ID:             r.id,
+			Manifest:       r.manifest,
+			Totals:         totals,
+			RequiredCaught: requiredCaught(gateMinRecall, totals.Attacks),
+			GateStatus:     gateOutcome(totals),
+			GoalsStatus:    goalsOutcome(totals),
+		})
+	}
+	for _, c := range src.corpus {
+		results := make(map[string]*viewResult, len(runs))
+		for _, r := range runs {
+			rec, ok := currentRecord(r.records, c)
+			if !ok {
+				continue
+			}
+			results[r.id] = &viewResult{Status: rec.Status, Model: rec.Model, Detail: rec.Detail, Refused: rec.Refused, CostUSD: rec.CostUSD, LatencyMS: rec.LatencyMS}
+		}
 		data.Cases = append(data.Cases, viewCase{
 			Key:       caseKey(c),
 			Source:    c.Source,
@@ -209,53 +259,74 @@ func buildViewData(opts options, corpus []labeledCase, now time.Time) (viewData,
 			WellKnown: c.WellKnown,
 			Text:      c.Text,
 			Context:   caseContext(c),
-			Base:      viewResultFor(baseRecords, c),
-			Change:    viewResultFor(changeRecords, c),
+			Results:   results,
 		})
 	}
 	return data, nil
 }
 
-func loadViewSide(id, dir string, opts options, corpus []labeledCase) (viewSide, map[string]caseRecord, error) {
-	var none viewSide
-	manifest, err := loadManifest(dir)
-	if err != nil {
-		return none, nil, err
+// loadRuns reads every run in dir that names its commits. A directory
+// without them predates commit tracking or is still being claimed.
+func loadRuns(dir string) ([]loadedRun, error) {
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
 	}
-	records, err := loadRecords(filepath.Join(dir, casesFile))
 	if err != nil {
-		return none, nil, err
+		return nil, fmt.Errorf("list runs: %w", err)
 	}
-	// Older reports hashed the decoded fields instead of the fixture line.
-	// Normalize only for display; execution caches still require current hashes.
-	for _, c := range corpus {
-		rec, ok := records[caseKey(c)]
-		if !ok || rec.Hash == caseHash(c) {
+	var runs []loadedRun
+	for _, entry := range entries {
+		if !entry.IsDir() {
 			continue
 		}
-		legacy := c
-		legacy.raw = ""
-		if rec.Hash == caseHash(legacy) {
-			rec.Hash = caseHash(c)
-			records[caseKey(c)] = rec
+		path := filepath.Join(dir, entry.Name())
+		manifest, err := readManifest(filepath.Join(path, manifestFile))
+		if err != nil || len(manifest.Commits) == 0 {
+			continue
 		}
+		records, err := loadRecords(filepath.Join(path, casesFile))
+		if err != nil {
+			return nil, err
+		}
+		runs = append(runs, loadedRun{id: entry.Name(), manifest: manifest, records: records})
 	}
-	totals := computeTotals(corpus, records)
-	required := 0
-	if opts.minRecall > 0 {
-		required = requiredCaught(opts.minRecall, totals.Attacks)
-	}
-	side := viewSide{ID: id, Manifest: manifest, Totals: totals, RequiredCaught: required, MaxFalsePositives: opts.maxFalsePositives, MinRecall: opts.minRecall, GateStatus: "", GoalsStatus: goalsOutcome(totals)}
-	side.GateStatus = gateOutcome(side)
-	return side, records, nil
+	return runs, nil
 }
 
-func viewResultFor(records map[string]caseRecord, c labeledCase) *viewResult {
-	rec, ok := currentRecord(records, c)
-	if !ok {
-		return nil
+// runWithCommit returns the ID of the run that measured commit's committed
+// code, or empty when none did. commit may be a full or abbreviated hash.
+func runWithCommit(runs []loadedRun, commit string) string {
+	if commit == "" {
+		return ""
 	}
-	return &viewResult{Status: rec.Status, Model: rec.Model, Detail: rec.Detail, Refused: rec.Refused, CostUSD: rec.CostUSD, LatencyMS: rec.LatencyMS}
+	for _, r := range runs {
+		for _, c := range r.manifest.Commits {
+			if !c.Uncommitted && strings.HasPrefix(c.SHA, commit) {
+				return r.id
+			}
+		}
+	}
+	return ""
+}
+
+// pickRuns orders the runs the viewer shows: the change, the base, then the
+// rest by most recent update, up to maxViewRuns.
+func pickRuns(runs []loadedRun, change, base string) []loadedRun {
+	rank := func(r loadedRun) int {
+		switch r.id {
+		case change:
+			return 0
+		case base:
+			return 1
+		}
+		return 2
+	}
+	sorted := slices.Clone(runs)
+	slices.SortStableFunc(sorted, func(a, b loadedRun) int {
+		return cmp.Or(cmp.Compare(rank(a), rank(b)), b.manifest.Updated.Compare(a.manifest.Updated))
+	})
+	return sorted[:min(len(sorted), maxViewRuns)]
 }
 
 // caseContext lists the framing a reader needs next to the message.
@@ -281,19 +352,20 @@ func caseContext(c labeledCase) map[string]string {
 	return out
 }
 
-// compareSides counts flips between main and this change.
-func compareSides(cases []viewCase) caseFlips {
+// compareRuns counts flips from run base to run change.
+func compareRuns(cases []viewCase, base, change string) caseFlips {
 	var f caseFlips
 	for _, c := range cases {
-		if !finished(c.Base) || !finished(c.Change) {
+		b, ch := c.Results[base], c.Results[change]
+		if !finished(b) || !finished(ch) {
 			continue
 		}
-		base, change := c.Base.Status == statusFlagged, c.Change.Status == statusFlagged
+		before, after := b.Status == statusFlagged, ch.Status == statusFlagged
 		malicious := c.Label == "malicious"
-		f.NewlyCaught += boolInt(malicious && !base && change)
-		f.NewlyMissed += boolInt(malicious && base && !change)
-		f.NewFalsePositives += boolInt(!malicious && !base && change)
-		f.FixedFalsePositives += boolInt(!malicious && base && !change)
+		f.NewlyCaught += boolInt(malicious && !before && after)
+		f.NewlyMissed += boolInt(malicious && before && !after)
+		f.NewFalsePositives += boolInt(!malicious && !before && after)
+		f.FixedFalsePositives += boolInt(!malicious && before && !after)
 	}
 	return f
 }
@@ -304,16 +376,11 @@ func finished(r *viewResult) bool {
 
 // gateOutcome says whether a run passes the merge gate, or that it cannot
 // tell yet.
-func gateOutcome(s viewSide) string {
-	t := s.Totals
+func gateOutcome(t sideTotals) string {
 	if t.Pending > 0 || t.OutOfCredit > 0 {
 		return "Incomplete"
 	}
-	gate, err := evaluateGate(s.MaxFalsePositives, s.MinRecall, []gateTally{{Attacks: t.Attacks, AttacksCaught: t.Caught, FalsePositives: t.FalsePositives, FalsePositiveKeys: nil}})
-	if !gate.Enforced {
-		return "Not set"
-	}
-	if err != nil {
+	if checkGate(gateTally{FalsePositives: t.FalsePositives, Attacks: t.Attacks, AttacksCaught: t.Caught, FalsePositiveKeys: nil}) != nil {
 		return "Fail"
 	}
 	return "Pass"
@@ -338,49 +405,80 @@ func goalsOutcome(t sideTotals) string {
 	return "Fails both"
 }
 
-func sideName(s viewSide) string {
-	name := s.Manifest.Label
-	if name == "" {
-		name = s.ID
+// changeGate applies the merge gate to this checkout's run and prints it.
+func changeGate(data viewData) error {
+	i := slices.IndexFunc(data.Runs, func(r viewRun) bool { return r.ID == data.Change })
+	if i < 0 {
+		return errors.New("this checkout has no run yet; run mise run risk:pi")
 	}
-	if s.Manifest.Ref != "" {
-		name += " (" + s.Manifest.Ref + ")"
+	run := data.Runs[i]
+	t := run.Totals
+	if t.Pending > 0 || t.OutOfCredit > 0 {
+		return fmt.Errorf("%d cases have no result for this checkout; rerun mise run risk:pi to finish before the merge gate", t.Pending+t.OutOfCredit)
 	}
-	return name
+	var keys []string
+	for _, c := range data.Cases {
+		if r := c.Results[data.Change]; c.Label == "benign" && r != nil && r.Status == statusFlagged {
+			keys = append(keys, c.Key)
+		}
+	}
+	tally := gateTally{FalsePositives: t.FalsePositives, Attacks: t.Attacks, AttacksCaught: t.Caught, FalsePositiveKeys: keys}
+	printGate(os.Stderr, runTitle(run.Manifest), tally)
+	return checkGate(tally)
 }
 
-// summaryMarkdown renders the viewer's summary table for a PR description.
+// runTitle names a run by its latest commit, such as "1a2b3c4d5e chore: fix".
+func runTitle(m runManifest) string {
+	if len(m.Commits) == 0 {
+		return "unknown commit"
+	}
+	last := m.Commits[len(m.Commits)-1]
+	return last.name() + " " + last.Subject
+}
+
+// summaryMarkdown renders the compared runs' summary table for a PR
+// description: the base, then this checkout's run.
 func summaryMarkdown(data viewData) string {
+	var shown []viewRun
+	for _, id := range []string{data.Base, data.Change} {
+		i := slices.IndexFunc(data.Runs, func(r viewRun) bool { return r.ID == id })
+		if id == "" || i < 0 || slices.ContainsFunc(shown, func(r viewRun) bool { return r.ID == id }) {
+			continue
+		}
+		shown = append(shown, data.Runs[i])
+	}
+	role := func(r viewRun) string {
+		if r.ID == data.Change {
+			return "this change"
+		}
+		return "main"
+	}
 	var b strings.Builder
 	b.WriteString("| Run | False positives | Well-known attacks | All attacks | Refused | No verdict | Out of credit | Decision time | Merge gate | Goals | Cost |\n")
 	b.WriteString("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
-	for _, s := range data.Sides {
-		t := s.Totals
-		fmt.Fprintf(&b, "| %s | %d | %d of %d | %d of %d (%.1f%%) | %d | %d | %d | %.1f s · p90 %.1f s | %s | %s | $%.2f |\n",
-			sideName(s), t.FalsePositives, t.WellKnownCaught, t.WellKnown, t.Caught, t.Attacks, 100*safeDiv(t.Caught, t.Attacks),
-			t.Refused, t.NoVerdict, t.OutOfCredit, t.LatencyP50MS/1000, t.LatencyP90MS/1000, s.GateStatus, s.GoalsStatus, t.CostUSD)
+	for _, r := range shown {
+		t := r.Totals
+		fmt.Fprintf(&b, "| %s (%s) | %d | %d of %d | %d of %d (%.1f%%) | %d | %d | %d | %.1f s · p90 %.1f s | %s | %s | $%.2f |\n",
+			role(r), strings.ReplaceAll(runTitle(r.Manifest), "|", `\|`), t.FalsePositives, t.WellKnownCaught, t.WellKnown, t.Caught, t.Attacks, 100*safeDiv(t.Caught, t.Attacks),
+			t.Refused, t.NoVerdict, t.OutOfCredit, t.LatencyP50MS/1000, t.LatencyP90MS/1000, r.GateStatus, r.GoalsStatus, t.CostUSD)
 	}
 	b.WriteString("\n")
-	for _, s := range data.Sides {
-		m := s.Manifest
-		if m.ConfirmationModel == "" {
+	for _, r := range shown {
+		d := r.Manifest.Detector
+		if d.PrefilterModel == "" {
+			fmt.Fprintf(&b, "- %s: %s · prompt `%s`\n", role(r), d.ConfirmationModel, prefix(d.ConfirmationPromptSHA256))
 			continue
 		}
-		fallback := ""
-		if m.RefusalFallbackModel != "" {
-			fallback = " (refusal fallback: " + m.RefusalFallbackModel + ")"
-		}
-		if m.PrefilterModel == "" {
-			fmt.Fprintf(&b, "- %s: %s%s · prompt `%s`\n", s.Manifest.Label, m.ConfirmationModel, fallback, prefix(m.ConfirmationPromptSHA256))
-			continue
-		}
-		fmt.Fprintf(&b, "- %s: %s ≥ %.2f → %s%s · confirmation prompt `%s` · questions `%s`\n",
-			s.Manifest.Label, m.PrefilterModel, m.PrefilterThreshold, m.ConfirmationModel, fallback, prefix(m.ConfirmationPromptSHA256), prefix(m.PrefilterQuestionsSHA256))
+		fmt.Fprintf(&b, "- %s: %s ≥ %.2f → %s · confirmation prompt `%s` · questions `%s`\n",
+			role(r), d.PrefilterModel, d.PrefilterThreshold, d.ConfirmationModel, prefix(d.ConfirmationPromptSHA256), prefix(d.PrefilterQuestionsSHA256))
 	}
-	if len(data.Sides) == 2 {
-		f := compareSides(data.Cases)
-		fmt.Fprintf(&b, "\nCompared with %s: %d newly caught · %d newly missed · %d new false positives · %d fixed false positives.\n",
-			data.Sides[0].Manifest.Label, f.NewlyCaught, f.NewlyMissed, f.NewFalsePositives, f.FixedFalsePositives)
+	if data.Base == data.Change && data.Base != "" {
+		b.WriteString("\nMain has the same code as this change, so one run covers both.\n")
+	}
+	if len(shown) == 2 {
+		f := compareRuns(data.Cases, data.Base, data.Change)
+		fmt.Fprintf(&b, "\nCompared with main: %d newly caught · %d newly missed · %d new false positives · %d fixed false positives.\n",
+			f.NewlyCaught, f.NewlyMissed, f.NewFalsePositives, f.FixedFalsePositives)
 	}
 	return b.String()
 }
@@ -424,10 +522,10 @@ func viewerListenAddress(address string) (string, error) {
 	return net.JoinHostPort(host, port), nil
 }
 
-// serveViewer serves a page that polls data.json, rebuilt from the run
-// directories on every request, until interrupted.
-func serveViewer(ctx context.Context, opts options, corpus []labeledCase) error {
-	address, err := viewerListenAddress(opts.serve)
+// serveViewer serves a page that polls data.json, rebuilt from the cached
+// runs on every request, until interrupted.
+func serveViewer(ctx context.Context, address string, openViewer bool, src viewSource) error {
+	address, err := viewerListenAddress(address)
 	if err != nil {
 		return err
 	}
@@ -448,7 +546,7 @@ func serveViewer(ctx context.Context, opts options, corpus []labeledCase) error 
 		_, _ = w.Write(page)
 	})
 	mux.HandleFunc("GET /data.json", func(w http.ResponseWriter, _ *http.Request) {
-		data, err := buildViewData(opts, corpus, time.Now().UTC())
+		data, err := buildViewData(src, time.Now().UTC())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -459,7 +557,7 @@ func serveViewer(ctx context.Context, opts options, corpus []labeledCase) error 
 	server := &http.Server{Handler: mux, ReadHeaderTimeout: viewerReadHeaderTimeout}
 	url := "http://" + listener.Addr().String() + "/"
 	fmt.Fprintf(os.Stderr, "viewer: %s (Ctrl-C to stop)\n", url)
-	if opts.openViewer {
+	if openViewer {
 		openBrowser(ctx, url)
 	}
 	go func() {

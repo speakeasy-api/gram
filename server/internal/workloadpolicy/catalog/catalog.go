@@ -8,7 +8,8 @@
 // workload signs in; this package must never be imported by workloadidentity.
 //
 // Entries are YAML files under platforms/, embedded in the binary and validated
-// when loaded. Adding a platform is adding a file.
+// when loaded. Adding a platform is adding a file. custom.yaml beside them holds
+// the forms for trusting a platform the catalog does not list.
 package catalog
 
 import (
@@ -31,8 +32,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 )
 
-//go:embed platforms/*.yaml
-var platformFiles embed.FS
+//go:embed platforms/*.yaml custom.yaml
+var embeddedFiles embed.FS
 
 // Visibility is whether the operator sees a value an entry supplies.
 type Visibility string
@@ -105,14 +106,28 @@ const (
 	// are shown, or says why there are none.
 	BlockComputedStatus BlockType = "computed_status"
 
-	// BlockComputed shows one value Gram derives, with a copy button.
+	// BlockComputed shows one value Speakeasy derives, with a copy button.
 	BlockComputed BlockType = "computed"
 
 	// BlockChecklistItem is one thing to do in the platform's console, with a
 	// checkbox the operator ticks as they go: a console field and the value
-	// Gram derives for it, or a field or control and what to do with it.
+	// Speakeasy derives for it, or a field or control and what to do with it.
 	BlockChecklistItem BlockType = "checklist_item"
+
+	// BlockInput collects one value a custom flow's form submits.
+	BlockInput BlockType = "input"
+
+	// BlockWildcardCaution warns, while the subject being allowed is a
+	// wildcard rule, that it admits more than one identity. Its copy names the
+	// rule and the agent, so the dashboard writes it.
+	BlockWildcardCaution BlockType = "wildcard_caution"
 )
+
+// platformBlocks are the blocks a catalog platform's guided setup may use.
+var platformBlocks = []BlockType{
+	BlockText, BlockImage, BlockLink, BlockField, BlockSubjectRule, BlockAgentPicker,
+	BlockTags, BlockComputedStatus, BlockComputed, BlockChecklistItem,
+}
 
 // Computed values a definition may place. Each is derived by the server, the
 // same way its authorization server metadata derives it; a definition can never
@@ -191,8 +206,8 @@ type Block struct {
 	// Href is a link's target.
 	Href string `yaml:"href"`
 
-	// Label is a link's or computed value's label, or the console field or
-	// control a checklist item names.
+	// Label is a link's or computed value's label, the console field or
+	// control a checklist item names, or a form control's label.
 	Label string `yaml:"label"`
 
 	// Variable is the key a field collects.
@@ -201,8 +216,25 @@ type Block struct {
 	// Value is the computed value a computed block or checklist item shows.
 	Value string `yaml:"value"`
 
-	// Help is shown under a computed value or checklist item.
+	// Help is shown under a computed value, checklist item or form control.
+	// Under a form control it is Markdown, and gives way to the control's
+	// validation message while there is one.
 	Help string `yaml:"help"`
+
+	// Field is the form value an input collects.
+	Field FormField `yaml:"field"`
+
+	// Placeholder is shown in an empty form control.
+	Placeholder string `yaml:"placeholder"`
+
+	// Multiline makes an input a text area.
+	Multiline bool `yaml:"multiline"`
+
+	// ReadOnly shows an input's value without letting it change.
+	ReadOnly bool `yaml:"read_only"`
+
+	// Format names the dashboard validator an input's value must pass.
+	Format InputFormat `yaml:"format"`
 }
 
 // Step is one screen of a guided setup.
@@ -265,7 +297,12 @@ type Platform struct {
 // Source provides the catalog. Files are the only source today; a staff-edited
 // store can replace them without changing callers.
 type Source interface {
+	// Platforms returns every catalog entry, ordered by key.
 	Platforms(ctx context.Context) ([]Platform, error)
+
+	// CustomFlows returns the forms for trusting a platform the catalog does
+	// not list and allowing its workloads.
+	CustomFlows(ctx context.Context) (CustomFlows, error)
 }
 
 // Embedded returns the platforms shipped with the server.
@@ -276,7 +313,7 @@ func Embedded() Source {
 type embeddedSource struct{}
 
 var loadEmbedded = sync.OnceValues(func() ([]Platform, error) {
-	return Load(platformFiles, "platforms")
+	return Load(embeddedFiles, "platforms")
 })
 
 func (embeddedSource) Platforms(_ context.Context) ([]Platform, error) {
@@ -316,21 +353,31 @@ func Load(fsys fs.FS, dir string) ([]Platform, error) {
 // Parse decodes and validates one platform file. Unknown fields are refused, so
 // a misspelled key fails instead of silently dropping its value.
 func Parse(raw []byte) (Platform, error) {
-	decoder := yaml.NewDecoder(bytes.NewReader(raw))
-	decoder.KnownFields(true)
-
-	var platform Platform
-	if err := decoder.Decode(&platform); err != nil {
-		return Platform{}, fmt.Errorf("decode: %w", err)
-	}
-	var extra yaml.Node
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		return Platform{}, errors.New("a platform file holds exactly one document")
+	platform, err := decodeOne[Platform](raw, "a platform file")
+	if err != nil {
+		return Platform{}, err
 	}
 	if err := validate(platform); err != nil {
 		return Platform{}, err
 	}
 	return platform, nil
+}
+
+// decodeOne decodes raw, which must hold exactly one YAML document, refusing
+// fields T does not declare. what names the file in the error.
+func decodeOne[T any](raw []byte, what string) (T, error) {
+	decoder := yaml.NewDecoder(bytes.NewReader(raw))
+	decoder.KnownFields(true)
+
+	var value, zero T
+	if err := decoder.Decode(&value); err != nil {
+		return zero, fmt.Errorf("decode: %w", err)
+	}
+	var extra yaml.Node
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		return zero, fmt.Errorf("%s holds exactly one document", what)
+	}
+	return value, nil
 }
 
 var (
@@ -527,8 +574,13 @@ func validateSetup(setup Setup, variables map[string]Variable) error {
 			return fmt.Errorf("step %q: title is required", step.ID)
 		}
 		for i, block := range step.Blocks {
-			if err := validateBlock(block, variables); err != nil {
+			if err := validateBlock(block, platformBlocks, variables); err != nil {
 				return fmt.Errorf("step %q block %d: %w", step.ID, i+1, err)
+			}
+			// Refused rather than ignored, so a form control's setting written
+			// into a platform cannot look like it took effect.
+			if block.Field != "" || block.Placeholder != "" || block.Multiline || block.ReadOnly || block.Format != "" {
+				return fmt.Errorf("step %q block %d: field, placeholder, multiline, read_only and format belong to custom flows", step.ID, i+1)
 			}
 		}
 	}
@@ -538,7 +590,15 @@ func validateSetup(setup Setup, variables map[string]Variable) error {
 	return nil
 }
 
-func validateBlock(b Block, variables map[string]Variable) error {
+// validateBlock checks one block against the rules every context shares, after
+// refusing a type the context does not allow. variables are the keys a field
+// block may collect.
+func validateBlock(b Block, allowed []BlockType, variables map[string]Variable) error {
+	known := slices.Contains(platformBlocks, b.Type) || slices.Contains(customFlowBlocks, b.Type)
+	if known && !slices.Contains(allowed, b.Type) {
+		return fmt.Errorf("%s blocks are not allowed here", b.Type)
+	}
+
 	switch b.Type {
 	case BlockText:
 		if strings.TrimSpace(b.Markdown) == "" {
@@ -569,7 +629,7 @@ func validateBlock(b Block, variables map[string]Variable) error {
 		}
 	case BlockComputed:
 		if !slices.Contains(computedValues, b.Value) {
-			return fmt.Errorf("computed value %q is not one Gram derives", b.Value)
+			return fmt.Errorf("computed value %q is not one Speakeasy derives", b.Value)
 		}
 		if strings.TrimSpace(b.Label) == "" {
 			return errors.New("computed value needs a label")
@@ -583,14 +643,25 @@ func validateBlock(b Block, variables map[string]Variable) error {
 			return errors.New("checklist item shows a computed value or markdown, not both")
 		case b.Value != "":
 			if !slices.Contains(computedValues, b.Value) {
-				return fmt.Errorf("computed value %q is not one Gram derives", b.Value)
+				return fmt.Errorf("computed value %q is not one Speakeasy derives", b.Value)
 			}
 		case strings.TrimSpace(b.Markdown) == "":
 			return errors.New("checklist item needs a computed value or markdown")
 		case strings.Contains(b.Markdown, "!["):
 			return errors.New("checklist item must not hold an image; use an image block")
 		}
-	case BlockSubjectRule, BlockAgentPicker, BlockTags, BlockComputedStatus:
+	case BlockInput:
+		want, ok := inputFormats[b.Field]
+		if !ok {
+			return fmt.Errorf("input names unknown field %q", b.Field)
+		}
+		if b.Format != want {
+			return fmt.Errorf("input %s must have format %q", b.Field, want)
+		}
+		if strings.TrimSpace(b.Label) == "" {
+			return fmt.Errorf("input %s needs a label", b.Field)
+		}
+	case BlockSubjectRule, BlockAgentPicker, BlockTags, BlockComputedStatus, BlockWildcardCaution:
 	default:
 		return fmt.Errorf("unknown block type %q", b.Type)
 	}
