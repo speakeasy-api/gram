@@ -13,7 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
-	"github.com/speakeasy-api/gram/server/internal/otel/otelpub"
+	"github.com/speakeasy-api/gram/server/internal/otelpub"
 )
 
 // toolCallTenant is the organization and project a tool call belongs to,
