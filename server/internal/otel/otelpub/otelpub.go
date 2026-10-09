@@ -17,9 +17,9 @@ func NewLoggerProvider(logger *slog.Logger, publisher gcp.Publisher[*otelv1.Inbo
 	// Synchronous on purpose: a batch processor would drop queued records on shutdown.
 	return sdklog.NewLoggerProvider(
 		sdklog.WithResource(res),
-		sdklog.WithProcessor(processor{exporter: &logExporter{
+		sdklog.WithProcessor(newProcessor(&logExporter{
 			logger:    logger.With(attr.SlogComponent("otelpub")),
 			publisher: publisher,
-		}}),
+		})),
 	)
 }

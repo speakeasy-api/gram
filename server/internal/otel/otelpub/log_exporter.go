@@ -70,7 +70,7 @@ func (e *logExporter) inbound(ctx context.Context, record *sdklog.Record) (*otel
 		inbound.GetScope().GetAttributes(),
 	} {
 		for _, kv := range attrs {
-			if enrich.IsAgentKey(kv.GetKey()) {
+			if enrich.IsPipelineKey(kv.GetKey()) {
 				return nil, fmt.Errorf("attribute %q is in the reserved namespace", kv.GetKey())
 			}
 		}

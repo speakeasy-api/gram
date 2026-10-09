@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 const (
@@ -216,6 +217,18 @@ func TestEmitRefusesTheReservedNamespace(t *testing.T) {
 	require.Contains(t, warnings.String(), "reserved namespace")
 }
 
+func TestEmitRefusesTheDirectoryNamespace(t *testing.T) {
+	t.Parallel()
+
+	publisher, published := capture(t, gcp.NewSuccessPublishResult())
+	logger, warnings := testLogger(t, publisher)
+
+	logger.Emit(authenticated(t.Context()), toolCallRecord(time.Unix(1_700_000_000, 0), log.String("directory.department", "engineering")))
+
+	require.Empty(t, *published)
+	require.Contains(t, warnings.String(), "reserved namespace")
+}
+
 func TestEmitRefusesTheReservedNamespaceOnTheResource(t *testing.T) {
 	t.Parallel()
 
@@ -308,6 +321,7 @@ func TestConcurrentEmitsPublishInParallel(t *testing.T) {
 			done <- struct{}{}
 		}()
 	}
+	defer close(publisher.release)
 	for range emits {
 		select {
 		case <-publisher.arrived:
@@ -315,8 +329,29 @@ func TestConcurrentEmitsPublishInParallel(t *testing.T) {
 			t.Fatal("emits were serialized: a second publish never started while the first was in flight")
 		}
 	}
-	close(publisher.release)
-	for range emits {
-		<-done
+}
+
+func TestShutdownWaitsForInFlightEmitsAndStopsNewOnes(t *testing.T) {
+	t.Parallel()
+
+	publisher := &barrierPublisher{arrived: make(chan struct{}, 2), release: make(chan struct{})}
+	provider := NewLoggerProvider(testenv.NewLogger(t), publisher, resource.Empty())
+	logger := provider.Logger(testLoggerName)
+	ctx := authenticated(t.Context())
+
+	go logger.Emit(ctx, toolCallRecord(time.Now()))
+	<-publisher.arrived
+
+	shutdown := make(chan error, 1)
+	go func() { shutdown <- provider.Shutdown(t.Context()) }()
+	select {
+	case <-shutdown:
+		t.Fatal("shutdown returned while an emit was still publishing")
+	case <-time.After(100 * time.Millisecond):
 	}
+	close(publisher.release)
+	require.NoError(t, <-shutdown)
+
+	logger.Emit(ctx, toolCallRecord(time.Now()))
+	require.Empty(t, publisher.arrived, "an emit after shutdown publishes nothing")
 }
