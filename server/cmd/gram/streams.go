@@ -13,6 +13,12 @@ import (
 	"syscall"
 	"time"
 
+	conversationv1 "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1"
+	sigintv1 "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1"
+	"github.com/speakeasy-api/gram/server/internal/classifier/jev"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/sigint/evaluation"
+
 	"cloud.google.com/go/pubsub/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,6 +26,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/client"
@@ -39,6 +46,8 @@ import (
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/infra/pkg/storage"
+	"github.com/speakeasy-api/gram/infra/pkg/storagebindings"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -261,10 +270,44 @@ func newStreamsCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
 			Required: false,
 		},
+		internalCatalogFlag(),
 		&cli.StringFlag{
 			Name:    "site-url",
 			Usage:   "The URL of the dashboard site, used to deep link from growth activity events",
 			EnvVars: []string{"GRAM_SITE_URL"},
+		},
+		&cli.StringFlag{
+			Name:    "sigint-openrouter-api-key",
+			Usage:   "Platform OpenRouter inference key for sensor evaluation; unset leaves the receiver stopped unless sigint-ack-only is enabled",
+			EnvVars: []string{"GRAM_SIGINT_OPENROUTER_API_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "storage-buckets",
+			Usage:   "Logical-to-physical storage bucket mapping as JSON; required outside local development",
+			EnvVars: []string{"GRAM_STORAGE_BUCKETS"},
+		},
+		&cli.PathFlag{
+			Name:    "lake-directory",
+			Usage:   "Filesystem object storage directory for local development",
+			EnvVars: []string{"GRAM_LAKE_DIRECTORY"},
+			Value:   "local/lake",
+		},
+		&cli.BoolFlag{
+			Name:    "sigint-ack-only",
+			Usage:   "Temporarily drain the sensor evaluation subscription: acknowledge all messages without evaluation or reading publication",
+			EnvVars: []string{"GRAM_SIGINT_ACK_ONLY"},
+		},
+		&cli.StringFlag{
+			Name:     "assets-backend",
+			Usage:    "Asset storage backend for conversation snapshots",
+			EnvVars:  []string{"GRAM_ASSETS_BACKEND"},
+			Required: true,
+		},
+		&cli.StringFlag{
+			Name:     "assets-uri",
+			Usage:    "Asset storage URI for conversation snapshots",
+			EnvVars:  []string{"GRAM_ASSETS_URI"},
+			Required: true,
 		},
 		&cli.PathFlag{
 			Name:     "config-file",
@@ -385,6 +428,13 @@ func newStreamsCommand() *cli.Command {
 			}
 
 			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
+			assetStorage, assetShutdown, err := newAssetStorage(ctx, logger, assetStorageOptions{assetsBackend: c.String("assets-backend"), assetsURI: c.String("assets-uri")})
+			if err != nil {
+				return fmt.Errorf("initialize evaluation asset storage: %w", err)
+			}
+
+			shutdownFuncs = append(shutdownFuncs, assetShutdown)
+
 			stripeClient, err := newStripeClient(ctx, logger, guardianPolicy, c)
 			if err != nil {
 				return fmt.Errorf("failed to create Stripe client: %w", err)
@@ -430,9 +480,10 @@ func newStreamsCommand() *cli.Command {
 				spanPub       gcp.Publisher[*otelv1.Span]
 				riskMeterPub  gcp.Publisher[*meteringv1.MeterReading]
 				sessionLogPub gcp.Publisher[*telemetryv1.LogRecord]
+				readingsPub   gcp.Publisher[*sigintv1.Reading]
 			)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
-				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub, riskMeterPub, sessionLogPub)
+				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub, riskMeterPub, sessionLogPub, readingsPub)
 			})
 
 			riskFingerprinter, err := risk.ParsePepperKeyRing([]byte(c.String("risk-fingerprint-pepper-keyring")))
@@ -467,6 +518,26 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("create risk meter publisher: %w", err)
 			}
 			riskRecorder := metering.NewRiskRecorder(riskMeterPub)
+			readingsPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &sigintv1.Reading{}, gcp.WithPubSubPublishSettings(&meterPublishSettings))
+			if err != nil {
+				return fmt.Errorf("create sensor readings publisher: %w", err)
+			}
+
+			sensorClassifier, err := jev.New(guardianPolicy, conv.NewSecret([]byte(c.String("sigint-openrouter-api-key"))))
+			if err != nil {
+				return fmt.Errorf("create sensor classifier: %w", err)
+			}
+
+			sensorEvaluator, err := evaluation.NewEvaluator(logger, meterProvider, evaluation.NewRepository(db), productFeatures, readingsPub, sensorClassifier)
+			if err != nil {
+				return fmt.Errorf("create sensor evaluator: %w", err)
+			}
+
+			lakeStore, lakeBuckets, lakeShutdown, err := newLakeStorage(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("initialize lake storage: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, lakeShutdown)
 
 			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub, riskRecorder)
 			replyWriter := enforcereply.NewWriter(redisClient)
@@ -548,11 +619,14 @@ func newStreamsCommand() *cli.Command {
 			// so subscriptions get reconciled afresh.
 			group, gctx := errgroup.WithContext(ctx)
 			rg := receiverGroup{
-				group:      group,
-				getContext: func() context.Context { return gctx },
-				tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/cmd/gram/streams"),
-				logger:     logger,
-				broker:     psbroker,
+				group:          group,
+				getContext:     func() context.Context { return gctx },
+				tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/cmd/gram/streams"),
+				logger:         logger,
+				broker:         psbroker,
+				meterProvider:  meterProvider,
+				storageStore:   lakeStore,
+				storageBuckets: lakeBuckets,
 			}
 
 			svixClient, svixShutdown, err := newSvixClient(c, logger, guardianPolicy)
@@ -669,6 +743,8 @@ func newStreamsCommand() *cli.Command {
 
 			// Start subscription receivers in this block
 			{
+				mustStreamToStorage(rg, storagebindings.GramSigintV1LakePrimary())
+
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
 				roleDistributionGuard := admission.NewGuard(featureFlags, admission.NewReportMetrics(meterProvider, logger))
 				roleDistributionHandler := roledistribution.NewHandler(logger, roledistribution.Processors{
@@ -686,13 +762,13 @@ func newStreamsCommand() *cli.Command {
 				if c.Bool(pluginPublicationConsumeFlagName) {
 					publicationHandler := plugins.NewPublicationHandler(logger, db, (&background.TemporalPluginPublisher{TemporalEnv: temporalEnv}).SignalPluginPublish)
 					organizationPublicationHandler := plugins.NewOrganizationPublicationHandler(logger, db)
-					settings := gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second}
+					settings := gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0}
 					mustReceiveBatchWithResult(rg, &pluginsv1.PublicationRequested{}, &pluginsv1.PublicationScheduler{}, publicationHandler, settings)
 					mustReceiveBatchWithResult(rg, &pluginsv1.OrganizationPublicationRequested{}, &pluginsv1.OrganizationPublicationScheduler{}, organizationPublicationHandler, settings)
 				}
 				if queue := c.String(networkIngressQueueFlag); queue != "" {
 					client := &background.NetworkIngressClient{Client: temporalEnv.Client(), Queue: queue}
-					mustReceiveBatchWithResult(rg, &networkingressv1.ReconcileRequested{}, &networkingressv1.Reconciler{}, networkingress.NewReconcileHandler(logger, queue, client.SignalNetworkIngress), gcp.BatchReceiveSettings{MaxMessages: 100, MaxBytes: constants.MiB, MaxLatency: time.Second})
+					mustReceiveBatchWithResult(rg, &networkingressv1.ReconcileRequested{}, &networkingressv1.Reconciler{}, networkingress.NewReconcileHandler(logger, queue, client.SignalNetworkIngress), gcp.BatchReceiveSettings{MaxMessages: 100, MaxBytes: constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				}
 
 				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)
@@ -703,14 +779,25 @@ func newStreamsCommand() *cli.Command {
 				mustReceive(rg, &riskv1.LLMAnalysis{}, &riskv1.LLMAnalyzer{}, llmAnalyzerHandler)
 				mustReceive(rg, &riskv1.CustomRulesAnalysis{}, &riskv1.CustomRulesAnalyzer{}, customRulesHandler)
 
-				mustReceiveBatch(rg, &telemetryv1.SessionObserved{}, &telemetryv1.SessionObservedCHWriter{}, telemetry.NewSessionObservedHandler(db, sessionLogger), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second})
+				mustReceiveBatch(rg, &telemetryv1.SessionObserved{}, &telemetryv1.SessionObservedCHWriter{}, telemetry.NewSessionObservedHandler(db, sessionLogger), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 
 				mustReceive(rg, &telemetryv1.LogRecord{}, &telemetryv1.Noop{}, new(subscribers.NoopHandler[*telemetryv1.LogRecord]))
 
 				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, webhookEventHandler)
 
-				mustReceiveBatchWithResult(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, meterProvider, chConn), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second})
-				mustReceiveBatch(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingCHWriter{}, metering.NewMeterReadingCHWriter(logger, db, meteringchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second})
+				if c.Bool("sigint-ack-only") || c.String("sigint-openrouter-api-key") != "" {
+					var handler streams.BatchResultHandler[*conversationv1.MessageEvent] = evaluation.NewConversationHandler(sensorEvaluator, assetStorage, evaluation.NewRepository(db))
+					if c.Bool("sigint-ack-only") {
+						// A successful batch with no staged failures acknowledges every
+						// message, without entering the evaluation path.
+						handler = streams.BatchResultHandlerFunc[*conversationv1.MessageEvent](func(context.Context, []streams.BatchMessage[*conversationv1.MessageEvent]) error {
+							return nil
+						})
+					}
+					mustReceiveBatchWithResult(rg, &conversationv1.MessageEvent{}, &sigintv1.Evaluator{}, handler, gcp.BatchReceiveSettings{MaxMessages: 20, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				}
+				mustReceiveBatchWithResult(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, meterProvider, chConn), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				mustReceiveBatch(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingCHWriter{}, metering.NewMeterReadingCHWriter(logger, db, meteringchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				mustReceive(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingStripeExporter{}, metering.NewMeterReadingStripeExporter(logger, meterProvider, replicaDB, stripeMeterEvents, stripeCatalog, c.Bool(stripeMeterEventExportFlagName)))
 
 				mustReceive(rg, &otelv1.InboundLogRecord{}, &otelv1.InboundLogRecordTransformer{}, otelsvc.NewLogTransformHandler(
@@ -732,32 +819,34 @@ func newStreamsCommand() *cli.Command {
 					replicaDB,
 					cache.NewRedisCacheAdapter(redisClient),
 				))
-				mustReceiveBatchWithResult(rg, &otelv1.LogRecord{}, &otelv1.LogRelay{}, logRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
-				mustReceiveBatchWithResult(rg, &otelv1.Metric{}, &otelv1.MetricRelay{}, metricRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
-				mustReceiveBatchWithResult(rg, &otelv1.Span{}, &otelv1.SpanRelay{}, spanRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
-				mustReceiveBatchWithResult(rg, &riskv1.Finding{}, &riskv1.FindingOTELRelay{}, riskFindingRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second})
-				mustReceiveBatchWithResult(rg, &telemetryv1.LogRecord{}, &telemetryv1.ToolCallLogRelay{}, toolCallLogRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+				mustReceiveBatchWithResult(rg, &otelv1.LogRecord{}, &otelv1.LogRelay{}, logRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				mustReceiveBatchWithResult(rg, &otelv1.Metric{}, &otelv1.MetricRelay{}, metricRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				mustReceiveBatchWithResult(rg, &otelv1.Span{}, &otelv1.SpanRelay{}, spanRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				mustReceiveBatchWithResult(rg, &riskv1.Finding{}, &riskv1.FindingOTELRelay{}, riskFindingRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				mustReceiveBatchWithResult(rg, &telemetryv1.LogRecord{}, &telemetryv1.ToolCallLogRelay{}, toolCallLogRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 
 				// Event feed tee: mirror the normalized OTEL topics into the
 				// otel_logs / otel_traces ClickHouse tables.
-				mustReceiveBatch(rg, &otelv1.LogRecord{}, &otelv1.LogEventCHWriter{}, otelsvc.NewLogEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+				mustReceiveBatch(rg, &otelv1.LogRecord{}, &otelv1.LogEventCHWriter{}, otelsvc.NewLogEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				spanEventReceiveSettings := pubsub.DefaultReceiveSettings
 				spanEventReceiveSettings.MaxOutstandingMessages = spanEventWriterOutstandingBatches * spanEventWriterBatchMessages
 				spanEventReceiveSettings.MaxOutstandingBytes = spanEventWriterOutstandingBatches * spanEventWriterBatchBytes
 				mustReceiveBatch(rg, &otelv1.Span{}, &otelv1.SpanEventCHWriter{}, otelsvc.NewSpanEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{
-					MaxMessages: spanEventWriterBatchMessages,
-					MaxBytes:    spanEventWriterBatchBytes,
-					MaxLatency:  spanEventWriterBatchLatency,
+					MaxMessages:         spanEventWriterBatchMessages,
+					MaxBytes:            spanEventWriterBatchBytes,
+					MaxLatency:          spanEventWriterBatchLatency,
+					MaxBufferedMessages: 0,
+					MaxBufferedBytes:    0,
 				}, gcp.WithPubSubReceiveSettings(&spanEventReceiveSettings))
 
 				// Agent session tee: project the same normalized OTEL topics into
 				// agent_events, in agent vocabulary, for the semantic query layer.
 				// Its own subscriptions, so it fails independently of the event feed.
-				mustReceiveBatch(rg, &otelv1.LogRecord{}, &otelv1.AgentEventLogCHWriter{}, otelsvc.NewAgentEventLogCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
-				mustReceiveBatch(rg, &otelv1.Span{}, &otelv1.AgentEventSpanCHWriter{}, otelsvc.NewAgentEventSpanCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+				mustReceiveBatch(rg, &otelv1.LogRecord{}, &otelv1.AgentEventLogCHWriter{}, otelsvc.NewAgentEventLogCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
+				mustReceiveBatch(rg, &otelv1.Span{}, &otelv1.AgentEventSpanCHWriter{}, otelsvc.NewAgentEventSpanCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 
 				if enableCHRiskWrites {
-					mustReceiveBatchWithResult(rg, &riskv1.Finding{}, &riskv1.FindingCHWriter{}, risk.NewFindingCHWriter(logger, replicaDB, meterProvider, chrepo.New(chConn), riskFingerprinter), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second})
+					mustReceiveBatchWithResult(rg, &riskv1.Finding{}, &riskv1.FindingCHWriter{}, risk.NewFindingCHWriter(logger, replicaDB, meterProvider, chrepo.New(chConn), riskFingerprinter), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0})
 				}
 			}
 
@@ -816,11 +905,62 @@ func shutdownPubSubPublishers(
 }
 
 type receiverGroup struct {
-	group      *errgroup.Group
-	getContext func() context.Context
-	tracer     trace.Tracer
-	logger     *slog.Logger
-	broker     gcp.SubscriberBroker
+	group          *errgroup.Group
+	getContext     func() context.Context
+	tracer         trace.Tracer
+	logger         *slog.Logger
+	broker         pubSubBroker
+	meterProvider  metric.MeterProvider
+	storageStore   storage.Store
+	storageBuckets map[string]string
+}
+
+// streamToStorage registers a generated storage consumer with the shared receiver
+// lifecycle. Runtime failures cancel sibling receivers through the group's context.
+func streamToStorage(g receiverGroup, definition storage.Definition) error {
+	if g.storageStore == nil {
+		return errors.New("storage store is required")
+	}
+	if g.storageBuckets[definition.Bucket] == "" {
+		return fmt.Errorf("storage bucket mapping is required for %q", definition.Bucket)
+	}
+
+	ctx := contextvalues.SetPubSubSubscriberContext(g.getContext(), contextvalues.PubSubSubscriberContext{
+		TopicProtoName:        string(proto.MessageName(definition.Payload)),
+		SubscriptionProtoName: string(proto.MessageName(definition.Marker)),
+	})
+
+	g.group.Go(func() error {
+		if err := storage.Run(ctx, definition, storage.Config{
+			Broker:  g.broker,
+			Store:   g.storageStore,
+			Buckets: g.storageBuckets,
+			Settings: storage.Settings{
+				MaxMessages:         0,
+				MaxBytes:            0,
+				MaxLatency:          0,
+				MaxPartitions:       0,
+				Concurrency:         0,
+				ProcessTimeout:      0,
+				MaxExtension:        0,
+				OutstandingMessages: 0,
+				OutstandingBytes:    0,
+			},
+			TempDir:       "",
+			MeterProvider: g.meterProvider,
+			Logger:        g.logger,
+		}); err != nil {
+			return fmt.Errorf("stream %s to storage: %w", definition.ProtoName, err)
+		}
+
+		return nil
+	})
+
+	return nil
+}
+
+func mustStreamToStorage(g receiverGroup, definition storage.Definition) {
+	must.Nil(streamToStorage(g, definition))
 }
 
 // setupSubscriber resolves the subscriber for a message/subscription pair and

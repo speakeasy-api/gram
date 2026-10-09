@@ -92,6 +92,9 @@ type validationMemberRequest struct {
 	session     string
 	version     string
 	metaVersion string
+	// apiKey and setCookie are configured headers a policy test looks for.
+	apiKey    string
+	setCookie string
 }
 
 // validationMember is a scripted MCP upstream recording every request it receives on the wire.
@@ -159,6 +162,8 @@ func (m *validationMember) serve(w http.ResponseWriter, r *http.Request) {
 		session:     r.Header.Get("Mcp-Session-Id"),
 		version:     r.Header.Get("MCP-Protocol-Version"),
 		metaVersion: metaVersion,
+		apiKey:      r.Header.Get("X-Api-Key"),
+		setCookie:   r.Header.Get("Set-Cookie"),
 	})
 	version := m.protocolVersion
 	mode := m.mode
@@ -701,6 +706,32 @@ func TestServeConsentAction_ValidateStandaloneRemoteBackend(t *testing.T) {
 	page = renderConsent(t, fx)
 	require.Contains(t, page, "Rejected by "+fx.name+" — reconnect to continue")
 	require.Equal(t, map[string]int64{"valid": 1, "rejected_by_member": 1}, validationCounts(t, fx.reader))
+}
+
+// The validation probe dials a remote backend through the same hardened
+// header policy as live traffic: a configured header stored under a lowercase
+// name is still sent, and a Set-Cookie row is not.
+func TestServeConsentAction_ValidateRemoteBackendAppliesRemoteHeaderPolicy(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedStandaloneValidationFixture(t, "remote-header-policy")
+	projectID, _ := consentTestTenant(t, ctx)
+	server, err := mcpservers_repo.New(fx.ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
+		ID:        fx.endpoint.McpServerID.UUID,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+	seedRemoteHeader(t, ctx, fx.ti.conn, projectID, server.RemoteMcpServerID.UUID, "x-api-key", "operator-credential", "", true)
+	seedRemoteHeader(t, ctx, fx.ti.conn, projectID, server.RemoteMcpServerID.UUID, "Set-Cookie", "synthetic=1", "", false)
+
+	fx.member.set(memberAccepts)
+	requireValidated(t, fx)
+	requests := fx.member.drain()
+	require.NotEmpty(t, requests)
+	for _, req := range requests {
+		require.Equal(t, "operator-credential", req.apiKey)
+		require.Empty(t, req.setCookie)
+	}
 }
 
 // A card without a live grant, or one no member would be handed, is refused before dialing.

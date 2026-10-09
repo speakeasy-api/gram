@@ -202,11 +202,19 @@ func (s *ProjectLifecycleService) CreateProject(ctx context.Context, principal P
 	// locked re-check inside the receipt transaction still replays a request
 	// that completed concurrently; both racers are then charged, which errs
 	// on the conservative side.
-	if replay, ok := s.completedCreateReceipt(ctx, principal, key, inputHash); ok {
-		return s.finish(ctx, principal, replay.result, replay.operation), nil
+	replay, ok, err := s.completedCreateReceipt(ctx, principal, key, inputHash)
+	if err != nil {
+		return ProjectMutationOutput{}, s.unexpected(ctx, err)
 	}
-	if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
-		return ProjectMutationOutput{}, projectBudgetError(err)
+	if ok {
+		stored, err := decodeProjectReceipt(replay.ResultPayload)
+		if err != nil {
+			return ProjectMutationOutput{}, s.unexpected(ctx, err)
+		}
+		return s.finish(ctx, principal, stored, replay), nil
+	}
+	if err := s.charge(principal)(ctx); err != nil {
+		return ProjectMutationOutput{}, err
 	}
 
 	stored, receipt, created, err := s.createInReceiptTransaction(ctx, principal, input.Name, slug, key, inputHash)
@@ -226,57 +234,38 @@ type createdReceipt struct {
 	operation OperationReceipt
 }
 
-// storedReplay is a completed receipt found by the pre-check, ready to return
-// without opening a transaction.
-type storedReplay struct {
-	result    projectReceipt
-	operation OperationReceipt
-}
-
-// noReplay is the empty result the pre-checks return beside false.
-var noReplay storedReplay
-
-// completedCreateReceipt is the read-only pre-check for a create replay. It
-// reports only a completed, unexpired receipt whose input matches; anything
-// else — a miss, a different input, a read failure — falls through to the
-// receipt transaction, which decides it authoritatively under the lock.
-func (s *ProjectLifecycleService) completedCreateReceipt(ctx context.Context, principal Principal, key, inputHash string) (storedReplay, bool) {
+// completedCreateReceipt is the read-only pre-check for a create replay. A
+// create has no project to key its receipt on, so it cannot go through
+// executeChargedMutationReceipt, but it judges the row the same way: its query
+// filters expiry with the database clock, and replayableReceipt reports only a
+// completed receipt whose input matches. A miss or a receipt the locked path
+// would refuse falls through to the receipt transaction, which decides it
+// authoritatively under the lock; a read failure is returned, so the caller
+// does not charge a request that may have been a replay.
+func (s *ProjectLifecycleService) completedCreateReceipt(ctx context.Context, principal Principal, key, inputHash string) (OperationReceipt, bool, error) {
 	row, err := s.queries.GetPlatformMCPProjectCreationReceipt(ctx, platformrepo.GetPlatformMCPProjectCreationReceiptParams{
 		OrganizationID: principal.OrganizationID, UserID: conv.ToPGText(principal.UserID),
 		Operation: operationCreateProject, IdempotencyKey: key,
 	})
-	if err != nil {
-		return noReplay, false
+	if errors.Is(err, pgx.ErrNoRows) {
+		return noReplay, false, nil
 	}
-	return replayableReceipt(row, inputHash)
+	if err != nil {
+		return noReplay, false, fmt.Errorf("look up project creation replay receipt: %w", err)
+	}
+	replay, check := replayableReceipt(row, inputHash, validProjectReceiptPayload)
+	return replay, check == receiptReplay, nil
 }
 
-// completedRenameReceipt is the same pre-check for a rename, keyed on the
-// exact project the rename targets.
-func (s *ProjectLifecycleService) completedRenameReceipt(ctx context.Context, principal Principal, projectID uuid.UUID, key, inputHash string) (storedReplay, bool) {
-	row, err := s.queries.GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
-		OrganizationID: principal.OrganizationID, ProjectID: projectID, Operation: operationRenameProject, IdempotencyKey: key,
-		UserID: conv.ToPGText(principal.UserID), SubjectUrn: userSubjectURN(principal.UserID),
-	})
-	if err != nil {
-		return noReplay, false
+// charge returns the budget charge for one create or rename, run only when no
+// completed receipt answers the request and outside any transaction.
+func (s *ProjectLifecycleService) charge(principal Principal) func(context.Context) error {
+	return func(ctx context.Context) error {
+		if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
+			return projectBudgetError(err)
+		}
+		return nil
 	}
-	return replayableReceipt(row, inputHash)
-}
-
-// replayableReceipt judges expiry against the wall clock rather than the
-// service's injectable clock, because the authoritative path decides it with
-// the database's clock_timestamp(); an injected clock would let the pre-check
-// replay a receipt the locked path has already treated as expired.
-func replayableReceipt(row platformrepo.PlatformMcpOperationReceipt, inputHash string) (storedReplay, bool) {
-	if row.Status != receiptStatusSucceeded || row.InputHash != inputHash || !row.ExpiresAt.Time.After(time.Now()) {
-		return noReplay, false
-	}
-	result, err := decodeProjectReceipt(row.ResultPayload)
-	if err != nil {
-		return noReplay, false
-	}
-	return storedReplay{result: result, operation: operationReceiptFromRow(row, true)}, true
 }
 
 func (s *ProjectLifecycleService) createInReceiptTransaction(ctx context.Context, principal Principal, name, slug, key, inputHash string) (projectReceipt, createdReceipt, bool, error) {
@@ -418,27 +407,18 @@ func (s *ProjectLifecycleService) RenameProject(ctx context.Context, principal P
 	}
 
 	// As for a create: a completed rename replays before anything is charged
-	// or locked, and the budget is charged outside any transaction.
-	if replay, ok := s.completedRenameReceipt(ctx, principal, project.ID, key, inputHash); ok {
-		return s.finish(ctx, principal, replay.result, replay.operation), nil
-	}
-	if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
-		return ProjectMutationOutput{}, projectBudgetError(err)
-	}
-
-	receipt, err := executeMutationReceipt(ctx, mutationReceiptExecution[projectReceipt]{
+	// or locked, and the budget is charged outside any transaction; see
+	// executeChargedMutationReceipt.
+	receipt, err := executeChargedMutationReceipt(ctx, s.charge(principal), mutationReceiptExecution[projectReceipt]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operationRenameProject,
 		IdempotencyKey: key, InputHash: inputHash, Label: "project rename",
 		Invalid: func(error) error { return projectLifecycleInvalid("The project rename request is invalid.") },
 		Conflict: func(message string) error {
 			return &ProjectLifecycleError{Code: "conflict", Message: message, Cause: ErrProjectLifecycleConflict}
 		},
-		Unavailable: projectLifecycleUnavailable,
-		ValidateReplay: func(stored []byte) bool {
-			_, err := decodeProjectReceipt(stored)
-			return err == nil
-		},
-		EncodeResult: encodeProjectReceipt,
+		Unavailable:    projectLifecycleUnavailable,
+		ValidateReplay: validProjectReceiptPayload,
+		EncodeResult:   encodeProjectReceipt,
 		Mutate: func(ctx context.Context, tx pgx.Tx) (projectReceipt, error) {
 			renamed, err := s.core.RenameInTransaction(ctx, tx, projects.RenameProjectMutation{
 				OrganizationID: principal.OrganizationID,
@@ -554,6 +534,11 @@ func encodeProjectReceipt(result projectReceipt) ([]byte, error) {
 		return nil, projectLifecycleUnavailable(errors.New("project receipt result is too large"))
 	}
 	return payload, nil
+}
+
+func validProjectReceiptPayload(payload []byte) bool {
+	_, err := decodeProjectReceipt(payload)
+	return err == nil
 }
 
 func decodeProjectReceipt(payload []byte) (projectReceipt, error) {

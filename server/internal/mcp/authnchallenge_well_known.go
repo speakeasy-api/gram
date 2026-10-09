@@ -71,9 +71,9 @@ type oauthProtectedResourceMetadata struct {
 // above.
 type oauthAuthorizationServerMetadata struct {
 	Issuer                              string   `json:"issuer"`
-	AuthorizationEndpoint               string   `json:"authorization_endpoint"`
+	AuthorizationEndpoint               string   `json:"authorization_endpoint,omitempty"`
 	TokenEndpoint                       string   `json:"token_endpoint"`
-	RegistrationEndpoint                string   `json:"registration_endpoint"`
+	RegistrationEndpoint                string   `json:"registration_endpoint,omitempty"`
 	RevocationEndpoint                  string   `json:"revocation_endpoint"`
 	ScopesSupported                     []string `json:"scopes_supported,omitempty"`
 	ResponseTypesSupported              []string `json:"response_types_supported"`
@@ -84,15 +84,18 @@ type oauthAuthorizationServerMetadata struct {
 	// JWS algorithms accepted on a private_key_jwt client assertion. It is the
 	// one part of assertion negotiation a client can discover: which of the
 	// two audience forms the server prefers has no metadata field, but the
-	// algorithm does.
-	TokenEndpointAuthSigningAlgValuesSupported []string `json:"token_endpoint_auth_signing_alg_values_supported"`
-	CodeChallengeMethodsSupported              []string `json:"code_challenge_methods_supported"`
-	RefreshTokenExpirationTypesSupported       []string `json:"refresh_token_expiration_types_supported"`
+	// algorithm does. A document that advertises no assertion-based client
+	// authentication omits it.
+	TokenEndpointAuthSigningAlgValuesSupported []string `json:"token_endpoint_auth_signing_alg_values_supported,omitempty"`
+	CodeChallengeMethodsSupported              []string `json:"code_challenge_methods_supported,omitempty"`
+	RefreshTokenExpirationTypesSupported       []string `json:"refresh_token_expiration_types_supported,omitempty"`
 
-	// AuthorizationResponseIssParameterSupported advertises RFC 9207 §3. Always
-	// true: every authorization response on this surface carries `iss`
-	// (RFC 9207 §2), and an omitted field means false to a client, so the
-	// value tracks a property of the surface rather than any configuration.
+	// AuthorizationResponseIssParameterSupported advertises RFC 9207 §3. True
+	// wherever an authorization endpoint is served: every authorization
+	// response on this surface carries `iss` (RFC 9207 §2), and an omitted
+	// field means false to a client, so the value tracks a property of the
+	// surface rather than any configuration. A document with no authorization
+	// endpoint omits it.
 	//
 	// The coupling with emission is asymmetric. A client seeing `iss` without
 	// the flag compares it anyway, which is what lets this document lag behind
@@ -100,7 +103,7 @@ type oauthAuthorizationServerMetadata struct {
 	// the flag without `iss` rejects the response outright, which is what
 	// makes turning this off — or serving it from a build whose response paths
 	// omit `iss` — a client-visible break.
-	AuthorizationResponseIssParameterSupported bool `json:"authorization_response_iss_parameter_supported"`
+	AuthorizationResponseIssParameterSupported bool `json:"authorization_response_iss_parameter_supported,omitempty"`
 
 	// ClientIDMetadataDocumentSupported advertises inbound CIMD support
 	// (draft-ietf-oauth-client-id-metadata-document-02 §6). Emitted as true

@@ -8,7 +8,7 @@ export const OBSERVABILITY_DOWNLOAD_PLATFORMS = [
   { platform: "cursor", label: "Cursor" },
   { platform: "codex", label: "Codex" },
   { platform: "opencode", label: "OpenCode" },
-  { platform: "copilot", label: "Copilot" },
+  { platform: "copilot", label: "Copilot CLI" },
   { platform: "openclaw", label: "OpenClaw" },
   { platform: "pi", label: "Pi" },
 ] as const;

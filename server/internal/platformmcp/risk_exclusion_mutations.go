@@ -88,7 +88,7 @@ func (s *riskExclusionMutationService) createExclusionTool(ctx context.Context, 
 	var reconcile *exclusioncore.Exclusion
 	receipt, err := s.controls.Receipts().Execute(ctx, principal, project, RiskMutationReceiptRequest{
 		Operation: operationCreateRiskExclusion, IdempotencyKey: input.IdempotencyKey, Input: prepared.normalized,
-	}, func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
+	}, s.controls.Charge(principal), func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
 		queries := riskrepo.New(tx)
 		if err := queries.LockRiskExclusionMutations(ctx, project.ID.String()); err != nil {
 			return nil, fmt.Errorf("lock risk exclusion create convergence: %w", err)
@@ -147,7 +147,7 @@ func (s *riskExclusionMutationService) updateExclusionTool(ctx context.Context, 
 	receipt, err := s.controls.Receipts().Execute(ctx, principal, project, RiskMutationReceiptRequest{
 		Operation: operationUpdateRiskExclusion, IdempotencyKey: input.IdempotencyKey,
 		Input: map[string]any{"project_slug": project.Slug, "exclusion_id": exclusionID.String(), "enabled": input.Enabled, "expected_version": input.ExpectedVersion},
-	}, func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
+	}, s.controls.Charge(principal), func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
 		updated, err := s.exclusions.ToggleInTransaction(ctx, tx, exclusioncore.ToggleMutation{
 			ID: exclusionID, ProjectID: project.ID, Enabled: input.Enabled, Actor: riskExclusionActor(principal),
 		}, func(locked exclusioncore.Exclusion) error {

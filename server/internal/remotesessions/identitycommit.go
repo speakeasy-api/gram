@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -1220,6 +1221,8 @@ func (c *IdentityCommit) createClient(ctx context.Context, tx *IdentityTx, crede
 		Audience:                     conv.PtrToPGText(credentials.Audience),
 		LegacyCallbackUrl:            false,
 		CallbackBaseUrl:              c.newClientBaseURL(),
+		GrantTypes:                   nil,
+		CredentialOwner:              pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return repo.RemoteSessionClient{}, fmt.Errorf("create client: %w", err)
@@ -1277,6 +1280,13 @@ func (c *IdentityCommit) attach(ctx context.Context, tx *IdentityTx, client repo
 }
 
 func (c *IdentityCommit) auditClientCreate(ctx context.Context, tx *IdentityTx, client repo.RemoteSessionClient) error {
+	// The client is audited before attach binds it, and the binding records
+	// its own event, so the snapshot carries no user session issuers.
+	snapshot, err := mv.BuildRemoteSessionClientView(client, nil)
+	if err != nil {
+		return fmt.Errorf("build created client view: %w", err)
+	}
+
 	if err := c.committer.audit.LogRemoteSessionClientCreate(ctx, tx.tx, audit.LogRemoteSessionClientCreateEvent{
 		OrganizationID:         c.plan.Scope.OrganizationID,
 		ProjectID:              c.plan.Scope.ProjectID,
@@ -1285,6 +1295,7 @@ func (c *IdentityCommit) auditClientCreate(ctx context.Context, tx *IdentityTx, 
 		ActorSlug:              nil,
 		RemoteSessionClientURN: urn.NewRemoteSessionClient(client.ID),
 		ClientID:               client.ClientID,
+		SnapshotAfter:          snapshot,
 	}); err != nil {
 		return fmt.Errorf("audit client creation: %w", err)
 	}

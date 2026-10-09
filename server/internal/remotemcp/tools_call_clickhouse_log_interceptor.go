@@ -86,16 +86,16 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallRequest(_ context.
 }
 
 // InterceptToolsCallResponse builds a [tm.LogParams] from the response, the
-// stashed start time (or a duration-missing sentinel), and the request auth
+// stashed start time (or a duration-missing sentinel), and the server
 // context, and emits it asynchronously to ClickHouse. Always returns nil.
 func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx context.Context, call *proxy.ToolsCallResponse) error {
 	if call == nil || call.Request == nil || call.Request.Params == nil {
 		return nil
 	}
 
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		i.logger.WarnContext(ctx, "skipping tools/call clickhouse log: missing auth context",
+	serverCtx, ok := GetServerContext(ctx)
+	if !ok || serverCtx.OrganizationID == "" || serverCtx.ProjectID == uuid.Nil {
+		i.logger.WarnContext(ctx, "skipping tools/call clickhouse log: missing server context",
 			attr.SlogComponent("xmcp"))
 		return nil
 	}
@@ -164,16 +164,20 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	logAttrs.RecordRequestBodyContent(call.Request.Params.Arguments)
 	logAttrs.RecordResponseBodyContent(outputContent)
 	logAttrs.RecordTraceContext(ctx)
-	logAttrs.RecordAuthenticatedActor(ctx)
 	ensureTraceContext(logAttrs)
 	if durationMissing {
 		logAttrs[DurationMissingKey] = true
 	}
-	if authCtx.APIKeyID != "" {
-		logAttrs[attr.APIKeyIDKey] = authCtx.APIKeyID
-	}
-	if authCtx.ExternalUserID != "" {
-		logAttrs[attr.ExternalUserIDKey] = authCtx.ExternalUserID
+	userInfo := tm.UserInfoByID("")
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ActiveOrganizationID == serverCtx.OrganizationID {
+		logAttrs.RecordAuthenticatedActor(ctx)
+		userInfo = tm.UserInfoByID(authCtx.UserID)
+		if authCtx.APIKeyID != "" {
+			logAttrs[attr.APIKeyIDKey] = authCtx.APIKeyID
+		}
+		if authCtx.ExternalUserID != "" {
+			logAttrs[attr.ExternalUserIDKey] = authCtx.ExternalUserID
+		}
 	}
 	// The gateway resolved the caller before dialing this member; without it
 	// proxied dispatches would be the one tool-call flavour with no client.
@@ -187,12 +191,12 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 			ID:             "",
 			URN:            toolURN,
 			Name:           toolName,
-			ProjectID:      authCtx.ProjectID.String(),
+			ProjectID:      serverCtx.ProjectID.String(),
 			DeploymentID:   "",
-			OrganizationID: authCtx.ActiveOrganizationID,
+			OrganizationID: serverCtx.OrganizationID,
 			FunctionID:     nil,
 		},
-		UserInfo:   tm.UserInfoByID(authCtx.UserID),
+		UserInfo:   userInfo,
 		Attributes: logAttrs,
 	}
 

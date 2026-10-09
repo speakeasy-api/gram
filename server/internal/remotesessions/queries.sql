@@ -653,6 +653,17 @@ SELECT COUNT(*)
 FROM remote_session_clients
 WHERE remote_session_issuer_id = @remote_session_issuer_id AND deleted IS FALSE;
 
+-- name: CountSelfRemoteSessionClientsByIssuerID :one
+-- Every non-deleted self client on an issuer, across every tenancy tier. The
+-- issuer update guard uses this to keep the token endpoint those clients need:
+-- like the delete guards, a count limited to the caller's tenant would let an
+-- update strand clients the caller cannot see.
+SELECT COUNT(*)
+FROM remote_session_clients
+WHERE remote_session_issuer_id = @remote_session_issuer_id
+  AND credential_owner = 'self'
+  AND deleted IS FALSE;
+
 -- name: CountTrustedUserSessionIssuersByRemoteSessionIssuerID :one
 -- Every active user-session issuer that treats this remote issuer as a trust
 -- anchor, across organizations. Delete, move, and migrate guards use this
@@ -739,7 +750,9 @@ INSERT INTO remote_session_clients (
     legacy_callback_url,
     json_web_key_set_id,
     identity_provider_connection_id,
-    callback_base_url
+    callback_base_url,
+    grant_types,
+    credential_owner
 )
 VALUES (
     @project_id,
@@ -756,7 +769,11 @@ VALUES (
     @legacy_callback_url,
     sqlc.narg('json_web_key_set_id'),
     sqlc.narg('identity_provider_connection_id'),
-    sqlc.narg('callback_base_url')
+    sqlc.narg('callback_base_url'),
+    sqlc.narg('grant_types')::text[],
+    -- NULL creates a subject client, so callers that predate credential_owner
+    -- need not name it. Allowed values are validated in application code.
+    COALESCE(sqlc.narg('credential_owner')::text, 'subject')
 )
 RETURNING *;
 
@@ -1845,6 +1862,7 @@ SELECT
     c.json_web_key_set_id                  AS json_web_key_set_id,
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
+    c.upstream_rejected_at                 AS upstream_rejected_at,
     i.id                                   AS issuer_id,
     i.issuer                               AS issuer_url,
     i.metadata                             AS issuer_metadata,
@@ -1947,6 +1965,7 @@ SELECT
     c.resource_tos_uri                     AS resource_tos_uri,
     c.client_secret_expires_at             AS client_secret_expires_at,
     c.upstream_rejected_at                 AS upstream_rejected_at,
+    c.credential_owner                     AS credential_owner,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     i.tunneled_mcp_server_id               AS tunneled_mcp_server_id,
     i.slug                                 AS issuer_slug,

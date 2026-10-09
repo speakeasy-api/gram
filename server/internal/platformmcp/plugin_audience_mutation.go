@@ -146,18 +146,23 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 	var rolloutErr error
 	rollout, rolloutErr = s.distributionAdmission.Resolve(ctx, principal.OrganizationID, organizationSlug, project.Slug)
 	ctx = roledelivery.WithProjectAdmission(ctx, principal.OrganizationID, project.ID, rollout, rolloutErr)
-	if err := s.mutationBudget.AllowConnectionOrOrganization(ctx, principal); err != nil {
-		if errors.Is(err, ErrOperationRateLimited) {
-			return SetPluginAssignmentsOutput{}, &PluginAssignmentMutationError{Code: "rate_limited", Message: "The plugin assignment mutation rate limit was reached.", Cause: err}
-		}
-		return SetPluginAssignmentsOutput{}, pluginAssignmentMutationUnavailable(err)
-	}
 	references, err := normalizePluginAssignmentReferences(input.AssignmentReferences)
 	if err != nil {
 		return SetPluginAssignmentsOutput{}, err
 	}
 	normalized := normalizedPluginAssignmentMutationInput(project.ID, input.Plugin, references, input.ExpectedAssignmentVersion)
-	receipt, err := s.mutationReceipts.Execute(ctx, principal, project, input.IdempotencyKey, normalized, func(ctx context.Context, tx pgx.Tx) (SetPluginAssignmentsReceiptResult, error) {
+	// Charged only when no completed receipt answers the request; see
+	// executeChargedMutationReceipt.
+	charge := func(ctx context.Context) error {
+		if err := s.mutationBudget.AllowConnectionOrOrganization(ctx, principal); err != nil {
+			if errors.Is(err, ErrOperationRateLimited) {
+				return &PluginAssignmentMutationError{Code: "rate_limited", Message: "The plugin assignment mutation rate limit was reached.", Cause: err}
+			}
+			return pluginAssignmentMutationUnavailable(err)
+		}
+		return nil
+	}
+	receipt, err := s.mutationReceipts.Execute(ctx, principal, project, input.IdempotencyKey, normalized, charge, func(ctx context.Context, tx pgx.Tx) (SetPluginAssignmentsReceiptResult, error) {
 		if err := admission.LockProject(ctx, tx, project.ID); err != nil {
 			return SetPluginAssignmentsReceiptResult{}, pluginAssignmentMutationUnavailable(err)
 		}
@@ -177,10 +182,12 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 			return SetPluginAssignmentsReceiptResult{}, err
 		}
 		result, err := pluginassignments.Replace(ctx, tx, s.audit, locked, pluginassignments.Input{
-			OrganizationID:   principal.OrganizationID,
-			ProjectID:        project.ID,
-			PluginID:         target.ID,
-			PrincipalURNs:    principalURNs,
+			OrganizationID: principal.OrganizationID,
+			ProjectID:      project.ID,
+			PluginID:       target.ID,
+			PrincipalURNs:  principalURNs,
+			// Keeps each principal's current install mode.
+			InstallModes:     nil,
 			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
 			ActorDisplayName: nil,
 			ActorSlug:        nil,

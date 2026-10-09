@@ -46,6 +46,7 @@ report.md
 /dev-idp/gen/http/openapi3.yaml
 scratch/
 /local/cache
+/local/lake
 /local/lgtm
 /local/ssl
 /local/keys
