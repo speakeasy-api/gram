@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -324,8 +325,8 @@ func TestToolExposureServiceWithoutPagingIsUnavailable(t *testing.T) {
 }
 
 // get_mcp must never answer a tool_cursor with a first-page projection as if
-// it continued the read: a cursor nothing can continue is refused, and a
-// foreign one is refused before the inventory is read.
+// it continued the read: without an exposure read the read is unavailable, and
+// a foreign cursor is refused before the inventory is read.
 func TestGetMCPRefusesAToolCursorItCannotContinue(t *testing.T) {
 	t.Parallel()
 	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_get_mcp_tool_cursor")
@@ -341,12 +342,39 @@ func TestGetMCPRefusesAToolCursorItCannotContinue(t *testing.T) {
 
 	withoutExposure := NewPostgresReader(testenv.NewLogger(t), fixture.conn).WithAuthorization(engine)
 	_, err = withoutExposure.GetMCP(ctx, fixture.principal, input)
-	require.ErrorAs(t, err, &refusal)
-	require.Equal(t, "invalid_request", refusal.Code, "a reader with no exposure read cannot continue any cursor")
+	require.ErrorIs(t, err, ErrUnavailable, "a reader with no exposure read reports the read unavailable, as ExposurePage does")
 
 	withExposure := NewPostgresReader(testenv.NewLogger(t), fixture.conn).WithAuthorization(engine).WithToolExposure(fixture.service)
 	input.ToolCursor = "not-a-cursor"
 	_, err = withExposure.GetMCP(ctx, fixture.principal, input)
 	require.ErrorAs(t, err, &refusal)
 	require.Equal(t, "invalid_request", refusal.Code)
+}
+
+// A server in another project is not counted in shared_with_other_servers, but
+// the write still refuses on it, so one joining mid-read must refuse the next
+// page too.
+func TestToolExposurePageAfterAnotherProjectSharedTheListIsRefused(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_tool_exposure_page_foreign")
+	seedExposedTools(t, ctx, fixture)
+	fixture.service.exposurePageSize = 2
+
+	first, err := fixture.service.Exposure(ctx, fixture.principal, fixture.project.ID, fixture.toolsetID)
+	require.NoError(t, err)
+
+	foreignProject, err := projectsrepo.New(fixture.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name: "Other project", Slug: "other-" + uuid.NewString()[:8], OrganizationID: fixture.principal.OrganizationID,
+	})
+	require.NoError(t, err)
+	_, err = mcpserversrepo.New(fixture.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: foreignProject.ID, Name: conv.ToPGText("Foreign front"), Slug: conv.ToPGText("foreign-front"),
+		ToolsetID: uuid.NullUUID{UUID: fixture.toolsetID, Valid: true}, Visibility: "private",
+	})
+	require.NoError(t, err)
+
+	_, err = fixture.service.ExposurePage(ctx, fixture.principal, fixture.project.ID, fixture.toolsetID, first.NextToolCursor)
+	var refusal *MCPToolExposureError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, "conflict", refusal.Code)
 }

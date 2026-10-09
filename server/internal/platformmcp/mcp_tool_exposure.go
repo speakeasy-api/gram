@@ -353,11 +353,11 @@ type toolExposureCursor struct {
 }
 
 // toolExposureListDigest is a one-way digest of an exposure version, so a
-// cursor can pin the list without revealing the version. It also pins how many
-// other servers share the list, so every page of one read reports the same
-// shared_with_other_servers.
-func toolExposureListDigest(version string, sharedWithOther int) string {
-	digest := sha256.Sum256(fmt.Appendf(nil, "platform-mcp-tool-exposure-cursor-list-v2\x00%s\x00%d", version, sharedWithOther))
+// cursor can pin the list without revealing the version. It also pins every
+// other server sharing the list, in this project and outside it, so the pages
+// of one read all describe the same reach.
+func toolExposureListDigest(version string, sharedWithOther int, foreignSharing int64) string {
+	digest := sha256.Sum256(fmt.Appendf(nil, "platform-mcp-tool-exposure-cursor-list-v3\x00%s\x00%d\x00%d", version, sharedWithOther, foreignSharing))
 	return hex.EncodeToString(digest[:])
 }
 
@@ -406,7 +406,7 @@ func (s *MCPToolExposureService) ExposurePage(ctx context.Context, principal Pri
 	}
 	version := toolExposureVersion(projectID, mcpID, row.ToolsetID, row.ToolsetVersion, row.ToolUrns)
 	sharedWithOther := max(len(row.FrontingServerIds)-1, 0)
-	listDigest := toolExposureListDigest(version, sharedWithOther)
+	listDigest := toolExposureListDigest(version, sharedWithOther, row.ForeignFrontingServerCount)
 	if pinnedDigest != "" && !hmac.Equal([]byte(pinnedDigest), []byte(listDigest)) {
 		return MCPToolExposure{}, toolExposurePageConflict()
 	}

@@ -770,12 +770,14 @@ func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input 
 		}
 		return MCP{}, err
 	}
-	// A tool_cursor is checked before the inventory is read, so a stale or
-	// foreign one costs no queries, and it is refused outright where no
-	// exposure read could ever continue it.
+	// A tool_cursor's signature and binding are checked before the inventory
+	// is read, so a malformed or foreign one costs no queries. Whether the
+	// list it pins still stands is checked by the page read itself. Without an
+	// exposure read nothing could continue any cursor, so that is reported as
+	// the read being unavailable, the same as ExposurePage reports it.
 	if input.ToolCursor != "" {
 		if !r.toolExposure.valid() {
-			return MCP{}, toolExposureCursorInvalid()
+			return MCP{}, ErrUnavailable
 		}
 		if _, err := r.toolExposure.openExposureCursor(principal, projectID, mcpID, input.ToolCursor); err != nil {
 			return MCP{}, err
