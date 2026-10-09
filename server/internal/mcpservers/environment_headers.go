@@ -76,12 +76,25 @@ func (s *Service) GetEnvironmentHeaders(ctx context.Context, payload *gen.GetEnv
 		return nil, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, s.logger)
 	}
 
-	// Authorize before reading anything about any environment: the same
-	// project-wide authority linking requires, plus read access to the server.
-	if err := s.authz.Require(ctx,
+	environmentID := server.EnvironmentID
+	switch payload.Selection {
+	case environmentSelectionNone:
+		environmentID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	case environmentSelectionEnvironment:
+		environmentID = uuid.NullUUID{UUID: candidate, Valid: true}
+	}
+
+	// Authorize before reading anything about any environment: read access to
+	// the server plus the authority linking the previewed environment would
+	// require, so an exclusion on that environment refuses its preview too.
+	var previewed []uuid.UUID
+	if environmentID.Valid {
+		previewed = []uuid.UUID{environmentID.UUID}
+	}
+	checks := append([]authz.Check{
 		authz.MCPCheck(authz.ScopeMCPRead, grantResourceID(server.ID, server.ToolsetID), projectID.String()),
-		authz.EnvironmentLinkCheck(projectID.String()),
-	); err != nil {
+	}, EnvironmentLinkChecks(projectID, previewed)...)
+	if err := s.authz.Require(ctx, checks...); err != nil {
 		return nil, err
 	}
 
@@ -107,13 +120,6 @@ func (s *Service) GetEnvironmentHeaders(ctx context.Context, payload *gen.GetEnv
 		result.Environments = append(result.Environments, &gen.McpServerEnvironmentSummary{ID: env.ID.String(), Name: env.Name, Slug: env.Slug})
 	}
 
-	environmentID := server.EnvironmentID
-	switch payload.Selection {
-	case environmentSelectionNone:
-		environmentID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	case environmentSelectionEnvironment:
-		environmentID = uuid.NullUUID{UUID: candidate, Valid: true}
-	}
 	if !environmentID.Valid {
 		return result, nil
 	}

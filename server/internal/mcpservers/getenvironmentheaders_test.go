@@ -352,3 +352,24 @@ func TestUpdateMcpServer_TunnelSharedWithMetaMcpSiblingRefusedDespiteDistinctEnv
 	_, err = f.ti.service.UpdateMcpServer(f.ctx, payload)
 	requireOopsCode(t, err, oops.CodeConflict)
 }
+
+// An exclusion on one environment refuses previewing that environment, linked
+// or as a candidate, while previews of other environments still work.
+func TestGetEnvironmentHeaders_EnvironmentExclusionRefusesItsPreview(t *testing.T) {
+	t.Parallel()
+
+	f := newLinkFixture(t)
+	server := f.remoteServer(t, &f.envID)
+	ctx := f.excludedFrom(t, f.envID)
+
+	_, err := f.ti.service.GetEnvironmentHeaders(ctx, previewPayload(server.ID, "linked", nil))
+	requireOopsCode(t, err, oops.CodeForbidden)
+	_, err = f.ti.service.GetEnvironmentHeaders(ctx, previewPayload(server.ID, "environment", &f.envID))
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	other, err := f.ti.service.GetEnvironmentHeaders(ctx, previewPayload(server.ID, "environment", &f.envID2))
+	require.NoError(t, err)
+	require.Equal(t, "ok", other.EnvironmentStatus)
+	_, err = f.ti.service.GetEnvironmentHeaders(ctx, previewPayload(server.ID, "none", nil))
+	require.NoError(t, err)
+}
