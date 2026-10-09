@@ -47,18 +47,14 @@ func decodeAnswer(q plannedQuestion, wire wireAnswer) *classifier.Answer {
 		return nil
 	}
 	distribution := make([]classifier.Probability, 0, len(options))
-	sum, maximum := 0.0, 0.0
+	maximum := 0.0
 	for i, option := range options {
 		p := wire.Probabilities[strconv.Itoa(i)]
 		if !probability(p) {
 			return nil
 		}
-		sum += *p
 		maximum = max(maximum, *p)
 		distribution = append(distribution, classifier.Probability{Option: option.Key, Value: *p})
-	}
-	if math.Abs(sum-1) > probabilityTolerance {
-		return nil
 	}
 	if q.question.Choice != nil {
 		if wire.Choice == nil {
