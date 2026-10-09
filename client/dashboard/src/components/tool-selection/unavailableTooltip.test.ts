@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { unavailableTooltip } from "./ToolSelectionPanel";
+import { unavailableTooltip } from "./unavailableTooltip";
 
 describe("unavailableTooltip", () => {
   it("explains an unproxied server shown with the default label", () => {
