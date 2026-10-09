@@ -84,6 +84,8 @@ function setImpact(
   };
 }
 
+const onBusyChange = vi.fn<(busy: boolean) => void>();
+
 function dialog(onLeave: (href?: string) => void) {
   return (
     <QueryClientProvider client={new QueryClient()}>
@@ -94,6 +96,7 @@ function dialog(onLeave: (href?: string) => void) {
             mcpServerId="a"
             onClose={() => {}}
             onLeave={onLeave}
+            onBusyChange={onBusyChange}
           />
         </Dialog.Content>
       </Dialog>
@@ -135,6 +138,7 @@ beforeEach(() => {
   state.remaining.mockReset();
   state.isError = false;
   state.error = undefined;
+  onBusyChange.mockReset();
 });
 
 afterEach(cleanup);
@@ -270,6 +274,32 @@ describe("DeleteTunnelDialogContent", () => {
     const message = state.toastError.mock.calls[0]?.[0] as string;
     expect(message).toContain("Could not check which MCP servers still use");
     expect(message).not.toContain("No MCP server you can view");
+  });
+
+  it("stays busy until recovery from a partial delete settles", async () => {
+    state.mutateAsync.mockRejectedValue(
+      new TunnelDeleteIncompleteError("Deleted 1 of 2 MCP servers.", true),
+    );
+    let finishRecovery: (servers: McpServer[]) => void = () => {};
+    state.remaining.mockReturnValue(
+      new Promise<McpServer[]>((done) => {
+        finishRecovery = done;
+      }),
+    );
+    const { onLeave } = renderDialog();
+    typeName();
+    await clickDelete();
+
+    // The mutation has rejected, but recovery is still reading what is left.
+    expect(onBusyChange).toHaveBeenLastCalledWith(true);
+    expect(
+      (screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+
+    await act(async () => finishRecovery(servers("b")));
+    expect(onLeave).toHaveBeenCalled();
+    expect(onBusyChange).toHaveBeenLastCalledWith(false);
   });
 
   it("stays open for a retry when nothing was deleted", async () => {
