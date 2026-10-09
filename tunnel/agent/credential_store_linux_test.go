@@ -175,7 +175,7 @@ func TestCredentialStoreScavengesCrashedAgent(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, dir.writeToken(testTokenA))
 	// A crash releases the lock without removing anything.
-	require.NoError(t, unix.Close(crashed.lockFD))
+	simulateCrash(t, crashed, dir)
 
 	survivor := openTestStore(t, root)
 	_, err = os.Stat(dir.tokenPath())
@@ -490,10 +490,22 @@ func TestCredentialStoreRecoversCrashUnderRestrictiveUmask(t *testing.T) {
 	dir, err := store.createSession()
 	require.NoError(t, err)
 	require.NoError(t, dir.writeToken(testTokenA))
-	require.NoError(t, unix.Close(store.lockFD))
+	simulateCrash(t, store, dir)
 
 	survivor := openTestStore(t, root)
 	_, err = os.Stat(dir.tokenPath())
 	require.ErrorIs(t, err, os.ErrNotExist, "a crashed instance is recovered at the next start")
 	require.NoError(t, survivor.Close())
+}
+
+// simulateCrash closes a store's descriptors without removing anything, as
+// an agent that dies does. The store must not be used afterwards.
+func simulateCrash(t *testing.T, store *linuxCredentialStore, dirs ...credentialDir) {
+	t.Helper()
+	for _, dir := range dirs {
+		require.NoError(t, unix.Close(dir.(*linuxCredentialDir).fd))
+	}
+	for _, fd := range []int{store.lockFD, store.instFD, store.baseFD} {
+		require.NoError(t, unix.Close(fd))
+	}
 }
