@@ -2,14 +2,12 @@ package directory
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
 )
 
 // DirectoryInventory lists the authoritative WorkOS Directory Sync inventory.
@@ -39,12 +37,7 @@ func AttributeDirectorySources(ctx context.Context, beginner interface {
 		return AttributionReport{}, fmt.Errorf("organization IDs are required")
 	}
 
-	snapshotTx, err := beginner.Begin(ctx)
-	if err != nil {
-		return AttributionReport{}, fmt.Errorf("begin sync cursor snapshot: %w", err)
-	}
-	snapshot, err := organizationSyncState(ctx, workosrepo.New(snapshotTx), workosOrganizationID)
-	_ = snapshotTx.Rollback(ctx)
+	snapshot, err := SnapshotOrganizationSync(ctx, beginner, workosOrganizationID)
 	if err != nil {
 		return AttributionReport{}, err
 	}
@@ -101,17 +94,8 @@ func AttributeDirectorySources(ctx context.Context, beginner interface {
 		return AttributionReport{}, fmt.Errorf("begin attribution transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	syncQueries := workosrepo.New(tx)
-	if err := syncQueries.LockOrganizationSync(ctx, workosOrganizationID); err != nil {
-		return AttributionReport{}, fmt.Errorf("lock organization event sync: %w", err)
-	}
-	current, err := organizationSyncState(ctx, syncQueries, workosOrganizationID)
-	if err != nil {
+	if err := snapshot.LockAndValidate(ctx, tx); err != nil {
 		return AttributionReport{}, err
-	}
-	if current.ID != snapshot.ID || current.LastEventID != snapshot.LastEventID ||
-		current.UpdatedAt.Valid != snapshot.UpdatedAt.Valid || !current.UpdatedAt.Time.Equal(snapshot.UpdatedAt.Time) {
-		return AttributionReport{}, fmt.Errorf("organization events changed during inventory retrieval; rerun with fresh inventory and review unattributed residuals")
 	}
 	queries := repo.New(tx)
 	unattributed, err := queries.ListUnattributedDirectorySources(ctx, organizationID)
@@ -167,15 +151,4 @@ func AttributeDirectorySources(ctx context.Context, beginner interface {
 		return AttributionReport{}, fmt.Errorf("commit attribution transaction: %w", err)
 	}
 	return report, nil
-}
-
-func organizationSyncState(ctx context.Context, queries *workosrepo.Queries, workosOrganizationID string) (workosrepo.GetOrganizationSyncStateRow, error) {
-	state, err := queries.GetOrganizationSyncState(ctx, workosOrganizationID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return state, nil
-	}
-	if err != nil {
-		return workosrepo.GetOrganizationSyncStateRow{}, fmt.Errorf("read organization event sync cursor: %w", err)
-	}
-	return state, nil
 }
