@@ -2,7 +2,11 @@
 // on dummy data, to get a feel for the layout before changing the real
 // builder. Nothing here calls the server or saves anything. Delete this file
 // and its tab in Explore.tsx once the decision is made.
+import { AXIS, seriesForTheme, TOOLTIP } from "@/components/chart/palette";
+import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
 import {
   Command,
   CommandEmpty,
@@ -13,12 +17,23 @@ import {
 } from "@/components/ui/Command";
 import { Icon } from "@/components/ui/Icon";
 import type { IconName } from "@/components/ui/Icon/names";
+import { Input } from "@/components/ui/Input";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/Popover";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
+import { useIsDarkTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
+import { XIcon } from "lucide-react";
 import { useMemo, useState, type JSX, type ReactNode } from "react";
 import {
   Area,
@@ -33,6 +48,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { WINDOW_PRESETS, type WindowPreset } from "./exploreModel";
 
 // ── Dummy catalog ─────────────────────────────────────────────────────────
 
@@ -66,17 +82,8 @@ const VALUES: Record<string, string[]> = {
 };
 
 const AGGS = ["count", "count distinct", "sum", "avg", "p50", "p95", "max"];
-const WINDOWS = ["Past 15m", "Past 1h", "Past 1d", "Past 7d", "Past 30d"];
 const LIMITS = ["5", "10", "25", "100"];
 const LETTERS = "abcdefgh";
-const COLORS = [
-  "#4f46e5",
-  "#0891b2",
-  "#d97706",
-  "#db2777",
-  "#16a34a",
-  "#64748b",
-];
 
 type ChartKind =
   | "line"
@@ -121,7 +128,7 @@ interface State {
   queries: Query[];
   formulas: string[];
   chart: ChartKind;
-  window: string;
+  window: WindowPreset;
 }
 
 const INITIAL: State = {
@@ -140,7 +147,7 @@ const INITIAL: State = {
   ],
   formulas: [],
   chart: "line",
-  window: "Past 7d",
+  window: "7d",
 };
 
 function datasetOf(name: string): DummyDataset {
@@ -168,17 +175,13 @@ export function ExploreV2Prototype(): JSX.Element {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="border-warning-default bg-warning-softest text-warning-default border border-dashed px-3 py-1.5 font-mono text-xs uppercase">
-        Prototype · dummy data · nothing is saved
-      </div>
-
       <section className="border-border bg-card flex flex-col border">
         <FilterBar
           fields={filterFields}
           filters={state.filters}
           onChange={(filters) => patch({ filters })}
         />
-        <div className="flex flex-col gap-1 px-3 py-2">
+        <div className="flex flex-col gap-1.5 px-3 py-2">
           {state.queries.map((query, index) => (
             <QueryRow
               key={query.letter}
@@ -191,24 +194,27 @@ export function ExploreV2Prototype(): JSX.Element {
             />
           ))}
           {state.formulas.map((formula, index) => (
-            <div key={index} className="flex items-center gap-2">
+            <div key={index} className="flex items-center gap-1.5">
               <span className="text-muted-foreground flex size-6 items-center justify-center font-mono text-xs italic">
                 ƒ
               </span>
-              <input
+              <Input
                 value={formula}
-                onChange={(e) =>
+                aria-label="Formula"
+                onChange={(value) =>
                   patch({
                     formulas: state.formulas.map((f, i) =>
-                      i === index ? e.target.value : f,
+                      i === index ? value : f,
                     ),
                   })
                 }
-                className="bg-muted/50 focus:border-border h-7 w-64 border border-transparent px-2 font-mono text-sm outline-none"
+                className="h-8 w-64 font-mono"
               />
-              <IconButton
+              <Button
+                variant="tertiary"
+                size="sm"
                 icon="x"
-                label="Remove formula"
+                aria-label="Remove formula"
                 onClick={() =>
                   patch({
                     formulas: state.formulas.filter((_, i) => i !== index),
@@ -217,7 +223,7 @@ export function ExploreV2Prototype(): JSX.Element {
               />
             </div>
           ))}
-          <div className="flex items-center gap-1 pt-1">
+          <div className="flex items-center gap-1">
             <Button
               variant="tertiary"
               size="sm"
@@ -272,15 +278,6 @@ export function ExploreV2Prototype(): JSX.Element {
         }}
         onRun={() => setRan(state)}
       />
-
-      <details className="text-muted-foreground text-xs">
-        <summary className="cursor-pointer font-mono uppercase">
-          Prototype state
-        </summary>
-        <pre className="bg-muted/40 mt-2 overflow-x-auto p-3">
-          {JSON.stringify(state, null, 2)}
-        </pre>
-      </details>
     </div>
   );
 }
@@ -297,74 +294,79 @@ function FilterBar({
   onChange: (filters: Filter[]) => void;
 }): JSX.Element {
   return (
-    <div className="border-border flex min-h-10 flex-wrap items-center gap-1.5 border-b px-3 py-1.5">
-      <Icon name="filter" className="text-muted-foreground size-3.5" />
+    <div className="border-border flex min-h-11 flex-wrap items-center gap-1.5 border-b px-3 py-1.5">
+      <span className="text-eyebrow pr-1">Where</span>
       {filters.map((filter, index) => (
-        <FilterPill
+        <FilterEditor
           key={index}
           fields={fields}
-          filter={filter}
-          onChange={(next) =>
+          initial={filter}
+          onDone={(next) =>
             onChange(filters.map((f, i) => (i === index ? next : f)))
           }
-          onRemove={() => onChange(filters.filter((_, i) => i !== index))}
+          trigger={
+            <Pill
+              onRemove={() => onChange(filters.filter((_, i) => i !== index))}
+              removeLabel={`Remove ${filter.field} filter`}
+            >
+              {filter.field}
+              <span className="text-muted-foreground">
+                {filter.op === "is" ? " : " : " !: "}
+              </span>
+              {filter.values.join(", ")}
+            </Pill>
+          }
         />
       ))}
       <FilterEditor
         fields={fields}
         onDone={(filter) => onChange([...filters, filter])}
         trigger={
-          <button
-            type="button"
-            className="text-muted-foreground hover:text-foreground inline-flex h-7 items-center gap-1 px-1.5 text-sm"
-          >
-            <Icon name="plus" className="size-3.5" />
-            {filters.length === 0 ? "Filter everything…" : "Filter"}
-          </button>
+          <Button variant="tertiary" size="sm" icon="plus">
+            {filters.length === 0 ? "Add filter" : "Filter"}
+          </Button>
         }
       />
     </div>
   );
 }
 
-function FilterPill({
-  fields,
-  filter,
-  onChange,
+// A value in the builder: a neutral badge with its own remove control, as
+// the filter value picker draws a picked value.
+function Pill({
+  children,
   onRemove,
+  removeLabel,
+  ...rest
 }: {
-  fields: string[];
-  filter: Filter;
-  onChange: (next: Filter) => void;
+  children: ReactNode;
   onRemove: () => void;
+  removeLabel: string;
 }): JSX.Element {
   return (
-    <span className="bg-muted inline-flex h-7 items-center font-mono text-xs">
-      <FilterEditor
-        fields={fields}
-        initial={filter}
-        onDone={onChange}
-        trigger={
-          <button type="button" className="flex h-full items-center gap-1 pl-2">
-            <span>{filter.field}</span>
-            <span className="text-muted-foreground">
-              {filter.op === "is" ? ":" : "!:"}
-            </span>
-            <span className="max-w-48 truncate">
-              {filter.values.join(", ")}
-            </span>
-          </button>
-        }
-      />
-      <button
-        type="button"
-        aria-label={`Remove ${filter.field} filter`}
-        onClick={onRemove}
-        className="text-muted-foreground hover:text-foreground flex h-full items-center px-1.5"
-      >
-        <Icon name="x" className="size-3" />
-      </button>
-    </span>
+    <Badge
+      variant="neutral"
+      size="lg"
+      className="max-w-80 cursor-pointer normal-case"
+      {...rest}
+    >
+      <Badge.Text className="min-w-0 truncate font-mono text-xs [text-box-trim:none]">
+        {children}
+      </Badge.Text>
+      <Badge.RightIcon>
+        <button
+          type="button"
+          aria-label={removeLabel}
+          onClick={(event) => {
+            event.stopPropagation();
+            onRemove();
+          }}
+          className="flex size-3 cursor-pointer items-center justify-center hover:opacity-70 focus:outline-none focus-visible:ring-1"
+        >
+          <XIcon className="size-3" />
+        </button>
+      </Badge.RightIcon>
+    </Badge>
   );
 }
 
@@ -390,13 +392,15 @@ function FilterEditor({
         if (next) setDraft(initial ?? null);
       }}
     >
-      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+      <PopoverTrigger asChild>
+        <span className="inline-flex">{trigger}</span>
+      </PopoverTrigger>
       <PopoverContent className="w-72 p-0" align="start">
         {draft === null ? (
           <Command>
             <CommandInput placeholder="Filter by…" />
             <CommandList>
-              <CommandEmpty>No field.</CommandEmpty>
+              <CommandEmpty>No field matches.</CommandEmpty>
               <CommandGroup>
                 {fields.map((field) => (
                   <CommandItem
@@ -411,26 +415,20 @@ function FilterEditor({
             </CommandList>
           </Command>
         ) : (
-          <div className="flex flex-col gap-2 p-2">
-            <div className="flex items-center gap-2 font-mono text-sm">
-              <span>{draft.field}</span>
-              {(["is", "is not"] as const).map((op) => (
-                <button
-                  key={op}
-                  type="button"
-                  onClick={() => setDraft({ ...draft, op })}
-                  className={cn(
-                    "px-1.5 py-0.5 text-xs",
-                    draft.op === op
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted",
-                  )}
-                >
-                  {op}
-                </button>
-              ))}
+          <div className="flex flex-col gap-3 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono text-sm">{draft.field}</span>
+              <SegmentedControl<Filter["op"]>
+                value={draft.op}
+                onChange={(op) => setDraft({ ...draft, op })}
+                options={[
+                  { value: "is", label: "is" },
+                  { value: "is not", label: "is not" },
+                ]}
+                className="h-7"
+              />
             </div>
-            <div className="flex max-h-56 flex-col overflow-y-auto">
+            <div className="flex max-h-56 flex-col gap-0.5 overflow-y-auto">
               {(VALUES[draft.field] ?? []).map((value) => {
                 const picked = draft.values.includes(value);
                 return (
@@ -438,10 +436,9 @@ function FilterEditor({
                     key={value}
                     className="hover:bg-muted flex cursor-pointer items-center gap-2 px-1.5 py-1 font-mono text-sm"
                   >
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={picked}
-                      onChange={() =>
+                      onCheckedChange={() =>
                         setDraft({
                           ...draft,
                           values: picked
@@ -492,7 +489,7 @@ function QueryRow({
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center gap-1",
+        "flex flex-wrap items-center gap-1.5",
         !query.visible && "opacity-50",
       )}
     >
@@ -501,17 +498,19 @@ function QueryRow({
         title={query.visible ? "Hide this query" : "Show this query"}
         onClick={() => onChange({ visible: !query.visible })}
         className={cn(
-          "flex size-6 items-center justify-center font-mono text-xs",
+          "border-border flex size-8 shrink-0 items-center justify-center border font-mono text-xs uppercase",
           query.visible
             ? "bg-primary text-primary-foreground"
-            : "bg-muted text-muted-foreground",
+            : "bg-card text-muted-foreground",
         )}
       >
         {query.letter}
       </button>
       <Token
+        label="Aggregation"
         value={query.agg}
         options={AGGS}
+        className="font-mono uppercase"
         onSelect={(agg) =>
           onChange({
             agg,
@@ -526,6 +525,7 @@ function QueryRow({
       />
       {counts ? null : (
         <Token
+          label="Measure field"
           value={query.field}
           options={
             query.agg === "count distinct"
@@ -537,6 +537,7 @@ function QueryRow({
       )}
       <Word>of</Word>
       <Token
+        label="Dataset"
         value={query.dataset}
         options={DATASETS.map((d) => d.name)}
         onSelect={(name) => {
@@ -549,33 +550,23 @@ function QueryRow({
         }}
       />
       <Word>by</Word>
-      {query.groupBy.length === 0 ? (
-        <span className="text-muted-foreground px-1 font-mono text-sm">
-          everything
-        </span>
-      ) : null}
+      {query.groupBy.length === 0 ? <Word>everything</Word> : null}
       {query.groupBy.map((group) => (
-        <span
+        <Pill
           key={group}
-          className="bg-muted inline-flex h-7 items-center gap-1 pl-2 font-mono text-sm"
+          removeLabel={`Stop grouping by ${group}`}
+          onRemove={() =>
+            onChange({ groupBy: query.groupBy.filter((g) => g !== group) })
+          }
         >
           {group}
-          <button
-            type="button"
-            aria-label={`Stop grouping by ${group}`}
-            onClick={() =>
-              onChange({ groupBy: query.groupBy.filter((g) => g !== group) })
-            }
-            className="text-muted-foreground hover:text-foreground flex h-full items-center px-1.5"
-          >
-            <Icon name="x" className="size-3" />
-          </button>
-        </span>
+        </Pill>
       ))}
       {free.length > 0 && query.groupBy.length < 3 ? (
         <Token
+          label="Add a group"
           value=""
-          placeholder="+"
+          placeholder="+ group"
           options={free}
           onSelect={(group) => onChange({ groupBy: [...query.groupBy, group] })}
         />
@@ -584,20 +575,32 @@ function QueryRow({
         <>
           <Word>top</Word>
           <Token
+            label="Limit"
             value={query.limit}
             options={LIMITS}
             onSelect={(limit) => onChange({ limit })}
           />
         </>
       ) : null}
-      <span className="ml-1 flex items-center gap-0.5">
-        <IconButton icon="sigma" label="Functions (not in the prototype)" />
+      <span className="flex items-center gap-0.5">
+        <Button
+          variant="tertiary"
+          size="sm"
+          icon="sigma"
+          aria-label="Functions (not in the prototype)"
+        />
         <AliasInput
           value={query.alias}
           onChange={(alias) => onChange({ alias })}
         />
         {canRemove ? (
-          <IconButton icon="x" label="Remove query" onClick={onRemove} />
+          <Button
+            variant="tertiary"
+            size="sm"
+            icon="x"
+            aria-label="Remove query"
+            onClick={onRemove}
+          />
         ) : null}
       </span>
     </div>
@@ -614,106 +617,63 @@ function AliasInput({
   const [editing, setEditing] = useState(false);
   if (!editing && value === "") {
     return (
-      <button
-        type="button"
-        onClick={() => setEditing(true)}
-        className="text-muted-foreground hover:text-foreground h-7 px-1.5 font-mono text-xs"
-      >
+      <Button variant="tertiary" size="sm" onClick={() => setEditing(true)}>
         as…
-      </button>
+      </Button>
     );
   }
   return (
-    <input
+    <Input
       autoFocus={editing}
       value={value}
-      placeholder="name"
-      onChange={(e) => onChange(e.target.value)}
+      placeholder="Name"
+      aria-label="Query name"
+      onChange={onChange}
       onBlur={() => setEditing(false)}
-      className="bg-muted/50 focus:border-border h-7 w-28 border border-transparent px-2 font-mono text-xs outline-none"
+      className="h-8 w-32"
     />
   );
 }
 
-// ── Token: a select that reads as a word ──────────────────────────────────
+// ── Token: the design system's small select, sized to its value ───────────
 
 function Token({
+  label,
   value,
   placeholder,
   options,
+  className,
   onSelect,
 }: {
+  label: string;
   value: string;
   placeholder?: string;
   options: string[];
+  className?: string;
   onSelect: (value: string) => void;
 }): JSX.Element {
-  const [open, setOpen] = useState(false);
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="bg-muted/50 hover:border-border hover:bg-muted inline-flex h-7 items-center gap-1 border border-transparent px-2 font-mono text-sm"
-        >
-          {value || (
-            <span className="text-muted-foreground">{placeholder}</span>
-          )}
-          <Icon name="chevron-down" className="text-muted-foreground size-3" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-56 p-0" align="start">
-        <Command>
-          {options.length > 6 ? <CommandInput placeholder="Search…" /> : null}
-          <CommandList>
-            <CommandEmpty>Nothing matches.</CommandEmpty>
-            <CommandGroup>
-              {options.map((option) => (
-                <CommandItem
-                  key={option}
-                  onSelect={() => {
-                    onSelect(option);
-                    setOpen(false);
-                  }}
-                  className="font-mono"
-                >
-                  {option}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+    <Select value={value} onValueChange={onSelect}>
+      <SelectTrigger
+        size="sm"
+        aria-label={label}
+        className={cn("w-auto min-w-0 gap-1.5", className)}
+      >
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem key={option} value={option} className={className}>
+            {option}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
 function Word({ children }: { children: ReactNode }): JSX.Element {
-  return (
-    <span className="text-muted-foreground px-0.5 text-xs">{children}</span>
-  );
-}
-
-function IconButton({
-  icon,
-  label,
-  onClick,
-}: {
-  icon: IconName;
-  label: string;
-  onClick?: () => void;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      onClick={onClick}
-      className="text-muted-foreground hover:text-foreground hover:bg-muted flex size-7 items-center justify-center"
-    >
-      <Icon name={icon} className="size-3.5" />
-    </button>
-  );
+  return <span className="text-muted-foreground text-xs">{children}</span>;
 }
 
 // ── Results: chart type, window and Run on the panel's header ─────────────
@@ -730,46 +690,48 @@ function Results({
   draft: State;
   changed: boolean;
   onChart: (chart: ChartKind) => void;
-  onWindow: (window: string) => void;
+  onWindow: (window: WindowPreset) => void;
   onRun: () => void;
 }): JSX.Element {
   const data = useMemo(() => dummyResult(state), [state]);
   return (
     <section className="border-border bg-card flex flex-col border">
-      <div className="border-border flex flex-wrap items-center gap-2 border-b px-3 py-1.5">
-        <div className="flex items-center">
-          {CHARTS.map((chart) => (
-            <button
-              key={chart.kind}
-              type="button"
-              title={chart.label}
-              aria-label={chart.label}
-              aria-pressed={draft.chart === chart.kind}
-              onClick={() => onChart(chart.kind)}
-              className={cn(
-                "flex size-7 items-center justify-center",
-                draft.chart === chart.kind
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted",
-              )}
-            >
-              <Icon name={chart.icon} className="size-4" />
-            </button>
-          ))}
-        </div>
+      <div className="border-border flex flex-wrap items-center gap-3 border-b px-3 py-2">
+        <span className="text-eyebrow">Results</span>
+        <SegmentedControl<ChartKind>
+          value={draft.chart}
+          onChange={onChart}
+          className="h-8"
+          options={CHARTS.map((chart) => ({
+            value: chart.kind,
+            tooltip: chart.label,
+            label: (
+              <Icon
+                name={chart.icon}
+                className="size-4"
+                aria-label={chart.label}
+              />
+            ),
+          }))}
+        />
         <div className="ml-auto flex items-center gap-2">
           {changed ? (
             <span className="text-muted-foreground text-xs">
-              Query changed since the last run.
+              Changed since the last run.
             </span>
           ) : null}
-          <Token value={draft.window} options={WINDOWS} onSelect={onWindow} />
+          <TimeRangePicker
+            preset={draft.window}
+            availablePresets={WINDOW_PRESETS}
+            onPresetChange={onWindow}
+            className="h-8 py-1"
+          />
           <Button variant="primary" size="sm" icon="play" onClick={onRun}>
-            Run
+            Run query
           </Button>
         </div>
       </div>
-      <div className="h-80 p-3">
+      <div className="h-80 p-4">
         <ResultBody chart={state.chart} data={data} />
       </div>
     </section>
@@ -789,6 +751,8 @@ function ResultBody({
   chart: ChartKind;
   data: DummyResult;
 }): JSX.Element {
+  const colors = seriesForTheme(useIsDarkTheme());
+  const grid = useIsDarkTheme() ? AXIS.gridDark : AXIS.grid;
   if (data.series.length === 0) {
     return (
       <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
@@ -800,7 +764,7 @@ function ResultBody({
     const total = data.totals.reduce((sum, t) => sum + t.value, 0);
     return (
       <div className="flex h-full flex-col items-center justify-center gap-1">
-        <span className="text-display-lg font-thin tabular-nums">
+        <span className="text-display-sm font-thin tabular-nums">
           {total.toLocaleString()}
         </span>
         <span className="text-muted-foreground text-xs">{data.series[0]}</span>
@@ -820,8 +784,11 @@ function ResultBody({
             {chart === "ranked" ? (
               <div className="bg-muted h-3 flex-1">
                 <div
-                  className="h-full bg-indigo-600"
-                  style={{ width: `${(row.value / max) * 100}%` }}
+                  className="h-full"
+                  style={{
+                    width: `${(row.value / max) * 100}%`,
+                    background: colors[0],
+                  }}
                 />
               </div>
             ) : (
@@ -839,14 +806,25 @@ function ResultBody({
     data: data.points,
     margin: { top: 4, right: 8, bottom: 0, left: -12 },
   };
+  const tick = { fontSize: 11, fill: AXIS.label };
   const axes = (
     <>
-      <CartesianGrid strokeDasharray="2 4" vertical={false} />
-      <XAxis dataKey="t" tick={{ fontSize: 11 }} />
-      <YAxis tick={{ fontSize: 11 }} />
-      <Tooltip />
+      <CartesianGrid stroke={grid} vertical={false} />
+      <XAxis dataKey="t" tick={tick} stroke={grid} />
+      <YAxis tick={tick} stroke={grid} />
+      <Tooltip
+        contentStyle={{
+          background: TOOLTIP.backgroundColor,
+          border: `1px solid ${TOOLTIP.borderColor}`,
+          borderRadius: TOOLTIP.cornerRadius,
+          fontSize: 12,
+        }}
+        labelStyle={{ color: TOOLTIP.titleColor }}
+        itemStyle={{ padding: 0 }}
+      />
     </>
   );
+  const color = (i: number) => colors[i % colors.length];
   return (
     <ResponsiveContainer width="100%" height="100%">
       {chart === "line" ? (
@@ -857,7 +835,7 @@ function ResultBody({
               key={s}
               dataKey={s}
               dot={false}
-              stroke={COLORS[i % COLORS.length]}
+              stroke={color(i)}
               strokeWidth={1.5}
             />
           ))}
@@ -869,8 +847,8 @@ function ResultBody({
             <Area
               key={s}
               dataKey={s}
-              stroke={COLORS[i % COLORS.length]}
-              fill={COLORS[i % COLORS.length]}
+              stroke={color(i)}
+              fill={color(i)}
               fillOpacity={0.15}
             />
           ))}
@@ -882,7 +860,7 @@ function ResultBody({
             <Bar
               key={s}
               dataKey={s}
-              fill={COLORS[i % COLORS.length]}
+              fill={color(i)}
               stackId={chart === "stacked_bar" ? "stack" : undefined}
             />
           ))}
@@ -905,9 +883,9 @@ function seeded(seed: string): () => number {
 
 function dummyResult(state: State): DummyResult {
   const filterKey = JSON.stringify(state.filters);
+  const visible = state.queries.filter((q) => q.visible);
   const series: string[] = [];
-  for (const query of state.queries) {
-    if (!query.visible) continue;
+  for (const query of visible) {
     const name =
       query.alias ||
       `${query.letter}: ${query.agg}${query.field ? ` ${query.field}` : ""} of ${query.dataset}`;
@@ -916,13 +894,8 @@ function dummyResult(state: State): DummyResult {
       series.push(name);
       continue;
     }
-    const values = VALUES[group] ?? [];
-    for (const value of values.slice(0, Number(query.limit))) {
-      series.push(
-        state.queries.filter((q) => q.visible).length > 1
-          ? `${query.letter} · ${value}`
-          : value,
-      );
+    for (const value of (VALUES[group] ?? []).slice(0, Number(query.limit))) {
+      series.push(visible.length > 1 ? `${query.letter} · ${value}` : value);
     }
   }
   for (const formula of state.formulas) series.push(`ƒ ${formula}`);
