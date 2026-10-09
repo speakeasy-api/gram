@@ -17,6 +17,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
@@ -24,8 +25,10 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/sigint"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
@@ -185,9 +188,17 @@ func composeRegistryOnPool(t *testing.T, logger *slog.Logger, pool, live *pgxpoo
 		risk.NewFalsePositiveCore(auditLogger, nil))
 	require.NoError(t, err)
 
+	redis, err := platformMCPInfra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+
+	tracer := testenv.NewTracerProvider(t)
+	features := productfeatures.NewClient(logger, tracer, pool, redis)
+	management := sigint.NewService(logger, tracer, pool, &sessions.Manager{}, liveEngine, auditLogger, features)
+	signalAuthoring := NewSignalAuthoringService(management, reader, liveEngine, key)
+
 	_, registrar := newServerWithRiskMutations(reader, nil, registrations, key, nil, NewFeedbackService(pool), NewOnboardingService(pool),
 		distributions, skills, diagnostics, NewWorkflowRunService(logger, nil), pluginInventory, sessionRecall, riskMutations,
-		CatalogDescriptor{}, accessReads, accessRoleMutations, nil)
+		CatalogDescriptor{}, accessReads, accessRoleMutations, nil, signalAuthoring)
 	registrar.withLogger(logger)
 	return registrar
 }

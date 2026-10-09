@@ -203,7 +203,7 @@ func TestEveryToolOnANotComposedServiceRefusesWithoutPanicking(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			_, registrar := newServerWithRiskMutations(reader, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{}, nil, nil, nil)
+			_, registrar := newServerWithRiskMutations(reader, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{}, nil, nil, nil, nil)
 			// No logger either: the backstop must not read one it was not given.
 			ctx := ContextWithPrincipal(t.Context(), testPrincipal())
 			descriptors := registrar.Descriptors()
