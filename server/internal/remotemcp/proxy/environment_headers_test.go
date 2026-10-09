@@ -54,6 +54,9 @@ func TestProxy_Post_StripsEnvironmentHeadersOnCrossOriginRedirect(t *testing.T) 
 	origin := <-originHeaders
 	require.Equal(t, "synthetic-env-key", origin.Get("X-Upstream-Key"))
 	require.Equal(t, "synthetic-env-instance", origin.Get("X-Instance-Url"))
+	// The caller's credential reaches the configured origin, so its absence
+	// after the redirect proves it was stripped.
+	require.Equal(t, "synthetic-client-key", origin.Get("X-Caller-Key"))
 
 	redirected := <-redirectedHeaders
 	for name, values := range redirected {

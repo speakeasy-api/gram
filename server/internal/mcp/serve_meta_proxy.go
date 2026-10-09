@@ -518,12 +518,14 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 }
 
 // memberMatchesServer reports whether the member snapshot that authorized a
-// dispatch still describes the server's backend and environment link.
+// dispatch still describes the server's backend, environment link and
+// visibility, which decides whether private-member authorization applied.
 func memberMatchesServer(member metaMember, server mcpservers_repo.McpServer) bool {
 	return member.remoteServerID == server.RemoteMcpServerID &&
 		member.tunneledServerID == server.TunneledMcpServerID &&
 		member.toolsetID == server.ToolsetID &&
-		member.environmentID == server.EnvironmentID
+		member.environmentID == server.EnvironmentID &&
+		member.visibility == server.Visibility
 }
 
 func memberBackendLabel(member metaMember) string {

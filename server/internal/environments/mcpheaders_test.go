@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 )
 
 // Synthetic values; assertions compare against these only.
@@ -213,13 +214,15 @@ func TestMCPHeaderNearMissNames(t *testing.T) {
 		&gen.EnvironmentEntryInput{Name: "MCP_HEADER_X-Ok", Value: new(syntheticHeaderValue), IsSecret: new(false)},
 		&gen.EnvironmentEntryInput{Name: "mcp_header_X-Lower", Value: new("synthetic-unrelated"), IsSecret: new(true)},
 		&gen.EnvironmentEntryInput{Name: "HEADER_X-Short", Value: new("synthetic-unrelated"), IsSecret: new(true)},
+		&gen.EnvironmentEntryInput{Name: "MCP_HEADERX-Missing", Value: new("synthetic-unrelated"), IsSecret: new(true)},
+		&gen.EnvironmentEntryInput{Name: "MCP_HEADER", Value: new("synthetic-unrelated"), IsSecret: new(true)},
 		&gen.EnvironmentEntryInput{Name: "API_KEY", Value: new("synthetic-unrelated"), IsSecret: new(true)},
 	)
 
 	entries := environments.NewEnvironmentEntries(testenv.NewLogger(t), ti.conn, ti.enc, nil)
 	names, err := entries.MCPHeaderNearMissNames(ctx, mustProjectID(t, ctx), uuid.MustParse(env.ID))
 	require.NoError(t, err)
-	require.Equal(t, []string{"HEADER_X-Short", "mcp_header_X-Lower"}, names)
+	require.ElementsMatch(t, []string{"HEADER_X-Short", "MCP_HEADER", "MCP_HEADERX-Missing", "mcp_header_X-Lower"}, names)
 
 	foreign, err := entries.MCPHeaderNearMissNames(ctx, uuid.New(), uuid.MustParse(env.ID))
 	require.NoError(t, err)
@@ -308,4 +311,38 @@ func TestInspectMCPServerHeaders_SnapshotTracksBackendURLAndLink(t *testing.T) {
 	// Another project sees no server.
 	_, err = entries.InspectMCPServerHeaders(ctx, uuid.New(), server.ID)
 	require.ErrorIs(t, err, environments.ErrMCPServerUnavailable)
+}
+
+// A tunneled server's snapshot carries its tunnel, no remote URL, and the
+// mapped entries of its linked environment.
+func TestInspectMCPServerHeaders_TunneledServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+	projectID := mustProjectID(t, ctx)
+	env := createEnvironment(t, ctx, ti, "mcp-headers-tunnel-snapshot",
+		&gen.EnvironmentEntryInput{Name: "MCP_HEADER_X_INSTANCE_URL", Value: new(syntheticHeaderValue), IsSecret: new(false)},
+	)
+	tunnel, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
+		ID: uuid.New(), ProjectID: projectID, Name: "snapshot-tunnel-" + uuid.NewString()[:8],
+		KeyHash: uuid.NewString(), KeyPrefix: "gram_tunnel_test", ResourceIdentifier: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: projectID, Name: pgtype.Text{String: "tunnel snap", Valid: true}, Slug: pgtype.Text{String: "tunnel-snap-" + uuid.NewString()[:8], Valid: true},
+		EnvironmentID: uuid.NullUUID{UUID: uuid.MustParse(env.ID), Valid: true}, TunneledMcpServerID: uuid.NullUUID{UUID: tunnel.ID, Valid: true}, Visibility: "private",
+	})
+	require.NoError(t, err)
+
+	snap, err := environments.NewEnvironmentEntries(testenv.NewLogger(t), ti.conn, ti.enc, nil).InspectMCPServerHeaders(ctx, projectID, server.ID)
+	require.NoError(t, err)
+	require.Equal(t, uuid.NullUUID{UUID: tunnel.ID, Valid: true}, snap.TunneledMcpServerID)
+	require.False(t, snap.RemoteMcpServerID.Valid)
+	require.Empty(t, snap.RemoteURL)
+	require.True(t, snap.EnvironmentLive)
+	rows, err := proxy.EnvironmentHeaderRows(snap.Headers)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "X-Instance-Url", rows[0].Name)
+	require.Equal(t, syntheticHeaderValue, rows[0].StaticValue)
 }

@@ -77,9 +77,9 @@ func TestReadEnvironmentHeadersRefusesAChangedConfiguration(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]func(server *mcpserversrepo.McpServer, snapshot *environments.MCPServerHeaderSnapshot){
-		// The request authorized remote A with no link; the server was then
-		// repointed at remote B and linked to E in one update.
-		"repointed and linked": func(server *mcpserversrepo.McpServer, snapshot *environments.MCPServerHeaderSnapshot) {
+		// The request authorized remote A linked to E; the server was then
+		// repointed at remote B in one update.
+		"repointed": func(server *mcpserversrepo.McpServer, snapshot *environments.MCPServerHeaderSnapshot) {
 			snapshot.RemoteMcpServerID = linked(uuid.New())
 		},
 		// The request authorized a link to E; E was unlinked and the source
@@ -165,4 +165,8 @@ func TestMemberMatchesServer(t *testing.T) {
 	require.False(t, memberMatchesServer(member, mcpserversrepo.McpServer{RemoteMcpServerID: linked(remote), EnvironmentID: linked(uuid.New())}), "relinked")
 	require.False(t, memberMatchesServer(member, mcpserversrepo.McpServer{RemoteMcpServerID: linked(remote)}), "unlinked")
 	require.False(t, memberMatchesServer(metaMember{remoteServerID: linked(remote)}, mcpserversrepo.McpServer{RemoteMcpServerID: linked(remote), EnvironmentID: linked(env)}), "linked after snapshot")
+
+	public := metaMember{remoteServerID: linked(remote), environmentID: linked(env), visibility: "public"}
+	require.True(t, memberMatchesServer(public, mcpserversrepo.McpServer{RemoteMcpServerID: linked(remote), EnvironmentID: linked(env), Visibility: "public"}))
+	require.False(t, memberMatchesServer(public, mcpserversrepo.McpServer{RemoteMcpServerID: linked(remote), EnvironmentID: linked(env), Visibility: "private"}), "made private after snapshot")
 }

@@ -88,12 +88,16 @@ export function AssistantDraftProvider({
     void invalidateAllAssistantsGet(queryClient);
     void invalidateAllAssistantsList(queryClient);
     void invalidateAllListEnvironments(queryClient);
-    // Onboarding writes environments through the SDK directly, which the
-    // query client's mutation hook does not see.
-    void invalidateUpstreamHeaderDependents(queryClient);
     void invalidateAllListToolsets(queryClient);
     void invalidateAllTriggers(queryClient);
     void invalidateAllTrigger(queryClient);
+  }, [queryClient]);
+
+  // Onboarding writes environment entries through the SDK directly, which the
+  // query client's mutation hook does not see, so upstream tool listings and
+  // environment header previews are refreshed here after those writes.
+  const invalidateEnvironmentEntries = useCallback(() => {
+    void invalidateUpstreamHeaderDependents(queryClient);
   }, [queryClient]);
 
   const invalidateSkillAttachments = useCallback(() => {
@@ -139,6 +143,7 @@ export function AssistantDraftProvider({
       assistant,
       refetchAssistant: refetch,
       invalidateAll,
+      invalidateEnvironmentEntries,
       invalidateSkillAttachments,
       registerPending,
       resolvePending,
@@ -152,6 +157,7 @@ export function AssistantDraftProvider({
       assistant,
       refetch,
       invalidateAll,
+      invalidateEnvironmentEntries,
       invalidateSkillAttachments,
       registerPending,
       resolvePending,

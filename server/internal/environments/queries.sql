@@ -266,7 +266,7 @@ WHERE e.id = @environment_id
   AND e.project_id = @project_id
   AND e.deleted IS FALSE
   AND ee.name NOT LIKE 'MCP\_HEADER\_%'
-  AND (LOWER(ee.name) LIKE 'mcp\_header\_%' OR LOWER(ee.name) LIKE 'header\_%')
+  AND (LOWER(ee.name) LIKE 'mcp\_header%' OR LOWER(ee.name) LIKE 'header\_%')
 ORDER BY ee.name;
 
 -- name: GetMCPServerHeaderSnapshot :many

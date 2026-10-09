@@ -664,7 +664,7 @@ WHERE e.id = $1
   AND e.project_id = $2
   AND e.deleted IS FALSE
   AND ee.name NOT LIKE 'MCP\_HEADER\_%'
-  AND (LOWER(ee.name) LIKE 'mcp\_header\_%' OR LOWER(ee.name) LIKE 'header\_%')
+  AND (LOWER(ee.name) LIKE 'mcp\_header%' OR LOWER(ee.name) LIKE 'header\_%')
 ORDER BY ee.name
 `
 
