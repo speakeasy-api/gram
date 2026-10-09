@@ -3555,10 +3555,20 @@ Channel context stays in the Raw view.
     RAISE EXCEPTION 'demo seed postflight: expected 3 recorded Slack tools, found %', stray;
   END IF;
 
+  -- The JAMF tool-permission example checks only its own rows, so other
+  -- seeded tunnels and issuers never change these counts.
   SELECT count(*) INTO stray FROM tunneled_mcp_servers
-  WHERE project_id = proj_a AND deleted IS FALSE;
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND id = demo.det_uuid('gram-demo-tunrbac-source');
   IF stray <> 1 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 1 tunneled MCP source, found %', stray;
+    RAISE EXCEPTION 'demo seed postflight: expected the JAMF tunneled MCP source, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM user_session_issuers
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND id = demo.det_uuid('gram-demo-tunrbac-issuer');
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected the JAMF user session issuer, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM mcp_server_tool_metadata
@@ -3756,13 +3766,14 @@ Channel context stays in the Raw view.
   -- credential kind, plus the pre-column row. A rerun that dropped or
   -- duplicated any of them would leave the badges telling a different story
   -- than the one they were seeded to tell.
-  -- One issuer per Connections credential story (acme-partner-gateway), four
-  -- project MCP issuers (Linear, Slack, the gateway and JAMF), and the
-  -- organization-wide workforce issuer used by GitHub.
+  -- One issuer per Connections credential story (acme-partner-gateway), three
+  -- project MCP issuers, and the organization-wide workforce issuer used by
+  -- GitHub. The JAMF tool-permission example's issuer is checked by id above.
   SELECT count(*) INTO stray FROM user_session_issuers
-  WHERE project_id = proj_a AND deleted IS FALSE;
-  IF stray <> 5 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 5 project user session issuers, found %', stray;
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND id <> demo.det_uuid('gram-demo-tunrbac-issuer');
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 4 project user session issuers, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM user_session_issuers
