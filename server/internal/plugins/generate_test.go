@@ -3526,12 +3526,29 @@ func TestGeneratePlatformMCPExistingServersClientsLocalServersAndPrivacy(t *test
 			"**Local servers, left unchanged:**",
 			"Report each one to the user by alias and transport only",
 			"for stdio, say the command is not shown",
-			"Do not migrate, wrap, tunnel, disable or remove them, and do not offer to",
+			"Do not migrate, wrap, disable or remove them. They stay exactly as configured in the client.",
 			"List local servers left unchanged separately",
 			"with the reason `local server left unchanged`",
 		}},
+		{"tunnel setup is a dashboard handoff, never an import", []string{
+			"## 8. Optionally set up a local server behind a Speakeasy tunnel",
+			"only if the user chooses it; that is never an import",
+			"Call `get_tunneled_mcp_setup_handoff`",
+			"Present the returned `setup_url` as a clickable link",
+			"follows the agent setup panel for the transport the panel offers",
+			"do not invent commands or flags",
+			"Never ask for, accept or repeat a tunnel key, header value, command line, environment value or any other credential in chat",
+			"Do not suggest rotating a key as a repair",
+			"A handoff creates nothing",
+			"`tunnel.connection_status`",
+			"not that the private server behind it works",
+			"an absent `tunnel` was not read, not offline",
+			"Do not call registration, readiness, provider attachment or plugin tools for a tunneled MCP server",
+			"never as added",
+			"`local server left unchanged; tunnel setup handed off`",
+		}},
 		{"private access is gated on live ingress readiness", []string{
-			"## 8. Optionally restrict migrated servers to the Tailscale private network",
+			"## 9. Optionally restrict migrated servers to the Tailscale private network",
 			"It is optional: declining leaves the import complete",
 			"It does not move or hide the upstream MCP server",
 			"`backend_kind: unproxied`",
@@ -3566,9 +3583,11 @@ func TestGeneratePlatformMCPExistingServersClientsLocalServersAndPrivacy(t *test
 		})
 	}
 	require.NotEqual(t, -1, strings.Index(workflow, "## 7. Keep authentication separate"))
-	require.Less(t, strings.Index(workflow, "## 7. Keep authentication separate"), strings.Index(workflow, "## 8. Optionally restrict"))
+	require.Less(t, strings.Index(workflow, "## 7. Keep authentication separate"), strings.Index(workflow, "## 8. Optionally set up a local server"))
+	require.Less(t, strings.Index(workflow, "## 8. Optionally set up a local server"), strings.Index(workflow, "## 9. Optionally restrict"))
 	require.Less(t, strings.Index(workflow, "call `get_mcp_network_traffic`"), strings.Index(workflow, "Present the choice per server"))
-	require.Less(t, strings.Index(workflow, "## 8. Optionally restrict"), strings.Index(workflow, "## 9. Record diagnostics only when the user asks"))
+	require.Less(t, strings.Index(workflow, "## 9. Optionally restrict"), strings.Index(workflow, "## 10. Record diagnostics only when the user asks"))
+	require.NotContains(t, workflow, "do not offer to")
 	require.NotContains(t, workflow, "Claude Code session")
 	for _, forbidden := range []string{"codex mcp add", "codex mcp remove", "tailscale up", "OAuth client secret:"} {
 		require.NotContains(t, workflow, forbidden)
