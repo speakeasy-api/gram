@@ -2494,6 +2494,7 @@ type GetTimeSeriesMetricsParams struct {
 	ExternalUserID      string                // Optional filter
 	APIKeyID            string                // Optional filter
 	ToolsetSlug         string                // Optional filter - filters by toolset/MCP server slug
+	ToolsetSlugServerID string                // Optional, with ToolsetSlug - drops rows stamped with a different mcp_server_id
 	RemoteMCPServerID   string                // Optional filter - filters by remote_mcp_server_id
 	MCPServerID         string                // Optional filter - filters by mcp_server_id
 	MetaMCPServerID     string                // Optional filter - gateway (meta MCP server) the call was dispatched through
@@ -2554,6 +2555,9 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 	}
 	if arg.ToolsetSlug != "" {
 		sb = sb.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
+		if arg.ToolsetSlugServerID != "" {
+			sb = sb.Where(squirrel.Eq{"mcp_server_id": []string{"", arg.ToolsetSlugServerID}})
+		}
 	}
 	if arg.RemoteMCPServerID != "" {
 		sb = sb.Where(squirrel.Eq{"remote_mcp_server_id": arg.RemoteMCPServerID})
@@ -2633,6 +2637,7 @@ type GetToolMetricsBreakdownParams struct {
 	ExternalUserID      string                // Optional filter
 	APIKeyID            string                // Optional filter
 	ToolsetSlug         string                // Optional filter - filters by toolset/MCP server slug
+	ToolsetSlugServerID string                // Optional, with ToolsetSlug - drops rows stamped with a different mcp_server_id
 	RemoteMCPServerID   string                // Optional filter - filters by remote_mcp_server_id
 	MCPServerID         string                // Optional filter - filters by mcp_server_id
 	MetaMCPServerID     string                // Optional filter - gateway (meta MCP server) the call was dispatched through
@@ -2673,6 +2678,9 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 	}
 	if arg.ToolsetSlug != "" {
 		sb = sb.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
+		if arg.ToolsetSlugServerID != "" {
+			sb = sb.Where(squirrel.Eq{"mcp_server_id": []string{"", arg.ToolsetSlugServerID}})
+		}
 	}
 	if arg.RemoteMCPServerID != "" {
 		sb = sb.Where(squirrel.Eq{"remote_mcp_server_id": arg.RemoteMCPServerID})

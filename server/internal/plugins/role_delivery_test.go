@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	endpointrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
@@ -271,4 +272,105 @@ func TestRoleAudienceDeliversCanonicalRowOnceBesideGatewayMember(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got.Servers, 1)
 	require.Equal(t, delivered.ID, got.Servers[0].ID)
+}
+
+func TestRoleAudienceCanonicalEndpointFallback(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name       string
+		visibility string
+		endpoint   bool
+	}{
+		{name: "enabled endpointless", visibility: "private"},
+		{name: "disabled endpointless", visibility: "disabled"},
+		{name: "disabled with endpoint", visibility: "disabled", endpoint: true},
+		{name: "enabled with endpoint", visibility: "private", endpoint: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestPluginsService(t)
+			ac, _ := contextvalues.GetAuthContext(ctx)
+			role := createTestRolePrincipal(t, ctx, ti, "endpoint-fallback")
+			toolset := createTestToolset(t, ctx, ti.conn, "Hosted fallback")
+			fixtures := testrepo.New(ti.conn)
+			canonical, err := fixtures.CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{ID: toolset.ID, ProjectID: *ac.ProjectID, ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: tt.visibility})
+			require.NoError(t, err)
+			var alternates []string
+			for range 2 {
+				id, err := fixtures.CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{ID: uuid.New(), ProjectID: *ac.ProjectID, ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: "private"})
+				require.NoError(t, err)
+				alternates = append(alternates, id.String())
+				_, err = endpointrepo.New(ti.conn).CreateMCPEndpoint(ctx, endpointrepo.CreateMCPEndpointParams{ProjectID: *ac.ProjectID, McpServerID: uuid.NullUUID{UUID: id, Valid: true}, Slug: "endpoint-" + id.String()[:8]})
+				require.NoError(t, err)
+			}
+			if tt.endpoint {
+				_, err = endpointrepo.New(ti.conn).CreateMCPEndpoint(ctx, endpointrepo.CreateMCPEndpointParams{ProjectID: *ac.ProjectID, McpServerID: uuid.NullUUID{UUID: canonical, Valid: true}, Slug: "endpoint-" + canonical.String()[:8]})
+				require.NoError(t, err)
+			}
+			principal, err := urn.ParsePrincipal(role)
+			require.NoError(t, err)
+			selectors, err := authz.NewSelector(authz.ScopeMCPConnect, toolset.ID.String()).MarshalJSON()
+			require.NoError(t, err)
+			_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: principal, Scope: string(authz.ScopeMCPConnect), Selectors: selectors})
+			require.NoError(t, err)
+			plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Endpoint fallback"})
+			require.NoError(t, err)
+			// Fresh delivery and replay both keep at most one wrapper for the toolset.
+			for range 2 {
+				_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{role}})
+				require.NoError(t, err)
+				got, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+				require.NoError(t, err)
+				if tt.visibility == "disabled" {
+					require.Empty(t, got.Servers)
+					continue
+				}
+				require.Len(t, got.Servers, 1)
+				require.NotNil(t, got.Servers[0].McpServerID)
+				if tt.endpoint {
+					require.Equal(t, canonical.String(), *got.Servers[0].McpServerID)
+				} else {
+					require.Contains(t, alternates, *got.Servers[0].McpServerID)
+				}
+			}
+			if tt.visibility == "disabled" || tt.endpoint {
+				return
+			}
+
+			got, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+			require.NoError(t, err)
+			require.Len(t, got.Servers, 1)
+			removedID := got.Servers[0].ID
+			require.NoError(t, ti.service.RemovePluginServer(ctx, &gen.RemovePluginServerPayload{PluginID: plugin.ID, ID: removedID}))
+			// Setup invokes Populate with preserveRemoval, unlike unchanged audience replay.
+			// The other live alternate must not bypass this toolset's removal history.
+			require.NoError(t, processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{}))
+			got, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+			require.NoError(t, err)
+			require.Empty(t, got.Servers, "setup replay must not resurrect a sibling wrapper")
+
+			// A new explicit audience grant ignores deleted history, but still deduplicates siblings.
+			_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{}})
+			require.NoError(t, err)
+			_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{role}})
+			require.NoError(t, err)
+			got, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+			require.NoError(t, err)
+			require.Len(t, got.Servers, 1)
+			require.NotEqual(t, removedID, got.Servers[0].ID)
+			require.NotNil(t, got.Servers[0].McpServerID)
+			require.Contains(t, alternates, *got.Servers[0].McpServerID)
+			fallback := got.Servers[0]
+
+			// A newly live canonical endpoint must not replace or duplicate the existing fallback.
+			_, err = endpointrepo.New(ti.conn).CreateMCPEndpoint(ctx, endpointrepo.CreateMCPEndpointParams{ProjectID: *ac.ProjectID, McpServerID: uuid.NullUUID{UUID: canonical, Valid: true}, Slug: "endpoint-" + canonical.String()[:8]})
+			require.NoError(t, err)
+			require.NoError(t, processDirectRoleSetup(ctx, ti, role, plugins.PublicationRequests{}))
+			got, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+			require.NoError(t, err)
+			require.Len(t, got.Servers, 1)
+			require.Equal(t, fallback.ID, got.Servers[0].ID)
+			require.Equal(t, fallback.McpServerID, got.Servers[0].McpServerID)
+		})
+	}
 }

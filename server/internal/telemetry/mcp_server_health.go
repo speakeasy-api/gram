@@ -199,6 +199,7 @@ func (h *MCPServerHealth) seriesBuckets(ctx context.Context, projectID, mcpServe
 		ExternalUserID:      "",
 		APIKeyID:            "",
 		ToolsetSlug:         toolsetSlug,
+		ToolsetSlugServerID: "",
 		RemoteMCPServerID:   "",
 		MCPServerID:         mcpServerID,
 		MetaMCPServerID:     "",

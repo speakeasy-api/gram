@@ -2119,6 +2119,15 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 	remoteMCPServerID := conv.PtrValOr(payload.RemoteMcpServerID, "")
 	mcpServerID := conv.PtrValOr(payload.McpServerID, "")
 	metaMCPServerID := conv.PtrValOr(payload.MetaMcpServerID, "")
+	// A slug-only hosted overview belongs to the toolset's canonical server.
+	// Explicit server/gateway scopes still select their own member traffic.
+	toolsetSlugServerID := ""
+	if toolsetSlug != "" && mcpServerID == "" && metaMCPServerID == "" && remoteMCPServerID == "" {
+		toolsetSlugServerID, err = s.overviewCanonicalServerID(ctx, *authCtx.ProjectID, toolsetSlug)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error resolving hosted overview identity")
+		}
+	}
 	eventSource := conv.PtrValOr(payload.EventSource, "")
 	hookSource := conv.PtrValOr(payload.HookSource, "")
 	accountType := conv.PtrValOr(payload.AccountType, "")
@@ -2166,7 +2175,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		ExternalUserID:      externalUserID,
 		APIKeyID:            apiKeyID,
 		ToolsetSlug:         toolsetSlug,
-		ToolsetSlugServerID: "",
+		ToolsetSlugServerID: toolsetSlugServerID,
 		RemoteMCPServerID:   remoteMCPServerID,
 		MCPServerID:         mcpServerID,
 		MetaMCPServerID:     metaMCPServerID,
@@ -2189,7 +2198,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		ExternalUserID:      externalUserID,
 		APIKeyID:            apiKeyID,
 		ToolsetSlug:         toolsetSlug,
-		ToolsetSlugServerID: "",
+		ToolsetSlugServerID: toolsetSlugServerID,
 		RemoteMCPServerID:   remoteMCPServerID,
 		MCPServerID:         mcpServerID,
 		MetaMCPServerID:     metaMCPServerID,
@@ -2215,6 +2224,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 			ExternalUserID:      externalUserID,
 			APIKeyID:            apiKeyID,
 			ToolsetSlug:         toolsetSlug,
+			ToolsetSlugServerID: toolsetSlugServerID,
 			RemoteMCPServerID:   remoteMCPServerID,
 			MCPServerID:         mcpServerID,
 			MetaMCPServerID:     metaMCPServerID,
@@ -2238,6 +2248,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		ExternalUserID:      externalUserID,
 		APIKeyID:            apiKeyID,
 		ToolsetSlug:         toolsetSlug,
+		ToolsetSlugServerID: toolsetSlugServerID,
 		RemoteMCPServerID:   remoteMCPServerID,
 		MCPServerID:         mcpServerID,
 		MetaMCPServerID:     metaMCPServerID,
@@ -2262,6 +2273,7 @@ func (s *Service) GetObservabilityOverview(ctx context.Context, payload *telem_g
 		ExternalUserID:      externalUserID,
 		APIKeyID:            apiKeyID,
 		ToolsetSlug:         toolsetSlug,
+		ToolsetSlugServerID: toolsetSlugServerID,
 		RemoteMCPServerID:   remoteMCPServerID,
 		MCPServerID:         mcpServerID,
 		MetaMCPServerID:     metaMCPServerID,

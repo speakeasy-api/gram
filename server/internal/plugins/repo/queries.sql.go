@@ -1080,7 +1080,7 @@ SELECT EXISTS (
         WHERE m.id = $5::uuid
           AND m.project_id = $3 AND m.deleted IS FALSE
       ))
-      OR ($5::uuid = $6::uuid AND ps.mcp_server_id IN (
+      OR (ps.mcp_server_id IN (
         SELECT m.id FROM mcp_servers m
         WHERE m.toolset_id = $6::uuid
           AND m.project_id = $3 AND m.deleted IS FALSE
@@ -1100,7 +1100,7 @@ type HasRoleDeliveryMembershipParams struct {
 }
 
 // A legacy toolset membership and its typed MCP wrapper are the same delivery,
-// and a canonical row is already delivered by any server on its toolset.
+// and automatic delivery treats all wrappers on the same toolset as one delivery.
 // Setup/eligibility preserve deleted history; explicit new grants/audiences do not.
 func (q *Queries) HasRoleDeliveryMembership(ctx context.Context, arg HasRoleDeliveryMembershipParams) (bool, error) {
 	row := q.db.QueryRow(ctx, hasRoleDeliveryMembership,
@@ -2597,6 +2597,9 @@ SELECT m.id, m.project_id, COALESCE(NULLIF(m.name, ''), NULLIF(m.slug, ''), m.id
     SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = m.id AND e.project_id = p.id AND e.deleted IS FALSE
   )) AND NOT (m.toolset_id IS NOT NULL AND m.id <> m.toolset_id AND EXISTS (
     SELECT 1 FROM mcp_servers canonical WHERE canonical.id = m.toolset_id AND canonical.project_id = p.id AND canonical.deleted IS FALSE
+      AND (canonical.visibility = 'disabled' OR canonical.unproxied_mcp_server_id IS NOT NULL OR EXISTS (
+        SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = canonical.id AND e.project_id = p.id AND e.deleted IS FALSE
+      ))
   )))::boolean AS eligible, latest.tool_urns
 FROM mcp_servers m JOIN projects p ON p.id = m.project_id
 LEFT JOIN toolsets backing ON backing.id = m.toolset_id AND backing.project_id = p.id AND backing.deleted IS FALSE
@@ -2641,7 +2644,8 @@ type ListRoleDeliveryServersRow struct {
 
 // Keep ineligible live backends as removal candidates. Only additions require eligibility.
 // Load latest live contents with the inventory for typed platform classification.
-// A toolset with a canonical row (id = toolset id) is delivered through that row only.
+// Prefer the canonical wrapper, but allow fallback when it is enabled and endpointless.
+// A disabled canonical wrapper still blocks automatic delivery through alternatives.
 func (q *Queries) ListRoleDeliveryServers(ctx context.Context, arg ListRoleDeliveryServersParams) ([]ListRoleDeliveryServersRow, error) {
 	rows, err := q.db.Query(ctx, listRoleDeliveryServers, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
