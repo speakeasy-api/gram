@@ -21,7 +21,8 @@ func TestConsentPage_MetaGovernedRemoteMemberIsManaged(t *testing.T) {
 	require.Equal(t, http.StatusOK, code, "a governed sole service must not auto-connect")
 	require.Nil(t, loc)
 	require.Contains(t, page, consentManagedCopy)
-	require.Contains(t, page, "1 of 1 connected", "a chained service counts as connected")
+	require.Contains(t, page, "0 of 1 connected", "a chained service counts once its check connects")
+	require.Contains(t, page, `data-chain-check="pending"`)
 	require.Contains(t, page, "Use a separate sign-in instead")
 
 	reqs := g.seen()
