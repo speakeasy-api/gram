@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -33,9 +34,15 @@ type credentialTestServer struct {
 type syncBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
+
+	// hold, when set, runs before each write, so a test can stall logging.
+	hold atomic.Pointer[func([]byte)]
 }
 
 func (b *syncBuffer) Write(p []byte) (int, error) {
+	if hold := b.hold.Load(); hold != nil {
+		(*hold)(p)
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.Write(p)
@@ -813,4 +820,64 @@ func TestCredentialsSessionStopsAdmittingOnceTerminationBegins(t *testing.T) {
 	_, writesAfter, _ := c.store.counts()
 	require.Equal(t, writes, writesAfter)
 	c.requireSessionEnds(t, call.sid)
+}
+
+func TestCredentialsAdmissionStopsBeforeTheRejectionIsLogged(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		mutate  func(*credentialCall)
+		message string
+	}{
+		"lost credential": {
+			mutate:  func(c *credentialCall) { c.token, c.noCredential = "", true },
+			message: "no longer admitted",
+		},
+		"changed grant": {
+			mutate: func(c *credentialCall) {
+				c.grant = testGrant{clientID: defaultTestGrant.clientID, grantID: defaultTestGrant.grantID, generation: 2}
+			},
+			message: "changed grant",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			c := newCredentialTestServer(t, credentialServerOptions{})
+			call := credentialCall{token: testTokenA}
+			call.sid = c.initialize(t, call)
+			sess := c.bridge.session(call.sid)
+			_, writes, _ := c.store.counts()
+
+			// Stall the rejection's log line, as a blocked log sink would.
+			logged := make(chan struct{})
+			release := make(chan struct{})
+			var releaseOnce sync.Once
+			t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
+			var loggedOnce sync.Once
+			hold := func(p []byte) {
+				if bytes.Contains(p, []byte(tc.message)) {
+					loggedOnce.Do(func() { close(logged) })
+					<-release
+				}
+			}
+			c.logs.hold.Store(&hold)
+
+			rejected := call
+			tc.mutate(&rejected)
+			rejected.body = `{"jsonrpc":"2.0","id":8,"method":"tools/list"}`
+			done := make(chan int, 1)
+			go func() { done <- c.do(t, rejected).StatusCode }()
+			<-logged
+			require.True(t, sess.closing.Load(), "admission stopped before the rejection was logged")
+
+			call.body = `{"jsonrpc":"2.0","id":9,"method":"tools/list"}`
+			require.Equal(t, http.StatusNotFound, c.do(t, call).StatusCode, "the old grant is refused meanwhile")
+			_, writesAfter, _ := c.store.counts()
+			require.Equal(t, writes, writesAfter)
+
+			c.logs.hold.Store(nil)
+			releaseOnce.Do(func() { close(release) })
+			<-done
+			c.requireSessionEnds(t, call.sid)
+		})
+	}
 }
