@@ -144,20 +144,55 @@ func parseTrustedURL(raw string, allowInsecure bool) (*url.URL, error) {
 }
 
 // credentialChildEnv replaces inherited credential variables with the
-// session's own token file and home.
+// session's own token file and home. Package caches stay outside the
+// session: unless the agent's environment sets them, they default under the
+// agent's own home, so a server installed on first use is downloaded once
+// rather than into every session's memory-backed directory.
 func credentialChildEnv(base []string, tokenPath, home string) []string {
-	env := make([]string, 0, len(base)+len(inheritedCredentialEnv))
+	cacheEnv := sharedCacheEnv(base)
+	env := make([]string, 0, len(base)+len(inheritedCredentialEnv)+len(cacheEnv))
 	for _, kv := range base {
 		name, _, _ := strings.Cut(kv, "=")
-		replaced := slices.Contains(inheritedCredentialEnv, name)
+		// An empty XDG_CACHE_HOME means unset; sharedCacheEnv supplies it.
+		replaced := slices.Contains(inheritedCredentialEnv, name) || kv == "XDG_CACHE_HOME="
 		if !replaced {
 			env = append(env, kv)
 		}
 	}
+	env = append(env, cacheEnv...)
 	return append(env,
 		AccessTokenFileEnv+"="+tokenPath,
 		"HOME="+home,
 		"XDG_CONFIG_HOME="+filepath.Join(home, ".config"),
 		"XDG_DATA_HOME="+filepath.Join(home, ".local", "share"),
 	)
+}
+
+// sharedCacheEnv returns cache variables to add for the child: XDG_CACHE_HOME
+// and npm's cache under the agent's own home when the agent's environment
+// does not set them. Without an absolute agent home it adds nothing, and
+// operators set the cache locations explicitly.
+func sharedCacheEnv(base []string) []string {
+	lookup := func(name string) string {
+		for _, kv := range base {
+			if k, v, ok := strings.Cut(kv, "="); ok && k == name {
+				return v
+			}
+		}
+		return ""
+	}
+	var add []string
+	cache := lookup("XDG_CACHE_HOME")
+	if cache == "" {
+		agentHome := lookup("HOME")
+		if !filepath.IsAbs(agentHome) {
+			return nil
+		}
+		cache = filepath.Join(agentHome, ".cache")
+		add = append(add, "XDG_CACHE_HOME="+cache)
+	}
+	if lookup("npm_config_cache") == "" && lookup("NPM_CONFIG_CACHE") == "" && filepath.IsAbs(cache) {
+		add = append(add, "npm_config_cache="+filepath.Join(cache, "npm"))
+	}
+	return add
 }
