@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -40,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -281,7 +283,8 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin delivery principals").LogError(ctx, s.logger)
 	}
 
-	return s.pluginSetFor(ctx, authCtx, principals)
+	result, _, err := s.pluginSetFor(ctx, authCtx, principals)
+	return result, err
 }
 
 // getAgentPlugins resolves plugins for an agent-principal key: the agent, the
@@ -306,16 +309,66 @@ func (s *Service) getAgentPlugins(ctx context.Context, authCtx *contextvalues.Au
 	}
 	principals := append([]string{canonical.String(), urn.PrincipalWildcard}, rolePrincipals...)
 
-	result, err := s.pluginSetFor(ctx, authCtx, principals)
+	result, rows, err := s.pluginSetFor(ctx, authCtx, principals)
 	if err != nil {
 		return nil, err
 	}
+	servers, err := s.agentMCPServers(ctx, rows)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent MCP servers").LogError(ctx, s.logger)
+	}
+	mv.AttachAgentMCPServers(result, servers)
 	mv.AttachAgentPrincipal(result, &gen.AgentPollingPrincipal{Urn: canonical.String(), DisplayName: agent.Name})
 	return result, nil
 }
 
+// agentMCPServers resolves the MCP servers an agent writes into its tools'
+// configurations: the Speakeasy-hosted servers in the plugins assigned to it.
+// Plugins offered as `available` are left out, because nobody on an agent's
+// machine can turn them on. A server reached through several plugins is
+// listed once, and a name shared by different servers gets a numeric suffix
+// so each entry keeps its own key.
+func (s *Service) agentMCPServers(ctx context.Context, rows []repo.GetAgentPluginSetRow) ([]*gen.AgentMCPServer, error) {
+	var projectIDs []uuid.UUID
+	pluginsByProject := make(map[uuid.UUID][]uuid.UUID)
+	for _, row := range rows {
+		if !row.PluginID.Valid || installmode.FromStored(row.PluginInstallMode) == installmode.Available {
+			continue
+		}
+		if _, seen := pluginsByProject[row.ProjectID]; !seen {
+			projectIDs = append(projectIDs, row.ProjectID)
+		}
+		pluginsByProject[row.ProjectID] = append(pluginsByProject[row.ProjectID], row.PluginID.UUID)
+	}
+
+	servers := []*gen.AgentMCPServer{}
+	listedURLs := make(map[string]bool)
+	takenNames := make(map[string]bool)
+	for _, projectID := range projectIDs {
+		projectServers, err := plugins.ListDeviceMCPServers(ctx, s.logger, s.db, s.serverURL, projectID, pluginsByProject[projectID])
+		if err != nil {
+			return nil, fmt.Errorf("list plugin MCP servers: %w", err)
+		}
+		for _, server := range projectServers {
+			if listedURLs[server.URL] {
+				continue
+			}
+			listedURLs[server.URL] = true
+
+			name := server.Key
+			for suffix := 2; takenNames[name]; suffix++ {
+				name = fmt.Sprintf("%s_%d", server.Key, suffix)
+			}
+			takenNames[name] = true
+
+			servers = append(servers, &gen.AgentMCPServer{Name: name, URL: server.URL, Tools: nil})
+		}
+	}
+	return servers, nil
+}
+
 // pluginSetFor builds the poll response for an already-resolved principal set.
-func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthContext, principals []string) (*gen.GetPluginsResult, error) {
+func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthContext, principals []string) (*gen.GetPluginsResult, []repo.GetAgentPluginSetRow, error) {
 	var (
 		rows             []repo.GetAgentPluginSetRow
 		configurationRow repo.DeviceAgentConfiguration
@@ -347,7 +400,7 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 		}
 	})
 	if err := group.Wait(); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent policy").LogError(ctx, s.logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "error resolving agent policy").LogError(ctx, s.logger)
 	}
 
 	base := strings.TrimRight(s.serverURL, "/")
@@ -360,7 +413,7 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 	if hasConfiguration {
 		built, err := buildDeviceAgentConfigurationView(configurationRow)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error decoding agent configuration").LogError(ctx, s.logger)
+			return nil, nil, oops.E(oops.CodeUnexpected, err, "error decoding agent configuration").LogError(ctx, s.logger)
 		}
 		configuration = built
 	}
@@ -374,7 +427,7 @@ func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthC
 	}
 	attachDeviceAgentConfiguration(result, configuration)
 
-	return result, nil
+	return result, rows, nil
 }
 
 // ListSyncedUsers returns the emails seen polling agent.getPlugins for the

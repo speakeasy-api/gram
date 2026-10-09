@@ -5,7 +5,40 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
+
+func TestRemoteServerURL(t *testing.T) {
+	t.Parallel()
+	vendor := pgtype.Text{String: "https://vendor.example/mcp", Valid: true}
+	for _, tc := range []struct {
+		name          string
+		row           repo.ListPluginsWithMcpServersForProjectRow
+		want          string
+		wantUnproxied bool
+		wantError     bool
+	}{
+		{name: "endpoint on the server URL", row: repo.ListPluginsWithMcpServersForProjectRow{EndpointSlug: "remote"}, want: "https://public.example/mcp/remote"},
+		{name: "custom domain endpoint wins", row: repo.ListPluginsWithMcpServersForProjectRow{EndpointSlug: "remote", EndpointCustomDomain: pgtype.Text{String: "mcp.acme.example", Valid: true}}, want: "https://mcp.acme.example/mcp/remote"},
+		{name: "unproxied URL is the vendor's", row: repo.ListPluginsWithMcpServersForProjectRow{EndpointSlug: "remote", UnproxiedUrl: vendor}, want: "https://vendor.example/mcp", wantUnproxied: true},
+		{name: "unproxied server cannot be private", row: repo.ListPluginsWithMcpServersForProjectRow{UnproxiedUrl: vendor, NetworkAccessMode: pgtype.Text{String: "private_only", Valid: true}}, wantUnproxied: true, wantError: true},
+		{name: "server address overrides the endpoint", row: repo.ListPluginsWithMcpServersForProjectRow{EndpointSlug: "remote", EndpointCustomDomain: pgtype.Text{String: "old.example", Valid: true}, AddressSlug: pgtype.Text{String: "renamed", Valid: true}, AddressCustomDomain: pgtype.Text{String: "mcp.acme.example", Valid: true}}, want: "https://mcp.acme.example/mcp/renamed"},
+		{name: "no endpoint fails closed", row: repo.ListPluginsWithMcpServersForProjectRow{}, wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, unproxied, err := remoteServerURL("https://public.example", tc.row)
+			require.Equal(t, tc.wantUnproxied, unproxied)
+			if tc.wantError {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
 
 func TestPackageMCPURL(t *testing.T) {
 	t.Parallel()

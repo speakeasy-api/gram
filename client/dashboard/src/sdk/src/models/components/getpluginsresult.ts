@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -10,6 +11,10 @@ import {
   AgentMarketplace,
   AgentMarketplace$inboundSchema,
 } from "./agentmarketplace.js";
+import {
+  AgentMCPServer,
+  AgentMCPServer$inboundSchema,
+} from "./agentmcpserver.js";
 import { AgentPlugin, AgentPlugin$inboundSchema } from "./agentplugin.js";
 import {
   AgentPollingPrincipal,
@@ -34,6 +39,10 @@ export type GetPluginsResult = {
    */
   marketplaces: Array<AgentMarketplace>;
   /**
+   * Speakeasy-hosted MCP servers the agent registers directly in each managed tool's configuration, authorized by the device's own mcp:connect credential. Populated only for agent API keys, from the MCP servers in the plugins assigned to the agent; always empty for people, who reach these servers through their plugins. Always present: an empty list tells the agent to remove the entries it wrote earlier.
+   */
+  mcpServers: Array<AgentMCPServer>;
+  /**
    * Plugins for the caller: the observability plugin of each listed marketplace, when enabled, and the plugins assigned to the caller. Each entry's install_mode says whether the agent installs it (`required`, `default`) or only offers it for the user to turn on (`available`). Each entry references one of the marketplaces above by name.
    */
   plugins: Array<AgentPlugin>;
@@ -44,13 +53,21 @@ export type GetPluginsResult = {
 export const GetPluginsResult$inboundSchema: z.ZodMiniType<
   GetPluginsResult,
   unknown
-> = z.object({
-  configuration: z.optional(DeviceAgentConfiguration$inboundSchema),
-  etag: z.string(),
-  marketplaces: z.array(AgentMarketplace$inboundSchema),
-  plugins: z.array(AgentPlugin$inboundSchema),
-  principal: z.optional(AgentPollingPrincipal$inboundSchema),
-});
+> = z.pipe(
+  z.object({
+    configuration: z.optional(DeviceAgentConfiguration$inboundSchema),
+    etag: z.string(),
+    marketplaces: z.array(AgentMarketplace$inboundSchema),
+    mcp_servers: z.array(AgentMCPServer$inboundSchema),
+    plugins: z.array(AgentPlugin$inboundSchema),
+    principal: z.optional(AgentPollingPrincipal$inboundSchema),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "mcp_servers": "mcpServers",
+    });
+  }),
+);
 
 export function getPluginsResultFromJSON(
   jsonString: string,
