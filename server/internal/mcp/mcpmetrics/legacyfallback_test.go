@@ -24,6 +24,7 @@ func TestLegacyFallbackAttributionWithoutMetrics(t *testing.T) {
 		}},
 	} {
 		t.Run(record.name, func(t *testing.T) {
+			t.Parallel()
 			var logs bytes.Buffer
 			logger := slog.New(slog.NewJSONHandler(&logs, nil))
 			record.write(logger, ToolsetSlugFallback{EntryPoint: LegacyFallbackServePublic, Slug: "legacy-test"})
