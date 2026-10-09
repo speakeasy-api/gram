@@ -202,8 +202,10 @@ func (m *ChallengeManager) resolveClientCredential(ctx context.Context, req Clie
 	}, nil
 }
 
-// clientCredentialExpiry is when cred expires, nil when its token endpoint
-// stated no expiry.
+// clientCredentialExpiry is Speakeasy's serving cutoff for cred: when it stops
+// presenting the credential. Its source sets one even when the token endpoint
+// stated no expiry, so unlike a subject grant's expiry it is present whenever
+// the source reports one, and it can be earlier than the upstream's.
 func clientCredentialExpiry(cred ClientCredential) *time.Time {
 	if cred.ExpiresAt().IsZero() {
 		return nil

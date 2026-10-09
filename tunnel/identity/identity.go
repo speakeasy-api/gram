@@ -68,8 +68,10 @@ type UpstreamCredential struct {
 	// TokenSHA256 is TokenSHA256 of the forwarded bearer token.
 	TokenSHA256 string `json:"token_sha256"`
 
-	// TokenExpiresAt is the token's expiry in Unix seconds. Omitted when the
-	// upstream did not state one.
+	// TokenExpiresAt is when the token stops being usable, in Unix seconds.
+	// For a subject credential it is the upstream's stated expiry, omitted
+	// when the upstream stated none. For a self credential it is Speakeasy's
+	// serving cutoff, present even when the upstream stated no expiry.
 	TokenExpiresAt *int64 `json:"token_expires_at,omitempty"`
 }
 
