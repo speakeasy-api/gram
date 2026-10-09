@@ -2,6 +2,7 @@ package evaluation
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -141,7 +142,7 @@ func handler(t *testing.T, m *conversationv1.MessageEvent, definitions []Sensor,
 func TestHandlerJevAllModesAndStableRedelivery(t *testing.T) {
 	t.Parallel()
 	calls := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		var req struct {
 			Questions map[string]struct {
@@ -166,11 +167,14 @@ func TestHandlerJevAllModesAndStableRedelivery(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"model": "test-model", "answers": answers, "usage": map[string]int{"input_tokens": 100, "output_tokens": 20}})
 	}))
 	t.Cleanup(server.Close)
+	roots := x509.NewCertPool()
+	roots.AddCert(server.Certificate())
 
-	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithTLSRootCAs(roots))
 	require.NoError(t, err)
 
-	c := jev.New(policy, conv.NewSecret([]byte("test-key")), jev.WithEndpoint(server.URL))
+	c, err := jev.New(policy, conv.NewSecret([]byte("test-key")), jev.WithEndpoint(server.URL))
+	require.NoError(t, err)
 	m := message()
 	m.SetRole(conversationv1.MessageEvent_ROLE_ASSISTANT)
 	provenance := &conversationv1.MessageEvent_IngestionContext{}

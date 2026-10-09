@@ -522,7 +522,12 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("create sensor readings publisher: %w", err)
 			}
 
-			sensorEvaluator, err := evaluation.NewEvaluator(logger, meterProvider, evaluation.NewRepository(db), productFeatures, readingsPub, jev.New(guardianPolicy, conv.NewSecret([]byte(c.String("sigint-openrouter-api-key")))))
+			sensorClassifier, err := jev.New(guardianPolicy, conv.NewSecret([]byte(c.String("sigint-openrouter-api-key"))))
+			if err != nil {
+				return fmt.Errorf("create sensor classifier: %w", err)
+			}
+
+			sensorEvaluator, err := evaluation.NewEvaluator(logger, meterProvider, evaluation.NewRepository(db), productFeatures, readingsPub, sensorClassifier)
 			if err != nil {
 				return fmt.Errorf("create sensor evaluator: %w", err)
 			}
