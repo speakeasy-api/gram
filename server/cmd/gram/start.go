@@ -1185,7 +1185,7 @@ func newStartCommand() *cli.Command {
 				Posthog: posthogClient, Features: featureFlags, ServerURL: serverURL, SiteURL: siteURL,
 				Encryption: encryptionClient, Guardian: guardianPolicy, Functions: functionsOrchestrator,
 				BillingTracker: billingTracker, Billing: billingRepo, Telemetry: telemLogger, TelemetryService: telemSvc,
-				ToolCallLogs: newToolCallLogs(logger, publishers.OTELLogs),
+				ToolCallLogs: newToolCallLogs(publishers.OTELLogs),
 				RAG:          ragService, Triggers: triggerApp, Authz: authzEngine, AssistantTokens: assistantTokenManager, PrincipalCredentials: principalCredentials,
 				ShadowMCP: shadowMCPClient, MCPRisk: mcpPolicyEvaluator, Audit: auditLogger, PlatformExtras: assistantPlatformExtras,
 				PlatformFeatureChecker: platformFeatureChecker, PlatformToolsets: platformToolsets,

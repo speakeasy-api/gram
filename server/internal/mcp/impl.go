@@ -26,7 +26,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
-	"go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -80,7 +79,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
+	"github.com/speakeasy-api/gram/server/internal/otel/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -176,8 +175,8 @@ type Service struct {
 	telemLogger       *tm.Logger
 	// toolCallLogger emits the started and completed records of every tool
 	// call the gateway runs into the OTel pipeline, where they become
-	// agent_events rows. It is the otelpub logger for the gateway's scope.
-	toolCallLogger         log.Logger
+	// agent_events rows.
+	toolCallLogger         *otelpub.Logger
 	vectorToolStore        *rag.ToolsetVectorStore
 	assistantTokens        *assistanttokens.Manager
 	principalCredentials   *principalcredential.Issuer
@@ -416,7 +415,7 @@ func NewService(
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
 	telemLogger *tm.Logger,
-	toolCallLogs log.LoggerProvider,
+	toolCallLogger *otelpub.Logger,
 	telemSvc *tm.Service,
 	vectorToolStore *rag.ToolsetVectorStore,
 	triggerApp *bgtriggers.App,
@@ -515,7 +514,7 @@ func NewService(
 		billingRepository:      billingRepository,
 		toolsetCache:           cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 		telemLogger:            telemLogger,
-		toolCallLogger:         toolCallLogs.Logger(dialect.GramGatewayLogScope),
+		toolCallLogger:         toolCallLogger,
 		vectorToolStore:        vectorToolStore,
 		assistantTokens:        assistantTokens,
 		principalCredentials:   principalCredentials,

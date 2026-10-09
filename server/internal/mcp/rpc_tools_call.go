@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/jwtclaims"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/otel/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -51,7 +52,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"go.opentelemetry.io/otel/log"
 )
 
 type toolsCallParams struct {
@@ -101,7 +101,7 @@ func handleToolsCall(
 	billingRepository billing.Repository,
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	telemLogger *tm.Logger,
-	toolCallLogger log.Logger,
+	toolCallLogger *otelpub.Logger,
 	vectorToolStore *rag.ToolsetVectorStore,
 	mcpMetadataRepo *mcpmetadata_repo.Queries,
 	auditLogger *audit.Logger,
@@ -416,7 +416,7 @@ func handleToolsCall(
 	// One id names the call on its telemetry_logs row and on the pair of
 	// records that becomes its agent_events rows. The tenant is the tool's
 	// own organization and project, as the telemetry row records them.
-	events := newToolCallEvents(toolCallLogger, toolCallTenant{
+	events := newToolCallEvents(toolCallLogger, logger, toolCallTenant{
 		organizationID: descriptor.OrganizationID,
 		projectID:      descriptor.ProjectID,
 	}, toolCallIdentity{
@@ -511,7 +511,7 @@ func handleToolsCall(
 	// From here the call is running: the started record goes out before
 	// the request is scanned, so a call the scan stops still shows, and the
 	// completed record once the response is built, whatever happened in
-	// between. Each Emit waits for the Pub/Sub ack, so this is two publishes
+	// between. Each record waits for the Pub/Sub ack, so this is two publishes
 	// on the call's path; a publish that fails never fails the call.
 	events.started(ctx)
 	defer func() { events.completed(ctx, rw.statusCode, rw.resultIsError, rw.failure) }()

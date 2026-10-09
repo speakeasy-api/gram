@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otel/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
@@ -46,9 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/urfave/cli/v2"
-	"go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/metric"
-	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 	"go.opentelemetry.io/otel/trace"
@@ -60,11 +59,11 @@ import (
 // one source for hosted tool use rather than one per tier.
 const gatewayRecordsServiceName = "gram-server"
 
-// newToolCallLogs is the otelpub logger provider the gateway emits its tool
-// call records through, into the inbound log topic.
-func newToolCallLogs(logger *slog.Logger, publisher gcp.Publisher[*otelv1.InboundLogRecord]) *sdklog.LoggerProvider {
-	return otelpub.NewLoggerProvider(logger, publisher,
-		resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(gatewayRecordsServiceName)))
+// newToolCallLogs is the otelpub logger the gateway writes its tool call records through.
+func newToolCallLogs(publisher gcp.Publisher[*otelv1.InboundLogRecord]) *otelpub.Logger {
+	return otelpub.NewLogger(publisher,
+		resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(gatewayRecordsServiceName)),
+		dialect.GramGatewayLogScope)
 }
 
 type mcpServiceDependencies struct {
@@ -86,9 +85,9 @@ type mcpServiceDependencies struct {
 	BillingTracker billing.Tracker
 	Billing        billing.Repository
 	Telemetry      *tm.Logger
-	// ToolCallLogs is the otelpub logger provider the gateway emits its
-	// tool call records through, into the OTel pipeline.
-	ToolCallLogs           log.LoggerProvider
+	// ToolCallLogs is the otelpub logger the gateway writes its tool call
+	// records through; the service closes it on Shutdown.
+	ToolCallLogs           *otelpub.Logger
 	TelemetryService       *tm.Service
 	RAG                    *rag.ToolsetVectorStore
 	Triggers               *bgtriggers.App
