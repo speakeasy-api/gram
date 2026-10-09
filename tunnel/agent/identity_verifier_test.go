@@ -407,7 +407,29 @@ func TestAdmitCredential(t *testing.T) {
 func TestCredentialChildEnvReplacesInheritedValues(t *testing.T) {
 	t.Parallel()
 	env := credentialChildEnv([]string{"PATH=/bin", "HOME=/root", "OKTA_ACCESS_TOKEN_FILE=/shared/token", AccessTokenFileEnv + "=/shared/other", "XDG_CONFIG_HOME=/etc"}, "/s/token", "/s/home")
-	require.Equal(t, []string{"PATH=/bin", AccessTokenFileEnv + "=/s/token", "HOME=/s/home", "XDG_CONFIG_HOME=/s/home/.config", "XDG_DATA_HOME=/s/home/.local/share"}, env)
+	require.Equal(t, []string{"PATH=/bin", "XDG_CACHE_HOME=/root/.cache", "npm_config_cache=/root/.cache/npm", AccessTokenFileEnv + "=/s/token", "HOME=/s/home", "XDG_CONFIG_HOME=/s/home/.config", "XDG_DATA_HOME=/s/home/.local/share"}, env)
+}
+
+func TestCredentialChildEnvKeepsCachesOutOfTheSession(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		base []string
+		want []string
+	}{
+		{"explicit caches kept", []string{"HOME=/root", "XDG_CACHE_HOME=/var/cache/mcp", "NPM_CONFIG_CACHE=/var/cache/npm"}, []string{"XDG_CACHE_HOME=/var/cache/mcp", "NPM_CONFIG_CACHE=/var/cache/npm"}},
+		{"npm follows an explicit XDG cache", []string{"HOME=/root", "XDG_CACHE_HOME=/var/cache/mcp"}, []string{"XDG_CACHE_HOME=/var/cache/mcp", "npm_config_cache=/var/cache/mcp/npm"}},
+		{"empty XDG cache treated as unset", []string{"HOME=/home/agent", "XDG_CACHE_HOME="}, []string{"XDG_CACHE_HOME=/home/agent/.cache", "npm_config_cache=/home/agent/.cache/npm"}},
+		{"no agent home adds nothing", []string{"PATH=/bin"}, []string{"PATH=/bin"}},
+		{"relative agent home adds nothing", []string{"HOME=home"}, []string{}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := credentialChildEnv(tc.base, "/s/token", "/s/home")
+			require.Equal(t, tc.want, env[:len(env)-4], "cache settings never point into the session")
+		})
+	}
 }
 
 func TestCredentialDeadlineIsEarlierOfExpiryAndMaxAge(t *testing.T) {
