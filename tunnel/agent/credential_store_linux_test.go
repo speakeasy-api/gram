@@ -101,7 +101,7 @@ func TestCredentialStoreRefusesUnsafeRoots(t *testing.T) {
 	target := memoryRoot(t)
 	require.NoError(t, os.Symlink(target, filepath.Join(root, "link")))
 	_, err = openCredentialStore(t.Context(), filepath.Join(root, "link"), discardLogger())
-	require.Error(t, err, "a symlinked root is refused")
+	require.ErrorContains(t, err, "use the resolved path", "a symlinked root is refused with a clear reason")
 
 	require.NoError(t, os.Symlink(target, filepath.Join(root, credentialBaseName)))
 	_, err = openCredentialStore(t.Context(), root, discardLogger())
@@ -469,4 +469,31 @@ func TestCredentialCleanupFailureKeepsRecoveryLock(t *testing.T) {
 	_, err = os.Stat(instance)
 	require.ErrorIs(t, err, os.ErrNotExist)
 	require.NoError(t, next.Close())
+}
+
+// Not parallel: the umask is process-wide, and top-level parallel tests only
+// start once the sequential ones have finished.
+//
+//nolint:paralleltest // Changes the process umask.
+func TestCredentialStoreRecoversCrashUnderRestrictiveUmask(t *testing.T) {
+	root := memoryRoot(t)
+	previous := unix.Umask(0o277)
+	crashed, err := openCredentialStore(t.Context(), root, discardLogger())
+	unix.Umask(previous)
+	require.NoError(t, err)
+	store := crashed.(*linuxCredentialStore)
+
+	info, err := os.Stat(filepath.Join(store.instPath, instanceLockName))
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "the lock is usable by a later scavenger")
+
+	dir, err := store.createSession()
+	require.NoError(t, err)
+	require.NoError(t, dir.writeToken(testTokenA))
+	require.NoError(t, unix.Close(store.lockFD))
+
+	survivor := openTestStore(t, root)
+	_, err = os.Stat(dir.tokenPath())
+	require.ErrorIs(t, err, os.ErrNotExist, "a crashed instance is recovered at the next start")
+	require.NoError(t, survivor.Close())
 }
