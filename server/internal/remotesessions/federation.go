@@ -161,7 +161,7 @@ func newFederatedProvider(organizationID string, issuer repo.RemoteSessionIssuer
 	if method == TokenEndpointAuthMethodPrivateKeyJWT && !client.JsonWebKeySetID.Valid {
 		return nil, ErrFederatedConfiguration
 	}
-	if len(doc.TokenEndpointAuthMethodsSupported) > 0 && !slices.Contains(doc.TokenEndpointAuthMethodsSupported, string(method)) {
+	if !slices.Contains(advertisedTokenEndpointAuthMethods(doc.TokenEndpointAuthMethodsSupported), string(method)) {
 		return nil, ErrFederatedConfiguration
 	}
 	if client.ClientSecretExpiresAt.Valid && !client.ClientSecretExpiresAt.Time.After(time.Now()) {
@@ -527,4 +527,12 @@ func (m *ChallengeManager) federatedTokenClient(p *FederatedProvider) (httpDoer,
 		return nil, TokenEndpointClientAuth{}, ErrFederatedConfiguration
 	}
 	return doer, TokenEndpointClientAuth{Method: method, RemoteSessionClientID: p.client.ID, OrganizationID: p.organizationID, JSONWebKeySetID: p.client.JsonWebKeySetID.UUID, ClientID: p.client.ClientID, ClientSecret: secret, AssertionAudience: audience, AssertionSigner: m.assertions}, nil
+}
+
+// RFC 8414 section 2: only an omitted token_endpoint_auth_methods_supported means client_secret_basic.
+func advertisedTokenEndpointAuthMethods(methods []string) []string {
+	if methods == nil {
+		return []string{string(TokenEndpointAuthMethodBasic)}
+	}
+	return methods
 }

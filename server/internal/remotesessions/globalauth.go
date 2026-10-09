@@ -55,6 +55,7 @@ func NewGlobalService(logger *slog.Logger, tp trace.TracerProvider, mp metric.Me
 		// No tunnel transport: a global identity provider cannot be bound to a
 		// project tunnel, so revocation always dials directly. A binding that
 		// somehow existed would fail closed rather than silently dial out.
-		revoker: NewUpstreamRevoker(logger, tp, mp, db, enc, policy, nil),
+		revoker:               NewUpstreamRevoker(logger, tp, mp, db, enc, policy, nil),
+		createDiscoveryBudget: defaultCreateDiscoveryBudget,
 	}
 }

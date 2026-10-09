@@ -11,6 +11,8 @@ export type DiscoveredEndpoints = {
   jwksUri: string;
   scopesSupported: string[];
   grantTypesSupported: string[];
+  // RFC 7523bis profiles; the ID-JAG profile gates identity chaining.
+  authorizationGrantProfilesSupported: string[];
   responseTypesSupported: string[];
   tokenEndpointAuthMethodsSupported: string[];
   // PKCE methods (RFC 8414 code_challenge_methods_supported). Unlike the

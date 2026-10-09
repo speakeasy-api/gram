@@ -12,6 +12,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearIssuerDiscoveryFixture = `-- name: ClearIssuerDiscoveryFixture :execrows
+UPDATE remote_session_issuers
+SET metadata_fetched_at = NULL
+WHERE id = $1
+  AND organization_id = $2
+`
+
+type ClearIssuerDiscoveryFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+// Test fixture: an issuer whose advertised capabilities have no discovery recorded.
+func (q *Queries) ClearIssuerDiscoveryFixture(ctx context.Context, arg ClearIssuerDiscoveryFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearIssuerDiscoveryFixture, arg.ID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createEligibleMCPServerFixture = `-- name: CreateEligibleMCPServerFixture :one
 INSERT INTO mcp_servers (project_id, name, slug, remote_mcp_server_id, remote_session_issuer_id, user_session_issuer_id, visibility)
 VALUES ($1, $2, $3, $4, $5, $6, $7)

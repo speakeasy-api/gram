@@ -48,6 +48,10 @@ beforeEach(() => {
     tokenEndpoint: "https://id.example.com/token",
     registrationEndpoint: "https://id.example.com/register",
     tokenEndpointAuthMethodsSupported: ["client_secret_basic"],
+    authorizationGrantProfilesSupported: [
+      "urn:ietf:params:oauth:grant-profile:id-jag",
+    ],
+    codeChallengeMethodsSupported: ["S256"],
   });
   mocks.getIssuer.mockRejectedValue(
     Object.assign(new Error("not found"), { statusCode: 404 }),
@@ -145,6 +149,10 @@ describe("configureCreatedRemoteMcpIdentity", () => {
           clientMode: "auto",
           createProvider: expect.objectContaining({
             issuer: "https://id.example.com",
+            authorizationGrantProfilesSupported: [
+              "urn:ietf:params:oauth:grant-profile:id-jag",
+            ],
+            codeChallengeMethodsSupported: ["S256"],
           }),
           clientConfiguration: expect.objectContaining({
             scope: ["resource.read"],
@@ -157,6 +165,41 @@ describe("configureCreatedRemoteMcpIdentity", () => {
     expect(mocks.commit.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.updateServer.mock.invocationCallOrder[0]!,
     );
+  });
+
+  it("sends an empty grant profile list when discovery advertised none", async () => {
+    mocks.fetchIssuer.mockResolvedValue({
+      issuer: "https://id.example.com",
+      authorizationEndpoint: "https://id.example.com/authorize",
+      tokenEndpoint: "https://id.example.com/token",
+    });
+
+    await configureCreatedRemoteMcpIdentity({
+      client,
+      remoteMcpServer: remoteServer(),
+      mcpServer: mcpServer(),
+      identityMode: "user",
+    });
+
+    const form = mocks.commit.mock.calls[0]![0]
+      .commitServerIdentityConfigurationForm as {
+      createProvider: Record<string, unknown>;
+    };
+    expect(form.createProvider.authorizationGrantProfilesSupported).toEqual([]);
+  });
+
+  it("creates no provider when discovery fails", async () => {
+    mocks.fetchIssuer.mockRejectedValue(new Error("unreachable"));
+
+    const result = await configureCreatedRemoteMcpIdentity({
+      client,
+      remoteMcpServer: remoteServer(),
+      mcpServer: mcpServer(),
+      identityMode: "user",
+    });
+
+    expect(result.status).toBe("setup-required");
+    expect(mocks.commit).not.toHaveBeenCalled();
   });
 
   it("retains the server disabled when registration is refused", async () => {

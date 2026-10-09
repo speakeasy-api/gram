@@ -4,11 +4,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
-func TestVetRefreshedDocumentRequiresExactIssuer(t *testing.T) {
+func TestVetDiscoveredDocumentRequiresExactIssuer(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -28,7 +26,7 @@ func TestVetRefreshedDocumentRequiresExactIssuer(t *testing.T) {
 				AuthorizationEndpoint: "https://issuer.example/authorize",
 				TokenEndpoint:         "https://issuer.example/token",
 			}
-			err := vetRefreshedDocument(doc, repo.RemoteSessionIssuer{Issuer: tc.requested})
+			err := vetDiscoveredDocument(doc, tc.requested)
 			if tc.wantErr {
 				var untrusted *untrustedDocumentError
 				require.ErrorAs(t, err, &untrusted)
