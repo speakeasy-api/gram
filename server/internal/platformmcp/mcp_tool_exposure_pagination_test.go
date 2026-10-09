@@ -13,6 +13,10 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -276,4 +280,73 @@ func TestGetMCPAdvertisesToolPagingAndRefusesAStaleToolCursor(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(text.Text), &refusal))
 	require.Equal(t, "invalid_request", refusal.Code)
 	require.Contains(t, refusal.Message, "tool_cursor")
+}
+
+// Pages stitched into one read must agree on how far a change would reach, so
+// a server that gains a sharing server mid-read refuses the next page.
+func TestToolExposurePageAfterTheListGainedASharingServerIsRefused(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_tool_exposure_page_shared")
+	seedExposedTools(t, ctx, fixture)
+	fixture.service.exposurePageSize = 2
+
+	first, err := fixture.service.Exposure(ctx, fixture.principal, fixture.project.ID, fixture.toolsetID)
+	require.NoError(t, err)
+	require.Zero(t, first.SharedWithOther)
+
+	_, err = mcpserversrepo.New(fixture.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: fixture.project.ID, Name: conv.ToPGText("Second front"), Slug: conv.ToPGText("second-front"),
+		ToolsetID: uuid.NullUUID{UUID: fixture.toolsetID, Valid: true}, Visibility: "private",
+	})
+	require.NoError(t, err)
+
+	_, err = fixture.service.ExposurePage(ctx, fixture.principal, fixture.project.ID, fixture.toolsetID, first.NextToolCursor)
+	var refusal *MCPToolExposureError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, "conflict", refusal.Code, "the first page's shared_with_other_servers no longer describes the list")
+}
+
+// A service missing its page cursor key or page size cannot serve a read it
+// could page, so it reports itself unavailable instead of serving one.
+func TestToolExposureServiceWithoutPagingIsUnavailable(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_tool_exposure_no_paging")
+	seedExposedTools(t, ctx, fixture)
+
+	fixture.service.exposurePageSize = 0
+	_, err := fixture.service.Exposure(ctx, fixture.principal, fixture.project.ID, fixture.toolsetID)
+	require.ErrorIs(t, err, ErrUnavailable)
+
+	fixture.service.exposurePageSize = maxExposedToolURNs
+	fixture.service.exposureCursors = nil
+	_, err = fixture.service.Exposure(ctx, fixture.principal, fixture.project.ID, fixture.toolsetID)
+	require.ErrorIs(t, err, ErrUnavailable)
+}
+
+// get_mcp must never answer a tool_cursor with a first-page projection as if
+// it continued the read: a cursor nothing can continue is refused, and a
+// foreign one is refused before the inventory is read.
+func TestGetMCPRefusesAToolCursorItCannotContinue(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedToolExposureFixture(t, t.Context(), "platform_mcp_get_mcp_tool_cursor")
+	seedExposedTools(t, ctx, fixture)
+	fixture.service.exposurePageSize = 2
+	first, err := fixture.service.Exposure(ctx, fixture.principal, fixture.project.ID, fixture.toolsetID)
+	require.NoError(t, err)
+	require.NotEmpty(t, first.NextToolCursor)
+
+	engine := authz.NewEngine(testenv.NewLogger(t), fixture.conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
+	input := GetMCPInput{ProjectID: fixture.project.ID.String(), MCPID: fixture.toolsetID.String(), ToolCursor: first.NextToolCursor}
+	var refusal *MCPToolExposureError
+
+	withoutExposure := NewPostgresReader(testenv.NewLogger(t), fixture.conn).WithAuthorization(engine)
+	_, err = withoutExposure.GetMCP(ctx, fixture.principal, input)
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, "invalid_request", refusal.Code, "a reader with no exposure read cannot continue any cursor")
+
+	withExposure := NewPostgresReader(testenv.NewLogger(t), fixture.conn).WithAuthorization(engine).WithToolExposure(fixture.service)
+	input.ToolCursor = "not-a-cursor"
+	_, err = withExposure.GetMCP(ctx, fixture.principal, input)
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, "invalid_request", refusal.Code)
 }

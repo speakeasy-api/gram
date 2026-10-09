@@ -770,6 +770,17 @@ func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input 
 		}
 		return MCP{}, err
 	}
+	// A tool_cursor is checked before the inventory is read, so a stale or
+	// foreign one costs no queries, and it is refused outright where no
+	// exposure read could ever continue it.
+	if input.ToolCursor != "" {
+		if !r.toolExposure.valid() {
+			return MCP{}, toolExposureCursorInvalid()
+		}
+		if _, err := r.toolExposure.openExposureCursor(principal, projectID, mcpID, input.ToolCursor); err != nil {
+			return MCP{}, err
+		}
+	}
 	return r.getMCPInventory(ctx, principal, projectID, mcpID, true, input.ToolCursor)
 }
 
@@ -844,6 +855,10 @@ func (r *PostgresReader) getMCPInventory(ctx context.Context, principal Principa
 		default:
 			return MCP{}, fmt.Errorf("read platform MCP tool exposure: %w", err)
 		}
+	} else if toolCursor != "" {
+		// Ignoring the cursor would hand back the first page's projection as
+		// if it continued the read.
+		return MCP{}, toolExposureCursorInvalid()
 	}
 	return mcp, nil
 }

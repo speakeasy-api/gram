@@ -2,9 +2,11 @@ package platform
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
@@ -55,10 +57,14 @@ func (t *GetMCP) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.
 	output, err := t.reader.GetMCP(ctx, principal, input)
 	if err != nil {
 		// A stale or conflicting tool_cursor is the caller's to correct by
-		// re-reading, so its code and message reach the caller as a result
-		// rather than disappearing into a generic tool failure.
-		if refusal, ok := platformmcp.ToolExposureRefusalPayload(err); ok {
-			return core.EncodeResult(wr, refusal)
+		// re-reading, so it fails with a code and message the caller can act
+		// on rather than a generic tool failure.
+		if exposure, ok := errors.AsType[*platformmcp.MCPToolExposureError](err); ok {
+			code := oops.CodeBadRequest
+			if exposure.Code == "conflict" {
+				code = oops.CodeConflict
+			}
+			return oops.E(code, err, "%s", exposure.Message)
 		}
 		return fmt.Errorf("get configured mcp: %w", err)
 	}

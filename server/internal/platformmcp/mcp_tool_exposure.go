@@ -144,7 +144,7 @@ type ChangeMCPToolsInput struct {
 	ProjectID       string   `json:"project_id" jsonschema:"project ID that owns the MCP server"`
 	MCPID           string   `json:"mcp_id" jsonschema:"exact MCP server ID from find_mcp or get_mcp"`
 	ToolURNs        []string `json:"tool_urns" jsonschema:"exact tool URNs from list_project_tools"`
-	ExpectedVersion string   `json:"expected_version" jsonschema:"exposure_version from the latest get_mcp read of this server"`
+	ExpectedVersion string   `json:"expected_version" jsonschema:"exposure_version from the page that completes the latest get_mcp read of this server"`
 	IdempotencyKey  string   `json:"idempotency_key" jsonschema:"caller-chosen key that makes a retry of this exact change safe"`
 	Confirmed       bool     `json:"confirmed" jsonschema:"true only after the user confirmed this exact server and tool list"`
 }
@@ -263,7 +263,7 @@ func (s *MCPToolExposureService) WithIndexing(index ToolExposureIndexer) *MCPToo
 }
 
 func (s *MCPToolExposureService) valid() bool {
-	return s != nil && s.db != nil && s.queries != nil && s.audit != nil && s.engine != nil && s.admin != nil && s.cursors != nil && s.reads.valid() && s.changes.valid() && s.now != nil
+	return s != nil && s.db != nil && s.queries != nil && s.audit != nil && s.engine != nil && s.admin != nil && s.cursors != nil && len(s.exposureCursors) > 0 && s.exposurePageSize > 0 && s.reads.valid() && s.changes.valid() && s.now != nil
 }
 
 // ListProjectTools reports the tools a project's latest completed deployment
@@ -353,14 +353,29 @@ type toolExposureCursor struct {
 }
 
 // toolExposureListDigest is a one-way digest of an exposure version, so a
-// cursor can pin the list without revealing the version.
-func toolExposureListDigest(version string) string {
-	digest := sha256.Sum256([]byte("platform-mcp-tool-exposure-cursor-list-v1\x00" + version))
+// cursor can pin the list without revealing the version. It also pins how many
+// other servers share the list, so every page of one read reports the same
+// shared_with_other_servers.
+func toolExposureListDigest(version string, sharedWithOther int) string {
+	digest := sha256.Sum256(fmt.Appendf(nil, "platform-mcp-tool-exposure-cursor-list-v2\x00%s\x00%d", version, sharedWithOther))
 	return hex.EncodeToString(digest[:])
 }
 
 func toolExposureCursorInvalid() error {
 	return toolExposureInvalid("That tool page marker is not valid for this MCP server. Read the server again without tool_cursor.")
+}
+
+// openExposureCursor verifies a tool_cursor and that it was issued to this
+// caller for this server. It touches no data, so a reader can refuse a bad
+// cursor before doing any of the work the page would need.
+func (s *MCPToolExposureService) openExposureCursor(principal Principal, projectID, mcpID uuid.UUID, cursor string) (toolExposureCursor, error) {
+	binding := principalCursorBinding(principal)
+	decoded, ok := openCursor[toolExposureCursor](s.exposureCursors, cursor)
+	if !ok || binding == "" || decoded.OrganizationID != principal.OrganizationID || decoded.Binding != binding ||
+		decoded.ProjectID != projectID.String() || decoded.MCPID != mcpID.String() || decoded.ListDigest == "" || decoded.Position <= 0 {
+		return toolExposureCursor{}, toolExposureCursorInvalid()
+	}
+	return decoded, nil
 }
 
 // ExposurePage reads one page of a server's tool list; an empty cursor is the
@@ -373,10 +388,9 @@ func (s *MCPToolExposureService) ExposurePage(ctx context.Context, principal Pri
 	binding := principalCursorBinding(principal)
 	position, pinnedDigest := 0, ""
 	if cursor != "" {
-		decoded, ok := openCursor[toolExposureCursor](s.exposureCursors, cursor)
-		if !ok || binding == "" || decoded.OrganizationID != principal.OrganizationID || decoded.Binding != binding ||
-			decoded.ProjectID != projectID.String() || decoded.MCPID != mcpID.String() || decoded.ListDigest == "" || decoded.Position <= 0 {
-			return MCPToolExposure{}, toolExposureCursorInvalid()
+		decoded, err := s.openExposureCursor(principal, projectID, mcpID, cursor)
+		if err != nil {
+			return MCPToolExposure{}, err
 		}
 		position, pinnedDigest = decoded.Position, decoded.ListDigest
 	}
@@ -391,7 +405,9 @@ func (s *MCPToolExposureService) ExposurePage(ctx context.Context, principal Pri
 		return MCPToolExposure{}, err
 	}
 	version := toolExposureVersion(projectID, mcpID, row.ToolsetID, row.ToolsetVersion, row.ToolUrns)
-	if pinnedDigest != "" && !hmac.Equal([]byte(pinnedDigest), []byte(toolExposureListDigest(version))) {
+	sharedWithOther := max(len(row.FrontingServerIds)-1, 0)
+	listDigest := toolExposureListDigest(version, sharedWithOther)
+	if pinnedDigest != "" && !hmac.Equal([]byte(pinnedDigest), []byte(listDigest)) {
 		return MCPToolExposure{}, toolExposurePageConflict()
 	}
 	// The row is this call's own copy, so it is sorted in place for paging.
@@ -407,7 +423,7 @@ func (s *MCPToolExposureService) ExposurePage(ctx context.Context, principal Pri
 		ToolCount:       len(urns),
 		ToolURNs:        urns[position:end],
 		Truncated:       end < len(urns),
-		SharedWithOther: max(len(row.FrontingServerIds)-1, 0),
+		SharedWithOther: sharedWithOther,
 	}
 	if !exposure.Truncated {
 		exposure.ExposureVersion = version
@@ -421,7 +437,7 @@ func (s *MCPToolExposureService) ExposurePage(ctx context.Context, principal Pri
 	}
 	next, err := sealCursor(s.exposureCursors, toolExposureCursor{
 		OrganizationID: principal.OrganizationID, Binding: binding,
-		ProjectID: projectID.String(), MCPID: mcpID.String(), ListDigest: toolExposureListDigest(version), Position: end,
+		ProjectID: projectID.String(), MCPID: mcpID.String(), ListDigest: listDigest, Position: end,
 	})
 	if err != nil {
 		return MCPToolExposure{}, fmt.Errorf("encode platform MCP tool exposure cursor: %w", err)
