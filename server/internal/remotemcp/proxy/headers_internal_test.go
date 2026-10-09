@@ -263,7 +263,7 @@ func TestApplyRequestHeadersRemoteRejectsRequiredProtectedSource(t *testing.T) {
 	message := requireBadRequest(t, err)
 	require.Contains(t, message, `"X-Upstream-Token"`)
 	require.Contains(t, message, `"gram-key"`)
-	require.Contains(t, message, "separate request header")
+	require.Contains(t, message, "never forwarded to remote MCP servers")
 	require.NotContains(t, message, "synthetic-api-key")
 }
 

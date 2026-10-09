@@ -217,7 +217,7 @@ describe("HeadersSection", () => {
 
   it("shows the server's reason when a save is refused", () => {
     const message =
-      'header "X-Upstream-Token" cannot be populated from request header "Authorization".';
+      'header "X-Upstream-Token" cannot read request header "Gram-Key": Speakeasy headers are never forwarded to remote MCP servers';
     renderSection(headerState({ error: new Error(message) }));
 
     expect(screen.getByText(message)).toBeTruthy();

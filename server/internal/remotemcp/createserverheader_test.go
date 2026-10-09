@@ -261,7 +261,7 @@ func TestCreateServerHeader_RejectsProtectedPassThroughSources(t *testing.T) {
 	}))
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Contains(t, oopsErr.Error(), "separate request header", "the refusal explains the remediation")
+	require.Contains(t, oopsErr.Error(), "never forwarded to remote MCP servers", "the refusal says why")
 }
 
 func TestCreateServerHeader_RejectsReservedDestinations(t *testing.T) {
@@ -505,7 +505,7 @@ func TestCreateServerHeader_RefusalsExplainTheFix(t *testing.T) {
 		code oops.Code
 		want []string
 	}{
-		{name: "X-Upstream-Token", opts: func(p *gen.CreateServerHeaderPayload) { p.ValueFromRequestHeader = new("gram-key") }, code: oops.CodeBadRequest, want: []string{`header "X-Upstream-Token" cannot be populated from request header "gram-key"`, "separate request header"}},
+		{name: "X-Upstream-Token", opts: func(p *gen.CreateServerHeaderPayload) { p.ValueFromRequestHeader = new("gram-key") }, code: oops.CodeBadRequest, want: []string{`header "X-Upstream-Token" cannot read request header "gram-key": Speakeasy headers are never forwarded to remote MCP servers`}},
 		{name: "set-cookie", opts: func(p *gen.CreateServerHeaderPayload) { p.Value = new("v") }, code: oops.CodeBadRequest, want: []string{`header "set-cookie" cannot be configured on a remote MCP server`, "Cookie can only hold a static value"}},
 		{name: "X Bad", opts: func(p *gen.CreateServerHeaderPayload) { p.Value = new("v") }, code: oops.CodeBadRequest, want: []string{`header name "X Bad" is not a valid HTTP header name`}},
 		{name: "X-Forwarded", opts: func(p *gen.CreateServerHeaderPayload) { p.ValueFromRequestHeader = new("X Bad") }, code: oops.CodeBadRequest, want: []string{`header "X-Forwarded" reads request header "X Bad", which is not a valid HTTP header name`}},

@@ -520,7 +520,7 @@ func resolveRemoteHeader(h ConfiguredHeader, userReq *http.Request) (string, err
 func remoteHeaderFailureMessage(h ConfiguredHeader, err error) string {
 	switch {
 	case errors.Is(err, ErrProtectedSource):
-		return fmt.Sprintf("required header %q for remote mcp server cannot be populated from request header %q. %s", h.Name, h.ValueFromRequestHeader, ProtectedSourceRemediation)
+		return fmt.Sprintf("required header %q cannot read request header %q: Speakeasy headers are never forwarded to remote MCP servers", h.Name, h.ValueFromRequestHeader)
 	case errors.Is(err, ErrReservedHeader):
 		return fmt.Sprintf("required header %q cannot be configured on a remote mcp server: change or remove it in the server's settings", h.Name)
 	case errors.Is(err, ErrInvalidHeaderName), errors.Is(err, ErrInvalidHeaderValue):
@@ -529,7 +529,3 @@ func remoteHeaderFailureMessage(h ConfiguredHeader, err error) string {
 		return "missing required header for remote mcp server"
 	}
 }
-
-// ProtectedSourceRemediation explains how to replace a configured header that
-// reads a protected inbound header.
-const ProtectedSourceRemediation = "Speakeasy does not forward Speakeasy credentials or headers to remote MCP servers. Have clients send the upstream credential in a separate request header and read it from there, or store a static credential"
