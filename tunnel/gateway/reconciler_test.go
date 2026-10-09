@@ -917,11 +917,6 @@ func TestRouteReconcilerValidatesEachSessionKey(t *testing.T) {
 	require.Equal(t, "new", string(body))
 }
 
-// reconcilerTestWait bounds waits on the reconciler's real ticker. Eventually
-// returns as soon as the condition holds, so a long bound costs nothing when
-// the ticker keeps up.
-const reconcilerTestWait = 15 * time.Second
-
 func TestRouteReconcilerRetriesFailedCleanupOnTicker(t *testing.T) {
 	t.Parallel()
 
@@ -936,29 +931,70 @@ func TestRouteReconcilerRetriesFailedCleanupOnTicker(t *testing.T) {
 		store,
 		20*time.Millisecond,
 	)
-	agent, _, err := dialTestAgent(t.Context(), harness.public.URL, key, http.HandlerFunc(successfulAgentHandler))
+	// Tracks the agent's session handler, which nudges the reconciler on its
+	// way out; httptest does not wait for hijacked connections.
+	var handlers sync.WaitGroup
+	public := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handlers.Add(1)
+		defer handlers.Done()
+		harness.gateway.PublicHandler().ServeHTTP(w, r)
+	}))
+	t.Cleanup(public.Close)
+	agent, _, err := dialTestAgent(t.Context(), public.URL, key, http.HandlerFunc(successfulAgentHandler))
 	require.NoError(t, err)
 	t.Cleanup(agent.Close)
-	// Generous windows: these wait on real timers, and the race detector plus
-	// parallel packages can delay them well past their nominal period.
 	require.Eventually(t, func() bool {
 		candidates, _ := store.Candidates(t.Context(), tunnelID)
 		return len(candidates) == 1
-	}, reconcilerTestWait, 5*time.Millisecond)
+	}, time.Second, 5*time.Millisecond)
 
 	store.failNextUnpublish()
 	agent.Close()
 	require.Eventually(t, func() bool {
 		return harness.gateway.ActiveSessions() == 0 && store.operationCount(tunnelID, "unpublish_failed") == 1
-	}, reconcilerTestWait, 5*time.Millisecond)
+	}, time.Second, 5*time.Millisecond)
+	// Cleanup is idempotent, and the disconnect nudge can land before or after
+	// a ticker retry, so a second unpublish is legitimate. What matters is
+	// that one succeeds after the failure and the route is gone.
 	require.Eventually(t, func() bool {
 		candidates, candidatesErr := store.Candidates(t.Context(), tunnelID)
-		return candidatesErr == nil && len(candidates) == 0 && store.operationCount(tunnelID, "unpublish") == 1
-	}, reconcilerTestWait, 5*time.Millisecond)
+		return candidatesErr == nil && len(candidates) == 0 && unpublishedAfterFailure(store.operationsFor(tunnelID))
+	}, time.Second, 5*time.Millisecond)
 
-	writesAfterRetry := store.writeCount()
+	handlers.Wait()
+	quiesceReconciler(t, harness.gateway.reconciler)
+	writesAfterRetry := len(store.operationsFor(tunnelID))
 	harness.gateway.Drain(t.Context())
-	require.Equal(t, writesAfterRetry, store.writeCount())
+	require.Len(t, store.operationsFor(tunnelID), writesAfterRetry, "drain does not clean up a tunnel already cleaned up")
+}
+
+// unpublishedAfterFailure reports whether a successful unpublish follows the
+// injected failure.
+func unpublishedAfterFailure(operations []storeOperation) bool {
+	failed := false
+	for _, operation := range operations {
+		switch {
+		case operation.kind == "unpublish_failed":
+			failed = true
+		case operation.kind == "unpublish" && failed:
+			return true
+		}
+	}
+	return false
+}
+
+// quiesceReconciler waits until every nudge already sent has been handled.
+// The reconciler handles one request at a time, so a revoke it accepts once
+// the nudge queue has drained is accepted only after that nudge's reconcile
+// has finished.
+func quiesceReconciler(t *testing.T, reconciler *routeReconciler) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		reconciler.dirtyMu.Lock()
+		defer reconciler.dirtyMu.Unlock()
+		return len(reconciler.dirty) == 0 && len(reconciler.nudges) == 0
+	}, time.Second, 5*time.Millisecond)
+	reconciler.requestRevoke(t.Context(), "tunnel-quiesce-barrier")
 }
 
 func TestGatewayDrainCleanupIgnoresCanceledFirstCaller(t *testing.T) {
