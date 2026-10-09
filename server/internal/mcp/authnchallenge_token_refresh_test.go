@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
@@ -31,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -144,6 +146,100 @@ func TestHandleToken_ConcurrentRefreshReplayReturnsWinnerResponse(t *testing.T) 
 	require.NoError(t, secondUnknown.err)
 	require.Equal(t, http.StatusBadRequest, secondUnknown.code)
 	require.Less(t, time.Since(started), 3*time.Second, "cached terminal refresh failures must not wait for the replay grace period")
+}
+
+func TestHandleToken_RefreshSerializationConflictReplaysDelayedWinner(t *testing.T) {
+	t.Parallel()
+
+	publicationStarted := make(chan struct{})
+	replayRead := make(chan struct{})
+	releasePublication := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releasePublication) }) }
+	t.Cleanup(release)
+	ctx, ti := newTestMCPServiceWithCacheWrapper(t, func(delegate cache.Cache) cache.Cache {
+		return &delayedRefreshPublicationCache{
+			failingAddCache:    failingAddCache{Cache: delegate},
+			publicationStarted: publicationStarted, replayRead: replayRead, releasePublication: releasePublication,
+		}
+	})
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	toolset, issuer, client, refreshToken := seedRefreshReplaySession(t, ctx, ti)
+
+	// Both requests take their REPEATABLE READ snapshots before competing
+	// for the old row. Rolling back this holder lets exactly one claim win.
+	holder := testenv.BeginTx(t, ctx, ti.conn)
+	hash := sha256.Sum256([]byte(refreshToken))
+	_, err := usersessions_repo.New(holder).RevokeUserSessionByRefreshTokenHash(ctx, usersessions_repo.RevokeUserSessionByRefreshTokenHashParams{
+		UserSessionIssuerID: issuer.ID, RefreshTokenHash: base64.RawURLEncoding.EncodeToString(hash[:]),
+	})
+	require.NoError(t, err)
+	results := make(chan refreshResult, 2)
+	for range 2 {
+		go func() {
+			results <- performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+		}()
+	}
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(holder), 2)
+	require.NoError(t, holder.Rollback(ctx))
+	select {
+	case <-replayRead:
+	case <-ctx.Done():
+		t.Fatal("losing refresh did not wait for the unpublished winner")
+	}
+	release()
+	var winnerBody string
+	for range 2 {
+		select {
+		case result := <-results:
+			require.NoError(t, result.err)
+			require.Equal(t, http.StatusOK, result.code, result.body)
+			if winnerBody == "" {
+				winnerBody = result.body
+			}
+			assertSameTokenPair(t, winnerBody, result.body)
+		case <-ctx.Done():
+			t.Fatal("refresh did not complete after winner publication")
+		}
+	}
+	active, err := usersessions_repo.New(ti.conn).ListUserSessionsByProjectID(ctx, usersessions_repo.ListUserSessionsByProjectIDParams{
+		ProjectID: issuer.ProjectID.UUID, Status: conv.ToPGText("active"),
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true}, LimitValue: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, active, 1, "only one successor may be persisted")
+}
+
+func TestHandleToken_RefreshSerializationConflictWithoutReplayIsRetryable(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset, issuer, client, refreshToken := seedRefreshReplaySession(t, ctx, ti)
+	holder := testenv.BeginTx(t, ctx, ti.conn)
+	hash := sha256.Sum256([]byte(refreshToken))
+	_, err := usersessions_repo.New(holder).RevokeUserSessionByRefreshTokenHash(ctx, usersessions_repo.RevokeUserSessionByRefreshTokenHashParams{
+		UserSessionIssuerID: issuer.ID, RefreshTokenHash: base64.RawURLEncoding.EncodeToString(hash[:]),
+	})
+	require.NoError(t, err)
+	results := make(chan refreshResult, 1)
+	go func() {
+		results <- performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+	}()
+	testenv.WaitForQueryBlockedBy(t, ctx, ti.conn, testenv.BackendPID(holder), "%RevokeUserSessionByRefreshTokenHash%")
+	require.NoError(t, holder.Commit(ctx))
+	select {
+	case result := <-results:
+		require.NoError(t, result.err)
+		require.Equal(t, http.StatusServiceUnavailable, result.code, result.body)
+		require.JSONEq(t, `{"error":"temporarily_unavailable","error_description":"refresh token rotation is still in progress"}`, result.body)
+	case <-time.After(10 * time.Second):
+		t.Fatal("refresh conflict exceeded its bounded replay wait")
+	}
+	// A conflict must not cache invalid_grant while publication is pending.
+	replayKey, _ := refreshReplayKeys(issuer.ID, refreshToken)
+	var replay any
+	require.ErrorIs(t, ti.cacheAdapter.Get(ctx, replayKey+":", &replay), redisCache.ErrCacheMiss)
 }
 
 func TestApplyIssuerGate_AgentSessionAdmitsLiveParent(t *testing.T) {
@@ -547,6 +643,43 @@ type tokenResponseFixture struct {
 
 type failingAddCache struct {
 	cache.Cache
+}
+
+type delayedRefreshPublicationCache struct {
+	failingAddCache
+	publicationStarted chan struct{}
+	replayRead         chan struct{}
+	releasePublication chan struct{}
+	replayReadOnce     sync.Once
+}
+
+func (c *delayedRefreshPublicationCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+	if strings.HasPrefix(key, "userSessionRefreshReplay:") {
+		close(c.publicationStarted)
+		select {
+		case <-c.releasePublication:
+		case <-ctx.Done():
+			return fmt.Errorf("wait for refresh replay publication: %w", ctx.Err())
+		}
+	}
+	if err := c.Cache.Set(ctx, key, value, ttl); err != nil {
+		return fmt.Errorf("publish refresh replay: %w", err)
+	}
+	return nil
+}
+
+func (c *delayedRefreshPublicationCache) Get(ctx context.Context, key string, value any) error {
+	if strings.HasPrefix(key, "userSessionRefreshReplay:") {
+		select {
+		case <-c.publicationStarted:
+			c.replayReadOnce.Do(func() { close(c.replayRead) })
+		default:
+		}
+	}
+	if err := c.Cache.Get(ctx, key, value); err != nil {
+		return fmt.Errorf("get cached refresh replay: %w", err)
+	}
+	return nil
 }
 
 type failingConditionalCache struct {
