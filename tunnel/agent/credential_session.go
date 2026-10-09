@@ -285,8 +285,11 @@ func (s *stdioSession) expireCredential(generation uint64) {
 // beginTerminate stops admitting requests at once, then ends the session in
 // the background after any write already admitted finishes.
 func (s *stdioSession) beginTerminate() {
-	s.closing.Store(true)
-	go s.terminate()
+	// Only the first caller starts termination; later rejected requests
+	// must not pile up goroutines waiting on the gate.
+	if s.closing.CompareAndSwap(false, true) {
+		go s.terminate()
+	}
 }
 
 // terminate ends the session after any admitted write finishes.
