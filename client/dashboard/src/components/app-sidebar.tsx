@@ -100,6 +100,9 @@ export function AppSidebar({
   const isRiskWatchdogEnabled = navAccess.has(routes.watchdog.url);
   const isUserSessionsEnabled = navAccess.has(routes.mcpSessions.url);
   const isAgentManagementEnabled = navAccess.has(routes.agents.url);
+  const isSignalsIntelligenceEnabled = navAccess.has(
+    routes.signalsIntelligence.url,
+  );
 
   // Shared with the page-title eyebrow (Page.Eyebrow) so the sidebar group
   // highlight and the page header always agree on the area. "Organization"
@@ -290,6 +293,14 @@ export function AppSidebar({
                 item: routes.agentSessions,
                 ...accessFor(routes.agentSessions),
               },
+              ...(isSignalsIntelligenceEnabled
+                ? [
+                    {
+                      item: routes.signalsIntelligence,
+                      ...accessFor(routes.signalsIntelligence),
+                    },
+                  ]
+                : []),
               ...(isOrgMemoryEnabled
                 ? [{ item: routes.orgMemory, ...accessFor(routes.orgMemory) }]
                 : []),

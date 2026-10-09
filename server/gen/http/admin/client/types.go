@@ -560,6 +560,8 @@ type GetOrganizationFeaturesResponseBody struct {
 	// Whether the organization has the staff-managed private network ingress
 	// entitlement
 	NetworkIngressEnabled *bool `form:"network_ingress_enabled,omitempty" json:"network_ingress_enabled,omitempty" xml:"network_ingress_enabled,omitempty"`
+	// Whether the organization can configure signals intelligence
+	SignalsIntelligenceEnabled *bool `form:"signals_intelligence_enabled,omitempty" json:"signals_intelligence_enabled,omitempty" xml:"signals_intelligence_enabled,omitempty"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -618,6 +620,8 @@ type SetOrganizationFeatureResponseBody struct {
 	// Whether the organization has the staff-managed private network ingress
 	// entitlement
 	NetworkIngressEnabled *bool `form:"network_ingress_enabled,omitempty" json:"network_ingress_enabled,omitempty" xml:"network_ingress_enabled,omitempty"`
+	// Whether the organization can configure signals intelligence
+	SignalsIntelligenceEnabled *bool `form:"signals_intelligence_enabled,omitempty" json:"signals_intelligence_enabled,omitempty" xml:"signals_intelligence_enabled,omitempty"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -20368,6 +20372,7 @@ func NewGetOrganizationFeaturesProductFeaturesOK(body *GetOrganizationFeaturesRe
 		ConsentToolFilteringEnabled:             body.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               body.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   body.NetworkIngressEnabled,
+		SignalsIntelligenceEnabled:              body.SignalsIntelligenceEnabled,
 		DeviceAgent:                             body.DeviceAgent,
 	}
 
@@ -20547,6 +20552,7 @@ func NewSetOrganizationFeatureProductFeaturesOK(body *SetOrganizationFeatureResp
 		ConsentToolFilteringEnabled:             body.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               body.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   body.NetworkIngressEnabled,
+		SignalsIntelligenceEnabled:              body.SignalsIntelligenceEnabled,
 		DeviceAgent:                             body.DeviceAgent,
 	}
 
