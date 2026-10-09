@@ -89,9 +89,10 @@ const speakeasyHeaderPrefix = "gram-"
 // proxy runs, but the policy must not depend on that ordering.
 const speakeasyAIHeaderPrefix = "speakeasy-ai-"
 
-// tunnelHeaderPrefix covers the tunnel transport family exchanged between
-// Speakeasy, the tunnel gateway and the tunnel agent.
-const tunnelHeaderPrefix = "x-gram-tunnel-"
+// internalHeaderPrefix covers Speakeasy's internal X-Gram-* family: the
+// tunnel transport fields exchanged with the gateway and agent, the agent
+// version, and internal request controls such as scope overrides.
+const internalHeaderPrefix = "x-gram-"
 
 // IsProtectedInboundHeader reports whether a header on the inbound request
 // carries a Speakeasy credential, session, caller assertion or tunnel
@@ -102,7 +103,7 @@ func IsProtectedInboundHeader(name string) bool {
 		return true
 	}
 	key := headerKey(name)
-	if strings.HasPrefix(key, speakeasyHeaderPrefix) || strings.HasPrefix(key, speakeasyAIHeaderPrefix) || strings.HasPrefix(key, tunnelHeaderPrefix) {
+	if strings.HasPrefix(key, speakeasyHeaderPrefix) || strings.HasPrefix(key, speakeasyAIHeaderPrefix) || strings.HasPrefix(key, internalHeaderPrefix) {
 		return true
 	}
 	switch key {
@@ -110,8 +111,7 @@ func IsProtectedInboundHeader(name string) bool {
 		"authorization",
 		"proxy-authorization",
 		"cookie",
-		"set-cookie",
-		"x-gram-agent-version":
+		"set-cookie":
 		return true
 	}
 	return false
@@ -189,4 +189,16 @@ func checkStoredTunneledHeader(h ConfiguredHeader) error {
 		}
 	}
 	return CheckTunneledHeader(h)
+}
+
+// deleteFoldedHeader removes every field in header whose name folds to the
+// same key as name, so an inbound X_Tenant cannot sit beside a configured
+// X-Tenant at an upstream that reads the two as one.
+func deleteFoldedHeader(header http.Header, name string) {
+	key := headerKey(name)
+	for existing := range header {
+		if headerKey(existing) == key {
+			delete(header, existing)
+		}
+	}
 }

@@ -308,7 +308,7 @@ func (p *Proxy) applyTunneledConfiguredHeaders(ctx context.Context, userReq *htt
 			}
 			p.Logger.WarnContext(ctx, "skip invalid configured header for tunneled mcp server", attr.SlogError(err))
 			if name, nerr := NormalizeHeaderName(h.Name); nerr == nil && !isReservedTunneledDestination(name) {
-				remoteReq.Header.Del(name)
+				deleteFoldedHeader(remoteReq.Header, name)
 			}
 			continue
 		}
@@ -325,8 +325,10 @@ func (p *Proxy) applyTunneledConfiguredHeaders(ctx context.Context, userReq *htt
 		if err != nil {
 			return oops.E(oops.CodeBadRequest, err, "missing required header for tunneled mcp server").LogWarn(ctx, p.Logger)
 		}
+		// A configured header owns its name in every spelling an upstream
+		// might fold together, so the caller's alias cannot stand beside it.
+		deleteFoldedHeader(remoteReq.Header, h.Name)
 		if value == "" {
-			remoteReq.Header.Del(h.Name)
 			continue
 		}
 		remoteReq.Header.Set(h.Name, value)

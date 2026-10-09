@@ -17,15 +17,14 @@ const SPEAKEASY_PREFIX = "gram-";
 /** The documented Speakeasy-AI-* names for the same headers. */
 const SPEAKEASY_AI_PREFIX = "speakeasy-ai-";
 
-/** The tunnel transport fields exchanged with the gateway and agent. */
-const TUNNEL_PREFIX = "x-gram-tunnel-";
+/** Internal fields: tunnel transport, agent version, request controls. */
+const INTERNAL_PREFIX = "x-gram-";
 
 const PROTECTED_INBOUND = new Set([
   "authorization",
   "proxy-authorization",
   "cookie",
   "set-cookie",
-  "x-gram-agent-version",
   "x-speakeasy-identity",
 ]);
 
@@ -59,7 +58,7 @@ export function isProtectedInboundHeader(name: string): boolean {
     PROTECTED_INBOUND.has(key) ||
     key.startsWith(SPEAKEASY_PREFIX) ||
     key.startsWith(SPEAKEASY_AI_PREFIX) ||
-    key.startsWith(TUNNEL_PREFIX)
+    key.startsWith(INTERNAL_PREFIX)
   );
 }
 

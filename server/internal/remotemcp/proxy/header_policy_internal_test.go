@@ -100,7 +100,7 @@ func TestCheckTunneledHeaderReservedDestinations(t *testing.T) {
 		"X-Speakeasy-Identity", "X_speakeasy_identity",
 		"X-Gram-Tunnel-Id", "X-Gram-Tunnel-Forward-Token", "X-Gram-Tunnel-Consumer-Session",
 		"X-Gram-Tunnel-Agent-Session", "X-Gram-Tunnel-Require-Active", "X_gram_tunnel_id",
-		"X-Gram-Agent-Version",
+		"X-Gram-Agent-Version", "X-Gram-Scope-Override", "X-Gram-Source",
 		"Gram-Key", "Gram-Session", "Gram-Chat-Session", "Gram-Project", "Gram-Consent-State", "Gram_key",
 		"Speakeasy-AI-Key", "Speakeasy-AI-Session", "Speakeasy-AI-Chat-Session", "Speakeasy_AI_Project",
 		"Cookie", "Set-Cookie", "Proxy-Authorization",
@@ -165,6 +165,7 @@ func credentialBearingRequest(t *testing.T) *http.Request {
 	req.Header.Set("Gram-Project", "synthetic-project")
 	req.Header.Set("Cookie", syntheticCookie)
 	req.Header.Set("X-Gram-Tunnel-Require-Active", "1")
+	req.Header.Set("X-Gram-Scope-Override", "client-supplied")
 	req.Header.Set("X-Gram-Tunnel-Forward-Token", "client-supplied")
 	req.Header["X_speakeasy_identity"] = []string{"client-supplied"}
 	req.Header["gram_key"] = []string{syntheticAPIKey}
@@ -501,4 +502,33 @@ func TestForwardRequestWithRetryKeepsConfiguredHeaders(t *testing.T) {
 	}
 	require.Equal(t, "second", second.Get("X-Gram-Tunnel-Forward-Token"))
 	require.Empty(t, second.Values("X-Gram-Tunnel-Consumer-Session"))
+}
+
+// A configured header owns every spelling of its name an upstream might fold
+// together: the caller's X_Tenant cannot reach the upstream beside it.
+func TestApplyRequestHeadersTunneledConfiguredHeaderOwnsFoldedSpellings(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		row  ConfiguredHeader
+		want []string
+	}{
+		{name: "static value", row: ConfiguredHeader{IsRequired: false, Name: "X-Tenant", StaticValue: "tenant-1", ValueFromRequestHeader: ""}, want: []string{"tenant-1"}},
+		{name: "empty optional pass-through", row: ConfiguredHeader{IsRequired: false, Name: "X-Tenant", StaticValue: "", ValueFromRequestHeader: "X-Client-Tenant"}, want: nil},
+		{name: "suppressed invalid row", row: ConfiguredHeader{IsRequired: false, Name: "X-Tenant", StaticValue: "", ValueFromRequestHeader: "Gram-Key"}, want: nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			userReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "https://gram.test/mcp", nil)
+			userReq.Header["X_tenant"] = []string{"attacker"}
+			userReq.Header.Set("Gram-Key", syntheticAPIKey)
+			remoteReq := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "https://upstream.test/mcp", nil)
+			p := policyProxy(t, HeaderPolicyTunneled, []ConfiguredHeader{tc.row})
+
+			require.NoError(t, p.applyRequestHeaders(t.Context(), userReq, remoteReq))
+			require.Empty(t, remoteReq.Header["X_tenant"])
+			require.Equal(t, tc.want, remoteReq.Header.Values("X-Tenant"))
+		})
+	}
 }
