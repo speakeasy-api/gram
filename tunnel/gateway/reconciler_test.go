@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -221,6 +222,16 @@ func (s *recordingRouteStore) releasePublish() {
 
 func (s *recordingRouteStore) releaseUnpublish() {
 	s.unpublishReleaseOnce.Do(func() { close(s.unpublishRelease) })
+}
+
+// failUnpublishes makes every unpublish fail until called with false.
+func (s *recordingRouteStore) failUnpublishes(fail bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.unpublishFailures = 0
+	if fail {
+		s.unpublishFailures = math.MaxInt
+	}
 }
 
 func (s *recordingRouteStore) failNextUnpublish() {
@@ -948,20 +959,24 @@ func TestRouteReconcilerRetriesFailedCleanupOnTicker(t *testing.T) {
 		return len(candidates) == 1
 	}, time.Second, 5*time.Millisecond)
 
-	store.failNextUnpublish()
+	// Fail every cleanup until the disconnect nudge has been handled, so only
+	// the ticker is left to retry: nothing else nudges this tunnel again.
+	store.failUnpublishes(true)
 	agent.Close()
+	handlers.Wait()
+	quiesceReconciler(t, harness.gateway.reconciler)
+	failures := store.operationCount(tunnelID, "unpublish_failed")
+	require.Positive(t, failures, "the disconnect cleanup failed")
 	require.Eventually(t, func() bool {
-		return harness.gateway.ActiveSessions() == 0 && store.operationCount(tunnelID, "unpublish_failed") == 1
-	}, time.Second, 5*time.Millisecond)
-	// Cleanup is idempotent, and the disconnect nudge can land before or after
-	// a ticker retry, so a second unpublish is legitimate. What matters is
-	// that one succeeds after the failure and the route is gone.
+		return store.operationCount(tunnelID, "unpublish_failed") > failures
+	}, time.Second, 5*time.Millisecond, "the ticker retries a failed cleanup")
+
+	store.failUnpublishes(false)
 	require.Eventually(t, func() bool {
 		candidates, candidatesErr := store.Candidates(t.Context(), tunnelID)
 		return candidatesErr == nil && len(candidates) == 0 && unpublishedAfterFailure(store.operationsFor(tunnelID))
-	}, time.Second, 5*time.Millisecond)
+	}, time.Second, 5*time.Millisecond, "a ticker retry completes the cleanup")
 
-	handlers.Wait()
 	quiesceReconciler(t, harness.gateway.reconciler)
 	writesAfterRetry := len(store.operationsFor(tunnelID))
 	harness.gateway.Drain(t.Context())
