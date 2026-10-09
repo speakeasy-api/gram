@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -386,7 +387,7 @@ func retireEndpoints(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, 
 
 // Delete tombstones a deleted toolset's canonical wrapper; returned domains need a post-commit reconcile.
 // The caller must hold the project's Shadow MCP admission lock.
-func Delete(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset) ([]uuid.UUID, error) {
+func Delete(ctx context.Context, tx pgx.Tx, tracerProvider trace.TracerProvider, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset) ([]uuid.UUID, error) {
 	if auditLogger == nil || !tombstone.ActorPresent(ctx, actor.UserID) {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "missing hosted MCP actor")
 	}
@@ -402,6 +403,7 @@ func Delete(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Act
 	}
 	if _, err := tombstone.Tombstone(ctx, tx, auditLogger, locked, tombstone.Input{
 		OrganizationID: toolset.OrganizationID, ProjectID: toolset.ProjectID, ActorUserID: actor.UserID, ActorEmail: actor.Email,
+		TracerProvider: tracerProvider,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "delete hosted MCP server")
 	}

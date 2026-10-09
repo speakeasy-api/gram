@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -66,6 +67,9 @@ type Input struct {
 	ProjectID      uuid.UUID
 	ActorUserID    string
 	ActorEmail     *string
+
+	// TracerProvider traces the risk policy cleanup the delete runs.
+	TracerProvider trace.TracerProvider
 }
 
 // Result is the tombstoned server, how many plugin attachments it lost, and
@@ -91,7 +95,7 @@ func Tombstone(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, locked
 	if err := servers.DeleteAssistantMCPServersByMCPServer(ctx, repo.DeleteAssistantMCPServersByMCPServerParams{McpServerID: deleted.ID, ProjectID: input.ProjectID}); err != nil {
 		return Result{}, fmt.Errorf("detach assistant mcp servers: %w", err)
 	}
-	deletedPolicies, err := policylifecycle.NewCleaner(auditLogger).SoftDeleteForMCPServer(ctx, tx, input.OrganizationID, input.ProjectID, deleted.ID, policylifecycle.Actor{
+	deletedPolicies, err := policylifecycle.NewCleaner(input.TracerProvider, auditLogger).SoftDeleteForMCPServer(ctx, tx, input.OrganizationID, input.ProjectID, deleted.ID, policylifecycle.Actor{
 		Principal:   actor,
 		DisplayName: input.ActorEmail,
 		Slug:        nil,

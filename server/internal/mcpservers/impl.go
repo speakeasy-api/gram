@@ -64,6 +64,7 @@ import (
 )
 
 type Service struct {
+	tracerProvider       trace.TracerProvider
 	tracer               trace.Tracer
 	logger               *slog.Logger
 	db                   *pgxpool.Pool
@@ -101,6 +102,7 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("mcpservers"))
 
 	return &Service{
+		tracerProvider:           tracerProvider,
 		tracer:                   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcpservers"),
 		logger:                   logger,
 		db:                       db,
@@ -1059,6 +1061,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		ProjectID:      *authCtx.ProjectID,
 		ActorUserID:    authCtx.UserID,
 		ActorEmail:     authCtx.Email,
+		TracerProvider: s.tracerProvider,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete mcp server").LogError(ctx, logger)

@@ -41,7 +41,7 @@ func startupSeeds(logger *slog.Logger, db *pgxpool.Pool) []activities.StartupSee
 			Name:    policylifecycle.OrphanRepairSeedName,
 			Version: policylifecycle.OrphanRepairSeedVersion,
 			Apply: func(ctx context.Context) error {
-				if _, err := policylifecycle.NewCleaner(audit.NewLogger()).RepairOrphans(ctx, db); err != nil {
+				if _, err := policylifecycle.NewCleaner(otel.GetTracerProvider(), audit.NewLogger()).RepairOrphans(ctx, db); err != nil {
 					return fmt.Errorf("repair orphaned MCP risk policies: %w", err)
 				}
 				return nil

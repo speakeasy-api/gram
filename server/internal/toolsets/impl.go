@@ -58,6 +58,7 @@ import (
 )
 
 type Service struct {
+	tracerProvider           trace.TracerProvider
 	tracer                   trace.Tracer
 	logger                   *slog.Logger
 	db                       *pgxpool.Pool
@@ -96,6 +97,7 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("toolsets"))
 
 	return &Service{
+		tracerProvider:           tracerProvider,
 		tracer:                   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/toolsets"),
 		logger:                   logger,
 		db:                       db,

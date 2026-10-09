@@ -7,7 +7,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -37,12 +40,16 @@ type Actor struct {
 
 // Cleaner soft-deletes policies whose sole MCP target no longer exists.
 type Cleaner struct {
-	audit *audit.Logger
+	tracer trace.Tracer
+	audit  *audit.Logger
 }
 
 // NewCleaner creates a lifecycle cleaner.
-func NewCleaner(auditLogger *audit.Logger) *Cleaner {
-	return &Cleaner{audit: auditLogger}
+func NewCleaner(tracerProvider trace.TracerProvider, auditLogger *audit.Logger) *Cleaner {
+	return &Cleaner{
+		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/risk/policylifecycle"),
+		audit:  auditLogger,
+	}
 }
 
 // SoftDeleteForMCPServer tombstones policies owned exclusively by one server.
@@ -56,7 +63,18 @@ func (c *Cleaner) SoftDeleteForMCPServer(
 	projectID uuid.UUID,
 	mcpServerID uuid.UUID,
 	actor Actor,
-) ([]uuid.UUID, error) {
+) (_ []uuid.UUID, retErr error) {
+	ctx, span := c.tracer.Start(ctx, "policylifecycle.softDeleteForMCPServer", trace.WithAttributes(
+		attr.ProjectID(projectID.String()),
+		attr.McpServerID(mcpServerID.String()),
+	))
+	defer func() {
+		if retErr != nil {
+			span.SetStatus(codes.Error, retErr.Error())
+		}
+		span.End()
+	}()
+
 	if err := lockPolicyCleanup(ctx, tx, projectID); err != nil {
 		return nil, err
 	}
@@ -69,12 +87,25 @@ func (c *Cleaner) SoftDeleteForMCPServer(
 		return nil, fmt.Errorf("list lifecycle-bound risk policies: %w", err)
 	}
 
-	return c.softDeletePolicies(ctx, tx, organizationID, projectID, policies, actor)
+	deleted, err := c.softDeletePolicies(ctx, tx, organizationID, projectID, policies, actor)
+	if err != nil {
+		return nil, err
+	}
+	span.SetAttributes(attr.DBDeletedRowsCount(int64(len(deleted))))
+	return deleted, nil
 }
 
 // RepairOrphans tombstones lifecycle-bound policies left by server deletions
 // that predate transactional cleanup. It is idempotent and commits per project.
-func (c *Cleaner) RepairOrphans(ctx context.Context, db *pgxpool.Pool) ([]uuid.UUID, error) {
+func (c *Cleaner) RepairOrphans(ctx context.Context, db *pgxpool.Pool) (_ []uuid.UUID, retErr error) {
+	ctx, span := c.tracer.Start(ctx, "policylifecycle.repairOrphans")
+	defer func() {
+		if retErr != nil {
+			span.SetStatus(codes.Error, retErr.Error())
+		}
+		span.End()
+	}()
+
 	projectIDs, err := repo.New(db).ListProjectIDsWithOrphanedLifecycleBoundRiskPolicies(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list projects with orphaned risk policies: %w", err)
@@ -89,10 +120,21 @@ func (c *Cleaner) RepairOrphans(ctx context.Context, db *pgxpool.Pool) ([]uuid.U
 		deleted = append(deleted, projectDeleted...)
 	}
 
+	span.SetAttributes(attr.DBDeletedRowsCount(int64(len(deleted))))
 	return deleted, nil
 }
 
-func (c *Cleaner) repairProject(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID) ([]uuid.UUID, error) {
+func (c *Cleaner) repairProject(ctx context.Context, db *pgxpool.Pool, projectID uuid.UUID) (_ []uuid.UUID, retErr error) {
+	ctx, span := c.tracer.Start(ctx, "policylifecycle.repairProject", trace.WithAttributes(
+		attr.ProjectID(projectID.String()),
+	))
+	defer func() {
+		if retErr != nil {
+			span.SetStatus(codes.Error, retErr.Error())
+		}
+		span.End()
+	}()
+
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin orphaned risk policy repair: %w", err)
@@ -129,6 +171,7 @@ func (c *Cleaner) repairProject(ctx context.Context, db *pgxpool.Pool, projectID
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit orphaned risk policy repair: %w", err)
 	}
+	span.SetAttributes(attr.DBDeletedRowsCount(int64(len(deleted))))
 	return deleted, nil
 }
 

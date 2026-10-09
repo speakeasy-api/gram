@@ -179,7 +179,7 @@ func TestRiskPolicyLifecycleRepair_SoftDeletesExistingOrphans(t *testing.T) {
 
 	beforeDeletes, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyDelete)
 	require.NoError(t, err)
-	cleaner := policylifecycle.NewCleaner(audit.NewLogger())
+	cleaner := policylifecycle.NewCleaner(testenv.NewTracerProvider(t), audit.NewLogger())
 	deleted, err := cleaner.RepairOrphans(ctx, ti.conn)
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{policy.ID}, deleted)
@@ -238,7 +238,7 @@ func TestRiskPolicyLifecycleCleanup_ToleratesMalformedMCPScope(t *testing.T) {
 	err = ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{ID: owner.ID})
 	require.NoError(t, err)
 
-	deleted, err := policylifecycle.NewCleaner(audit.NewLogger()).RepairOrphans(ctx, ti.conn)
+	deleted, err := policylifecycle.NewCleaner(testenv.NewTracerProvider(t), audit.NewLogger()).RepairOrphans(ctx, ti.conn)
 	require.NoError(t, err)
 	require.Empty(t, deleted)
 
