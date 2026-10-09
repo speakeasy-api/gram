@@ -1166,20 +1166,8 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	// Post-commit, best-effort: RFC 7009 for the orphaned grants.
 	s.revoker.RevokeAllDetached(ctx, orphanCreds)
 
-	if s.temporalEnv != nil {
-		cleaner := background.TemporalRiskPolicyResultsCleaner{
-			TemporalEnv: s.temporalEnv,
-			Logger:      logger,
-		}
-		for _, policyID := range tombstoned.DeletedRiskPolicies {
-			if err := cleaner.Clean(ctx, *authCtx.ProjectID, policyID); err != nil {
-				logger.ErrorContext(ctx, "trigger lifecycle-bound risk policy results cleanup",
-					attr.SlogRiskPolicyID(policyID.String()),
-					attr.SlogError(err),
-				)
-			}
-		}
-	}
+	resultsCleaner := background.TemporalRiskPolicyResultsCleaner{TemporalEnv: s.temporalEnv, Logger: logger}
+	resultsCleaner.CleanAll(ctx, *authCtx.ProjectID, tombstoned.DeletedRiskPolicies)
 
 	if err := s.reconcileMcpServerCustomDomains(ctx, tombstone.RootDomainIDs(lockedServer.RootEndpoints)); err != nil {
 		return err

@@ -801,7 +801,7 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to detach assistant toolsets").LogError(ctx, logger)
 	}
-	clearedDomainIDs, err := s.deleteHostedServer(ctx, dbtx, authCtx, toDelete)
+	hostedDeleted, err := s.deleteHostedServer(ctx, dbtx, authCtx, toDelete)
 	if err != nil {
 		return err
 	}
@@ -832,7 +832,10 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 		s.publishPluginsAfterToolsetChange(ctx, authCtx)
 	}
 
-	return s.reconcileCustomDomains(ctx, clearedDomainIDs)
+	resultsCleaner := background.TemporalRiskPolicyResultsCleaner{TemporalEnv: s.temporalEnv, Logger: logger}
+	resultsCleaner.CleanAll(ctx, *authCtx.ProjectID, hostedDeleted.DeletedRiskPolicies)
+
+	return s.reconcileCustomDomains(ctx, hostedDeleted.RootDomainIDs)
 }
 
 func (s *Service) GetToolset(ctx context.Context, payload *gen.GetToolsetPayload) (*types.Toolset, error) {
