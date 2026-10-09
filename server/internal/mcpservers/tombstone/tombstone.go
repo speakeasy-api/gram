@@ -30,6 +30,9 @@ type Locked struct {
 }
 
 // Lock takes the domain -> endpoint -> server locks; pgx.ErrNoRows means the server is gone.
+// Callers must take the project's Shadow MCP admission lock first, because
+// Tombstone's risk policy cleanup needs it and other writers take it before
+// the server row lock.
 func Lock(ctx context.Context, tx pgx.Tx, organizationID string, projectID, serverID uuid.UUID) (Locked, error) {
 	endpoints := mcpendpointsrepo.New(tx)
 	domainIDs, err := endpoints.ListCustomDomainIDsByMCPServerID(ctx, mcpendpointsrepo.ListCustomDomainIDsByMCPServerIDParams{McpServerID: serverID, ProjectID: projectID})

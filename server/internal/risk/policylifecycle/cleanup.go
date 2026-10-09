@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	shadowadmission "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -45,7 +46,9 @@ func NewCleaner(auditLogger *audit.Logger) *Cleaner {
 }
 
 // SoftDeleteForMCPServer tombstones policies owned exclusively by one server.
-// The caller must invoke it after tombstoning the server in the same transaction.
+// The caller must invoke it after tombstoning the server in the same
+// transaction, and must take shadowadmission.LockProject before locking the
+// server row.
 func (c *Cleaner) SoftDeleteForMCPServer(
 	ctx context.Context,
 	tx pgx.Tx,
@@ -54,12 +57,11 @@ func (c *Cleaner) SoftDeleteForMCPServer(
 	mcpServerID uuid.UUID,
 	actor Actor,
 ) ([]uuid.UUID, error) {
-	queries := repo.New(tx)
-	if err := lockPolicyCleanup(ctx, queries, projectID); err != nil {
+	if err := lockPolicyCleanup(ctx, tx, projectID); err != nil {
 		return nil, err
 	}
 
-	policies, err := queries.ListLifecycleBoundRiskPoliciesByMCPServer(ctx, repo.ListLifecycleBoundRiskPoliciesByMCPServerParams{
+	policies, err := repo.New(tx).ListLifecycleBoundRiskPoliciesByMCPServer(ctx, repo.ListLifecycleBoundRiskPoliciesByMCPServerParams{
 		ProjectID:   projectID,
 		McpServerID: mcpServerID.String(),
 	})
@@ -97,12 +99,11 @@ func (c *Cleaner) repairProject(ctx context.Context, db *pgxpool.Pool, projectID
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
-	queries := repo.New(tx)
-	if err := lockPolicyCleanup(ctx, queries, projectID); err != nil {
+	if err := lockPolicyCleanup(ctx, tx, projectID); err != nil {
 		return nil, err
 	}
 
-	policies, err := queries.ListOrphanedLifecycleBoundRiskPoliciesByProject(ctx, projectID)
+	policies, err := repo.New(tx).ListOrphanedLifecycleBoundRiskPoliciesByProject(ctx, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("list orphaned risk policies: %w", err)
 	}
@@ -131,7 +132,16 @@ func (c *Cleaner) repairProject(ctx context.Context, db *pgxpool.Pool, projectID
 	return deleted, nil
 }
 
-func lockPolicyCleanup(ctx context.Context, queries *repo.Queries, projectID uuid.UUID) error {
+// lockPolicyCleanup takes the project locks every risk policy writer takes,
+// in the shared order: Shadow MCP admission, then policy mutations, then
+// exclusion mutations. A server delete must take the admission lock before it
+// locks the server row, because UpdateMcpServer takes them in that order.
+// Taking the advisory lock again in the same transaction does not block.
+func lockPolicyCleanup(ctx context.Context, tx pgx.Tx, projectID uuid.UUID) error {
+	if err := shadowadmission.LockProject(ctx, tx, projectID); err != nil {
+		return fmt.Errorf("lock shadow MCP admission: %w", err)
+	}
+	queries := repo.New(tx)
 	if err := queries.LockRiskPolicyMutations(ctx, projectID.String()); err != nil {
 		return fmt.Errorf("lock risk policy mutations: %w", err)
 	}

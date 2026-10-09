@@ -229,12 +229,15 @@ WHERE id = @id
 -- A policy belongs to one server's lifecycle only when that server is its
 -- sole explicit target. Multi-server and all-server policies survive one
 -- target's deletion.
+-- The JSON guards below never raise on a malformed scope: Postgres does not
+-- order AND operands, so a cast or array function cannot rely on an earlier
+-- filter to skip a scalar such as {"servers": null}.
 SELECT *
 FROM risk_policies
 WHERE project_id = @project_id
   AND deleted IS FALSE
-  AND COALESCE((mcp_scope->>'all_servers')::boolean, FALSE) IS FALSE
-  AND jsonb_array_length(COALESCE(mcp_scope->'servers', '[]'::jsonb)) = 1
+  AND mcp_scope->'all_servers' IS DISTINCT FROM 'true'::jsonb
+  AND jsonb_array_length(CASE WHEN jsonb_typeof(mcp_scope->'servers') = 'array' THEN mcp_scope->'servers' ELSE '[]'::jsonb END) = 1
   AND mcp_scope @> jsonb_build_object(
     'servers',
     jsonb_build_array(jsonb_build_object('mcp_server_id', @mcp_server_id::text))
@@ -245,11 +248,11 @@ ORDER BY id;
 SELECT DISTINCT policy.project_id
 FROM risk_policies AS policy
 WHERE policy.deleted IS FALSE
-  AND COALESCE((policy.mcp_scope->>'all_servers')::boolean, FALSE) IS FALSE
-  AND jsonb_array_length(COALESCE(policy.mcp_scope->'servers', '[]'::jsonb)) = 1
+  AND policy.mcp_scope->'all_servers' IS DISTINCT FROM 'true'::jsonb
+  AND jsonb_array_length(CASE WHEN jsonb_typeof(policy.mcp_scope->'servers') = 'array' THEN policy.mcp_scope->'servers' ELSE '[]'::jsonb END) = 1
   AND EXISTS (
     SELECT 1
-    FROM jsonb_array_elements(policy.mcp_scope->'servers') AS target
+    FROM jsonb_array_elements(CASE WHEN jsonb_typeof(policy.mcp_scope->'servers') = 'array' THEN policy.mcp_scope->'servers' ELSE '[]'::jsonb END) AS target
     WHERE EXISTS (
       SELECT 1
       FROM mcp_servers AS server
@@ -272,11 +275,11 @@ SELECT *
 FROM risk_policies AS policy
 WHERE policy.project_id = @project_id
   AND policy.deleted IS FALSE
-  AND COALESCE((policy.mcp_scope->>'all_servers')::boolean, FALSE) IS FALSE
-  AND jsonb_array_length(COALESCE(policy.mcp_scope->'servers', '[]'::jsonb)) = 1
+  AND policy.mcp_scope->'all_servers' IS DISTINCT FROM 'true'::jsonb
+  AND jsonb_array_length(CASE WHEN jsonb_typeof(policy.mcp_scope->'servers') = 'array' THEN policy.mcp_scope->'servers' ELSE '[]'::jsonb END) = 1
   AND EXISTS (
     SELECT 1
-    FROM jsonb_array_elements(policy.mcp_scope->'servers') AS target
+    FROM jsonb_array_elements(CASE WHEN jsonb_typeof(policy.mcp_scope->'servers') = 'array' THEN policy.mcp_scope->'servers' ELSE '[]'::jsonb END) AS target
     WHERE EXISTS (
       SELECT 1
       FROM mcp_servers AS server

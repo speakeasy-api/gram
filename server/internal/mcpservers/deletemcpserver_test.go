@@ -206,6 +206,57 @@ func TestRiskPolicyLifecycleRepair_SoftDeletesExistingOrphans(t *testing.T) {
 	require.Empty(t, deleted, "the repair must be idempotent")
 }
 
+func TestRiskPolicyLifecycleCleanup_ToleratesMalformedMCPScope(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	ownerBackendID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	owner, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		Name:              "policy owner",
+		RemoteMcpServerID: &ownerBackendID,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+	ownerID := uuid.MustParse(owner.ID)
+
+	liveBackendID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	live, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		Name:              "live policy target",
+		RemoteMcpServerID: &liveBackendID,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+
+	lifecyclePolicy := seedMCPScopedRiskPolicy(t, ctx, ti, "lifecycle policy", []uuid.UUID{ownerID})
+	nullServersPolicy := seedRiskPolicyWithRawMCPScope(t, ctx, ti, "null servers", []byte(`{"servers": null}`))
+	nonBooleanAllServersPolicy := seedRiskPolicyWithRawMCPScope(t, ctx, ti, "non-boolean all servers",
+		[]byte(`{"all_servers": "not-a-boolean", "servers": [{"mcp_server_id": "`+live.ID+`"}]}`))
+
+	err = ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{ID: owner.ID})
+	require.NoError(t, err)
+
+	deleted, err := policylifecycle.NewCleaner(audit.NewLogger()).RepairOrphans(ctx, ti.conn)
+	require.NoError(t, err)
+	require.Empty(t, deleted)
+
+	queries := riskrepo.New(ti.conn)
+	_, err = queries.GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{
+		ID:        lifecyclePolicy.ID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	for _, policy := range []riskrepo.RiskPolicy{nullServersPolicy, nonBooleanAllServersPolicy} {
+		_, err = queries.GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{
+			ID:        policy.ID,
+			ProjectID: *authCtx.ProjectID,
+		})
+		require.NoError(t, err, "policy %q must survive", policy.Name)
+	}
+}
+
 func TestDeleteMcpServer_DetachesFromPlugins(t *testing.T) {
 	t.Parallel()
 
@@ -641,6 +692,20 @@ func seedMCPScopedRiskPolicy(
 	}
 	scope, err := json.Marshal(map[string]any{"servers": servers})
 	require.NoError(t, err)
+
+	return seedRiskPolicyWithRawMCPScope(t, ctx, ti, name, scope)
+}
+
+// seedRiskPolicyWithRawMCPScope stores scope verbatim, so tests can seed
+// shapes the API normalizes away.
+func seedRiskPolicyWithRawMCPScope(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	name string,
+	scope []byte,
+) riskrepo.RiskPolicy {
+	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
