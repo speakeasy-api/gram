@@ -706,6 +706,46 @@ func (q *Queries) RecordRemoteProtectedResourceFetchError(ctx context.Context, a
 	return i, err
 }
 
+const serverHeaderNameExists = `-- name: ServerHeaderNameExists :one
+SELECT EXISTS (
+    SELECT 1
+    FROM remote_mcp_server_headers
+    WHERE remote_mcp_server_headers.remote_mcp_server_id = $1
+        AND remote_mcp_server_headers.deleted IS FALSE
+        AND replace(lower(remote_mcp_server_headers.name), '_', '-') = replace(lower($2::text), '_', '-')
+        AND remote_mcp_server_headers.id <> $3
+        AND remote_mcp_server_headers.remote_mcp_server_id IN (
+            SELECT remote_mcp_servers.id FROM remote_mcp_servers
+            WHERE remote_mcp_servers.project_id = $4 AND remote_mcp_servers.deleted IS FALSE
+        )
+) AS name_exists
+`
+
+type ServerHeaderNameExistsParams struct {
+	RemoteMcpServerID uuid.UUID
+	Name              string
+	ExcludeID         uuid.UUID
+	ProjectID         uuid.UUID
+}
+
+// Reports whether another live header of the server already uses name,
+// ignoring case and reading underscores as dashes, which is how the header
+// policy and some upstreams match names. Names are stored as entered and the
+// unique index compares them exactly, so writers check this while holding the
+// parent server's row lock. exclude_id is the header being updated, or the nil
+// UUID on create.
+func (q *Queries) ServerHeaderNameExists(ctx context.Context, arg ServerHeaderNameExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, serverHeaderNameExists,
+		arg.RemoteMcpServerID,
+		arg.Name,
+		arg.ExcludeID,
+		arg.ProjectID,
+	)
+	var name_exists bool
+	err := row.Scan(&name_exists)
+	return name_exists, err
+}
+
 const setRemoteProtectedResourceMetadataTimestamps = `-- name: SetRemoteProtectedResourceMetadataTimestamps :execrows
 UPDATE remote_protected_resources
 SET

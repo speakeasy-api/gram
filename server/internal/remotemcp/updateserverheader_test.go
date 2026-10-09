@@ -16,8 +16,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // createSecretHeader creates a secret header through the service so its value
@@ -308,4 +310,203 @@ func TestUpdateServerHeader_OtherProjectNotFound(t *testing.T) {
 	}))
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestUpdateServerHeader_CaseInsensitiveDuplicateConflicts(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+	seedLegacyHeader(t, ctx, ti, server.ID, "x-api-key", "legacy", "")
+	other := createSecretHeader(t, ctx, ti, server.ID, "X-Other", "other-secret")
+
+	// A value-preserving secret update gets no exception.
+	_, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(other.ID, "X-Api-Key", func(p *gen.UpdateServerHeaderPayload) {
+		p.IsSecret = new(true)
+	}))
+	requireOopsCode(t, err, oops.CodeConflict)
+	requireStoredSecretValue(t, ctx, ti, server.ID, "X-Other", "other-secret")
+}
+
+func TestUpdateServerHeader_KeepsNameWithoutConflictingWithItself(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+	legacy := seedLegacyHeader(t, ctx, ti, server.ID, "x-api-key", "legacy", "")
+
+	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(legacy.ID.String(), "x-api-key", func(p *gen.UpdateServerHeaderPayload) {
+		p.Value = new("rotated")
+	}))
+	require.NoError(t, err)
+	require.Equal(t, "x-api-key", updated.Name)
+}
+
+// Rows that collided before names were matched case-insensitively stay
+// editable as long as the edit keeps the name.
+func TestUpdateServerHeader_LegacyCollidingRowKeepsName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+	legacy := seedLegacyHeader(t, ctx, ti, server.ID, "X-Foo", "legacy", "")
+	seedLegacyHeader(t, ctx, ti, server.ID, "x_foo", "other", "")
+
+	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(legacy.ID.String(), "X-Foo", func(p *gen.UpdateServerHeaderPayload) {
+		p.Value = new("rotated")
+	}))
+	require.NoError(t, err)
+	require.Equal(t, "X-Foo", updated.Name)
+
+	_, err = ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(legacy.ID.String(), "x-foo", func(p *gen.UpdateServerHeaderPayload) {
+		p.Value = new("rotated")
+	}))
+	requireOopsCode(t, err, oops.CodeConflict)
+}
+
+// Editing a secret without resupplying its value still validates the name,
+// renames it as entered, even by case only, and keeps the ciphertext.
+func TestUpdateServerHeader_LegacySecretKeepsValueWhenRenamed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+	legacy, err := remotemcp.NewHeaders(testenv.NewLogger(t), ti.conn, ti.enc).CreateServerHeader(ctx, repo.CreateServerHeaderParams{
+		RemoteMcpServerID:      uuid.MustParse(server.ID),
+		ProjectID:              projectID(t, ctx),
+		Name:                   "x-api-key",
+		Description:            conv.PtrToPGText(nil),
+		IsRequired:             true,
+		IsSecret:               true,
+		Value:                  conv.ToPGText("legacy-secret"),
+		ValueFromRequestHeader: conv.PtrToPGTextEmpty(nil),
+	})
+	require.NoError(t, err)
+
+	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(legacy.ID.String(), "X-Api-Key", func(p *gen.UpdateServerHeaderPayload) {
+		p.IsSecret = new(true)
+		p.IsRequired = new(true)
+	}))
+	require.NoError(t, err)
+	require.Equal(t, "X-Api-Key", updated.Name)
+	requireStoredSecretValue(t, ctx, ti, server.ID, "X-Api-Key", "legacy-secret")
+
+	// The name is still validated when the value is preserved.
+	_, err = ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(legacy.ID.String(), "Set-Cookie", func(p *gen.UpdateServerHeaderPayload) {
+		p.IsSecret = new(true)
+	}))
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	requireStoredSecretValue(t, ctx, ti, server.ID, "X-Api-Key", "legacy-secret")
+}
+
+func TestUpdateServerHeader_RejectsProtectedPassThroughSource(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+	legacy := seedLegacyHeader(t, ctx, ti, server.ID, "X-Upstream-Token", "", "Gram-Key")
+
+	// Keeping the protected source while changing anything else is refused.
+	_, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(legacy.ID.String(), "X-Upstream-Token", func(p *gen.UpdateServerHeaderPayload) {
+		p.ValueFromRequestHeader = new("Gram-Key")
+	}))
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	// Repairing it to a separately supplied header works.
+	updated, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(legacy.ID.String(), "X-Upstream-Token", func(p *gen.UpdateServerHeaderPayload) {
+		p.ValueFromRequestHeader = new("X-Client-Upstream-Token")
+	}))
+	require.NoError(t, err)
+	require.Equal(t, "X-Client-Upstream-Token", *updated.ValueFromRequestHeader)
+}
+
+// An update decides whether to keep a stored secret from the header as it is
+// once the server is locked, not from a read taken before it waited: a header
+// another writer turned into a pass-through has no secret left to keep.
+func TestUpdateServerHeader_RereadsHeaderAfterServerLock(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+	project := projectID(t, ctx)
+	created := createSecretHeader(t, ctx, ti, server.ID, "X-Api-Key", "original-secret")
+
+	holder := testenv.BeginTx(t, ctx, ti.conn)
+	_, err := repo.New(holder).GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{ID: uuid.MustParse(server.ID), ProjectID: project})
+	require.NoError(t, err)
+
+	result := make(chan error, 1)
+	go func() {
+		_, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(created.ID, "X-Api-Key", func(p *gen.UpdateServerHeaderPayload) {
+			p.IsSecret = new(true)
+		}))
+		result <- err
+	}()
+	testenv.WaitForQueryBlockedBy(t, ctx, ti.conn, testenv.BackendPID(holder), "%FROM remote_mcp_servers%FOR UPDATE%")
+
+	source := "X-Client-Token"
+	_, err = repo.New(holder).UpdateServerHeader(ctx, repo.UpdateServerHeaderParams{
+		Name:                   "X-Api-Key",
+		Description:            conv.PtrToPGText(nil),
+		IsRequired:             false,
+		IsSecret:               false,
+		SetValue:               true,
+		Value:                  conv.PtrToPGTextEmpty(nil),
+		ValueFromRequestHeader: conv.PtrToPGTextEmpty(&source),
+		ID:                     uuid.MustParse(created.ID),
+		ProjectID:              project,
+	})
+	require.NoError(t, err)
+	require.NoError(t, holder.Commit(ctx))
+
+	requireOopsCode(t, <-result, oops.CodeBadRequest)
+	stored, err := ti.service.GetServerHeader(ctx, &gen.GetServerHeaderPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               created.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "X-Client-Token", *stored.ValueFromRequestHeader, "the competing writer's row stands")
+}
+
+// A rename checks for a case-insensitive duplicate only once it holds the
+// server lock, so it sees a duplicate a writer ahead of it committed.
+func TestUpdateServerHeader_DuplicateCheckWaitsForServerLock(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createTestServer(t, ctx, ti)
+	project := projectID(t, ctx)
+	other := createSecretHeader(t, ctx, ti, server.ID, "X-Other", "other-secret")
+
+	holder := testenv.BeginTx(t, ctx, ti.conn)
+	_, err := repo.New(holder).GetServerByIDForUpdate(ctx, repo.GetServerByIDForUpdateParams{ID: uuid.MustParse(server.ID), ProjectID: project})
+	require.NoError(t, err)
+
+	result := make(chan error, 1)
+	go func() {
+		_, err := ti.service.UpdateServerHeader(ctx, newUpdateServerHeaderPayload(other.ID, "x-api-key", func(p *gen.UpdateServerHeaderPayload) {
+			p.IsSecret = new(true)
+		}))
+		result <- err
+	}()
+	testenv.WaitForQueryBlockedBy(t, ctx, ti.conn, testenv.BackendPID(holder), "%FROM remote_mcp_servers%FOR UPDATE%")
+
+	value := "holder"
+	_, err = repo.New(holder).CreateServerHeader(ctx, repo.CreateServerHeaderParams{
+		RemoteMcpServerID:      uuid.MustParse(server.ID),
+		ProjectID:              project,
+		Name:                   "X-Api-Key",
+		Description:            conv.PtrToPGText(nil),
+		IsRequired:             false,
+		IsSecret:               false,
+		Value:                  conv.PtrToPGTextEmpty(&value),
+		ValueFromRequestHeader: conv.PtrToPGTextEmpty(nil),
+	})
+	require.NoError(t, err)
+	require.NoError(t, holder.Commit(ctx))
+
+	requireOopsCode(t, <-result, oops.CodeConflict)
+	requireStoredSecretValue(t, ctx, ti, server.ID, "X-Other", "other-secret")
 }
