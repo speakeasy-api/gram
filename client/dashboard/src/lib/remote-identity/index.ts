@@ -14,7 +14,10 @@ export {
   findPassThroughAuthorizationHeader,
   findStaticAuthorizationHeader,
   managedAuthorizationHeader,
+  remoteHeaderPolicyEffectMessage,
+  remoteHeaderPolicyReasonMessage,
 } from "./model/headers";
+export type { RemoteHeaderPolicyIssue } from "./model/headers";
 
 export { REDACTED_SECRET } from "./model/secret";
 
@@ -23,6 +26,7 @@ export { normalizeScopes } from "./model/clientConfiguration";
 export {
   headerDraftErrors,
   headerDraftFromCatalog,
+  savedHeaderPolicyIssue,
 } from "./drafts/headerDrafts";
 export type {
   HeaderDraft,

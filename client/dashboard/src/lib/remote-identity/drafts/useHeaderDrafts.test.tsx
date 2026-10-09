@@ -384,3 +384,172 @@ describe("useHeaderDrafts", () => {
     expect(mocks.create).not.toHaveBeenCalled();
   });
 });
+
+function renderDraftsWithoutIdentity() {
+  return renderHook(
+    () =>
+      useHeaderDrafts({
+        remoteMcpServerId: "remote-source-1",
+        identity: { mode: "none", managed: null, isError: false },
+      }),
+    { wrapper },
+  );
+}
+
+/** A saved row reading a header the remote header policy now refuses. */
+function refusedPassThrough(
+  overrides: Partial<RemoteMcpServerHeader> = {},
+): RemoteMcpServerHeader {
+  return serverHeader({
+    id: "header-forwarded",
+    name: "X-Upstream-Token",
+    value: undefined,
+    valueFromRequestHeader: "Authorization",
+    isRequired: true,
+    ...overrides,
+  });
+}
+
+describe("useHeaderDrafts with rows the remote header policy refuses", () => {
+  it("saves an unrelated row beside an untouched refused row", async () => {
+    mocks.headers.mockReturnValue(
+      headersResult([
+        refusedPassThrough(),
+        refusedPassThrough({
+          id: "header-authorization",
+          name: "Authorization",
+          valueFromRequestHeader: "Authorization",
+        }),
+      ]),
+    );
+    const { result } = renderDraftsWithoutIdentity();
+
+    act(() => result.current.addHeader());
+    act(() =>
+      result.current.replaceHeader(2, {
+        ...result.current.drafts[2]!,
+        name: "X-Api-Key",
+        staticValue: "sk-test",
+      }),
+    );
+    expect(result.current.validationError).toBeNull();
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses any edit that keeps the refused source", () => {
+    mocks.headers.mockReturnValue(headersResult([refusedPassThrough()]));
+    const { result } = renderDraftsWithoutIdentity();
+
+    act(() =>
+      result.current.replaceHeader(0, {
+        ...result.current.drafts[0]!,
+        isRequired: false,
+      }),
+    );
+
+    expect(result.current.validationError).toBe(
+      'Change the source or name of "X-Upstream-Token", or remove this header.',
+    );
+    expect(result.current.fieldErrors.get("header-forwarded")?.field).toBe(
+      "value",
+    );
+  });
+
+  it("writes a repair to a separately supplied header", async () => {
+    mocks.headers.mockReturnValue(headersResult([refusedPassThrough()]));
+    const { result } = renderDraftsWithoutIdentity();
+
+    act(() =>
+      result.current.replaceHeader(0, {
+        ...result.current.drafts[0]!,
+        valueFromRequestHeader: "X-Client-Upstream-Token",
+      }),
+    );
+    expect(result.current.validationError).toBeNull();
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    expect(mocks.update.mock.calls[0]?.[0]).toMatchObject({
+      request: {
+        updateServerHeaderForm: {
+          id: "header-forwarded",
+          valueFromRequestHeader: "X-Client-Upstream-Token",
+        },
+      },
+    });
+  });
+
+  it("deletes one refused row while another stays", async () => {
+    mocks.headers.mockReturnValue(
+      headersResult([
+        refusedPassThrough(),
+        refusedPassThrough({
+          id: "header-key",
+          name: "X-Key",
+          valueFromRequestHeader: "Gram-Key",
+        }),
+      ]),
+    );
+    const { result } = renderDraftsWithoutIdentity();
+
+    act(() => result.current.removeHeader(0));
+    expect(result.current.validationError).toBeNull();
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    expect(mocks.remove).toHaveBeenCalledWith({
+      request: { id: "header-forwarded" },
+    });
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses a new row reading Gram-Key and allows one reading a custom header", () => {
+    const { result } = renderDraftsWithoutIdentity();
+
+    act(() => result.current.addHeader());
+    act(() =>
+      result.current.replaceHeader(0, {
+        ...result.current.drafts[0]!,
+        name: "X-Upstream-Token",
+        source: "request",
+        isSecret: false,
+        valueFromRequestHeader: "Gram-Key",
+      }),
+    );
+    expect(result.current.validationError).toContain(
+      'Speakeasy does not forward "Gram-Key"',
+    );
+
+    act(() =>
+      result.current.replaceHeader(0, {
+        ...result.current.drafts[0]!,
+        valueFromRequestHeader: "X-Service-Token",
+      }),
+    );
+    expect(result.current.validationError).toBeNull();
+  });
+
+  it("still asks for a saved Authorization row to go when identity owns the name", () => {
+    mocks.headers.mockReturnValue(
+      headersResult([
+        refusedPassThrough({
+          id: "header-authorization",
+          name: "Authorization",
+        }),
+      ]),
+    );
+    const { result } = renderDrafts();
+
+    expect(result.current.validationError).not.toBeNull();
+  });
+});

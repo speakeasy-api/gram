@@ -226,3 +226,122 @@ describe("HeadersSection", () => {
     ).toBeTruthy();
   });
 });
+
+/** A saved row as headerDraftFromServer returns it. */
+function savedDraft(overrides: Partial<HeaderDraft>): HeaderDraft {
+  const row = draft({ id: overrides.key ?? "row-1", ...overrides });
+  return {
+    ...row,
+    saved: {
+      name: row.name,
+      source: row.source,
+      staticValue: row.staticValue,
+      valueFromRequestHeader: row.valueFromRequestHeader,
+      isRequired: row.isRequired,
+      isSecret: row.isSecret,
+    },
+  };
+}
+
+describe("HeadersSection remote header policy warnings", () => {
+  it("says a required custom header read from Authorization blocks requests", () => {
+    renderSection(
+      headerState({
+        drafts: [
+          savedDraft({
+            key: "row-forwarded",
+            name: "X-Upstream-Token",
+            source: "request",
+            staticValue: "",
+            valueFromRequestHeader: "Authorization",
+            isRequired: true,
+          }),
+        ],
+      }),
+    );
+
+    screen.getByText(/Every request to this server fails/);
+    screen.getByText(/separate request header/);
+  });
+
+  it("says an optional custom header read from Gram-Key is not sent", () => {
+    renderSection(
+      headerState({
+        drafts: [
+          savedDraft({
+            key: "row-key",
+            name: "X-Key",
+            source: "request",
+            staticValue: "",
+            valueFromRequestHeader: "Gram-Key",
+          }),
+        ],
+      }),
+    );
+
+    screen.getByText(/Speakeasy does not send this header/);
+    expect(screen.queryByText(/Every request to this server fails/)).toBeNull();
+  });
+
+  it("says a required Authorization pass-through fails without an upstream account, once", () => {
+    renderSection(
+      headerState({
+        drafts: [
+          savedDraft({
+            key: "row-authorization",
+            name: "Authorization",
+            source: "request",
+            staticValue: "",
+            valueFromRequestHeader: "Authorization",
+            isRequired: true,
+          }),
+        ],
+        authorization: {
+          unknown: false,
+          passThroughHeaderId: "row-authorization",
+        },
+      }),
+    );
+
+    screen.getByText(
+      /unless a connected upstream account supplies Authorization/,
+    );
+    expect(screen.queryByText(/Legacy pass-through Authorization/)).toBeNull();
+  });
+
+  it("does not flag a custom header read from an allowed request header", () => {
+    renderSection(
+      headerState({
+        drafts: [
+          savedDraft({
+            key: "row-service",
+            name: "X-Upstream-Token",
+            source: "request",
+            staticValue: "",
+            valueFromRequestHeader: "X-Service-Token",
+            isRequired: true,
+          }),
+        ],
+      }),
+    );
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText(/Speakeasy does not/)).toBeNull();
+  });
+
+  it("calls a row naming an MCP protocol header ignored", () => {
+    renderSection(
+      headerState({
+        drafts: [
+          savedDraft({
+            key: "row-method",
+            name: "Mcp-Method",
+            isRequired: true,
+          }),
+        ],
+      }),
+    );
+
+    screen.getByText(/this row has no effect/);
+  });
+});

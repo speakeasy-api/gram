@@ -1,6 +1,11 @@
 import type { ExternalMCPRemoteHeader } from "@gram/client/models/components/externalmcpremoteheader.js";
 import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader.js";
-import { authorizationHeaderGuard } from "../model/headers";
+import {
+  authorizationHeaderGuard,
+  remoteHeaderPolicyIssue,
+  remoteHeaderPolicyReasonMessage,
+  type RemoteHeaderPolicyIssue,
+} from "../model/headers";
 import type { IdentityMode } from "../model/identity";
 import { REDACTED_SECRET } from "../model/secret";
 
@@ -27,7 +32,24 @@ export type HeaderDraft = {
   hadSecret: boolean;
   /** Row was seeded from the endpoint's catalog entry (and is unsaved). */
   fromCatalog?: boolean;
+  /**
+   * The editable fields as the server last returned them, for a saved row.
+   * A saved row the header policy now refuses stays as it is until the
+   * operator edits it, so it never blocks saving the other rows.
+   */
+  saved?: SavedHeaderFields;
 };
+
+/** A saved row's editable fields, compared to tell an untouched row apart. */
+export type SavedHeaderFields = Pick<
+  HeaderDraft,
+  | "name"
+  | "source"
+  | "staticValue"
+  | "valueFromRequestHeader"
+  | "isRequired"
+  | "isSecret"
+>;
 
 function headerSourceFromServer(header: RemoteMcpServerHeader): HeaderSource {
   if (header.valueFromRequestHeader) {
@@ -42,9 +64,7 @@ export function headerDraftFromServer(
   const source = headerSourceFromServer(header);
   const isRedactedSecret = header.isSecret && header.value === REDACTED_SECRET;
 
-  return {
-    key: header.id,
-    id: header.id,
+  const fields: SavedHeaderFields = {
     name: header.name,
     source,
     staticValue:
@@ -56,18 +76,62 @@ export function headerDraftFromServer(
     valueFromRequestHeader: header.valueFromRequestHeader ?? "",
     isRequired: header.isRequired,
     isSecret: header.isSecret,
+  };
+
+  return {
+    key: header.id,
+    id: header.id,
+    ...fields,
     hadSecret: header.isSecret,
+    saved: fields,
   };
 }
 
-// Inbound headers a pass-through row may not read from; mirrors the proxy.
-// Authorization is deliberately absent: forwarding the caller's own upstream
-// credential is what pass-through identity is for.
-const DENIED_PASS_THROUGH_SOURCES = new Set([
-  "cookie",
-  "set-cookie",
-  "proxy-authorization",
-]);
+/** Whether a saved row still holds exactly what the server returned. */
+export function isUnchangedSavedDraft(draft: HeaderDraft): boolean {
+  const saved = draft.saved;
+  if (!draft.id || !saved) return false;
+  return (
+    draft.name === saved.name &&
+    draft.source === saved.source &&
+    draft.staticValue === saved.staticValue &&
+    draft.valueFromRequestHeader === saved.valueFromRequestHeader &&
+    draft.isRequired === saved.isRequired &&
+    draft.isSecret === saved.isSecret
+  );
+}
+
+/**
+ * The header policy's verdict on the row the server holds, for warning about
+ * a saved row that predates the policy. Null for an unsaved row.
+ */
+export function savedHeaderPolicyIssue(
+  draft: HeaderDraft,
+): RemoteHeaderPolicyIssue | null {
+  const saved = draft.saved;
+  if (!draft.id || !saved) return null;
+  return remoteHeaderPolicyIssue({
+    name: saved.name,
+    valueFromRequestHeader:
+      saved.source === "request" ? saved.valueFromRequestHeader : undefined,
+    isRequired: saved.isRequired,
+  });
+}
+
+/**
+ * The header policy's verdict on a draft as it would be written. An unsaved
+ * source counts only when the row reads from a request header.
+ */
+export function draftPolicyIssue(
+  draft: HeaderDraft,
+): RemoteHeaderPolicyIssue | null {
+  return remoteHeaderPolicyIssue({
+    name: draft.name,
+    valueFromRequestHeader:
+      draft.source === "request" ? draft.valueFromRequestHeader : undefined,
+    isRequired: draft.isRequired,
+  });
+}
 
 // A saved secret shows its redacted placeholder (`***`) in the value field. As
 // long as the user leaves that placeholder untouched, we keep the existing
@@ -139,7 +203,13 @@ export function headerDraftErrors(
     }
     names.add(normalized);
 
-    if (identityMode) {
+    // An identity that owns Authorization still needs a saved row claiming
+    // that name removed. With no identity, an untouched saved row is left to
+    // the policy check below.
+    if (
+      identityMode &&
+      !(identityMode === "none" && isUnchangedSavedDraft(draft))
+    ) {
       const authorizationError = authorizationHeaderGuard(
         identityMode,
         name,
@@ -151,23 +221,31 @@ export function headerDraftErrors(
       }
     }
 
+    // A saved row is checked when it is edited, not merely for existing:
+    // the server leaves untouched rows alone, so one the policy now refuses
+    // must not hold every other row hostage. Its row explains the refusal.
+    if (isUnchangedSavedDraft(draft)) continue;
+
+    const policyIssue = draftPolicyIssue(draft);
+    if (policyIssue) {
+      errors.set(draft.key, {
+        field: policyIssue.reason === "protected-source" ? "value" : "name",
+        message: draft.id
+          ? `Change the source or name of "${name}", or remove this header.`
+          : remoteHeaderPolicyReasonMessage(
+              policyIssue.reason,
+              draft.valueFromRequestHeader,
+            ),
+      });
+      continue;
+    }
+
     if (draft.source === "request") {
       const source = draft.valueFromRequestHeader.trim();
       if (!source) {
         errors.set(draft.key, {
           field: "value",
           message: `Header "${name}" needs an inbound request header name.`,
-        });
-        continue;
-      }
-      // Mirrors the proxy, which is the control that actually holds: these
-      // carry the dashboard's own session rather than anything meant for the
-      // upstream. Checked here so the refusal arrives while editing instead of
-      // as a failed request later.
-      if (DENIED_PASS_THROUGH_SOURCES.has(source.toLowerCase())) {
-        errors.set(draft.key, {
-          field: "value",
-          message: `"${source}" cannot be forwarded upstream.`,
         });
         continue;
       }
