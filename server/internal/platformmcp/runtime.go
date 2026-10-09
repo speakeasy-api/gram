@@ -144,6 +144,7 @@ func NewRuntimeWithRiskMutations(logger *slog.Logger, authenticator Authenticato
 	}
 	server, registrar := newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, workflowRun, plugins, sessionRecall, riskMutations, candidate, accessReads, accessRoleMutations, assistantIdentity, connectionMutations...)
 	registrar.withExternalAuthorizer(authorizer)
+	registrar.withLogger(logger)
 	runtime := &Runtime{
 		authenticator:        authenticator,
 		gate:                 gate,

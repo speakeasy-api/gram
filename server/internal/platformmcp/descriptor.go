@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"reflect"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
@@ -180,10 +182,20 @@ type Registrar struct {
 	resources          []ResourceDescriptor
 	riskTelemetry      RiskTelemetry
 	externalAuthorizer Authorizer
+	// logger records the cause of a tool error no classifier recognised. It
+	// may be nil — a registrar composed without one still fails safe, it just
+	// cannot say why.
+	logger *slog.Logger
 }
 
 func newRegistrar(server *mcp.Server) *Registrar {
-	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}, externalAuthorizer: nil}
+	return &Registrar{server: server, descriptors: nil, resources: nil, riskTelemetry: noopRiskTelemetry{}, externalAuthorizer: nil, logger: nil}
+}
+
+func (r *Registrar) withLogger(logger *slog.Logger) {
+	if r != nil {
+		r.logger = logger
+	}
 }
 
 func (r *Registrar) withExternalAuthorizer(authorizer Authorizer) {
@@ -329,16 +341,11 @@ func addResource(r *Registrar, resource *mcp.Resource, meta ResourceMeta, read f
 			if request.Params.URI != resource.URI {
 				return nil, mcp.ResourceNotFoundError(request.Params.URI)
 			}
-			if r.externalAuthorizer == nil {
-				return nil, ErrUnavailable
+			if err := r.authorizeExternal(ctx, meta.Authorization); err != nil {
+				return nil, r.failSafe(ctx, resource.URI, err)
 			}
-			principal, err := principalFromToolContext(ctx)
-			if err != nil {
-				return nil, err
-			}
-			if err := r.externalAuthorizer.AuthorizeExternalCall(ctx, principal, meta.Authorization); err != nil {
-				return nil, fmt.Errorf("authorize external resource: %w", err)
-			}
+			// Reads serve the pinned in-process corpus, and a withheld guide's
+			// error is its own answer, so only authorization needs the backstop.
 			text, err := read(ctx)
 			if err != nil {
 				return nil, err
@@ -383,21 +390,21 @@ func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler m
 			tool.OutputSchema = inferOutputSchema[Out](tool.Name)
 		}
 		mcp.AddTool(r.server, tool, func(ctx context.Context, request *mcp.CallToolRequest, input In) (*mcp.CallToolResult, Out, error) {
-			var zero Out
-			if r.externalAuthorizer == nil {
-				return nil, zero, ErrUnavailable
+			var result *mcp.CallToolResult
+			var output Out
+			err := r.authorizeExternal(ctx, meta.Authorization)
+			if err == nil {
+				result, output, err = handler(ctx, request, input)
 			}
-			principal, err := principalFromToolContext(ctx)
-			if err != nil {
-				return nil, zero, err
+			if err == nil {
+				return result, output, nil
 			}
-			if err := r.externalAuthorizer.AuthorizeExternalCall(ctx, principal, meta.Authorization); err != nil {
-				if result, ok := externalAuthorizationToolResult(err); ok {
-					return result, zero, nil
-				}
-				return nil, zero, fmt.Errorf("authorize external tool %q: %w", tool.Name, err)
+			// A denial is projected from its fields wherever it was raised, so a
+			// handler that wraps one still answers with permission_denied.
+			if result, ok := externalAuthorizationToolResult(err); ok {
+				return result, output, nil
 			}
-			return handler(ctx, request, input)
+			return nil, output, r.failSafe(ctx, tool.Name, err)
 		})
 	}
 
@@ -427,7 +434,7 @@ func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler m
 			request := &mcp.CallToolRequest{}
 			result, output, err := handler(ctx, request, input)
 			if err != nil {
-				return nil, err
+				return nil, r.failSafe(ctx, tool.Name, err)
 			}
 			if refusal, ok := refusalFromResult(result); ok {
 				return nil, refusal
@@ -445,6 +452,87 @@ func (d Descriptor) Invoke(ctx context.Context, arguments json.RawMessage) (any,
 		return nil, ErrUnavailable
 	}
 	return d.invoke(ctx, arguments)
+}
+
+// authorizeExternal admits the caller of one external tool call or resource
+// read under the policy it declared.
+func (r *Registrar) authorizeExternal(ctx context.Context, policy ExternalAuthorization) error {
+	if r.externalAuthorizer == nil {
+		return ErrUnavailable
+	}
+	principal, err := principalFromToolContext(ctx)
+	if err != nil {
+		return err
+	}
+	if err := r.externalAuthorizer.AuthorizeExternalCall(ctx, principal, policy); err != nil {
+		// A denial or bare sentinel is already the answer; only a cause is
+		// worth the context.
+		if safe, ok := recognisedToolError(err); ok {
+			return safe
+		}
+		return fmt.Errorf("authorize external call: %w", err)
+	}
+	return nil
+}
+
+// failSafe is the backstop for a tool error that no classifier recognised.
+//
+// Each tool family still projects its own errors into specific refusals —
+// those are what make the tools usable — but a projection is only as safe as
+// it is exhaustive, across every path including the shared cores a tool calls
+// and does not own. Whatever reaches here unrecognised would otherwise be
+// returned to the caller as its text, which can carry driver messages, SQL, or
+// relation and constraint names. So the caller gets the generic unavailable
+// refusal, and the server log keeps the full cause.
+//
+// It runs on every failure path, including a service that was never composed
+// and a registrar given no logger, so the log is guarded rather than assumed.
+// Resource authorization goes through it too, named by URI.
+func (r *Registrar) failSafe(ctx context.Context, tool string, err error) error {
+	if safe, ok := recognisedToolError(err); ok {
+		return safe
+	}
+	if r.logger != nil {
+		// A caller that went away or ran out of time is not a server fault.
+		level := slog.LevelError
+		if ctx.Err() != nil {
+			level = slog.LevelWarn
+		}
+		r.logger.Log(ctx, level, "platform mcp tool returned an unclassified error", attr.SlogToolName(tool), attr.SlogError(err))
+	}
+	payload, marshalErr := json.Marshal(featureUnavailableResult{
+		Code:    unavailableCode,
+		Feature: tool,
+		Message: "That is temporarily unavailable. Try again shortly, and read the current state again before repeating a change.",
+	})
+	if marshalErr != nil {
+		payload = []byte(`{"code":"` + unavailableCode + `"}`)
+	}
+	return &ToolRefusalError{Code: unavailableCode, Payload: string(payload)}
+}
+
+var recognisedSentinels = [...]error{ErrUnauthorized, ErrForbidden, ErrUnavailable}
+
+// recognisedToolError returns the form of err that is already safe to show a
+// caller: a tool's own refusal or authorization denial, or one of the
+// package's bare sentinels, whose text is fixed. A recognised error wrapped in
+// more context is returned unwrapped, because the wrapping text is exactly
+// what cannot be vouched for. A JSON-RPC error is not recognised: a remote MCP
+// server or the SDK authors its message and data.
+func recognisedToolError(err error) (error, bool) {
+	for _, sentinel := range recognisedSentinels {
+		// Only the bare sentinel: wrapped, it carries its cause's text too.
+		if errors.Is(err, sentinel) && err.Error() == sentinel.Error() {
+			return sentinel, true
+		}
+	}
+	if refusal, ok := errors.AsType[*ToolRefusalError](err); ok {
+		return refusal, true
+	}
+	if denied, ok := errors.AsType[*ExternalAuthorizationError](err); ok {
+		return denied, true
+	}
+	return nil, false
 }
 
 // refusalFromResult turns a tool's error result into an error, so a direct
