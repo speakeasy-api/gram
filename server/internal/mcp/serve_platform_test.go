@@ -428,7 +428,7 @@ func servePlatformHTTP(t *testing.T, ti *testInstance, slug string, body []byte,
 func TestServePlatformToolset_PlatformMCPReadVariantListsTools(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	ctx, ti := newTestMCPServiceWithPlatformMCPRead(t)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -472,7 +472,7 @@ func TestServePlatformToolset_PlatformMCPReadVariantListsTools(t *testing.T) {
 func TestServePlatformToolset_PlatformMCPReadLegacyVariantRejected(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	ctx, ti := newTestMCPServiceWithPlatformMCPRead(t)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -494,7 +494,7 @@ func TestServePlatformToolset_PlatformMCPReadLegacyVariantRejected(t *testing.T)
 func TestServePlatformToolset_PlatformMCPReadNonManagedAssistantRejected(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
+	ctx, ti := newTestMCPServiceWithPlatformMCPRead(t)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -522,7 +522,7 @@ func TestServePlatformToolset_PlatformMCPReadNonManagedAssistantRejected(t *test
 func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, recorder := newTestMCPServiceWithScanSpans(t)
+	ctx, ti, recorder := newTestMCPServiceWithPlatformMCPReadScanSpans(t)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

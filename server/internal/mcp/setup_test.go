@@ -181,6 +181,35 @@ func newTestMCPServiceWithoutTemporal(t *testing.T) (context.Context, *testInsta
 		nil,
 		nil,
 		false,
+		false,
+		mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: 0, AutoVerifyWait: 0},
+		testenv.NewTracerProvider(t),
+		nil, nil,
+	)
+}
+
+// newTestMCPServiceWithPlatformMCPRead also serves the Platform MCP read tools
+// on the platform toolset. Building them registers and resolves the schema of
+// every Platform MCP tool, which costs most of a second per fixture under
+// -race, so only tests that reach that toolset should ask for it.
+func newTestMCPServiceWithPlatformMCPRead(t *testing.T) (context.Context, *testInstance) {
+	t.Helper()
+	return newTestMCPServiceWithPoolConfigAndTemporal(
+		t,
+		testenv.NewLogger(t),
+		testenv.NewMeterProvider(t),
+		&mockIdentityResolver{hasAccessOK: true},
+		mcp.TunnelPublicConfig{
+			SessionTTL:         0,
+			LiveSessionCap:     0,
+			InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+			RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+			MaxRequestLifetime: 0,
+		},
+		nil,
+		nil,
+		true,
+		true,
 		mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: 0, AutoVerifyWait: 0},
 		testenv.NewTracerProvider(t),
 		nil, nil,
@@ -367,7 +396,7 @@ func newTestMCPServiceWithPoolConfig(
 	guardianOpts ...func(*guardian.Policy),
 ) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestMCPServiceWithPoolConfigAndTemporal(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, true, metaRuntime, testenv.NewTracerProvider(t), nil, nil, guardianOpts...)
+	return newTestMCPServiceWithPoolConfigAndTemporal(t, logger, meterProvider, identityResolver, tunnelPublicConfig, wrapCache, configurePool, true, false, metaRuntime, testenv.NewTracerProvider(t), nil, nil, guardianOpts...)
 }
 
 func newTestMCPServiceWithPoolConfigAndTemporal(
@@ -379,6 +408,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	wrapCache func(cache.Cache) cache.Cache,
 	configurePool func(*pgxpool.Config),
 	withTemporal bool,
+	withPlatformMCPRead bool,
 	metaRuntime mcp.MetaRuntimeConfig,
 	tracerProvider trace.TracerProvider,
 	funcs functions.ToolCaller,
@@ -516,21 +546,25 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 		require.NoError(t, efficacySignaler.Shutdown(context.Background()))
 	})
 	assistantSkillTools := platformtoolsruntime.AssistantSkillTools(logger, conn, platformskills.WithEfficacySignaler(efficacySignaler))
-	platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
-		AssistantMemoryTools:          nil,
-		AssistantSkillTools:           assistantSkillTools,
-		AssistantTriggerTools:         nil,
-		ManagedAssistantInsightsTools: managedLogsTools,
+	var platformMCPReadTools []platformtools.ExternalTool
+	if withPlatformMCPRead {
 		// Composed the way the server composes it: descriptors admitted to the
 		// assistant audience, called directly by the adapter.
-		PlatformMCPReadTools: assistant_platform_mcp_adapter.ExternalTools(
+		platformMCPReadTools = assistant_platform_mcp_adapter.ExternalTools(
 			platformmcp.NewRuntimeWithLifecycle(
 				logger, nil, nil, platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine), "", "test-cursor-key",
 				platformmcp.NewPostgresReader(logger, conn).WithAuthorization(authzEngine), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 				platformmcp.CatalogDescriptor{},
 			).AssistantTools(),
 			platformmcp.NewLiveOrgAdminAuthorizer(conn, authzEngine),
-		),
+		)
+	}
+	platformToolsets := platformtools.BuildToolsets(platformtools.ToolsetDependencies{
+		AssistantMemoryTools:          nil,
+		AssistantSkillTools:           assistantSkillTools,
+		AssistantTriggerTools:         nil,
+		ManagedAssistantInsightsTools: managedLogsTools,
+		PlatformMCPReadTools:          platformMCPReadTools,
 	})
 	tunnelRoutes := route.NewRouteTable()
 	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime)
@@ -565,13 +599,25 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 
 func newTestMCPServiceWithScanSpans(t *testing.T, callers ...functions.ToolCaller) (context.Context, *testInstance, *tracetest.SpanRecorder) {
 	t.Helper()
-	recorder := tracetest.NewSpanRecorder()
-	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
-	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
 	var caller functions.ToolCaller
 	if len(callers) > 0 {
 		caller = callers[0]
 	}
+	return newScanSpansFixture(t, false, caller)
+}
+
+// newTestMCPServiceWithPlatformMCPReadScanSpans is newTestMCPServiceWithScanSpans
+// with the Platform MCP read tools served; see newTestMCPServiceWithPlatformMCPRead.
+func newTestMCPServiceWithPlatformMCPReadScanSpans(t *testing.T) (context.Context, *testInstance, *tracetest.SpanRecorder) {
+	t.Helper()
+	return newScanSpansFixture(t, true, nil)
+}
+
+func newScanSpansFixture(t *testing.T, withPlatformMCPRead bool, caller functions.ToolCaller) (context.Context, *testInstance, *tracetest.SpanRecorder) {
+	t.Helper()
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
 	ctx, ti := newTestMCPServiceWithPoolConfigAndTemporal(t,
 		testenv.NewLogger(t), testenv.NewMeterProvider(t),
 		&mockIdentityResolver{hasAccessOK: true},
@@ -580,7 +626,7 @@ func newTestMCPServiceWithScanSpans(t *testing.T, callers ...functions.ToolCalle
 			InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
 			RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
 			MaxRequestLifetime: 0,
-		}, nil, nil, false, mcp.MetaRuntimeConfig{
+		}, nil, nil, false, withPlatformMCPRead, mcp.MetaRuntimeConfig{
 			MemberCallTimeout: 0, ValidationTimeout: 0, AutoVerifyWait: 0, RecheckInterval: 0,
 		}, provider, caller, nil)
 	return ctx, ti, recorder
@@ -803,7 +849,7 @@ func requireTelemetryRowCount(t *testing.T, where string, want uint64, args ...a
 
 func newTestMCPServiceWithCallerAssertions(t *testing.T, issuer *mcpauthz.Issuer) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestMCPServiceWithPoolConfigAndTemporal(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, issuer)
+	return newTestMCPServiceWithPoolConfigAndTemporal(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, false, mcp.MetaRuntimeConfig{}, testenv.NewTracerProvider(t), nil, issuer)
 }
 
 // createTestUser stores a user so authentication can resolve its profile, as
