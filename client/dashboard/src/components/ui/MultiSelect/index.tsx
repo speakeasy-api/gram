@@ -323,9 +323,8 @@ interface MultiSelectProps
 
   /**
    * If true, a created value only counts as existing when it matches an
-   * option's value or a selection exactly. Use for case-sensitive tokens,
-   * where `Read` and `read` are different values; labels are only display,
-   * so a short label never blocks creating the value it reads as.
+   * option or selection exactly. Use for case-sensitive tokens, where `Read`
+   * and `read` are different values.
    * Optional, defaults to false.
    */
   caseSensitiveCreate?: boolean;
@@ -823,8 +822,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       const needle = fold(trimmedSearchValue);
       const matchesExisting = getAllOptions().some(
         (option) =>
-          fold(option.value) === needle ||
-          (!caseSensitiveCreate && fold(option.label) === needle),
+          fold(option.value) === needle || fold(option.label) === needle,
       );
       if (matchesExisting) return false;
       return !selectedValues.some((value) => fold(value) === needle);

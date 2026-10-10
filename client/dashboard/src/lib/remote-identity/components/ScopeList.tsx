@@ -142,7 +142,14 @@ function ClampedScopes({
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(list);
-    return () => observer.disconnect();
+    // Lines can rewrap when the web font lands without the clipped list
+    // changing size, so measure again then.
+    let live = true;
+    void document.fonts?.ready.then(() => live && measure());
+    return () => {
+      live = false;
+      observer.disconnect();
+    };
   }, [scopes, maxLines]);
 
   return (
@@ -204,7 +211,14 @@ function useTruncatedScopes(
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(list);
-    return () => observer.disconnect();
+    // A chip can start overflowing when the web font lands without the list
+    // changing size, so measure again then.
+    let live = true;
+    void document.fonts?.ready.then(() => live && measure());
+    return () => {
+      live = false;
+      observer.disconnect();
+    };
   }, [listRef, scopes]);
   return truncated;
 }
