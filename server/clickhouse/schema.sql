@@ -310,7 +310,8 @@ CREATE TABLE IF NOT EXISTS shadow_mcp_inventory_urls (
     server_name_override String DEFAULT '',
     first_seen DateTime64(9, 'UTC'),
     last_seen DateTime64(9, 'UTC'),
-    updated_at DateTime64(9, 'UTC')
+    updated_at DateTime64(9, 'UTC'),
+    legacy_override UInt8 DEFAULT 1 COMMENT '1 when written before overrides moved to shadow_mcp_inventory_url_overrides, so server_name_override is meaningful. Current writers set 0.'
 ) ENGINE = ReplacingMergeTree(updated_at)
 ORDER BY (gram_project_id, canonical_server_url)
 SETTINGS index_granularity = 8192
@@ -319,6 +320,28 @@ COMMENT 'Project-scoped Shadow MCP inventory URLs and display metadata';
 CREATE INDEX IF NOT EXISTS idx_shadow_mcp_inventory_urls_slug_hash
 ON shadow_mcp_inventory_urls (substring(lower(hex(SHA256(canonical_server_url))), 1, 8))
 TYPE bloom_filter(0.01) GRANULARITY 1;
+
+CREATE TABLE IF NOT EXISTS shadow_mcp_inventory_url_overrides (
+    gram_project_id UUID,
+    canonical_server_url String,
+    server_name_override String COMMENT 'Admin-set display name. Empty means the override was cleared.',
+    updated_at DateTime64(9, 'UTC')
+) ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY (gram_project_id, canonical_server_url)
+SETTINGS index_granularity = 8192
+COMMENT 'Admin-set Shadow MCP display names, kept apart from observation rows so ingest writes cannot overwrite them';
+
+-- Transitional: copies display names written by code that predates
+-- shadow_mcp_inventory_url_overrides, so names set before the new writer ships
+-- are not lost. Drop together with legacy_override once no such writer runs.
+CREATE MATERIALIZED VIEW IF NOT EXISTS shadow_mcp_inventory_url_overrides_legacy_mv TO shadow_mcp_inventory_url_overrides AS
+SELECT
+    gram_project_id,
+    canonical_server_url,
+    server_name_override,
+    updated_at
+FROM shadow_mcp_inventory_urls
+WHERE legacy_override = 1;
 
 CREATE TABLE IF NOT EXISTS ai_detections (
     organization_id String COMMENT 'Organization the reporting device agent is enrolled in.',
