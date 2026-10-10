@@ -1,0 +1,177 @@
+package plugins
+
+import (
+	"cmp"
+	"context"
+	"fmt"
+	"log/slog"
+	"net/url"
+	"slices"
+	"strings"
+
+	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
+)
+
+// DeviceMCPServer is a Speakeasy-hosted MCP server inside a plugin, at the
+// address the plugin's published package uses. The device agent writes these
+// into an agent identity's tool configurations with its own mcp:connect
+// credential.
+type DeviceMCPServer struct {
+	// PluginSlug is the slug of the plugin the server belongs to.
+	PluginSlug string
+
+	// DisplayName is the server's display name within its plugin.
+	DisplayName string
+
+	// Name is the key the device writes the server under in each tool's MCP
+	// configuration: `speakeasy-` followed by the server's slug. The prefix
+	// keeps it apart from servers people add by hand.
+	Name string
+
+	// URL is the server's streamable-HTTP address.
+	URL string
+
+	// SortOrder is the server's position within its plugin.
+	SortOrder int32
+}
+
+// ListDeviceMCPServers returns the Speakeasy-hosted MCP servers in the given
+// plugins of one project, ordered by plugin slug, then position, then display
+// name. It returns nothing when pluginIDs is empty.
+//
+// Unproxied servers are left out: their address is the vendor's own server,
+// which must never receive a Speakeasy credential. Gateway members are left
+// out too: publishing re-checks their distribution admission under the
+// project's admission lock, which a device poll must not take.
+//
+// A server whose address cannot be resolved, or is not https, is logged and
+// skipped, so one misconfigured server does not keep the rest from reaching
+// devices.
+func ListDeviceMCPServers(ctx context.Context, logger *slog.Logger, db repo.DBTX, serverURL string, projectID uuid.UUID, pluginIDs []uuid.UUID) ([]DeviceMCPServer, error) {
+	if len(pluginIDs) == 0 {
+		return nil, nil
+	}
+
+	queries := repo.New(db)
+	toolsetRows, err := queries.ListPluginsWithServersForProject(ctx, repo.ListPluginsWithServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
+	if err != nil {
+		return nil, fmt.Errorf("list toolset plugin servers: %w", err)
+	}
+	remoteRows, err := queries.ListPluginsWithMcpServersForProject(ctx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
+	if err != nil {
+		return nil, fmt.Errorf("list remote plugin servers: %w", err)
+	}
+
+	skip := func(pluginSlug string, err error) {
+		logger.WarnContext(ctx, "plugin MCP server has no usable address; leaving it out of the device poll",
+			attr.SlogError(err),
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogPluginSlug(pluginSlug),
+		)
+	}
+
+	servers := make([]DeviceMCPServer, 0, len(toolsetRows)+len(remoteRows))
+	for _, r := range toolsetRows {
+		mcpURL, ok, err := toolsetServerURL(serverURL, r)
+		if err == nil && ok {
+			err = requireHTTPS(mcpURL)
+		}
+		switch {
+		case err != nil:
+			skip(r.PluginSlug, err)
+		case ok:
+			servers = append(servers, DeviceMCPServer{
+				PluginSlug:  r.PluginSlug,
+				DisplayName: r.ServerDisplayName,
+				Name:        deviceMCPServerName(r.ToolsetMcpSlug.String, r.ServerDisplayName),
+				URL:         mcpURL,
+				SortOrder:   r.ServerSortOrder,
+			})
+		}
+	}
+	for _, r := range remoteRows {
+		mcpURL, unproxied, err := remoteServerURL(serverURL, r)
+		if err == nil && !unproxied {
+			err = requireHTTPS(mcpURL)
+		}
+		switch {
+		case err != nil:
+			skip(r.PluginSlug, err)
+		case !unproxied:
+			servers = append(servers, DeviceMCPServer{
+				PluginSlug:  r.PluginSlug,
+				DisplayName: r.ServerDisplayName,
+				Name:        deviceMCPServerName(r.McpServerSlug.String, r.ServerDisplayName),
+				URL:         mcpURL,
+				SortOrder:   r.ServerSortOrder,
+			})
+		}
+	}
+
+	slices.SortStableFunc(servers, func(a, b DeviceMCPServer) int {
+		return cmp.Or(
+			cmp.Compare(a.PluginSlug, b.PluginSlug),
+			cmp.Compare(a.SortOrder, b.SortOrder),
+			cmp.Compare(a.DisplayName, b.DisplayName),
+		)
+	})
+	return servers, nil
+}
+
+// requireHTTPS refuses an address the device would send its credential to in
+// cleartext.
+func requireHTTPS(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	switch {
+	case err != nil:
+		return fmt.Errorf("parse MCP server URL: %w", err)
+	case u.Scheme != "https" || u.Host == "":
+		return fmt.Errorf("MCP server URL is not an https URL: %q", u.Redacted())
+	case u.User != nil:
+		// Embedded credentials would travel alongside the device's own.
+		return fmt.Errorf("MCP server URL carries credentials: %q", u.Redacted())
+	default:
+		return nil
+	}
+}
+
+// deviceMCPServerNamePrefix marks the MCP server entries Speakeasy writes into
+// a tool's configuration.
+const deviceMCPServerNamePrefix = "speakeasy-"
+
+// deviceMCPServerName names a server's entry in a tool's MCP configuration:
+// the prefix followed by slug, or by displayName when the server has no slug,
+// lowercased with each run of characters outside [a-z0-9-] collapsed into one
+// `-` and the ends trimmed. The result is a valid key in Claude Code's
+// mcpServers, Codex's bare TOML table names, and Cursor's mcp.json.
+func deviceMCPServerName(slug, displayName string) string {
+	name := slugifyMCPServerName(slug)
+	if name == "" {
+		name = slugifyMCPServerName(displayName)
+	}
+	if name == "" {
+		name = "mcp-server"
+	}
+	return deviceMCPServerNamePrefix + name
+}
+
+func slugifyMCPServerName(value string) string {
+	var b strings.Builder
+	b.Grow(len(value))
+	pendingDash := false
+	for _, r := range strings.ToLower(value) {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') {
+			pendingDash = true
+			continue
+		}
+		if pendingDash && b.Len() > 0 {
+			b.WriteByte('-')
+		}
+		pendingDash = false
+		b.WriteRune(r)
+	}
+	return b.String()
+}

@@ -132,6 +132,13 @@ type GetPluginsResponseBody struct {
 	// The non-human principal the plugin set was resolved for. Present only when
 	// the caller authenticated with an agent API key.
 	Principal *AgentPollingPrincipalResponseBody `form:"principal,omitempty" json:"principal,omitempty" xml:"principal,omitempty"`
+	// Speakeasy-hosted MCP servers the agent registers directly in each managed
+	// tool's configuration, authorized by the device's own mcp:connect credential.
+	// Populated only for agent API keys, from the MCP servers in the plugins
+	// assigned to the agent; always empty for people, who reach these servers
+	// through their plugins. Always present: an empty list tells the agent to
+	// remove the entries it wrote earlier.
+	McpServers []*AgentMCPServerResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 }
 
 // ListSyncedUsersResponseBody is the type of the "agent" service
@@ -2295,6 +2302,20 @@ type AgentPollingPrincipalResponseBody struct {
 	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 }
 
+// AgentMCPServerResponseBody is used to define fields on response body types.
+type AgentMCPServerResponseBody struct {
+	// Stable key the agent writes the server under in each tool's MCP
+	// configuration: `speakeasy-` followed by the server's slug, using only
+	// lowercase letters, digits and `-`. Unique within the response; a second
+	// server with the same name gets a numeric suffix such as `speakeasy-linear-2`.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The server's streamable-HTTP URL.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// Stable IDs of the managed tools this server applies to. Absent or empty
+	// means every managed tool.
+	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+}
+
 // SyncedAgentUserResponseBody is used to define fields on response body types.
 type SyncedAgentUserResponseBody struct {
 	// Email the device agent reported on sync. Resolve against org members for
@@ -2552,6 +2573,14 @@ func NewGetPluginsResultOK(body *GetPluginsResponseBody) *agent.GetPluginsResult
 	}
 	if body.Principal != nil {
 		v.Principal = unmarshalAgentPollingPrincipalResponseBodyToAgentAgentPollingPrincipal(body.Principal)
+	}
+	v.McpServers = make([]*agent.AgentMCPServer, len(body.McpServers))
+	for i, val := range body.McpServers {
+		if val == nil {
+			v.McpServers[i] = nil
+			continue
+		}
+		v.McpServers[i] = unmarshalAgentMCPServerResponseBodyToAgentAgentMCPServer(val)
 	}
 
 	return v
@@ -4340,6 +4369,9 @@ func ValidateGetPluginsResponseBody(body *GetPluginsResponseBody) (err error) {
 	if body.Plugins == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("plugins", "body"))
 	}
+	if body.McpServers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_servers", "body"))
+	}
 	for _, e := range body.Marketplaces {
 		if e != nil {
 			if err2 := ValidateAgentMarketplaceResponseBody(e); err2 != nil {
@@ -4362,6 +4394,13 @@ func ValidateGetPluginsResponseBody(body *GetPluginsResponseBody) (err error) {
 	if body.Principal != nil {
 		if err2 := ValidateAgentPollingPrincipalResponseBody(body.Principal); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.McpServers {
+		if e != nil {
+			if err2 := ValidateAgentMCPServerResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -7220,6 +7259,21 @@ func ValidateAgentPollingPrincipalResponseBody(body *AgentPollingPrincipalRespon
 	}
 	if body.DisplayName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
+	}
+	return
+}
+
+// ValidateAgentMCPServerResponseBody runs the validations defined on
+// AgentMCPServerResponseBody
+func ValidateAgentMCPServerResponseBody(body *AgentMCPServerResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
+	}
+	if body.Name != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", *body.Name, "^speakeasy-[a-z0-9-]+$"))
 	}
 	return
 }

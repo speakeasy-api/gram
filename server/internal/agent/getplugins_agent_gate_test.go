@@ -154,10 +154,14 @@ func TestGetPlugins_AgentKeyReceivesRoleAssignedPlugins(t *testing.T) {
 	assignPlugin(t, ctx, ti.conn, roleTool, ti.orgID, role.RoleUrn)
 	otherRoleTool := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "other-role-tool")
 	assignPlugin(t, ctx, ti.conn, otherRoleTool, ti.orgID, "role:organization:unheld")
+	_, roleServerURL := seedToolsetServer(t, ti, roleTool, "role-linear", "Linear")
+	seedToolsetServer(t, ti, otherRoleTool, "unheld-slack", "Slack")
 
 	admitted, err := ti.service.APIKeyAuth(context.WithValue(t.Context(), goa.MethodKey, "getPlugins"), minted.key, getPluginsScheme)
 	require.NoError(t, err)
 	res, err := ti.service.GetPlugins(admitted, &gen.GetPluginsPayload{})
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{wantObservability, "role-tool"}, pluginSlugs(res))
+	require.Equal(t, map[string]string{"speakeasy-role-linear": roleServerURL}, mcpServersByName(res),
+		"a role the agent holds selects its plugin's servers; an unheld role's do not")
 }
