@@ -8,6 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
@@ -29,6 +31,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
+	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/rag"
@@ -44,28 +48,43 @@ import (
 	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
+	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
+// gatewayRecordsServiceName is the service.name on gateway tool call records,
+// whichever process serves the gateway, so they share one agent_events source.
+const gatewayRecordsServiceName = "gram-server"
+
+// newToolCallLogs is the otelpub logger the gateway writes its tool call records through.
+func newToolCallLogs(publisher gcp.Publisher[*otelv1.InboundLogRecord]) *otelpub.Logger {
+	return otelpub.NewLogger(publisher,
+		resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(gatewayRecordsServiceName)),
+		dialect.GramGatewayLogScope)
+}
+
 type mcpServiceDependencies struct {
-	Logger                 *slog.Logger
-	Tracer                 trace.TracerProvider
-	Meter                  metric.MeterProvider
-	DB                     *pgxpool.Pool
-	Redis                  *redis.Client
-	Sessions               *sessions.Manager
-	ChatSessions           *chatsessions.Manager
-	Environment            toolconfig.EnvironmentLoader
-	Posthog                *posthog.Posthog
-	Features               feature.Provider
-	ServerURL              *url.URL
-	SiteURL                *url.URL
-	Encryption             *encryption.Client
-	Guardian               *guardian.Policy
-	Functions              functions.ToolCaller
-	BillingTracker         billing.Tracker
-	Billing                billing.Repository
-	Telemetry              *tm.Logger
+	Logger         *slog.Logger
+	Tracer         trace.TracerProvider
+	Meter          metric.MeterProvider
+	DB             *pgxpool.Pool
+	Redis          *redis.Client
+	Sessions       *sessions.Manager
+	ChatSessions   *chatsessions.Manager
+	Environment    toolconfig.EnvironmentLoader
+	Posthog        *posthog.Posthog
+	Features       feature.Provider
+	ServerURL      *url.URL
+	SiteURL        *url.URL
+	Encryption     *encryption.Client
+	Guardian       *guardian.Policy
+	Functions      functions.ToolCaller
+	BillingTracker billing.Tracker
+	Billing        billing.Repository
+	Telemetry      *tm.Logger
+	// ToolCallLogs is closed by the service on Shutdown.
+	ToolCallLogs           *otelpub.Logger
 	TelemetryService       *tm.Service
 	RAG                    *rag.ToolsetVectorStore
 	Triggers               *bgtriggers.App
@@ -101,7 +120,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (*mcp.Service, erro
 		}
 	}
 	service, err := mcp.NewService(d.Logger, d.Tracer, d.Meter, d.DB, d.Sessions, d.ChatSessions, d.Environment, d.Posthog, d.Features, d.ServerURL, d.SiteURL, d.Encryption, cacheImpl,
-		d.Guardian, d.Functions, d.BillingTracker, d.Billing, d.Telemetry, d.TelemetryService, d.RAG, d.Triggers, d.Authz, d.AssistantTokens, d.PrincipalCredentials, d.ShadowMCP, d.Audit, d.PlatformExtras, d.PlatformFeatureChecker, d.PlatformToolsets,
+		d.Guardian, d.Functions, d.BillingTracker, d.Billing, d.Telemetry, d.ToolCallLogs, d.TelemetryService, d.RAG, d.Triggers, d.Authz, d.AssistantTokens, d.PrincipalCredentials, d.ShadowMCP, d.Audit, d.PlatformExtras, d.PlatformFeatureChecker, d.PlatformToolsets,
 		d.Identity, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), d.Challenges, d.MCPRisk, proxy, route.NewRedis(d.Redis), c.String("tunnel-forward-token"), cidrs, d.CallerAssertions, d.Redis,
 		mcp.TunnelPublicConfig{SessionTTL: 0, LiveSessionCap: c.Int("public-tunnels-live-session-cap"), InitializeRate: ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0}, RequestRate: ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0}, MaxRequestLifetime: 0},
 		mcp.MetaRuntimeConfig{MemberCallTimeout: c.Duration("meta-member-call-timeout"), ValidationTimeout: 0, AutoVerifyWait: 0, RecheckInterval: c.Duration("remote-session-recheck-interval")})

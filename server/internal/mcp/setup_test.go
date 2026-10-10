@@ -40,10 +40,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolcallobserver"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 	"go.opentelemetry.io/otel/trace"
 
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	keys_gen "github.com/speakeasy-api/gram/server/gen/keys"
 	"github.com/speakeasy-api/gram/server/internal/assistant_platform_mcp_adapter"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -66,6 +70,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
+	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
@@ -127,6 +133,7 @@ type testInstance struct {
 	// clientCredentials serves self clients from the production minter;
 	// tests replace it to control the upstream credential.
 	clientCredentials *testClientCredentials
+	toolCallRecords   *toolCallRecorder
 }
 
 // testClientCredentials is the challenge manager's client credential source.
@@ -154,6 +161,37 @@ func (c *testClientCredentials) use(source remotesessions.ClientCredentialSource
 	defer c.mu.Unlock()
 
 	c.source = source
+}
+
+// toolCallRecorder keeps every tool call record the gateway publishes.
+type toolCallRecorder struct {
+	mu      sync.Mutex
+	records []*otelv1.InboundLogRecord
+	err     error
+}
+
+func (r *toolCallRecorder) Publish(_ context.Context, record *otelv1.InboundLogRecord, _ ...gcp.PublishOption) gcp.PublishResult {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.err != nil {
+		return gcp.NewErrPublishResult(r.err)
+	}
+	r.records = append(r.records, record)
+	return gcp.NewSuccessPublishResult()
+}
+
+func (*toolCallRecorder) Stop(context.Context) error { return nil }
+
+func (r *toolCallRecorder) all() []*otelv1.InboundLogRecord {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.records)
+}
+
+func (r *toolCallRecorder) failWith(err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.err = err
 }
 
 // newTestMCPService wires a permissive identity resolver. Tests asserting
@@ -533,7 +571,10 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 		),
 	})
 	tunnelRoutes := route.NewRouteTable()
-	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime)
+	toolCallRecords := &toolCallRecorder{}
+	// Named as in production, so the pipeline derives the same source.
+	toolCallLogs := otelpub.NewLogger(toolCallRecords, resource.NewSchemaless(semconv.ServiceNameKey.String("gram-server")), dialect.GramGatewayLogScope)
+	svc, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthog, features, serverURL, siteURL, enc, mcpCache, guardianPolicy, funcs, billingStub, billingStub, telemLogger, toolCallLogs, telemService, vectorToolStore, nil, authzEngine, assistantTokens, principalCredentials, shadowMCPClient, auditLogger, assistantSkillTools, featClient.PlatformFeatureCheck, platformToolsets, identityResolver, userSessionSigner, remoteChallengeMgr, scanEvaluator, remoteProxyManager, tunnelRoutes, "", nil, callerAssertions, redisClient, tunnelPublicConfig, metaRuntime)
 	require.NoError(t, err)
 	// Identity chaining runs as in production, so gate tests without bindings
 	// prove it leaves their behavior unchanged.
@@ -560,6 +601,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 		features:             features,
 		efficacySignaler:     efficacySignaler,
 		clientCredentials:    clientCredentials,
+		toolCallRecords:      toolCallRecords,
 	}
 }
 
