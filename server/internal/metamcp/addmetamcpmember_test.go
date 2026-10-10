@@ -223,6 +223,36 @@ func TestAddMetaMcpMember_AllowsDistinctBackends(t *testing.T) {
 	}
 }
 
+func TestAddMetaMcpMember_RejectsToolsetCanonicalServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	meta := seedMetaMcpServer(t, ctx, ti, "canonical member host")
+	toolsetID := seedToolsetBackend(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
+	_, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: toolsetID, ProjectID: *authCtx.ProjectID, Name: conv.ToPGText("hosted"),
+		Slug: conv.ToPGText("hosted-" + uuid.NewString()[:8]), ToolsetID: conv.ToNullUUID(toolsetID), Visibility: "private",
+	})
+	require.NoError(t, err)
+	member := seedMcpServerFronting(t, ctx, ti.conn, *authCtx.ProjectID, mcpserversrepo.CreateMCPServerParams{ToolsetID: conv.ToNullUUID(toolsetID)})
+
+	_, err = ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		MetaMcpServerID: meta.ID, McpServerID: toolsetID.String(), SortOrder: nil,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+
+	_, err = ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		MetaMcpServerID: meta.ID, McpServerID: member.String(), SortOrder: nil,
+	})
+	require.NoError(t, err)
+}
+
 func TestAddMetaMcpMember_RemovedMemberFreesBackend(t *testing.T) {
 	t.Parallel()
 

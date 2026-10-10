@@ -112,3 +112,28 @@ func TestServePublic_MetaEndpoint_InitializeSessionCarriesClientToToolCalls(t *t
 		   AND mcp_client_version = '2.4.1'`,
 		1, authCtx.ProjectID.String(), meta.ID.String())
 }
+
+// Pins the member stamp the diagnostics reads rely on to keep these calls off the canonical row.
+func TestServePublic_MetaEndpoint_HostedMemberCallStampsMemberBesideCanonical(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	slug := "meta-" + uuid.NewString()
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
+	canonical := createToolsetMcpEndpointWithID(t, ctx, ti.conn, member.toolsetID, *authCtx.ProjectID, member.toolsetID, slug+"-canonical", "public", uuid.NullUUID{}, uuid.Nil)
+
+	callMetaTool(t, ctx, ti, slug, "execute_tool", map[string]any{
+		"name":      member.slug + "--alpha_tool",
+		"arguments": map[string]any{},
+	})
+
+	requireTelemetryRowCount(t, `gram_project_id = ? AND event_source = 'tool_call' AND tool_name = 'alpha_tool'
+		   AND meta_mcp_server_id = ? AND mcp_server_id = ?`,
+		1, authCtx.ProjectID.String(), meta.ID.String(), member.serverID.String())
+	requireTelemetryRowCount(t, `gram_project_id = ? AND event_source = 'tool_call' AND mcp_server_id = ?`,
+		0, authCtx.ProjectID.String(), canonical.ID.String())
+}

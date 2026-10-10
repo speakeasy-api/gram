@@ -2717,17 +2717,29 @@ LIMIT @result_limit;
 -- display name (the key the plugin's mcp.json ships it under). One row per
 -- (server, membership); a server with no membership yields one row with empty
 -- plugin columns. Hosted servers are also reached through memberships attached
--- by toolset, so those memberships are included for the server fronting that
--- toolset. Memberships are gathered from the project's live plugins through the
--- (plugin_id, backend) indexes, one arm per backend kind: a live membership has
--- exactly one backend, so the arms never repeat a row.
+-- by toolset, so those memberships, and the toolset slug, belong to the
+-- toolset's hosting server: its canonical row (id = toolset id), or every
+-- server fronting it when it has none. Memberships are gathered from the
+-- project's live plugins through the (plugin_id, backend) indexes, one arm per
+-- backend kind: a live membership has exactly one backend, so the arms never
+-- repeat a row. toolset_shared marks a hosting server whose toolset other live
+-- servers also front, since their calls carry the same toolset slug.
 WITH server AS (
     SELECT
         m.id,
         m.toolset_id,
         COALESCE(m.name, '')::text AS mcp_name,
         COALESCE(m.slug, '')::text AS mcp_slug,
-        COALESCE(toolset.slug, '')::text AS toolset_slug
+        COALESCE(toolset.slug, '')::text AS toolset_slug,
+        (m.toolset_id IS NOT NULL AND (m.id = m.toolset_id OR NOT EXISTS (
+            SELECT 1 FROM mcp_servers AS canonical
+            WHERE canonical.id = m.toolset_id AND canonical.project_id = m.project_id AND canonical.deleted IS FALSE
+        )))::boolean AS hosts_toolset,
+        EXISTS (
+            SELECT 1 FROM mcp_servers AS sibling
+            WHERE sibling.toolset_id = m.toolset_id AND sibling.project_id = m.project_id
+              AND sibling.deleted IS FALSE AND sibling.id <> m.id
+        )::boolean AS toolset_shared
     FROM mcp_servers AS m
     JOIN projects AS project
       ON project.id = m.project_id
@@ -2771,13 +2783,14 @@ server_membership AS (
     FROM server
     JOIN membership
       ON membership.toolset_id = server.toolset_id
-    WHERE server.toolset_id IS NOT NULL
+    WHERE server.hosts_toolset
 )
 SELECT
     server.id AS mcp_server_id,
     server.mcp_name,
     server.mcp_slug,
-    server.toolset_slug,
+    (CASE WHEN server.hosts_toolset THEN server.toolset_slug ELSE '' END)::text AS toolset_slug,
+    (server.hosts_toolset AND server.toolset_shared)::boolean AS toolset_shared,
     COALESCE(server_membership.plugin_slug, '')::text AS plugin_slug,
     COALESCE(server_membership.display_name, '')::text AS plugin_display_name
 FROM server

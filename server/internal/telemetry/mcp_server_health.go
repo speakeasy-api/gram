@@ -151,7 +151,8 @@ func (h *MCPServerHealth) Outcomes(ctx context.Context, target MCPServerTelemetr
 // matching a row by the server id or the toolset slug as the outcome breakdown
 // does. The time series filters on one identity at a time, so when the target
 // has both the buckets are counted by inclusion-exclusion: calls by id, plus
-// calls by slug, minus calls carrying both.
+// calls by slug, minus calls carrying both. The slug read excludes rows
+// stamped with another server id, keeping shared-toolset member calls separate.
 func (h *MCPServerHealth) Series(ctx context.Context, target MCPServerTelemetryTarget, from, to time.Time, bucket time.Duration) ([]MCPServerSeriesPoint, error) {
 	if target.ProjectID == "" {
 		return nil, fmt.Errorf("mcp server health: project id is required")
@@ -163,23 +164,23 @@ func (h *MCPServerHealth) Series(ctx context.Context, target MCPServerTelemetryT
 
 	switch {
 	case target.MCPServerID != "" && target.ToolsetSlug != "":
-		byID, err := h.seriesBuckets(ctx, target.ProjectID, target.MCPServerID, "", from, to, intervalSeconds)
+		byID, err := h.seriesBuckets(ctx, target.ProjectID, target.MCPServerID, "", target.MCPServerID, from, to, intervalSeconds)
 		if err != nil {
 			return nil, err
 		}
-		bySlug, err := h.seriesBuckets(ctx, target.ProjectID, "", target.ToolsetSlug, from, to, intervalSeconds)
+		bySlug, err := h.seriesBuckets(ctx, target.ProjectID, "", target.ToolsetSlug, target.MCPServerID, from, to, intervalSeconds)
 		if err != nil {
 			return nil, err
 		}
-		byBoth, err := h.seriesBuckets(ctx, target.ProjectID, target.MCPServerID, target.ToolsetSlug, from, to, intervalSeconds)
+		byBoth, err := h.seriesBuckets(ctx, target.ProjectID, target.MCPServerID, target.ToolsetSlug, target.MCPServerID, from, to, intervalSeconds)
 		if err != nil {
 			return nil, err
 		}
 		return mergeSeries(byID, bySlug, byBoth)
 	case target.MCPServerID != "":
-		return h.seriesBuckets(ctx, target.ProjectID, target.MCPServerID, "", from, to, intervalSeconds)
+		return h.seriesBuckets(ctx, target.ProjectID, target.MCPServerID, "", target.MCPServerID, from, to, intervalSeconds)
 	case target.ToolsetSlug != "":
-		return h.seriesBuckets(ctx, target.ProjectID, "", target.ToolsetSlug, from, to, intervalSeconds)
+		return h.seriesBuckets(ctx, target.ProjectID, "", target.ToolsetSlug, target.MCPServerID, from, to, intervalSeconds)
 	default:
 		return nil, fmt.Errorf("mcp server health: target names no direct-lane identity")
 	}
@@ -187,7 +188,7 @@ func (h *MCPServerHealth) Series(ctx context.Context, target MCPServerTelemetryT
 
 // seriesBuckets reads one filtered time series. Every call over the same
 // window and interval returns the same gap-filled bucket starts.
-func (h *MCPServerHealth) seriesBuckets(ctx context.Context, projectID, mcpServerID, toolsetSlug string, from, to time.Time, intervalSeconds int64) ([]MCPServerSeriesPoint, error) {
+func (h *MCPServerHealth) seriesBuckets(ctx context.Context, projectID, mcpServerID, toolsetSlug, toolsetSlugServerID string, from, to time.Time, intervalSeconds int64) ([]MCPServerSeriesPoint, error) {
 	buckets, err := h.chRepo.GetTimeSeriesMetrics(ctx, repo.GetTimeSeriesMetricsParams{
 		ExcludedHookSources: nil,
 		GramProjectID:       projectID,
@@ -199,6 +200,7 @@ func (h *MCPServerHealth) seriesBuckets(ctx context.Context, projectID, mcpServe
 		ExternalUserID:      "",
 		APIKeyID:            "",
 		ToolsetSlug:         toolsetSlug,
+		ToolsetSlugServerID: toolsetSlugServerID,
 		RemoteMCPServerID:   "",
 		MCPServerID:         mcpServerID,
 		MetaMCPServerID:     "",

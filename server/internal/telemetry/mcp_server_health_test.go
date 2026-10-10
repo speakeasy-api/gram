@@ -129,6 +129,8 @@ func TestMCPServerHealth_ToolsetBackedServer(t *testing.T) {
 
 	insertHealthToolCall(t, ctx, ti, healthToolCallParams{projectID: projectID, timestamp: now.Add(-5 * time.Minute), mcpServerID: serverID, toolsetSlug: "backed", statusCode: 200})
 	insertHealthToolCall(t, ctx, ti, healthToolCallParams{projectID: projectID, timestamp: now.Add(-4 * time.Minute), toolsetSlug: "backed", statusCode: 404})
+	insertHealthToolCall(t, ctx, ti, healthToolCallParams{projectID: projectID, timestamp: now.Add(-3 * time.Minute), mcpServerID: serverID, statusCode: 503})
+	insertHealthToolCall(t, ctx, ti, healthToolCallParams{projectID: projectID, timestamp: now.Add(-2 * time.Minute), mcpServerID: uuid.NewString(), toolsetSlug: "backed", statusCode: 503})
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	target := telemetry.MCPServerTelemetryTarget{ProjectID: projectID, MCPServerID: serverID, ToolsetSlug: "backed", URLSlug: "backed"}
@@ -137,13 +139,14 @@ func TestMCPServerHealth_ToolsetBackedServer(t *testing.T) {
 	outcomes, err := reader.Outcomes(ctx, target, from, to)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), outcomes.Success)
+	require.Equal(t, int64(1), outcomes.ServerError, "only the selected server contributes failures, not a sibling sharing its slug")
 	require.Equal(t, int64(1), outcomes.ClientError, "a row carrying only the toolset slug is matched through it")
 
 	points, err := reader.Series(ctx, target, from, to, 24*time.Hour)
 	require.NoError(t, err)
 	total, failed := seriesTotals(points)
-	require.Equal(t, int64(2), total, "the series matches either identity and counts a row carrying both once")
-	require.Equal(t, int64(1), failed)
+	require.Equal(t, int64(3), total, "the series matches either identity and counts a row carrying both once")
+	require.Equal(t, int64(2), failed, "shared-slug member failures are excluded")
 }
 
 func TestMCPServerHealth_ToolsetOnlyServer(t *testing.T) {

@@ -427,13 +427,13 @@ func traceCursorScope(target drilldownTarget, outcome string) string {
 	)
 }
 
-// summaryIdentityParams scopes the summary read to exactly one identity filter.
+// summaryIdentityParams scopes the summary read to one configured server.
 //
-// The two are recorded on different traffic: hosted calls carry
-// gram.toolset.slug and no mcp_server id, so ANDing both matches nothing and
-// silently reports zero latency. The mcp_server id is what scopes the models
-// that carry no slug, where an empty slug would otherwise read as "no filter"
-// and return the whole project under this MCP's name.
+// Older hosted calls carry gram.toolset.slug and no mcp_server id, so ANDing
+// both would drop them; the slug read instead leaves out rows stamped with
+// another server's id. The mcp_server id is what scopes the models that carry
+// no slug, where an empty slug would otherwise read as "no filter" and return
+// the whole project under this MCP's name.
 func summaryIdentityParams(target drilldownTarget, start, end int64) telemetryrepo.GetOverviewSummaryParams {
 	params := telemetryrepo.GetOverviewSummaryParams{
 		GramProjectID: target.projectID,
@@ -442,6 +442,7 @@ func summaryIdentityParams(target drilldownTarget, start, end int64) telemetryre
 	}
 	if slug := target.identity.toolsetSlug; slug != "" {
 		params.ToolsetSlug = slug
+		params.ToolsetSlugServerID = target.identity.mcpServerID
 		return params
 	}
 	params.MCPServerID = target.identity.mcpServerID
