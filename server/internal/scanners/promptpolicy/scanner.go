@@ -60,6 +60,9 @@ func (s *Scanner) ScanWithVerdict(ctx context.Context, orgID, projectID, userID,
 }
 
 func FindingsFromEvaluation(cfg Config, verdict *Verdict, err error, judgeUnavailable bool) []scanners.Finding {
+	if errors.Is(err, ErrNoVerdict) {
+		return []scanners.Finding{}
+	}
 	if err != nil || judgeUnavailable {
 		if cfg.FailOpen {
 			return []scanners.Finding{}
