@@ -30,7 +30,7 @@ INSERT INTO api_keys (
   , $6
   , $7::text[]
 )
-RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
+RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, parent_api_key_id, device_id, created_at, updated_at, deleted_at, deleted, last_accessed_at
 `
 
 type CreateAPIKeyParams struct {
@@ -67,6 +67,8 @@ func (q *Queries) CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (Api
 		&i.DelegatedGrants,
 		&i.DelegatedGrantsVersion,
 		&i.ExpiresAt,
+		&i.ParentApiKeyID,
+		&i.DeviceID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -102,7 +104,7 @@ INSERT INTO api_keys (
   , $8
   , $9
 )
-RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
+RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, parent_api_key_id, device_id, created_at, updated_at, deleted_at, deleted, last_accessed_at
 `
 
 type CreateAgentAPIKeyParams struct {
@@ -143,6 +145,8 @@ func (q *Queries) CreateAgentAPIKey(ctx context.Context, arg CreateAgentAPIKeyPa
 		&i.DelegatedGrants,
 		&i.DelegatedGrantsVersion,
 		&i.ExpiresAt,
+		&i.ParentApiKeyID,
+		&i.DeviceID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -248,7 +252,7 @@ WHERE id = $1
   AND organization_id = $2
   AND subject_urn = $3
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
+RETURNING id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, parent_api_key_id, device_id, created_at, updated_at, deleted_at, deleted, last_accessed_at
 `
 
 type DeleteAgentAPIKeyParams struct {
@@ -273,6 +277,8 @@ func (q *Queries) DeleteAgentAPIKey(ctx context.Context, arg DeleteAgentAPIKeyPa
 		&i.DelegatedGrants,
 		&i.DelegatedGrantsVersion,
 		&i.ExpiresAt,
+		&i.ParentApiKeyID,
+		&i.DeviceID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -358,7 +364,7 @@ func (q *Queries) ExpirePluginHooksAPIKeysByProject(ctx context.Context, arg Exp
 }
 
 const getAPIKeyByID = `-- name: GetAPIKeyByID :one
-SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
+SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, parent_api_key_id, device_id, created_at, updated_at, deleted_at, deleted, last_accessed_at
 FROM api_keys
 WHERE id = $1
   AND organization_id = $2
@@ -385,6 +391,8 @@ func (q *Queries) GetAPIKeyByID(ctx context.Context, arg GetAPIKeyByIDParams) (A
 		&i.DelegatedGrants,
 		&i.DelegatedGrantsVersion,
 		&i.ExpiresAt,
+		&i.ParentApiKeyID,
+		&i.DeviceID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -395,7 +403,7 @@ func (q *Queries) GetAPIKeyByID(ctx context.Context, arg GetAPIKeyByIDParams) (A
 }
 
 const getAPIKeyByIDForUpdate = `-- name: GetAPIKeyByIDForUpdate :one
-SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
+SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, parent_api_key_id, device_id, created_at, updated_at, deleted_at, deleted, last_accessed_at
 FROM api_keys
 WHERE id = $1
   AND organization_id = $2
@@ -423,6 +431,8 @@ func (q *Queries) GetAPIKeyByIDForUpdate(ctx context.Context, arg GetAPIKeyByIDF
 		&i.DelegatedGrants,
 		&i.DelegatedGrantsVersion,
 		&i.ExpiresAt,
+		&i.ParentApiKeyID,
+		&i.DeviceID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -433,7 +443,7 @@ func (q *Queries) GetAPIKeyByIDForUpdate(ctx context.Context, arg GetAPIKeyByIDF
 }
 
 const getAPIKeyByKeyHash = `-- name: GetAPIKeyByKeyHash :one
-SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.subject_urn, api_keys.delegated_grants, api_keys.delegated_grants_version, api_keys.expires_at, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at, users.email
+SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.subject_urn, api_keys.delegated_grants, api_keys.delegated_grants_version, api_keys.expires_at, api_keys.parent_api_key_id, api_keys.device_id, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at, users.email
 FROM api_keys
 JOIN users ON users.id = api_keys.created_by_user_id
 WHERE key_hash = $1
@@ -454,6 +464,8 @@ type GetAPIKeyByKeyHashRow struct {
 	DelegatedGrants        []byte
 	DelegatedGrantsVersion pgtype.Int4
 	ExpiresAt              pgtype.Timestamptz
+	ParentApiKeyID         uuid.NullUUID
+	DeviceID               pgtype.Text
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
@@ -481,6 +493,8 @@ func (q *Queries) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (GetAP
 		&i.DelegatedGrants,
 		&i.DelegatedGrantsVersion,
 		&i.ExpiresAt,
+		&i.ParentApiKeyID,
+		&i.DeviceID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -558,7 +572,7 @@ func (q *Queries) IsAPIKeyManagedByActiveLiteLLMInstance(ctx context.Context, ar
 }
 
 const listAPIKeysByOrganization = `-- name: ListAPIKeysByOrganization :many
-SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.subject_urn, api_keys.delegated_grants, api_keys.delegated_grants_version, api_keys.expires_at, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at
+SELECT api_keys.id, api_keys.organization_id, api_keys.project_id, api_keys.created_by_user_id, api_keys.name, api_keys.key_prefix, api_keys.key_hash, api_keys.scopes, api_keys.subject_urn, api_keys.delegated_grants, api_keys.delegated_grants_version, api_keys.expires_at, api_keys.parent_api_key_id, api_keys.device_id, api_keys.created_at, api_keys.updated_at, api_keys.deleted_at, api_keys.deleted, api_keys.last_accessed_at
 FROM api_keys
 WHERE api_keys.organization_id = $1
   AND api_keys.deleted IS FALSE
@@ -601,6 +615,8 @@ func (q *Queries) ListAPIKeysByOrganization(ctx context.Context, organizationID 
 			&i.DelegatedGrants,
 			&i.DelegatedGrantsVersion,
 			&i.ExpiresAt,
+			&i.ParentApiKeyID,
+			&i.DeviceID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -618,7 +634,7 @@ func (q *Queries) ListAPIKeysByOrganization(ctx context.Context, organizationID 
 }
 
 const listAgentAPIKeys = `-- name: ListAgentAPIKeys :many
-SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
+SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, parent_api_key_id, device_id, created_at, updated_at, deleted_at, deleted, last_accessed_at
 FROM api_keys
 WHERE organization_id = $1
   AND subject_urn = $2
@@ -653,6 +669,8 @@ func (q *Queries) ListAgentAPIKeys(ctx context.Context, arg ListAgentAPIKeysPara
 			&i.DelegatedGrants,
 			&i.DelegatedGrantsVersion,
 			&i.ExpiresAt,
+			&i.ParentApiKeyID,
+			&i.DeviceID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,

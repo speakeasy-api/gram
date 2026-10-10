@@ -1,4 +1,4 @@
-h1:3NcTfhyWsYm6mERMT8iHxFt9XhEoFB0tae5hPzbxjwU=
+h1:EhCTiQIz5aKidxgs1iu2XFaok8HsupgTT3LwHoHwmi4=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -465,3 +465,4 @@ h1:3NcTfhyWsYm6mERMT8iHxFt9XhEoFB0tae5hPzbxjwU=
 20261008140642_plugin-assignments-install-mode.sql h1:yfHd69hHXMmPyOk7rwPWdg3hnMeWhxX0+nhPO/vOxTQ=
 20261009001313_platform-mcp-receipts-user-operation-index.sql h1:V2qls0HlrodVvttuI48FdtrdGD9+EIC24SATxTkLRZ8=
 20261009115022_sigint_configuration.sql h1:Czu2BqmSrIi7LgYY/fBLPsq58UXwmJN0FaEmgCzHTw4=
+20261010151004_api-keys-add-minted-credential-columns.sql h1:xQ5GIP2vqIibwEVVxUxulbFIZYJ0eNNyVHR8R7oJqGQ=
