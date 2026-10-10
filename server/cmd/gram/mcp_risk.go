@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/metering"
@@ -30,7 +31,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
-	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -90,6 +90,8 @@ func newMCPRiskEvaluator(
 	features feature.Provider,
 	enforcementDispatcher risk.EnforcementDispatcher,
 	completions gramopenrouter.CompletionClient,
+	guardianPolicy *guardian.Policy,
+	provisioner gramopenrouter.Provisioner,
 	publishers *background.Publishers,
 	shadowMCPClient *shadowmcp.Client,
 	toolIOLogsEnabled telemetry.FeatureChecker,
@@ -99,7 +101,7 @@ func newMCPRiskEvaluator(
 		piiScanner = ra.NewPresidioClient(presidioURL, tracerProvider, meterProvider, logger)
 	}
 	judgeLimiter := gramopenrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
-	piScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completions, judgeLimiter).Classify)
+	piScanner := promptinjection.NewScanner(logger, newPICascade(logger, tracerProvider, meterProvider, completions, guardianPolicy, provisioner, db).Classify)
 	promptPolicyScanner := promptpolicy.NewScanner(logger, ppopenrouter.New(logger, tracerProvider, meterProvider, completions, judgeLimiter).Evaluate)
 	celEngine, err := celenv.New()
 	if err != nil {

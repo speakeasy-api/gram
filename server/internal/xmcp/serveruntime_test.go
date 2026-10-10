@@ -313,13 +313,16 @@ func TestServeMCP_PublicRemoteBackend_IssuerTokenSendsNoAuthorizationUpstream(t 
 
 	ctx, ti := newTestService(t)
 
-	var gotAuth string
-	done := make(chan struct{}, 1)
+	authorization := make(chan string, 1)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get("Authorization")
+		// Metadata probes run concurrently; only capture the proxied MCP request.
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
-		done <- struct{}{}
+		authorization <- r.Header.Get("Authorization")
 	}))
 	t.Cleanup(upstream.Close)
 
@@ -331,9 +334,8 @@ func TestServeMCP_PublicRemoteBackend_IssuerTokenSendsNoAuthorizationUpstream(t 
 	token := mintAccessTokenForSeededEndpoint(t, ctx, ti, slug, mcpServer)
 
 	rr := runHandler(t, ctx, ti, http.MethodPost, slug, bearer(token), []byte(initializeBody))
-	<-done
 	require.Equal(t, http.StatusOK, rr.Code, "body=%s", rr.Body.String())
-	require.Empty(t, gotAuth, "issuer-gated bearer must never leak to the remote MCP server")
+	require.Empty(t, <-authorization, "issuer-gated bearer must never leak to the remote MCP server")
 }
 
 // Public variant of the API-key rejection above.
