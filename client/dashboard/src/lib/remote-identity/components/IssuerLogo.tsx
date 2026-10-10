@@ -49,7 +49,8 @@ export function IssuerLogo({
           className,
         )}
       >
-        {name.trim().charAt(0)}
+        {/* The first code point, so an emoji or astral letter stays whole. */}
+        {Array.from(name.trim())[0] ?? "?"}
       </span>
     );
   }

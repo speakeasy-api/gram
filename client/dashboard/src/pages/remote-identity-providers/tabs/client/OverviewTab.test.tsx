@@ -272,17 +272,22 @@ describe("client overview identity provider card", () => {
   });
 
   it("omits the card when the issuer failed to load", () => {
-    renderTab({ issuer: undefined });
+    const { container } = renderTab({ issuer: undefined });
 
     expect(screen.queryByText("View identity provider")).toBeNull();
+    expect(container.querySelector(".skeleton")).toBeNull();
     expect(screen.getByText("Client")).toBeTruthy();
   });
 
   it("keeps the card while the issuer loads", () => {
-    renderTab({ issuer: undefined, isIssuerLoading: true });
+    const { container } = renderTab({
+      issuer: undefined,
+      isIssuerLoading: true,
+    });
 
     // The card holds its place with a skeleton until the issuer arrives.
     expect(screen.queryByText("View identity provider")).toBeNull();
+    expect(container.querySelector(".skeleton")).not.toBeNull();
     expect(screen.getByText("Client")).toBeTruthy();
   });
 });

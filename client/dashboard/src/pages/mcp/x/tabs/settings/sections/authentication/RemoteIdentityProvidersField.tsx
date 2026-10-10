@@ -2,12 +2,8 @@ import { FieldError } from "@/components/ui/Field";
 import { RequireScope } from "@/components/require-scope";
 import { Text } from "@/components/ui/Text";
 import { remoteSessionScopeTier } from "@/lib/sources";
-import { IssuerLink } from "@/lib/remote-identity";
-import {
-  IssuerLogo,
-  ScopeBadge,
-  issuerDisplayName,
-} from "@/lib/remote-identity";
+import { IssuerLink, IssuerLogo, ScopeBadge } from "@/lib/remote-identity";
+import { issuerDisplayName } from "@/pages/remote-identity-providers/issuerDisplay";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { Button } from "@/components/ui/Button";
 import { Plus, Trash2 } from "lucide-react";
@@ -150,6 +146,7 @@ function RemoteIdentityProviderRow({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <IssuerLogo
           logoAssetId={issuer.logoAssetId}
+          // The name IssuerLink shows beside it.
           name={issuerDisplayName(issuer)}
           size="md"
         />

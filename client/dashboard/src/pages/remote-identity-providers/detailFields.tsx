@@ -49,7 +49,12 @@ export function InfoField({
   className?: string;
 }): JSX.Element {
   return (
-    <div data-info-field className={cn("flex flex-col gap-1", className)}>
+    // min-w-0 lets a one-line URL truncate inside a grid column instead of
+    // widening it.
+    <div
+      data-info-field
+      className={cn("flex min-w-0 flex-col gap-1", className)}
+    >
       <div className="flex flex-wrap items-center gap-2">
         <Text small muted>
           {label}
@@ -78,7 +83,7 @@ export function InfoSection({
   children: ReactNode;
 }): JSX.Element {
   return (
-    <div>
+    <div className="min-w-0">
       <Heading variant="h4" className="mb-3">
         {title}
       </Heading>
@@ -91,7 +96,8 @@ export function InfoSection({
 // truncated, and when it is cut off lays the whole value over it on hover. It
 // follows the MCP server sidebar's URL row: the trigger and the card carry the
 // same insets, so pulling the card up by the trigger's height lands the two
-// texts on each other.
+// texts on each other. The trigger takes focus so keyboard users can reveal
+// the value too.
 export function OverflowText({
   children,
   muted,
@@ -113,7 +119,11 @@ export function OverflowText({
       {/* No delay: this reveals text already on screen. */}
       <HoverCard openDelay={0} open={open} onOpenChange={onOpenChange}>
         <HoverCardTrigger asChild>
-          <span ref={lineRef} className="-mx-2 block px-2 py-1">
+          <span
+            ref={lineRef}
+            tabIndex={0}
+            className="focus-visible:ring-ring -mx-2 block px-2 py-1 focus-visible:ring-1 focus-visible:outline-none"
+          >
             <Text
               small
               muted={muted}
@@ -128,7 +138,8 @@ export function OverflowText({
           align="start"
           side="bottom"
           sideOffset={-28}
-          className="w-auto max-w-none px-2 py-1 font-mono text-sm whitespace-nowrap duration-75"
+          // A value wider than the viewport wraps instead of running off it.
+          className="w-max max-w-[calc(100vw-2rem)] px-2 py-1 font-mono text-sm break-all duration-75"
         >
           {children}
         </HoverCardContent>

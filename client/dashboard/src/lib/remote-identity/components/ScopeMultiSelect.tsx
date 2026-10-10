@@ -1,6 +1,6 @@
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { useMemo } from "react";
-import { sharedScopePrefix, shortScope } from "../model/scopePrefix";
+import { scopeLabels } from "../model/scopePrefix";
 
 // Enough that a typical selection shows whole before it collapses to a count.
 const SCOPE_BADGE_LIMIT = 8;
@@ -26,12 +26,8 @@ export function ScopeMultiSelect({
   // Typed scopes join the list so the menu shows every selection. URL scopes
   // under a shared base are labeled by what follows it; the value stays whole.
   const items = useMemo(() => {
-    const scopes = [...new Set([...options, ...value])];
-    const prefix = sharedScopePrefix(scopes);
-    return scopes.map((scope) => ({
-      label: shortScope(scope, prefix),
-      value: scope,
-    }));
+    const labels = scopeLabels([...new Set([...options, ...value])]);
+    return Array.from(labels, ([scope, label]) => ({ label, value: scope }));
   }, [options, value]);
   return (
     <MultiSelect

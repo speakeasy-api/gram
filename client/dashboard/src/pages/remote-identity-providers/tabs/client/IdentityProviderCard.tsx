@@ -36,7 +36,8 @@ export function IdentityProviderCard({
           <div className="flex flex-col gap-6">
             {/* The provider itself heads the card, ruled off from its
                 details edge to edge. */}
-            <div className="-mx-6 flex items-center justify-between gap-4 border-b px-6 pb-4">
+            {/* On a narrow card the link wraps below the provider. */}
+            <div className="-mx-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b px-6 pb-4">
               <div className="flex min-w-0 items-center gap-3">
                 <IssuerLogo
                   logoAssetId={issuer.logoAssetId}

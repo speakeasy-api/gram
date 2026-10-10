@@ -500,4 +500,26 @@ describe("MultiSelect creatable values", () => {
 
     expect(onValueChange).toHaveBeenCalledWith(["Read"]);
   });
+
+  it("creates a value that only matches an option's label when case-sensitive", () => {
+    const onValueChange = vi.fn<(value: string[]) => void>();
+    render(
+      <MultiSelect
+        options={[{ label: "read", value: "https://example.com/auth/read" }]}
+        onValueChange={onValueChange}
+        placeholder="Pick values"
+        creatable
+        caseSensitiveCreate
+        hideSelectAll
+      />,
+    );
+    fireEvent.click(screen.getByText("Pick values"));
+    fireEvent.change(screen.getByPlaceholderText("Search options..."), {
+      target: { value: "read" },
+    });
+
+    fireEvent.click(screen.getByRole("option", { name: /Create new option/ }));
+
+    expect(onValueChange).toHaveBeenCalledWith(["read"]);
+  });
 });

@@ -9,8 +9,15 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/HoverCard";
 import { Text } from "@/components/ui/Text";
-import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { sharedScopePrefix, shortScope } from "../model/scopePrefix";
+import {
+  type RefObject,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { scopeLabels } from "../model/scopePrefix";
 
 // Enough to show a typical provider whole; Google and Microsoft advertise
 // hundreds, which collapse behind "+N more".
@@ -36,36 +43,43 @@ export function ScopeList({
 }): JSX.Element {
   // Providers occasionally list a scope twice; each chip is keyed by scope.
   const scopes = useMemo(() => [...new Set(listed ?? [])], [listed]);
-  const prefix = useMemo(() => sharedScopePrefix(scopes), [scopes]);
+  const labels = useMemo(() => scopeLabels(scopes), [scopes]);
 
   if (scopes.length === 0) {
     return <Text small>—</Text>;
   }
   return maxLines ? (
-    <ClampedScopes scopes={scopes} prefix={prefix} maxLines={maxLines} />
+    <ClampedScopes scopes={scopes} labels={labels} maxLines={maxLines} />
   ) : (
-    <CollapsibleScopes scopes={scopes} prefix={prefix} />
+    <CollapsibleScopes scopes={scopes} labels={labels} />
   );
 }
 
 function CollapsibleScopes({
   scopes,
-  prefix,
+  labels,
 }: {
   scopes: string[];
-  prefix: string;
+  labels: Map<string, string>;
 }): JSX.Element {
   const { collapsible, expanded, toggle, visible } = useCollapsedPreview(
     scopes,
     PREVIEW_COUNT,
   );
   const listId = useId();
+  const listRef = useRef<HTMLUListElement>(null);
+  // Expanding grows the list, which the observer sees.
+  const truncated = useTruncatedScopes(listRef, scopes);
 
   return (
-    <ul id={listId} className="flex flex-wrap items-center gap-1">
+    <ul ref={listRef} id={listId} className="flex flex-wrap items-center gap-1">
       {visible.map((scope) => (
         <li key={scope} className="max-w-full">
-          <ScopeChip scope={scope} prefix={prefix} />
+          <ScopeChip
+            scope={scope}
+            label={labels.get(scope)!}
+            truncated={truncated.has(scope)}
+          />
         </li>
       ))}
       {collapsible && (
@@ -85,14 +99,15 @@ function CollapsibleScopes({
 
 function ClampedScopes({
   scopes,
-  prefix,
+  labels,
   maxLines,
 }: {
   scopes: string[];
-  prefix: string;
+  labels: Map<string, string>;
   maxLines: number;
 }): JSX.Element {
   const listRef = useRef<HTMLUListElement>(null);
+  const truncated = useTruncatedScopes(listRef, scopes);
   // Chips wrap freely, so the clip is measured: the list is cut at the top of
   // the first line past maxLines, and every chip from there on is counted.
   const [clip, setClip] = useState<{ height: number; hidden: number } | null>(
@@ -116,10 +131,13 @@ function ClampedScopes({
         return;
       }
       const shown = items.filter((item) => item.top < cut);
-      setClip({
-        height: Math.max(...shown.map((item) => item.bottom)) - top,
-        hidden: items.length - shown.length,
-      });
+      const height = Math.max(...shown.map((item) => item.bottom)) - top;
+      const hidden = items.length - shown.length;
+      setClip((prev) =>
+        prev?.height === height && prev.hidden === hidden
+          ? prev
+          : { height, hidden },
+      );
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -134,9 +152,19 @@ function ClampedScopes({
         className="flex flex-wrap items-center gap-1 overflow-hidden"
         style={clip ? { maxHeight: clip.height } : undefined}
       >
-        {scopes.map((scope) => (
-          <li key={scope} className="max-w-full">
-            <ScopeChip scope={scope} prefix={prefix} />
+        {scopes.map((scope, i) => (
+          <li
+            key={scope}
+            className="max-w-full"
+            // Chips clipped out of view stay out of the tab order and away
+            // from screen readers; "and N more" stands in for them.
+            inert={!!clip && i >= scopes.length - clip.hidden}
+          >
+            <ScopeChip
+              scope={scope}
+              label={labels.get(scope)!}
+              truncated={truncated.has(scope)}
+            />
           </li>
         ))}
       </ul>
@@ -150,39 +178,86 @@ function ClampedScopes({
 }
 
 /**
- * One scope. A scope shown without its shared base lays its full name over
- * the chip on hover.
+ * useTruncatedScopes watches a list of chips and returns the scopes whose
+ * chip is cut off. Only a scope longer than the whole row truncates, so one
+ * observer on the list, not one per chip, catches it.
+ */
+function useTruncatedScopes(
+  listRef: RefObject<HTMLUListElement | null>,
+  scopes: string[],
+): Set<string> {
+  const [truncated, setTruncated] = useState<Set<string>>(() => new Set());
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const measure = () => {
+      const next = new Set<string>();
+      for (const text of list.querySelectorAll<HTMLElement>("[data-scope]")) {
+        if (text.scrollWidth > text.clientWidth) next.add(text.dataset.scope!);
+      }
+      setTruncated((prev) =>
+        prev.size === next.size && [...next].every((s) => prev.has(s))
+          ? prev
+          : next,
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [listRef, scopes]);
+  return truncated;
+}
+
+/**
+ * One scope. A chip that hides part of its scope, by dropping the shared base
+ * or by truncating, takes focus and lays the full scope over itself on hover
+ * or focus.
  */
 function ScopeChip({
   scope,
-  prefix,
+  label,
+  truncated,
 }: {
   scope: string;
-  prefix: string;
+  label: string;
+  truncated: boolean;
 }): JSX.Element {
-  const label = shortScope(scope, prefix);
+  const shortened = label !== scope;
+  const reveals = shortened || truncated;
   const chip = (
     <Badge
       background={false}
+      tabIndex={reveals ? 0 : undefined}
       // Scopes are case-sensitive, so the badge must not uppercase them.
-      className={`max-w-full ${CHIP_TEXT}`}
+      className={`focus-visible:ring-ring max-w-full focus-visible:ring-1 focus-visible:outline-none ${CHIP_TEXT}`}
     >
-      <span className="truncate">{label}</span>
+      <Badge.Text data-scope={scope} className="truncate">
+        {shortened ? (
+          <>
+            <span aria-hidden>{label}</span>
+            <span className="sr-only">{scope}</span>
+          </>
+        ) : (
+          label
+        )}
+      </Badge.Text>
     </Badge>
   );
-  if (label === scope) return chip;
+  if (!reveals) return chip;
 
   return (
     // No delay: this reveals the rest of a name already on screen.
     <HoverCard openDelay={0}>
       <HoverCardTrigger asChild>{chip}</HoverCardTrigger>
       {/* A chip is 20px tall; pulling the card up by that lands it on the
-          chip, with the same border, insets and type. */}
+          chip, with the same border, insets and type. A scope wider than the
+          viewport wraps instead of running off it. */}
       <HoverCardContent
         align="start"
         side="bottom"
         sideOffset={-20}
-        className={`flex h-5 w-auto max-w-none items-center px-1 py-0 whitespace-nowrap duration-75 ${CHIP_TEXT}`}
+        className={`flex min-h-5 w-max max-w-[calc(100vw-2rem)] items-center px-1 py-0 break-all duration-75 ${CHIP_TEXT}`}
       >
         {scope}
       </HoverCardContent>
