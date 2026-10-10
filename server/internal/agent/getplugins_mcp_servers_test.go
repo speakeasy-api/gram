@@ -20,9 +20,16 @@ import (
 // do not collide across tests.
 func seedToolsetServer(t *testing.T, ti *testInstance, pluginID uuid.UUID, slug, displayName string) (uuid.UUID, string) {
 	t.Helper()
+	return seedProjectToolsetServer(t, ti, ti.projectID, pluginID, slug, displayName)
+}
+
+// seedProjectToolsetServer is seedToolsetServer for a toolset in another
+// project of the same org.
+func seedProjectToolsetServer(t *testing.T, ti *testInstance, projectID, pluginID uuid.UUID, slug, displayName string) (uuid.UUID, string) {
+	t.Helper()
 	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{
 		OrganizationID:         ti.orgID,
-		ProjectID:              ti.projectID,
+		ProjectID:              projectID,
 		Name:                   slug,
 		Slug:                   slug,
 		Description:            pgtype.Text{Valid: false},
@@ -158,6 +165,7 @@ func TestGetPlugins_AgentListsSharedServerOnceAndSuffixesNameCollisions(t *testi
 
 	res, err := ti.service.GetPlugins(agentCtx, &gen.GetPluginsPayload{})
 	require.NoError(t, err)
+	require.Len(t, res.McpServers, 2)
 	require.Equal(t, map[string]string{"speakeasy-dup-linear": dashURL, "speakeasy-dup-linear-2": underscoreURL}, mcpServersByName(res))
 }
 
@@ -214,4 +222,26 @@ func TestGetPlugins_AgentMCPServerChangesChangeETag(t *testing.T) {
 	again, err := ti.service.GetPlugins(agentCtx, &gen.GetPluginsPayload{})
 	require.NoError(t, err)
 	require.Equal(t, withServer.Etag, again.Etag, "an unchanged policy keeps its ETag")
+}
+
+func TestGetPlugins_AgentSkipsServersOfCollapsedMarketplaces(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "default-token")
+	agentCtx, actor := withAgentKeyAuth(t, ctx, ti, "CI agent")
+
+	// beta's name collides with the default project's, so its marketplace is
+	// not served and its plugin is dropped: its server must go with it.
+	beta := seedProject(t, ctx, ti.conn, ti.orgID, "beta")
+	setMarketplaceOverride(t, ctx, ti.conn, beta, wantMarketplace)
+	publishMarketplace(t, ctx, ti.conn, beta, "beta-token")
+	betaTool := seedPlugin(t, ctx, ti.conn, ti.orgID, beta, "beta-only-tool")
+	assignPlugin(t, ctx, ti.conn, betaTool, ti.orgID, actor.String())
+	seedProjectToolsetServer(t, ti, beta, betaTool, "beta-linear", "Linear")
+
+	res, err := ti.service.GetPlugins(agentCtx, &gen.GetPluginsPayload{})
+	require.NoError(t, err)
+	require.NotContains(t, pluginSlugs(res), "beta-only-tool")
+	require.Empty(t, res.McpServers, "a server is listed only when its plugin is")
 }

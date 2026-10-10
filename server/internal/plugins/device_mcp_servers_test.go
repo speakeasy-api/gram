@@ -38,3 +38,23 @@ func TestDeviceMCPServerName(t *testing.T) {
 		})
 	}
 }
+
+func TestRequireHTTPS(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		url string
+		ok  bool
+	}{
+		{"https://app.getgram.ai/mcp/linear", true},
+		{"http://app.getgram.ai/mcp/linear", false},
+		{"https:///mcp/linear", false},
+		{"/mcp/linear", false},
+	} {
+		err := requireHTTPS(tc.url)
+		if tc.ok {
+			require.NoError(t, err, tc.url)
+		} else {
+			require.Error(t, err, tc.url)
+		}
+	}
+}
