@@ -23,7 +23,7 @@ import (
 
 func newAnalyzer(t *testing.T, completer llmanalyzer.Completer) *llmanalyzer.Analyzer {
 	t.Helper()
-	return llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), completer)
+	return llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), completer)
 }
 
 func userRequest(body string) llmanalyzer.Request {

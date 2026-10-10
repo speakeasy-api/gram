@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/riskhealth"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"math"
@@ -241,6 +242,7 @@ type scannerMetrics struct {
 	llmPolicyEvaluations metric.Int64Counter
 	llmPolicyDuration    metric.Float64Histogram
 	llmShadowComparison  metric.Int64Counter
+	health               *riskhealth.Metrics
 }
 
 func newScannerMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *scannerMetrics {
@@ -310,6 +312,7 @@ func newScannerMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) 
 		llmPolicyEvaluations: llmPolicyEvaluations,
 		llmPolicyDuration:    llmPolicyDuration,
 		llmShadowComparison:  llmShadowComparison,
+		health:               riskhealth.NewMetrics(meterProvider, logger),
 	}
 }
 
@@ -654,6 +657,7 @@ func (s *Scanner) scanForEnforcement(
 	for _, p := range applicablePolicies {
 		g.Go(func() error {
 			result, scanErr := s.scanPolicy(gctx, p, request.Provenance, text, messageType, toolName, promptPoliciesOn, mode, legacyFindings, llmFindings, laneTruncated, incomplete)
+			s.recordPolicyHealth(gctx, organizationID, result, scanErr)
 			if scanErr != nil {
 				incomplete.Store(true)
 				if errors.Is(scanErr, context.Canceled) {
@@ -809,6 +813,27 @@ func (s *Scanner) HasEnabledShadowMCPPolicy(ctx context.Context, projectID uuid.
 		return false, fmt.Errorf("list shadow_mcp policies: %w", err)
 	}
 	return len(policies) > 0, nil
+}
+
+// recordPolicyHealth reports one customer policy evaluation on the
+// cross-engine availability counter.
+//
+// Both failure shapes here are invisible in the enforcement metrics: a policy
+// whose scan errors is logged and dropped, and a policy that comes back with
+// a dead-letter sentinel reached no verdict because an engine it depends on
+// was down. In each case the event travelled unanalyzed against that policy,
+// which is what the counter is for.
+func (s *Scanner) recordPolicyHealth(ctx context.Context, organizationID string, result *ScanResult, scanErr error) {
+	switch {
+	case scanErr == nil && (result == nil || result.DeadLetterReason == ""):
+		s.metrics.health.RecordCompleted(ctx, organizationID, riskhealth.ComponentPolicyEvaluation)
+	case scanErr == nil:
+		s.metrics.health.RecordDegraded(ctx, organizationID, riskhealth.ComponentPolicyEvaluation, riskhealth.ReasonDependencyUnavailable)
+	case riskhealth.IsCanceled(scanErr):
+		s.metrics.health.RecordCanceled(ctx, organizationID, riskhealth.ComponentPolicyEvaluation)
+	default:
+		s.metrics.health.RecordDegraded(ctx, organizationID, riskhealth.ComponentPolicyEvaluation, riskhealth.ReasonPolicyError)
+	}
 }
 
 // recordScan records scan metrics. Uses non-blocking OTEL atomic operations.

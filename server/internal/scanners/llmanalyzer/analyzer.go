@@ -9,11 +9,13 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
+	"github.com/speakeasy-api/gram/server/internal/riskhealth"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/stokens"
 )
@@ -54,6 +56,7 @@ type Completer interface {
 type Analyzer struct {
 	logger    *slog.Logger
 	tracer    trace.Tracer
+	health    *riskhealth.Metrics
 	completer Completer
 	stokens   *stokens.Codec
 }
@@ -61,10 +64,11 @@ type Analyzer struct {
 // NewAnalyzer builds an analyzer over completer. A nil completer yields a
 // disabled analyzer whose Analyze always returns a dead-letter result, so the
 // lanes need no nil checks of their own.
-func NewAnalyzer(logger *slog.Logger, tracerProvider trace.TracerProvider, completer Completer) *Analyzer {
+func NewAnalyzer(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, completer Completer) *Analyzer {
 	return &Analyzer{
 		logger:    logger.With(attr.SlogComponent("risk-llm-analyzer")),
 		tracer:    tracerProvider.Tracer(tracerName),
+		health:    riskhealth.NewMetrics(meterProvider, logger),
 		completer: completer,
 		stokens:   stokens.NewCodec(),
 	}
@@ -184,6 +188,7 @@ func (a *Analyzer) Analyze(ctx context.Context, req Request) Analysis {
 		findings = append(findings, NewFinding(key, verdict.Risks[key].Reasoning))
 	}
 	span.SetAttributes(attribute.Int("gram.risk.llm.flagged_count", len(flagged)))
+	a.health.RecordCompleted(ctx, req.OrgID, riskhealth.ComponentLLMAnalyzer)
 
 	return Analysis{
 		Result: scanners.Result{
@@ -200,6 +205,11 @@ func (a *Analyzer) Analyze(ctx context.Context, req Request) Analysis {
 
 func (a *Analyzer) fail(ctx context.Context, span trace.Span, info CallInfo, completion Completion, truncated bool, err error) Analysis {
 	reason := DeadLetterReason(err)
+	if riskhealth.IsCanceled(err) {
+		a.health.RecordCanceled(ctx, info.OrgID, riskhealth.ComponentLLMAnalyzer)
+	} else {
+		a.health.RecordDegraded(ctx, info.OrgID, riskhealth.ComponentLLMAnalyzer, healthReason(reason))
+	}
 	span.RecordError(err)
 	span.SetStatus(codes.Error, "risk llm analysis failed")
 	span.SetAttributes(attribute.String("gram.risk.llm.dead_letter_reason", reason))
@@ -277,6 +287,29 @@ func DeadLetterReason(err error) string {
 		}
 	}
 	return ReasonRequestError
+}
+
+// healthReason maps a dead-letter reason onto the cross-engine availability
+// vocabulary. The dead-letter reasons stay as they are: they are written onto
+// sentinel findings and read by user-facing copy, so they cannot be renamed
+// to match a metric dimension.
+func healthReason(reason string) riskhealth.Reason {
+	switch reason {
+	case ReasonDisabled:
+		return riskhealth.ReasonNotConfigured
+	case ReasonTimeout:
+		return riskhealth.ReasonTimeout
+	case ReasonRateLimited:
+		return riskhealth.ReasonRateLimited
+	case ReasonUpstream5xx:
+		return riskhealth.ReasonUpstreamUnavailable
+	case ReasonUpstream4xx:
+		return riskhealth.ReasonBadRequest
+	case ReasonEmptyCompletion, ReasonParseError:
+		return riskhealth.ReasonMalformedResponse
+	default:
+		return riskhealth.ReasonError
+	}
 }
 
 // NewFinding builds the finding for a positive score on key. The reasoning

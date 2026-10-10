@@ -467,7 +467,7 @@ func TestEnforceHandler_MeterFailurePreservesReply(t *testing.T) {
 	meterPub := gcp.NewMockPublisher[*meteringv1.MeterReading]()
 	meterPub.On("Publish", mock.Anything, mock.Anything).Return(errors.New("meter unavailable"))
 	_, client, writer := newReplyWriter(t)
-	analyzer := llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), flaggingStub(map[string]int{}, "clean"))
+	analyzer := llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), flaggingStub(map[string]int{}, "clean"))
 	handler := llmanalyzer.NewEnforceHandler(
 		slog.New(slog.NewTextHandler(&logs, nil)),
 		testenv.NewTracerProvider(t),

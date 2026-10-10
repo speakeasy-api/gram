@@ -575,7 +575,7 @@ func newStreamsCommand() *cli.Command {
 			} else {
 				logger.WarnContext(ctx, "LLM analyzer disabled: GRAM_RISK_LLM_URL empty")
 			}
-			llmAnalyzer := llmanalyzer.NewAnalyzer(logger, tracerProvider, riskLLMCompleter)
+			llmAnalyzer := llmanalyzer.NewAnalyzer(logger, tracerProvider, meterProvider, riskLLMCompleter)
 			llmAnalyzerHandler := llmanalyzer.NewHandler(logger, meterProvider, llmAnalyzer, findingsPub, riskRecorder)
 
 			// Custom-rules shadow-mode subscriber: loads a project's selected CEL
