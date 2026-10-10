@@ -8,7 +8,7 @@ import type { Dashboard } from "@gram/client/models/components/dashboard.js";
 import type { DashboardFilters } from "@gram/client/models/components/dashboardfilters.js";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
 import { useDashboards } from "@gram/client/react-query/dashboards.js";
-import { useMemo, type JSX } from "react";
+import { useMemo, type JSX, type ReactNode } from "react";
 import {
   barValuesFromSaved,
   sameFilters,
@@ -27,8 +27,10 @@ const NO_FILTERS: DashboardFilters = { values: {} };
 
 /** What the page is told about the page around it. */
 interface BuiltInDashboardPageProps {
-  /** Where the list of dashboards is. */
-  backHref: string;
+  /** Where the list of dashboards is, when the page sits under one. */
+  backHref?: string | undefined;
+  /** Buttons drawn beside Duplicate. */
+  actions?: ReactNode;
   /** Open the project dashboard Duplicate makes. */
   onOpen: (dashboard: Dashboard) => void;
 }
@@ -48,7 +50,10 @@ export function BuiltInDashboardPage({
   // request of its own.
   const list = useDashboards();
   const page = list.data?.builtIn.find((candidate) => candidate.slug === slug);
-  const back = <DashboardBackLink href={props.backHref} />;
+  const back =
+    props.backHref === undefined ? null : (
+      <DashboardBackLink href={props.backHref} />
+    );
 
   if (list.isPending) {
     return (
@@ -86,6 +91,7 @@ export function BuiltInDashboardPage({
 function BuiltInDashboardView({
   page,
   backHref,
+  actions,
   onOpen,
 }: BuiltInDashboardPageProps & { page: BuiltInDashboard }): JSX.Element {
   const mutations = useDashboardMutations();
@@ -156,15 +162,18 @@ function BuiltInDashboardView({
       }
       byline="Built by Speakeasy and read only. Duplicate it to lay it out your own way."
       actions={
-        <Button
-          variant="secondary"
-          size="sm"
-          icon="copy"
-          disabled={mutations.pending}
-          onClick={() => mutations.duplicateBuiltIn(page.slug, onOpen)}
-        >
-          Duplicate
-        </Button>
+        <>
+          {actions}
+          <Button
+            variant="secondary"
+            size="sm"
+            icon="copy"
+            disabled={mutations.pending}
+            onClick={() => mutations.duplicateBuiltIn(page.slug, onOpen)}
+          >
+            Duplicate
+          </Button>
+        </>
       }
       toolbar={
         <>
