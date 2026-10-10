@@ -1,4 +1,3 @@
-import { AssetImage } from "@/components/asset-image";
 import { DetailHero } from "@/components/detail-hero";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
@@ -14,7 +13,7 @@ import { remoteSessionScopeTier } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { Link, Navigate, useLocation, useParams } from "react-router";
-import { ScopeBadge } from "@/lib/remote-identity";
+import { IssuerLogo, ScopeBadge } from "@/lib/remote-identity";
 import { issuerDisplayName } from "./issuerDisplay";
 import { ClientsTab } from "./tabs/issuer/ClientsTab";
 import { OverviewTab } from "./tabs/issuer/OverviewTab";
@@ -81,12 +80,8 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
             )}
           </div>
           <div className="flex items-center gap-3">
-            {issuer?.logoAssetId && (
-              <AssetImage
-                assetId={issuer.logoAssetId}
-                alt=""
-                className="size-10 shrink-0 object-contain"
-              />
+            {issuer && (
+              <IssuerLogo logoAssetId={issuer.logoAssetId} name={label} />
             )}
             <Heading variant="h1" className="break-all normal-case">
               {label}

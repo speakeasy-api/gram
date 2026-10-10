@@ -165,7 +165,7 @@ export function KeySetField({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <Label>Signing Key Set</Label>
+      <Label>Signing key set</Label>
       <Select
         value={selected}
         onValueChange={handleChange}

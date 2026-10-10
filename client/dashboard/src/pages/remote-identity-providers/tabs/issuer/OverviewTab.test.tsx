@@ -30,7 +30,7 @@ function issuer(omitScopeFallback?: boolean): RemoteSessionIssuer {
 }
 
 function value(label: string): HTMLElement {
-  return screen.getByText(label).parentElement!;
+  return screen.getByText(label).closest<HTMLElement>("[data-info-field]")!;
 }
 
 describe("issuer overview scope fallback", () => {
