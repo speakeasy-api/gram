@@ -56,6 +56,12 @@ export interface UseProxiedMcpToolsResult {
    */
   needsAuth: boolean;
   error: Error | null;
+  /**
+   * When the latest successful listing completed (0 before the first). A
+   * refetch that returns the same tools keeps `tools` referentially equal but
+   * advances this, so callers can react to each successful listing.
+   */
+  listedAt: number;
   refetch: () => void;
 }
 
@@ -171,6 +177,7 @@ export function useProxiedMcpTools(
     isError: query.isError,
     needsAuth: query.isError && isUnauthorizedError(query.error),
     error: query.error,
+    listedAt: query.dataUpdatedAt,
     refetch: () => void query.refetch(),
   };
 }

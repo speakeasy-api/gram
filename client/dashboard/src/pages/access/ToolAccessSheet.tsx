@@ -278,7 +278,7 @@ function ToolChecklist({
   source: ToolSource;
   selected: string[];
   onChange: (tools: string[]) => void;
-}): JSX.Element {
+}): JSX.Element | null {
   const [query, setQuery] = useState("");
   switch (source.status) {
     case "loading":
@@ -300,14 +300,28 @@ function ToolChecklist({
           </span>
         </Alert>
       );
-    case "dynamic":
     case "none":
+      return null;
+    case "dynamic":
       return (
         <Alert variant="default" alignTop className="text-sm">
-          This server resolves its tools when they&rsquo;re called and none are
-          recorded, so it can&rsquo;t be limited by tool or by annotation. Allow
-          it as a whole, or leave it out.
+          Speakeasy doesn&rsquo;t proxy this server&rsquo;s traffic, so it
+          can&rsquo;t be limited by tool or by annotation. Allow it as a whole,
+          or leave it out.
         </Alert>
+      );
+    case "offline":
+      return (
+        <InlineEmptyState
+          icon="plug-zap"
+          heading="Tunnel offline — connect the agent to list its tools"
+          description="No tools are recorded for this server yet. Once its tunnel agent connects, its tools are listed and recorded here."
+          action={
+            <Button variant="secondary" size="sm" onClick={source.retry}>
+              <Button.Text>Retry</Button.Text>
+            </Button>
+          }
+        />
       );
     case "needs-connect":
       return <ConnectPrompt entry={entry} connect={source.connect} />;

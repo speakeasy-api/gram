@@ -10,6 +10,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import { ANNOTATION_OPTIONS, type ToolAnnotation } from "./annotations";
+import { unavailableTooltip } from "./unavailableTooltip";
 
 export type { ToolAnnotation };
 
@@ -33,6 +34,10 @@ export interface ToolSelectionServer {
   emptyLabel?: string;
   /** Expanded body when ready with zero tools. */
   emptyContent?: React.ReactNode;
+  /**
+   * Defaults to the unproxied-server copy, as does the tooltip. A caller with
+   * its own label gets no tooltip unless it passes one.
+   */
   unavailableLabel?: string;
   unavailableTooltip?: React.ReactNode;
   onRetry?: () => void;
@@ -561,16 +566,17 @@ function ServerRow({
           />
         </span>
         <span className="text-muted-foreground shrink-0 text-xs">
-          {server.unavailableLabel ?? "dynamic tools"}
+          {server.unavailableLabel ?? "not proxied"}
         </span>
       </div>
     );
-    if (!server.unavailableTooltip) return row;
+    const tooltip = unavailableTooltip(server);
+    if (!tooltip) return row;
     return (
       <Tooltip>
         <TooltipTrigger asChild>{row}</TooltipTrigger>
         <TooltipContent side="bottom" className="max-w-xs">
-          {server.unavailableTooltip}
+          {tooltip}
         </TooltipContent>
       </Tooltip>
     );

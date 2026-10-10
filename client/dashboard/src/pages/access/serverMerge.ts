@@ -41,14 +41,18 @@ export interface Server {
    */
   dynamicTools: boolean;
   /**
-   * True for servers backed by a remote MCP server (they have a
-   * remote_mcp_server_id). Only these carry stored tool metadata — the
-   * `listToolMetadata` endpoint rejects everything else — so the "Specific
-   * tools" picker fetches their tools from the metadata table on demand.
-   * Tunneled-backed dynamic servers are false here: they cannot be
-   * individually permissioned and stay a non-selectable row.
+   * True for servers that proxy to a remote or tunneled MCP server. Only these
+   * carry stored tool metadata — the `listToolMetadata` endpoint rejects
+   * everything else — so the "Specific tools" picker fetches their tools from
+   * the metadata table on demand. Other dynamic servers (unproxied ones) carry
+   * no Speakeasy traffic to permission per tool and stay a non-selectable row.
    */
-  remoteBacked: boolean;
+  storedToolInventory: boolean;
+  /**
+   * The tunneled source behind the server, when there is one, so an editor
+   * can tell whether its agent is connected before trying to list tools.
+   */
+  tunneledSourceId?: string;
 }
 
 export interface ServerGroup {
@@ -64,8 +68,10 @@ export interface McpServerRow {
   name?: string | undefined;
   slug?: string | undefined;
   toolsetId?: string | undefined;
-  /** Present only for remote-MCP-backed servers; absent for tunneled ones. */
+  /** Present only for remote-MCP-backed servers. */
   remoteMcpServerId?: string | undefined;
+  /** Present only for tunneled-MCP-backed servers. */
+  tunneledMcpServerId?: string | undefined;
 }
 
 /** See the GRANT ID INVARIANT at the top of this file. */
@@ -87,9 +93,8 @@ export function mcpServerDisplayName(row: McpServerRow): string {
  * - toolset-backed rows whose toolset entry is absent (e.g. filtered out for
  *   having no visible tools) are added with empty tools, still grantable at
  *   the server level;
- * - remote/tunneled rows are added with `dynamicTools: true`, with
- *   `remoteBacked` set only for remote-MCP-backed rows (tunneled ones cannot
- *   carry tool metadata).
+ * - remote/tunneled rows are added with `dynamicTools: true` and
+ *   `storedToolInventory: true`, since both carry stored tool metadata.
  * Does not mutate the input groups; groups left with no servers are dropped.
  */
 export function mergeMcpServersIntoGroups(
@@ -123,7 +128,8 @@ export function mergeMcpServersIntoGroups(
       mcpSlug: undefined,
       tools: [],
       dynamicTools: !row.toolsetId,
-      remoteBacked: !!row.remoteMcpServerId,
+      storedToolInventory: !!row.remoteMcpServerId || !!row.tunneledMcpServerId,
+      tunneledSourceId: row.tunneledMcpServerId,
     });
   }
 

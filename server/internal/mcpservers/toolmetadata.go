@@ -529,7 +529,7 @@ func (s *Service) DeleteToolMetadata(ctx context.Context, payload *gen.DeleteToo
 
 // invalidateDispositionCache best-effort evicts the server's cached tool
 // dispositions after a committed metadata write, so an admin edit takes effect
-// in remote-MCP enforcement without waiting out the read cache's TTL. A failure
+// in proxied-MCP enforcement without waiting out the read cache's TTL. A failure
 // only means that cache serves the prior view until it expires, so it is logged
 // rather than surfaced — the write itself has already committed.
 func (s *Service) invalidateDispositionCache(ctx context.Context, projectID, serverID uuid.UUID, logger *slog.Logger) {
@@ -567,7 +567,10 @@ func (s *Service) logToolMetadataChange(
 // loadMCPServerForToolMetadata resolves the server every tool metadata method
 // operates on, and rejects the ones that can never hold metadata.
 //
-// Tool metadata backs disposition-aware RBAC for remote-backed servers.
+// Tool metadata backs disposition-aware RBAC for servers that proxy to a
+// remote or tunneled MCP server: both resolve their tools at call time, and
+// the private-visibility interceptors key dispositions on the mcp_servers id
+// either way. Unproxied servers carry no Speakeasy traffic to enforce on.
 // Toolset-backed servers already persist annotation hints on their tool
 // definition tables, so storing a second copy here is disallowed. Reads are
 // rejected on the same terms: answering 200 with an empty list would read as
@@ -593,8 +596,8 @@ func loadMCPServerForToolMetadata(
 		return repo.McpServer{}, oops.E(oops.CodeUnexpected, err, "get mcp server").LogError(ctx, logger)
 	}
 
-	if !server.RemoteMcpServerID.Valid {
-		return repo.McpServer{}, oops.E(oops.CodeInvalid, nil, "tool metadata is only supported for MCP servers backed by a remote MCP server").LogError(ctx, logger)
+	if !server.RemoteMcpServerID.Valid && !server.TunneledMcpServerID.Valid {
+		return repo.McpServer{}, oops.E(oops.CodeInvalid, nil, "tool metadata is only supported for MCP servers backed by a remote or tunneled MCP server").LogWarn(ctx, logger)
 	}
 
 	return server, nil

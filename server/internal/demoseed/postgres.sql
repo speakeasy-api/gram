@@ -783,7 +783,7 @@ BEGIN
        ARRAY['user_demo_priya'],
        ARRAY[]::text[]),
       ('support-desk', 'Support Desk',
-       'Connects to Acme Support Tools with every tool, and to Slack for read-only tools only.',
+       'Connects to Acme Support Tools with every tool, to Slack for read-only tools only, and to JAMF only to list devices.',
        ARRAY[]::text[],
        ARRAY['user_demo_hana'],
        ARRAY[]::text[]),
@@ -1758,6 +1758,60 @@ BEGIN
   IF stray <> 1 THEN
     RAISE EXCEPTION 'demo seed: expected 1 supplemental server membership, found %', stray;
   END IF;
+
+  ------------------------------------------------------------------
+  -- A tunneled MCP source with a private server in front of it. Its tool
+  -- inventory and per-tool grants are stored, but the tunnel has never
+  -- connected an agent, so the Inspect tab shows it offline over the recorded
+  -- tools and the role editor can still limit it by tool. The key hash is not
+  -- the hash of any key: no agent can ever authenticate to this tunnel.
+  -- Added after role distribution above: it is not part of any plugin.
+  ------------------------------------------------------------------
+  INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix)
+  VALUES (demo.det_uuid('gram-demo-tunrbac-source'), proj_a, 'JAMF on-prem',
+          'demo-seed-unusable-' || demo.det_uuid('gram-demo-tunrbac-source')::text,
+          'gram_tunnel_demo');
+
+  INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                    authn_challenge_mode, session_duration)
+  VALUES (demo.det_uuid('gram-demo-tunrbac-issuer'), proj_a, demo_org, 'jamf',
+          'interactive', make_interval(secs => 14 * 24 * 60 * 60));
+
+  INSERT INTO mcp_servers (id, project_id, name, slug, tunneled_mcp_server_id,
+                           user_session_issuer_id, visibility)
+  VALUES (demo.det_uuid('gram-demo-tunrbac-mcpserver'), proj_a, 'JAMF', 'jamf',
+          demo.det_uuid('gram-demo-tunrbac-source'),
+          demo.det_uuid('gram-demo-tunrbac-issuer'), 'private');
+
+  INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug)
+  VALUES (demo.det_uuid('gram-demo-tunrbac-endpoint'), proj_a,
+          demo.det_uuid('gram-demo-tunrbac-mcpserver'), 'acme-demo-jamf');
+
+  -- device_status carries only a title, so it has no disposition: annotation
+  -- rules such as the Read-only Tools role's do not reach it.
+  INSERT INTO mcp_server_tool_metadata (id, project_id, mcp_server_id, tool_name,
+                                        title, read_only_hint, destructive_hint,
+                                        idempotent_hint, open_world_hint)
+  SELECT demo.det_uuid('gram-demo-tunrbac-tool-' || t.tool_name), proj_a,
+         demo.det_uuid('gram-demo-tunrbac-mcpserver'), t.tool_name, t.title,
+         t.read_only, t.destructive, t.idempotent, NULL
+  FROM (VALUES
+    ('list_devices', 'List devices', TRUE, FALSE, NULL::boolean),
+    ('get_device', 'Get device', TRUE, FALSE, NULL::boolean),
+    ('lock_device', 'Lock device', FALSE, FALSE, TRUE),
+    ('wipe_device', 'Wipe device', FALSE, TRUE, NULL::boolean),
+    ('device_status', 'Device status', NULL::boolean, NULL::boolean, NULL::boolean)
+  ) AS t(tool_name, title, read_only, destructive, idempotent);
+
+  -- Support Desk may only list devices on JAMF: one tool, not the server.
+  INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
+  SELECT demo.det_uuid('gram-demo-tunrbac-grant-list-devices'), demo_org,
+         'role:organization:' || r.id, 'mcp:connect',
+         jsonb_build_object('resource_kind', 'mcp',
+           'resource_id', demo.det_uuid('gram-demo-tunrbac-mcpserver')::text,
+           'tool', 'list_devices')
+  FROM organization_roles r
+  WHERE r.organization_id = demo_org AND r.workos_slug = 'support-desk';
 
   -- Leave instructions NULL so Settings starts with the editable built-in
   -- instructions, matching the gateway's initialize and server/discover text.
@@ -3598,6 +3652,36 @@ Channel context stays in the Raw view.
     RAISE EXCEPTION 'demo seed postflight: expected 3 recorded Slack tools, found %', stray;
   END IF;
 
+  -- The JAMF tool-permission example checks only its own rows, so other
+  -- seeded tunnels and issuers never change these counts.
+  SELECT count(*) INTO stray FROM tunneled_mcp_servers
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND id = demo.det_uuid('gram-demo-tunrbac-source');
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected the JAMF tunneled MCP source, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM user_session_issuers
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND id = demo.det_uuid('gram-demo-tunrbac-issuer');
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected the JAMF user session issuer, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM mcp_server_tool_metadata
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND mcp_server_id = demo.det_uuid('gram-demo-tunrbac-mcpserver');
+  IF stray <> 5 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 5 recorded JAMF tools, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM principal_grants
+  WHERE organization_id = demo_org AND scope = 'mcp:connect'
+    AND selectors->>'resource_id' = demo.det_uuid('gram-demo-tunrbac-mcpserver')::text;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 JAMF tool grant, found %', stray;
+  END IF;
+
   SELECT count(*) INTO stray FROM session_quarantines
   WHERE organization_id = demo_org AND project_id = proj_a AND released_at IS NULL;
   IF stray <> 1 THEN
@@ -3781,9 +3865,10 @@ Channel context stays in the Raw view.
   -- than the one they were seeded to tell.
   -- One issuer per Connections credential story (acme-partner-gateway), three
   -- project MCP issuers, and the organization-wide workforce issuer used by
-  -- GitHub.
+  -- GitHub. The JAMF tool-permission example's issuer is checked by id above.
   SELECT count(*) INTO stray FROM user_session_issuers
-  WHERE project_id = proj_a AND deleted IS FALSE;
+  WHERE project_id = proj_a AND deleted IS FALSE
+    AND id <> demo.det_uuid('gram-demo-tunrbac-issuer');
   IF stray <> 4 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 4 project user session issuers, found %', stray;
   END IF;

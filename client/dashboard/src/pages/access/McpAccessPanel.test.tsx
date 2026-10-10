@@ -20,6 +20,20 @@ const live = vi.hoisted(() => ({
     | undefined,
   lastOptions: undefined as { enabled?: boolean } | undefined,
   canWrite: true,
+  isError: false,
+  refetch: vi.fn(),
+}));
+const tunnel = vi.hoisted(() => ({
+  offline: false,
+  refetch: vi.fn(),
+  lastSourceId: undefined as string | undefined,
+}));
+
+vi.mock("@/pages/mcp/x/tabs/useTunnelAgentStatus", () => ({
+  useTunnelAgentStatus: (options: { tunneledSourceId?: string }) => {
+    tunnel.lastSourceId = options.tunneledSourceId;
+    return { offline: tunnel.offline, refetch: tunnel.refetch };
+  },
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
@@ -54,9 +68,9 @@ vi.mock("@/pages/mcp/x/tabs/useRemoteMcpToolConnection", () => ({
       metadataByTool: {},
       loading: !options.enabled,
       needsAuth: !!options.enabled && live.needsAuth,
-      isError: false,
+      isError: !!options.enabled && live.isError,
       isIssuerGated: true,
-      refetch: () => {},
+      refetch: live.refetch,
       connect: live.connect,
       sync: () => {},
       isSyncing: false,
@@ -105,7 +119,7 @@ const server = (id: string, name: string) => ({
     },
   ],
   dynamicTools: false,
-  remoteBacked: false,
+  storedToolInventory: false,
 });
 
 const connect = (allow: Selector[] | null, deny?: Selector[]): RoleGrant => ({
@@ -158,6 +172,11 @@ beforeEach(() => {
   live.needsAuth = true;
   live.tools = undefined;
   live.canWrite = true;
+  live.isError = false;
+  live.refetch.mockReset();
+  tunnel.offline = false;
+  tunnel.refetch.mockReset();
+  tunnel.lastSourceId = undefined;
   inventory.groups = [
     {
       projectId: "p-default",
@@ -171,7 +190,16 @@ beforeEach(() => {
           slug: "remote-docs",
           tools: [],
           dynamicTools: true,
-          remoteBacked: true,
+          storedToolInventory: true,
+        },
+        {
+          id: "tunneled",
+          name: "JAMF",
+          slug: "jamf",
+          tools: [],
+          dynamicTools: true,
+          storedToolInventory: true,
+          tunneledSourceId: "tunnel-1",
         },
       ],
     },
@@ -329,6 +357,38 @@ describe("McpAccessPanel", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "1 Tool" }));
     expect(screen.getByText("1 of 2 tools selected")).toBeTruthy();
+  });
+
+  it("says a tunneled server's agent is offline and retries both reads", () => {
+    live.needsAuth = false;
+    live.isError = true;
+    tunnel.offline = true;
+    renderPanel({
+      "mcp:connect": connect([
+        { resourceKind: "mcp", resourceId: "tunneled", tool: "list_devices" },
+      ]),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "1 Tool" }));
+    expect(tunnel.lastSourceId).toBe("tunnel-1");
+    expect(
+      screen.getByText("Tunnel offline — connect the agent to list its tools"),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(tunnel.refetch).toHaveBeenCalled();
+    expect(live.refetch).toHaveBeenCalled();
+  });
+
+  it("lists a tunneled server's tools once its agent is connected", () => {
+    live.needsAuth = false;
+    live.tools = { list_devices: { annotations: { readOnlyHint: true } } };
+    renderPanel({
+      "mcp:connect": connect([
+        { resourceKind: "mcp", resourceId: "tunneled", tool: "list_devices" },
+      ]),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "1 Tool" }));
+    expect(screen.queryByText(/Tunnel offline/)).toBeNull();
+    expect(screen.getByText("1 of 1 tools selected")).toBeTruthy();
   });
 
   it("asks for mcp:write instead of connecting when the editor cannot record tools", () => {
