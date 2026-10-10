@@ -1,5 +1,12 @@
 # dashboard
 
+## 0.135.1
+
+### Patch Changes
+
+- b4c4904: Identity providers with long scope lists or uploaded logos now read cleanly. Scopes show as chips, URL-style scopes drop their shared base and reveal it on hover, and the client page cuts the list after three lines. Logos keep their shape at full height, providers without a logo show their initial, and long endpoint URLs stay on one line with the full value on hover.
+- 52fb54c: The private network setup sheet now suggests `acme-speakeasy` instead of `acme-gram` as an example organization private hostname.
+
 ## 0.135.0
 
 ### Minor Changes
