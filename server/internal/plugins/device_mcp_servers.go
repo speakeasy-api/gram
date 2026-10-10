@@ -130,6 +130,9 @@ func requireHTTPS(rawURL string) error {
 		return fmt.Errorf("parse MCP server URL: %w", err)
 	case u.Scheme != "https" || u.Host == "":
 		return fmt.Errorf("MCP server URL is not an https URL: %q", u.Redacted())
+	case u.User != nil:
+		// Embedded credentials would travel alongside the device's own.
+		return fmt.Errorf("MCP server URL carries credentials: %q", u.Redacted())
 	default:
 		return nil
 	}

@@ -49,6 +49,8 @@ func TestRequireHTTPS(t *testing.T) {
 		{"http://app.getgram.ai/mcp/linear", false},
 		{"https:///mcp/linear", false},
 		{"/mcp/linear", false},
+		{"https://user:secret@app.getgram.ai/mcp/linear", false},
+		{"https://user@app.getgram.ai/mcp/linear", false},
 	} {
 		err := requireHTTPS(tc.url)
 		if tc.ok {
