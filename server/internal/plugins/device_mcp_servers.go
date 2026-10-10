@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -46,8 +47,9 @@ type DeviceMCPServer struct {
 // out too: publishing re-checks their distribution admission under the
 // project's admission lock, which a device poll must not take.
 //
-// A server whose address cannot be resolved is logged and skipped, so one
-// misconfigured server does not keep the rest from reaching devices.
+// A server whose address cannot be resolved, or is not https, is logged and
+// skipped, so one misconfigured server does not keep the rest from reaching
+// devices.
 func ListDeviceMCPServers(ctx context.Context, logger *slog.Logger, db repo.DBTX, serverURL string, projectID uuid.UUID, pluginIDs []uuid.UUID) ([]DeviceMCPServer, error) {
 	if len(pluginIDs) == 0 {
 		return nil, nil
@@ -74,6 +76,9 @@ func ListDeviceMCPServers(ctx context.Context, logger *slog.Logger, db repo.DBTX
 	servers := make([]DeviceMCPServer, 0, len(toolsetRows)+len(remoteRows))
 	for _, r := range toolsetRows {
 		mcpURL, ok, err := toolsetServerURL(serverURL, r)
+		if err == nil && ok {
+			err = requireHTTPS(mcpURL)
+		}
 		switch {
 		case err != nil:
 			skip(r.PluginSlug, err)
@@ -89,6 +94,9 @@ func ListDeviceMCPServers(ctx context.Context, logger *slog.Logger, db repo.DBTX
 	}
 	for _, r := range remoteRows {
 		mcpURL, unproxied, err := remoteServerURL(serverURL, r)
+		if err == nil && !unproxied {
+			err = requireHTTPS(mcpURL)
+		}
 		switch {
 		case err != nil:
 			skip(r.PluginSlug, err)
@@ -111,6 +119,20 @@ func ListDeviceMCPServers(ctx context.Context, logger *slog.Logger, db repo.DBTX
 		)
 	})
 	return servers, nil
+}
+
+// requireHTTPS refuses an address the device would send its credential to in
+// cleartext.
+func requireHTTPS(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	switch {
+	case err != nil:
+		return fmt.Errorf("parse MCP server URL: %w", err)
+	case u.Scheme != "https" || u.Host == "":
+		return fmt.Errorf("MCP server URL is not an https URL: %q", u.Redacted())
+	default:
+		return nil
+	}
 }
 
 // deviceMCPServerNamePrefix marks the MCP server entries Speakeasy writes into

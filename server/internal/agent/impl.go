@@ -324,16 +324,16 @@ func (s *Service) getAgentPlugins(ctx context.Context, authCtx *contextvalues.Au
 }
 
 // agentMCPServers resolves the MCP servers an agent writes into its tools'
-// configurations: the Speakeasy-hosted servers in the plugins assigned to it.
-// Plugins offered as `available` are left out, because nobody on an agent's
-// machine can turn them on. A server reached through several plugins is
-// listed once, and a name shared by different servers gets a numeric suffix
-// (`speakeasy-linear-2`) so each entry keeps its own key.
+// configurations: the Speakeasy-hosted servers in the plugins the poll
+// delivers to it. Plugins offered as `available` are left out, because nobody
+// on an agent's machine can turn them on. A server reached through several
+// plugins is listed once, and a name shared by different servers gets a
+// numeric suffix (`speakeasy-linear-2`) so each entry keeps its own key.
 func (s *Service) agentMCPServers(ctx context.Context, rows []repo.GetAgentPluginSetRow) ([]*gen.AgentMCPServer, error) {
 	var projectIDs []uuid.UUID
 	pluginsByProject := make(map[uuid.UUID][]uuid.UUID)
-	for _, row := range rows {
-		if !row.PluginID.Valid || installmode.FromStored(row.PluginInstallMode) == installmode.Available {
+	for _, row := range mv.DeliveredAgentPluginRows(rows) {
+		if installmode.FromStored(row.PluginInstallMode) == installmode.Available {
 			continue
 		}
 		if _, seen := pluginsByProject[row.ProjectID]; !seen {
