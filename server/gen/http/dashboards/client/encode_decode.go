@@ -2160,6 +2160,245 @@ func DecodeDuplicateDashboardResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildDuplicateBuiltInDashboardRequest instantiates a HTTP request object
+// with method and path set to call the "dashboards" service
+// "duplicateBuiltInDashboard" endpoint
+func (c *Client) BuildDuplicateBuiltInDashboardRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DuplicateBuiltInDashboardDashboardsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("dashboards", "duplicateBuiltInDashboard", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDuplicateBuiltInDashboardRequest returns an encoder for requests sent
+// to the dashboards duplicateBuiltInDashboard server.
+func EncodeDuplicateBuiltInDashboardRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*dashboards.DuplicateBuiltInDashboardPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("dashboards", "duplicateBuiltInDashboard", "*dashboards.DuplicateBuiltInDashboardPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewDuplicateBuiltInDashboardRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("dashboards", "duplicateBuiltInDashboard", err)
+		}
+		return nil
+	}
+}
+
+// DecodeDuplicateBuiltInDashboardResponse returns a decoder for responses
+// returned by the dashboards duplicateBuiltInDashboard endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeDuplicateBuiltInDashboardResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDuplicateBuiltInDashboardResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body DuplicateBuiltInDashboardResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dashboards", "duplicateBuiltInDashboard", err)
+			}
+			err = ValidateDuplicateBuiltInDashboardResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dashboards", "duplicateBuiltInDashboard", err)
+			}
+			res := NewDuplicateBuiltInDashboardDashboardOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body DuplicateBuiltInDashboardUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dashboards", "duplicateBuiltInDashboard", err)
+			}
+			err = ValidateDuplicateBuiltInDashboardUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dashboards", "duplicateBuiltInDashboard", err)
+			}
+			return nil, NewDuplicateBuiltInDashboardUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DuplicateBuiltInDashboardForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dashboards", "duplicateBuiltInDashboard", err)
+			}
+			err = ValidateDuplicateBuiltInDashboardForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dashboards", "duplicateBuiltInDashboard", err)
+			}
+			return nil, NewDuplicateBuiltInDashboardForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DuplicateBuiltInDashboardBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dashboards", "duplicateBuiltInDashboard", err)
+			}
+			err = ValidateDuplicateBuiltInDashboardBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dashboards", "duplicateBuiltInDashboard", err)
+			}
+			return nil, NewDuplicateBuiltInDashboardBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DuplicateBuiltInDashboardNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dashboards", "duplicateBuiltInDashboard", err)
+			}
+			err = ValidateDuplicateBuiltInDashboardNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dashboards", "duplicateBuiltInDashboard", err)
+			}
+			return nil, NewDuplicateBuiltInDashboardNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DuplicateBuiltInDashboardConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dashboards", "duplicateBuiltInDashboard", err)
+			}
+			err = ValidateDuplicateBuiltInDashboardConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dashboards", "duplicateBuiltInDashboard", err)
+			}
+			return nil, NewDuplicateBuiltInDashboardConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DuplicateBuiltInDashboardUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dashboards", "duplicateBuiltInDashboard", err)
+			}
+			err = ValidateDuplicateBuiltInDashboardUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dashboards", "duplicateBuiltInDashboard", err)
+			}
+			return nil, NewDuplicateBuiltInDashboardUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DuplicateBuiltInDashboardInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dashboards", "duplicateBuiltInDashboard", err)
+			}
+			err = ValidateDuplicateBuiltInDashboardInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dashboards", "duplicateBuiltInDashboard", err)
+			}
+			return nil, NewDuplicateBuiltInDashboardInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DuplicateBuiltInDashboardInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("dashboards", "duplicateBuiltInDashboard", err)
+				}
+				err = ValidateDuplicateBuiltInDashboardInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("dashboards", "duplicateBuiltInDashboard", err)
+				}
+				return nil, NewDuplicateBuiltInDashboardInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DuplicateBuiltInDashboardUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("dashboards", "duplicateBuiltInDashboard", err)
+				}
+				err = ValidateDuplicateBuiltInDashboardUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("dashboards", "duplicateBuiltInDashboard", err)
+				}
+				return nil, NewDuplicateBuiltInDashboardUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("dashboards", "duplicateBuiltInDashboard", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DuplicateBuiltInDashboardGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("dashboards", "duplicateBuiltInDashboard", err)
+			}
+			err = ValidateDuplicateBuiltInDashboardGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("dashboards", "duplicateBuiltInDashboard", err)
+			}
+			return nil, NewDuplicateBuiltInDashboardGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("dashboards", "duplicateBuiltInDashboard", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildDeleteDashboardRequest instantiates a HTTP request object with method
 // and path set to call the "dashboards" service "deleteDashboard" endpoint
 func (c *Client) BuildDeleteDashboardRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2459,6 +2698,55 @@ func unmarshalDashboardPlacementResponseBodyToDashboardsDashboardPlacement(v *Da
 		Y:        *v.Y,
 		W:        *v.W,
 		H:        *v.H,
+	}
+
+	return res
+}
+
+// unmarshalBuiltInDashboardResponseBodyToDashboardsBuiltInDashboard builds a
+// value of type *dashboards.BuiltInDashboard from a value of type
+// *BuiltInDashboardResponseBody.
+func unmarshalBuiltInDashboardResponseBodyToDashboardsBuiltInDashboard(v *BuiltInDashboardResponseBody) *dashboards.BuiltInDashboard {
+	res := &dashboards.BuiltInDashboard{
+		Slug:        *v.Slug,
+		Name:        *v.Name,
+		Description: *v.Description,
+	}
+	res.Cards = make([]*dashboards.BuiltInCard, len(v.Cards))
+	for i, val := range v.Cards {
+		if val == nil {
+			res.Cards[i] = nil
+			continue
+		}
+		res.Cards[i] = unmarshalBuiltInCardResponseBodyToDashboardsBuiltInCard(val)
+	}
+
+	return res
+}
+
+// unmarshalBuiltInCardResponseBodyToDashboardsBuiltInCard builds a value of
+// type *dashboards.BuiltInCard from a value of type *BuiltInCardResponseBody.
+func unmarshalBuiltInCardResponseBodyToDashboardsBuiltInCard(v *BuiltInCardResponseBody) *dashboards.BuiltInCard {
+	res := &dashboards.BuiltInCard{
+		Name:        *v.Name,
+		Description: v.Description,
+		Dataset:     *v.Dataset,
+		X:           *v.X,
+		Y:           *v.Y,
+		W:           *v.W,
+		H:           *v.H,
+	}
+	res.Query = make(map[string]any, len(v.Query))
+	for key, val := range v.Query {
+		tk := key
+		tv := val
+		res.Query[tk] = tv
+	}
+	res.Visualization = make(map[string]any, len(v.Visualization))
+	for key, val := range v.Visualization {
+		tk := key
+		tv := val
+		res.Visualization[tk] = tv
 	}
 
 	return res

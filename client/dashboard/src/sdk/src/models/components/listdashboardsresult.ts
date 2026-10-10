@@ -3,12 +3,21 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  BuiltInDashboard,
+  BuiltInDashboard$inboundSchema,
+} from "./builtindashboard.js";
 import { Dashboard, Dashboard$inboundSchema } from "./dashboard.js";
 
 export type ListDashboardsResult = {
+  /**
+   * The dashboards Speakeasy ships, the same in every project
+   */
+  builtIn: Array<BuiltInDashboard>;
   /**
    * Dashboards in the project, most recently updated first
    */
@@ -19,9 +28,17 @@ export type ListDashboardsResult = {
 export const ListDashboardsResult$inboundSchema: z.ZodMiniType<
   ListDashboardsResult,
   unknown
-> = z.object({
-  dashboards: z.array(Dashboard$inboundSchema),
-});
+> = z.pipe(
+  z.object({
+    built_in: z.array(BuiltInDashboard$inboundSchema),
+    dashboards: z.array(Dashboard$inboundSchema),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "built_in": "builtIn",
+    });
+  }),
+);
 
 export function listDashboardsResultFromJSON(
   jsonString: string,
