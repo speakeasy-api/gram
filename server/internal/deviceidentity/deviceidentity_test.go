@@ -91,3 +91,23 @@ func TestNormalizeSerialRejectsPlaceholders(t *testing.T) {
 		require.Empty(t, deviceidentity.NormalizeSerial(&reported), "placeholder %q must not serve as a device identity", reported)
 	}
 }
+
+// DeviceID prefers the serial, falls back to the hostname for cloud boxes that
+// report none, and is empty when neither identifies the machine.
+func TestDeviceID(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		serial, hostname *string
+		want             string
+	}{
+		"serial wins":          {new(" C02XK1ABCDEF "), new("laptop"), "serial:c02xk1abcdef"},
+		"placeholder serial":   {new("To Be Filled By O.E.M."), new("Runner-1"), "hostname:runner-1"},
+		"hostname only":        {nil, new(" Runner-1 "), "hostname:runner-1"},
+		"blank hostname":       {nil, new("  "), ""},
+		"neither":              {nil, nil, ""},
+		"placeholder and none": {new("0"), nil, ""},
+	} {
+		require.Equal(t, tc.want, deviceidentity.DeviceID(tc.serial, tc.hostname), "input %q", name)
+	}
+}

@@ -9,6 +9,7 @@ import { agentGetPlugins } from "../funcs/agentGetPlugins.js";
 import { agentGetSessionMeta } from "../funcs/agentGetSessionMeta.js";
 import { agentListAiScanTargets } from "../funcs/agentListAiScanTargets.js";
 import { agentListSyncedUsers } from "../funcs/agentListSyncedUsers.js";
+import { agentMintMcpCredential } from "../funcs/agentMintMcpCredential.js";
 import { agentReportAIScan } from "../funcs/agentReportAIScan.js";
 import { agentReportSessionMoved } from "../funcs/agentReportSessionMoved.js";
 import { agentUpdateConfiguration } from "../funcs/agentUpdateConfiguration.js";
@@ -22,6 +23,7 @@ import { GetPluginsResult } from "../models/components/getpluginsresult.js";
 import { GetSessionMetaResult } from "../models/components/getsessionmetaresult.js";
 import { ListAiScanTargetsResult } from "../models/components/listaiscantargetsresult.js";
 import { ListSyncedUsersResult } from "../models/components/listsyncedusersresult.js";
+import { MintMcpCredentialResult } from "../models/components/mintmcpcredentialresult.js";
 import {
   CreateAgentSessionHandoffRequest,
   CreateAgentSessionHandoffSecurity,
@@ -50,6 +52,10 @@ import {
   ListSyncedAgentUsersRequest,
   ListSyncedAgentUsersSecurity,
 } from "../models/operations/listsyncedagentusers.js";
+import {
+  MintAgentMcpCredentialRequest,
+  MintAgentMcpCredentialSecurity,
+} from "../models/operations/mintagentmcpcredential.js";
 import {
   ReportAgentAIScanRequest,
   ReportAgentAIScanSecurity,
@@ -195,6 +201,25 @@ export class Agent extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListSyncedUsersResult> {
     return unwrapAsync(agentListSyncedUsers(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * mintMcpCredential agent
+   *
+   * @remarks
+   * Mint the credential an agent identity's device agent writes into its AI tools' MCP server entries. Authenticated by the device's enrollment agent key, it returns a separate key for the same agent that carries only mcp:connect, so revoking it does not unenroll the device and it cannot poll policy. The device identifies itself with the Gram-Device-Serial or Gram-Device-Hostname header; asking again from the same device revokes that device's previous credential, while other devices sharing the enrollment key keep theirs. The credential stops working when its parent key is revoked or expires.
+   */
+  async mintMcpCredential(
+    request: MintAgentMcpCredentialRequest,
+    security?: MintAgentMcpCredentialSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<MintMcpCredentialResult> {
+    return unwrapAsync(agentMintMcpCredential(
       this,
       request,
       security,

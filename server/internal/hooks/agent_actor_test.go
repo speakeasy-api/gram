@@ -79,13 +79,20 @@ func seedHooksIngestGrant(t *testing.T, ctx context.Context, ti *testInstance, o
 // delegated policy grants org:hooks_ingest on policyOrgID.
 func admittedAgentContext(t *testing.T, ctx context.Context, ti *testInstance, grantAgent bool, policyOrgID string) (context.Context, error) {
 	t.Helper()
+	return admittedAgentContextWithCredential(t, ctx, ti, grantAgent, []authz.Grant{authz.NewGrant(authz.ScopeOrgHooksIngest, policyOrgID)})
+}
+
+// admittedAgentContextWithCredential is admittedAgentContext with the key's
+// delegated policy chosen by the caller.
+func admittedAgentContextWithCredential(t *testing.T, ctx context.Context, ti *testInstance, grantAgent bool, delegated []authz.Grant) (context.Context, error) {
+	t.Helper()
 	authCtx, actor, ownerUserID := agentAuthContext(t, ctx, ti)
 	if grantAgent {
 		seedHooksIngestGrant(t, ctx, ti, authCtx.ActiveOrganizationID, actor)
 	}
 	seedHooksIngestGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, ownerUserID))
 
-	policy, err := runtimepolicy.NewDelegatedPolicy(runtimepolicy.DelegatedPolicyVersion2, []authz.Grant{authz.NewGrant(authz.ScopeOrgHooksIngest, policyOrgID)})
+	policy, err := runtimepolicy.NewDelegatedPolicy(runtimepolicy.DelegatedPolicyVersion2, delegated)
 	require.NoError(t, err)
 	raw, err := runtimepolicy.EncodeDelegatedPolicy(runtimepolicy.DelegatedPolicyVersion2, policy)
 	require.NoError(t, err)
@@ -125,6 +132,20 @@ func TestRequireAgentHooksIngest_RejectsAgentWithoutGrant(t *testing.T) {
 	require.True(t, ok)
 
 	agentCtx, err := admittedAgentContext(t, ctx, ti, false, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, ti.service.requireAgentHooksIngest(agentCtx), &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+// An agent's minted MCP credential carries only mcp:connect, so hooks refuse it
+// even though the agent itself may ingest.
+func TestRequireAgentHooksIngest_RejectsMCPCredential(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	mcpOnly := []authz.Grant{authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCP, authz.SelectorKeyResourceID: "*"})}
+	agentCtx, err := admittedAgentContextWithCredential(t, ctx, ti, true, mcpOnly)
 	require.NoError(t, err)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, ti.service.requireAgentHooksIngest(agentCtx), &oopsErr)

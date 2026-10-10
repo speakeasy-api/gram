@@ -109,6 +109,15 @@ type CreateSessionHandoffRequestBody struct {
 	TTLSeconds *int `form:"ttl_seconds,omitempty" json:"ttl_seconds,omitempty" xml:"ttl_seconds,omitempty"`
 }
 
+// MintMcpCredentialRequestBody is the type of the "agent" service
+// "mintMcpCredential" endpoint HTTP request body.
+type MintMcpCredentialRequestBody struct {
+	// When the credential expires. Defaults to 90 days from now. Requests more
+	// than one year out are rejected; any expiry is capped at the parent key's
+	// expiry.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
+}
+
 // GetPluginsResponseBody is the type of the "agent" service "getPlugins"
 // endpoint HTTP response body.
 type GetPluginsResponseBody struct {
@@ -221,6 +230,21 @@ type CreateSessionHandoffResponseBody struct {
 	// read or expiry.
 	URL string `form:"url" json:"url" xml:"url"`
 	// When the link stops being served regardless of reads.
+	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
+}
+
+// MintMcpCredentialResponseBody is the type of the "agent" service
+// "mintMcpCredential" endpoint HTTP response body.
+type MintMcpCredentialResponseBody struct {
+	// ID of the minted credential.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The credential. Returned only once; write it into the tool's MCP server
+	// entry as a bearer token.
+	Key string `form:"key" json:"key" xml:"key"`
+	// Non-secret prefix of the credential, for identifying it without reading the
+	// secret.
+	KeyPrefix string `form:"key_prefix" json:"key_prefix" xml:"key_prefix"`
+	// When the credential stops working.
 	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
 }
 
@@ -2237,6 +2261,189 @@ type CreateSessionHandoffGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// MintMcpCredentialUnauthorizedResponseBody is the type of the "agent" service
+// "mintMcpCredential" endpoint HTTP response body for the "unauthorized" error.
+type MintMcpCredentialUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintMcpCredentialForbiddenResponseBody is the type of the "agent" service
+// "mintMcpCredential" endpoint HTTP response body for the "forbidden" error.
+type MintMcpCredentialForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintMcpCredentialBadRequestResponseBody is the type of the "agent" service
+// "mintMcpCredential" endpoint HTTP response body for the "bad_request" error.
+type MintMcpCredentialBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintMcpCredentialNotFoundResponseBody is the type of the "agent" service
+// "mintMcpCredential" endpoint HTTP response body for the "not_found" error.
+type MintMcpCredentialNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintMcpCredentialConflictResponseBody is the type of the "agent" service
+// "mintMcpCredential" endpoint HTTP response body for the "conflict" error.
+type MintMcpCredentialConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintMcpCredentialUnsupportedMediaResponseBody is the type of the "agent"
+// service "mintMcpCredential" endpoint HTTP response body for the
+// "unsupported_media" error.
+type MintMcpCredentialUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintMcpCredentialInvalidResponseBody is the type of the "agent" service
+// "mintMcpCredential" endpoint HTTP response body for the "invalid" error.
+type MintMcpCredentialInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintMcpCredentialInvariantViolationResponseBody is the type of the "agent"
+// service "mintMcpCredential" endpoint HTTP response body for the
+// "invariant_violation" error.
+type MintMcpCredentialInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintMcpCredentialUnexpectedResponseBody is the type of the "agent" service
+// "mintMcpCredential" endpoint HTTP response body for the "unexpected" error.
+type MintMcpCredentialUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintMcpCredentialGatewayErrorResponseBody is the type of the "agent" service
+// "mintMcpCredential" endpoint HTTP response body for the "gateway_error"
+// error.
+type MintMcpCredentialGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AgentMarketplaceResponseBody is used to define fields on response body types.
 type AgentMarketplaceResponseBody struct {
 	// Stable identifier for the marketplace, used as its key when the agent
@@ -2600,6 +2807,18 @@ func NewGetSessionMetaResponseBody(res *agent.GetSessionMetaResult) *GetSessionM
 func NewCreateSessionHandoffResponseBody(res *agent.CreateSessionHandoffResult) *CreateSessionHandoffResponseBody {
 	body := &CreateSessionHandoffResponseBody{
 		URL:       res.URL,
+		ExpiresAt: res.ExpiresAt,
+	}
+	return body
+}
+
+// NewMintMcpCredentialResponseBody builds the HTTP response body from the
+// result of the "mintMcpCredential" endpoint of the "agent" service.
+func NewMintMcpCredentialResponseBody(res *agent.MintMcpCredentialResult) *MintMcpCredentialResponseBody {
+	body := &MintMcpCredentialResponseBody{
+		ID:        res.ID,
+		Key:       res.Key,
+		KeyPrefix: res.KeyPrefix,
 		ExpiresAt: res.ExpiresAt,
 	}
 	return body
@@ -4168,6 +4387,148 @@ func NewCreateSessionHandoffGatewayErrorResponseBody(res *goa.ServiceError) *Cre
 	return body
 }
 
+// NewMintMcpCredentialUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "mintMcpCredential" endpoint of the "agent" service.
+func NewMintMcpCredentialUnauthorizedResponseBody(res *goa.ServiceError) *MintMcpCredentialUnauthorizedResponseBody {
+	body := &MintMcpCredentialUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintMcpCredentialForbiddenResponseBody builds the HTTP response body from
+// the result of the "mintMcpCredential" endpoint of the "agent" service.
+func NewMintMcpCredentialForbiddenResponseBody(res *goa.ServiceError) *MintMcpCredentialForbiddenResponseBody {
+	body := &MintMcpCredentialForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintMcpCredentialBadRequestResponseBody builds the HTTP response body
+// from the result of the "mintMcpCredential" endpoint of the "agent" service.
+func NewMintMcpCredentialBadRequestResponseBody(res *goa.ServiceError) *MintMcpCredentialBadRequestResponseBody {
+	body := &MintMcpCredentialBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintMcpCredentialNotFoundResponseBody builds the HTTP response body from
+// the result of the "mintMcpCredential" endpoint of the "agent" service.
+func NewMintMcpCredentialNotFoundResponseBody(res *goa.ServiceError) *MintMcpCredentialNotFoundResponseBody {
+	body := &MintMcpCredentialNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintMcpCredentialConflictResponseBody builds the HTTP response body from
+// the result of the "mintMcpCredential" endpoint of the "agent" service.
+func NewMintMcpCredentialConflictResponseBody(res *goa.ServiceError) *MintMcpCredentialConflictResponseBody {
+	body := &MintMcpCredentialConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintMcpCredentialUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "mintMcpCredential" endpoint of the "agent"
+// service.
+func NewMintMcpCredentialUnsupportedMediaResponseBody(res *goa.ServiceError) *MintMcpCredentialUnsupportedMediaResponseBody {
+	body := &MintMcpCredentialUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintMcpCredentialInvalidResponseBody builds the HTTP response body from
+// the result of the "mintMcpCredential" endpoint of the "agent" service.
+func NewMintMcpCredentialInvalidResponseBody(res *goa.ServiceError) *MintMcpCredentialInvalidResponseBody {
+	body := &MintMcpCredentialInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintMcpCredentialInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "mintMcpCredential" endpoint of the "agent"
+// service.
+func NewMintMcpCredentialInvariantViolationResponseBody(res *goa.ServiceError) *MintMcpCredentialInvariantViolationResponseBody {
+	body := &MintMcpCredentialInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintMcpCredentialUnexpectedResponseBody builds the HTTP response body
+// from the result of the "mintMcpCredential" endpoint of the "agent" service.
+func NewMintMcpCredentialUnexpectedResponseBody(res *goa.ServiceError) *MintMcpCredentialUnexpectedResponseBody {
+	body := &MintMcpCredentialUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintMcpCredentialGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "mintMcpCredential" endpoint of the "agent" service.
+func NewMintMcpCredentialGatewayErrorResponseBody(res *goa.ServiceError) *MintMcpCredentialGatewayErrorResponseBody {
+	body := &MintMcpCredentialGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetPluginsPayload builds a agent service getPlugins endpoint payload.
 func NewGetPluginsPayload(legacyEmail *string, apikeyToken *string, email *string, serialNumber *string, hostname *string, environment *string) *agent.GetPluginsPayload {
 	v := &agent.GetPluginsPayload{}
@@ -4310,6 +4671,19 @@ func NewCreateSessionHandoffPayload(body *CreateSessionHandoffRequestBody, apike
 		Content:       *body.Content,
 		SourceSurface: body.SourceSurface,
 		TTLSeconds:    body.TTLSeconds,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SerialNumber = serialNumber
+	v.Hostname = hostname
+
+	return v
+}
+
+// NewMintMcpCredentialPayload builds a agent service mintMcpCredential
+// endpoint payload.
+func NewMintMcpCredentialPayload(body *MintMcpCredentialRequestBody, apikeyToken *string, serialNumber *string, hostname *string) *agent.MintMcpCredentialPayload {
+	v := &agent.MintMcpCredentialPayload{
+		ExpiresAt: body.ExpiresAt,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SerialNumber = serialNumber
@@ -4487,6 +4861,15 @@ func ValidateCreateSessionHandoffRequestBody(body *CreateSessionHandoffRequestBo
 		if utf8.RuneCountInString(*body.SourceSurface) > 64 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.source_surface", *body.SourceSurface, utf8.RuneCountInString(*body.SourceSurface), 64, false))
 		}
+	}
+	return
+}
+
+// ValidateMintMcpCredentialRequestBody runs the validations defined on
+// MintMcpCredentialRequestBody
+func ValidateMintMcpCredentialRequestBody(body *MintMcpCredentialRequestBody) (err error) {
+	if body.ExpiresAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
 	}
 	return
 }

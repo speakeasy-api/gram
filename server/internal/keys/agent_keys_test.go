@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -531,4 +532,34 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, code, oopsErr.Code)
+}
+
+// A minted MCP credential is bound to its enrollment key and device; rotating
+// it would issue a parentless key that outlives both.
+func TestKeysService_MintedMCPCredentialCannotBeRotated(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestKeysService(t)
+	agentID, projectID := createAgentKeyFixture(t, ctx, ti)
+	payload := agentKeyPayload(agentID, projectID)
+	parent, err := ti.service.CreateKey(ctx, payload)
+	require.NoError(t, err)
+	parentID := uuid.MustParse(parent.ID)
+	parentRow, err := keysrepo.New(ti.conn).GetAPIKeyByID(ctx, keysrepo.GetAPIKeyByIDParams{ID: parentID, OrganizationID: testAuthContext(t, ctx).ActiveOrganizationID})
+	require.NoError(t, err)
+
+	_, hash, prefix, err := auth.GenerateAPIKeyMaterial(auth.APIKeyPrefix("local"))
+	require.NoError(t, err)
+	child, err := keysrepo.New(ti.conn).CreateChildAgentAPIKey(ctx, keysrepo.CreateChildAgentAPIKeyParams{
+		OrganizationID: parentRow.OrganizationID, CreatedByUserID: parentRow.CreatedByUserID, Name: "MCP credential for hostname:runner-1",
+		KeyPrefix: prefix, KeyHash: hash, SubjectUrn: parentRow.SubjectUrn,
+		DelegatedGrants: parentRow.DelegatedGrants, DelegatedGrantsVersion: parentRow.DelegatedGrantsVersion,
+		ExpiresAt: parentRow.ExpiresAt, ParentApiKeyID: uuid.NullUUID{UUID: parentID, Valid: true}, DeviceID: conv.ToPGText("hostname:runner-1"),
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.RotateKey(ctx, &gen.RotateKeyPayload{
+		ID: child.ID.String(), Name: "rotated credential", DelegatedGrantsVersion: 1, RequestedGrants: payload.RequestedGrants,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }

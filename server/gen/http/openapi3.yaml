@@ -14005,6 +14005,107 @@ paths:
             x-speakeasy-name-override: listSyncedUsers
             x-speakeasy-react-hook:
                 name: SyncedAgentUsers
+    /rpc/agent.mintMcpCredential:
+        post:
+            description: Mint the credential an agent identity's device agent writes into its AI tools' MCP server entries. Authenticated by the device's enrollment agent key, it returns a separate key for the same agent that carries only mcp:connect, so revoking it does not unenroll the device and it cannot poll policy. The device identifies itself with the Gram-Device-Serial or Gram-Device-Hostname header; asking again from the same device revokes that device's previous credential, while other devices sharing the enrollment key keep theirs. The credential stops working when its parent key is revoked or expires.
+            operationId: mintAgentMcpCredential
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Hardware serial number of the machine minting the credential, when the agent can read it. Identifies the device the credential is issued to.
+                  in: header
+                  name: Gram-Device-Serial
+                  schema:
+                    description: Hardware serial number of the machine minting the credential, when the agent can read it. Identifies the device the credential is issued to.
+                    maxLength: 255
+                    type: string
+                - allowEmptyValue: true
+                  description: Hostname of the machine minting the credential. Identifies the device when it reports no usable serial, as cloud machines do.
+                  in: header
+                  name: Gram-Device-Hostname
+                  schema:
+                    description: Hostname of the machine minting the credential. Identifies the device when it reports no usable serial, as cloud machines do.
+                    maxLength: 255
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/MintMcpCredentialRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/MintMcpCredentialResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+            summary: mintMcpCredential agent
+            tags:
+                - agent
+            x-speakeasy-name-override: mintMcpCredential
     /rpc/agent.reportAIScan:
         post:
             description: 'Report the result of a device-agent AI scan: which AI tools from the served scan target catalog (or the list embedded in the agent as a fallback) were found installed or running on the device. A scan with zero matches still reports, so organizations can prove a device was scanned and came back clean. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report scans. Fire-and-forget from the agent''s perspective: the daemon must never block on this call.'
@@ -102823,6 +102924,35 @@ components:
                 - issuer
                 - clients_migrated
                 - source_deleted
+        MintMcpCredentialRequestBody:
+            type: object
+            properties:
+                expires_at:
+                    type: string
+                    description: When the credential expires. Defaults to 90 days from now. Requests more than one year out are rejected; any expiry is capped at the parent key's expiry.
+                    format: date-time
+        MintMcpCredentialResult:
+            type: object
+            properties:
+                expires_at:
+                    type: string
+                    description: When the credential stops working.
+                    format: date-time
+                id:
+                    type: string
+                    description: ID of the minted credential.
+                    format: uuid
+                key:
+                    type: string
+                    description: The credential. Returned only once; write it into the tool's MCP server entry as a bearer token.
+                key_prefix:
+                    type: string
+                    description: Non-secret prefix of the credential, for identifying it without reading the secret.
+            required:
+                - id
+                - key
+                - key_prefix
+                - expires_at
         MintUserSessionRequestBody:
             type: object
             properties:

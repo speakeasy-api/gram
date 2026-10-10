@@ -1082,6 +1082,14 @@ CREATE TABLE IF NOT EXISTS api_keys (
   delegated_grants_version INTEGER,
   expires_at timestamptz,
 
+  -- Set on a credential an agent key minted for itself (its mcp:connect key).
+  -- The child authenticates only while this parent row is live. No foreign
+  -- key: ON DELETE SET NULL would turn an orphaned child into a parentless one.
+  parent_api_key_id uuid,
+  -- The device a minted credential was issued to, so re-minting replaces only
+  -- that device's credential when several devices share one parent.
+  device_id TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -1093,6 +1101,10 @@ CREATE TABLE IF NOT EXISTS api_keys (
   CONSTRAINT api_keys_key_hash UNIQUE (key_hash),
   CONSTRAINT api_keys_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
 );
+
+CREATE INDEX IF NOT EXISTS api_keys_parent_api_key_id_device_id_idx
+ON api_keys (parent_api_key_id, device_id)
+WHERE parent_api_key_id IS NOT NULL AND deleted IS FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS api_keys_organization_id_name_key
 ON api_keys (organization_id, name)

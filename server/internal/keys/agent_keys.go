@@ -174,12 +174,20 @@ func (s *Service) RotateKey(ctx context.Context, payload *gen.RotateKeyPayload) 
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock agent API key for rotation").LogError(ctx, s.logger)
 	}
+	// Rotation would issue a replacement detached from the enrollment key and
+	// device it was minted for. Revoke it instead; the device mints a new one.
+	if oldKey.ParentApiKeyID.Valid {
+		return nil, oops.E(oops.CodeBadRequest, nil, "an MCP credential cannot be rotated; revoke it and the device mints a new one")
+	}
 
 	revoked, err := kr.DeleteAgentAPIKey(ctx, repo.DeleteAgentAPIKeyParams{ID: oldKey.ID, OrganizationID: human.Auth.ActiveOrganizationID, SubjectUrn: conv.ToPGText(prepared.subjectURN)})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "revoke rotated agent API key").LogError(ctx, s.logger)
 	}
 	if err := s.logAgentKeyRevoke(ctx, tx, human, revoked); err != nil {
+		return nil, err
+	}
+	if err := s.revokeChildAgentKeys(ctx, tx, human, revoked.ID); err != nil {
 		return nil, err
 	}
 	created, err := s.createPreparedAgentKey(ctx, tx, human, prepared)
@@ -208,7 +216,25 @@ func (s *Service) revokeLoadedAgentKey(ctx context.Context, tx pgx.Tx, key repo.
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "revoke agent API key").LogError(ctx, s.logger)
 	}
-	return s.logAgentKeyRevoke(ctx, tx, human, revoked)
+	if err := s.logAgentKeyRevoke(ctx, tx, human, revoked); err != nil {
+		return err
+	}
+	return s.revokeChildAgentKeys(ctx, tx, human, revoked.ID)
+}
+
+// revokeChildAgentKeys retires the credentials a revoked key minted. They
+// already fail authentication with the parent gone; this keeps listings honest.
+func (s *Service) revokeChildAgentKeys(ctx context.Context, tx pgx.Tx, human agentmanagement.HumanContext, parentID uuid.UUID) error {
+	children, err := repo.New(tx).RevokeChildAPIKeys(ctx, repo.RevokeChildAPIKeysParams{OrganizationID: human.Auth.ActiveOrganizationID, ParentApiKeyID: uuid.NullUUID{UUID: parentID, Valid: true}})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "revoke credentials minted by agent API key").LogError(ctx, s.logger)
+	}
+	for _, child := range children {
+		if err := s.logAgentKeyRevoke(ctx, tx, human, child); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Service) prepareAgentKey(ctx context.Context, agentIDRaw, name string, versionRaw int, requestedForms []*gen.AgentPolicyGrantForm, expiryRaw *string) (preparedAgentKey, error) {

@@ -471,3 +471,54 @@ func BuildCreateSessionHandoffPayload(agentCreateSessionHandoffBody string, agen
 
 	return v, nil
 }
+
+// BuildMintMcpCredentialPayload builds the payload for the agent
+// mintMcpCredential endpoint from CLI flags.
+func BuildMintMcpCredentialPayload(agentMintMcpCredentialBody string, agentMintMcpCredentialApikeyToken string, agentMintMcpCredentialSerialNumber string, agentMintMcpCredentialHostname string) (*agent.MintMcpCredentialPayload, error) {
+	var err error
+	var body MintMcpCredentialRequestBody
+	{
+		err = json.Unmarshal([]byte(agentMintMcpCredentialBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"expires_at\": \"1970-01-01T00:00:01Z\"\n   }'")
+		}
+	}
+	var apikeyToken *string
+	{
+		if agentMintMcpCredentialApikeyToken != "" {
+			apikeyToken = &agentMintMcpCredentialApikeyToken
+		}
+	}
+	var serialNumber *string
+	{
+		if agentMintMcpCredentialSerialNumber != "" {
+			serialNumber = &agentMintMcpCredentialSerialNumber
+			if utf8.RuneCountInString(*serialNumber) > 255 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("serial_number", *serialNumber, utf8.RuneCountInString(*serialNumber), 255, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var hostname *string
+	{
+		if agentMintMcpCredentialHostname != "" {
+			hostname = &agentMintMcpCredentialHostname
+			if utf8.RuneCountInString(*hostname) > 255 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("hostname", *hostname, utf8.RuneCountInString(*hostname), 255, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	v := &agent.MintMcpCredentialPayload{
+		ExpiresAt: body.ExpiresAt,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SerialNumber = serialNumber
+	v.Hostname = hostname
+
+	return v, nil
+}

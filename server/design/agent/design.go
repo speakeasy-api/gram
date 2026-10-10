@@ -423,6 +423,43 @@ var _ = Service("agent", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "createSessionHandoff")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateAgentSessionHandoff"}`)
 	})
+
+	Method("mintMcpCredential", func() {
+		Description("Mint the credential an agent identity's device agent writes into its AI tools' MCP server entries. Authenticated by the device's enrollment agent key, it returns a separate key for the same agent that carries only mcp:connect, so revoking it does not unenroll the device and it cannot poll policy. The device identifies itself with the Gram-Device-Serial or Gram-Device-Hostname header; asking again from the same device revokes that device's previous credential, while other devices sharing the enrollment key keep theirs. The credential stops working when its parent key is revoked or expires.")
+
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
+
+		Payload(func() {
+			security.ByKeyPayload()
+			Attribute("expires_at", String, func() {
+				Description("When the credential expires. Defaults to 90 days from now. Requests more than one year out are rejected; any expiry is capped at the parent key's expiry.")
+				Format(FormatDateTime)
+			})
+			// Optional in the schema so a device that reports neither gets the
+			// handler's explanatory 400 rather than a generic validation error.
+			Attribute("serial_number", String, "Hardware serial number of the machine minting the credential, when the agent can read it. Identifies the device the credential is issued to.", func() {
+				MaxLength(255)
+			})
+			Attribute("hostname", String, "Hostname of the machine minting the credential. Identifies the device when it reports no usable serial, as cloud machines do.", func() {
+				MaxLength(255)
+			})
+		})
+
+		Result(MintMcpCredentialResult)
+
+		HTTP(func() {
+			POST("/rpc/agent.mintMcpCredential")
+			security.ByKeyHeader()
+			Header("serial_number:Gram-Device-Serial")
+			Header("hostname:Gram-Device-Hostname")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "mintAgentMcpCredential")
+		Meta("openapi:extension:x-speakeasy-name-override", "mintMcpCredential")
+	})
 })
 
 // --- Types ---
@@ -625,6 +662,19 @@ var CreateSessionHandoffResult = Type("CreateSessionHandoffResult", func() {
 	Attribute("url", String, "Capability URL serving the uploaded handoff markdown. Unauthenticated by design — the unguessable token is the credential — and dead after the first read or expiry.")
 	Attribute("expires_at", String, func() {
 		Description("When the link stops being served regardless of reads.")
+		Format(FormatDateTime)
+	})
+})
+
+var MintMcpCredentialResult = Type("MintMcpCredentialResult", func() {
+	Required("id", "key", "key_prefix", "expires_at")
+	Attribute("id", String, "ID of the minted credential.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("key", String, "The credential. Returned only once; write it into the tool's MCP server entry as a bearer token.")
+	Attribute("key_prefix", String, "Non-secret prefix of the credential, for identifying it without reading the secret.")
+	Attribute("expires_at", String, func() {
+		Description("When the credential stops working.")
 		Format(FormatDateTime)
 	})
 })

@@ -32,6 +32,7 @@ var getPluginsScheme = &security.APIKeyScheme{
 
 type realAgentKey struct {
 	key     string
+	id      uuid.UUID
 	agentID uuid.UUID
 	actor   urn.Principal
 }
@@ -39,6 +40,11 @@ type realAgentKey struct {
 // mintAgentKey stores a real agent-principal key through the keys repo writer;
 // agent and owner hold every delegated grant so live admission keeps them.
 func mintAgentKey(t *testing.T, ctx context.Context, ti *testInstance, delegated []authz.Grant) realAgentKey {
+	t.Helper()
+	return mintAgentKeyExpiring(t, ctx, ti, delegated, 24*time.Hour)
+}
+
+func mintAgentKeyExpiring(t *testing.T, ctx context.Context, ti *testInstance, delegated []authz.Grant, ttl time.Duration) realAgentKey {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -69,7 +75,7 @@ func mintAgentKey(t *testing.T, ctx context.Context, ti *testInstance, delegated
 	require.NoError(t, err)
 	key, keyHash, keyPrefix, err := auth.GenerateAPIKeyMaterial(auth.APIKeyPrefix("local"))
 	require.NoError(t, err)
-	_, err = keysrepo.New(ti.conn).CreateAgentAPIKey(ctx, keysrepo.CreateAgentAPIKeyParams{
+	created, err := keysrepo.New(ti.conn).CreateAgentAPIKey(ctx, keysrepo.CreateAgentAPIKeyParams{
 		OrganizationID:         ti.orgID,
 		CreatedByUserID:        authCtx.UserID,
 		Name:                   "gate-key",
@@ -78,10 +84,10 @@ func mintAgentKey(t *testing.T, ctx context.Context, ti *testInstance, delegated
 		SubjectUrn:             conv.ToPGText(actor.String()),
 		DelegatedGrants:        rawPolicy,
 		DelegatedGrantsVersion: pgtype.Int4{Int32: int32(runtimepolicy.CurrentDelegatedPolicyVersion), Valid: true},
-		ExpiresAt:              pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		ExpiresAt:              pgtype.Timestamptz{Time: time.Now().Add(ttl), InfinityModifier: pgtype.Finite, Valid: true},
 	})
 	require.NoError(t, err)
-	return realAgentKey{key: key, agentID: agent.ID, actor: actor}
+	return realAgentKey{key: key, id: created.ID, agentID: agent.ID, actor: actor}
 }
 
 func requireCode(t *testing.T, err error, code oops.Code) {

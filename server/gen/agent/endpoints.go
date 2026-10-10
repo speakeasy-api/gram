@@ -27,6 +27,7 @@ type Endpoints struct {
 	ReportSessionMoved   goa.Endpoint
 	ReportAIScan         goa.Endpoint
 	CreateSessionHandoff goa.Endpoint
+	MintMcpCredential    goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "agent" service with endpoints.
@@ -45,6 +46,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ReportSessionMoved:   NewReportSessionMovedEndpoint(s, a.APIKeyAuth),
 		ReportAIScan:         NewReportAIScanEndpoint(s, a.APIKeyAuth),
 		CreateSessionHandoff: NewCreateSessionHandoffEndpoint(s, a.APIKeyAuth),
+		MintMcpCredential:    NewMintMcpCredentialEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -61,6 +63,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ReportSessionMoved = m(e.ReportSessionMoved)
 	e.ReportAIScan = m(e.ReportAIScan)
 	e.CreateSessionHandoff = m(e.CreateSessionHandoff)
+	e.MintMcpCredential = m(e.MintMcpCredential)
 }
 
 // NewGetPluginsEndpoint returns an endpoint function that calls the method
@@ -313,5 +316,28 @@ func NewCreateSessionHandoffEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 			return nil, err
 		}
 		return s.CreateSessionHandoff(ctx, p)
+	}
+}
+
+// NewMintMcpCredentialEndpoint returns an endpoint function that calls the
+// method "mintMcpCredential" of service "agent".
+func NewMintMcpCredentialEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*MintMcpCredentialPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"agent_user"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.MintMcpCredential(ctx, p)
 	}
 }

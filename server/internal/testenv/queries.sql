@@ -1915,3 +1915,11 @@ SET omit_scope_fallback = @omit_scope_fallback
 WHERE id = @id
   AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid
   AND organization_id IS NOT DISTINCT FROM sqlc.narg(organization_id)::text;
+
+-- name: ExpireAPIKeyFixture :exec
+-- Backdates a key so it is already expired without breaking its profile.
+UPDATE api_keys
+SET created_at = clock_timestamp() - INTERVAL '2 hours',
+    expires_at = clock_timestamp() - INTERVAL '1 hour'
+WHERE id = @id
+  AND organization_id = @organization_id;
