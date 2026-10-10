@@ -272,7 +272,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 		return Outcome{}, errors.New("enforcement project id is required")
 	}
 	if len(request.Lanes) == 0 {
-		return Outcome{ByLane: map[Lane]*riskv1.EnforcementReply{}, Failed: map[Lane]error{}, Complete: true, Deadline: false, Truncated: false}, nil
+		return Outcome{ByLane: map[Lane]*riskv1.EnforcementReply{}, Failed: map[Lane]error{}, Complete: true, Deadline: false, CallerBudget: map[Lane]bool{}, Truncated: false}, nil
 	}
 	limit := d.contentLimit(ctx)
 	truncated := false
@@ -319,6 +319,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 	createdAtText := createdAt.Format(time.RFC3339Nano)
 	byLane := make(map[Lane]*riskv1.EnforcementReply, len(request.Lanes))
 	failed := make(map[Lane]error, len(request.Lanes))
+	callerBudget := make(map[Lane]bool, len(request.Lanes))
 	deadline := false
 	var mu sync.Mutex
 	group, groupCtx := errgroup.WithContext(ctx)
@@ -328,8 +329,15 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 			if override := d.laneWaitTimeout[lane.Scanner]; override > 0 {
 				waitTimeout = override
 			}
+			laneStart := time.Now()
 			laneCtx, cancel := context.WithTimeout(groupCtx, waitTimeout)
 			defer cancel()
+			// WithTimeout keeps whichever deadline is earlier. An earlier one
+			// than this lane's own budget can only have come from the caller,
+			// so a deadline here means the caller ran out of time rather than
+			// the consumer failing to answer within its budget.
+			laneDeadline, _ := laneCtx.Deadline()
+			callerCut := laneDeadline.Before(laneStart.Add(waitTimeout))
 			var laneBroker EnforcementLane
 			var enforcement proto.Message
 			switch lane.Scanner {
@@ -440,7 +448,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 			if requestErr != nil {
 				mu.Lock()
 				failed[lane] = requestErr
-				deadline = deadline || errors.Is(requestErr, context.DeadlineExceeded)
+				if errors.Is(requestErr, context.DeadlineExceeded) {
+					deadline = true
+					if callerCut {
+						callerBudget[lane] = true
+					}
+				}
 				mu.Unlock()
 				return nil
 			}
@@ -453,7 +466,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, request DispatchRequest) (Out
 	if err := group.Wait(); err != nil {
 		return Outcome{}, fmt.Errorf("dispatch enforcement lanes: %w", err)
 	}
-	return Outcome{ByLane: byLane, Failed: failed, Complete: len(byLane) == len(request.Lanes), Deadline: deadline, Truncated: truncated}, nil
+	return Outcome{ByLane: byLane, Failed: failed, Complete: len(byLane) == len(request.Lanes), Deadline: deadline, CallerBudget: callerBudget, Truncated: truncated}, nil
 }
 
 func truncateAtRuneBoundary(s string, n int) string {

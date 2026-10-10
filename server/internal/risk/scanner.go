@@ -226,6 +226,12 @@ const (
 	failModeClosed = "closed"
 	failModeShadow = "shadow"
 
+	// reasonBudgetExhausted marks a lane whose wait was cut short by the
+	// caller's own deadline instead of the lane's wait budget. It is the one
+	// degradation reason that says nothing about consumer health, so it is
+	// alerted separately from the consumer-failure reasons.
+	reasonBudgetExhausted = "budget_exhausted"
+
 	// realtimeStreamsExecutionPath is the execution path of a Pub/Sub
 	// enforcement lane whose reply enforces; realtimeShadowExecutionPath
 	// marks the LLM analyzer lane of the shadow engine mode, whose reply is
@@ -1532,17 +1538,28 @@ func llmEnforcementOrigin(baseProvenance metering.RiskProvenance, policies []rep
 
 // laneFindings folds one lane of a dispatch outcome into findings for source.
 // A non-empty reason classifies why the lane produced no usable reply
-// (deadline, request_error, incomplete, invalid_reply, reply_<status>,
-// invalid_finding); err carries the underlying failure when there is one.
+// (budget_exhausted, deadline, request_error, incomplete, invalid_reply,
+// reply_<status>, invalid_finding); err carries the underlying failure when
+// there is one.
+//
+// budget_exhausted and deadline are both a missing reply after a deadline,
+// but only deadline says anything about the consumer: budget_exhausted means
+// the caller's own deadline - an inference hook's verdict budget, say - cut
+// the wait short before the lane had spent its budget, so the consumer was
+// never given its full time to answer. Alerting keeps them apart: a burst of
+// budget_exhausted is caller-side pressure, not an outage.
 func laneFindings(text, source string, lane enforcereply.Lane, outcome enforcereply.Outcome) (findings []scanners.Finding, reason string, err error) {
 	reply := outcome.ByLane[lane]
 	switch {
 	case reply == nil:
 		reason = "incomplete"
 		laneErr := outcome.Failed[lane]
-		if errors.Is(laneErr, context.DeadlineExceeded) || (laneErr == nil && outcome.Deadline) {
+		switch {
+		case outcome.CallerBudget[lane]:
+			reason = reasonBudgetExhausted
+		case errors.Is(laneErr, context.DeadlineExceeded) || (laneErr == nil && outcome.Deadline):
 			reason = "deadline"
-		} else if laneErr != nil {
+		case laneErr != nil:
 			reason = "request_error"
 		}
 		return nil, reason, laneErr
@@ -1690,7 +1707,14 @@ func (s *Scanner) recordPubsubDegraded(ctx context.Context, lane enforcereply.La
 	if err != nil {
 		args = append(args, attr.SlogError(err))
 	}
-	s.logger.ErrorContext(ctx, "pub/sub enforcement lane degraded", args...)
+	if reason == reasonBudgetExhausted {
+		// The consumer was never given its full budget, so this is caller-side
+		// pressure rather than a dependency fault. Keep it off the error level
+		// the on-call error-rate views alert on; the counter still carries it.
+		s.logger.WarnContext(ctx, "pub/sub enforcement lane cut short by caller budget", args...)
+	} else {
+		s.logger.ErrorContext(ctx, "pub/sub enforcement lane degraded", args...)
+	}
 	if s.metrics.pubsubDegraded != nil {
 		s.metrics.pubsubDegraded.Add(ctx, 1, metric.WithAttributes(
 			attribute.String("lane", lane.String()),
