@@ -3,10 +3,40 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { specForDataset, type ExploreSpec } from "./exploreModel";
 import { ExploreResults, type RunQuery } from "./ExploreResults";
+import { MAX_SERIES } from "./resultSeries";
 
+// The chart is drawn to a canvas, so the mock exposes what the drawing was
+// told: the series, their dataset types and fills, and whether the scales
+// stack.
 vi.mock("react-chartjs-2", () => ({
-  Chart: ({ data }: { data: { datasets: { label: string }[] } }) => (
-    <div data-testid="chart">
+  Chart: ({
+    type,
+    data,
+    options,
+  }: {
+    type: string;
+    data: {
+      datasets: {
+        label: string;
+        type: string;
+        fill?: string | boolean;
+        data: unknown[];
+      }[];
+    };
+    options: { scales: { y: { stacked?: boolean } } };
+  }) => (
+    <div
+      data-testid="chart"
+      data-type={type}
+      data-stacked={String(options.scales.y.stacked ?? false)}
+      data-last-points={JSON.stringify(data.datasets.at(-1)?.data ?? null)}
+      data-dataset-types={data.datasets
+        .map((dataset) => dataset.type)
+        .join(",")}
+      data-fills={data.datasets
+        .map((dataset) => String(dataset.fill ?? ""))
+        .join(",")}
+    >
       {data.datasets.map((dataset) => dataset.label).join(",")}
     </div>
   ),
@@ -14,6 +44,7 @@ vi.mock("react-chartjs-2", () => ({
 vi.mock("@/lib/theme", () => ({ useIsDarkTheme: () => false }));
 vi.mock("@/components/chart/useSeriesColors", () => ({
   useSeriesColors: () => ["#000", "#111"],
+  useOtherSeriesColor: () => "#888",
 }));
 
 const dataset: AnalyticsDataset = {
@@ -176,6 +207,143 @@ describe("ExploreResults", () => {
     );
     expect(screen.getByTestId("chart").textContent).toBe("ann,bob");
     expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  it("stacks a breakdown as bars on stacked scales", () => {
+    render(
+      <ExploreResults
+        dataset={dataset}
+        spec={spec({ chartType: "stacked_bar" })}
+        result={loaded([
+          { time_bucket: "2026-09-14T10:00:00Z", user: "ann", count: 2 },
+          { time_bucket: "2026-09-14T10:00:00Z", user: "bob", count: 1 },
+        ])}
+      />,
+    );
+    const chart = screen.getByTestId("chart");
+    expect(chart.textContent).toBe("ann,bob");
+    expect(chart.dataset.type).toBe("bar");
+    expect(chart.dataset.stacked).toBe("true");
+    expect(chart.dataset.datasetTypes).toBe("bar,bar");
+    expect(screen.queryByText(/drawn as/)).toBeNull();
+  });
+
+  it("stacks a breakdown as bands that fill down to the band below", () => {
+    render(
+      <ExploreResults
+        dataset={dataset}
+        spec={spec({ chartType: "stacked_area" })}
+        result={loaded([
+          { time_bucket: "2026-09-14T10:00:00Z", user: "ann", count: 2 },
+          { time_bucket: "2026-09-14T10:00:00Z", user: "bob", count: 1 },
+        ])}
+      />,
+    );
+    const chart = screen.getByTestId("chart");
+    expect(chart.dataset.type).toBe("line");
+    expect(chart.dataset.stacked).toBe("true");
+    expect(chart.dataset.datasetTypes).toBe("line,line");
+    expect(chart.dataset.fills).toBe("stack,stack");
+  });
+
+  it("draws a stack with nothing to stack by as the plain chart it is, and says so", () => {
+    render(
+      <ExploreResults
+        dataset={dataset}
+        spec={spec({ chartType: "stacked_bar", dimensions: [] })}
+        result={loaded([{ time_bucket: "2026-09-14T10:00:00Z", count: 3 }])}
+      />,
+    );
+    const chart = screen.getByTestId("chart");
+    expect(chart.dataset.type).toBe("bar");
+    expect(chart.dataset.stacked).toBe("false");
+    expect(
+      screen.getByText(
+        "Stacking needs a Group by, so this is drawn as a bar chart.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("folds the series past the cap into Other on a stack, and says how many", () => {
+    const rows = Array.from({ length: MAX_SERIES + 3 }, (_, i) => ({
+      time_bucket: "2026-09-14T10:00:00Z",
+      user: `user-${i}`,
+      count: i + 1,
+    }));
+    render(
+      <ExploreResults
+        dataset={dataset}
+        spec={spec({ chartType: "stacked_bar" })}
+        result={loaded(rows)}
+      />,
+    );
+    const chart = screen.getByTestId("chart");
+    const labels = chart.textContent?.split(",") ?? [];
+    expect(labels).toHaveLength(MAX_SERIES);
+    expect(labels.at(-1)).toBe("Other (4 series)");
+    // The four smallest series, counts 1 to 4, are summed into the band.
+    expect(chart.dataset.lastPoints).toBe("[10]");
+    expect(
+      screen.getByText(
+        `Showing the ${MAX_SERIES - 1} largest of ${MAX_SERIES + 3} series; the other 4 are stacked as Other.`,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("drops the series past the cap on a line, and says how many", () => {
+    const rows = Array.from({ length: MAX_SERIES + 3 }, (_, i) => ({
+      time_bucket: "2026-09-14T10:00:00Z",
+      user: `user-${i}`,
+      count: i + 1,
+    }));
+    render(
+      <ExploreResults
+        dataset={dataset}
+        spec={spec({ chartType: "line" })}
+        result={loaded(rows)}
+      />,
+    );
+    expect(screen.getByTestId("chart").textContent?.split(",")).not.toContain(
+      "Other",
+    );
+    expect(
+      screen.getByText(
+        `Showing the ${MAX_SERIES} largest of ${MAX_SERIES + 3} series.`,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("refuses to stack more than one measure", () => {
+    render(
+      <ExploreResults
+        dataset={dataset}
+        spec={spec({
+          chartType: "stacked_bar",
+          measures: [
+            { op: "count", field: "" },
+            { op: "sum", field: "count" },
+          ],
+        })}
+        result={loaded([{ time_bucket: "t", user: "ann", count: 1 }])}
+      />,
+    );
+    expect(screen.getByText("A stacked chart stacks one measure")).toBeTruthy();
+    expect(screen.queryByTestId("chart")).toBeNull();
+  });
+
+  it("refuses to stack a measure that does not add up", () => {
+    render(
+      <ExploreResults
+        dataset={dataset}
+        spec={spec({
+          chartType: "stacked_area",
+          measures: [{ op: "avg", field: "count" }],
+        })}
+        result={loaded([{ time_bucket: "t", user: "ann", avg_count: 1 }])}
+      />,
+    );
+    expect(screen.getByText("A stacked chart adds its bands up")).toBeTruthy();
+    expect(screen.queryByTestId("chart")).toBeNull();
   });
 
   it("refuses to chart measures with different units", () => {

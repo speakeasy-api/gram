@@ -3088,7 +3088,12 @@ Channel context stays in the Raw view.
      'Sessions by surface', NULL, 'sessions',
      '{"window":"30d","grain":"day","ungrouped":false,"dimensions":["surface"],"measures":[{"op":"count","field":"","alias":"count"}],"filters":[],"order_by":[],"limit":1000}',
      '{"type":"area","options":{}}',
-     now() - interval '11 days', now() - interval '6 days');
+     now() - interval '11 days', now() - interval '6 days'),
+    (demo.det_uuid('gram-demo-explore-widget-6'), proj_a, demo_org, 'user_demo_priya',
+     'Calls by MCP server', 'Which servers the calls went to, day by day', 'tool_calls',
+     '{"window":"7d","grain":"day","ungrouped":false,"dimensions":["mcp_server"],"measures":[{"op":"count","field":"","alias":"count"}],"filters":[],"order_by":[],"limit":1000}',
+     '{"type":"stacked_bar","options":{}}',
+     now() - interval '4 days', now() - interval '1 day');
 
   ------------------------------------------------------------------
   -- Postflight asserts: demo data landed, and nothing leaked outside
@@ -4096,8 +4101,8 @@ Channel context stays in the Raw view.
   END IF;
 
   SELECT count(*) INTO stray FROM widgets WHERE project_id = proj_a AND deleted IS FALSE;
-  IF stray <> 5 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 5 Explore widgets, found %', stray;
+  IF stray <> 6 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 6 Explore widgets, found %', stray;
   END IF;
 
   -- Sigint postflights preserve the complete authoring story: all modes,

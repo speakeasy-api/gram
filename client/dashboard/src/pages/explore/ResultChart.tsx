@@ -1,5 +1,8 @@
 import { AXIS, TOOLTIP, withAlpha } from "@/components/chart/palette";
-import { useSeriesColors } from "@/components/chart/useSeriesColors";
+import {
+  useOtherSeriesColor,
+  useSeriesColors,
+} from "@/components/chart/useSeriesColors";
 import { useIsDarkTheme } from "@/lib/theme";
 import {
   BarElement,
@@ -13,12 +16,18 @@ import {
   Tooltip,
   type ChartDataset,
   type ChartOptions,
+  type TooltipItem,
 } from "chart.js";
 import { useChartZoom } from "@/components/chart/useChartZoom";
 import ZoomPlugin from "chartjs-plugin-zoom";
 import { useEffect, useMemo, type JSX } from "react";
 import { Chart } from "react-chartjs-2";
-import { formatMeasureValue, type ChartType, type Grain } from "./exploreModel";
+import {
+  formatMeasureValue,
+  isStacked,
+  type ChartType,
+  type Grain,
+} from "./exploreModel";
 import {
   bucketTick,
   bucketTitle,
@@ -43,7 +52,10 @@ export const CHART_HEIGHT = 320;
 
 type TimeseriesDataset = ChartDataset<"bar" | "line", (number | null)[]>;
 
-/** A bucketed result as a line, area or bar chart, one series per tuple. */
+/**
+ * A bucketed result as a line, area or bar chart, one series per tuple, or
+ * as a stack of them, one band per tuple.
+ */
 export function ResultChart({
   seriesSet,
   unit,
@@ -63,8 +75,11 @@ export function ResultChart({
   onRangeSelect?: ((from: Date, to: Date) => void) | undefined;
 }): JSX.Element {
   const colors = useSeriesColors();
+  const otherColor = useOtherSeriesColor();
   const isDark = useIsDarkTheme();
   const { buckets, series } = seriesSet;
+  const stacked = isStacked(chartType);
+  const bars = chartType === "bar" || chartType === "stacked_bar";
 
   // The x axis is categories, so the plugin reports bucket indexes; the
   // range runs from the first bucket's start to the last one's end.
@@ -93,17 +108,35 @@ export function ResultChart({
   const datasets = useMemo<TimeseriesDataset[]>(
     () =>
       series.map((one) => {
-        const color = colors[paletteIndex(one.label, colors.length)]!;
-        const base = {
-          label: one.label,
-          data: one.points,
-          backgroundColor: chartType === "area" ? withAlpha(color, 0.2) : color,
-          borderColor: color,
-        };
-        if (chartType === "bar") return { ...base, type: "bar" };
+        const color = one.other
+          ? otherColor
+          : colors[paletteIndex(one.label, colors.length)]!;
+        // A stacked band contributes nothing where its series had no row;
+        // Chart.js breaks a stacked line at a null and leaves a bar gap, so
+        // a stack draws the missing bucket as zero.
+        const data = stacked
+          ? one.points.map((point) => point ?? 0)
+          : one.points;
+        const base = { label: one.label, data, borderColor: color };
+        if (bars) return { ...base, type: "bar", backgroundColor: color };
+        if (chartType === "stacked_area") {
+          // Each band fills down to the one below it, and the first to the
+          // axis; the bands never overlap, so each is painted solid.
+          return {
+            ...base,
+            type: "line",
+            backgroundColor: color,
+            borderWidth: 1,
+            // One bucket has no segment to fill, so its point is drawn.
+            pointRadius: buckets.length === 1 ? 4 : 0,
+            pointHoverRadius: 4,
+            fill: "stack",
+          };
+        }
         return {
           ...base,
           type: "line",
+          backgroundColor: chartType === "area" ? withAlpha(color, 0.2) : color,
           borderWidth: 1.5,
           pointRadius: isSparse(one.points) ? 4 : 0,
           pointHoverRadius: 4,
@@ -111,7 +144,7 @@ export function ResultChart({
           spanGaps: true,
         };
       }),
-    [series, chartType, colors],
+    [series, chartType, stacked, bars, colors, otherColor, buckets.length],
   );
 
   const options = useMemo<ChartOptions<"line" | "bar">>(
@@ -128,6 +161,9 @@ export function ResultChart({
         },
         tooltip: {
           ...TOOLTIP,
+          // A stacked bucket lists only the bands that contributed, and
+          // what they add up to.
+          filter: (item) => !stacked || (item.parsed.y ?? 0) !== 0,
           callbacks: {
             title: (items) => {
               const iso = items[0]?.label;
@@ -135,11 +171,13 @@ export function ResultChart({
             },
             label: (context) =>
               `${context.dataset.label}: ${formatMeasureValue(Number(context.parsed.y ?? 0), unit)}`,
+            footer: (items) => (stacked ? stackTotal(items, unit) : ""),
           },
         },
       },
       scales: {
         x: {
+          stacked,
           grid: { display: false },
           ticks: {
             color: AXIS.label,
@@ -153,6 +191,7 @@ export function ResultChart({
           },
         },
         y: {
+          stacked,
           beginAtZero: true,
           grid: { color: isDark ? AXIS.gridDark : AXIS.grid },
           ticks: {
@@ -162,7 +201,7 @@ export function ResultChart({
         },
       },
     }),
-    [datasets.length, unit, isDark, buckets, grain, zoomPluginOptions],
+    [datasets.length, unit, isDark, buckets, grain, zoomPluginOptions, stacked],
   );
 
   return (
@@ -172,12 +211,22 @@ export function ResultChart({
     >
       <Chart<"bar" | "line", (number | null)[], string>
         ref={chartRef}
-        type={chartType === "bar" ? "bar" : "line"}
+        type={bars ? "bar" : "line"}
         data={{ labels: buckets, datasets }}
         options={options}
       />
     </div>
   );
+}
+
+/** The tooltip's last line on a stack: what the bands under the cursor add up to. */
+function stackTotal(
+  items: TooltipItem<"bar" | "line">[],
+  unit: string,
+): string {
+  let sum = 0;
+  for (const item of items) sum += Number(item.parsed.y ?? 0);
+  return `Total: ${formatMeasureValue(sum, unit)}`;
 }
 
 const HOUR_MS = 3_600_000;
