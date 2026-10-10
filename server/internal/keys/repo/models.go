@@ -22,6 +22,8 @@ type ApiKey struct {
 	DelegatedGrants        []byte
 	DelegatedGrantsVersion pgtype.Int4
 	ExpiresAt              pgtype.Timestamptz
+	ParentApiKeyID         uuid.NullUUID
+	DeviceID               pgtype.Text
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
