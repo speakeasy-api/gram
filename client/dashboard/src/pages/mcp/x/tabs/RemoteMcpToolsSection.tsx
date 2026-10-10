@@ -269,7 +269,7 @@ function RemoteMcpToolsBody({
     return <RemoteMcpToolsConnectPrompt onConnect={onConnect} />;
   }
 
-  // A 401 with no connect target used to open /x/mcp/<slug>/connect/first-party
+  // A 401 with no connect target used to open the first-party connect route
   // anyway, which returns a bare not_found document. Point at settings instead.
   if (needsAuth) {
     return (

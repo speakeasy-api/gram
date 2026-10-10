@@ -180,9 +180,7 @@ export function AgentKeyServers({
           issuerId: detail.userSessionIssuerId,
           endpoints: url ? [url] : [],
           connectUrl: detail.mcpSlug
-            ? firstPartyConnectUrl(`${getServerURL()}/mcp/${detail.mcpSlug}`, {
-                runtimePath: "mcp",
-              })
+            ? firstPartyConnectUrl(`${getServerURL()}/mcp/${detail.mcpSlug}`)
             : undefined,
         };
       } else {

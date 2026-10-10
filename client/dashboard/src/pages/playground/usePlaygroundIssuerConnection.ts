@@ -69,12 +69,9 @@ export function usePlaygroundIssuerConnection(
     },
   );
 
-  // The connect page is opened as a top-level tab on the toolset `/mcp` surface
+  // The connect page is opened as a top-level tab on the `/mcp` surface
   // so it rides the gram_session cookie on the backend origin (not the proxy).
-  const authUrl = useMemo(
-    () => firstPartyConnectUrl(mcpUrl, { runtimePath: "mcp" }),
-    [mcpUrl],
-  );
+  const authUrl = useMemo(() => firstPartyConnectUrl(mcpUrl), [mcpUrl]);
 
   const connect = useCallback(() => {
     if (authUrl) window.open(authUrl, "_blank", "noopener,noreferrer");
