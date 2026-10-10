@@ -247,6 +247,15 @@ func TestIsRetryOfUnhealthyTransition(t *testing.T) {
 	}, checkedAt))
 }
 
+func TestHealthIssueMessageCAAForbiddenNamesLetsEncryptRecord(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t,
+		`CAA records for this domain do not allow Let's Encrypt to issue a TLS certificate. Add a CAA record: 0 issue "letsencrypt.org".`,
+		HealthIssueMessage(HealthIssueCAAForbidden, DNSRemediation{Domain: "chat.example.com", ExpectedCNAME: "cname.example.com.", ExpectedARecords: nil}),
+	)
+}
+
 func TestHealthIssueMessageCertificateProblemsAreManagedByGram(t *testing.T) {
 	t.Parallel()
 
