@@ -200,8 +200,8 @@ func handleToolsCall(
 	// only when exactly one enabled wrapper exists. Disabled wrappers do not
 	// serve, and choosing among multiple live wrappers would apply an arbitrary
 	// server's policy and telemetry identity.
-	// Keep the payload unchanged because its nil server id still identifies the
-	// legacy authorization path.
+	// Keep the payload unchanged because its nil server id still identifies a
+	// legacy request with no fronting server.
 	attributedMCPServerID := payload.mcpServerID
 	if attributedMCPServerID == nil {
 		servers, lookupErr := mcpservers_repo.New(db).ListEnabledMCPServersByToolsetID(ctx, mcpservers_repo.ListEnabledMCPServersByToolsetIDParams{

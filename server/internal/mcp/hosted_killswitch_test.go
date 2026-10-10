@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
 
 func TestServePublic_HostedToolsCallKillswitch(t *testing.T) {
@@ -87,6 +88,82 @@ func TestServePublic_HostedToolsCallKillswitch(t *testing.T) {
 	require.JSONEq(t, `{"jsonrpc":"2.0","id":3,"error":{"code":-32603,"message":"Internal error"}}`, unavailable.Body.String())
 	require.NotContains(t, unavailable.Body.String(), note)
 	require.NotContains(t, unavailable.Body.String(), "mcp_tool_calls_paused")
+}
+
+// A legacy-slug fallback request on a toolset with a canonical wrapper is
+// subject to kill switches keyed on that wrapper.
+func TestServePublic_LegacyFallbackHostedToolsCallKillswitch(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	require.NotEmpty(t, authCtx.UserID)
+
+	toolset, token := createIssuerGatedLegacyToolset(t, ctx, ti, authCtx, "ks-fallback-")
+	// Canonical wrapper exposed on a different slug, so the toolset slug misses mcp_endpoints.
+	createToolsetMcpEndpointWithID(t, ctx, ti.conn, toolset.ID, *authCtx.ProjectID, toolset.ID, "ks-canonical-"+uuid.NewString(), "public", uuid.NullUUID{}, toolset.UserSessionIssuerID.UUID)
+
+	before, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsCallBody("missing_tool"), token, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, before.Code)
+	require.NotContains(t, before.Body.String(), "mcp_tool_calls_paused")
+
+	insertHostedKillswitchPrescription(t, ctx, ti, authCtx.ActiveOrganizationID, authCtx.UserID, toolset.ID, "Tool calls paused for maintenance.")
+
+	paused, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsCallBody("missing_tool"), token, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, paused.Code)
+	require.JSONEq(t, `{"jsonrpc":"2.0","id":3,"error":{"code":-32003,"message":"Tool calls paused for maintenance.","data":{"code":"mcp_tool_calls_paused"}}}`, paused.Body.String())
+}
+
+// Without a canonical wrapper the fallback has no fronting server, so a kill
+// switch keyed on the toolset id does not apply.
+func TestServePublic_LegacyFallbackWithoutWrapperSkipsHostedKillswitch(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	require.NotEmpty(t, authCtx.UserID)
+
+	toolset, token := createIssuerGatedLegacyToolset(t, ctx, ti, authCtx, "ks-nowrap-")
+	insertHostedKillswitchPrescription(t, ctx, ti, authCtx.ActiveOrganizationID, authCtx.UserID, toolset.ID, "Tool calls paused for maintenance.")
+
+	response, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsCallBody("missing_tool"), token, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Contains(t, response.Body.String(), "tool not found")
+	require.NotContains(t, response.Body.String(), "mcp_tool_calls_paused")
+}
+
+// createIssuerGatedLegacyToolset creates a public issuer-gated toolset with no
+// mcp_endpoints row and a user-session bearer for the in-toolset gate.
+func createIssuerGatedLegacyToolset(t *testing.T, ctx context.Context, ti *testInstance, authCtx *contextvalues.AuthContext, slugPrefix string) (toolsetsrepo.Toolset, string) {
+	t.Helper()
+
+	repo := toolsetsrepo.New(ti.conn)
+	toolset := createPublicMCPToolset(t, ctx, repo, authCtx, slugPrefix+uuid.NewString()[:8])
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	toolset, err := repo.UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
+		Slug:                toolset.Slug,
+		ProjectID:           toolset.ProjectID,
+	})
+	require.NoError(t, err)
+
+	subject := urn.NewUserSubject(authCtx.UserID)
+	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
+		Subject:  subject,
+		Audience: urn.NewToolset(toolset.ID).String(),
+		Issuer:   ti.serverURL.String() + "/mcp/" + toolset.McpSlug.String,
+		Lifetime: time.Hour,
+	})
+	require.NoError(t, err)
+	persistTestUserSession(t, ti, issuerID, subject, jti)
+	return toolset, token
 }
 
 func attachMissingRemoteSession(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID) {

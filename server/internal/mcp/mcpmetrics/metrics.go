@@ -76,9 +76,9 @@ const (
 )
 
 // Metrics is the mcp service's full instrument set. A nil *Metrics is valid —
-// every Record method becomes a no-op — and each method is also
-// nil-instrument-safe, so a partially constructed value still records what
-// it can.
+// metric recording becomes a no-op, but RecordToolsetSlugFallback still emits
+// attribution logs when a logger is supplied. Each method is also
+// nil-instrument-safe, so a partially constructed value still records what it can.
 type Metrics struct {
 	// mcpInitializeCounter is the unsampled census of observed handshakes by
 	// protocol revision. A counter rather than a span attribute because traces
@@ -362,14 +362,15 @@ func (m *Metrics) RecordKillswitchIdentityCoverage(ctx context.Context, surface 
 	m.identityCoverage.Record(ctx, surface, identity, resource)
 }
 
-// RecordToolsetSlugFallback counts one request served through the legacy
-// toolsets.mcp_slug lookup after an mcp_endpoints address miss. Semantics on
+// RecordToolsetSlugFallback logs and counts one request served through the
+// legacy toolsets.mcp_slug lookup after an mcp_endpoints address miss. Semantics on
 // [LegacyFallbackCounter.RecordToolsetSlugFallback].
-func (m *Metrics) RecordToolsetSlugFallback(ctx context.Context, entryPoint LegacyFallbackEntryPoint) {
-	if m == nil {
-		return
+func (m *Metrics) RecordToolsetSlugFallback(ctx context.Context, logger *slog.Logger, hit ToolsetSlugFallback) {
+	var counter *LegacyFallbackCounter
+	if m != nil {
+		counter = m.legacyFallback
 	}
-	m.legacyFallback.RecordToolsetSlugFallback(ctx, entryPoint)
+	counter.RecordToolsetSlugFallback(ctx, logger, hit)
 }
 
 // RecordLegacyAudienceAccepted counts one bearer accepted via the legacy

@@ -408,6 +408,12 @@ const (
 	MetaMemberBackendKey   = attribute.Key("gram.meta.member.backend")
 	MetaDispatchOutcomeKey = attribute.Key("gram.meta.dispatch.outcome")
 	McpURLKey              = attribute.Key("gram.mcp.url")
+
+	// Legacy toolsets.mcp_slug fallback attribution; logs only, never metric dimensions.
+	McpFallbackRequestHostKey         = attribute.Key("gram.mcp.fallback.request_host")
+	McpFallbackCanonicalWrapperKey    = attribute.Key("gram.mcp.fallback.canonical_wrapper")
+	McpFallbackToolsetCustomDomainKey = attribute.Key("gram.mcp.fallback.toolset_custom_domain")
+
 	// McpClientNameKey / McpClientVersionKey carry the MCP caller's
 	// self-reported identity from the initialize handshake (or the
 	// per-request _meta hint). Untrusted client input: attribution only,
@@ -2847,6 +2853,21 @@ func SlogMcpRejectionReason[V ~string](v V) slog.Attr {
 }
 
 func McpEntryPoint[V ~string](v V) attribute.KeyValue { return McpEntryPointKey.String(string(v)) }
+func SlogMcpEntryPoint[V ~string](v V) slog.Attr {
+	return slog.String(string(McpEntryPointKey), string(v))
+}
+
+func SlogMcpFallbackRequestHost[V ~string](v V) slog.Attr {
+	return slog.String(string(McpFallbackRequestHostKey), string(v))
+}
+
+func SlogMcpFallbackCanonicalWrapper(v bool) slog.Attr {
+	return slog.Bool(string(McpFallbackCanonicalWrapperKey), v)
+}
+
+func SlogMcpFallbackToolsetCustomDomain[V ~string](v V) slog.Attr {
+	return slog.String(string(McpFallbackToolsetCustomDomainKey), string(v))
+}
 
 func McpKillswitchSurface[V ~string](v V) attribute.KeyValue {
 	return McpKillswitchSurfaceKey.String(string(v))

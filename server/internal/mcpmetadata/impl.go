@@ -1232,15 +1232,24 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 	if err != nil {
 		return nil, err
 	}
-	if server, serverErr := s.mcpServersRepo.GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID}); serverErr == nil {
-		mode, modeErr := networkaccess.Effective(server.NetworkAccessMode)
-		if modeErr != nil || !mode.Allows(networkaccess.SurfacePublic) {
+	wrapper, serverErr := s.mcpServersRepo.GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
+	if serverErr == nil {
+		mode, modeErr := networkaccess.Effective(wrapper.NetworkAccessMode)
+		if modeErr != nil || !mode.Allows(networkaccess.SurfacePublic) || !CanonicalWrapperMatchesToolset(&wrapper, toolset) {
 			return nil, fmt.Errorf("%w: endpoint is not available on this network surface", errToolsetNotFound)
 		}
 	} else if !errors.Is(serverErr, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("load canonical mcp server: %w", serverErr)
 	}
-	s.legacyFallback.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackInstallPage)
+	s.legacyFallback.RecordToolsetSlugFallback(ctx, s.logger, mcpmetrics.ToolsetSlugFallback{
+		EntryPoint:          mcpmetrics.LegacyFallbackInstallPage,
+		Slug:                mcpSlug,
+		ToolsetID:           toolset.ID,
+		ProjectID:           toolset.ProjectID,
+		CustomDomainHost:    customdomains.FromContext(ctx) != nil,
+		CanonicalWrapper:    serverErr == nil && CanonicalWrapperMatchesToolset(&wrapper, toolset),
+		ToolsetCustomDomain: ToolsetCustomDomainState(ctx, s.domainsRepo, toolset),
+	})
 	org, err := s.orgsRepo.GetOrganizationMetadata(ctx, toolset.OrganizationID)
 	if err != nil {
 		return nil, fmt.Errorf("load organization: %w", err)
@@ -1253,6 +1262,33 @@ func (s *Service) resolveInstallContext(ctx context.Context, mcpSlug string) (*i
 		organization:   org,
 		mcpURLOverride: "",
 	}, nil
+}
+
+// CanonicalWrapperMatchesToolset reports whether the toolset's canonical
+// mcp_servers row agrees with the toolset columns the legacy slug path serves.
+func CanonicalWrapperMatchesToolset(wrapper *mcpservers_repo.McpServer, toolset *toolsets_repo.Toolset) bool {
+	return wrapper.ToolsetID.Valid && wrapper.ToolsetID.UUID == toolset.ID && wrapper.Visibility != "disabled" && wrapper.UserSessionIssuerID == toolset.UserSessionIssuerID && (wrapper.Visibility == "public") == toolset.McpIsPublic
+}
+
+// ToolsetCustomDomainState classifies the toolset's custom domain binding for fallback attribution.
+func ToolsetCustomDomainState(ctx context.Context, domains *customdomains_repo.Queries, toolset *toolsets_repo.Toolset) mcpmetrics.ToolsetCustomDomainState {
+	if !toolset.CustomDomainID.Valid {
+		return mcpmetrics.ToolsetCustomDomainNone
+	}
+	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil && domainCtx.DomainID == toolset.CustomDomainID.UUID {
+		return mcpmetrics.ToolsetCustomDomainLive
+	}
+	domain, err := domains.GetCustomDomainByIDAndOrganization(ctx, customdomains_repo.GetCustomDomainByIDAndOrganizationParams{ID: toolset.CustomDomainID.UUID, OrganizationID: toolset.OrganizationID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return mcpmetrics.ToolsetCustomDomainDeleted
+	case err != nil:
+		return mcpmetrics.ToolsetCustomDomainUnknown
+	case !domain.Verified || !domain.Activated:
+		return mcpmetrics.ToolsetCustomDomainInactive
+	default:
+		return mcpmetrics.ToolsetCustomDomainLive
+	}
 }
 
 // resolveOrgCustomDomainInstallContext resolves a slug in the organization's
