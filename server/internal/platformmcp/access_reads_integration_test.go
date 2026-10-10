@@ -137,6 +137,53 @@ func TestGetMCPAccessUsesFrontingServerIDAndStoredToolMetadata(t *testing.T) {
 	require.Equal(t, []string{"list_tasks"}, output.Roles[0].AllowedKnownTools)
 }
 
+// A role narrowed to read-only tools covers the stored tools classified that
+// way. A stored tool with no annotation hints has no classification, so the
+// coverage report lists it as outside the role rather than allowed.
+func TestGetMCPAccessExcludesUnclassifiedToolsFromDispositionRole(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_access_unclassified")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := NewAccessReadService(testenv.NewLogger(t), conn, allowBudget(), "access-read-key")
+
+	rows, err := platformrepo.New(conn).ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
+		OrganizationID: principal.OrganizationID, ConnectionID: uuid.NullUUID{}, ConnectionGeneration: uuid.NullUUID{}, SkipAuthorizationFilter: true,
+		UserID: inventoryText(principal.UserID), ActingSurface: inventoryText(string(principal.surface())),
+		ProjectID: uuid.NullUUID{UUID: project.ID, Valid: true}, AfterMcpID: uuid.NullUUID{}, QueryText: "", ReadinessState: pgtype.Text{}, LimitValue: 10,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, rows)
+	target := rows[0]
+
+	_, err = mcpserversrepo.New(conn).AddMCPServerToolMetadata(ctx, mcpserversrepo.AddMCPServerToolMetadataParams{
+		ProjectID: target.ProjectID, McpServerID: target.McpServerID,
+		Tools: []byte(`[{"tool_name":"list_tasks","read_only_hint":true},{"tool_name":"ping"}]`),
+	})
+	require.NoError(t, err)
+
+	role := seedAccessRole(t, ctx, conn, principal.OrganizationID, "readers", "Readers")
+	selector := authz.NewSelector(authz.ScopeMCPConnect, target.McpServerID.String())
+	selector[authz.SelectorKeyDisposition] = authz.DispositionReadOnly
+	selectorBytes, err := selector.MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: principal.OrganizationID, PrincipalUrn: role, Scope: string(authz.ScopeMCPConnect), Selectors: selectorBytes,
+	})
+	require.NoError(t, err)
+
+	output, err := service.GetMCPAccess(ctx, principal, GetMCPAccessInput{ProjectID: project.ID.String(), MCPID: target.McpServerID.String()})
+	require.NoError(t, err)
+	require.Equal(t, []MCPAccessTool{{Name: "list_tasks", Disposition: "read_only"}, {Name: "ping", Disposition: ""}}, output.MCP.Tools)
+	require.Len(t, output.Roles, 1)
+	require.Equal(t, "Readers", output.Roles[0].Name)
+	require.True(t, output.Roles[0].CanEnterServer)
+	require.Equal(t, []string{"list_tasks"}, output.Roles[0].AllowedKnownTools)
+	require.NotEqual(t, "all", output.Roles[0].KnownToolAccess)
+}
+
 func seedAccessMember(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID, userID, email string) {
 	t.Helper()
 	_, err := usersrepo.New(conn).UpsertUser(ctx, usersrepo.UpsertUserParams{ID: userID, Email: email, DisplayName: userID, PhotoUrl: pgtype.Text{}, Admin: false})

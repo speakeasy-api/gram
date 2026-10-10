@@ -122,6 +122,24 @@ func TestService_CreateRole_RejectsRiskPolicyGrant(t *testing.T) {
 	ti.roles.AssertNotCalled(t, "CreateRole", mock.Anything, mock.Anything, mock.Anything)
 }
 
+// The disposition a check gives an unannotated tool is internal, so a role
+// grant cannot name it.
+func TestService_CreateRole_RejectsUnclassifiedDisposition(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+
+	_, err := ti.service.CreateRole(ctx, &gen.CreateRolePayload{
+		Name:        "Unclassified Reader",
+		Description: conv.PtrEmpty("Should not be allowed"),
+		Grants: []*gen.RoleGrant{
+			{Scope: string(authz.ScopeMCPConnect), Selectors: []*gen.Selector{{ResourceKind: "mcp", ResourceID: "*", Disposition: new(authz.DispositionUnclassified)}}},
+		},
+	})
+	require.Error(t, err)
+	ti.roles.AssertNotCalled(t, "CreateRole", mock.Anything, mock.Anything, mock.Anything)
+}
+
 func TestService_CreateRole_WithoutDescription(t *testing.T) {
 	t.Parallel()
 

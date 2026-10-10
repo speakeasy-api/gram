@@ -210,3 +210,32 @@ func TestToolsCallAuthzInterceptor_UnclassifiedToolAuthorizedByToolGrant(t *test
 
 	require.NoError(t, interceptor.InterceptToolsCallRequest(ctx, newToolsCallRequest("search_tickets")))
 }
+
+func TestToolsCallAuthzInterceptor_DispositionGrantRejectsUnclassifiedTool(t *testing.T) {
+	t.Parallel()
+
+	// A disposition-only grant never reaches a tool with no recorded
+	// metadata; a server-level grant still does.
+	engine := newAuthzEngineForTest(t)
+	authCtx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
+	dispositionCtx := authztest.WithExactGrants(t, authCtx,
+		authz.NewGrantWithSelector(authz.ScopeMCPConnect, authz.Selector{
+			"resource_kind": "mcp",
+			"resource_id":   testServerID,
+			"disposition":   "read_only",
+		}),
+	)
+
+	resolver := fakeToolDispositionResolver{dispositions: map[string]string{"list_items": "read_only"}}
+	interceptor := remotemcp.NewToolsCallAuthzInterceptor(engine, resolver, testServerID, testProjectID, testenv.NewLogger(t))
+
+	require.NoError(t, interceptor.InterceptToolsCallRequest(dispositionCtx, newToolsCallRequest("list_items")))
+
+	err := interceptor.InterceptToolsCallRequest(dispositionCtx, newToolsCallRequest("unrecorded_tool"))
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+
+	serverCtx := authztest.WithExactGrants(t, authCtx, authz.NewGrant(authz.ScopeMCPConnect, testServerID))
+	require.NoError(t, interceptor.InterceptToolsCallRequest(serverCtx, newToolsCallRequest("unrecorded_tool")))
+}

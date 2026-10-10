@@ -94,6 +94,8 @@ func TestAgentPolicyRejectsUnsafeDenyAndMalformedGrantsAtomically(t *testing.T) 
 		{name: "management", payload: gen.CreatePolicyGrantPayload{Scope: string(authz.ScopeAgentWrite), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindAgent, ResourceID: "*"}}},
 		{name: "blocklist", payload: gen.CreatePolicyGrantPayload{Scope: string(authz.ScopeProjectBlockedRead), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindProject, ResourceID: "*"}}},
 		{name: "malformed selector", payload: gen.CreatePolicyGrantPayload{Scope: string(authz.ScopeProjectRead), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: "*"}}},
+		{name: "unclassified disposition", payload: gen.CreatePolicyGrantPayload{Scope: string(authz.ScopeMCPConnect), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: "*", Disposition: new(authz.DispositionUnclassified)}}},
+		{name: "wildcard disposition", payload: gen.CreatePolicyGrantPayload{Scope: string(authz.ScopeMCPConnect), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: "*", Disposition: new("*")}}},
 	}
 	for _, tt := range tests {
 		agent := createAgent(t, conn, "org-validation", "owner", tt.name+" validation agent")

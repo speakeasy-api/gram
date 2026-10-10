@@ -84,6 +84,17 @@ const (
 	executeToolToolName   = "execute_tool"
 )
 
+// isDynamicDiscoveryTool reports whether name is one of the dynamic-mode
+// facade's discovery tools, which reveal tools rather than call one.
+func isDynamicDiscoveryTool(name string) bool {
+	switch name {
+	case searchToolsToolName, describeToolsToolName:
+		return true
+	default:
+		return false
+	}
+}
+
 func handleToolsCall(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -153,22 +164,37 @@ func handleToolsCall(
 		dynamicFacade = false
 	}
 
-	if dynamicFacade {
-		switch params.Name {
-		case searchToolsToolName:
-			return handleSearchToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorToolStore)
-		case describeToolsToolName:
-			return handleDescribeToolsCall(ctx, logger, req.ID, params.Arguments, toolset)
-		case executeToolToolName:
-			proxyName, proxyArgs, err := processExecuteToolCall(ctx, logger, params.Arguments)
-			if err != nil {
-				return nil, err
-			}
-
-			// TODO: we would want some way in metrics/logging/billing to track this is a dynamic tool call
-			params.Name = proxyName
-			params.Arguments = proxyArgs
+	if dynamicFacade && isDynamicDiscoveryTool(params.Name) {
+		// Discovery only ever reveals the tools this caller may call, and is
+		// not offered at all when there are none — refused before any search
+		// work, exactly as tools/list omits the facade.
+		discovery, allowedTools, _, err := authorizedDiscoveryToolset(ctx, authzEngine, payload, toolset)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for dynamic tools").LogError(ctx, logger)
 		}
+		if toolAuthzEnforced(authzEngine, payload, toolset) && allowedTools == 0 {
+			return nil, fmt.Errorf("authorize dynamic MCP tools: %w", mcpaccess.ToolPermissionDenied(oops.C(oops.CodeForbidden)))
+		}
+
+		if params.Name == searchToolsToolName {
+			return handleSearchToolsCall(ctx, logger, req.ID, params.Arguments, discovery, vectorToolStore)
+		}
+		return handleDescribeToolsCall(ctx, logger, req.ID, params.Arguments, discovery)
+	}
+
+	// execute_tool is not gated on discovery: it unwraps to its target, which
+	// is then resolved and authorized below exactly like a direct call. This
+	// keeps it working for targets discovery can't count, such as external
+	// MCP passthrough tools.
+	if dynamicFacade && params.Name == executeToolToolName {
+		proxyName, proxyArgs, err := processExecuteToolCall(ctx, logger, params.Arguments)
+		if err != nil {
+			return nil, err
+		}
+
+		// TODO: we would want some way in metrics/logging/billing to track this is a dynamic tool call
+		params.Name = proxyName
+		params.Arguments = proxyArgs
 	}
 
 	// Strip the x-gram-toolset-id property the agent echoed back from the

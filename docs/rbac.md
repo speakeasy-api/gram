@@ -745,6 +745,8 @@ idempotent
 open_world
 ```
 
+A tool with no annotation hint set to true has no disposition: no annotations, only a title, every hint false, or (for remote and tunneled servers) no stored tool metadata. `authz.MCPToolCallCheck` gives such a tool the internal disposition `unclassified`, which `ValidateSelector` rejects in any grant. A grant narrowed only by disposition therefore never reaches an unannotated tool; a grant naming the tool, or a grant for the whole server or project, still does. To make such a tool available to an annotation rule, record its annotations (materialized hosted tools carry them on their definitions; remote and tunneled servers store them as tool metadata) or grant it by name. Hosted passthrough tools (`<slug>--<tool>`, served live from an external MCP server) remain unclassified even when the upstream annotates them, and need a grant by tool name, server, or project.
+
 Only add a dimension when the resource family needs finer-grained grants without creating a new scope for every variation. New dimensions must be explicitly allowed in `authz.ValidateSelector`; otherwise role grants using them will be rejected.
 
 ### Selector matching
