@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	agent "github.com/speakeasy-api/gram/server/gen/agent"
 	goahttp "goa.design/goa/v3/http"
@@ -2366,13 +2367,36 @@ func DecodeMintMcpCredentialRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		}
 
 		var (
-			apikeyToken *string
+			apikeyToken  *string
+			serialNumber *string
+			hostname     *string
 		)
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
 		}
-		payload = NewMintMcpCredentialPayload(&body, apikeyToken)
+		serialNumberRaw := r.Header.Get("Gram-Device-Serial")
+		if serialNumberRaw != "" {
+			serialNumber = &serialNumberRaw
+		}
+		if serialNumber != nil {
+			if utf8.RuneCountInString(*serialNumber) > 255 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("serial_number", *serialNumber, utf8.RuneCountInString(*serialNumber), 255, false))
+			}
+		}
+		hostnameRaw := r.Header.Get("Gram-Device-Hostname")
+		if hostnameRaw != "" {
+			hostname = &hostnameRaw
+		}
+		if hostname != nil {
+			if utf8.RuneCountInString(*hostname) > 255 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("hostname", *hostname, utf8.RuneCountInString(*hostname), 255, false))
+			}
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewMintMcpCredentialPayload(&body, apikeyToken, serialNumber, hostname)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

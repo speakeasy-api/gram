@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * mintMcpCredential agent
  *
  * @remarks
- * Mint the credential an agent identity's device agent writes into its AI tools' MCP server entries. Authenticated by the device's enrollment agent key, it returns a separate key for the same agent that carries only mcp:connect, so revoking it does not unenroll the device and it cannot poll policy. Asking again revokes the previous credential. The credential stops working when its parent key is revoked or expires.
+ * Mint the credential an agent identity's device agent writes into its AI tools' MCP server entries. Authenticated by the device's enrollment agent key, it returns a separate key for the same agent that carries only mcp:connect, so revoking it does not unenroll the device and it cannot poll policy. The device identifies itself with the Gram-Device-Serial or Gram-Device-Hostname header; asking again from the same device revokes that device's previous credential, while other devices sharing the enrollment key keep theirs. The credential stops working when its parent key is revoked or expires.
  */
 export function agentMintMcpCredential(
   client: GramCore,
@@ -111,6 +111,16 @@ async function $do(
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
     Accept: "application/json",
+    "Gram-Device-Hostname": encodeSimple(
+      "Gram-Device-Hostname",
+      payload["Gram-Device-Hostname"],
+      { explode: false, charEncoding: "none" },
+    ),
+    "Gram-Device-Serial": encodeSimple(
+      "Gram-Device-Serial",
+      payload["Gram-Device-Serial"],
+      { explode: false, charEncoding: "none" },
+    ),
     "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
       explode: false,
       charEncoding: "none",

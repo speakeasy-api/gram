@@ -425,7 +425,7 @@ var _ = Service("agent", func() {
 	})
 
 	Method("mintMcpCredential", func() {
-		Description("Mint the credential an agent identity's device agent writes into its AI tools' MCP server entries. Authenticated by the device's enrollment agent key, it returns a separate key for the same agent that carries only mcp:connect, so revoking it does not unenroll the device and it cannot poll policy. Asking again revokes the previous credential. The credential stops working when its parent key is revoked or expires.")
+		Description("Mint the credential an agent identity's device agent writes into its AI tools' MCP server entries. Authenticated by the device's enrollment agent key, it returns a separate key for the same agent that carries only mcp:connect, so revoking it does not unenroll the device and it cannot poll policy. The device identifies itself with the Gram-Device-Serial or Gram-Device-Hostname header; asking again from the same device revokes that device's previous credential, while other devices sharing the enrollment key keep theirs. The credential stops working when its parent key is revoked or expires.")
 
 		Security(security.ByKey, func() {
 			Scope("agent_user")
@@ -437,6 +437,14 @@ var _ = Service("agent", func() {
 				Description("When the credential expires. Defaults to 90 days from now and is capped at the parent key's expiry.")
 				Format(FormatDateTime)
 			})
+			// Optional in the schema so a device that reports neither gets the
+			// handler's explanatory 400 rather than a generic validation error.
+			Attribute("serial_number", String, "Hardware serial number of the machine minting the credential, when the agent can read it. Identifies the device the credential is issued to.", func() {
+				MaxLength(255)
+			})
+			Attribute("hostname", String, "Hostname of the machine minting the credential. Identifies the device when it reports no usable serial, as cloud machines do.", func() {
+				MaxLength(255)
+			})
 		})
 
 		Result(MintMcpCredentialResult)
@@ -444,6 +452,8 @@ var _ = Service("agent", func() {
 		HTTP(func() {
 			POST("/rpc/agent.mintMcpCredential")
 			security.ByKeyHeader()
+			Header("serial_number:Gram-Device-Serial")
+			Header("hostname:Gram-Device-Hostname")
 			Response(StatusOK)
 		})
 

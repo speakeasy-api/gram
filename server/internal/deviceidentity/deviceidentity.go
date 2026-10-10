@@ -93,6 +93,20 @@ func NormalizeSerial(reported *string) string {
 	return serial
 }
 
+// DeviceID names one machine for credentials issued to it: its serial when it
+// has a usable one, otherwise its hostname. Cloud boxes report no serial, so the
+// hostname is what tells a fleet sharing one key apart. Returns "" when the
+// device reported neither. Both values are self-reported by the device.
+func DeviceID(serial, hostname *string) string {
+	if normalized := NormalizeSerial(serial); normalized != "" {
+		return "serial:" + normalized
+	}
+	if host := strings.ToLower(strings.TrimSpace(conv.PtrValOr(hostname, ""))); host != "" {
+		return "hostname:" + host
+	}
+	return ""
+}
+
 // NormalizeEnvironment maps the declared kind onto the closed set. Total:
 // every input resolves to one of the Environment* values, never to "".
 //

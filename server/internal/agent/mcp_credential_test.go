@@ -78,9 +78,14 @@ func authorizeMethod(t *testing.T, ti *testInstance, key, method string) (contex
 
 func mintMCPCredential(t *testing.T, ti *testInstance, parentKey string) *gen.MintMcpCredentialResult {
 	t.Helper()
+	return mintMCPCredentialOn(t, ti, parentKey, &gen.MintMcpCredentialPayload{Hostname: new("runner-1")})
+}
+
+func mintMCPCredentialOn(t *testing.T, ti *testInstance, parentKey string, payload *gen.MintMcpCredentialPayload) *gen.MintMcpCredentialResult {
+	t.Helper()
 	admitted, err := authorizeMethod(t, ti, parentKey, "mintMcpCredential")
 	require.NoError(t, err)
-	res, err := ti.service.MintMcpCredential(admitted, &gen.MintMcpCredentialPayload{})
+	res, err := ti.service.MintMcpCredential(admitted, payload)
 	require.NoError(t, err)
 	return res
 }
@@ -162,7 +167,7 @@ func TestMintMcpCredential_AgentWithoutMCPAccessIsRefused(t *testing.T) {
 
 	admitted, err := authorizeMethod(t, ti, parent.key, "mintMcpCredential")
 	require.NoError(t, err)
-	_, err = ti.service.MintMcpCredential(admitted, &gen.MintMcpCredentialPayload{})
+	_, err = ti.service.MintMcpCredential(admitted, &gen.MintMcpCredentialPayload{Hostname: new("runner-1")})
 	requireCode(t, err, oops.CodeForbidden)
 }
 
@@ -174,7 +179,7 @@ func TestMintMcpCredential_HumanWithoutMCPAccessIsRefused(t *testing.T) {
 
 	admitted, err := authorizeMethod(t, ti, parent.key, "mintMcpCredential")
 	require.NoError(t, err)
-	_, err = ti.service.MintMcpCredential(admitted, &gen.MintMcpCredentialPayload{})
+	_, err = ti.service.MintMcpCredential(admitted, &gen.MintMcpCredentialPayload{Hostname: new("runner-1")})
 	requireCode(t, err, oops.CodeForbidden)
 }
 
@@ -233,7 +238,7 @@ func TestMintMcpCredential_ChildCannotMint(t *testing.T) {
 
 	admitted, err := authorizeMethod(t, ti, key, "mintMcpCredential")
 	require.NoError(t, err)
-	_, err = ti.service.MintMcpCredential(admitted, &gen.MintMcpCredentialPayload{})
+	_, err = ti.service.MintMcpCredential(admitted, &gen.MintMcpCredentialPayload{Hostname: new("runner-1")})
 	requireCode(t, err, oops.CodeForbidden)
 }
 
@@ -302,11 +307,11 @@ func TestMintMcpCredential_NonAgentCallersAreRefused(t *testing.T) {
 	ctx, ti := newTestAgentService(t)
 
 	// The test context is a human session.
-	_, err := ti.service.MintMcpCredential(ctx, &gen.MintMcpCredentialPayload{})
+	_, err := ti.service.MintMcpCredential(ctx, &gen.MintMcpCredentialPayload{Hostname: new("runner-1")})
 	requireCode(t, err, oops.CodeForbidden)
 
 	// No credential at all.
-	_, err = ti.service.MintMcpCredential(t.Context(), &gen.MintMcpCredentialPayload{})
+	_, err = ti.service.MintMcpCredential(t.Context(), &gen.MintMcpCredentialPayload{Hostname: new("runner-1")})
 	requireCode(t, err, oops.CodeUnauthorized)
 }
 
@@ -318,7 +323,83 @@ func TestMintMcpCredential_RejectsBadExpiry(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, raw := range []string{"tomorrow", time.Now().Add(-time.Hour).Format(time.RFC3339), time.Now().Add(400 * 24 * time.Hour).Format(time.RFC3339)} {
-		_, err := ti.service.MintMcpCredential(admitted, &gen.MintMcpCredentialPayload{ExpiresAt: &raw})
+		_, err := ti.service.MintMcpCredential(admitted, &gen.MintMcpCredentialPayload{ExpiresAt: &raw, Hostname: new("runner-1")})
 		requireCode(t, err, oops.CodeBadRequest)
 	}
+}
+
+func TestMintMcpCredential_DevicesSharingAnEnrollmentKeyStayLive(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	parent := enrollWithMCP(t, ctx, ti, 24*time.Hour)
+
+	// Two cloud runners with no serial, then a laptop identified by serial.
+	first := mintMCPCredentialOn(t, ti, parent.key, &gen.MintMcpCredentialPayload{Hostname: new("runner-1")})
+	second := mintMCPCredentialOn(t, ti, parent.key, &gen.MintMcpCredentialPayload{Hostname: new("runner-2")})
+	laptop := mintMCPCredentialOn(t, ti, parent.key, &gen.MintMcpCredentialPayload{SerialNumber: new("C02XK1ABCDEF"), Hostname: new("runner-1")})
+
+	// Live credentials authenticate and fail the route gate on grants (403);
+	// revoked ones fail to authenticate (401).
+	for _, credential := range []*gen.MintMcpCredentialResult{first, second, laptop} {
+		_, err := authorizeMethod(t, ti, credential.Key, "getPlugins")
+		requireCode(t, err, oops.CodeForbidden)
+	}
+	live, err := keysrepo.New(ti.conn).ListAgentAPIKeys(ctx, keysrepo.ListAgentAPIKeysParams{OrganizationID: ti.orgID, SubjectUrn: conv.ToPGText(parent.actor.String())})
+	require.NoError(t, err)
+	require.Len(t, live, 4, "the parent and one credential per device")
+}
+
+func TestMintMcpCredential_RemintRevokesOnlyThatDevice(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	parent := enrollWithMCP(t, ctx, ti, 24*time.Hour)
+
+	runner := mintMCPCredentialOn(t, ti, parent.key, &gen.MintMcpCredentialPayload{Hostname: new("runner-1")})
+	other := mintMCPCredentialOn(t, ti, parent.key, &gen.MintMcpCredentialPayload{Hostname: new("runner-2")})
+	// Hostnames compare case-insensitively, so this is the same device.
+	again := mintMCPCredentialOn(t, ti, parent.key, &gen.MintMcpCredentialPayload{Hostname: new(" Runner-1 ")})
+
+	_, err := authorizeMethod(t, ti, runner.Key, "getPlugins")
+	requireCode(t, err, oops.CodeUnauthorized)
+	for _, credential := range []*gen.MintMcpCredentialResult{other, again} {
+		_, err := authorizeMethod(t, ti, credential.Key, "getPlugins")
+		requireCode(t, err, oops.CodeForbidden)
+	}
+
+	row, err := keysrepo.New(ti.conn).GetAPIKeyByID(ctx, keysrepo.GetAPIKeyByIDParams{ID: uuid.MustParse(again.ID), OrganizationID: ti.orgID})
+	require.NoError(t, err)
+	require.Equal(t, "hostname:runner-1", row.DeviceID.String)
+}
+
+func TestMintMcpCredential_SerialIdentifiesTheDeviceOverHostname(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	parent := enrollWithMCP(t, ctx, ti, 24*time.Hour)
+
+	before := mintMCPCredentialOn(t, ti, parent.key, &gen.MintMcpCredentialPayload{SerialNumber: new("C02XK1ABCDEF"), Hostname: new("old-name")})
+	renamed := mintMCPCredentialOn(t, ti, parent.key, &gen.MintMcpCredentialPayload{SerialNumber: new("c02xk1abcdef"), Hostname: new("new-name")})
+
+	_, err := authorizeMethod(t, ti, before.Key, "getPlugins")
+	requireCode(t, err, oops.CodeUnauthorized)
+	_, err = authorizeMethod(t, ti, renamed.Key, "getPlugins")
+	requireCode(t, err, oops.CodeForbidden)
+}
+
+func TestMintMcpCredential_MissingDeviceIsRejected(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	parent := enrollWithMCP(t, ctx, ti, 24*time.Hour)
+	existing := mintMCPCredential(t, ti, parent.key)
+
+	admitted, err := authorizeMethod(t, ti, parent.key, "mintMcpCredential")
+	require.NoError(t, err)
+	// A placeholder serial is no identity either.
+	for _, payload := range []*gen.MintMcpCredentialPayload{{}, {Hostname: new("  ")}, {SerialNumber: new("To Be Filled By O.E.M.")}} {
+		_, err := ti.service.MintMcpCredential(admitted, payload)
+		requireCode(t, err, oops.CodeBadRequest)
+	}
+
+	// A rejected mint revokes nothing.
+	_, err = authorizeMethod(t, ti, existing.Key, "getPlugins")
+	requireCode(t, err, oops.CodeForbidden)
 }

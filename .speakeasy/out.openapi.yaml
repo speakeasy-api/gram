@@ -7008,7 +7008,7 @@ paths:
         name: SyncedAgentUsers
   /rpc/agent.mintMcpCredential:
     post:
-      description: Mint the credential an agent identity's device agent writes into its AI tools' MCP server entries. Authenticated by the device's enrollment agent key, it returns a separate key for the same agent that carries only mcp:connect, so revoking it does not unenroll the device and it cannot poll policy. Asking again revokes the previous credential. The credential stops working when its parent key is revoked or expires.
+      description: Mint the credential an agent identity's device agent writes into its AI tools' MCP server entries. Authenticated by the device's enrollment agent key, it returns a separate key for the same agent that carries only mcp:connect, so revoking it does not unenroll the device and it cannot poll policy. The device identifies itself with the Gram-Device-Serial or Gram-Device-Hostname header; asking again from the same device revokes that device's previous credential, while other devices sharing the enrollment key keep theirs. The credential stops working when its parent key is revoked or expires.
       operationId: mintAgentMcpCredential
       parameters:
         - allowEmptyValue: true
@@ -7017,6 +7017,22 @@ paths:
           name: Gram-Key
           schema:
             description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Hardware serial number of the machine minting the credential, when the agent can read it. Identifies the device the credential is issued to.
+          in: header
+          name: Gram-Device-Serial
+          schema:
+            description: Hardware serial number of the machine minting the credential, when the agent can read it. Identifies the device the credential is issued to.
+            maxLength: 255
+            type: string
+        - allowEmptyValue: true
+          description: Hostname of the machine minting the credential. Identifies the device when it reports no usable serial, as cloud machines do.
+          in: header
+          name: Gram-Device-Hostname
+          schema:
+            description: Hostname of the machine minting the credential. Identifies the device when it reports no usable serial, as cloud machines do.
+            maxLength: 255
             type: string
       requestBody:
         content:

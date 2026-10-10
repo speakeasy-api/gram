@@ -2629,6 +2629,14 @@ func EncodeMintMcpCredentialRequest(encoder func(*http.Request) goahttp.Encoder)
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
+		if p.SerialNumber != nil {
+			head := *p.SerialNumber
+			req.Header.Set("Gram-Device-Serial", head)
+		}
+		if p.Hostname != nil {
+			head := *p.Hostname
+			req.Header.Set("Gram-Device-Hostname", head)
+		}
 		body := NewMintMcpCredentialRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("agent", "mintMcpCredential", err)

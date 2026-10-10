@@ -272,6 +272,7 @@ INSERT INTO api_keys (
   , delegated_grants_version
   , expires_at
   , parent_api_key_id
+  , device_id
 ) VALUES (
     @organization_id
   , NULL
@@ -285,7 +286,20 @@ INSERT INTO api_keys (
   , @delegated_grants_version
   , @expires_at
   , @parent_api_key_id
+  , @device_id
 )
+RETURNING *;
+
+-- name: RevokeDeviceChildAPIKeys :many
+-- Re-minting replaces one device's credential; other devices sharing the
+-- parent keep theirs.
+UPDATE api_keys
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND parent_api_key_id = @parent_api_key_id
+  AND device_id = @device_id
+  AND deleted IS FALSE
 RETURNING *;
 
 -- name: RevokeChildAPIKeys :many

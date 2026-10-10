@@ -19,6 +19,14 @@ export type MintAgentMcpCredentialRequest = {
    * API Key header
    */
   gramKey?: string | undefined;
+  /**
+   * Hardware serial number of the machine minting the credential, when the agent can read it. Identifies the device the credential is issued to.
+   */
+  gramDeviceSerial?: string | undefined;
+  /**
+   * Hostname of the machine minting the credential. Identifies the device when it reports no usable serial, as cloud machines do.
+   */
+  gramDeviceHostname?: string | undefined;
   mintMcpCredentialRequestBody: MintMcpCredentialRequestBody;
 };
 
@@ -55,6 +63,8 @@ export function mintAgentMcpCredentialSecurityToJSON(
 /** @internal */
 export type MintAgentMcpCredentialRequest$Outbound = {
   "Gram-Key"?: string | undefined;
+  "Gram-Device-Serial"?: string | undefined;
+  "Gram-Device-Hostname"?: string | undefined;
   MintMcpCredentialRequestBody: MintMcpCredentialRequestBody$Outbound;
 };
 
@@ -65,11 +75,15 @@ export const MintAgentMcpCredentialRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     gramKey: z.optional(z.string()),
+    gramDeviceSerial: z.optional(z.string()),
+    gramDeviceHostname: z.optional(z.string()),
     mintMcpCredentialRequestBody: MintMcpCredentialRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramKey: "Gram-Key",
+      gramDeviceSerial: "Gram-Device-Serial",
+      gramDeviceHostname: "Gram-Device-Hostname",
       mintMcpCredentialRequestBody: "MintMcpCredentialRequestBody",
     });
   }),

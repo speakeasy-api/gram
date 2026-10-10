@@ -4680,11 +4680,13 @@ func NewCreateSessionHandoffPayload(body *CreateSessionHandoffRequestBody, apike
 
 // NewMintMcpCredentialPayload builds a agent service mintMcpCredential
 // endpoint payload.
-func NewMintMcpCredentialPayload(body *MintMcpCredentialRequestBody, apikeyToken *string) *agent.MintMcpCredentialPayload {
+func NewMintMcpCredentialPayload(body *MintMcpCredentialRequestBody, apikeyToken *string, serialNumber *string, hostname *string) *agent.MintMcpCredentialPayload {
 	v := &agent.MintMcpCredentialPayload{
 		ExpiresAt: body.ExpiresAt,
 	}
 	v.ApikeyToken = apikeyToken
+	v.SerialNumber = serialNumber
+	v.Hostname = hostname
 
 	return v
 }

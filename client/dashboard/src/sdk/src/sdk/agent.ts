@@ -212,7 +212,7 @@ export class Agent extends ClientSDK {
    * mintMcpCredential agent
    *
    * @remarks
-   * Mint the credential an agent identity's device agent writes into its AI tools' MCP server entries. Authenticated by the device's enrollment agent key, it returns a separate key for the same agent that carries only mcp:connect, so revoking it does not unenroll the device and it cannot poll policy. Asking again revokes the previous credential. The credential stops working when its parent key is revoked or expires.
+   * Mint the credential an agent identity's device agent writes into its AI tools' MCP server entries. Authenticated by the device's enrollment agent key, it returns a separate key for the same agent that carries only mcp:connect, so revoking it does not unenroll the device and it cannot poll policy. The device identifies itself with the Gram-Device-Serial or Gram-Device-Hostname header; asking again from the same device revokes that device's previous credential, while other devices sharing the enrollment key keep theirs. The credential stops working when its parent key is revoked or expires.
    */
   async mintMcpCredential(
     request: MintAgentMcpCredentialRequest,

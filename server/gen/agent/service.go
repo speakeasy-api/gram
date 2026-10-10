@@ -106,8 +106,11 @@ type Service interface {
 	// tools' MCP server entries. Authenticated by the device's enrollment agent
 	// key, it returns a separate key for the same agent that carries only
 	// mcp:connect, so revoking it does not unenroll the device and it cannot poll
-	// policy. Asking again revokes the previous credential. The credential stops
-	// working when its parent key is revoked or expires.
+	// policy. The device identifies itself with the Gram-Device-Serial or
+	// Gram-Device-Hostname header; asking again from the same device revokes that
+	// device's previous credential, while other devices sharing the enrollment key
+	// keep theirs. The credential stops working when its parent key is revoked or
+	// expires.
 	MintMcpCredential(context.Context, *MintMcpCredentialPayload) (res *MintMcpCredentialResult, err error)
 }
 
@@ -456,6 +459,12 @@ type MintMcpCredentialPayload struct {
 	// When the credential expires. Defaults to 90 days from now and is capped at
 	// the parent key's expiry.
 	ExpiresAt *string
+	// Hardware serial number of the machine minting the credential, when the agent
+	// can read it. Identifies the device the credential is issued to.
+	SerialNumber *string
+	// Hostname of the machine minting the credential. Identifies the device when
+	// it reports no usable serial, as cloud machines do.
+	Hostname *string
 }
 
 // MintMcpCredentialResult is the result type of the agent service

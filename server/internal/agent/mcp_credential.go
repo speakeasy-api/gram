@@ -2,7 +2,10 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +19,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/deviceidentity"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -27,8 +32,9 @@ const (
 	maxMCPCredentialLifetime     = 365 * 24 * time.Hour
 )
 
-// MintMcpCredential issues the caller's agent a child key holding only the
-// parent's mcp:connect grants (ADR-0024). Re-minting revokes the previous one.
+// MintMcpCredential issues the caller's agent a child key holding only its
+// delegable MCP access (ADR-0024). Re-minting replaces the credential of the
+// calling device only, since several devices may share one enrollment key.
 func (s *Service) MintMcpCredential(ctx context.Context, payload *gen.MintMcpCredentialPayload) (*gen.MintMcpCredentialResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
@@ -42,6 +48,12 @@ func (s *Service) MintMcpCredential(ctx context.Context, payload *gen.MintMcpCre
 	parentID, err := uuid.Parse(authCtx.APIKeyID)
 	if err != nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	// Without a device id a re-mint could only replace every device's
+	// credential under this parent, so refuse instead.
+	deviceID := deviceidentity.DeviceID(payload.SerialNumber, payload.Hostname)
+	if deviceID == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "send the Gram-Device-Serial or Gram-Device-Hostname header to identify this device")
 	}
 
 	now := time.Now().UTC()
@@ -113,7 +125,9 @@ func (s *Service) MintMcpCredential(ctx context.Context, payload *gen.MintMcpCre
 		return nil, oops.E(oops.CodeUnexpected, err, "encode MCP credential policy").LogError(ctx, s.logger)
 	}
 
-	revoked, err := kr.RevokeChildAPIKeys(ctx, keysrepo.RevokeChildAPIKeysParams{OrganizationID: authCtx.ActiveOrganizationID, ParentApiKeyID: uuid.NullUUID{UUID: parent.ID, Valid: true}})
+	revoked, err := kr.RevokeDeviceChildAPIKeys(ctx, keysrepo.RevokeDeviceChildAPIKeysParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ParentApiKeyID: uuid.NullUUID{UUID: parent.ID, Valid: true}, DeviceID: conv.ToPGText(deviceID),
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "revoke previous MCP credential").LogError(ctx, s.logger)
 	}
@@ -140,7 +154,7 @@ func (s *Service) MintMcpCredential(ctx context.Context, payload *gen.MintMcpCre
 	created, err := kr.CreateChildAgentAPIKey(ctx, keysrepo.CreateChildAgentAPIKeyParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		CreatedByUserID:        parent.CreatedByUserID,
-		Name:                   "MCP credential " + parent.ID.String(),
+		Name:                   mcpCredentialName(parent.ID, deviceID),
 		KeyPrefix:              keyPrefix,
 		KeyHash:                keyHash,
 		SubjectUrn:             parent.SubjectUrn,
@@ -148,6 +162,7 @@ func (s *Service) MintMcpCredential(ctx context.Context, payload *gen.MintMcpCre
 		DelegatedGrantsVersion: pgtype.Int4{Int32: int32(runtimepolicy.CurrentDelegatedPolicyVersion), Valid: true},
 		ExpiresAt:              pgtype.Timestamptz{Time: expiresAt, InfinityModifier: pgtype.Finite, Valid: true},
 		ParentApiKeyID:         uuid.NullUUID{UUID: parent.ID, Valid: true},
+		DeviceID:               conv.ToPGText(deviceID),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create MCP credential").LogError(ctx, s.logger)
@@ -234,6 +249,17 @@ func loadUserPolicy(ctx context.Context, tx pgx.Tx, organizationID, userID strin
 		return nil, oops.E(oops.CodeUnexpected, err, "load live member policy")
 	}
 	return grants, nil
+}
+
+// mcpCredentialName must be unique among an organization's live keys. The hash
+// covers parent and device; the readable part may be truncated.
+func mcpCredentialName(parentID uuid.UUID, deviceID string) string {
+	sum := sha256.Sum256([]byte(parentID.String() + "\x00" + deviceID))
+	label := deviceID
+	if runes := []rune(label); len(runes) > 160 {
+		label = string(runes[:160])
+	}
+	return fmt.Sprintf("MCP credential for %s (%s)", label, hex.EncodeToString(sum[:8]))
 }
 
 func mcpCredentialAuditMetadata(key keysrepo.ApiKey) *audit.AgentKeyCredentialMetadata {
