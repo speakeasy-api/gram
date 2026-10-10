@@ -1,6 +1,13 @@
+import { Badge } from "@/components/ui/Badge";
 import { Heading } from "@/components/ui/Heading";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/HoverCard";
 import { Text } from "@/components/ui/Text";
-import type { ReactNode } from "react";
+import { cn } from "@/lib/utils";
+import { useRef, useState, type ReactNode } from "react";
 
 // Shared read-only field primitives for the org-admin Remote Identity Provider
 // and Remote Session Client detail Overview tabs: a small muted label above a
@@ -28,18 +35,35 @@ export function InfoText({
 }
 
 // InfoField renders a small muted label above a left-aligned value.
+// Pass `badges` to tag the label with short machine values that qualify the
+// field, such as the authentication methods a token endpoint accepts.
 export function InfoField({
   label,
+  badges,
   children,
+  className,
 }: {
   label: string;
+  badges?: string[] | null;
   children: ReactNode;
+  className?: string;
 }): JSX.Element {
   return (
-    <div className="flex flex-col gap-1">
-      <Text small muted>
-        {label}
-      </Text>
+    <div data-info-field className={cn("flex flex-col gap-1", className)}>
+      <div className="flex flex-wrap items-center gap-2">
+        <Text small muted>
+          {label}
+        </Text>
+        {badges?.map((badge) => (
+          <Badge
+            key={badge}
+            background={false}
+            className="tracking-normal normal-case"
+          >
+            {badge}
+          </Badge>
+        ))}
+      </div>
       {children}
     </div>
   );
@@ -63,9 +87,59 @@ export function InfoSection({
   );
 }
 
-// InfoUrl renders an endpoint or other URL value, "—" when unset.
+// OverflowText keeps a long machine value (a URL, an issuer) on one line,
+// truncated, and when it is cut off lays the whole value over it on hover. It
+// follows the MCP server sidebar's URL row: the trigger and the card carry the
+// same insets, so pulling the card up by the trigger's height lands the two
+// texts on each other.
+export function OverflowText({
+  children,
+  muted,
+}: {
+  children: string;
+  muted?: boolean;
+}): JSX.Element {
+  const lineRef = useRef<HTMLSpanElement>(null);
+  const [open, setOpen] = useState(false);
+  // CSS can't tell when text is truncated, so check at the moment the card
+  // would open: it only opens when the line is cut off.
+  const onOpenChange = (next: boolean) => {
+    const text = lineRef.current?.firstElementChild;
+    setOpen(next && !!text && text.scrollWidth > text.clientWidth);
+  };
+
+  return (
+    <div className="min-w-0">
+      {/* No delay: this reveals text already on screen. */}
+      <HoverCard openDelay={0} open={open} onOpenChange={onOpenChange}>
+        <HoverCardTrigger asChild>
+          <span ref={lineRef} className="-mx-2 block px-2 py-1">
+            <Text
+              small
+              muted={muted}
+              as="span"
+              className="block truncate font-mono"
+            >
+              {children}
+            </Text>
+          </span>
+        </HoverCardTrigger>
+        <HoverCardContent
+          align="start"
+          side="bottom"
+          sideOffset={-28}
+          className="w-auto max-w-none px-2 py-1 font-mono text-sm whitespace-nowrap duration-75"
+        >
+          {children}
+        </HoverCardContent>
+      </HoverCard>
+    </div>
+  );
+}
+
+// InfoUrl renders an endpoint or other URL value on one line, "—" when unset.
 export function InfoUrl({ value }: { value: string | undefined }): JSX.Element {
-  return <InfoText mono>{value || "—"}</InfoText>;
+  return value ? <OverflowText>{value}</OverflowText> : <InfoText>—</InfoText>;
 }
 
 // InfoList renders a metadata array as a comma-separated list, "—" when empty.

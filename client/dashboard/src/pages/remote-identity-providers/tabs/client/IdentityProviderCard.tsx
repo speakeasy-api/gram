@@ -1,9 +1,12 @@
 import { Card } from "@/components/ui/Card";
+import { Link as TextLink } from "@/components/ui/Link";
 import { SkeletonParagraph } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
+import { IssuerLogo, ScopeBadge, ScopeList } from "@/lib/remote-identity";
 import { useRoutes } from "@/routes";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { Link } from "react-router";
-import { InfoField, InfoList, InfoText, InfoUrl } from "../../detailFields";
+import { InfoField, InfoText, InfoUrl, OverflowText } from "../../detailFields";
 import { issuerDisplayName } from "../../issuerDisplay";
 
 // registrationMethods names how a client can be registered with the issuer.
@@ -28,43 +31,71 @@ export function IdentityProviderCard({
 
   return (
     <Card>
-      <Card.Header>Identity Provider</Card.Header>
       <Card.Content>
         {issuer ? (
-          <div className="grid items-start gap-x-8 gap-y-4 sm:grid-cols-2">
-            <InfoField label="Name">
-              <Link
-                to={routes.remoteIdentityProviders.issuerDetail.overview.href(
-                  issuerId,
-                )}
-                className="hover:text-primary text-sm break-all hover:underline"
+          <div className="flex flex-col gap-6">
+            {/* The provider itself heads the card, ruled off from its
+                details edge to edge. */}
+            <div className="-mx-6 flex items-center justify-between gap-4 border-b px-6 pb-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <IssuerLogo
+                  logoAssetId={issuer.logoAssetId}
+                  name={issuerDisplayName(issuer)}
+                  size="xl"
+                />
+                {/* The URL line's hover padding hangs below the text; the
+                    negative margin keeps it out of the block's height, so the
+                    48px logo spans exactly the name and the URL. */}
+                <div className="-mb-1 flex min-w-0 flex-col">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Text className="truncate text-base">
+                      {issuerDisplayName(issuer)}
+                    </Text>
+                    <ScopeBadge
+                      projectId={issuer.projectId}
+                      organizationId={issuer.organizationId}
+                    />
+                  </div>
+                  <OverflowText muted>{issuer.issuer}</OverflowText>
+                </div>
+              </div>
+              <TextLink
+                asChild
+                variant="secondary"
+                size="sm"
+                className="visited:text-link-secondary shrink-0"
               >
-                {issuerDisplayName(issuer)}
-              </Link>
-            </InfoField>
-            <InfoField label="Issuer">
-              <InfoText mono>{issuer.issuer}</InfoText>
-            </InfoField>
-            <InfoField label="Authorization Endpoint">
-              <InfoUrl value={issuer.authorizationEndpoint} />
-            </InfoField>
-            <InfoField label="Token Endpoint">
-              <InfoUrl value={issuer.tokenEndpoint} />
-            </InfoField>
-            <InfoField label="Registration Endpoint">
-              <InfoUrl value={issuer.registrationEndpoint} />
-            </InfoField>
-            <InfoField label="Registration Methods">
-              <InfoText>
-                {methods.length > 0 ? methods.join(", ") : "None advertised"}
-              </InfoText>
-            </InfoField>
-            <InfoField label="Token Endpoint Authentication Methods">
-              <InfoList values={issuer.tokenEndpointAuthMethodsSupported} />
-            </InfoField>
-            <InfoField label="Scopes Supported">
-              <InfoList values={issuer.scopesSupported} />
-            </InfoField>
+                <Link
+                  to={routes.remoteIdentityProviders.issuerDetail.overview.href(
+                    issuerId,
+                  )}
+                >
+                  View identity provider
+                </Link>
+              </TextLink>
+            </div>
+            <div className="grid items-start gap-x-8 gap-y-4 sm:grid-cols-2">
+              <InfoField label="Authorization endpoint">
+                <InfoUrl value={issuer.authorizationEndpoint} />
+              </InfoField>
+              <InfoField
+                label="Token endpoint"
+                badges={issuer.tokenEndpointAuthMethodsSupported}
+              >
+                <InfoUrl value={issuer.tokenEndpoint} />
+              </InfoField>
+              <InfoField label="Registration endpoint">
+                <InfoUrl value={issuer.registrationEndpoint} />
+              </InfoField>
+              <InfoField label="Registration methods">
+                <InfoText>
+                  {methods.length > 0 ? methods.join(", ") : "None advertised"}
+                </InfoText>
+              </InfoField>
+              <InfoField label="Scopes supported" className="sm:col-span-2">
+                <ScopeList scopes={issuer.scopesSupported} maxLines={3} />
+              </InfoField>
+            </div>
           </div>
         ) : (
           <SkeletonParagraph lines={4} />
