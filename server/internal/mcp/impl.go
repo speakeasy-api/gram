@@ -997,6 +997,10 @@ func writeOAuthProtectedResourceMetadataResponse(ctx context.Context, logger *sl
 	return httpcache.WriteCacheableJSON(ctx, w, r, logger, "application/json", metadataCacheMaxAgeSeconds, body)
 }
 
+// publicMCPNotFoundMessage is the one message ServePublic answers for an
+// address miss and a policy denial alike, so neither reveals the other.
+const publicMCPNotFoundMessage = "mcp server not found"
+
 // ServePublic serves /mcp/{mcpSlug}. Resolution tries mcp_endpoints
 // first — a slug bound to a custom-domain request resolves only against
 // that domain; a slug arriving on the platform domain resolves only
@@ -1042,6 +1046,10 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
 	case mcpendpoints.IsAddressMiss(err):
 		// Address miss: fall through to the legacy toolset lookup.
+	case mcpendpoints.IsPolicyDenied(err):
+		// A denial must answer exactly as a miss, or it reveals the endpoint.
+		return rejectMissingMCPTarget(w, r, logger, mcpversions.SupportedHostedToolset(),
+			oops.E(oops.CodeNotFound, err, publicMCPNotFoundMessage))
 	default:
 		return err
 	}
@@ -1053,7 +1061,8 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	toolset, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
-		return oops.E(oops.CodeNotFound, err, "mcp server not found")
+		return rejectMissingMCPTarget(w, r, logger, mcpversions.SupportedHostedToolset(),
+			oops.E(oops.CodeNotFound, err, publicMCPNotFoundMessage))
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}

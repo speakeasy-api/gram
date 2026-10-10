@@ -53,7 +53,8 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 
 	toolset, ok := s.platformToolsets[slug]
 	if !ok {
-		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		return rejectMissingMCPTarget(w, r, s.logger, mcpversions.SupportedPlatformToolset(),
+			oops.E(oops.CodeNotFound, nil, "platform toolset not found"))
 	}
 
 	prepared, handled, err := s.prepareTerminatedMCPRequest(
@@ -87,6 +88,9 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 	metering.AttributeMCPBandwidthServer(ctx, metering.MCPServerTypePlatformToolset, slug, slug)
 
 	if err := s.authorizePlatformToolset(ctx, slug, authCtx); err != nil {
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeNotFound {
+			return rejectPreparedMCPTarget(w, r, s.logger, prepared, mcpversions.SupportedPlatformToolset(), err)
+		}
 		return err
 	}
 	if prepared.empty() {
