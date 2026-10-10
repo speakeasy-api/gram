@@ -112,8 +112,9 @@ type CreateSessionHandoffRequestBody struct {
 // MintMcpCredentialRequestBody is the type of the "agent" service
 // "mintMcpCredential" endpoint HTTP request body.
 type MintMcpCredentialRequestBody struct {
-	// When the credential expires. Defaults to 90 days from now and is capped at
-	// the parent key's expiry.
+	// When the credential expires. Defaults to 90 days from now. Requests more
+	// than one year out are rejected; any expiry is capped at the parent key's
+	// expiry.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 }
 

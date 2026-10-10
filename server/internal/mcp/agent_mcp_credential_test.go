@@ -11,12 +11,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // insertMCPCredential stores a child of the key behind parentToken the way
@@ -75,16 +77,46 @@ func TestServeAgentGateway_MCPCredentialDiesWithExpiredParent(t *testing.T) {
 	require.NoError(t, err)
 	parent, err := keysrepo.New(ti.conn).GetAPIKeyByKeyHash(ctx, hash)
 	require.NoError(t, err)
-	require.NoError(t, testrepo.New(ti.conn).ExpireAPIKeyFixture(ctx, parent.ID))
+	require.NoError(t, testrepo.New(ti.conn).ExpireAPIKeyFixture(ctx, testrepo.ExpireAPIKeyFixtureParams{ID: parent.ID, OrganizationID: parent.OrganizationID}))
 
 	_, err = serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), child, makeInitializeBody())
 	requireAgentGatewayCode(t, err, oops.CodeUnauthorized)
 }
 
-func TestApplyIssuerGate_MCPCredentialLivesAndDiesWithParent(t *testing.T) {
+// Suspension lives on the agent, not the key, so it reaches a child through
+// live principal admission rather than the parent-liveness predicate.
+func TestServeAgentGateway_MCPCredentialDiesWithSuspendedAgent(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
-	fx, _, _, session := seedAgentRefreshSession(t, ctx, ti)
+	fx := seedAgentGateway(t, ctx, ti)
+	child := insertMCPCredential(t, ctx, ti, fx.token)
+
+	_, err := agentsrepo.New(ti.conn).SuspendAgent(ctx, agentsrepo.SuspendAgentParams{OrganizationID: fx.agent.OrganizationID, ID: fx.agent.ID})
+	require.NoError(t, err)
+	_, err = serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), child, makeInitializeBody())
+	requireAgentGatewayCode(t, err, oops.CodeUnauthorized)
+}
+
+func TestApplyIssuerGate_MCPCredentialDiesWithSuspendedAgent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx, agent, _, session := seedAgentRefreshSession(t, ctx, ti)
+	_, child, endpoint := issuerGateMCPCredential(t, ctx, ti, fx, session)
+
+	_, _, _, err := ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), child, ti.serverURL.String(), &endpoint)
+	require.NoError(t, err)
+
+	_, err = agentsrepo.New(ti.conn).SuspendAgent(ctx, agentsrepo.SuspendAgentParams{OrganizationID: fx.orgID, ID: agent.ID})
+	require.NoError(t, err)
+	w := httptest.NewRecorder()
+	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), w, child, ti.serverURL.String(), &endpoint)
+	assertAgentKeyUnauthorized(t, w, err)
+}
+
+// issuerGateMCPCredential enrolls a key for the session's agent and mints a
+// child of it, returning both tokens and the issuer-gated endpoint.
+func issuerGateMCPCredential(t *testing.T, ctx context.Context, ti *testInstance, fx agentConsentFixture, session usersessions_repo.UserSession) (string, string, mcp.ResolvedMcpEndpoint) {
+	t.Helper()
 	parentToken, hash, prefix, err := auth.GenerateAPIKeyMaterial(auth.APIKeyPrefix("test"))
 	require.NoError(t, err)
 	_, err = keysrepo.New(ti.conn).CreateAgentAPIKey(ctx, keysrepo.CreateAgentAPIKeyParams{
@@ -95,14 +127,21 @@ func TestApplyIssuerGate_MCPCredentialLivesAndDiesWithParent(t *testing.T) {
 		ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
 	})
 	require.NoError(t, err)
-	child := insertMCPCredential(t, ctx, ti, parentToken)
 	endpoint := mcp.ResolvedMcpEndpoint{
 		AudienceURN: urn.NewToolset(fx.toolset.ID).String(), OrganizationID: fx.orgID,
 		ProjectID: fx.target.ProjectID, RouteBase: "mcp", Slug: fx.toolset.McpSlug.String,
 		ToolsetID: uuid.NullUUID{UUID: fx.toolset.ID, Valid: true}, UserSessionIssuerID: fx.target.UserSessionIssuerID,
 	}
+	return parentToken, insertMCPCredential(t, ctx, ti, parentToken), endpoint
+}
 
-	_, _, _, err = ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), child, ti.serverURL.String(), &endpoint)
+func TestApplyIssuerGate_MCPCredentialLivesAndDiesWithParent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx, _, _, session := seedAgentRefreshSession(t, ctx, ti)
+	parentToken, child, endpoint := issuerGateMCPCredential(t, ctx, ti, fx, session)
+
+	_, _, _, err := ti.service.ApplyIssuerGate(t.Context(), httptest.NewRecorder(), child, ti.serverURL.String(), &endpoint)
 	require.NoError(t, err)
 
 	revokeKeyByToken(t, ctx, ti, parentToken)

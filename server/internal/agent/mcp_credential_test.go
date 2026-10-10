@@ -281,7 +281,7 @@ func TestMintMcpCredential_ParentExpiryInvalidatesChild(t *testing.T) {
 	parent := enrollWithMCP(t, ctx, ti, 24*time.Hour)
 	child := mintMCPCredential(t, ti, parent.key)
 
-	require.NoError(t, testrepo.New(ti.conn).ExpireAPIKeyFixture(ctx, parent.id))
+	require.NoError(t, testrepo.New(ti.conn).ExpireAPIKeyFixture(ctx, testrepo.ExpireAPIKeyFixtureParams{ID: parent.id, OrganizationID: ti.orgID}))
 
 	_, err := authorizeMethod(t, ti, child.Key, "getPlugins")
 	requireCode(t, err, oops.CodeUnauthorized)
@@ -313,6 +313,34 @@ func TestMintMcpCredential_NonAgentCallersAreRefused(t *testing.T) {
 	// No credential at all.
 	_, err = ti.service.MintMcpCredential(t.Context(), &gen.MintMcpCredentialPayload{Hostname: new("runner-1")})
 	requireCode(t, err, oops.CodeUnauthorized)
+}
+
+// Org device-agent keys (`agent`) and per-user keys (`agent_user`) both pass
+// the endpoint's key scheme, so the refusal must come from the agent checks.
+func TestMintMcpCredential_OrgAndPerUserKeysAreRefused(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	for _, scope := range []string{"agent", "agent_user"} {
+		t.Run(scope, func(t *testing.T) {
+			t.Parallel()
+			key, hash, prefix, err := auth.GenerateAPIKeyMaterial(auth.APIKeyPrefix("local"))
+			require.NoError(t, err)
+			_, err = keysrepo.New(ti.conn).CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
+				OrganizationID: ti.orgID, ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+				CreatedByUserID: authCtx.UserID, Name: scope + " key", KeyPrefix: prefix, KeyHash: hash, Scopes: []string{scope},
+			})
+			require.NoError(t, err)
+
+			admitted, err := authorizeMethod(t, ti, key, "mintMcpCredential")
+			if err == nil {
+				_, err = ti.service.MintMcpCredential(admitted, &gen.MintMcpCredentialPayload{Hostname: new("runner-1")})
+			}
+			requireCode(t, err, oops.CodeForbidden)
+		})
+	}
 }
 
 func TestMintMcpCredential_RejectsBadExpiry(t *testing.T) {

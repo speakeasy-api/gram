@@ -1171,11 +1171,17 @@ UPDATE api_keys
 SET created_at = clock_timestamp() - INTERVAL '2 hours',
     expires_at = clock_timestamp() - INTERVAL '1 hour'
 WHERE id = $1
+  AND organization_id = $2
 `
 
+type ExpireAPIKeyFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
 // Backdates a key so it is already expired without breaking its profile.
-func (q *Queries) ExpireAPIKeyFixture(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, expireAPIKeyFixture, id)
+func (q *Queries) ExpireAPIKeyFixture(ctx context.Context, arg ExpireAPIKeyFixtureParams) error {
+	_, err := q.db.Exec(ctx, expireAPIKeyFixture, arg.ID, arg.OrganizationID)
 	return err
 }
 

@@ -1921,4 +1921,5 @@ WHERE id = @id
 UPDATE api_keys
 SET created_at = clock_timestamp() - INTERVAL '2 hours',
     expires_at = clock_timestamp() - INTERVAL '1 hour'
-WHERE id = @id;
+WHERE id = @id
+  AND organization_id = @organization_id;

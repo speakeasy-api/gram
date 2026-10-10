@@ -7,7 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type MintMcpCredentialRequestBody = {
   /**
-   * When the credential expires. Defaults to 90 days from now and is capped at the parent key's expiry.
+   * When the credential expires. Defaults to 90 days from now. Requests more than one year out are rejected; any expiry is capped at the parent key's expiry.
    */
   expiresAt?: Date | undefined;
 };

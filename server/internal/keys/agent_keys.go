@@ -174,6 +174,11 @@ func (s *Service) RotateKey(ctx context.Context, payload *gen.RotateKeyPayload) 
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock agent API key for rotation").LogError(ctx, s.logger)
 	}
+	// Rotation would issue a replacement detached from the enrollment key and
+	// device it was minted for. Revoke it instead; the device mints a new one.
+	if oldKey.ParentApiKeyID.Valid {
+		return nil, oops.E(oops.CodeBadRequest, nil, "an MCP credential cannot be rotated; revoke it and the device mints a new one")
+	}
 
 	revoked, err := kr.DeleteAgentAPIKey(ctx, repo.DeleteAgentAPIKeyParams{ID: oldKey.ID, OrganizationID: human.Auth.ActiveOrganizationID, SubjectUrn: conv.ToPGText(prepared.subjectURN)})
 	if err != nil {

@@ -102929,7 +102929,7 @@ components:
             properties:
                 expires_at:
                     type: string
-                    description: When the credential expires. Defaults to 90 days from now and is capped at the parent key's expiry.
+                    description: When the credential expires. Defaults to 90 days from now. Requests more than one year out are rejected; any expiry is capped at the parent key's expiry.
                     format: date-time
         MintMcpCredentialResult:
             type: object

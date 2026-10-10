@@ -456,8 +456,9 @@ type ListSyncedUsersResult struct {
 // mintMcpCredential method.
 type MintMcpCredentialPayload struct {
 	ApikeyToken *string
-	// When the credential expires. Defaults to 90 days from now and is capped at
-	// the parent key's expiry.
+	// When the credential expires. Defaults to 90 days from now. Requests more
+	// than one year out are rejected; any expiry is capped at the parent key's
+	// expiry.
 	ExpiresAt *string
 	// Hardware serial number of the machine minting the credential, when the agent
 	// can read it. Identifies the device the credential is issued to.

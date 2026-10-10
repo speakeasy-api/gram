@@ -434,7 +434,7 @@ var _ = Service("agent", func() {
 		Payload(func() {
 			security.ByKeyPayload()
 			Attribute("expires_at", String, func() {
-				Description("When the credential expires. Defaults to 90 days from now and is capped at the parent key's expiry.")
+				Description("When the credential expires. Defaults to 90 days from now. Requests more than one year out are rejected; any expiry is capped at the parent key's expiry.")
 				Format(FormatDateTime)
 			})
 			// Optional in the schema so a device that reports neither gets the

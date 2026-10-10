@@ -101,7 +101,10 @@ func (s *Service) MintMcpCredential(ctx context.Context, payload *gen.MintMcpCre
 
 	enrollment, err := runtimepolicy.DecodeDelegatedPolicy(runtimepolicy.DelegatedPolicyVersion(parent.DelegatedGrantsVersion.Int32), parent.DelegatedGrants)
 	if err != nil {
-		return nil, oops.C(oops.CodeUnauthorized)
+		if errors.Is(err, runtimepolicy.ErrInvalidDelegatedPolicy) {
+			return nil, oops.C(oops.CodeUnauthorized)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "decode enrollment key policy").LogError(ctx, s.logger)
 	}
 	// Device sync marks an enrollment key; other agent keys cannot mint.
 	if !authz.GrantsContainSelector(enrollment.RuntimeGrants(), authz.ScopeOrgDeviceAgentSync, authz.NewSelector(authz.ScopeOrgDeviceAgentSync, authCtx.ActiveOrganizationID)) {
@@ -109,10 +112,15 @@ func (s *Service) MintMcpCredential(ctx context.Context, payload *gen.MintMcpCre
 	}
 
 	agent, err := agents.ResolvePrincipal(ctx, tx, authCtx.ActiveOrganizationID, actor)
-	if err != nil {
+	if errors.Is(err, agents.ErrPrincipalInvalid) || errors.Is(err, agents.ErrPrincipalNotFound) {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if agents.DeriveLifecycle(agent) != agents.LifecycleActive {
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve enrollment agent").LogError(ctx, s.logger)
+	}
+	// Same gate as credential admission, so a mint never returns a key that
+	// every MCP call would then refuse.
+	if agents.DeriveLifecycle(agent) != agents.LifecycleActive || agent.OwnerReassignmentRequiredAt.Valid {
 		return nil, oops.C(oops.CodeForbidden)
 	}
 
@@ -200,11 +208,11 @@ func (s *Service) mcpConnectPolicy(ctx context.Context, tx pgx.Tx, organizationI
 	if err != nil {
 		return runtimepolicy.DelegatedPolicy{}, oops.E(oops.CodeUnexpected, err, "load live agent policy").LogError(ctx, s.logger)
 	}
-	ownerPolicy, err := loadUserPolicy(ctx, tx, organizationID, ownerUserID)
+	ownerPolicy, err := s.loadUserPolicy(ctx, tx, organizationID, ownerUserID)
 	if err != nil {
 		return runtimepolicy.DelegatedPolicy{}, err
 	}
-	authorizerPolicy, err := loadUserPolicy(ctx, tx, organizationID, authorizerUserID)
+	authorizerPolicy, err := s.loadUserPolicy(ctx, tx, organizationID, authorizerUserID)
 	if err != nil {
 		return runtimepolicy.DelegatedPolicy{}, err
 	}
@@ -235,18 +243,19 @@ func (s *Service) mcpConnectPolicy(ctx context.Context, tx pgx.Tx, organizationI
 	return policy, nil
 }
 
-// loadUserPolicy loads a member's live grants; a departed member delegates nothing.
-func loadUserPolicy(ctx context.Context, tx pgx.Tx, organizationID, userID string) ([]authz.Grant, error) {
-	principals, err := authz.ResolveUserPrincipals(ctx, tx, organizationID, userID)
-	if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
-		return nil, oops.C(oops.CodeForbidden)
-	}
+// loadUserPolicy loads a member's live grants. Eligibility matches credential
+// admission, so a member admission would reject delegates nothing here.
+func (s *Service) loadUserPolicy(ctx context.Context, tx pgx.Tx, organizationID, userID string) ([]authz.Grant, error) {
+	principals, eligible, err := runtimepolicy.ResolveEligibleUser(ctx, tx, organizationID, userID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "resolve live member principals")
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve live member principals").LogError(ctx, s.logger)
+	}
+	if !eligible {
+		return nil, oops.C(oops.CodeForbidden)
 	}
 	grants, err := authz.LoadGrants(ctx, tx, organizationID, principals)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "load live member policy")
+		return nil, oops.E(oops.CodeUnexpected, err, "load live member policy").LogError(ctx, s.logger)
 	}
 	return grants, nil
 }
