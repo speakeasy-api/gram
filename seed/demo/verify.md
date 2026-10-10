@@ -516,6 +516,26 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     `mcp:read` and `mcp:write` carry the note that they also connect. Edit
     **Read-only Tools**: All servers is chosen with a Read-Only Tools badge.
     Save stays disabled on each until something is edited.
+29. **Self remote session client**
+    - Run `mise run seed` twice. In the `default` project, open **Remote
+      Identity Providers → Jamf Pro**. The Overview must render the issuer
+      `https://<org-slug>.jamfcloud.example` and its `/api/oauth/token` token
+      endpoint, without an error boundary. No discovery has run. Its
+      **Client Setup Documentation** link opens Jamf's API Roles and Clients
+      guide.
+    - Open **Clients → demo-jamf-pro-api-client**. Its Overview must render
+      client ID `demo-jamf-pro-api-client` and token endpoint authentication
+      method `client_secret_post`, with no scopes. The **MCP Servers** tab is
+      empty, and the **Sessions** tab shows **No active sessions for this
+      client**.
+    - The dashboard does not yet display `credential_owner` (AIM-464). Check the
+      management API response instead: the client's `credential_owner` is
+      `self` and `grant_types` is `client_credentials`. Do not describe these
+      fields as rendered UI.
+    - The client must have no user session issuer binding and no MCP server
+      that uses it. Do not bind it to a server to populate a page: its secret
+      is an invalid ciphertext, so any request would fail with the
+      administrator misconfiguration error.
 
 ## On failure
 

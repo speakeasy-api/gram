@@ -1290,6 +1290,40 @@ BEGIN
      ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'], ARRAY['documents:read'],
      'https://resource.example.com/mcp');
 
+  -- A client that holds its upstream credential for itself (credential_owner
+  -- self): Speakeasy obtains one access token with the client_credentials
+  -- grant and it is shared by every caller, so nobody connects an account.
+  -- Shaped like a Jamf Pro API client, the same tenant as the MDM fixture:
+  -- Jamf Pro publishes no authorization server metadata, so the issuer is
+  -- entered by hand with only its token endpoint, and its grant type and auth
+  -- method are administrator-declared. The client sends its secret in the
+  -- form body, as Jamf documents. Access comes from the API Roles assigned in
+  -- Jamf Pro, not from a requested scope. No MCP server is bound to it yet:
+  -- the dashboard does not tell self clients apart, and a bound server would
+  -- read as per-user identity. Reserved example host and an invalid
+  -- ciphertext keep it from obtaining any credential.
+  INSERT INTO remote_session_issuers
+    (id, project_id, organization_id, slug, issuer, token_endpoint, name,
+     grant_types_supported, token_endpoint_auth_methods_supported,
+     client_setup_documentation_url, metadata_fetched_at)
+  VALUES
+    (demo.det_uuid('gram-demo-remote-identity-provider-jamf-pro'), proj_a, demo_org,
+     'jamf-pro', 'https://acme-demo.jamfcloud.example',
+     'https://acme-demo.jamfcloud.example/api/oauth/token', 'Jamf Pro',
+     ARRAY['client_credentials'], ARRAY['client_secret_post'],
+     'https://learn.jamf.com/r/en-US/jamf-pro-documentation-current/API_Roles_and_Clients',
+     NULL);
+
+  INSERT INTO remote_session_clients
+    (id, project_id, organization_id, remote_session_issuer_id, client_id,
+     client_secret_encrypted, token_endpoint_auth_method, grant_types, scope,
+     credential_owner)
+  VALUES
+    (demo.det_uuid('gram-demo-remote-identity-client-jamf-pro'), proj_a, demo_org,
+     demo.det_uuid('gram-demo-remote-identity-provider-jamf-pro'),
+     'demo-jamf-pro-api-client', 'DEMO-NOT-VALID-CIPHERTEXT', 'client_secret_post',
+     ARRAY['client_credentials'], NULL, 'self');
+
   -- Resolved from a Client ID Metadata Document, and the strongest posture
   -- available: it signs an assertion with a key it publishes, so Speakeasy holds no
   -- secret for it. This is the row the "Key-authenticated" badge appears on.
@@ -3753,6 +3787,62 @@ Channel context stays in the Raw view.
     RAISE EXCEPTION 'demo seed postflight: expected one declared chaining registration, found %', stray;
   END IF;
 
+  SELECT count(*) INTO stray FROM remote_session_issuers
+  WHERE project_id = proj_a AND organization_id = demo_org
+    AND id = demo.det_uuid('gram-demo-remote-identity-provider-jamf-pro')
+    AND token_endpoint IS NOT NULL AND token_endpoint <> ''
+    AND authorization_endpoint IS NULL AND jwks_uri IS NULL
+    AND metadata IS NULL AND metadata_fetched_at IS NULL AND deleted IS FALSE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: Jamf Pro issuer must have only a token endpoint and must not claim discovery';
+  END IF;
+
+  -- Exactly one self client in the tenant.
+  SELECT count(*) INTO stray FROM remote_session_clients
+  WHERE (project_id = proj_a OR organization_id = demo_org)
+    AND credential_owner = 'self' AND deleted IS FALSE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 self remote session client, found %', stray;
+  END IF;
+
+  -- Its secret is the inert ciphertext.
+  SELECT count(*) INTO stray FROM remote_session_clients
+  WHERE project_id = proj_a
+    AND id = demo.det_uuid('gram-demo-remote-identity-client-jamf-pro')
+    AND remote_session_issuer_id
+        = demo.det_uuid('gram-demo-remote-identity-provider-jamf-pro')
+    AND credential_owner = 'self'
+    AND token_endpoint_auth_method = 'client_secret_post'
+    AND client_secret_encrypted = 'DEMO-NOT-VALID-CIPHERTEXT'
+    AND grant_types = ARRAY['client_credentials']
+    AND deleted IS FALSE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected the inert Jamf Pro self client, found %', stray;
+  END IF;
+
+  -- Nobody connects a self client, and no MCP server uses this one.
+  SELECT count(*) INTO stray FROM remote_session_client_user_session_issuers
+  WHERE remote_session_client_id
+        = demo.det_uuid('gram-demo-remote-identity-client-jamf-pro');
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: Jamf Pro self client must not be bound to a user session issuer, found % bindings', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM remote_sessions
+  WHERE remote_session_client_id
+        = demo.det_uuid('gram-demo-remote-identity-client-jamf-pro');
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: Jamf Pro self client must have no remote sessions, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM mcp_servers
+  WHERE project_id = proj_a
+    AND remote_session_issuer_id
+        = demo.det_uuid('gram-demo-remote-identity-provider-jamf-pro');
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: no MCP server may route to the Jamf Pro issuer, found %', stray;
+  END IF;
+
   -- The registrations are the point of the Connections surfaces: one per
   -- credential kind, plus the pre-column row. A rerun that dropped or
   -- duplicated any of them would leave the badges telling a different story
@@ -3778,11 +3868,12 @@ Channel context stays in the Raw view.
     RAISE EXCEPTION 'demo seed postflight: expected 8 registered agents, found %', stray;
   END IF;
 
-  -- Linear's remote identity provider and the identity chaining example.
+  -- Linear's remote identity provider, the identity chaining example, and
+  -- Jamf Pro.
   SELECT count(*) INTO stray FROM remote_session_issuers
   WHERE project_id = proj_a AND deleted IS FALSE;
-  IF stray <> 2 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 2 project remote session issuers, found %', stray;
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 3 project remote session issuers, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM remote_session_clients
