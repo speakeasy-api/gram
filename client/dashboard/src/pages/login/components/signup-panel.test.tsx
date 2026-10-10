@@ -25,13 +25,55 @@ function renderPanel(initialEntry = "/sign-up", redirectTo?: string | null) {
 }
 
 describe("SignUpPanel", () => {
-  it("asks for the email and company name only", () => {
+  it("asks for email and company name without a personal name", () => {
     renderPanel();
     expect(screen.getByLabelText("Work email")).toBeTruthy();
     expect(screen.getByLabelText("Company name")).toBeTruthy();
     // The person's own name is deliberately absent: AuthKit has no parameter
     // to pre-fill it, so asking here would mean typing it twice.
     expect(screen.queryByLabelText("Full name")).toBeNull();
+  });
+
+  it("starts unchecked and links to the terms", () => {
+    renderPanel();
+    const checkbox = screen.getByRole("checkbox", {
+      name: /I agree to the Speakeasy Terms of Service/i,
+    });
+    expect(checkbox).toHaveProperty("checked", false);
+    const link = screen.getByRole("link", { name: "Terms of Service" });
+    expect(link.getAttribute("href")).toBe("https://www.speakeasy.com/terms");
+  });
+
+  it("blocks submission without consent and allows recovery", async () => {
+    const assign = vi
+      .spyOn(window.location, "assign")
+      .mockImplementation(() => {});
+    const user = userEvent.setup();
+    renderPanel();
+    await user.type(screen.getByLabelText("Work email"), "someone@example.com");
+    await user.type(screen.getByLabelText("Company name"), "Acme Inc");
+    const cta = screen.getByRole("button", { name: /create account/i });
+    await user.click(cta);
+    expect(
+      await screen.findByText(
+        "You must agree to the Terms of Service to continue",
+      ),
+    ).toBeTruthy();
+    expect(assign).not.toHaveBeenCalled();
+    expect(telemetryCapture).not.toHaveBeenCalled();
+
+    const checkbox = screen.getByRole("checkbox");
+    await user.click(checkbox);
+    expect(cta.hasAttribute("disabled")).toBe(false);
+    await user.click(checkbox);
+    expect(cta.hasAttribute("disabled")).toBe(true);
+
+    checkbox.focus();
+    await user.keyboard(" ");
+    await user.click(cta);
+    expect(assign).toHaveBeenCalledTimes(1);
+    expect(telemetryCapture).toHaveBeenCalledTimes(1);
+    assign.mockRestore();
   });
 
   it("leaves the CTA enabled on a pristine empty form", () => {
@@ -127,6 +169,7 @@ describe("SignUpPanel", () => {
 
     const user = userEvent.setup();
     renderPanel();
+    await user.click(screen.getByRole("checkbox"));
 
     await user.type(screen.getByLabelText("Work email"), "someone@example.com");
     await user.type(screen.getByLabelText("Company name"), "アクメ株式会社");
@@ -148,6 +191,7 @@ describe("SignUpPanel", () => {
 
     const user = userEvent.setup();
     renderPanel();
+    await user.click(screen.getByRole("checkbox"));
 
     await user.type(screen.getByLabelText("Work email"), "someone@example.com");
     await user.type(screen.getByLabelText("Company name"), "Acme Inc");
@@ -169,6 +213,7 @@ describe("SignUpPanel", () => {
 
     const user = userEvent.setup();
     renderPanel("/sign-up", "https://app.example/cli/callback");
+    await user.click(screen.getByRole("checkbox"));
 
     await user.type(screen.getByLabelText("Work email"), "someone@example.com");
     await user.type(screen.getByLabelText("Company name"), "Acme Inc");
@@ -189,6 +234,7 @@ describe("SignUpPanel", () => {
 
     const user = userEvent.setup();
     renderPanel();
+    await user.click(screen.getByRole("checkbox"));
 
     // A non-breaking space, as arrives from pasting out of a document or a web
     // page. JavaScript's \s matches it and the server's Go regex does not, so
@@ -218,6 +264,7 @@ describe("SignUpPanel", () => {
 
     const user = userEvent.setup();
     renderPanel();
+    await user.click(screen.getByRole("checkbox"));
 
     await user.type(screen.getByLabelText("Work email"), "someone@example.com");
     await user.type(screen.getByLabelText("Company name"), "Acme Inc");
@@ -238,6 +285,7 @@ describe("SignUpPanel", () => {
 
     const user = userEvent.setup();
     renderPanel();
+    await user.click(screen.getByRole("checkbox"));
 
     await user.type(screen.getByLabelText("Work email"), "someone@example.com");
     await user.type(screen.getByLabelText("Company name"), "Acme Inc");
