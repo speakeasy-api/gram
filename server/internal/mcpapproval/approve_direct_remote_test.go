@@ -21,8 +21,10 @@ import (
 func TestApproveDirectRemoteRecordsAnApprovedEntryAndWidensIt(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
+	// The administrator is a member of the organization they administer;
+	// decisions reject granted principals that do not resolve in it.
 	actor := ti.authContext.UserID
-	actorURN := urn.NewPrincipal(urn.PrincipalTypeUser, actor).String()
+	actorURN := seedMemberPrincipal(t, ctx, ti, actor)
 	const target = "https://mcp.example.test/server"
 
 	tx := testenv.BeginTx(t, ctx, ti.conn)
