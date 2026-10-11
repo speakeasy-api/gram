@@ -89,7 +89,7 @@ func registerDistributionTools(reg *Registrar, onboarding *OnboardingService, di
 	addTool(reg, &mcp.Tool{
 		Name:        "remove_mcp_from_plugin",
 		Title:       "Remove an MCP Server from a Plugin",
-		Description: "Take an MCP server back out of one plugin, undoing distribute_mcp_to_plugin, so the people it is shared with stop getting it. Constraints: only a membership this flow created is removed; one an administrator made by hand stays. Name the plugin exactly, on the same terms as distribute_mcp_to_plugin. Removing it from a plugin does not revoke any Shadow MCP approval recorded for it; adding it back to a plugin whose audience that approval covers is admitted without a new approval. Revoke the approval itself from the server's Shadow MCP page.",
+		Description: "Take an MCP server back out of one plugin, undoing distribute_mcp_to_plugin, so the people it is shared with stop getting it. Constraints: only a membership this flow created is removed; one an administrator made by hand stays. Name the plugin exactly, on the same terms as distribute_mcp_to_plugin. Removing it from a plugin does not revoke any Shadow MCP approval recorded for it; adding it back to a plugin whose audience that approval covers is admitted without a new approval. Narrow or revoke the approval itself with decide_shadow_mcp_access, or from the server's Shadow MCP page.",
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
 		// External-only for the same reason as distribution: the removal is
@@ -213,7 +213,7 @@ func shadowMCPStandingMessage(standing *ShadowMCPStanding) string {
 	case shadowMCPStandingApproved:
 		// Not attributed to this write: an earlier decision may already have
 		// covered the audience, in which case nothing new was recorded.
-		return " This project has a Shadow MCP policy, and the server is approved under it for the people this plugin reaches; an administrator's distribution is what records that approval when none covers them yet. Narrow or revoke it from its Shadow MCP page."
+		return " This project has a Shadow MCP policy, and the server is approved under it for the people this plugin reaches; an administrator's distribution is what records that approval when none covers them yet. Narrow or revoke it with decide_shadow_mcp_access or from its Shadow MCP page."
 	case DistributionAdmissionNotApplicable, "not_required":
 		return ""
 	case DistributionAdmissionEmptyAudience:

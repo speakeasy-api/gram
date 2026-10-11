@@ -145,10 +145,6 @@ func (s *LifecycleVisibilityService) update(ctx context.Context, principal Princ
 	if err != nil {
 		return UpdateMCPVisibilityResult{}, err
 	}
-	ctx, err = admission.AdministratorWriteContext(ctx, s.authorization, principal.OrganizationID)
-	if err != nil {
-		return UpdateMCPVisibilityResult{}, fmt.Errorf("%w: %w", ErrDistributionAdmissionUnavailable, err)
-	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return UpdateMCPVisibilityResult{}, fmt.Errorf("begin platform mcp visibility update: %w", err)
@@ -191,10 +187,17 @@ func (s *LifecycleVisibilityService) update(ctx context.Context, principal Princ
 		return UpdateMCPVisibilityResult{}, ErrLifecycleVisibilityUnavailable
 	}
 	if to == "private" {
+		// Only a new enabling write consults the policy, so only it asks who is
+		// acting: turning a server off, and replaying a completed receipt, must
+		// keep working through an authorization outage.
+		admissionCtx, err := admission.AdministratorWriteContext(ctx, s.authorization, principal.OrganizationID)
+		if err != nil {
+			return UpdateMCPVisibilityResult{}, fmt.Errorf("%w: %w", ErrDistributionAdmissionUnavailable, err)
+		}
 		if err := admission.LockProject(ctx, tx, project.ID); err != nil {
 			return UpdateMCPVisibilityResult{}, fmt.Errorf("lock platform mcp visibility admission: %w", err)
 		}
-		if err := s.admission.CheckMCPServerTarget(ctx, tx, principal.OrganizationID, project.ID, mcpID, "", false); err != nil {
+		if err := s.admission.CheckMCPServerTarget(admissionCtx, tx, principal.OrganizationID, project.ID, mcpID, "", false); err != nil {
 			switch {
 			case errors.Is(err, admission.ErrApprovalRequired):
 				return UpdateMCPVisibilityResult{}, fmt.Errorf("%w: %w", ErrDistributionBlockedPendingApproval, err)

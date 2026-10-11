@@ -936,7 +936,9 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 		return false, false, oops.E(oops.CodeUnexpected, err, "check direct-remote distribution admission").LogError(ctx, s.logger)
 	}
 
-	outcome, err := plugins.AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
+	// Role plugins are checked by the same guard inside the attachment, so the
+	// administrator's write must be marked there too.
+	outcome, err := plugins.AttachToDefaultAndRolePluginsAuditedWithOutcome(admissionCtx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		ToolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},

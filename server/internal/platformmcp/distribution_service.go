@@ -483,11 +483,14 @@ func (s *DistributionService) RepairPublication(ctx context.Context, principal P
 		return Distribution{}, err
 	}
 	// Publishing performs external I/O and must not hold a database transaction
-	// open. Release the admission snapshot immediately before the retry; every
-	// retry repeats this check, while the published package remains an eventually
-	// consistent projection rather than a transactional database effect.
-	if err := tx.Rollback(ctx); err != nil {
-		return Distribution{}, fmt.Errorf("release platform mcp publication repair admission lock: %w", err)
+	// open. Commit the admission snapshot before the retry: an organization
+	// administrator's repair may just have recorded the Shadow MCP approval
+	// that admitted it, and that approval must exist before anything is
+	// published on its strength. Every retry repeats this check, while the
+	// published package remains an eventually consistent projection rather than
+	// a transactional database effect.
+	if err := tx.Commit(ctx); err != nil {
+		return Distribution{}, fmt.Errorf("commit platform mcp publication repair admission: %w", err)
 	}
 	return s.publishCommittedDistribution(ctx, principal, row, plugin.Name, "Repair Platform MCP "+plugin.Name+" plugin publication")
 }

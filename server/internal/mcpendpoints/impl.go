@@ -252,7 +252,9 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "check direct-remote distribution admission").LogError(ctx, logger)
 		}
-		attached, pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, mcpServer)
+		// Role plugins are checked by the same guard inside the attachment, so
+		// the administrator's write must be marked there too.
+		attached, pluginCreated, err = s.attachToDefaultPlugin(admissionCtx, dbtx, authCtx, mcpServer)
 		if err != nil {
 			return nil, err
 		}
