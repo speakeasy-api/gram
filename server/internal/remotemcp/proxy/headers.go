@@ -2,9 +2,15 @@ package proxy
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
+	"golang.org/x/net/http/httpguts"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
@@ -16,6 +22,127 @@ const (
 	// HTTP transport.
 	McpSessionIDHeader = "Mcp-Session-Id"
 )
+
+// HeaderPolicy selects how strictly a proxy treats operator-configured headers
+// and the client headers it copies upstream.
+type HeaderPolicy string
+
+const (
+	// HeaderPolicyRemote (the zero value) is applied to remote MCP servers:
+	//   - client headers: Speakeasy credentials, sessions, caller assertions and
+	//     tunnel transport fields ([IsProtectedInboundHeader]) are not copied
+	//     upstream;
+	//   - configured headers: may not read those headers as their source, may
+	//     not set Set-Cookie/Proxy-Authorization or a request-sourced Cookie,
+	//     and are re-validated on every request (an invalid optional row is
+	//     dropped, an invalid required row fails the request with 400).
+	HeaderPolicyRemote HeaderPolicy = ""
+
+	// HeaderPolicyTunneled keeps the pre-existing behaviour for tunneled MCP
+	// servers. The tunnel's own routing fields (tunnel id, forward token,
+	// client affinity) are passed to the proxy as configured headers, so the
+	// remote filtering would reject them; tunnel-specific filtering is defined
+	// by the tunnel header work.
+	HeaderPolicyTunneled HeaderPolicy = "tunneled"
+)
+
+// ErrInvalidHeaderName reports a configured header name that is not a valid
+// HTTP field name.
+var ErrInvalidHeaderName = errors.New("invalid header name")
+
+// ErrInvalidHeaderValue reports a configured header value containing bytes
+// that cannot appear in an HTTP field value.
+var ErrInvalidHeaderValue = errors.New("invalid header value")
+
+// ErrReservedHeader reports a configured header whose name or source is
+// reserved by the policy.
+var ErrReservedHeader = errors.New("reserved header")
+
+// ErrProtectedSource reports a configured header that reads a protected inbound
+// header. It always accompanies [ErrReservedHeader].
+var ErrProtectedSource = errors.New("protected source")
+
+// ErrProtectedDestination reports a configured header that would send a
+// request-sourced value under a protected name. It always accompanies
+// [ErrReservedHeader].
+var ErrProtectedDestination = errors.New("protected destination")
+
+// NormalizeHeaderName validates raw as an HTTP field name and returns its
+// canonical form. Control bytes anywhere in raw are rejected before any
+// trimming, so a name carrying CR, LF or a tab is never quietly repaired into
+// a valid one. Leading and trailing ASCII spaces are trimmed.
+func NormalizeHeaderName(raw string) (string, error) {
+	for i := range len(raw) {
+		if c := raw[i]; c < 0x20 || c == 0x7f {
+			return "", fmt.Errorf("%w: contains a control character", ErrInvalidHeaderName)
+		}
+	}
+	name := strings.Trim(raw, " ")
+	if !httpguts.ValidHeaderFieldName(name) {
+		return "", fmt.Errorf("%w: %q is not an HTTP field name", ErrInvalidHeaderName, name)
+	}
+	return http.CanonicalHeaderKey(name), nil
+}
+
+// ValidateHeaderValue reports whether v may be sent as an HTTP field value.
+// Horizontal tab is the only control character allowed.
+func ValidateHeaderValue(v string) error {
+	for i := range len(v) {
+		if c := v[i]; (c < 0x20 && c != '\t') || c == 0x7f {
+			return fmt.Errorf("%w: contains a control character", ErrInvalidHeaderValue)
+		}
+	}
+	if !httpguts.ValidHeaderFieldValue(v) {
+		return ErrInvalidHeaderValue
+	}
+	return nil
+}
+
+// headerKey folds a header name for policy matching. Underscores are treated
+// as dashes because some upstream servers read X_Foo as X-Foo.
+func headerKey(name string) string {
+	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(name), "_", "-"))
+}
+
+// speakeasyHeaderPrefix covers Speakeasy's own request headers: API keys,
+// dashboard and chat sessions, project selection and consent transport state.
+const speakeasyHeaderPrefix = "gram-"
+
+// speakeasyAIHeaderPrefix covers the documented Speakeasy-AI-* names for the
+// same credentials and sessions. The public listener renames them to the
+// older names before handlers run, but not every route installs that
+// middleware, so the policy matches both spellings itself.
+const speakeasyAIHeaderPrefix = "speakeasy-ai-"
+
+// tunnelHeaderPrefix covers the tunnel transport family exchanged between
+// Speakeasy, the tunnel gateway and the tunnel agent.
+const tunnelHeaderPrefix = "x-gram-tunnel-"
+
+// IsProtectedInboundHeader reports whether a header on the inbound request
+// carries a Speakeasy credential, session, caller assertion or tunnel
+// transport field. Under [HeaderPolicyRemote] such a header is never copied
+// upstream and never used as the source of a configured header.
+//
+// Authorization is not listed: the copy already drops it, and a configured
+// header may forward the caller's own upstream credential from it.
+func IsProtectedInboundHeader(name string) bool {
+	if mcpauthz.ReservedHeader(name) {
+		return true
+	}
+	key := headerKey(name)
+	if strings.HasPrefix(key, speakeasyHeaderPrefix) || strings.HasPrefix(key, speakeasyAIHeaderPrefix) || strings.HasPrefix(key, tunnelHeaderPrefix) {
+		return true
+	}
+	switch key {
+	case
+		"proxy-authorization",
+		"cookie",
+		"set-cookie",
+		"x-gram-agent-version":
+		return true
+	}
+	return false
+}
 
 // isSkippedRequestHeader returns true for headers that should never be
 // forwarded verbatim from the user request to the remote MCP server:
@@ -192,9 +319,16 @@ func (p *Proxy) stripConfiguredCredentials(header http.Header) {
 // non-empty, the proxy emits its own "Authorization: Bearer <override>"
 // upstream after configured headers are resolved so per-user identity wins a
 // legacy conflict with a static Authorization credential.
+//
+// Under [HeaderPolicyRemote], [IsProtectedInboundHeader] headers are dropped
+// from the copy as well.
 func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, remoteReq *http.Request) error {
+	tunneled := p.HeaderPolicy == HeaderPolicyTunneled
 	for name, values := range userReq.Header {
 		if isSkippedRequestHeader(name) {
+			continue
+		}
+		if !tunneled && IsProtectedInboundHeader(name) {
 			continue
 		}
 		for _, v := range values {
@@ -202,25 +336,12 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 		}
 	}
 
-	for _, h := range p.Headers {
-		if mcpauthz.ReservedHeader(h.Name) || mcpauthz.ReservedHeader(h.ValueFromRequestHeader) {
-			continue
+	if tunneled {
+		if err := p.applyTunneledConfiguredHeaders(ctx, userReq, remoteReq); err != nil {
+			return err
 		}
-		// A configured header must not set or delete a standard MCP request
-		// header: the client's value is forwarded untouched, as the
-		// specification requires of an intermediary.
-		if httpheaders.IsStandardMCPRequestHeader(h.Name) {
-			continue
-		}
-		value, err := h.Resolve(userReq)
-		if err != nil {
-			return oops.E(oops.CodeBadRequest, err, "missing required header for remote mcp server").LogError(ctx, p.Logger)
-		}
-		if value == "" {
-			remoteReq.Header.Del(h.Name)
-			continue
-		}
-		remoteReq.Header.Set(h.Name, value)
+	} else if err := p.applyRemoteConfiguredHeaders(ctx, userReq, remoteReq); err != nil {
+		return err
 	}
 
 	if p.AuthorizationOverride != "" {
@@ -244,4 +365,177 @@ func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, 
 	}
 
 	return nil
+}
+
+// applyTunneledConfiguredHeaders overlays configured headers under
+// [HeaderPolicyTunneled].
+func (p *Proxy) applyTunneledConfiguredHeaders(ctx context.Context, userReq *http.Request, remoteReq *http.Request) error {
+	for _, h := range p.Headers {
+		if mcpauthz.ReservedHeader(h.Name) || mcpauthz.ReservedHeader(h.ValueFromRequestHeader) {
+			continue
+		}
+		// A configured header must not set or delete a standard MCP request
+		// header: the client's value is forwarded untouched, as the
+		// specification requires of an intermediary.
+		if httpheaders.IsStandardMCPRequestHeader(h.Name) {
+			continue
+		}
+		value, err := h.Resolve(userReq)
+		if err != nil {
+			return oops.E(oops.CodeBadRequest, err, "missing required header for remote mcp server").LogError(ctx, p.Logger)
+		}
+		if value == "" {
+			remoteReq.Header.Del(h.Name)
+			continue
+		}
+		remoteReq.Header.Set(h.Name, value)
+	}
+	return nil
+}
+
+// applyRemoteConfiguredHeaders overlays configured headers under
+// [HeaderPolicyRemote], re-validating every stored row so one written before
+// the policy existed cannot bypass it. A failing optional row is suppressed;
+// a failing required row rejects the request, naming the header, never its
+// value.
+func (p *Proxy) applyRemoteConfiguredHeaders(ctx context.Context, userReq *http.Request, remoteReq *http.Request) error {
+	for _, h := range p.Headers {
+		if isUnownedHeader(h.Name) {
+			continue
+		}
+		// A resolved upstream token owns Authorization. The configured row it
+		// shadows is not sent, so it cannot impose a requirement of its own.
+		if p.AuthorizationOverride != "" && headerKey(h.Name) == "authorization" {
+			continue
+		}
+
+		value, err := resolveRemoteHeader(h, userReq)
+		if err != nil {
+			if h.IsRequired {
+				return oops.E(oops.CodeBadRequest, err, "%s", remoteHeaderFailureMessage(h, err)).LogWarn(ctx, p.Logger)
+			}
+			p.logWithIdentity(ctx, slog.LevelWarn, "skip invalid configured header for remote mcp server", attr.SlogRemoteMCPConfiguredHeaderName(h.Name), attr.SlogError(err))
+		}
+		clearRemoteDestination(remoteReq.Header, h.Name)
+		if value != "" {
+			remoteReq.Header.Set(h.Name, value)
+		}
+	}
+	return nil
+}
+
+// clearRemoteDestination removes client values under the name of a
+// configured header, so they cannot stand in for it or sit beside it.
+// Every spelling an upstream may fold together goes, matched by the trimmed
+// name the client would send. Unowned headers are never touched.
+func clearRemoteDestination(header http.Header, stored string) {
+	name, err := NormalizeHeaderName(stored)
+	if err != nil {
+		return
+	}
+	if isUnownedHeader(name) {
+		return
+	}
+	key := headerKey(name)
+	for present := range header {
+		if headerKey(present) == key {
+			delete(header, present)
+		}
+	}
+}
+
+// isUnownedHeader reports whether name belongs to the caller assertion or the
+// client's standard MCP request headers, which configuration never sets or
+// clears: an intermediary must forward the latter untouched.
+func isUnownedHeader(name string) bool {
+	return mcpauthz.ReservedHeader(name) || httpheaders.IsStandardMCPRequestHeader(strings.ReplaceAll(name, "_", "-"))
+}
+
+// CheckRemoteHeader validates a configured header against
+// [HeaderPolicyRemote]. Names are matched case-insensitively, with
+// underscores read as dashes.
+func CheckRemoteHeader(h ConfiguredHeader) error {
+	if h.ValueFromRequestHeader != "" && IsProtectedInboundHeader(h.ValueFromRequestHeader) {
+		return fmt.Errorf("%w: %w: %q cannot be forwarded to a remote MCP server", ErrReservedHeader, ErrProtectedSource, h.ValueFromRequestHeader)
+	}
+	if isReservedRemoteDestination(h) {
+		return fmt.Errorf("%w: %q cannot be configured on a remote MCP server", ErrReservedHeader, h.Name)
+	}
+	if h.ValueFromRequestHeader != "" && IsProtectedInboundHeader(h.Name) {
+		return fmt.Errorf("%w: %w: %q cannot be populated from a request header", ErrReservedHeader, ErrProtectedDestination, h.Name)
+	}
+	if h.StaticValue != "" {
+		if err := ValidateHeaderValue(h.StaticValue); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// isReservedRemoteDestination reports whether a configured header may not be
+// sent under its name to a remote upstream. Cookie is allowed only as a static
+// operator credential, never populated from the inbound request.
+func isReservedRemoteDestination(h ConfiguredHeader) bool {
+	if isUnownedHeader(h.Name) {
+		return true
+	}
+	switch headerKey(h.Name) {
+	case "set-cookie", "proxy-authorization":
+		return true
+	case "cookie":
+		return h.ValueFromRequestHeader != ""
+	}
+	return false
+}
+
+// checkStoredRemoteHeader re-validates a stored configured header at request
+// time. Any casing is accepted, but surrounding whitespace is not: the name is
+// sent and later removed exactly as stored.
+func checkStoredRemoteHeader(h ConfiguredHeader) error {
+	names := []string{h.Name}
+	if h.ValueFromRequestHeader != "" {
+		names = append(names, h.ValueFromRequestHeader)
+	}
+	for _, raw := range names {
+		name, err := NormalizeHeaderName(raw)
+		if err != nil {
+			return err
+		}
+		if !strings.EqualFold(name, raw) {
+			return fmt.Errorf("%w: %q has surrounding whitespace", ErrInvalidHeaderName, raw)
+		}
+	}
+	return CheckRemoteHeader(h)
+}
+
+// resolveRemoteHeader validates a stored header and resolves the value to send.
+func resolveRemoteHeader(h ConfiguredHeader, userReq *http.Request) (string, error) {
+	if err := checkStoredRemoteHeader(h); err != nil {
+		return "", err
+	}
+	value, err := h.Resolve(userReq)
+	if err != nil || value == "" {
+		return "", err
+	}
+	if err := ValidateHeaderValue(value); err != nil {
+		return "", fmt.Errorf("header %q: %w", h.Name, err)
+	}
+	return value, nil
+}
+
+// remoteHeaderFailureMessage is the client-facing explanation for a required
+// configured header that cannot be sent to a remote MCP server.
+func remoteHeaderFailureMessage(h ConfiguredHeader, err error) string {
+	switch {
+	case errors.Is(err, ErrProtectedSource):
+		return fmt.Sprintf("required header %q cannot read request header %q: Speakeasy credentials and cookies are never forwarded to remote MCP servers", h.Name, h.ValueFromRequestHeader)
+	case errors.Is(err, ErrProtectedDestination):
+		return fmt.Sprintf("required header %q cannot be populated from a request header: it is a Speakeasy header", h.Name)
+	case errors.Is(err, ErrReservedHeader):
+		return fmt.Sprintf("required header %q cannot be configured on a remote mcp server: change or remove it in the server's settings", h.Name)
+	case errors.Is(err, ErrInvalidHeaderName), errors.Is(err, ErrInvalidHeaderValue):
+		return fmt.Sprintf("required header %q for remote mcp server is not a valid HTTP header: change or remove it in the server's settings", h.Name)
+	default:
+		return "missing required header for remote mcp server"
+	}
 }

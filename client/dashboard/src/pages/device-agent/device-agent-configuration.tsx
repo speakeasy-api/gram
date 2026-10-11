@@ -40,6 +40,11 @@ import { toast } from "sonner";
 
 const PLATFORMS = [
   {
+    key: "copilot",
+    label: "GitHub Copilot CLI",
+    description: "Configure GitHub Copilot CLI plugins and MCP settings.",
+  },
+  {
     key: "claude_code",
     label: "Claude Code",
     description: "Configure Claude Code plugins and MCP settings.",
@@ -64,6 +69,12 @@ const PLATFORMS = [
   label: string;
   description: string;
 }>;
+
+const ENFORCEMENT_LAYER_LABELS: Record<EnforcementLayer, string> = {
+  off: "Off",
+  user: "User",
+  managed: "Managed",
+};
 
 const MIN_SYNC_INTERVAL_SECONDS = 60;
 const MAX_SYNC_INTERVAL_SECONDS = 86_400;
@@ -370,7 +381,9 @@ function DeviceAgentConfigurationForm({
                   className="w-40"
                   aria-label={`${platform.label} enforcement layer`}
                 >
-                  <SelectValue />
+                  <SelectValue>
+                    {ENFORCEMENT_LAYER_LABELS[platformLayers[platform.key]!]}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="off">Off</SelectItem>

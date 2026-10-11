@@ -119,8 +119,11 @@ type GetPluginsResponseBody struct {
 	// Plugin marketplaces the agent should register with the tools it manages.
 	// Sorted by name.
 	Marketplaces []*AgentMarketplaceResponseBody `form:"marketplaces,omitempty" json:"marketplaces,omitempty" xml:"marketplaces,omitempty"`
-	// Plugins the agent should enable. Each entry references one of the
-	// marketplaces above by name.
+	// Plugins for the caller: the observability plugin of each listed marketplace,
+	// when enabled, and the plugins assigned to the caller. Each entry's
+	// install_mode says whether the agent installs it (`required`, `default`) or
+	// only offers it for the user to turn on (`available`). Each entry references
+	// one of the marketplaces above by name.
 	Plugins []*AgentPluginResponseBody `form:"plugins,omitempty" json:"plugins,omitempty" xml:"plugins,omitempty"`
 	// Organization-wide remote configuration. Absent until an administrator saves
 	// a configuration, allowing an agent with no cached remote layer to keep using
@@ -2248,12 +2251,21 @@ type AgentMarketplaceResponseBody struct {
 
 // AgentPluginResponseBody is used to define fields on response body types.
 type AgentPluginResponseBody struct {
-	// Plugin slug. Combined with marketplace_name, this identifies the plugin the
-	// agent enables in the managed tool.
+	// Plugin slug. Combined with marketplace_name, this identifies the plugin in
+	// the managed tool.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// Name of the marketplace this plugin lives in. Always equals the `name` of
 	// one of the marketplaces in the same response.
 	MarketplaceName *string `form:"marketplace_name,omitempty" json:"marketplace_name,omitempty" xml:"marketplace_name,omitempty"`
+	// How the agent installs the plugin. `required`: installed, and the user can't
+	// turn it off. `default`: installed, and the user can turn it off.
+	// `available`: not installed until the user turns it on. Agents that predate
+	// this field install every listed plugin.
+	InstallMode *string `form:"install_mode,omitempty" json:"install_mode,omitempty" xml:"install_mode,omitempty"`
+	// Display name of the plugin. Absent for the synthesized observability plugin.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Short description of the plugin, when one is set.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 }
 
 // DeviceAgentConfigurationResponseBody is used to define fields on response
@@ -7162,6 +7174,14 @@ func ValidateAgentPluginResponseBody(body *AgentPluginResponseBody) (err error) 
 	}
 	if body.MarketplaceName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("marketplace_name", "body"))
+	}
+	if body.InstallMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("install_mode", "body"))
+	}
+	if body.InstallMode != nil {
+		if !(*body.InstallMode == "required" || *body.InstallMode == "default" || *body.InstallMode == "available") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.install_mode", *body.InstallMode, []any{"required", "default", "available"}))
+		}
 	}
 	return
 }

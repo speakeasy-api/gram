@@ -21,7 +21,7 @@ import { useDashboardMutations } from "./useDashboardMutations";
 const DEFAULT_SORT: SortDescriptor = { id: "updated", direction: "desc" };
 
 /**
- * The project's dashboards, as the Dashboards tab lists them: searchable by
+ * The project's dashboards, as the Dashboards page lists them: searchable by
  * name and opened with a click. Anyone can make one; duplicating someone
  * else's makes a copy to change.
  */

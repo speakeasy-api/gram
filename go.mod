@@ -60,6 +60,7 @@ require (
 	github.com/moby/moby/client v0.4.0
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/oschwald/maxminddb-golang v1.13.1
+	github.com/parquet-go/parquet-go v0.32.0
 	github.com/pgvector/pgvector-go v0.4.0
 	github.com/pgx-contrib/pgxotel v0.0.0-20250908221444-24ae56d05ec0
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
@@ -94,6 +95,7 @@ require (
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.44.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.44.0
+	go.opentelemetry.io/otel/log v0.20.0
 	go.opentelemetry.io/otel/metric v1.44.0
 	go.opentelemetry.io/otel/sdk v1.44.0
 	go.opentelemetry.io/otel/sdk/metric v1.44.0
@@ -211,6 +213,7 @@ require (
 	github.com/gohugoio/hashstructure v0.6.0 // indirect
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/google/gnostic-models v0.7.0 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/pprof v0.0.0-20260115054156-294ebfa9ad83 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
@@ -270,6 +273,8 @@ require (
 	github.com/onsi/gomega v1.39.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
+	github.com/parquet-go/bitpack v1.0.0 // indirect
+	github.com/parquet-go/jsonlite v1.0.0 // indirect
 	github.com/paulmach/orb v0.12.0 // indirect
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58 // indirect
 	github.com/pelletier/go-toml/v2 v2.4.2 // indirect
@@ -307,6 +312,7 @@ require (
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
+	github.com/twpayne/go-geom v1.6.1 // indirect
 	github.com/ulikunitz/xz v0.5.14 // indirect
 	github.com/vektah/gqlparser/v2 v2.5.19 // indirect
 	github.com/vmihailenco/go-tinylfu v0.2.2 // indirect

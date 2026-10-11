@@ -3962,6 +3962,17 @@ func TestGeneratePlatformMCPPackageEmitsToolExposureWorkflow(t *testing.T) {
 		"stop before requesting confirmation or calling a mutation, and hand off to the AICP dashboard",
 		"Do not infer platform-tool absence, automatic-membership changes, or restored eligibility from a partial list.",
 		"Never reuse the old exposure version",
+		// A long tool list is read page by page, and only a completed read
+		// yields a version a change can be confirmed against.
+		"`tool_exposure.next_tool_cursor`",
+		"A partial page carries no exposure version",
+		"repeat until it is absent",
+		"Present the server's tools only once that read is complete",
+		"read the rest through `get_mcp` with `tool_cursor` before reporting the full list",
+		"start again from the first page",
+		// A caller handed no cursor cannot finish the read, so the workflow
+		// stops rather than treating the partial page as the whole list.
+		"no change can be confirmed against it",
 		"refused to avoid overwriting somebody else's edit",
 		// A shared tool list is structural, so the workflow must not send the
 		// caller back to a fresh read on it the way a conflict does.

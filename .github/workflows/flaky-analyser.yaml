@@ -1,0 +1,42 @@
+name: Flaky test analyser
+
+# Scans the last 14 days of failed server-test jobs in merge-queue and main
+# runs, where the code has already passed PR checks. A test that failed for two
+# or more different PRs (or main pushes) gets a "flaky-candidate" Linear ticket;
+# the server-test gate then quarantines it the next time it fails. See
+# ci/cmd/flaky.
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: flaky-analyser
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  analyse:
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Open tickets for new flaky-test candidates
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+        run: go run ./ci/cmd/flaky analyze

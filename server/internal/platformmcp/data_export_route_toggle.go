@@ -17,7 +17,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -272,27 +271,18 @@ func (s *DataExportRouteToggleService) toggle(ctx context.Context, principal Pri
 	digest := sha256.Sum256(append([]byte("platform-mcp-data-export-toggle-v1\x00"), payload...))
 	inputHash := hex.EncodeToString(digest[:])
 
-	// A retry of a change that already committed is answered from its stored
-	// receipt here, before the budget is charged, so a caller whose allowance
-	// is spent still gets the result it is owed. This read takes no lock and
-	// opens no transaction; the executor's locked re-check below still
-	// replays a duplicate that commits concurrently with this one.
-	if stored, ok := s.completedReceipt(ctx, principal, project, operation, key, inputHash); ok {
-		return s.finish(ctx, principal, project, routeID, enabled, stored)
-	}
-	// Charged outside any transaction. The limiter is a network round-trip to
-	// Redis, and doing it inside the receipt transaction would hold a
-	// PostgreSQL connection and the receipt's advisory lock for as long as
-	// Redis takes to answer. Two racing duplicates may both be charged, which
-	// errs on the side of the budget.
-	if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
-		if errors.Is(err, ErrOperationRateLimited) {
-			return ToggleDataExportRouteOutput{}, &DataExportToggleError{Code: "rate_limited", Message: "Pausing or resuming data exports was asked for too often just now. Try again shortly.", Cause: err}
+	// A retry of a change that already committed replays its stored receipt
+	// without spending the allowance; see executeChargedMutationReceipt.
+	charge := func(ctx context.Context) error {
+		if err := s.changes.AllowConnectionOrOrganization(ctx, principal); err != nil {
+			if errors.Is(err, ErrOperationRateLimited) {
+				return &DataExportToggleError{Code: "rate_limited", Message: "Pausing or resuming data exports was asked for too often just now. Try again shortly.", Cause: err}
+			}
+			return dataExportToggleUnavailable(err)
 		}
-		return ToggleDataExportRouteOutput{}, dataExportToggleUnavailable(err)
+		return nil
 	}
-
-	receipt, err := executeMutationReceipt(ctx, mutationReceiptExecution[dataExportToggleReceipt]{
+	receipt, err := executeChargedMutationReceipt(ctx, charge, mutationReceiptExecution[dataExportToggleReceipt]{
 		DB: s.db, Now: s.now, Principal: principal, Project: project, Operation: operation,
 		IdempotencyKey: key, InputHash: inputHash, Label: "data export " + operation,
 		Invalid: func(error) error { return dataExportToggleInvalid("The request is invalid.") },
@@ -343,26 +333,6 @@ func validDataExportToggleReceipt(stored []byte) bool {
 		return false
 	}
 	return result.Outcome == dataExportOutcomeUnchanged || result.Outcome == dataExportOutcomePaused || result.Outcome == dataExportOutcomeResumed
-}
-
-// completedReceipt is the unlocked replay check that runs before the budget is
-// charged. Only a completed, unexpired receipt for exactly this request
-// counts; anything else — no receipt, a pending one, a different input under
-// the same key, or a failed read — falls through to the executor, which
-// decides under its lock and refuses a mismatched input as a conflict.
-func (s *DataExportRouteToggleService) completedReceipt(ctx context.Context, principal Principal, project ResolvedProject, operation, key, inputHash string) (OperationReceipt, bool) {
-	var miss OperationReceipt
-	row, err := s.queries.GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
-		OrganizationID: principal.OrganizationID, UserID: conv.ToPGText(principal.UserID), SubjectUrn: userSubjectURN(principal.UserID),
-		ProjectID: project.ID, Operation: operation, IdempotencyKey: key,
-	})
-	if err != nil {
-		return miss, false
-	}
-	if row.InputHash != inputHash || row.Status != receiptStatusSucceeded || len(row.ResultPayload) == 0 || !row.ExpiresAt.Valid || !row.ExpiresAt.Time.After(s.now()) || !validDataExportToggleReceipt(row.ResultPayload) {
-		return miss, false
-	}
-	return operationReceiptFromRow(row, true), true
 }
 
 // finish turns a stored or freshly written receipt into the tool result, with

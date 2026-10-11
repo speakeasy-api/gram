@@ -1,5 +1,32 @@
 # dashboard
 
+## 0.135.0
+
+### Minor Changes
+
+- 8c561d4: `remoteMcp.getServerScopes` now needs only read access on the target MCP server and reports each client's `issuer_name` and `issuer_url` and whether the caller `can_pin`. In the dashboard, the pinned scopes picker is read-only unless you have edit access on every server sharing the URL, its status line names what sign-ins actually request when the pin does not decide, and in Settings › Identity members who can read but not edit the server see a read-only "Requested at sign-in" summary of the scopes the connected client requests.
+- 8763550: The remote session client page folds Settings into Overview, which shows the identity provider's endpoints, registration methods and supported scopes above the client's editable settings, with scopes chosen from those the provider advertises.
+- 111bf1f: Add Signals intelligence configuration management to the dashboard, with reusable signals, sensor modes, and ordered signal membership. The organization-level `signals_intelligence` product feature controls sidebar and command-palette visibility and direct page access. Read-only project members can inspect configuration; changes require project write access. Enable the feature in demo and local fixtures. Classification execution remains out of scope.
+
+### Patch Changes
+
+- 4ff622b: The Access Hub's forms for registering and editing a custom platform, and for allowing and editing access under one, now take their copy and fields from the server's custom flows. They keep the same fields, checks and wording, and show a loading state, or a message with a retry, while the form is not yet available.
+- fe988df: A widget can be put on a dashboard from wherever it is: **Add to dashboard** on a Widgets tab row or card and in the widget bar picks one of the dashboards you can change, or makes a new one with the widget as its first card, and the toast offers to open it. Saving the builder as a new widget has an **Advanced** section to place it on a dashboard straight away.
+- 502a8b6: A dashboard has the shared filter bar above its cards, offering a date range and the fields (user, agent, model, MCP server, status) some card can be filtered by; every card answers within it. A dashboard opens on its saved filters, or on the past seven days, unless the link says otherwise. Picking in the bar is the viewer's own view until **Save filters** stores it as what the dashboard opens on for everyone; **Reset filters** returns to what is saved.
+- 4470b2a: Identity providers created or refreshed in the dashboard from discovered metadata keep the authorization grant profiles they advertise (including the ID-JAG profile), so identity chaining no longer reports them as unsupported. A discovered issuer that advertises no profiles sends an empty list, so it is still recorded as discovered; providers entered by hand omit the field. Changing a provider's issuer URL without rediscovering clears its grant profiles. The Settings tab does the same, and the OAuth proxy wizard no longer substitutes its defaults for lists a discovered document omits, while still keeping the scopes the operator entered.
+- fe988df: Dashboards moved out of an Explore tab into their own **Dashboards** page in the sidebar, under Observability beside Explore. Each dashboard has its own address, `/dashboards/<id>`. A card's **Open in Explore** and a widget's **Add to dashboard** go between the two pages.
+- fe988df: The Explore query builder is laid out as Datadog's query editor is, and takes two lines instead of a form.
+  
+  - **First line:** the dataset, then the filters as one search field of `field:value` pills. Click a pill to edit it, or the empty field to add one.
+  - **Second line:** hangs from the search icon and reads as a sentence: **Show** | Count of | all rows — **by** | user | + — then **limit to top** | 100 | by | the order for a whole-window chart, or **rollup** | every | 1h (auto) for a timeseries.
+  - **Results header:** the chart type (as icons), the window and **Run query** move here.
+- 73d7328: Adding a source to an MCP gateway never reuses that source's own hosted MCP server as the gateway member. The gateway keeps its own private member server, independent of whether the hosted server is enabled or public.
+- a4ed7f5: The search term on the MCP page is kept in the URL, so going back from a server keeps your search instead of clearing it.
+- 02e02cf: Risk events found in a prompt attachment, such as a spreadsheet, now show their context. The risk-only transcript returned nothing for these findings because they belong to the attachment rather than a message; it now windows around the prompt the attachment was sent with, and the finding drawer shows the flagged attachment beneath that prompt. The session's risky-only count includes those prompts too.
+- 111bf1f: Allow creating and editing sensor and signal slugs in their dashboard forms, with validation for the shared slug format.
+- 3d9795e: Show matching plugin links on Team Access role rows.
+- 0273ee4: Toasts now follow the dashboard's light/dark setting instead of the operating system's, so description text such as the repository link after adding marketplace collaborators is readable in light mode when the OS is in dark mode.
+
 ## 0.134.0
 
 ### Minor Changes

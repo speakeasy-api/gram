@@ -49,7 +49,7 @@ func TestPluginAssignmentAdmissionRejectionLeavesNoMutationOrReceipt(t *testing.
 	require.NoError(t, err)
 	store := NewPluginAssignmentMutationReceiptStore(conn)
 	normalized := normalizedPluginAssignmentMutationInput(project.ID, plugin.ID.String(), []string{"everyone"}, "version")
-	_, err = store.Execute(ctx, principal, project, "admission-rejected", normalized, func(ctx context.Context, tx pgx.Tx) (SetPluginAssignmentsReceiptResult, error) {
+	_, err = store.Execute(ctx, principal, project, "admission-rejected", normalized, noReceiptCharge, func(ctx context.Context, tx pgx.Tx) (SetPluginAssignmentsReceiptResult, error) {
 		locked, err := pluginassignments.Lock(ctx, tx, principal.OrganizationID, project.ID, plugin.ID)
 		require.NoError(t, err)
 		_, err = pluginassignments.Replace(ctx, tx, audit.NewLogger(), locked, pluginassignments.Input{
@@ -807,7 +807,7 @@ func TestPluginAssignmentMutationReceiptRollsBackDomainAndReceipt(t *testing.T) 
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Rollback", "rollback")
 	store := NewPluginAssignmentMutationReceiptStore(conn)
 	normalized := normalizedPluginAssignmentMutationInput(project.ID, plugin.ID.String(), nil, "version")
-	_, err = store.Execute(ctx, principal, project, "rollback", normalized, func(ctx context.Context, tx pgx.Tx) (SetPluginAssignmentsReceiptResult, error) {
+	_, err = store.Execute(ctx, principal, project, "rollback", normalized, noReceiptCharge, func(ctx context.Context, tx pgx.Tx) (SetPluginAssignmentsReceiptResult, error) {
 		_, err := pluginsrepo.New(tx).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{
 			PluginID: plugin.ID, OrganizationID: principal.OrganizationID, PrincipalUrn: urn.PrincipalWildcard,
 		})

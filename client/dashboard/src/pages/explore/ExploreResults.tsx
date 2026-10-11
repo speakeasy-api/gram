@@ -3,7 +3,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import type { AnalyticsQueryResult } from "@gram/client/models/components/analyticsqueryresult.js";
 import type { UseQueryResult } from "@tanstack/react-query";
-import type { JSX } from "react";
+import type { JSX, ReactNode } from "react";
 import {
   completeMeasures,
   hasChartShape,
@@ -29,19 +29,42 @@ export function ExploreResults({
   dataset,
   spec,
   result,
+  toolbar,
 }: {
   dataset: AnalyticsDataset | undefined;
   /** The spec the last run answered, which the builder may have moved past. */
   spec: ExploreSpec;
   result: RunQuery;
+  /** Drawn on the panel's header, beside its name: chart, window, Run. */
+  toolbar?: ReactNode;
+}): JSX.Element {
+  return (
+    <ResultsFrame toolbar={toolbar} busy={result.isFetching}>
+      <ResultsBody dataset={dataset} spec={spec} primary={result} />
+    </ResultsFrame>
+  );
+}
+
+/** The results panel: its header, with the toolbar, over what it shows. */
+export function ResultsFrame({
+  toolbar,
+  busy = false,
+  children,
+}: {
+  toolbar?: ReactNode;
+  busy?: boolean;
+  children: ReactNode;
 }): JSX.Element {
   return (
     <section
-      className="border-border bg-card flex flex-col gap-4 border p-5"
-      aria-busy={result.isFetching}
+      className="border-border bg-card flex flex-col border"
+      aria-busy={busy}
     >
-      <span className="text-eyebrow">Results</span>
-      <ResultsBody dataset={dataset} spec={spec} primary={result} />
+      <div className="border-border flex min-h-12 flex-wrap items-center gap-3 border-b px-3 py-2">
+        <span className="text-eyebrow">Results</span>
+        {toolbar}
+      </div>
+      <div className="flex flex-col gap-4 p-5">{children}</div>
     </section>
   );
 }

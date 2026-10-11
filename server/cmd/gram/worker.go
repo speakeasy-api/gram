@@ -209,6 +209,7 @@ func newWorkerCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
 			Required: false,
 		},
+		internalCatalogFlag(),
 		&cli.StringFlag{
 			Name:     "tunnel-forward-token",
 			Usage:    "Shared secret presented to the tunnel gateway forward listener to authenticate gram-worker",

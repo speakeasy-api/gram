@@ -198,6 +198,37 @@ function renderSheet() {
   );
 }
 
+const ID_JAG_PROFILE = "urn:ietf:params:oauth:grant-profile:id-jag";
+
+function renderGrantProfileSheet() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <ModifyRemoteIdentityProviderSheet
+        open
+        onOpenChange={vi.fn<(open: boolean) => void>()}
+        userSessionIssuer={{ id: "user-issuer-1" } as UserSessionIssuer}
+        issuer={
+          {
+            id: "issuer-1",
+            issuer: "https://idp.example.com",
+            slug: "idp",
+            authorizationEndpoint: "https://idp.example.com/authorize",
+            tokenEndpoint: "https://idp.example.com/token",
+            authorizationGrantProfilesSupported: [ID_JAG_PROFILE],
+            clientIdMetadataDocumentSupported: false,
+          } as RemoteSessionIssuer
+        }
+      />
+    </QueryClientProvider>,
+  );
+}
+
 describe("ModifyRemoteIdentityProviderSheet legacy callback migration", () => {
   it("migrates the client through the project endpoint with project:write", async () => {
     fixture.legacyCallbackUrl = true;
@@ -291,6 +322,38 @@ describe("ModifyRemoteIdentityProviderSheet", () => {
           tokenEndpointAuthMethod: AuthMethod.PrivateKeyJwt,
           tokenEndpointAuthAudienceFormat: AuthAudienceFormat.TokenEndpoint,
           clientSecret: undefined,
+        }),
+      }),
+    );
+  });
+
+  it("clears grant profiles when the issuer URL changes without rediscovery", async () => {
+    renderGrantProfileSheet();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Issuer URL" }), {
+      target: { value: "https://other.example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(sdk.updateIssuer).toHaveBeenCalledWith({
+        updateRemoteSessionIssuerForm: expect.objectContaining({
+          issuer: "https://other.example.com",
+          authorizationGrantProfilesSupported: [],
+        }),
+      }),
+    );
+  });
+
+  it("keeps saved grant profiles on an unrelated save", async () => {
+    renderGrantProfileSheet();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(sdk.updateIssuer).toHaveBeenCalledWith({
+        updateRemoteSessionIssuerForm: expect.objectContaining({
+          authorizationGrantProfilesSupported: [ID_JAG_PROFILE],
         }),
       }),
     );

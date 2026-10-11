@@ -3058,6 +3058,47 @@ type SessionQuarantine struct {
 	ReleasedBy     pgtype.Text
 }
 
+type SigintCustomSignal struct {
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	Name               string
+	Slug               string
+	Description        pgtype.Text
+	ClassifierCriteria pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
+	Deleted            bool
+}
+
+type SigintSensor struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	Name            string
+	Slug            string
+	Description     pgtype.Text
+	Instructions    pgtype.Text
+	Mode            string
+	MatchExpression string
+	Enabled         bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
+type SigintSensorSignal struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	SensorID  uuid.UUID
+	SignalID  uuid.UUID
+	SortOrder int32
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+	DeletedAt pgtype.Timestamptz
+	Deleted   bool
+}
+
 type Skill struct {
 	ID             uuid.UUID
 	ProjectID      uuid.UUID

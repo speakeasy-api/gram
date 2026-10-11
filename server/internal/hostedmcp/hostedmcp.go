@@ -9,8 +9,11 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -124,6 +127,19 @@ func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor
 	if !created && (!canonical.ToolsetID.Valid || canonical.ToolsetID.UUID != toolset.ID) {
 		return nil, oops.E(oops.CodeConflict, nil, "hosted MCP identity belongs to another server")
 	}
+	if created {
+		// A legacy toolset whose address is taken stays legacy rather than failing its own save.
+		held, err := addressHeld(ctx, tx, toolset, !toolset.CustomDomainID.Valid || !dead[toolset.CustomDomainID.UUID])
+		if err != nil {
+			return nil, err
+		}
+		if held && requested != nil {
+			return nil, oops.E(oops.CodeConflict, ErrAddressInUse, "hosted MCP address is already in use; free it before configuring network access")
+		}
+		if held {
+			return nil, nil
+		}
+	}
 
 	mode := networkaccess.ModePublicOnly
 	if !created {
@@ -165,7 +181,7 @@ func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor
 			ToolVariationsGroupID: toolset.ToolVariationsGroupID, Visibility: wantVisibility, NetworkAccessMode: networkaccess.Storage(mode),
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeConflict, err, "create hosted MCP server")
+			return nil, createServerError(err)
 		}
 		if err := auditLogger.LogMcpServerCreate(ctx, tx, audit.LogMcpServerCreateEvent{
 			OrganizationID: toolset.OrganizationID, ProjectID: toolset.ProjectID, Actor: principal, ActorDisplayName: actor.Email,
@@ -238,6 +254,41 @@ func Sync(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor
 		return nil, err
 	}
 	return tombstone.RootDomainIDs(append(clearedRoots, moved...)), nil
+}
+
+// createServerError classifies a racing slug claim without swallowing the failed write.
+// The caller must still roll back the transaction; retain the database cause for diagnostics.
+func createServerError(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "mcp_servers_project_id_slug_key" {
+		return oops.E(oops.CodeConflict, errors.Join(ErrAddressInUse, err), "hosted MCP project server slug is already in use")
+	}
+	return oops.E(oops.CodeConflict, err, "create hosted MCP server")
+}
+
+// addressHeld reports whether another live endpoint or server already holds the toolset's address or server slug.
+func addressHeld(ctx context.Context, tx pgx.Tx, toolset toolsetsrepo.Toolset, addressed bool) (bool, error) {
+	if addressed {
+		endpointRepo := mcpendpointsrepo.New(tx)
+		if err := endpointRepo.LockSlugScope(ctx, mcpendpointsrepo.LockSlugScopeParams{CustomDomainID: toolset.CustomDomainID, Slug: toolset.McpSlug.String}); err != nil {
+			return false, oops.E(oops.CodeUnexpected, err, "lock hosted MCP address")
+		}
+		_, err := endpointRepo.GetMCPEndpointByCustomDomainAndSlug(ctx, mcpendpointsrepo.GetMCPEndpointByCustomDomainAndSlugParams{Slug: toolset.McpSlug.String, CustomDomainID: toolset.CustomDomainID})
+		switch {
+		case err == nil:
+			return true, nil
+		case !errors.Is(err, pgx.ErrNoRows):
+			return false, oops.E(oops.CodeUnexpected, err, "check hosted MCP address")
+		}
+	}
+	_, err := mcpserversrepo.New(tx).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: toolset.McpSlug, ProjectID: toolset.ProjectID})
+	switch {
+	case err == nil:
+		return true, nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return false, oops.E(oops.CodeUnexpected, err, "check hosted MCP server slug")
+	}
+	return false, nil
 }
 
 // syncEndpoint re-keys the single endpoint in place so client references keep its identity.
@@ -334,34 +385,48 @@ func retireEndpoints(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, 
 	return roots, nil
 }
 
-// Delete tombstones a deleted toolset's canonical wrapper; returned domains need a post-commit reconcile.
-func Delete(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset) ([]uuid.UUID, error) {
+// DeleteResult lists the post-commit work a hosted MCP deletion leaves.
+type DeleteResult struct {
+	// RootDomainIDs are custom domains whose root was cleared and need a reconcile.
+	RootDomainIDs []uuid.UUID
+
+	// DeletedRiskPolicies are lifecycle-bound policies whose results need cleanup.
+	DeletedRiskPolicies []uuid.UUID
+}
+
+// Delete tombstones a deleted toolset's canonical wrapper.
+func Delete(ctx context.Context, tx pgx.Tx, tracerProvider trace.TracerProvider, auditLogger *audit.Logger, actor Actor, toolset toolsetsrepo.Toolset) (DeleteResult, error) {
 	if auditLogger == nil || !tombstone.ActorPresent(ctx, actor.UserID) {
-		return nil, oops.E(oops.CodeUnauthorized, nil, "missing hosted MCP actor")
+		return DeleteResult{}, oops.E(oops.CodeUnauthorized, nil, "missing hosted MCP actor")
 	}
 	locked, err := tombstone.Lock(ctx, tx, toolset.OrganizationID, toolset.ProjectID, toolset.ID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
+		return DeleteResult{}, nil
 	}
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock hosted MCP server for deletion")
+		return DeleteResult{}, oops.E(oops.CodeUnexpected, err, "lock hosted MCP server for deletion")
 	}
 	if !locked.Server.ToolsetID.Valid || locked.Server.ToolsetID.UUID != toolset.ID {
-		return nil, oops.E(oops.CodeConflict, nil, "hosted MCP identity belongs to another server")
+		return DeleteResult{}, oops.E(oops.CodeConflict, nil, "hosted MCP identity belongs to another server")
 	}
-	if _, err := tombstone.Tombstone(ctx, tx, auditLogger, locked, tombstone.Input{
+	tombstoned, err := tombstone.Tombstone(ctx, tx, auditLogger, locked, tombstone.Input{
 		OrganizationID: toolset.OrganizationID, ProjectID: toolset.ProjectID, ActorUserID: actor.UserID, ActorEmail: actor.Email,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "delete hosted MCP server")
+		TracerProvider: tracerProvider,
+	})
+	if err != nil {
+		return DeleteResult{}, oops.E(oops.CodeUnexpected, err, "delete hosted MCP server")
 	}
 	if err := auditLogger.LogMcpServerDelete(ctx, tx, audit.LogMcpServerDeleteEvent{
 		OrganizationID: toolset.OrganizationID, ProjectID: toolset.ProjectID,
 		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, actor.UserID), ActorDisplayName: actor.Email,
 		McpServerURN: urn.NewMcpServer(toolset.ID), McpServerName: toolset.Name, McpServerSlug: toolset.McpSlug.String,
 	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "audit hosted MCP deletion")
+		return DeleteResult{}, oops.E(oops.CodeUnexpected, err, "audit hosted MCP deletion")
 	}
-	return tombstone.RootDomainIDs(locked.RootEndpoints), nil
+	return DeleteResult{
+		RootDomainIDs:       tombstone.RootDomainIDs(locked.RootEndpoints),
+		DeletedRiskPolicies: tombstoned.DeletedRiskPolicies,
+	}, nil
 }
 
 func isRoot(endpoint mcpendpointsrepo.McpEndpoint) bool {

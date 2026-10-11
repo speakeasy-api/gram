@@ -40,7 +40,6 @@ export {
 export type { AgentCredentialFields } from "./drafts/useCredentialDraft";
 
 export {
-  displayUrl,
   issuerDisplayName,
   useUserIdentityDraft,
 } from "./drafts/useIdentityDraft";
@@ -60,3 +59,5 @@ export { IssuerLink } from "./components/ProviderLink";
 export { UserIdentityRow } from "./components/ProviderRow";
 export { ScopeBadge } from "./components/ScopeBadge";
 export { ScopeMultiSelect } from "./components/ScopeMultiSelect";
+export { IssuerLogo } from "./components/IssuerLogo";
+export { ScopeList } from "./components/ScopeList";

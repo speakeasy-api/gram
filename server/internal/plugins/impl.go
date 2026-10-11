@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -1227,6 +1228,7 @@ func (s *Service) SetPluginAssignments(ctx context.Context, payload *gen.SetPlug
 		ProjectID:        *ac.ProjectID,
 		PluginID:         pluginID,
 		PrincipalURNs:    payload.PrincipalUrns,
+		InstallModes:     payload.InstallModes,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
 		ActorDisplayName: ac.Email,
 		ActorSlug:        nil,
@@ -3622,6 +3624,7 @@ func pluginAssignmentToGen(a repo.PluginAssignment) *gen.PluginAssignment {
 	return &gen.PluginAssignment{
 		ID:           a.ID.String(),
 		PrincipalUrn: a.PrincipalUrn,
+		InstallMode:  string(installmode.FromStored(a.InstallMode)),
 		CreatedAt:    formatTime(a.CreatedAt),
 	}
 }

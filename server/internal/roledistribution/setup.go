@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/assignments"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins/roledelivery"
 	"github.com/speakeasy-api/gram/server/internal/roledistribution/requests"
@@ -133,14 +134,17 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 		return false, fmt.Errorf("list role plugin assignments: %w", err)
 	}
 	current := make([]string, 0, len(existing))
+	modes := make(map[string]string, len(existing)+1)
 	alreadyAssigned := false
 	for _, a := range existing {
 		current = append(current, a.PrincipalUrn)
+		modes[a.PrincipalUrn] = string(installmode.FromStored(a.InstallMode))
 		alreadyAssigned = alreadyAssigned || a.PrincipalUrn == roleURN
 	}
 	desired := append([]string{}, current...)
 	if !alreadyAssigned {
 		desired = append(desired, roleURN)
+		modes[roleURN] = string(installmode.Default)
 	}
 	if !assignments.IsSubset(desired, current) {
 		if err := guard.CheckPluginAudience(ctx, tx, organizationID, projectID, pluginID, desired); err != nil {
@@ -159,7 +163,7 @@ func ProcessRoleDistributionSetup(ctx context.Context, db *pgxpool.Pool, publica
 		return false, fmt.Errorf("add role plugin assignment: %w", err)
 	}
 	if !alreadyAssigned {
-		if err := auditLogger.LogPluginAssignmentsSet(ctx, tx, audit.LogPluginAssignmentsSetEvent{OrganizationID: organizationID, ProjectID: projectID, Actor: actor, ActorDisplayName: &actorDisplayName, ActorSlug: nil, PluginID: pluginID, PluginName: plugin.Name, PluginSlug: plugin.Slug, PrincipalURNs: desired}); err != nil {
+		if err := auditLogger.LogPluginAssignmentsSet(ctx, tx, audit.LogPluginAssignmentsSetEvent{OrganizationID: organizationID, ProjectID: projectID, Actor: actor, ActorDisplayName: &actorDisplayName, ActorSlug: nil, PluginID: pluginID, PluginName: plugin.Name, PluginSlug: plugin.Slug, PrincipalURNs: desired, InstallModes: modes}); err != nil {
 			return false, fmt.Errorf("audit role plugin assignment: %w", err)
 		}
 	}

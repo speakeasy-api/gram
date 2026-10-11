@@ -1302,7 +1302,7 @@ func TestRiskMutationReceiptReplayConflictAndRollback(t *testing.T) {
 	calls := 0
 
 	result := CreateRiskPolicyReceiptResult{Project: RiskMutationReceiptProject{ID: project.ID.String(), Slug: project.Slug}, Policy: RiskPolicyReceiptSummary{ID: "11111111-1111-4111-8111-111111111111", PolicyType: "standard", Enabled: true, Action: "flag"}, Version: "opaque", MatchedExisting: false, ResultCategory: "created"}
-	first, err := store.Execute(ctx, principal, project, request, func(_ context.Context, _ pgx.Tx) (RiskMutationReceiptResult, error) {
+	first, err := store.Execute(ctx, principal, project, request, noReceiptCharge, func(_ context.Context, _ pgx.Tx) (RiskMutationReceiptResult, error) {
 		calls++
 		return result, nil
 	})
@@ -1312,7 +1312,7 @@ func TestRiskMutationReceiptReplayConflictAndRollback(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, string(expectedPayload), string(first.ResultPayload))
 
-	replayed, err := store.Execute(ctx, principal, project, request, func(context.Context, pgx.Tx) (RiskMutationReceiptResult, error) {
+	replayed, err := store.Execute(ctx, principal, project, request, noReceiptCharge, func(context.Context, pgx.Tx) (RiskMutationReceiptResult, error) {
 		calls++
 		return nil, errors.New("replay must not execute callback")
 	})
@@ -1323,11 +1323,11 @@ func TestRiskMutationReceiptReplayConflictAndRollback(t *testing.T) {
 
 	changed := request
 	changed.Input = map[string]any{"name": "different", "enabled": true}
-	_, err = store.Execute(ctx, principal, project, changed, func(context.Context, pgx.Tx) (RiskMutationReceiptResult, error) { return nil, nil })
+	_, err = store.Execute(ctx, principal, project, changed, noReceiptCharge, func(context.Context, pgx.Tx) (RiskMutationReceiptResult, error) { return nil, nil })
 	require.ErrorIs(t, err, ErrRiskMutationConflict)
 
 	failed := RiskMutationReceiptRequest{Operation: operationCreateRiskExclusion, IdempotencyKey: "rollback-key", Input: map[string]any{"match_type": "source", "match_value": "gitleaks"}}
-	_, err = store.Execute(ctx, principal, project, failed, func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
+	_, err = store.Execute(ctx, principal, project, failed, noReceiptCharge, func(ctx context.Context, tx pgx.Tx) (RiskMutationReceiptResult, error) {
 		if _, err := projectsrepo.New(tx).UploadProjectLogo(ctx, projectsrepo.UploadProjectLogoParams{LogoAssetID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, ProjectID: project.ID}); err != nil {
 			return nil, fmt.Errorf("set rollback sentinel project logo: %w", err)
 		}
