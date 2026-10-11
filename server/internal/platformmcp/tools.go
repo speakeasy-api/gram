@@ -209,7 +209,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	}, &mcp.ServerOptions{
 		Instructions: strings.Join([]string{
 			"# What this server is",
-			"Speakeasy's AI Control Plane lets an administrator put MCP servers and skills in front of the people in their organization. An MCP server reaches a person in stages: added to a project, its OAuth provider connected, confirmed working, put into a plugin — the bundle of MCP servers and skills you share with people — and published to them. Someone asking to \"set up Slack for support\" is asking for all five. Name the stage you are at in those words.",
+			"Speakeasy's AI Control Plane lets an administrator put MCP servers and skills in front of the people in their organization. An MCP server reaches a person in stages: added to a project, its OAuth provider connected, confirmed working, put into a plugin — the bundle of MCP servers and skills you share with people — and published to them. Someone asking to \"set up Slack for support\" is asking for all five. Name the stage you are at in those words. When the organisation has a Shadow MCP policy that blocks unreviewed servers, an organization administrator putting a server of the user's own into a plugin counts as the review: the server is recorded in Shadow MCP as approved for the people who receive it, and the result says so with a link to its page. Later distributions widen that approval to the new people; they never narrow it, and removing the server from a plugin does not revoke it. Tell the administrator that; narrowing or revoking the approval is done by deciding the server's Shadow MCP access here or from that page, and stopping the server reaching people is done by removing it from the plugin or turning it off. Making such a server public stays refused under the policy, because an approval never grants anonymous access.",
 			"# How to talk about it",
 			"You are speaking to an administrator who knows what MCP and OAuth are, but has never seen how this platform is built. Industry terms — MCP server, Streamable HTTP, OAuth, identity provider, dynamic client registration — need no explanation. This platform's own words do: the first time a reply uses plugin, registration, distribution, publication, readiness, catalogue, skill, or version, say what it means in the same sentence.",
 			"Never say these aloud: tool names, cursors, receipts, version tokens, idempotency keys, error codes, rollout or preview status, or how this server routes between its callers. Those are mechanism. Report what changed for the administrator's people and what to do next.",
@@ -282,7 +282,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		if postgresReader.reviewRequests == nil {
 			registerUnavailableReviewRequestTools(reg)
 		} else {
-			registerReviewRequestTools(reg, postgresReader.reviewRequests, postgresReader, postgresReader.reviewRequestBudget)
+			registerReviewRequestTools(reg, postgresReader.reviewRequests, postgresReader, postgresReader.reviewRequestBudget, postgresReader.reviewLinks)
 		}
 		registerRiskToolsWithMutations(reg, postgresReader.riskReads, postgresReader.riskAnalysisStatus, riskMutations)
 		registerRiskFindingsTool(reg, postgresReader.riskFindings)
@@ -596,7 +596,7 @@ func registerUnavailableReadinessTools(reg *Registrar) {
 }
 
 func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
-	if errors.Is(err, ErrDistributionBlockedPendingApproval) || errors.Is(err, ErrDistributionDisabled) || errors.Is(err, ErrDistributionAdmissionUnavailable) {
+	if errors.Is(err, ErrDistributionBlockedPendingApproval) || errors.Is(err, ErrDistributionAdmissionUnavailable) {
 		return distributionToolError(err)
 	}
 	var result operationBudgetResult

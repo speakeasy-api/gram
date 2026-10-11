@@ -479,7 +479,7 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		audit:                 nil,
 		mutationBudget:        OperationBudget{},
 		mutationReceipts:      nil,
-		distributionAdmission: admission.NewGuard(nil, nil),
+		distributionAdmission: admission.NewGuard(),
 		publication:           plugindelivery.PublicationRequests{Enabled: false},
 		publisher:             nil,
 		republishBudget:       OperationBudget{},
