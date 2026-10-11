@@ -213,7 +213,7 @@ func shadowMCPStandingMessage(standing *ShadowMCPStanding) string {
 	case shadowMCPStandingApproved:
 		// Not attributed to this write: an earlier decision may already have
 		// covered the audience, in which case nothing new was recorded.
-		return " This project has a Shadow MCP policy, and the server is approved under it for the people this plugin reaches; an administrator's distribution is what records that approval when none covers them yet. Narrow or revoke it with decide_shadow_mcp_access or from its Shadow MCP page."
+		return " This project has a Shadow MCP policy, and the server is approved under it for the people this plugin reaches; an administrator's distribution is what records that approval when none covers them yet. Narrow or revoke it by deciding the server's Shadow MCP access, or from its Shadow MCP page."
 	case DistributionAdmissionNotApplicable, "not_required":
 		return ""
 	case DistributionAdmissionEmptyAudience:

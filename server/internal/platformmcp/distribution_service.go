@@ -479,7 +479,8 @@ func (s *DistributionService) RepairPublication(ctx context.Context, principal P
 	if err := admission.LockProject(ctx, tx, target.ProjectID); err != nil {
 		return Distribution{}, fmt.Errorf("lock platform mcp publication repair admission: %w", err)
 	}
-	if _, err := s.requireDistributionAdmission(ctx, tx, q, principal, target, plugin.ID); err != nil {
+	remoteURL, err := s.requireDistributionAdmission(ctx, tx, q, principal, target, plugin.ID)
+	if err != nil {
 		return Distribution{}, err
 	}
 	// Publishing performs external I/O and must not hold a database transaction
@@ -492,7 +493,14 @@ func (s *DistributionService) RepairPublication(ctx context.Context, principal P
 	if err := tx.Commit(ctx); err != nil {
 		return Distribution{}, fmt.Errorf("commit platform mcp publication repair admission: %w", err)
 	}
-	return s.publishCommittedDistribution(ctx, principal, row, plugin.Name, "Repair Platform MCP "+plugin.Name+" plugin publication")
+	distribution, err := s.publishCommittedDistribution(ctx, principal, row, plugin.Name, "Repair Platform MCP "+plugin.Name+" plugin publication")
+	if err != nil {
+		return Distribution{}, err
+	}
+	// A repair that was admitted as an administrator's approval says so, like
+	// the distribution it repairs.
+	distribution.ShadowMCP = shadowMCPStanding(ctx, s.reads, s.links, principal, ResolvedProject{ID: target.ProjectID, Name: target.ProjectName, Slug: target.ProjectSlug}, remoteURL)
+	return distribution, nil
 }
 
 func (s *DistributionService) publishCommittedDistribution(ctx context.Context, principal Principal, row repo.PlatformMcpDistribution, pluginName, commitMessage string) (Distribution, error) {
