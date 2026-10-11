@@ -30,6 +30,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -124,6 +126,22 @@ func seedBlockedDirectRemoteDistribution(t *testing.T, ctx context.Context, ti *
 	})
 	require.NoError(t, err)
 	ti.service.WithDistributionAdmission(admission.NewGuard())
+}
+
+// seedBlockingShadowMCPPolicy gives the project an enabled Shadow MCP block
+// policy, which is what makes direct-remote admission enforce anything.
+func seedBlockingShadowMCPPolicy(t *testing.T, ctx context.Context, ti *testInstance) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	_, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
+		ID: uuid.New(), ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID,
+		Name: "Blocking Shadow MCP", PolicyType: "standard", Sources: []string{shadowmcp.SourceShadowMCP},
+		PresidioEntities: nil, AnalyzerConfig: nil, PromptInjectionRules: nil, DisabledRules: nil, CustomRuleIds: nil,
+		Enabled: true, Action: "block", AudienceType: "everyone", ShadowMcpDisposition: pgtype.Text{},
+		AutoName: false, UserMessage: pgtype.Text{}, Prompt: pgtype.Text{}, ModelConfig: nil, Score: pgtype.Float8{},
+	})
+	require.NoError(t, err)
 }
 
 func withExactAuthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...authz.Grant) context.Context {

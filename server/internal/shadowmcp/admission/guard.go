@@ -290,14 +290,23 @@ func (g *Guard) CheckMCPServerTarget(ctx context.Context, tx pgx.Tx, organizatio
 }
 
 // CheckPublicVisibility blocks public exposure of provenance-bound direct-remote
-// MCPs. Organisation audience approval does not grant anonymous access, so no
-// standing plugin approval can authorize this transition.
+// MCPs while the project has an enabled Shadow MCP block policy. Organisation
+// audience approval does not grant anonymous access, so no standing approval,
+// and no administrator's write, can authorize this transition; only a project
+// without a block policy is free to make it.
 func (g *Guard) CheckPublicVisibility(ctx context.Context, tx pgx.Tx, organizationID string, projectID, mcpServerID uuid.UUID) error {
 	_, scoped, err := directRemoteTarget(ctx, tx, organizationID, projectID, mcpServerID)
 	if err != nil {
 		return unavailable(err)
 	}
 	if !scoped {
+		return nil
+	}
+	blocking, err := blockPolicyEnabled(ctx, tx, organizationID, projectID)
+	if err != nil {
+		return unavailable(err)
+	}
+	if !blocking {
 		return nil
 	}
 	return ErrApprovalRequired

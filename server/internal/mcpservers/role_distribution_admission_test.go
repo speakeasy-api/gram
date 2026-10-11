@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
@@ -17,8 +16,6 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
-	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -38,14 +35,7 @@ func TestUpdateMcpServer_EnableRoleDistributionRequiresApproval(t *testing.T) {
 		OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID,
 	})
 	require.NoError(t, err)
-	_, err = riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
-		ID: uuid.New(), ProjectID: *ac.ProjectID, OrganizationID: ac.ActiveOrganizationID,
-		Name: "Blocking Shadow MCP", PolicyType: "standard", Sources: []string{shadowmcp.SourceShadowMCP},
-		PresidioEntities: nil, AnalyzerConfig: nil, PromptInjectionRules: nil, DisabledRules: nil, CustomRuleIds: nil,
-		Enabled: true, Action: "block", AudienceType: "everyone", ShadowMcpDisposition: pgtype.Text{},
-		AutoName: false, UserMessage: pgtype.Text{}, Prompt: pgtype.Text{}, ModelConfig: nil, Score: pgtype.Float8{},
-	})
-	require.NoError(t, err)
+	seedBlockingShadowMCPPolicy(t, ctx, ti)
 	now := conv.ToPGTimestamptz(time.Now())
 	role, err := accessrepo.New(ti.conn).UpsertOrganizationRole(ctx, accessrepo.UpsertOrganizationRoleParams{
 		OrganizationID: ac.ActiveOrganizationID, WorkosSlug: "approval-role", WorkosName: "Approval role",

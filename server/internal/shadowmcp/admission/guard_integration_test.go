@@ -106,6 +106,16 @@ func TestPrivateGatewayAudienceBlocksEveryone(t *testing.T) {
 	require.NoError(t, CheckGatewayNetworkMode(ctx, tx, fixture.orgID, fixture.projectID, gateway.ID, networkaccess.ModePublicOnly))
 }
 
+// Without a block policy there is nothing to enforce: a scoped direct-remote
+// server may go public, exactly as any other server may.
+func TestGuardPublicVisibilityIsFreeWithoutABlockPolicy(t *testing.T) {
+	t.Parallel()
+	fixture := newAdmissionFixture(t)
+	serverID, _ := seedAdmissionRemote(t, fixture)
+	tx := testenv.BeginTx(t, t.Context(), fixture.conn)
+	require.NoError(t, NewGuard().CheckPublicVisibility(t.Context(), tx, fixture.orgID, fixture.projectID, serverID))
+}
+
 func TestGuardPublicVisibilityCannotUseOrganisationApproval(t *testing.T) {
 	t.Parallel()
 	fixture := newAdmissionFixture(t)

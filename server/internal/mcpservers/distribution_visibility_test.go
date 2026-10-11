@@ -25,6 +25,7 @@ func TestUpdateMcpServer_PrivateDirectRemoteCannotBecomePublic(t *testing.T) {
 	})
 	require.NoError(t, err)
 	seedBlockedDirectRemoteDistribution(t, ctx, ti, uuid.MustParse(created.ID))
+	seedBlockingShadowMCPPolicy(t, ctx, ti)
 
 	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
 		ID: created.ID, RemoteMcpServerID: &remoteID, Visibility: types.McpServerVisibility("public"),
@@ -45,6 +46,7 @@ func TestUpdateMcpServer_DisabledDirectRemoteCannotBecomePublic(t *testing.T) {
 	require.True(t, ok)
 	created, remoteID := createDisabledRemoteServer(t, ctx, ti, *authCtx.ProjectID, "Disabled direct remote")
 	seedBlockedDirectRemoteDistribution(t, ctx, ti, uuid.MustParse(created.ID))
+	seedBlockingShadowMCPPolicy(t, ctx, ti)
 
 	_, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
 		ID: created.ID, RemoteMcpServerID: &remoteID, Visibility: types.McpServerVisibility("public"),
@@ -56,6 +58,23 @@ func TestUpdateMcpServer_DisabledDirectRemoteCannotBecomePublic(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "disabled", server.Visibility)
+}
+
+// Without a Shadow MCP block policy there is nothing to enforce, so a scoped
+// direct-remote server may go public like any other server.
+func TestUpdateMcpServer_DirectRemoteCanBecomePublicWithoutABlockPolicy(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	created, remoteID := createDisabledRemoteServer(t, ctx, ti, *authCtx.ProjectID, "Unpoliced direct remote")
+	seedBlockedDirectRemoteDistribution(t, ctx, ti, uuid.MustParse(created.ID))
+
+	updated, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		ID: created.ID, RemoteMcpServerID: &remoteID, Visibility: types.McpServerVisibility("public"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, types.McpServerVisibility("public"), updated.Visibility)
 }
 
 func TestUpdateMcpServer_PublicDirectRemoteCanNarrowVisibility(t *testing.T) {
