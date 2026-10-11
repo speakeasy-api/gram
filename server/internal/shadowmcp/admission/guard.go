@@ -47,10 +47,18 @@ func (e *ApprovalRequiredError) Unwrap() error { return ErrApprovalRequired }
 // made inside the caller's transaction from the same policy and decision rows
 // the runtime scanner reads, so no exposure write can bypass the policy the
 // dashboard enforces.
-type Guard struct{}
+//
+// One actor is not refused: an organization administrator. Their write is the
+// review the policy asks for, so when an approver is wired the guard records
+// the approval for the write's audience in the same transaction and lets the
+// write proceed. The server then appears in the Shadow MCP inventory as
+// approved for exactly the people who receive it.
+type Guard struct {
+	approver Approver
+}
 
 func NewGuard() *Guard {
-	return &Guard{}
+	return &Guard{approver: nil}
 }
 
 // CheckAttachment validates adding one MCP server to an exact existing plugin.
@@ -326,8 +334,32 @@ func (g *Guard) checkURL(ctx context.Context, tx pgx.Tx, organizationID string, 
 	if err != nil {
 		return unavailable(err)
 	}
-	if verdict.State == StateApprovalRequired {
+	if verdict.State != StateApprovalRequired {
+		return nil
+	}
+	actor := ActorFromContext(ctx)
+	if g.approver == nil || !actor.OrgAdmin {
 		return &ApprovalRequiredError{CanonicalURL: canonical.CanonicalURL}
+	}
+	if err := g.approver.ApproveDirectRemote(ctx, tx, ApproveDirectRemoteInput{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		CanonicalURL:   canonical.CanonicalURL,
+		PrincipalURNs:  append([]string(nil), desired...),
+		ActorUserID:    actor.UserID,
+		ActorEmail:     actor.Email,
+		Rationale:      "Approved by an organization administrator who shared this server with these people.",
+	}); err != nil {
+		return unavailable(fmt.Errorf("record administrator approval: %w", err))
+	}
+	// Read the decision back rather than trusting the write: the approval must
+	// cover the audience the way the runtime will evaluate it.
+	verdict, err = Check(ctx, tx, organizationID, projectID, canonical.CanonicalURL, desired)
+	if err != nil {
+		return unavailable(err)
+	}
+	if verdict.State == StateApprovalRequired {
+		return unavailable(errors.New("administrator approval did not cover the audience"))
 	}
 	return nil
 }

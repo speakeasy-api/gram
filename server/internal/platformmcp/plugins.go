@@ -454,7 +454,6 @@ type PluginsService struct {
 	mutationReceipts          *PluginAssignmentMutationReceiptStore
 	distributionAdmission     *admission.Guard
 	distributionAdmissionRead distributionAdmissionReader
-	reviews                   ShadowMCPReviewFiler
 
 	// publication and publisher request a plugin publish. republish_plugin
 	// uses both; create_plugin and rename_plugin signal through publisher

@@ -131,6 +131,7 @@ func (s *LifecycleVisibilityService) update(ctx context.Context, principal Princ
 	if err != nil {
 		return UpdateMCPVisibilityResult{}, err
 	}
+	ctx = administratorContext(ctx, principal)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return UpdateMCPVisibilityResult{}, fmt.Errorf("begin platform mcp visibility update: %w", err)

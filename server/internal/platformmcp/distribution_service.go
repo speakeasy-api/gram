@@ -57,11 +57,6 @@ type DistributionInput struct {
 	// ExpectedVersion is the distribution version the caller read before
 	// writing.
 	ExpectedVersion int64
-
-	// Justification is the optional reason recorded on a Shadow MCP review
-	// request when an enabled block policy refuses the distribution. Empty
-	// uses a generated note naming the server, plugin, and project.
-	Justification string
 }
 
 // Distribution is the bounded state used by management and MCP tool adapters.
@@ -83,6 +78,11 @@ type Distribution struct {
 	// Plugin is the name of the plugin the caller's target resolved to, echoed
 	// so a caller sees where its distribution landed rather than inferring it.
 	Plugin string
+
+	// ShadowMCP is the server's standing with the project's Shadow MCP policy
+	// after the write, for a user-supplied URL. Nil for reviewed catalogue
+	// servers and when no reader is wired.
+	ShadowMCP *ShadowMCPStanding
 }
 
 // ExistingPluginAttacher delegates attachment to the Plugins package. Keeping
@@ -113,7 +113,8 @@ type DistributionService struct {
 	publish   ProjectPublisher
 	now       func() time.Time
 	admission *admission.Guard
-	reviews   ShadowMCPReviewFiler
+	reads     distributionAdmissionReader
+	links     ShadowMCPReviewLinker
 }
 
 func NewDistributionService(db *pgxpool.Pool, auditLogger *audit.Logger, attach ExistingPluginAttacher, publish ProjectPublisher, plugins PluginTargetResolver) *DistributionService {
@@ -130,11 +131,12 @@ func (s *DistributionService) WithDistributionAdmission(guard *admission.Guard) 
 	return s
 }
 
-// WithShadowMCPReview lets a refused distribution file a review request on
-// the administrator's behalf instead of stopping at the refusal.
-func (s *DistributionService) WithShadowMCPReview(reviews ShadowMCPReviewFiler) *DistributionService {
+// WithShadowMCPStanding lets a committed distribution report where the server
+// now stands with the project's Shadow MCP policy, and where to see it.
+func (s *DistributionService) WithShadowMCPStanding(reads distributionAdmissionReader, links ShadowMCPReviewLinker) *DistributionService {
 	if s != nil {
-		s.reviews = reviews
+		s.reads = reads
+		s.links = links
 	}
 	return s
 }
@@ -182,6 +184,7 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 	if err != nil {
 		return Distribution{}, ErrDistributionInvalid
 	}
+	ctx = administratorContext(ctx, principal)
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -226,11 +229,9 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 	if err != nil {
 		return Distribution{}, err
 	}
-	if err := s.requireDistributionAdmission(ctx, tx, q, principal, target, plugin.ID); err != nil {
-		// Filing a review does its own I/O; release the locked write transaction
-		// first so nothing partial is held while the request is recorded.
-		_ = tx.Rollback(ctx)
-		return Distribution{}, s.reviewRefusal(ctx, principal, target, plugin.Name, input.Justification, err)
+	remoteURL, err := s.requireDistributionAdmission(ctx, tx, q, principal, target, plugin.ID)
+	if err != nil {
+		return Distribution{}, err
 	}
 
 	pluginQueries := pluginsrepo.New(tx)
@@ -291,13 +292,18 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 	if err := tx.Commit(ctx); err != nil {
 		return Distribution{}, fmt.Errorf("commit platform mcp distribution: %w", err)
 	}
-	return s.publishCommittedDistribution(ctx, principal, row, plugin.Name, "Distribute Platform MCP to "+plugin.Name+" plugin")
+	distribution, err := s.publishCommittedDistribution(ctx, principal, row, plugin.Name, "Distribute Platform MCP to "+plugin.Name+" plugin")
+	if err != nil {
+		return Distribution{}, err
+	}
+	distribution.ShadowMCP = shadowMCPStanding(ctx, s.reads, s.links, principal, ResolvedProject{ID: target.ProjectID, Name: target.ProjectName, Slug: target.ProjectSlug}, remoteURL)
+	return distribution, nil
 }
 
 // DistributeForOnboarding delegates to the same explicit-project distribution
 // path used by the dashboard. The active workflow supplies the registered MCP;
 // callers cannot target an arbitrary server or create a Default plugin.
-func (s *DistributionService) DistributeForOnboarding(ctx context.Context, principal Principal, projectSlug, targetPlugin, justification string) (Distribution, error) {
+func (s *DistributionService) DistributeForOnboarding(ctx context.Context, principal Principal, projectSlug, targetPlugin string) (Distribution, error) {
 	current, err := s.Current(ctx, principal, projectSlug, targetPlugin)
 	if err != nil {
 		return Distribution{}, err
@@ -306,7 +312,6 @@ func (s *DistributionService) DistributeForOnboarding(ctx context.Context, princ
 		ProjectSlug:     projectSlug,
 		Plugin:          targetPlugin,
 		ExpectedVersion: current.Version,
-		Justification:   justification,
 	})
 }
 
@@ -424,6 +429,7 @@ func (s *DistributionService) RepairPublication(ctx context.Context, principal P
 	if s == nil || s.db == nil || input.ProjectSlug == "" || input.ExpectedVersion <= 0 {
 		return Distribution{}, ErrDistributionInvalid
 	}
+	ctx = administratorContext(ctx, principal)
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return Distribution{}, fmt.Errorf("begin platform mcp publication repair admission: %w", err)
@@ -448,9 +454,8 @@ func (s *DistributionService) RepairPublication(ctx context.Context, principal P
 	if err := admission.LockProject(ctx, tx, target.ProjectID); err != nil {
 		return Distribution{}, fmt.Errorf("lock platform mcp publication repair admission: %w", err)
 	}
-	if err := s.requireDistributionAdmission(ctx, tx, q, principal, target, plugin.ID); err != nil {
-		_ = tx.Rollback(ctx)
-		return Distribution{}, s.reviewRefusal(ctx, principal, target, plugin.Name, input.Justification, err)
+	if _, err := s.requireDistributionAdmission(ctx, tx, q, principal, target, plugin.ID); err != nil {
+		return Distribution{}, err
 	}
 	// Publishing performs external I/O and must not hold a database transaction
 	// open. Release the admission snapshot immediately before the retry; every
@@ -505,51 +510,32 @@ func (s *DistributionService) onboardingTarget(ctx context.Context, q *repo.Quer
 // requireDistributionAdmission is the enforcement chokepoint for user-supplied
 // URLs. It runs before readiness because an open server can be fresh-ready
 // anonymously, which is insufficient to override an organization's enabled
-// Shadow MCP block policy. Reviewed catalogue registrations are unaffected.
-// A refusal wraps the guard's *admission.ApprovalRequiredError, which names
-// the refused URL, under ErrDistributionBlockedPendingApproval.
-func (s *DistributionService) requireDistributionAdmission(ctx context.Context, tx pgx.Tx, q *repo.Queries, principal Principal, target repo.GetPlatformMCPOnboardingDistributionTargetRow, pluginID uuid.UUID) error {
+// Shadow MCP block policy. Reviewed catalogue registrations are unaffected and
+// return an empty URL. An organization administrator is not refused: the guard
+// records their write as the approval for the plugin's audience. Anyone else
+// is refused under ErrDistributionBlockedPendingApproval, wrapping the guard's
+// *admission.ApprovalRequiredError that names the URL.
+func (s *DistributionService) requireDistributionAdmission(ctx context.Context, tx pgx.Tx, q *repo.Queries, principal Principal, target repo.GetPlatformMCPOnboardingDistributionTargetRow, pluginID uuid.UUID) (string, error) {
 	registration, err := lifecycleRegistration(ctx, q, principal, target.ProjectID, target.RegistrationID.UUID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrDistributionInvalid
+		return "", ErrDistributionInvalid
 	}
 	if err != nil {
-		return fmt.Errorf("resolve direct remote distribution registration: %w", err)
+		return "", fmt.Errorf("resolve direct remote distribution registration: %w", err)
 	}
 	if registration.CatalogProvider != directRemoteProviderKey {
-		return nil
+		return "", nil
 	}
 	if s.admission == nil || !target.McpServerID.Valid || registration.CatalogReference == "" {
-		return ErrDistributionAdmissionUnavailable
+		return "", ErrDistributionAdmissionUnavailable
 	}
 	if err := s.admission.CheckAttachment(ctx, tx, principal.OrganizationID, target.ProjectID, pluginID, target.McpServerID.UUID); err != nil {
 		if errors.Is(err, admission.ErrApprovalRequired) {
-			return fmt.Errorf("%w: %w", ErrDistributionBlockedPendingApproval, err)
+			return "", fmt.Errorf("%w: %w", ErrDistributionBlockedPendingApproval, err)
 		}
-		return fmt.Errorf("%w: %w", ErrDistributionAdmissionUnavailable, err)
+		return "", fmt.Errorf("%w: %w", ErrDistributionAdmissionUnavailable, err)
 	}
-	return nil
-}
-
-// reviewRefusal turns a Shadow MCP refusal into a filed review request when a
-// filer is wired, and otherwise passes the refusal through unchanged. Any
-// other error is returned as is. It must run after the write transaction is
-// released: filing does its own database and evidence I/O.
-func (s *DistributionService) reviewRefusal(ctx context.Context, principal Principal, target repo.GetPlatformMCPOnboardingDistributionTargetRow, pluginName, justification string, err error) error {
-	var refused *admission.ApprovalRequiredError
-	if !errors.As(err, &refused) {
-		return err
-	}
-	if s.reviews == nil || refused.CanonicalURL == "" {
-		return ErrDistributionBlockedPendingApproval
-	}
-	project := ResolvedProject{ID: target.ProjectID, Name: target.ProjectName, Slug: target.ProjectSlug}
-	activity := "adding " + refused.CanonicalURL + " to the " + pluginName + " plugin in project " + target.ProjectSlug
-	review, fileErr := s.reviews.FileShadowMCPReview(ctx, principal, project, refused.CanonicalURL, activity, justification)
-	if fileErr != nil {
-		return fmt.Errorf("%w: file Shadow MCP review: %w", ErrDistributionBlockedPendingApproval, fileErr)
-	}
-	return &ShadowMCPReviewRequiredError{Review: review, Cause: err}
+	return registration.CatalogReference, nil
 }
 
 func (s *DistributionService) requireFreshReadiness(ctx context.Context, q *repo.Queries, principal Principal, projectID, registrationID, connectionID, generation uuid.UUID) error {
@@ -658,6 +644,24 @@ func distributionAuthContext(principal Principal) *contextvalues.AuthContext {
 		UserID:               principal.UserID,
 		Email:                nil,
 	}
+}
+
+// administratorContext gives the admission guard the acting user. A request
+// that already carries a session auth context (the dashboard's management API)
+// keeps it, so a non-administrator there stays one. A call from the external
+// Platform MCP carries none, and every write tool on that surface is
+// organization-administrator authorized, so the principal is recorded as the
+// administrator it is. A managed assistant is not an administrator.
+func administratorContext(ctx context.Context, principal Principal) context.Context {
+	if _, ok := contextvalues.GetAuthContext(ctx); ok {
+		return ctx
+	}
+	if principal.Surface != SurfacePlatformMCP || principal.UserID == "" {
+		return ctx
+	}
+	authCtx := distributionAuthContext(principal)
+	authCtx.IsAdmin = true
+	return contextvalues.SetAuthContext(ctx, authCtx)
 }
 
 func distributionDisplayName(target repo.GetPlatformMCPOnboardingDistributionTargetRow) string {

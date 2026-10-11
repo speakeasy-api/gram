@@ -1,11 +1,15 @@
 package admission
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -196,4 +200,93 @@ func TestGuardProspectiveMissingDefaultSeedsOnlyDefaultProject(t *testing.T) {
 	seedBlockingPolicy(t, fixture)
 	tx = testenv.BeginTx(t, t.Context(), fixture.conn)
 	require.NoError(t, guard.CheckProspectiveDefaultAttachment(t.Context(), tx, fixture.orgID, fixture.projectID, serverID))
+}
+
+// recordingApprover stands in for the MCP approval service: it records what
+// the guard asked for and seeds the decision the real approver would write.
+type recordingApprover struct {
+	fixture admissionFixture
+	t       *testing.T
+	inputs  []ApproveDirectRemoteInput
+}
+
+func (a *recordingApprover) ApproveDirectRemote(_ context.Context, _ pgx.Tx, input ApproveDirectRemoteInput) error {
+	a.inputs = append(a.inputs, input)
+	seedDecision(a.t, a.fixture, input.CanonicalURL, "approved", input.PrincipalURNs)
+	return nil
+}
+
+func adminContext(ctx context.Context, userID string, admin bool) context.Context {
+	return contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{UserID: userID, IsAdmin: admin})
+}
+
+// An organization administrator's write is the approval: the guard records it
+// for the write's audience and admits the write. Anyone else is still refused,
+// and so is an administrator when no approver is wired.
+func TestGuardRecordsAnAdministratorsWriteAsTheApproval(t *testing.T) {
+	t.Parallel()
+	fixture := newAdmissionFixture(t)
+	serverID, _ := seedAdmissionRemote(t, fixture)
+	seedBlockingPolicy(t, fixture)
+	plugin, err := pluginsrepo.New(fixture.conn).CreatePlugin(t.Context(), pluginsrepo.CreatePluginParams{
+		OrganizationID: fixture.orgID, ProjectID: fixture.projectID, Name: "Support", Slug: "support", Description: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	_, err = pluginsrepo.New(fixture.conn).AddPluginAssignment(t.Context(), pluginsrepo.AddPluginAssignmentParams{
+		OrganizationID: fixture.orgID, PluginID: plugin.ID, PrincipalUrn: "role:developers",
+	})
+	require.NoError(t, err)
+
+	// A non-administrator, and an administrator without an approver, are refused.
+	tx := testenv.BeginTx(t, t.Context(), fixture.conn)
+	require.ErrorIs(t, NewGuard().CheckAttachment(adminContext(t.Context(), "member", false), tx, fixture.orgID, fixture.projectID, plugin.ID, serverID), ErrApprovalRequired)
+	require.ErrorIs(t, NewGuard().CheckAttachment(adminContext(t.Context(), "admin", true), tx, fixture.orgID, fixture.projectID, plugin.ID, serverID), ErrApprovalRequired)
+	approver := &recordingApprover{fixture: fixture, t: t}
+	require.ErrorIs(t, NewGuard().WithApprover(approver).CheckAttachment(adminContext(t.Context(), "member", false), tx, fixture.orgID, fixture.projectID, plugin.ID, serverID), ErrApprovalRequired)
+	require.ErrorIs(t, NewGuard().WithApprover(approver).CheckAttachment(t.Context(), tx, fixture.orgID, fixture.projectID, plugin.ID, serverID), ErrApprovalRequired, "no actor in context is not an administrator")
+	require.Empty(t, approver.inputs)
+	require.NoError(t, tx.Rollback(t.Context()))
+
+	// An administrator is admitted, and the approval names the audience.
+	tx = testenv.BeginTx(t, t.Context(), fixture.conn)
+	require.NoError(t, NewGuard().WithApprover(approver).CheckAttachment(adminContext(t.Context(), "admin", true), tx, fixture.orgID, fixture.projectID, plugin.ID, serverID))
+	require.NoError(t, tx.Commit(t.Context()))
+	require.Len(t, approver.inputs, 1)
+	require.Equal(t, "https://mcp.example.test/server", approver.inputs[0].CanonicalURL)
+	require.Equal(t, []string{"role:developers"}, approver.inputs[0].PrincipalURNs)
+	require.Equal(t, "admin", approver.inputs[0].ActorUserID)
+	require.Equal(t, fixture.projectID, approver.inputs[0].ProjectID)
+
+	// The approval is standing: a later write by anyone is covered.
+	tx = testenv.BeginTx(t, t.Context(), fixture.conn)
+	require.NoError(t, NewGuard().CheckAttachment(adminContext(t.Context(), "member", false), tx, fixture.orgID, fixture.projectID, plugin.ID, serverID))
+	require.NoError(t, tx.Rollback(t.Context()))
+}
+
+// An approver that does not actually cover the audience must not let the
+// write through on trust.
+func TestGuardRefusesWhenTheRecordedApprovalDoesNotCoverTheAudience(t *testing.T) {
+	t.Parallel()
+	fixture := newAdmissionFixture(t)
+	serverID, _ := seedAdmissionRemote(t, fixture)
+	seedBlockingPolicy(t, fixture)
+	plugin, err := pluginsrepo.New(fixture.conn).CreatePlugin(t.Context(), pluginsrepo.CreatePluginParams{
+		OrganizationID: fixture.orgID, ProjectID: fixture.projectID, Name: "Ops", Slug: "ops", Description: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	_, err = pluginsrepo.New(fixture.conn).AddPluginAssignment(t.Context(), pluginsrepo.AddPluginAssignmentParams{
+		OrganizationID: fixture.orgID, PluginID: plugin.ID, PrincipalUrn: "role:operators",
+	})
+	require.NoError(t, err)
+	tx := testenv.BeginTx(t, t.Context(), fixture.conn)
+	noop := approverFunc(func(context.Context, pgx.Tx, ApproveDirectRemoteInput) error { return nil })
+	err = NewGuard().WithApprover(noop).CheckAttachment(adminContext(t.Context(), "admin", true), tx, fixture.orgID, fixture.projectID, plugin.ID, serverID)
+	require.ErrorIs(t, err, ErrUnavailable)
+	require.NotErrorIs(t, err, ErrApprovalRequired)
+}
+
+type approverFunc func(context.Context, pgx.Tx, ApproveDirectRemoteInput) error
+
+func (f approverFunc) ApproveDirectRemote(ctx context.Context, tx pgx.Tx, input ApproveDirectRemoteInput) error {
+	return f(ctx, tx, input)
 }

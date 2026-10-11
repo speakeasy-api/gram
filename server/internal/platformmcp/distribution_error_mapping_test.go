@@ -22,7 +22,6 @@ func TestLifecycleToolRetainsDistributionErrorCodes(t *testing.T) {
 		code  string
 	}{
 		{cause: ErrDistributionBlockedPendingApproval, code: "approval_required"},
-		{cause: ErrShadowMCPReviewRequired, code: "shadow_mcp_review_required"},
 		{cause: ErrDistributionAdmissionUnavailable, code: "distribution_unavailable"},
 	} {
 		result, ok := operationBudgetToolResult(fmt.Errorf("enable admission: %w", test.cause))

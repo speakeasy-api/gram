@@ -12,9 +12,8 @@ import (
 )
 
 type pluginRefusalResult struct {
-	Code    string                     `json:"code"`
-	Message string                     `json:"message"`
-	Review  *ShadowMCPReviewToolOutput `json:"review,omitempty"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }
 
 // Plugin reads serve both audiences: the managed assistant resolves a plugin by
@@ -265,10 +264,7 @@ func pluginToolResult(err error) (*mcp.CallToolResult, bool) {
 		result = pluginRefusalResult{Code: "invalid_request", Message: "That page marker does not belong to this project. Start the list again from the beginning."}
 	default:
 		if mutation, ok := errors.AsType[*PluginAssignmentMutationError](err); ok {
-			result = pluginRefusalResult{Code: mutation.Code, Message: mutation.Message, Review: nil}
-			if filed, ok := errors.AsType[*shadowMCPReviewFiledError](err); ok {
-				result.Review = &filed.review
-			}
+			result = pluginRefusalResult{Code: mutation.Code, Message: mutation.Message}
 			break
 		}
 		if budgetResult, ok := operationBudgetToolResult(err); ok {

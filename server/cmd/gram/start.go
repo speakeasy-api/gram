@@ -1794,6 +1794,10 @@ func newStartCommand() *cli.Command {
 				analysisstatus.SignalCooldown,
 				logger,
 			)
+			// An organization administrator's plugin write is the review a Shadow
+			// MCP block policy asks for; the guard records it through the approval
+			// service so the server shows in the inventory as approved.
+			distributionAdmission.WithApprover(mcpApprovalService)
 			// Without Temporal there is no coordinator to describe, so Platform MCP
 			// serves get_risk_analysis_status as its stub instead of a live service
 			// that would fail on every call.
