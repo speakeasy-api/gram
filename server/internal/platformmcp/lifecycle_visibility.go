@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -82,13 +83,26 @@ type LifecycleVisibilityService struct {
 	key       []byte
 	now       func() time.Time
 	admission *admission.Guard
+	// authorization decides whether the acting user is an organization
+	// administrator, whose re-enabling is recorded as the Shadow MCP approval.
+	authorization *authz.Engine
+}
+
+// WithAdministratorAuthorization lets an organization administrator's
+// re-enabling of a server added by URL stand as the Shadow MCP approval for
+// the audiences it reaches again.
+func (s *LifecycleVisibilityService) WithAdministratorAuthorization(engine *authz.Engine) *LifecycleVisibilityService {
+	if s != nil {
+		s.authorization = engine
+	}
+	return s
 }
 
 func NewLifecycleVisibilityService(db *pgxpool.Pool, auditLogger *audit.Logger, locker LifecycleVisibilityLocker, updater LifecycleVisibilityUpdater, publisher ProjectPublisher, reconcile func(context.Context, []uuid.UUID) error, readiness *ReadinessService, keyMaterial string) (*LifecycleVisibilityService, error) {
 	if db == nil || auditLogger == nil || locker == nil || updater == nil || reconcile == nil || readiness == nil || keyMaterial == "" {
 		return nil, ErrLifecycleVisibilityInvalid
 	}
-	return &LifecycleVisibilityService{db: db, audit: auditLogger, locker: locker, updater: updater, publisher: publisher, reconcile: reconcile, readiness: readiness, key: lifecycleMetadataVersionKey(keyMaterial), now: time.Now, admission: admission.NewGuard()}, nil
+	return &LifecycleVisibilityService{db: db, audit: auditLogger, locker: locker, updater: updater, publisher: publisher, reconcile: reconcile, readiness: readiness, key: lifecycleMetadataVersionKey(keyMaterial), now: time.Now, admission: admission.NewGuard(), authorization: nil}, nil
 }
 
 func (s *LifecycleVisibilityService) WithDistributionAdmission(guard *admission.Guard) *LifecycleVisibilityService {
@@ -131,7 +145,10 @@ func (s *LifecycleVisibilityService) update(ctx context.Context, principal Princ
 	if err != nil {
 		return UpdateMCPVisibilityResult{}, err
 	}
-	ctx = administratorContext(ctx, principal)
+	ctx, err = admission.AdministratorWriteContext(ctx, s.authorization, principal.OrganizationID)
+	if err != nil {
+		return UpdateMCPVisibilityResult{}, fmt.Errorf("%w: %w", ErrDistributionAdmissionUnavailable, err)
+	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return UpdateMCPVisibilityResult{}, fmt.Errorf("begin platform mcp visibility update: %w", err)

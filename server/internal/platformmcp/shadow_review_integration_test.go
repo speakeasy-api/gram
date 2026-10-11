@@ -93,14 +93,29 @@ func newShadowApprovalDistribution(t *testing.T, conn *pgxpool.Pool, suffix stri
 	redisClient, err := platformMCPInfra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 	sessions := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("shadow-approval-"+suffix), billing.NewStubClient(logger, tracerProvider))
-	core := mcpapproval.NewService(logger, tracerProvider, conn, sessions, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, nil), new(feature.InMemory), audit.NewLogger(), nil, nil)
+	engine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, nil)
+	core := mcpapproval.NewService(logger, tracerProvider, conn, sessions, engine, new(feature.InMemory), audit.NewLogger(), nil, nil)
 	dashboard, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
 	organizations := NewPostgresOrganizationSlugResolver(conn)
 	service := NewDistributionService(conn, nil, testExistingPluginAttacher(), func(context.Context, uuid.UUID, string, string) error { return nil }, testPluginTargets(conn)).
 		WithDistributionAdmission(admission.NewGuard().WithApprover(core)).
-		WithShadowMCPStanding(NewShadowDistributionReadService(logger, conn, organizations), NewShadowMCPReviewLinkService(dashboard, organizations))
+		WithShadowMCPStanding(NewShadowDistributionReadService(logger, conn), NewShadowMCPReviewLinkService(dashboard, organizations)).
+		WithAdministratorAuthorization(engine)
 	return service, core
+}
+
+// signedInAs is the request context a Platform MCP or dashboard call arrives
+// with: the acting user, enforced authorization, and exactly the grants given.
+// Being an organization administrator is a grant, not a property of the
+// surface or the principal.
+func signedInAs(ctx context.Context, principal Principal, admin bool) context.Context {
+	sessionID := "session-" + principal.UserID
+	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, SessionID: &sessionID})
+	if admin {
+		return authztest.WithAdminGrants(ctx)
+	}
+	return authz.GrantsToContext(ctx, []authz.Grant{})
 }
 
 // An organization administrator distributing a server added by URL is the
@@ -122,9 +137,12 @@ func TestDistributionByAnAdministratorIsRecordedAsTheShadowMCPApproval(t *testin
 	require.True(t, ok)
 	service, core := newShadowApprovalDistribution(t, conn, "admin")
 
-	// A request that arrives with a non-administrator session keeps being refused.
-	memberCtx := contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, IsAdmin: false})
-	_, err = service.Distribute(memberCtx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: plugin.Slug, ExpectedVersion: 0})
+	// A request without an acting user, and one from a signed-in member who is
+	// not an organization administrator, keep being refused: the Platform MCP
+	// surface alone proves nothing.
+	_, err = service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: plugin.Slug, ExpectedVersion: 0})
+	require.ErrorIs(t, err, ErrDistributionBlockedPendingApproval)
+	_, err = service.Distribute(signedInAs(ctx, principal, false), principal, DistributionInput{ProjectSlug: project.Slug, Plugin: plugin.Slug, ExpectedVersion: 0})
 	require.ErrorIs(t, err, ErrDistributionBlockedPendingApproval)
 	servers, err := pluginsrepo.New(conn).ListPluginServers(ctx, plugin.ID)
 	require.NoError(t, err)
@@ -132,8 +150,9 @@ func TestDistributionByAnAdministratorIsRecordedAsTheShadowMCPApproval(t *testin
 	_, err = core.ResolveDecisionTarget(ctx, principal.OrganizationID, project.ID, "server_url", canonical.CanonicalURL)
 	require.Error(t, err, "a refused write records nothing in Shadow MCP")
 
-	// The Platform MCP principal is an organization administrator: the write is admitted and recorded as the approval.
-	attached, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: plugin.Slug, ExpectedVersion: 0})
+	// The acting user holds org:admin: the write is admitted and recorded as the approval.
+	adminCtx := signedInAs(ctx, principal, true)
+	attached, err := service.Distribute(adminCtx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: plugin.Slug, ExpectedVersion: 0})
 	require.NoError(t, err)
 	require.True(t, attached.AttachmentLive)
 	require.NotNil(t, attached.ShadowMCP)
@@ -156,10 +175,13 @@ func TestDistributionByAnAdministratorIsRecordedAsTheShadowMCPApproval(t *testin
 	require.NoError(t, err, "the administrator is the entry's requester")
 	require.Equal(t, canonical.CanonicalURL, requester.TargetRaw)
 
-	// Distributing again is covered by the standing approval and records nothing new.
-	again, err := service.Distribute(ctx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: plugin.Slug, ExpectedVersion: attached.Version})
+	// Distributing again is covered by the standing approval and records
+	// nothing new, and the replay reports the same standing as the first write.
+	again, err := service.Distribute(adminCtx, principal, DistributionInput{ProjectSlug: project.Slug, Plugin: plugin.Slug, ExpectedVersion: attached.Version})
 	require.NoError(t, err)
 	require.True(t, again.AttachmentLive)
+	require.NotNil(t, again.ShadowMCP, "a replay reports the standing too")
+	require.Equal(t, shadowMCPStandingApproved, again.ShadowMCP.State)
 	decisions, err = approvalrepo.New(conn).ListDecisionsForApprovalRequest(ctx, approvalrepo.ListDecisionsForApprovalRequestParams{McpApprovalRequestID: requestID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Len(t, decisions, 1)

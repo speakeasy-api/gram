@@ -925,7 +925,11 @@ func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCt
 		return false, false, nil
 	}
 
-	if err := s.distributionAdmission.CheckProspectiveDefaultAttachment(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, server.ID); err != nil {
+	admissionCtx, err := admission.AdministratorWriteContext(ctx, s.authz, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return false, false, oops.E(oops.CodeUnavailable, err, "distribution approval could not be verified safely").LogError(ctx, s.logger)
+	}
+	if err := s.distributionAdmission.CheckProspectiveDefaultAttachment(admissionCtx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, server.ID); err != nil {
 		if errors.Is(err, admission.ErrApprovalRequired) {
 			return false, false, oops.E(oops.CodeConflict, err, "direct-remote distribution is not admitted")
 		}

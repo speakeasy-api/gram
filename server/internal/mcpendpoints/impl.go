@@ -242,7 +242,11 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	// or marketplace publishing; that flow is exclusive to generic MCP servers.
 	attached, pluginCreated := false, false
 	if mcpServerID.Valid && mcpServer.Visibility != mcpservers.VisibilityDisabled {
-		if err := s.distributionAdmission.CheckProspectiveDefaultAttachment(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServerID.UUID); err != nil {
+		admissionCtx, err := admission.AdministratorWriteContext(ctx, s.authz, authCtx.ActiveOrganizationID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnavailable, err, "distribution approval could not be verified safely").LogError(ctx, logger)
+		}
+		if err := s.distributionAdmission.CheckProspectiveDefaultAttachment(admissionCtx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServerID.UUID); err != nil {
 			if errors.Is(err, admission.ErrApprovalRequired) {
 				return nil, oops.E(oops.CodeConflict, err, "direct-remote distribution is not admitted")
 			}

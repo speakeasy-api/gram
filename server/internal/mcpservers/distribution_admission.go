@@ -26,6 +26,12 @@ func (s *Service) checkDistributionAdmission(ctx context.Context, tx pgx.Tx, org
 		}
 		return err
 	}
+	// This is a write: an organization administrator's own change is recorded
+	// as the Shadow MCP approval it stands for.
+	ctx, err := admission.AdministratorWriteContext(ctx, s.authz, organizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnavailable, err, "distribution approval could not be verified safely").LogError(ctx, s.logger)
+	}
 	if err := s.distributionAdmission.CheckMCPServerTarget(ctx, tx, organizationID, projectID, serverID, proposedURL, targetChange); err != nil {
 		if errors.Is(err, admission.ErrApprovalRequired) {
 			return oops.E(oops.CodeConflict, err, "direct-remote distribution is not admitted")

@@ -852,11 +852,16 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 				displayName = gateway.Name
 			}
 		}
-		var admissionErr error
+		// Adding a server to a plugin is a write: an organization administrator's
+		// own addition is recorded as the Shadow MCP approval it stands for.
+		admissionCtx, admissionErr := admission.AdministratorWriteContext(ctx, s.authz, ac.ActiveOrganizationID)
+		if admissionErr != nil {
+			return nil, oops.E(oops.CodeUnavailable, admissionErr, "distribution approval could not be verified safely").LogError(ctx, s.logger)
+		}
 		if backend.metaMcpServerID.Valid {
-			admissionErr = s.distributionAdmission.CheckGatewayAttachment(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, pluginID, backend.metaMcpServerID.UUID)
+			admissionErr = s.distributionAdmission.CheckGatewayAttachment(admissionCtx, tx, ac.ActiveOrganizationID, *ac.ProjectID, pluginID, backend.metaMcpServerID.UUID)
 		} else {
-			admissionErr = s.distributionAdmission.CheckAttachment(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, pluginID, backend.mcpServerID.UUID)
+			admissionErr = s.distributionAdmission.CheckAttachment(admissionCtx, tx, ac.ActiveOrganizationID, *ac.ProjectID, pluginID, backend.mcpServerID.UUID)
 		}
 		if err := admissionErr; err != nil {
 			if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrPrivateGatewayAudience) || errors.Is(err, admission.ErrUnavailable) {

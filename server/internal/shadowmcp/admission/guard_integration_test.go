@@ -9,6 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -220,14 +222,22 @@ type recordingApprover struct {
 	inputs  []ApproveDirectRemoteInput
 }
 
-func (a *recordingApprover) ApproveDirectRemote(_ context.Context, _ pgx.Tx, input ApproveDirectRemoteInput) error {
+func (a *recordingApprover) ApproveDirectRemote(_ context.Context, tx pgx.Tx, input ApproveDirectRemoteInput) error {
 	a.inputs = append(a.inputs, input)
-	seedDecision(a.t, a.fixture, input.CanonicalURL, "approved", input.PrincipalURNs)
+	// Through the caller's transaction, as the real approver does: the approval
+	// must roll back with the write it was recorded for.
+	seedDecisionOn(a.t, tx, a.fixture, input.CanonicalURL, "approved", input.PrincipalURNs)
 	return nil
 }
 
+// adminContext is a signed-in user: marked as an organization administrator
+// the way a write path marks one, or a plain member with no marker.
 func adminContext(ctx context.Context, userID string, admin bool) context.Context {
-	return contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{UserID: userID, IsAdmin: admin})
+	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{UserID: userID})
+	if admin {
+		return WithAdministrator(ctx, userID, nil)
+	}
+	return ctx
 }
 
 // An organization administrator's write is the approval: the guard records it
@@ -255,6 +265,16 @@ func TestGuardRecordsAnAdministratorsWriteAsTheApproval(t *testing.T) {
 	require.ErrorIs(t, NewGuard().WithApprover(approver).CheckAttachment(adminContext(t.Context(), "member", false), tx, fixture.orgID, fixture.projectID, plugin.ID, serverID), ErrApprovalRequired)
 	require.ErrorIs(t, NewGuard().WithApprover(approver).CheckAttachment(t.Context(), tx, fixture.orgID, fixture.projectID, plugin.ID, serverID), ErrApprovalRequired, "no actor in context is not an administrator")
 	require.Empty(t, approver.inputs)
+	require.NoError(t, tx.Rollback(t.Context()))
+
+	// An administrator's write that rolls back takes its approval with it.
+	tx = testenv.BeginTx(t, t.Context(), fixture.conn)
+	require.NoError(t, NewGuard().WithApprover(approver).CheckAttachment(adminContext(t.Context(), "admin", true), tx, fixture.orgID, fixture.projectID, plugin.ID, serverID))
+	require.NoError(t, tx.Rollback(t.Context()))
+	require.Len(t, approver.inputs, 1)
+	approver.inputs = nil
+	tx = testenv.BeginTx(t, t.Context(), fixture.conn)
+	require.ErrorIs(t, NewGuard().CheckAttachment(adminContext(t.Context(), "member", false), tx, fixture.orgID, fixture.projectID, plugin.ID, serverID), ErrApprovalRequired, "a rolled-back write leaves no approval behind")
 	require.NoError(t, tx.Rollback(t.Context()))
 
 	// An administrator is admitted, and the approval names the audience.
@@ -299,4 +319,41 @@ type approverFunc func(context.Context, pgx.Tx, ApproveDirectRemoteInput) error
 
 func (f approverFunc) ApproveDirectRemote(ctx context.Context, tx pgx.Tx, input ApproveDirectRemoteInput) error {
 	return f(ctx, tx, input)
+}
+
+// Only the authorization engine decides who is an organization administrator:
+// a signed-in member, a user acting for another organization, and a request
+// with no acting user are all left unmarked.
+func TestAdministratorWriteContextMarksOnlyOrganizationAdministrators(t *testing.T) {
+	t.Parallel()
+	fixture := newAdmissionFixture(t)
+	engine := authz.NewEngine(testenv.NewLogger(t), fixture.conn, authztest.ChallengeLoggingAlwaysDisabled, nil)
+	sessionID := "session"
+	email := "admin@example.test"
+	signedIn := func(organizationID string) context.Context {
+		return contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{UserID: "user-1", ActiveOrganizationID: organizationID, SessionID: &sessionID, Email: &email})
+	}
+
+	ctx, err := AdministratorWriteContext(authztest.WithAdminGrants(signedIn(fixture.orgID)), engine, fixture.orgID)
+	require.NoError(t, err)
+	actor := ActorFromContext(ctx)
+	require.True(t, actor.OrgAdmin)
+	require.Equal(t, "user-1", actor.UserID)
+	require.Equal(t, &email, actor.Email)
+
+	ctx, err = AdministratorWriteContext(authztest.WithExactGrants(t, signedIn(fixture.orgID)), engine, fixture.orgID)
+	require.NoError(t, err)
+	require.False(t, ActorFromContext(ctx).OrgAdmin, "a member with no org:admin grant is not an administrator")
+
+	ctx, err = AdministratorWriteContext(authztest.WithAdminGrants(signedIn("other-org")), engine, fixture.orgID)
+	require.NoError(t, err)
+	require.False(t, ActorFromContext(ctx).OrgAdmin, "an administrator of another organization is not one here")
+
+	ctx, err = AdministratorWriteContext(t.Context(), engine, fixture.orgID)
+	require.NoError(t, err)
+	require.False(t, ActorFromContext(ctx).OrgAdmin, "no acting user, no administrator")
+
+	ctx, err = AdministratorWriteContext(authztest.WithAdminGrants(signedIn(fixture.orgID)), nil, fixture.orgID)
+	require.NoError(t, err)
+	require.False(t, ActorFromContext(ctx).OrgAdmin, "no engine, no administrator")
 }

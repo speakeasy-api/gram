@@ -96,7 +96,19 @@ func (s *Service) ApproveDirectRemote(ctx context.Context, tx pgx.Tx, input shad
 	})
 	switch {
 	case err == nil && standing.Decision == decisionApproved:
-		granted = append(granted, standing.GrantedPrincipalUrns...)
+		// A principal approved earlier may since have left the organization or
+		// been deleted; the decision write would reject it as new input, which
+		// must not block an unrelated administrator's write. Carry forward
+		// only what still resolves.
+		for _, principalURN := range standing.GrantedPrincipalUrns {
+			resolves, err := principalResolves(ctx, tx, input.OrganizationID, principalURN)
+			if err != nil {
+				return err
+			}
+			if resolves {
+				granted = append(granted, principalURN)
+			}
+		}
 	case err != nil && !errors.Is(err, pgx.ErrNoRows):
 		return fmt.Errorf("read standing decision for administrator approval: %w", err)
 	}
@@ -127,4 +139,21 @@ func (s *Service) ApproveDirectRemote(ctx context.Context, tx pgx.Tx, input shad
 		return fmt.Errorf("record administrator decision: %w", err)
 	}
 	return nil
+}
+
+// principalResolves reports whether a previously approved principal still
+// exists in the organization. A malformed or vanished principal is simply no
+// longer part of the audience; any other failure is returned.
+func principalResolves(ctx context.Context, tx pgx.Tx, organizationID, principalURN string) (bool, error) {
+	principal, err := urn.ParsePrincipal(principalURN)
+	if err != nil {
+		return false, nil //nolint:nilerr // an unparseable stored principal is dropped, not fatal
+	}
+	if err := authz.ValidatePrincipal(ctx, tx, organizationID, principal); err != nil {
+		if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
+			return false, nil
+		}
+		return false, fmt.Errorf("validate previously approved principal: %w", err)
+	}
+	return true, nil
 }

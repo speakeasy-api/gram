@@ -45,18 +45,17 @@ type distributionAdmissionReader interface {
 }
 
 type ShadowDistributionReadService struct {
-	logger        *slog.Logger
-	db            *pgxpool.Pool
-	organizations OrganizationSlugResolver
-	now           func() time.Time
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	now    func() time.Time
 }
 
-func NewShadowDistributionReadService(logger *slog.Logger, db *pgxpool.Pool, organizations OrganizationSlugResolver) *ShadowDistributionReadService {
-	return &ShadowDistributionReadService{logger: logger, db: db, organizations: organizations, now: time.Now}
+func NewShadowDistributionReadService(logger *slog.Logger, db *pgxpool.Pool) *ShadowDistributionReadService {
+	return &ShadowDistributionReadService{logger: logger, db: db, now: time.Now}
 }
 
 func (s *ShadowDistributionReadService) valid() bool {
-	return s != nil && s.logger != nil && s.db != nil && s.organizations != nil && s.now != nil
+	return s != nil && s.logger != nil && s.db != nil && s.now != nil
 }
 
 func (s *ShadowDistributionReadService) ForPlugin(ctx context.Context, organizationID string, projectID, pluginID uuid.UUID) DistributionAdmission {
@@ -151,11 +150,6 @@ func (s *ShadowDistributionReadService) ForTarget(ctx context.Context, organizat
 func (s *ShadowDistributionReadService) read(ctx context.Context, organizationID string, projectID uuid.UUID, emptyState string, load func(context.Context, pgx.Tx) ([]distributionAdmissionTarget, error)) DistributionAdmission {
 	result := s.unavailable()
 	if !s.valid() || organizationID == "" || projectID == uuid.Nil {
-		return result
-	}
-	organizationSlug, err := s.organizations.OrganizationSlug(ctx, organizationID)
-	if err != nil || organizationSlug == "" {
-		s.warn(ctx, "resolve organization slug", err)
 		return result
 	}
 	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly, DeferrableMode: "", BeginQuery: "", CommitQuery: ""})

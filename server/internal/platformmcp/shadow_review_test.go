@@ -79,6 +79,9 @@ func TestShadowMCPStandingMessageOnlySpeaksWhenThereIsSomethingToSay(t *testing.
 
 	require.Empty(t, shadowMCPStandingMessage(nil))
 	require.Empty(t, shadowMCPStandingMessage(&ShadowMCPStanding{State: DistributionAdmissionNotApplicable}))
-	require.Contains(t, shadowMCPStandingMessage(&ShadowMCPStanding{State: shadowMCPStandingApproved}), "counts as its review")
+	approved := shadowMCPStandingMessage(&ShadowMCPStanding{State: shadowMCPStandingApproved})
+	require.Contains(t, approved, "approved under it")
+	require.NotContains(t, approved, "your distribution", "an earlier decision may already have covered the audience, so the write is not credited")
+	require.Contains(t, shadowMCPStandingMessage(&ShadowMCPStanding{State: DistributionAdmissionEmptyAudience}), "No one is assigned")
 	require.Contains(t, shadowMCPStandingMessage(&ShadowMCPStanding{State: DistributionAdmissionUnavailable}), "could not be confirmed")
 }

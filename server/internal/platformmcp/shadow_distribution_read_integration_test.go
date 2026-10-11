@@ -48,7 +48,7 @@ func TestShadowDistributionReadReportsRepairForPluginAndTarget(t *testing.T) {
 	_, err = riskrepo.New(conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{ID: uuid.New(), ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: "Blocking Shadow MCP", PolicyType: "standard", Sources: []string{shadowmcp.SourceShadowMCP}, PresidioEntities: nil, AnalyzerConfig: nil, PromptInjectionRules: nil, DisabledRules: nil, CustomRuleIds: nil, Enabled: true, Action: "block", AudienceType: "everyone", ShadowMcpDisposition: pgtype.Text{}, AutoName: false, UserMessage: pgtype.Text{}, Prompt: pgtype.Text{}, ModelConfig: nil, Score: pgtype.Float8{}})
 	require.NoError(t, err)
 
-	service := NewShadowDistributionReadService(testenv.NewLogger(t), conn, NewPostgresOrganizationSlugResolver(conn))
+	service := NewShadowDistributionReadService(testenv.NewLogger(t), conn)
 	pluginResult := service.ForPlugin(ctx, principal.OrganizationID, project.ID, plugin.ID)
 	targetResult := service.ForTarget(ctx, principal.OrganizationID, project.ID, canonicalTarget.CanonicalURL)
 

@@ -91,6 +91,34 @@ func TestApproveDirectRemoteOverridesAnEarlierDenial(t *testing.T) {
 	require.Equal(t, "denied", decisions[1].Decision)
 }
 
+// A principal approved earlier that has since left the organization must not
+// block an administrator's later write: it is dropped from the carried-forward
+// audience instead of being re-submitted as new input.
+func TestApproveDirectRemoteDropsAStandingPrincipalThatNoLongerResolves(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	actor := ti.authContext.UserID
+	actorURN := seedMemberPrincipal(t, ctx, ti, actor)
+	const target = "https://mcp.example.test/stale"
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: target, status: "approved", evidence: `{}`, version: 1})
+	gone := urn.NewPrincipal(urn.PrincipalTypeUser, "user-who-left").String()
+	_, err := ti.repo.CreateApprovalDecision(ctx, repo.CreateApprovalDecisionParams{
+		OrganizationID: ti.organizationID, ProjectID: ti.projectID, McpApprovalRequestID: requestID,
+		Decision: "approved", DecidedBy: "earlier-admin", EvidenceSnapshot: []byte(`{}`), EvidenceVersion: 1, GrantedPrincipalUrns: []string{gone},
+	})
+	require.NoError(t, err)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, ti.service.ApproveDirectRemote(ctx, tx, shadowadmission.ApproveDirectRemoteInput{
+		OrganizationID: ti.organizationID, ProjectID: ti.projectID, CanonicalURL: target,
+		PrincipalURNs: []string{actorURN}, ActorUserID: actor, ActorEmail: ti.authContext.Email, Rationale: "shared with support",
+	}))
+	require.NoError(t, tx.Commit(ctx))
+	decisions := decisionsFor(t, ctx, ti, ti.projectID, requestID)
+	require.Len(t, decisions, 2)
+	require.Equal(t, []string{actorURN}, decisions[0].GrantedPrincipalUrns, "the vanished principal is not carried forward")
+}
+
 // Nothing is written for an invalid ask.
 func TestApproveDirectRemoteRejectsInvalidInput(t *testing.T) {
 	t.Parallel()

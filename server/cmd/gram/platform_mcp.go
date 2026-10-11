@@ -412,7 +412,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		Organization: ratelimit.New(limitStore, platformmcp.PluginAssignmentMutationOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginAssignmentMutationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 	}
 	organizationSlugs := platformmcp.NewPostgresOrganizationSlugResolver(config.DB)
-	distributionAdmissionReads := platformmcp.NewShadowDistributionReadService(config.Logger, config.DB, organizationSlugs)
+	distributionAdmissionReads := platformmcp.NewShadowDistributionReadService(config.Logger, config.DB)
 	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey).
 		WithAuthorization(config.Authz).
 		WithRemoteSessions(config.RemoteChallengeManager).
@@ -444,7 +444,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	}
 	distributions := newPlatformMCPDistributionService(config, pluginInventory).
 		WithDistributionAdmission(config.DistributionAdmission).
-		WithShadowMCPStanding(distributionAdmissionReads, shadowReviewLinks)
+		WithShadowMCPStanding(distributionAdmissionReads, shadowReviewLinks).
+		WithAdministratorAuthorization(config.Authz)
 
 	// Keep the local fixture on its original paths unless discovery owns them.
 	registryPrefix := ""
@@ -566,7 +567,7 @@ func attachShadowInventory(reader *platformmcp.PostgresReader, config platformMC
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(err))
 		return false
 	}
-	shadowInventory.WithDistributionAdmissionReads(platformmcp.NewShadowDistributionReadService(config.Logger, config.DB, organizationSlugs))
+	shadowInventory.WithDistributionAdmissionReads(platformmcp.NewShadowDistributionReadService(config.Logger, config.DB))
 	reader.WithShadowInventory(shadowInventory)
 	return true
 }
@@ -670,7 +671,7 @@ func newPlatformMCPLifecycleVisibilityService(config platformMCPConfig, readines
 	if err != nil {
 		return nil, err
 	}
-	return service.WithDistributionAdmission(config.DistributionAdmission), nil
+	return service.WithDistributionAdmission(config.DistributionAdmission).WithAdministratorAuthorization(config.Authz), nil
 }
 
 func newPlatformMCPDistributionService(config platformMCPConfig, pluginTargets platformmcp.PluginTargetResolver) *platformmcp.DistributionService {
@@ -1004,7 +1005,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		Organization: ratelimit.New(limitStore, platformmcp.PluginAssignmentMutationOrganizationLimitName, ratelimit.PerMinute(platformmcp.PluginAssignmentMutationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 	}
 	organizationSlugs := platformmcp.NewPostgresOrganizationSlugResolver(config.DB)
-	distributionAdmissionReads := platformmcp.NewShadowDistributionReadService(config.Logger, config.DB, organizationSlugs)
+	distributionAdmissionReads := platformmcp.NewShadowDistributionReadService(config.Logger, config.DB)
 	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey).
 		WithAuthorization(config.Authz).
 		WithRemoteSessions(config.RemoteChallengeManager).
@@ -1036,7 +1037,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	}
 	distributions := newPlatformMCPDistributionService(config, pluginInventory).
 		WithDistributionAdmission(config.DistributionAdmission).
-		WithShadowMCPStanding(distributionAdmissionReads, shadowReviewLinks)
+		WithShadowMCPStanding(distributionAdmissionReads, shadowReviewLinks).
+		WithAdministratorAuthorization(config.Authz)
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills).
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).

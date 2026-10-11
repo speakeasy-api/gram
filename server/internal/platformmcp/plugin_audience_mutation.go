@@ -74,6 +74,11 @@ type SetPluginAssignmentsReceiptResult struct {
 type SetPluginAssignmentsOutput struct {
 	SetPluginAssignmentsReceiptResult
 	Receipt RiskMutationToolReceipt `json:"receipt"`
+	// DistributionAdmission is the plugin's standing with the project's Shadow
+	// MCP policy after the write, read fresh on every call including replays:
+	// covered means every server added by URL in it is approved for the whole
+	// audience, which an administrator's own widening records.
+	DistributionAdmission *DistributionAdmission `json:"distribution_admission,omitempty" jsonschema:"the plugin's standing with the project's Shadow MCP policy after this write, read fresh; state covered: every server added by URL in this plugin is approved for its whole audience, which an organization administrator's own widening records; not_required: no block policy; not_applicable: no server added by URL; repair_required: an audience is uncovered; absent when the standing could not be read"`
 }
 
 type normalizedSetPluginAssignments struct {
@@ -141,9 +146,12 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 	if evaluation != feature.EvaluationEnabled {
 		return SetPluginAssignmentsOutput{}, pluginAssignmentMutationUnavailable(nil)
 	}
-	// An administrator widening a plugin's audience is the review a Shadow MCP
-	// block policy would otherwise demand for the servers in it.
-	ctx = administratorContext(ctx, principal)
+	// An organization administrator widening a plugin's audience is the review
+	// a Shadow MCP block policy would otherwise demand for the servers in it.
+	ctx, err = admission.AdministratorWriteContext(ctx, s.authorization, principal.OrganizationID)
+	if err != nil {
+		return SetPluginAssignmentsOutput{}, pluginAssignmentMutationUnavailable(err)
+	}
 	references, err := normalizePluginAssignmentReferences(input.AssignmentReferences)
 	if err != nil {
 		return SetPluginAssignmentsOutput{}, err
@@ -265,7 +273,29 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 	if err := json.Unmarshal(receipt.ResultPayload, &result); err != nil {
 		return SetPluginAssignmentsOutput{}, fmt.Errorf("decode plugin assignment mutation receipt: %w", err)
 	}
-	return SetPluginAssignmentsOutput{SetPluginAssignmentsReceiptResult: result, Receipt: riskMutationToolReceipt(receipt)}, nil
+	return SetPluginAssignmentsOutput{
+		SetPluginAssignmentsReceiptResult: result,
+		Receipt:                           riskMutationToolReceipt(receipt),
+		DistributionAdmission:             s.pluginDistributionAdmission(ctx, principal.OrganizationID, project.ID, result.Plugin.ID),
+	}, nil
+}
+
+// pluginDistributionAdmission reads the plugin's Shadow MCP standing after a
+// write, on the fresh path and on a replay alike, so the caller is told what
+// the write meant for the policy rather than only that it happened.
+func (s *PluginsService) pluginDistributionAdmission(ctx context.Context, organizationID string, projectID uuid.UUID, pluginID string) *DistributionAdmission {
+	if s == nil || s.distributionAdmissionRead == nil {
+		return nil
+	}
+	id, err := uuid.Parse(pluginID)
+	if err != nil || id == uuid.Nil {
+		return nil
+	}
+	standing := s.distributionAdmissionRead.ForPlugin(ctx, organizationID, projectID, id)
+	if !standing.Complete {
+		return nil
+	}
+	return &standing
 }
 
 func pluginAssignmentAdmissionError(err error) error {

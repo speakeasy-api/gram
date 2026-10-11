@@ -28,6 +28,15 @@ func (s *Service) assignmentAdmissionGuard() func(context.Context, pgx.Tx, plugi
 		if assignments.IsSubset(desired, current) {
 			return nil
 		}
+		if s == nil || s.distributionAdmission == nil {
+			return admission.ErrUnavailable
+		}
+		// Widening is a write: an organization administrator's widening is
+		// recorded as the Shadow MCP approval it stands for.
+		ctx, err := admission.AdministratorWriteContext(ctx, s.authz, plugin.OrganizationID)
+		if err != nil {
+			return fmt.Errorf("%w: %w", admission.ErrUnavailable, err)
+		}
 		return s.distributionAdmission.CheckPluginAudience(ctx, tx, plugin.OrganizationID, plugin.ProjectID, plugin.ID, desired)
 	}
 }

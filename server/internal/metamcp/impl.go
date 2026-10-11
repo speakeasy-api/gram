@@ -871,7 +871,11 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 		return nil, oops.E(oops.CodeConflict, nil, "another member of this meta mcp server already fronts the same backend").LogError(ctx, logger)
 	}
 
-	if err := s.distributionAdmission.CheckGatewayMemberAddition(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, metaID, mcpServerID); err != nil {
+	admissionCtx, err := admission.AdministratorWriteContext(ctx, s.authz, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnavailable, err, "gateway member distribution approval could not be verified safely").LogError(ctx, logger)
+	}
+	if err := s.distributionAdmission.CheckGatewayMemberAddition(admissionCtx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, metaID, mcpServerID); err != nil {
 		switch {
 		case errors.Is(err, admission.ErrApprovalRequired):
 			return nil, oops.E(oops.CodeConflict, err, "gateway member requires Shadow MCP approval").LogError(ctx, logger)

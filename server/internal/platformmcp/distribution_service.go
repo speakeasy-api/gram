@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
@@ -115,6 +116,19 @@ type DistributionService struct {
 	admission *admission.Guard
 	reads     distributionAdmissionReader
 	links     ShadowMCPReviewLinker
+	// authorization decides whether the acting user is an organization
+	// administrator, whose distribution is recorded as the Shadow MCP approval.
+	authorization *authz.Engine
+}
+
+// WithAdministratorAuthorization lets a distribution by an organization
+// administrator stand as the Shadow MCP approval for its audience. Without it,
+// a block policy refuses every uncovered direct-remote server.
+func (s *DistributionService) WithAdministratorAuthorization(engine *authz.Engine) *DistributionService {
+	if s != nil {
+		s.authorization = engine
+	}
+	return s
 }
 
 func NewDistributionService(db *pgxpool.Pool, auditLogger *audit.Logger, attach ExistingPluginAttacher, publish ProjectPublisher, plugins PluginTargetResolver) *DistributionService {
@@ -184,7 +198,10 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 	if err != nil {
 		return Distribution{}, ErrDistributionInvalid
 	}
-	ctx = administratorContext(ctx, principal)
+	ctx, err = s.administratorWriteContext(ctx, principal)
+	if err != nil {
+		return Distribution{}, err
+	}
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -272,7 +289,12 @@ func (s *DistributionService) Distribute(ctx context.Context, principal Principa
 		if err := tx.Commit(ctx); err != nil {
 			return Distribution{}, fmt.Errorf("commit idempotent platform mcp distribution: %w", err)
 		}
-		return Distribution{State: existing.State, Version: existing.Version, AttachmentLive: true, PublicationState: existing.PublicationState, Plugin: plugin.Name}, nil
+		// A replay reports the same standing a fresh write would: the server's
+		// approval is as real the second time it is asked about.
+		return Distribution{
+			State: existing.State, Version: existing.Version, AttachmentLive: true, PublicationState: existing.PublicationState, Plugin: plugin.Name,
+			ShadowMCP: shadowMCPStanding(ctx, s.reads, s.links, principal, ResolvedProject{ID: target.ProjectID, Name: target.ProjectName, Slug: target.ProjectSlug}, remoteURL),
+		}, nil
 	}
 
 	row, err := persistDistribution(ctx, q, existing, found, distributionPersistenceInput{
@@ -429,7 +451,10 @@ func (s *DistributionService) RepairPublication(ctx context.Context, principal P
 	if s == nil || s.db == nil || input.ProjectSlug == "" || input.ExpectedVersion <= 0 {
 		return Distribution{}, ErrDistributionInvalid
 	}
-	ctx = administratorContext(ctx, principal)
+	ctx, err := s.administratorWriteContext(ctx, principal)
+	if err != nil {
+		return Distribution{}, err
+	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return Distribution{}, fmt.Errorf("begin platform mcp publication repair admission: %w", err)
@@ -646,22 +671,18 @@ func distributionAuthContext(principal Principal) *contextvalues.AuthContext {
 	}
 }
 
-// administratorContext gives the admission guard the acting user. A request
-// that already carries a session auth context (the dashboard's management API)
-// keeps it, so a non-administrator there stays one. A call from the external
-// Platform MCP carries none, and every write tool on that surface is
-// organization-administrator authorized, so the principal is recorded as the
-// administrator it is. A managed assistant is not an administrator.
-func administratorContext(ctx context.Context, principal Principal) context.Context {
-	if _, ok := contextvalues.GetAuthContext(ctx); ok {
-		return ctx
+// administratorWriteContext marks the write as an organization
+// administrator's when the authorization engine says the acting user holds
+// org:admin here, so the admission guard records it as the Shadow MCP
+// approval. Nothing is assumed from the surface: a managed assistant, a
+// member, or a request without an acting user is left unmarked and refused
+// as before. A failure to evaluate fails the write closed.
+func (s *DistributionService) administratorWriteContext(ctx context.Context, principal Principal) (context.Context, error) {
+	ctx, err := admission.AdministratorWriteContext(ctx, s.authorization, principal.OrganizationID)
+	if err != nil {
+		return ctx, fmt.Errorf("%w: %w", ErrDistributionAdmissionUnavailable, err)
 	}
-	if principal.Surface != SurfacePlatformMCP || principal.UserID == "" {
-		return ctx
-	}
-	authCtx := distributionAuthContext(principal)
-	authCtx.IsAdmin = true
-	return contextvalues.SetAuthContext(ctx, authCtx)
+	return ctx, nil
 }
 
 func distributionDisplayName(target repo.GetPlatformMCPOnboardingDistributionTargetRow) string {
