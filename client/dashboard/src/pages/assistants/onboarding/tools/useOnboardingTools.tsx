@@ -1000,6 +1000,14 @@ function buildAssistantTools(deps: ToolDeps) {
             const hostedSlug = direct
               ? undefined
               : await hostedToolsetSlug(mcp_server_slug);
+            if (
+              !direct &&
+              !live.toolsets.some((t) => t.toolsetSlug === hostedSlug)
+            ) {
+              return errResult(
+                `MCP server "${mcp_server_slug}" is not attached to this assistant.`,
+              );
+            }
             const updated = await sdk.assistants.update({
               updateAssistantForm:
                 hostedSlug !== undefined

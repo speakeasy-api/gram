@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -542,7 +543,7 @@ func TestAssistantsService_AttachMCPServer_RejectsUnreachable(t *testing.T) {
 		tx := testenv.BeginTx(t, t.Context(), conn)
 		_, resolveErr := svc.core.resolveMcpServerRefsForWrite(t.Context(), tx, projectID, []*types.AssistantMCPServerRef{
 			{McpServerSlug: tt.slug, EnvironmentSlug: nil},
-		}, nil)
+		}, nil, hostedmcp.SystemActor("test"))
 		require.NoError(t, tx.Rollback(t.Context()))
 		require.ErrorContains(t, resolveErr, tt.wantErr)
 

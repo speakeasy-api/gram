@@ -201,6 +201,17 @@ func TestHostedAttachmentRuntimeConfigSurvivesMove(t *testing.T) {
 	}
 }
 
+// When twins disagree, the legacy row's environment wins, as older pods read it.
+func TestHostedAttachmentTwinLegacyEnvironmentWins(t *testing.T) {
+	t.Parallel()
+	f := newHostedAttachmentFixture(t, "hosted_twin_env")
+	f.addLegacyRow(t, f.hosted.ID, f.environmentID(t, "staging"))
+	f.addServerRow(t, f.hosted.ID, uuid.NullUUID{})
+	servers := f.runtime(t)
+	require.Len(t, servers, 1)
+	require.Equal(t, "staging", servers[0].Headers["Gram-Environment"])
+}
+
 // A toolset with no canonical wrapper keeps its legacy runtime config.
 func TestHostedAttachmentWithoutWrapperKeepsLegacyRuntime(t *testing.T) {
 	t.Parallel()
@@ -373,6 +384,23 @@ func TestHostedAttachmentCreateByServerSlug(t *testing.T) {
 	require.EqualValues(t, 1, counts.Toolsets)
 	require.EqualValues(t, 1, counts.McpServers)
 	require.ElementsMatch(t, []string{"billing", "remote"}, runtimeIDs(f.runtime(t)))
+}
+
+// Attaching by server ref turns MCP on, as attaching by toolset does.
+func TestHostedAttachmentByServerSlugEnablesMCP(t *testing.T) {
+	t.Parallel()
+	f := newHostedAttachmentFixture(t, "hosted_attach_enables")
+	f.setToolsetMCPEnabled(t, false)
+	name := "updated"
+
+	_, err := f.core.UpdateAssistant(t.Context(), f.projectID, f.assistant, &name, nil, nil, nil,
+		[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil)
+	require.NoError(t, err)
+	ts, err := toolsetsrepo.New(f.db).GetToolsetByIDAndProject(t.Context(), toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.hosted.ID, ProjectID: f.projectID})
+	require.NoError(t, err)
+	require.True(t, ts.McpEnabled)
+	require.EqualValues(t, 1, f.counts(t).Toolsets)
+	require.Equal(t, []string{"billing"}, runtimeIDs(f.runtime(t)))
 }
 
 // Legacy rows follow the toolset, as on main, when the wrapper has drifted from it.

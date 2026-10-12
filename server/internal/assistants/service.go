@@ -949,6 +949,7 @@ func (s *ServiceCore) resolveMcpServerRefsForWrite(
 	projectID uuid.UUID,
 	refs []*types.AssistantMCPServerRef,
 	skipHosted map[uuid.UUID]struct{},
+	actor hostedmcp.Actor,
 ) ([]resolvedMcpServerInsert, error) {
 	if len(refs) == 0 {
 		return nil, nil
@@ -982,6 +983,25 @@ func (s *ServiceCore) resolveMcpServerRefsForWrite(
 	})
 	if err != nil {
 		return nil, fmt.Errorf("resolve mcp server slugs: %w", err)
+	}
+	// Hosted servers attached by server ref get MCP turned on, as the toolsets path does.
+	var enable []resolvedToolsetInsert
+	for _, row := range serverRows {
+		if _, skip := skipHosted[row.ID]; row.Hosted && !skip && row.Visibility == visibility.Disabled {
+			enable = append(enable, resolvedToolsetInsert{ToolsetID: row.ID, Slug: "", EnvironmentID: uuid.NullUUID{}})
+		}
+	}
+	if len(enable) > 0 {
+		if err := enableAssistantToolsets(ctx, tx, s.audit, actor, projectID, enable); err != nil {
+			return nil, err
+		}
+		serverRows, err = queries.ResolveMcpServersForWrite(ctx, assistantrepo.ResolveMcpServersForWriteParams{
+			ProjectID: projectID,
+			Slugs:     serverSlugs,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("resolve mcp server slugs: %w", err)
+		}
 	}
 	hosted := map[string]bool{}
 	skipped := map[string]bool{}
@@ -1369,7 +1389,7 @@ func (s *ServiceCore) CreateAssistant(
 		return assistantRecord{}, err
 	}
 	// Server rows lock after the hosted sync's domain -> endpoint -> server locks.
-	resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers, toolsetIDSet(resolved))
+	resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers, toolsetIDSet(resolved), assistantActor(ctx, createdByUserID))
 	if err != nil {
 		return assistantRecord{}, err
 	}
@@ -1516,7 +1536,7 @@ func (s *ServiceCore) UpdateAssistant(
 			skipHosted[id] = struct{}{}
 		}
 		// Server rows lock after the hosted sync's domain -> endpoint -> server locks.
-		resolvedMcpServers, err = s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers, skipHosted)
+		resolvedMcpServers, err = s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers, skipHosted, assistantActor(ctx, record.CreatedByUserID))
 		if err != nil {
 			return assistantRecord{}, err
 		}
