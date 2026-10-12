@@ -84,8 +84,17 @@ describe("impersonationInstructions", () => {
       const out = text(impersonationInstructions(method, edited));
       expect(out).not.toContain("signer@other-project");
     }
+    // Each method grants on the account it creates.
     expect(text(impersonationInstructions("gcloud", edited))).toContain(
-      "speakeasy-signer@acme-prod.iam.gserviceaccount.com",
+      "add-iam-policy-binding speakeasy-signer@acme-prod.iam.gserviceaccount.com",
     );
+    expect(text(impersonationInstructions("terraform", edited))).toContain(
+      "service_account_id = google_service_account.speakeasy_signer.name",
+    );
+    const console = text(impersonationInstructions("console", edited));
+    expect(console).toContain(
+      "Create a service account named speakeasy-signer",
+    );
+    expect(console).toContain("Open the new account");
   });
 });
