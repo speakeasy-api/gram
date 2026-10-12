@@ -364,6 +364,13 @@ func (s *Service) DeleteInTx(ctx context.Context, tx pgx.Tx, change Change, expe
 	widgetID := change.widgetID
 
 	queries := repo.New(tx)
+	dashboards := dashboardsrepo.New(tx)
+	// A layout change locks a dashboard and then share-locks its widgets; this
+	// locks the widget and then touches its dashboards. The project's
+	// dashboard lock, taken first by both, keeps the two from crossing.
+	if err := dashboards.LockProjectDashboards(ctx, *authCtx.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock project dashboards").LogError(ctx, s.logger)
+	}
 	if _, err := s.lockWidget(ctx, queries, *authCtx.ProjectID, widgetID, expectedVersion); err != nil {
 		return nil, err
 	}
@@ -374,7 +381,6 @@ func (s *Service) DeleteInTx(ctx context.Context, tx pgx.Tx, change Change, expe
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list widget's dashboards").LogError(ctx, s.logger)
 	}
-	dashboards := dashboardsrepo.New(tx)
 	before := make(map[uuid.UUID][]dashboardsrepo.DashboardWidget, len(affected))
 	for _, dashboard := range affected {
 		cards, err := dashboards.ListPlacements(ctx, dashboardsrepo.ListPlacementsParams{ProjectID: *authCtx.ProjectID, DashboardID: dashboard.DashboardID})

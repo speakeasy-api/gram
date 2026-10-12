@@ -152,10 +152,23 @@ func saveArguments(projectID string, name string) map[string]any {
 	return map[string]any{"project_id": projectID, "name": name, "dataset": "sessions", "query": widgetTestQuery(), "visualization": widgetTestChart(), "confirmed": false}
 }
 
-func confirmed(arguments map[string]any, preview widgetWriteOutput, key string) map[string]any {
-	out := make(map[string]any, len(arguments)+4)
-	maps.Copy(out, arguments)
-	out["confirmed"], out["expected_version"], out["preview_token"], out["idempotency_key"] = true, preview.Version, preview.PreviewToken, key
+// previewOutput is a write preview as its confirmation carries it: the
+// version and token the preview returned.
+type previewOutput interface {
+	previewed() (version, token string)
+}
+
+func (o widgetWriteOutput) previewed() (version, token string) { return o.Version, o.PreviewToken }
+
+// confirmed is the confirmation of a preview under the given key: the
+// previewed arguments with the preview's version and token.
+func confirmed(arguments map[string]any, preview previewOutput, key string) map[string]any {
+	version, token := preview.previewed()
+	out := maps.Clone(arguments)
+	out["confirmed"] = true
+	out["expected_version"] = version
+	out["preview_token"] = token
+	out["idempotency_key"] = key
 	return out
 }
 
@@ -174,6 +187,9 @@ func TestWidgetToolsDeclareTheirContract(t *testing.T) {
 		descriptor := descriptorByName(t, reg, name)
 		require.False(t, descriptor.Annotations.ReadOnlyHint, name)
 		require.Equal(t, discoveryProjectRead, descriptor.Meta.DiscoveryScopes, name)
+		// A create or a copy makes another widget per confirmed key; only a
+		// delete leaves the project as it left it.
+		require.Equal(t, name == deleteWidgetToolName, descriptor.Annotations.IdempotentHint, name)
 	}
 	projectID, widgetID := uuid.NewString(), uuid.NewString()
 	target := map[string]any{"project_id": projectID, "widget_id": widgetID, "confirmed": false}
