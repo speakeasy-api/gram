@@ -143,34 +143,44 @@ func TestXAAIdentityInspectorCallbackUsesRecordedOrigin(t *testing.T) {
 	require.Equal(t, "https://recorded.example.test"+remotesessions.FederatedIDPCallbackPath(f.trustedClient), *callback)
 }
 
-// orderedGovernor also reports the per-vendor identity provider order.
+// orderedGovernor reports a fixed EMA provider order.
 type orderedGovernor struct {
 	*recordingGovernor
-	kinds []remotesessions.EMAProviderKind
+	order   remotesessions.EMAProviderOrder
+	ordered bool
 }
 
-func (g orderedGovernor) Providers(context.Context, identitychaining.Request) []remotesessions.EMAProviderKind {
-	return g.kinds
+func (g orderedGovernor) ProviderOrder(context.Context, identitychaining.Request) (remotesessions.EMAProviderOrder, bool) {
+	return g.order, g.ordered
 }
 
-func TestXAAIdentityInspectorReportsProviderOrder(t *testing.T) {
+func TestXAAIdentityInspectorReportsAvailableProviders(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_xaa_inspector_providers")
 	require.NoError(t, err)
 	f := seedXAAInspectorFixture(t, ctx, conn, pgtype.Text{})
 	bindXAAInspectorUpstream(t, ctx, conn, f, f.issuerA)
+	external := remotesessions.EMAProvider{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: f.issuerA, InternalSessionIssuerID: uuid.Nil, Unavailable: ""}
+	pending := remotesessions.EMAProvider{Kind: remotesessions.EMAProviderSpeakeasy, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.New(), Unavailable: remotesessions.EMAProviderSigningUnavailable}
+	inspect := func(g orderedGovernor) XAAIdentityChaining {
+		inspector := &postgresXAAIdentityInspector{db: conn, governor: g, origins: remotesessions.CallbackOrigins{Outbound: nil, Registration: nil}}
+		chaining, _, err := inspector.Inspect(ctx, f.organizationID, f.projectID, f.serverID, f.issuerA, "https://upstream.example.test/mcp")
+		require.NoError(t, err)
+		return chaining
+	}
 
-	governor := orderedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: true}, kinds: []remotesessions.EMAProviderKind{remotesessions.EMAProviderSpeakeasy, remotesessions.EMAProviderExternal}}
-	inspector := &postgresXAAIdentityInspector{db: conn, governor: governor, origins: remotesessions.CallbackOrigins{Outbound: nil, Registration: nil}}
-	chaining, _, err := inspector.Inspect(ctx, f.organizationID, f.projectID, f.serverID, f.issuerA, "https://upstream.example.test/mcp")
-	require.NoError(t, err)
-	require.True(t, chaining.Served)
-	require.Equal(t, []string{"speakeasy", "external"}, chaining.Providers)
+	served := inspect(orderedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: true}, order: remotesessions.EMAProviderOrder{VendorIssuer: "", IsDefault: false, Providers: []remotesessions.EMAProvider{pending, external}}, ordered: true})
+	require.True(t, served.Served)
+	require.Nil(t, served.NotServedReason)
+	require.Equal(t, []XAAEMAProvider{{Kind: "external", RemoteSessionIssuerID: new(f.issuerA.String())}}, served.Providers, "a provider that cannot serve is omitted")
 
-	unserved := orderedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: false}, kinds: []remotesessions.EMAProviderKind{remotesessions.EMAProviderExternal}}
-	inspector.governor = unserved
-	chaining, _, err = inspector.Inspect(ctx, f.organizationID, f.projectID, f.serverID, f.issuerA, "https://upstream.example.test/mcp")
-	require.NoError(t, err)
-	require.Empty(t, chaining.Providers, "no order is reported when chaining does not serve the upstream")
+	unavailable := inspect(orderedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: false}, order: remotesessions.EMAProviderOrder{VendorIssuer: "", IsDefault: false, Providers: []remotesessions.EMAProvider{pending}}, ordered: true})
+	require.False(t, unavailable.Served)
+	require.Equal(t, "provider_unavailable", conv.PtrValOr(unavailable.NotServedReason, ""))
+	require.Empty(t, unavailable.Providers)
+
+	unbound := inspect(orderedGovernor{recordingGovernor: &recordingGovernor{issuer: f.issuerA, serves: false}, order: remotesessions.EMAProviderOrder{VendorIssuer: "", IsDefault: false, Providers: nil}, ordered: false})
+	require.Equal(t, "binding_not_ready", conv.PtrValOr(unbound.NotServedReason, ""))
+	require.Empty(t, unbound.Providers)
 }
