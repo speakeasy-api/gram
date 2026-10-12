@@ -172,7 +172,9 @@ func AttachAgentMCPServers(result *gen.GetPluginsResult, servers []*gen.AgentMCP
 	hash := sha256.New()
 	writeAgentPluginsETag(hash, "plugins=%s\n", result.Etag)
 	for _, server := range servers {
-		writeAgentPluginsETag(hash, "mcp\x00%s\x00%s\x00%s\n", server.Name, server.URL, strings.Join(server.Tools, ","))
+		writeAgentPluginsETag(hash, "mcp\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s\n",
+			server.Name, server.URL, strings.Join(server.Tools, ","),
+			conv.PtrValOr(server.TokenEndpoint, ""), conv.PtrValOr(server.Audience, ""), conv.PtrValOr(server.Resource, ""))
 	}
 	result.Etag = hex.EncodeToString(hash.Sum(nil))
 }

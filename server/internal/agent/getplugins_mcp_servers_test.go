@@ -1,6 +1,7 @@
 package agent_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -9,6 +10,7 @@ import (
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -244,4 +246,61 @@ func TestGetPlugins_AgentSkipsServersOfCollapsedMarketplaces(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, pluginSlugs(res), "beta-only-tool")
 	require.Empty(t, res.McpServers, "a server is listed only when its plugin is")
+}
+
+// fakeWorkloadTokenTargets resolves token targets from a fixed map of URLs.
+type fakeWorkloadTokenTargets map[string]mcp.WorkloadTokenTarget
+
+func (f fakeWorkloadTokenTargets) WorkloadTokenTargetFor(_ context.Context, mcpURL string) (mcp.WorkloadTokenTarget, bool, error) {
+	target, ok := f[mcpURL]
+	return target, ok, nil
+}
+
+// Each entry carries the token endpoint, audience, and resource a workload
+// uses to reach it; a server no workload grant reaches is still listed, with
+// none. A changed target changes the ETag.
+func TestGetPlugins_AgentMCPServersCarryWorkloadTokenTargets(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+	agentCtx, actor := withAgentKeyAuth(t, ctx, ti, "CI agent")
+	tool := seedPlugin(t, ctx, ti.conn, ti.orgID, ti.projectID, "agent-tool")
+	assignPlugin(t, ctx, ti.conn, tool, ti.orgID, actor.String())
+	_, sharedURL := seedToolsetServer(t, ti, tool, "shared-linear", "Linear")
+	_, perEndpointURL := seedToolsetServer(t, ti, tool, "own-github", "GitHub")
+	_, headlessUnreachableURL := seedToolsetServer(t, ti, tool, "no-grant", "No grant")
+
+	targets := fakeWorkloadTokenTargets{
+		sharedURL:      {TokenEndpoint: testServerURL + "/oauth/usi/1/token", Audience: testServerURL + "/oauth/usi/1/token", Resource: ""},
+		perEndpointURL: {TokenEndpoint: perEndpointURL + "/token", Audience: perEndpointURL + "/token", Resource: perEndpointURL},
+	}
+	ti.service.WithWorkloadTokenTargets(targets)
+
+	res, err := ti.service.GetPlugins(agentCtx, &gen.GetPluginsPayload{})
+	require.NoError(t, err)
+	byURL := make(map[string]*gen.AgentMCPServer, len(res.McpServers))
+	for _, s := range res.McpServers {
+		byURL[s.URL] = s
+	}
+	require.Len(t, byURL, 3, "a server no workload grant reaches is still listed")
+
+	shared := byURL[sharedURL]
+	require.Equal(t, new(testServerURL+"/oauth/usi/1/token"), shared.TokenEndpoint)
+	require.Equal(t, shared.TokenEndpoint, shared.Audience)
+	require.Nil(t, shared.Resource, "the issuer-wide grant names no resource")
+
+	own := byURL[perEndpointURL]
+	require.Equal(t, new(perEndpointURL+"/token"), own.TokenEndpoint)
+	require.Equal(t, new(perEndpointURL), own.Resource)
+
+	none := byURL[headlessUnreachableURL]
+	require.Nil(t, none.TokenEndpoint)
+	require.Nil(t, none.Audience)
+	require.Nil(t, none.Resource)
+
+	targets[perEndpointURL] = mcp.WorkloadTokenTarget{TokenEndpoint: testServerURL + "/oauth/usi/2/token", Audience: testServerURL + "/oauth/usi/2/token", Resource: ""}
+	moved, err := ti.service.GetPlugins(agentCtx, &gen.GetPluginsPayload{})
+	require.NoError(t, err)
+	require.NotEqual(t, res.Etag, moved.Etag, "a server moving to another authorization server reaches devices on the next poll")
 }

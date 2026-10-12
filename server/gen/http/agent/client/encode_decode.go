@@ -2670,8 +2670,11 @@ func unmarshalAgentPollingPrincipalResponseBodyToAgentAgentPollingPrincipal(v *A
 // type *agent.AgentMCPServer from a value of type *AgentMCPServerResponseBody.
 func unmarshalAgentMCPServerResponseBodyToAgentAgentMCPServer(v *AgentMCPServerResponseBody) *agent.AgentMCPServer {
 	res := &agent.AgentMCPServer{
-		Name: *v.Name,
-		URL:  *v.URL,
+		Name:          *v.Name,
+		URL:           *v.URL,
+		TokenEndpoint: v.TokenEndpoint,
+		Audience:      v.Audience,
+		Resource:      v.Resource,
 	}
 	if v.Tools != nil {
 		res.Tools = make([]string, len(v.Tools))

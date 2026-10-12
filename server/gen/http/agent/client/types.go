@@ -2314,6 +2314,18 @@ type AgentMCPServerResponseBody struct {
 	// Stable IDs of the managed tools this server applies to. Absent or empty
 	// means every managed tool.
 	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	// Token endpoint where a workload exchanges an identity assertion (RFC 7523
+	// JWT bearer grant) for a session that reaches this server. Absent when the
+	// server's authorization server offers no workload grant, so the server cannot
+	// be reached without a person.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// The exact `aud` the identity assertion must carry for token_endpoint.
+	// Present exactly when token_endpoint is.
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Resource indicator (RFC 8707) to send with the grant. Present only when
+	// token_endpoint mints sessions for this one server; absent when it mints one
+	// session for every server of its issuer.
+	Resource *string `form:"resource,omitempty" json:"resource,omitempty" xml:"resource,omitempty"`
 }
 
 // SyncedAgentUserResponseBody is used to define fields on response body types.

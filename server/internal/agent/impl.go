@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deviceidentity"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -68,6 +69,15 @@ type Service struct {
 	blobStore       assets.BlobStore
 	telemetry       *telemetry.Logger
 	growth          *growthsignals.Emitter
+	// workloadTokens resolves where a workload obtains a session for each
+	// polled MCP server. Nil leaves the token fields of every entry empty.
+	workloadTokens WorkloadTokenTargets
+}
+
+// WorkloadTokenTargets resolves where a workload exchanges an identity
+// assertion for a session that reaches the MCP server at a URL.
+type WorkloadTokenTargets interface {
+	WorkloadTokenTargetFor(ctx context.Context, mcpURL string) (mcp.WorkloadTokenTarget, bool, error)
 }
 
 var (
@@ -103,7 +113,15 @@ func NewService(
 		blobStore:       blobStore,
 		telemetry:       telemetryLogger,
 		growth:          growthEmitter,
+		workloadTokens:  nil,
 	}
+}
+
+// WithWorkloadTokenTargets sets the resolver that fills each polled MCP
+// server's token endpoint.
+func (s *Service) WithWorkloadTokenTargets(targets WorkloadTokenTargets) *Service {
+	s.workloadTokens = targets
+	return s
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -371,9 +389,38 @@ func (s *Service) agentMCPServers(ctx context.Context, rows []repo.GetAgentPlugi
 			name = fmt.Sprintf("%s-%d", server.Name, suffix)
 		}
 		takenNames[name] = true
-		servers = append(servers, &gen.AgentMCPServer{Name: name, URL: server.URL, Tools: nil})
+		entry := &gen.AgentMCPServer{Name: name, URL: server.URL, Tools: nil, TokenEndpoint: nil, Audience: nil, Resource: nil}
+		if err := s.attachWorkloadTokenTarget(ctx, entry); err != nil {
+			return nil, err
+		}
+		servers = append(servers, entry)
 	}
 	return servers, nil
+}
+
+// attachWorkloadTokenTarget fills the entry's token fields. A server no
+// workload grant reaches is still listed, with none: its plugin may give it to
+// a person, and the device needs the full list to remove what it wrote before.
+func (s *Service) attachWorkloadTokenTarget(ctx context.Context, entry *gen.AgentMCPServer) error {
+	if s.workloadTokens == nil {
+		return nil
+	}
+	target, ok, err := s.workloadTokens.WorkloadTokenTargetFor(ctx, entry.URL)
+	if err != nil {
+		return fmt.Errorf("resolve workload token target: %w", err)
+	}
+	if !ok {
+		s.logger.InfoContext(ctx, "plugin MCP server offers no workload grant; a headless device cannot reach it",
+			attr.SlogURL(entry.URL),
+		)
+		return nil
+	}
+	entry.TokenEndpoint = &target.TokenEndpoint
+	entry.Audience = &target.Audience
+	if target.Resource != "" {
+		entry.Resource = &target.Resource
+	}
+	return nil
 }
 
 // pluginSetFor builds the poll response for an already-resolved principal set.

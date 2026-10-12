@@ -154,6 +154,18 @@ type AgentMCPServer struct {
 	// Stable IDs of the managed tools this server applies to. Absent or empty
 	// means every managed tool.
 	Tools []string
+	// Token endpoint where a workload exchanges an identity assertion (RFC 7523
+	// JWT bearer grant) for a session that reaches this server. Absent when the
+	// server's authorization server offers no workload grant, so the server cannot
+	// be reached without a person.
+	TokenEndpoint *string
+	// The exact `aud` the identity assertion must carry for token_endpoint.
+	// Present exactly when token_endpoint is.
+	Audience *string
+	// Resource indicator (RFC 8707) to send with the grant. Present only when
+	// token_endpoint mints sessions for this one server; absent when it mints one
+	// session for every server of its issuer.
+	Resource *string
 }
 
 type AgentMarketplace struct {
