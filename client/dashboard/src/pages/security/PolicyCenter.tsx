@@ -84,6 +84,7 @@ import {
   type PolicyAction,
 } from "./policy-data";
 import { POLICY_TYPE_LABEL, policyTypeOf } from "./policy-type";
+import { ShadowAIDecisionsBanner } from "./shadow-ai/ShadowAIDecisionsBanner";
 import { cn } from "@/lib/utils";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { useDetectionRulesStore } from "./detection-rules-data";
@@ -1008,21 +1009,24 @@ function PolicyCenterContent() {
     : "";
 
   let policiesBody = (
-    <Table
-      columns={policyColumns}
-      data={policyRows}
-      rowKey={(row) => row.policy.id}
-      onRowClick={(row) =>
-        // Both prompt and standard policies open their dedicated detail page
-        // (eval workbench for prompt, on-page editor for standard).
-        routes.policyCenter.detail.goTo(row.policy.id)
-      }
-      renderRow={(row, rowElement) => (
-        <TableRowContextMenu key={row.policy.id} actions={policyActions(row)}>
-          {rowElement}
-        </TableRowContextMenu>
-      )}
-    />
+    <>
+      <ShadowAIDecisionsBanner policies={data?.policies ?? []} />
+      <Table
+        columns={policyColumns}
+        data={policyRows}
+        rowKey={(row) => row.policy.id}
+        onRowClick={(row) =>
+          // Both prompt and standard policies open their dedicated detail page
+          // (eval workbench for prompt, on-page editor for standard).
+          routes.policyCenter.detail.goTo(row.policy.id)
+        }
+        renderRow={(row, rowElement) => (
+          <TableRowContextMenu key={row.policy.id} actions={policyActions(row)}>
+            {rowElement}
+          </TableRowContextMenu>
+        )}
+      />
+    </>
   );
   if (isLoading) {
     policiesBody = (
