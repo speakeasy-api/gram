@@ -9,7 +9,15 @@ import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { ScopeDefinition } from "@gram/client/models/components/scopedefinition.js";
-import { Ban, Check, ChevronDown, ChevronRight, X } from "lucide-react";
+import {
+  Ban,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Eraser,
+  Info,
+  X,
+} from "lucide-react";
 import { useMemo, useState, type JSX, type ReactNode } from "react";
 
 import {
@@ -144,7 +152,7 @@ const CELL_BASE =
 const CELL_STYLE: Record<CellState, string> = {
   // Emerald rather than the design system's olive success green, which reads
   // as disabled at this size.
-  on: "bg-emerald-700 border-emerald-700 text-white dark:bg-emerald-600 dark:border-emerald-600",
+  on: "bg-emerald-800 border-emerald-800 text-white dark:bg-emerald-600 dark:border-emerald-600",
   inherited: "border-foreground border-dashed text-foreground bg-background",
   blocked: "border-destructive text-destructive bg-background",
   "inherited-blocked":
@@ -320,7 +328,14 @@ function MatrixTable({
               column ? (
                 <th key={column.label} scope="col" className={TH}>
                   <SimpleTooltip tooltip={column.hint}>
-                    <span className="cursor-default">{column.label}</span>
+                    <span
+                      tabIndex={0}
+                      aria-label={`${column.label}: ${column.hint}`}
+                      className="inline-flex cursor-default items-center gap-1"
+                    >
+                      {column.label}
+                      <Info aria-hidden="true" className="size-3" />
+                    </span>
                   </SimpleTooltip>
                 </th>
               ) : (
@@ -330,14 +345,18 @@ function MatrixTable({
             <th scope="col" className={cn(TH, "pr-4 text-left")}>
               <span className="flex items-center justify-between gap-2">
                 {trailing}
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
+                  size="xs"
                   onClick={onClear}
                   disabled={!onClear}
-                  className="text-eyebrow hover:text-foreground cursor-pointer underline-offset-4 hover:underline disabled:cursor-default disabled:opacity-40 disabled:hover:no-underline"
+                  className="bg-background normal-case"
                 >
-                  Clear
-                </button>
+                  <Button.LeftIcon>
+                    <Eraser className="size-3.5" />
+                  </Button.LeftIcon>
+                  <Button.Text>Clear table</Button.Text>
+                </Button>
               </span>
             </th>
           </tr>
@@ -685,12 +704,21 @@ function McpMatrix({
       <MatrixTable
         title="MCP servers"
         columns={[
-          { label: "Connect", hint: "Connect and call tools" },
-          { label: "View", hint: "Also see the server's configuration" },
-          { label: "Manage", hint: "Also change the server" },
+          {
+            label: "Connect",
+            hint: "Connect to the server and call its tools.",
+          },
+          {
+            label: "View",
+            hint: "See the server's settings and tool list. Includes Connect.",
+          },
+          {
+            label: "Manage",
+            hint: "Change, publish and delete the server. Includes View and Connect.",
+          },
           {
             label: "Blocked",
-            hint: "Block every level, even when another role allows it",
+            hint: "Take away every level, even if another role allows it.",
           },
         ]}
         trailing="Tools"
@@ -1010,11 +1038,14 @@ function PlatformMatrix({
       <MatrixTable
         title="Platform feature"
         columns={[
-          { label: "View", hint: "See it" },
-          { label: "Manage", hint: "Also create, change and delete it" },
+          { label: "View", hint: "See it and its settings." },
+          {
+            label: "Manage",
+            hint: "Create, change and delete it. Includes View.",
+          },
           {
             label: "Blocked",
-            hint: "Block every level, even when another role allows it",
+            hint: "Take away every level, even if another role allows it.",
           },
           null,
         ]}
