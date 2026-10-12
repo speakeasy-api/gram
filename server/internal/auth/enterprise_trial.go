@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -103,7 +105,7 @@ func organizationEligibleForSelfServeTrial(org orgRepo.OrganizationMetadatum) bo
 // first is also not armed here; that request sends the trial-started
 // notification. The returned organization is the row after a successful arm,
 // and the caller's row otherwise.
-func (s *Service) armSelfServeTrialForExistingOrganization(ctx context.Context, org orgRepo.OrganizationMetadatum, userID, actorEmail string) (orgRepo.OrganizationMetadatum, bool, error) {
+func (s *Service) armSelfServeTrialForExistingOrganization(ctx context.Context, org orgRepo.OrganizationMetadatum, userID, actorEmail string, membership identity.IDPMembershipRole) (orgRepo.OrganizationMetadatum, bool, error) {
 	if !organizationEligibleForSelfServeTrial(org) {
 		return org, false, nil
 	}
@@ -133,6 +135,9 @@ func (s *Service) armSelfServeTrialForExistingOrganization(ctx context.Context, 
 	if err := authz.SeedSystemRoleGrantsTx(ctx, tx, org.ID); err != nil {
 		return org, false, fmt.Errorf("provision organization access defaults: %w", err)
 	}
+	if err := assignSelfServeTrialMembershipRole(ctx, tx, org.ID, userID, membership); err != nil {
+		return org, false, err
+	}
 	if err := s.organizationSeeder(ctx, tx, org.ID); err != nil {
 		return org, false, fmt.Errorf("seed organization default entitlements: %w", err)
 	}
@@ -151,4 +156,44 @@ func (s *Service) armSelfServeTrialForExistingOrganization(ctx context.Context, 
 		return org, false, fmt.Errorf("reload organization after trial: %w", err)
 	}
 	return updated, true, nil
+}
+
+// membershipRoleForOrg returns the identity-provider membership for workosOrgID.
+// The zero value means this organization had no membership in the login sync.
+func membershipRoleForOrg(roles []identity.IDPMembershipRole, workosOrgID string) identity.IDPMembershipRole {
+	var none identity.IDPMembershipRole
+	if workosOrgID == "" {
+		return none
+	}
+	for _, role := range roles {
+		if role.WorkOSOrganizationID == workosOrgID {
+			return role
+		}
+	}
+	return none
+}
+
+// assignSelfServeTrialMembershipRole writes the signing-in user's identity-provider
+// roles onto the organization that just received a trial. Built-in roles are
+// seeded first, so admin and member slugs resolve. An empty slug list is left
+// untouched: applying it would remove every assignment this user already holds.
+// The write does not record a WorkOS event id, so a later membership webhook
+// still applies.
+func assignSelfServeTrialMembershipRole(ctx context.Context, tx pgx.Tx, organizationID, gramUserID string, membership identity.IDPMembershipRole) error {
+	if membership.WorkOSUserID == "" || len(membership.RoleSlugs) == 0 {
+		return nil
+	}
+	err := orgRepo.New(tx).SyncUserOrganizationRoleAssignments(ctx, orgRepo.SyncUserOrganizationRoleAssignmentsParams{
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID:  conv.ToPGTextEmpty(""),
+		OrganizationID:     organizationID,
+		WorkosUserID:       membership.WorkOSUserID,
+		WorkosRoleSlugs:    membership.RoleSlugs,
+		UserID:             conv.ToPGText(gramUserID),
+		WorkosMembershipID: conv.ToPGTextEmpty(membership.WorkOSMembershipID),
+	})
+	if err != nil {
+		return fmt.Errorf("assign self-serve trial membership role: %w", err)
+	}
+	return nil
 }

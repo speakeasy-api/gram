@@ -538,7 +538,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	// the zero-organization signup path, which is the only other place a
 	// self-serve trial is armed. Grant that trial here, before the session is
 	// stored, so the first authenticated request already sees it.
-	orgMetadata, trialArmed, err := s.armSelfServeTrialForExistingOrganization(ctx, orgMetadata, userID, userInfo.Email)
+	workosOrgID := ""
+	if orgMetadata.WorkosID.Valid {
+		workosOrgID = orgMetadata.WorkosID.String
+	}
+	orgMetadata, trialArmed, err := s.armSelfServeTrialForExistingOrganization(ctx, orgMetadata, userID, userInfo.Email, membershipRoleForOrg(login.MembershipRoles, workosOrgID))
 	if err != nil {
 		// The arming transaction rolls back, so the organization is unchanged.
 		// Login still completes: a seeding or trial write must not turn into a

@@ -382,6 +382,18 @@ func TestE2E_Callback_NewUserWithWorkOSOrgMemberships(t *testing.T) {
 
 	_, err = trialsRepo.New(inst.conn).GetTrial(ctx, expectedOrgID)
 	require.NoError(t, err)
+
+	assignments, err := accessRepo.New(inst.conn).ListOrganizationRoleAssignmentRecordsByWorkosUser(ctx, accessRepo.ListOrganizationRoleAssignmentRecordsByWorkosUserParams{
+		OrganizationID: expectedOrgID,
+		WorkosUserID:   workosUserID,
+	})
+	require.NoError(t, err)
+	require.Len(t, assignments, 1)
+	require.False(t, assignments[0].DeletedAt.Valid)
+	memberRole, err := accessRepo.New(inst.conn).GetGlobalRoleBySlug(ctx, "member")
+	require.NoError(t, err)
+	require.Equal(t, "role:global:"+memberRole.ID.String(), assignments[0].RoleUrn)
+	require.Equal(t, users.UserIDFromWorkOSID(workosUserID), assignments[0].UserID.String)
 }
 
 func TestE2E_Callback_NonLatinWorkOSOrganizationUsesDeterministicSlug(t *testing.T) {
