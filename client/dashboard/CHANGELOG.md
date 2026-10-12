@@ -1,5 +1,28 @@
 # dashboard
 
+## 0.136.0
+
+### Minor Changes
+
+- b481b2d: The Okta identity provider page has an **Okta sign-in** section. Once the connection is verified and the AI agent is recorded, **Set up Okta sign-in** registers the agent's linked app (its Client ID is the agent ID) as an organization client on the Okta issuer and signs it with private_key_jwt from a signing key set with an active key. The key picker does not offer the Okta connection's managed KMS key. The section shows the active public key (JWK, public members only) with a copy button: paste it in the agent's Credentials in Okta and click Activate. Okta stores the key itself, so rotating the key set or publishing a new key means registering the new public key in Okta again. It also shows the sign-in redirect URI for the linked app.
+  
+  Setup needs customer-managed encryption keys and a Google Cloud KMS key; without the entitlement the section says so and blocks setup. If several organization clients claim the agent ID, the section names the problem and blocks setup until the extras are deleted, and the connection's own managed client is never treated as the sign-in client.
+  
+  A table lists every organization sign-in issuer and whether it trusts Okta sign-in, including issuers that still trust the sign-in client of a previous agent ID. Changing the agent ID warns that those issuers need to be moved. When none trusts Okta sign-in, **Set up Okta sign-in** creates a new `okta-sign-in` sign-in issuer (or the next free numbered slug) instead of reusing an existing one. Admins pick an existing sign-in issuer explicitly with **Trust Okta sign-in** on its row, which asks for confirmation when the issuer trusts another sign-in client or MCP servers or toolsets use it, lists them, and warns that people must already exist through SCIM. If trusting fails, the dialog stays open with the error so a retry trusts the same issuer. **Add sign-in issuer** creates a dedicated sign-in issuer per vendor, checking the slug against every organization sign-in issuer.
+
+### Patch Changes
+
+- 3ffc9d0: Risk policy details load immediately. The obsolete analysis-progress counts are removed, including `risk.getPolicyStatus` and the "View Progress" panel.
+- e5e28d7: Connecting an issuer-gated MCP server from the dashboard now starts the sign-in flow on the `/mcp` routes instead of the legacy `/x/mcp` routes.
+- 56218c5: Explore and widgets can draw a **Stacked bar** and a **Stacked area** chart, which show what made up a total rather than how each series moved. A stack needs a Group by; without one it is drawn as the plain bar or area it is and says so. It stacks one measure that adds up, a count or a sum, since its bands are a total. When a breakdown has more series than fit, the smallest are stacked as one **Other** band so the height is still the real total, and the tooltip gives each bucket's total.
+- af578ee: The Dashboards page lists the dashboards Speakeasy ships with the product, marked **Speakeasy-built**, beside the project's own. One opens read only at `/dashboards/builtin/<slug>` under the shared filter bar, with every card answering within it, and **Duplicate** makes a project dashboard from it, with a saved widget per card, that can be laid out and changed like any other. The first is **MCP & Tools**: what the agents called, how often a call failed, and who was calling.
+- 74a96dd: Fix saving a remote session client with no audience, which the API rejected.
+- 7f35277: Links to a hosted MCP server now open its toolset page instead of the generic server page, which showed controls that do not apply to it.
+- b4c4904: Identity providers with long scope lists or uploaded logos now read cleanly. Scopes show as chips, URL-style scopes drop their shared base and reveal it on hover, and the client page cuts the list after three lines. Logos keep their shape at full height, providers without a logo show their initial, and long endpoint URLs stay on one line with the full value on hover.
+- 52fb54c: The private network setup sheet now suggests `acme-speakeasy` instead of `acme-gram` as an example organization private hostname.
+- fae8c34: The role editor now shows a permission the role only blocks as blocked. The row names the blocked server and says that the block applies even when another role grants the permission. It no longer reads as a grant. Adding that permission from the picker now grants it next to the block and keeps the block. Before, the picker deleted the block.
+- daf0a70: Editing a Shadow MCP policy no longer fails with "cannot change the sources or action of a shadow mcp policy with a disposition". A `block_all` policy — the default, and what every policy the dashboard creates stores — can once again turn its Shadow MCP detector off or move off the Deny action, exactly as the policies that predate the disposition field always could; the server now retires the policy's allowed-server grants along with the posture instead of leaving them behind. An `allow_all` policy still cannot, because its blocked-server list would have nothing left to enforce, but the editor now pins its detector and action up front with the reason, and the remaining server-side rejections say which part of the edit was refused and what to do instead. The Platform MCP `update_risk_policy` tool follows the same rule: a `block_all` policy's patch may turn off `shadow_mcp` or move off the Deny action and retires the policy's allowed-server grants with it, while an `allow_all` policy's patch is refused with the same explanation.
+
 ## 0.135.0
 
 ### Minor Changes
