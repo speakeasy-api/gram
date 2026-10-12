@@ -2240,6 +2240,41 @@ ON json_web_keys (organization_id, json_web_key_set_id);
 CREATE INDEX IF NOT EXISTS json_web_keys_external_key_tenant_idx
 ON json_web_keys (organization_id, external_key_id);
 
+-- Whether a key set backs an internal session issuer. Any issuer row counts,
+-- live or tombstoned, so customer key APIs never expose an issuer's keys.
+CREATE OR REPLACE FUNCTION is_internal_session_issuer_key_set(org_id TEXT, set_id uuid)
+RETURNS boolean
+LANGUAGE sql STABLE PARALLEL SAFE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM internal_session_issuers AS isi
+    WHERE isi.organization_id = org_id
+      AND isi.json_web_key_set_id = set_id
+  );
+$$;
+
+-- Whether an external key backs, or ever backed, an internal session issuer's
+-- key set: as the set's backing key or as one of its published keys.
+CREATE OR REPLACE FUNCTION is_internal_session_issuer_external_key(org_id TEXT, key_id uuid)
+RETURNS boolean
+LANGUAGE sql STABLE PARALLEL SAFE
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM internal_session_issuers AS isi
+    JOIN json_web_key_sets AS s
+      ON s.organization_id = isi.organization_id
+     AND s.id = isi.json_web_key_set_id
+    WHERE isi.organization_id = org_id
+      AND (s.external_key_id = key_id OR EXISTS (
+        SELECT 1 FROM json_web_keys AS k
+        WHERE k.organization_id = s.organization_id
+          AND k.json_web_key_set_id = s.id
+          AND k.external_key_id = key_id
+      ))
+  );
+$$;
+
 -- Customer-hosted MCP servers connected through outbound tunnels. Gram stores
 -- the durable management/source record; live connection routing is cached in
 -- Redis by the tunnel gateway.
