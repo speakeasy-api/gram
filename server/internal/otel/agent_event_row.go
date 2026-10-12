@@ -197,6 +197,7 @@ func agentEventRow(columns canonicalColumns, enrichment rowEnrichment) chrepo.Ag
 		Source:             columns.source,
 		Provider:           columns.provider,
 		Surface:            columns.surface,
+		Channel:            enrich.Channel(enrichment.originalScopeName),
 		UserID:             enrichment.userID,
 		UserEmail:          columns.userEmail,
 		ExternalUserID:     columns.externalUserID,
@@ -360,9 +361,11 @@ func (c *canonicalColumns) read(key string, value any) {
 
 // rowEnrichment is what the transform pipeline stamped onto the record
 // before it reached the topic: directory enrichment, resolved attribution,
-// and the producer-stated user id. Read from the outbound attributes, where
-// the enrichers put it.
+// the producer-stated user id and the scope the record arrived under. Read
+// from the outbound attributes, where the enrichers put it.
 type rowEnrichment struct {
+	originalScopeName string
+
 	userID      string
 	accountType string
 	billingMode string
@@ -387,6 +390,8 @@ var (
 
 func (e *rowEnrichment) read(key string, value any) {
 	switch key {
+	case string(enrich.OriginalInstrumentationScopeNameKey):
+		e.originalScopeName = enrichmentString(value)
 	case string(attr.UserIDKey):
 		e.userID = enrichmentString(value)
 	case string(attr.AccountTypeKey):

@@ -141,6 +141,48 @@ func TestAgentEventRowFromLogCopiesTheCanonicalColumns(t *testing.T) {
 	require.Equal(t, "example", row.Surface)
 }
 
+// The channel is the lane the record entered through, read off the scope the
+// producer wrote under: each Speakeasy producer has a lane, and anything else
+// is the producer's own OTel export.
+func TestAgentEventRowFromLogFillsChannelFromTheOriginalScope(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct{ scope, channel string }{
+		{scope: enrich.GatewayScopeName, channel: enrich.ChannelGateway},
+		{scope: enrich.HooksScopeName, channel: enrich.ChannelHooks},
+		{scope: enrich.ChatScopeName, channel: enrich.ChannelChat},
+		{scope: claudeCodeScopeName, channel: enrich.ChannelOTel},
+	} {
+		t.Run("it fills "+tc.channel, func(t *testing.T) {
+			t.Parallel()
+			row, skip := agentEventRowFromLog(agentEventTestRawLog(tc.scope, "tool_call"), testObservedAt)
+			require.Empty(t, skip)
+			require.Equal(t, tc.channel, row.Channel)
+		})
+	}
+
+	t.Run("it is the otel lane when no scope was kept", func(t *testing.T) {
+		t.Parallel()
+		row, skip := agentEventRowFromLog(agentEventTestRawLog("", "tool_call"), testObservedAt)
+		require.Empty(t, skip)
+		require.Equal(t, enrich.ChannelOTel, row.Channel)
+	})
+}
+
+func TestAgentEventRowFromSpanFillsChannelFromTheOriginalScope(t *testing.T) {
+	t.Parallel()
+
+	span := spanEventTestSpan("org-1", "gram-server")
+	span.SetName("tools/call")
+	span.SetAttributes([]*otelv1.Span_KeyValue{
+		spanEventTestKV(string(enrich.OriginalInstrumentationScopeNameKey), enrich.GatewayScopeName),
+	})
+
+	row, skip := agentEventRowFromSpan(span, testObservedAt)
+	require.Empty(t, skip)
+	require.Equal(t, enrich.ChannelGateway, row.Channel)
+}
+
 func TestAgentEventRowFromLog(t *testing.T) {
 	t.Parallel()
 
@@ -183,6 +225,7 @@ func TestAgentEventRowFromLog(t *testing.T) {
 		require.Equal(t, "claude-code", row.Source)
 		require.Equal(t, "anthropic", row.Provider)
 		require.Equal(t, "claude-code", row.Surface)
+		require.Equal(t, enrich.ChannelOTel, row.Channel, "a producer's own export is the otel lane")
 		require.Equal(t, "dev@example.com", row.UserEmail)
 		require.Equal(t, "acct-1", row.ExternalUserID)
 		require.Equal(t, "anthropic-org-1", row.ExternalOrgID)

@@ -33,6 +33,7 @@ func platformAnalyticsToolCall(organizationID, projectID, recordID, sessionID, u
 		Source:             "claude-code",
 		Provider:           "anthropic",
 		Surface:            "claude-code",
+		Channel:            "otel",
 		UserID:             "",
 		UserEmail:          user,
 		ExternalUserID:     "",

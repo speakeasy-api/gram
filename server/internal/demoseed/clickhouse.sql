@@ -86,6 +86,7 @@ DELETE FROM skill_efficacy_scores WHERE organization_id = 'org_gram_demo_workspa
 DELETE FROM billing_meter_daily_summaries WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM billing_meter_readings_by_time WHERE organization_id = 'org_gram_demo_workspace';
 DELETE FROM agent_events WHERE organization_id = 'org_gram_demo_workspace';
+DELETE FROM session_transcript WHERE organization_id = 'org_gram_demo_workspace';
 
 -- Inserts must never race rows from the previous seed generation. The Go
 -- runner polls this same condition before advancing past the delete phase, and
@@ -102,8 +103,10 @@ SELECT throwIf(
 
 SELECT throwIf(
   (SELECT count() FROM agent_events
-   WHERE organization_id = 'org_gram_demo_workspace') != 0,
-  'demo seed preflight: agent_events rows remain after the scoped delete');
+   WHERE organization_id = 'org_gram_demo_workspace')
+  + (SELECT count() FROM session_transcript
+     WHERE organization_id = 'org_gram_demo_workspace') != 0,
+  'demo seed preflight: agent_events or session_transcript rows remain after the scoped deletes');
 
 -- Transcript-only inference capture: counts as a chat without fabricating usage.
 INSERT INTO telemetry_logs
@@ -2329,7 +2332,7 @@ SELECT throwIf(
 INSERT INTO agent_events
   (organization_id, project_id, occurred_at_unix_nano, observed_at_unix_nano,
    record_id, session_id, turn_id, event_id, event_type, raw_event_name,
-   source, provider, surface, user_id, user_email, external_user_id,
+   source, provider, surface, channel, user_id, user_email, external_user_id,
    account_type, billing_mode, external_org_id, device_id,
    department_name, division_name, job_title, employee_type, cost_center_name,
    roles, groups, model, query_source, skill_name, agent_name,
@@ -2350,7 +2353,7 @@ SELECT
   multiIf(kind = 'prompt', 'prompt', kind = 'request', 'api_request', failed, 'api_error', 'api_response'),
   concat(if(on_claude, 'claude_code.', 'codex.'),
          multiIf(kind = 'prompt', 'user_prompt', kind = 'request', 'api_request', failed, 'api_error', 'api_response')),
-  arrayElement(['claude-code', 'codex'], 1 + toUInt32(NOT on_claude)), provider_v, surface_v, user_id_v, email_v, '',
+  arrayElement(['claude-code', 'codex'], 1 + toUInt32(NOT on_claude)), provider_v, surface_v, 'otel', user_id_v, email_v, '',
   '', '', '', device_v,
   department_v, division_v, title_v, emp_type_v, cost_center_v,
   roles_v, groups_v,
@@ -2439,8 +2442,8 @@ WHERE t < turns;
 -- is what fills the skills dataset; Codex reports no skills.
 INSERT INTO agent_events
   (organization_id, project_id, occurred_at_unix_nano, observed_at_unix_nano,
-   record_id, session_id, turn_id, event_id, event_type, raw_event_name,
-   source, provider, surface, user_id, user_email, external_user_id,
+   record_id, session_id, turn_id, event_id, event_type, raw_event_name, name,
+   source, provider, surface, channel, user_id, user_email, external_user_id,
    account_type, billing_mode, external_org_id, device_id,
    department_name, division_name, job_title, employee_type, cost_center_name,
    roles, groups, model, query_source, skill_name, agent_name,
@@ -2459,7 +2462,8 @@ SELECT
   concat('call_demo_agent_', toString(i), '_', toString(t), '_', toString(k)),
   if(kind = 'decision', 'tool_decision', 'tool_call_result'),
   concat(if(on_claude, 'claude_code.', 'codex.'), if(kind = 'decision', 'tool_decision', 'tool_result')),
-  arrayElement(['claude-code', 'codex'], 1 + toUInt32(NOT on_claude)), provider_v, surface_v, user_id_v, email_v, '',
+  tool_v,
+  arrayElement(['claude-code', 'codex'], 1 + toUInt32(NOT on_claude)), provider_v, surface_v, 'otel', user_id_v, email_v, '',
   '', '', '', device_v,
   department_v, division_v, title_v, emp_type_v, cost_center_v,
   roles_v, groups_v,

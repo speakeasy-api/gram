@@ -25,6 +25,7 @@ func agentEventFixture(orgID string, recordID, sessionID, turnID, eventID, event
 		Source:             "claude-code",
 		Provider:           "anthropic",
 		Surface:            "claude-code",
+		Channel:            "otel",
 		UserID:             "",
 		UserEmail:          "dev@example.com",
 		ExternalUserID:     "",

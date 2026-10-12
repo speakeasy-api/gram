@@ -267,5 +267,6 @@ func TestRetentionLimitsMatchTheSchema(t *testing.T) {
 	}
 
 	require.Equal(t, MaxEventTimeRangeDays, ttl("agent_events"), "agent_events TTL drifted from the catalog's event limit")
+	require.Equal(t, MaxEventTimeRangeDays, ttl("session_transcript"), "session_transcript keeps what agent_events keeps")
 	require.Equal(t, MaxMetricTimeRangeDays, ttl("agent_metrics"), "agent_metrics TTL drifted from the catalog's metric limit")
 }

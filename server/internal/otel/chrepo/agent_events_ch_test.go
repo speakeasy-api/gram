@@ -31,6 +31,7 @@ func TestInsertAgentEvents(t *testing.T) {
 			Source:             "claude-code",
 			Provider:           "anthropic",
 			Surface:            "claude-code",
+			Channel:            "otel",
 			UserID:             "",
 			UserEmail:          "dev@example.com",
 			ExternalUserID:     "acct-1",
@@ -78,7 +79,7 @@ func TestInsertAgentEvents(t *testing.T) {
 		require.NoError(t, err)
 
 		rows, err := conn.Query(t.Context(), `
-			SELECT record_id, event_id, event_type, roles, cost_usd, input_tokens, department_name,
+			SELECT record_id, event_id, event_type, channel, roles, cost_usd, input_tokens, department_name,
 			       toString(attributes.nested.k), duration_nano
 			FROM agent_events
 			WHERE organization_id = ?
@@ -88,15 +89,15 @@ func TestInsertAgentEvents(t *testing.T) {
 		defer func() { require.NoError(t, rows.Close()) }()
 
 		type got struct {
-			recordID, eventID, eventType, department, nested string
-			roles                                            []string
-			cost                                             float64
-			inputTokens, durationNano                        int64
+			recordID, eventID, eventType, channel, department, nested string
+			roles                                                     []string
+			cost                                                      float64
+			inputTokens, durationNano                                 int64
 		}
 		var out []got
 		for rows.Next() {
 			var g got
-			require.NoError(t, rows.Scan(&g.recordID, &g.eventID, &g.eventType, &g.roles, &g.cost, &g.inputTokens, &g.department, &g.nested, &g.durationNano))
+			require.NoError(t, rows.Scan(&g.recordID, &g.eventID, &g.eventType, &g.channel, &g.roles, &g.cost, &g.inputTokens, &g.department, &g.nested, &g.durationNano))
 			out = append(out, g)
 		}
 		require.NoError(t, rows.Err())
@@ -105,6 +106,7 @@ func TestInsertAgentEvents(t *testing.T) {
 		require.Equal(t, "record-1", out[0].recordID)
 		require.Equal(t, "record-1", out[0].eventID)
 		require.Equal(t, "api_request", out[0].eventType)
+		require.Equal(t, "otel", out[0].channel)
 		require.Equal(t, []string{"admin", "member"}, out[0].roles)
 		require.InDelta(t, 0.0125, out[0].cost, 1e-9)
 		require.Equal(t, int64(120), out[0].inputTokens)
