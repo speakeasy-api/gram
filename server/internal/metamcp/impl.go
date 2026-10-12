@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	gatewaymcp "github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -291,6 +292,10 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		return nil, err
 	}
 
+	if payload.DiscoveryMode != nil && !gatewaymcp.DiscoveryMode(*payload.DiscoveryMode).Valid() {
+		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported discovery mode")
+	}
+
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	// Validate the same normalized text that will be persisted, not the raw input.
@@ -407,6 +412,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		NetworkAccessModeSet: payload.NetworkAccessMode != nil,
 		NetworkAccessMode:    storedMode,
 		InstructionsSet:      payload.Instructions != nil,
+		DiscoveryMode:        conv.PtrToPGText(payload.DiscoveryMode),
 		// A blank submission restores the built-in instructions (NULL).
 		Instructions:   instructions,
 		ID:             serverID,

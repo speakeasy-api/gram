@@ -1,3 +1,4 @@
+import { GatewayDiscoverySection } from "./GatewayDiscoverySection";
 import { Check, Copy, Loader2 } from "lucide-react";
 import {
   DangerSettingsSection,
@@ -22,6 +23,7 @@ import { NetworkAccessSection } from "@/pages/mcp/x/tabs/settings/sections/Netwo
 import { RequireScope } from "@/components/require-scope";
 import { Text } from "@/components/ui/Text";
 import { Textarea } from "@/components/moon/textarea";
+import directInstructions from "./builtin-gateway-direct-instructions.txt?raw";
 import builtInInstructions from "./builtin-gateway-instructions.txt?raw";
 import { cn } from "@/lib/utils";
 import { invalidateAllGetMetaMcpServer } from "@gram/client/react-query/getMetaMcpServer.js";
@@ -82,6 +84,10 @@ export function GatewaySettingsTab({
   return (
     <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
       <GatewayNameSection metaMcpServer={metaMcpServer} />
+      <GatewayDiscoverySection
+        key={`${metaMcpServer.id}:${metaMcpServer.discoveryMode}`}
+        metaMcpServer={metaMcpServer}
+      />
       <GatewayInstructionsSection metaMcpServer={metaMcpServer} />
       <ServerUrlSection
         backend={{ metaMcpServerId: metaMcpServer.id }}
@@ -202,7 +208,11 @@ export function GatewayInstructionsSection({
 }): JSX.Element {
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write", metaMcpServer.projectId);
-  const stored = metaMcpServer.instructions || builtInInstructions;
+  const defaultInstructions =
+    metaMcpServer.discoveryMode === "direct"
+      ? directInstructions.trimEnd()
+      : builtInInstructions;
+  const stored = metaMcpServer.instructions || defaultInstructions;
   const [draft, setDraft] = useState(stored);
 
   useEffect(() => {
@@ -220,7 +230,7 @@ export function GatewayInstructionsSection({
       // Refetching an already-empty saved value does not change `stored`.
       setDraft((current) =>
         current.replaceAll("\0", "").trim() === ""
-          ? builtInInstructions
+          ? defaultInstructions
           : current,
       );
       toast.success("Gateway instructions updated");
@@ -241,11 +251,10 @@ export function GatewayInstructionsSection({
         <SettingsSection.Title>Instructions</SettingsSection.Title>
         <SettingsSection.Description>
           Sent to every client on connect. Speakeasy&apos;s built-in
-          instructions teach agents to list servers and describe tools before
-          executing; your text replaces them. Save it blank to restore the
-          built-in text. Anyone who can connect to this gateway can read the
-          text, and clients already connected keep the old text until they
-          reconnect.
+          instructions reflect the active discovery mode; your text replaces
+          them. Save it blank to restore the built-in text. Anyone who can
+          connect to this gateway can read the text, and clients already
+          connected keep the old text until they reconnect.
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
@@ -255,7 +264,9 @@ export function GatewayInstructionsSection({
               <FieldLabel htmlFor="gateway-instructions">
                 Custom instructions
               </FieldLabel>
-              <CopyBuiltInInstructionsButton />
+              <CopyBuiltInInstructionsButton
+                instructions={defaultInstructions}
+              />
             </div>
             <Textarea
               id="gateway-instructions"
@@ -312,7 +323,11 @@ export function GatewayInstructionsSection({
 }
 
 // Keeps the default text available when editing saved custom instructions.
-function CopyBuiltInInstructionsButton(): JSX.Element {
+function CopyBuiltInInstructionsButton({
+  instructions,
+}: {
+  instructions: string;
+}): JSX.Element {
   const [copied, setCopied] = useState(false);
 
   return (
@@ -320,7 +335,7 @@ function CopyBuiltInInstructionsButton(): JSX.Element {
       variant="tertiary"
       size="xs"
       onClick={() => {
-        void navigator.clipboard.writeText(builtInInstructions).then(
+        void navigator.clipboard.writeText(instructions).then(
           () => {
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
