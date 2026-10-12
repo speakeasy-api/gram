@@ -7,14 +7,14 @@ import type { PolicyMCPScopeValue } from "./policy-mcp-scope";
  * the MCP servers to start the scope step with, and the server names that
  * were recognized in the administrator's description, if that is where the
  * selection came from. */
-export type PolicyDraftMCPScope = {
+type PolicyDraftMCPScope = {
   serverIds: string[];
   matchedNames: string[];
 };
 
 /** Where a draft came from, so the wizard can say so and send the
  * administrator back to that starting point with their description intact. */
-export type PolicyDraftOrigin =
+type PolicyDraftOrigin =
   | { source: "preset" }
   | {
       source: "describe";
