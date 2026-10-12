@@ -914,7 +914,7 @@ function buildAssistantTools(deps: ToolDeps) {
   const attach_mcp_server = defineFrontendTool<AttachMCPServerArgs, ToolResult>(
     {
       description:
-        "Attach an MCP server to the assistant so it can call those tools at runtime. Pass exactly one of mcp_server_slug (any server from list_mcp_servers; tunnelled or disabled servers are rejected) or toolset_slug (a toolset's MCP server, turned on if needed and bound to the assistant's shared environment by default). For mcp_server_slug, pass environment_slug only when the server needs a specific environment's variables; most remote servers carry their own connection auth and need none. Replaces any prior reference to the same server.",
+        "Attach an MCP server to the assistant so it can call those tools at runtime. Pass exactly one of mcp_server_slug (any server from list_mcp_servers; tunnelled, disabled, or servers without a Speakeasy-hosted MCP endpoint are rejected) or toolset_slug (a toolset's MCP server, turned on if needed and bound to the assistant's shared environment by default). For mcp_server_slug, pass environment_slug only when the server needs a specific environment's variables; most remote servers carry their own connection auth and need none. Replaces any prior reference to the same server.",
       parameters: z.object({
         mcp_server_slug: z.string().optional(),
         toolset_slug: z.string().optional(),
@@ -1212,7 +1212,7 @@ function buildAssistantTools(deps: ToolDeps) {
   >(
     {
       description:
-        "List MCP servers registered in the current project — remote (external SaaS) and tunnelled servers as well as toolset-backed ones. Use this to find the slug for attach_mcp_server when the user asks to add an MCP server that is not a Speakeasy toolset. Only enabled, non-tunnelled servers are attachable.",
+        "List MCP servers registered in the current project — remote (external SaaS) and tunnelled servers as well as toolset-backed ones. Use this to find the slug for attach_mcp_server when the user asks to add an MCP server that is not a Speakeasy toolset. Only enabled, non-tunnelled servers with a Speakeasy-hosted MCP endpoint are attachable.",
       parameters: z.object({}),
       execute: async () => {
         try {
