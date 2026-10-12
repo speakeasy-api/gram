@@ -111,10 +111,12 @@ export function ClientCard({
   };
 
   const update = useUpdateOrganizationRemoteSessionClientMutation({
-    onSuccess: async () => {
+    onSuccess: async (saved) => {
       await invalidateAllOrganizationRemoteSessionClient(queryClient, {
         refetchType: "all",
       });
+      // An emptied audience is omitted, so show what was actually kept.
+      setAudience(saved.audience ?? "");
       setClientSecret("");
       setLegacyCallbackMode(undefined);
       toast.success("Client updated");
