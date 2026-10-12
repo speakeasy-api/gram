@@ -93,6 +93,7 @@ func TestPreparationAudit_EnableScopesAndUnlink(t *testing.T) {
 	metadata, err = audittest.DecodeAuditData(record.Metadata)
 	require.NoError(t, err)
 	require.Equal(t, "unlinked", metadata["state"], "the disable event records the committed state")
+	require.Equal(t, []any{}, metadata["scopes"], "the disable event records the committed scopes")
 }
 
 func TestPreparationAudit_UnlinkWithoutBindingRecordsNothing(t *testing.T) {
@@ -147,6 +148,10 @@ func TestPreparationAudit_MoveClientRecordsBothClients(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, previous.String(), disabled.SubjectID)
 	require.Equal(t, "downstream-client", disabled.SubjectDisplay)
+	disabledMetadata, err := audittest.DecodeAuditData(disabled.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, "unlinked", disabledMetadata["state"], "the previous client no longer holds the binding")
+	require.Equal(t, []any{}, disabledMetadata["scopes"])
 
 	enabledRecord, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionRemoteSessionClientEnableIdentityChaining)
 	require.NoError(t, err)
