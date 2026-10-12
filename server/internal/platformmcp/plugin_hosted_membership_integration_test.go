@@ -11,6 +11,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -68,7 +69,7 @@ func TestGetPluginReadsToolsetKeyedEntryThroughCanonicalServer(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(settings.PluginMemberships), plugin.ID.String(), "connection settings list the toolset-keyed entry")
 
-	_, err = conn.Exec(ctx, "UPDATE mcp_servers SET visibility = 'disabled' WHERE id = $1 AND project_id = $2", hosted.ID, project.ID)
+	err = testrepo.New(conn).SetMCPServerVisibilityFixture(ctx, testrepo.SetMCPServerVisibilityFixtureParams{Visibility: "disabled", ID: hosted.ID, ProjectID: project.ID})
 	require.NoError(t, err)
 	got, err = service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID.String()})
 	require.NoError(t, err)

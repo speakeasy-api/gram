@@ -1048,6 +1048,9 @@ INSERT INTO mcp_servers (id, project_id, toolset_id, visibility)
 VALUES (@id, @project_id, @toolset_id, @visibility)
 RETURNING id;
 
+-- name: SetMCPServerVisibilityFixture :exec
+UPDATE mcp_servers SET visibility = @visibility WHERE id = @id AND project_id = @project_id;
+
 -- name: CreateMCPServerCatalogueFixtures :execrows
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id, visibility)
 SELECT

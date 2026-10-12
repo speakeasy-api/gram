@@ -5223,6 +5223,21 @@ func (q *Queries) SetMCPServerRemoteSessionIssuerFixture(ctx context.Context, ar
 	return result.RowsAffected(), nil
 }
 
+const setMCPServerVisibilityFixture = `-- name: SetMCPServerVisibilityFixture :exec
+UPDATE mcp_servers SET visibility = $1 WHERE id = $2 AND project_id = $3
+`
+
+type SetMCPServerVisibilityFixtureParams struct {
+	Visibility string
+	ID         uuid.UUID
+	ProjectID  uuid.UUID
+}
+
+func (q *Queries) SetMCPServerVisibilityFixture(ctx context.Context, arg SetMCPServerVisibilityFixtureParams) error {
+	_, err := q.db.Exec(ctx, setMCPServerVisibilityFixture, arg.Visibility, arg.ID, arg.ProjectID)
+	return err
+}
+
 const setMetaMCPServerNetworkAccessModeFixture = `-- name: SetMetaMCPServerNetworkAccessModeFixture :execrows
 UPDATE meta_mcp_servers
 SET network_access_mode = $1
