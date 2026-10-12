@@ -129,7 +129,6 @@ func InitAuthContext(t *testing.T, ctx context.Context, conn *pgxpool.Pool, sess
 		ImpersonatorEmail:     "",
 		SupportOrganizationID: "",
 		SupportExpiresAt:      time.Time{},
-		IssuedAt:              time.Time{},
 	}
 	err = sessionManager.StoreSession(ctx, session)
 	require.NoError(t, err)

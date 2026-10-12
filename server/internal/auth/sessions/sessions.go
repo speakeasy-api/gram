@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -52,6 +53,11 @@ type SessionRevoker interface {
 	RevokeSession(ctx context.Context, sessionID string) error
 }
 
+// SessionLister lists a user's IDP sessions.
+type SessionLister interface {
+	ListSessionIDs(ctx context.Context, idpUserID string) ([]string, error)
+}
+
 // UserResolver provides identity-layer operations that Authenticate needs.
 // Implemented by the identity.Resolver to avoid a circular import.
 type UserResolver interface {
@@ -65,7 +71,8 @@ type Manager struct {
 	logger       *slog.Logger
 	tracer       trace.Tracer
 	sessionCache cache.TypedCacheObject[Session]
-	validAfter   cache.TypedCacheObject[validAfter]
+	redis        *redis.Client
+	flags        feature.Provider
 	idpClient    SessionRevoker
 	orgRepo      *orgRepo.Queries
 	userRepo     *userRepo.Queries
@@ -89,7 +96,8 @@ func NewManager(
 		logger:       logger,
 		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth/sessions"),
 		sessionCache: cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), suffix),
-		validAfter:   cache.NewTypedObjectCache[validAfter](logger.With(attr.SlogCacheNamespace("session_valid_after")), cache.NewRedisCacheAdapter(redisClient), suffix),
+		redis:        redisClient,
+		flags:        nil,
 		idpClient:    idpClient,
 		orgRepo:      orgRepo.New(db),
 		userRepo:     userRepo.New(db),
@@ -266,22 +274,36 @@ func (s *Manager) GetSession(ctx context.Context, sessionID string) (Session, er
 	return session, nil
 }
 
+// StoreSession stores a session. A session stored again keeps its original
+// issuance, so re-storing never lifts it past the sign-out-everywhere epoch.
 func (s *Manager) StoreSession(ctx context.Context, session Session) error {
-	if session.IssuedAt.IsZero() {
-		session.IssuedAt = time.Now()
-	}
-	err := s.sessionCache.Store(ctx, session)
-	if err != nil {
+	if err := s.sessionCache.Store(ctx, session); err != nil {
 		return fmt.Errorf("store session: %w", err)
 	}
+	if s.redis != nil {
+		if err := s.redis.SetNX(ctx, sessionIssuedAtKey(session.SessionID), time.Now().UnixMicro(), sessionMarkerTTL).Err(); err != nil {
+			return fmt.Errorf("store session issuance: %w", err)
+		}
+	}
+	return nil
+}
 
+// StoreSessionIssuedAt stores a session and records when it was issued, for
+// the sign-out-everywhere epoch. Issuance lives beside the session so the
+// session's serialized form stays unchanged across versions.
+func (s *Manager) StoreSessionIssuedAt(ctx context.Context, session Session, issuedAt time.Time) error {
+	if err := s.sessionCache.Store(ctx, session); err != nil {
+		return fmt.Errorf("store session: %w", err)
+	}
+	if s.redis != nil {
+		if err := s.redis.Set(ctx, sessionIssuedAtKey(session.SessionID), issuedAt.UnixMicro(), sessionMarkerTTL).Err(); err != nil {
+			return fmt.Errorf("store session issuance: %w", err)
+		}
+	}
 	return nil
 }
 
 func (s *Manager) UpdateSession(ctx context.Context, expected, replacement Session) error {
-	if replacement.IssuedAt.IsZero() {
-		replacement.IssuedAt = expected.IssuedAt
-	}
 	updated, err := s.sessionCache.CompareAndSwap(ctx, expected, replacement)
 	if err != nil {
 		return fmt.Errorf("update session: %w", err)
@@ -340,36 +362,128 @@ func (s *Manager) InvalidateUserInfoCache(ctx context.Context, userID string) er
 	return nil
 }
 
+// SetFlags wires the flag provider gating epoch enforcement.
+func (s *Manager) SetFlags(flags feature.Provider) { s.flags = flags }
+
+// SSOSignInEnforced reports whether SSO sign-in enforcement is on.
+func (s *Manager) SSOSignInEnforced(ctx context.Context) bool {
+	return feature.SSOSignInEnforced(ctx, s.flags)
+}
+
+// sessionMarkerTTL outlives any dashboard session the markers describe.
+const sessionMarkerTTL = 400 * 24 * time.Hour
+
+func sessionIssuedAtKey(sessionID string) string { return "sessions:issued_at:" + sessionID }
+
+func userValidAfterKey(userID string) string { return "sessions:valid_after:" + userID }
+
+// raiseValidAfter stores max(current, ARGV[1]) so concurrent writers never
+// move the epoch backwards.
+var raiseValidAfter = redis.NewScript(`
+local current = tonumber(redis.call("GET", KEYS[1]) or "0")
+local proposed = tonumber(ARGV[1])
+if proposed > current then
+  redis.call("SET", KEYS[1], ARGV[1], "PX", ARGV[2])
+  return proposed
+end
+redis.call("PEXPIRE", KEYS[1], ARGV[2])
+return current
+`)
+
+// IssuedAt is when a dashboard session was issued; ok is false for sessions
+// stored before issuance was recorded.
+func (s *Manager) IssuedAt(ctx context.Context, sessionID string) (time.Time, bool, error) {
+	if s.redis == nil {
+		return time.Time{}, false, nil
+	}
+	v, err := s.redis.Get(ctx, sessionIssuedAtKey(sessionID)).Int64()
+	if errors.Is(err, redis.Nil) {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("get session issuance: %w", err)
+	}
+	return time.UnixMicro(v), true, nil
+}
+
+// issuedBeforeEpoch reports whether a session issued at issuedAt (ok false when
+// unknown) predates its user's sign-out-everywhere epoch.
+func (s *Manager) issuedBeforeEpoch(ctx context.Context, userID string, issuedAt time.Time, issuedKnown bool) (bool, error) {
+	epoch, err := s.redis.Get(ctx, userValidAfterKey(userID)).Int64()
+	if errors.Is(err, redis.Nil) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("get session epoch: %w", err)
+	}
+	return !issuedKnown || issuedAt.UnixMicro() <= epoch, nil
+}
+
+// ListUserIDPSessionIDs lists every IDP session a user holds, or nothing when
+// the IDP client cannot list them or the user has no IDP identity.
+func (s *Manager) ListUserIDPSessionIDs(ctx context.Context, userID string) ([]string, error) {
+	lister, ok := s.idpClient.(SessionLister)
+	if !ok || lister == nil {
+		return nil, nil
+	}
+	user, err := s.userRepo.GetUser(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get user: %w", err)
+	}
+	if !user.WorkosID.Valid || user.WorkosID.String == "" {
+		return nil, nil
+	}
+	ids, err := lister.ListSessionIDs(ctx, user.WorkosID.String)
+	if err != nil {
+		return nil, fmt.Errorf("list idp sessions: %w", err)
+	}
+	return ids, nil
+}
+
+// SessionPredatesEpoch reports whether a session was issued before its user
+// signed out everywhere. It is false while enforcement is off.
+func (s *Manager) SessionPredatesEpoch(ctx context.Context, userID, sessionID string) (bool, error) {
+	if s.redis == nil || !feature.SSOSignInEnforced(ctx, s.flags) {
+		return false, nil
+	}
+	issuedAt, known, err := s.IssuedAt(ctx, sessionID)
+	if err != nil {
+		return false, err
+	}
+	return s.issuedBeforeEpoch(ctx, userID, issuedAt, known)
+}
+
+// IssuedBeforeEpoch reports whether a session issued at issuedAt (known false
+// when unrecorded) predates its user's sign-out-everywhere epoch. It is false
+// while enforcement is off.
+func (s *Manager) IssuedBeforeEpoch(ctx context.Context, userID string, issuedAt time.Time, known bool) (bool, error) {
+	if s.redis == nil || !feature.SSOSignInEnforced(ctx, s.flags) {
+		return false, nil
+	}
+	return s.issuedBeforeEpoch(ctx, userID, issuedAt, known)
+}
+
 // checkValidAfter rejects a session issued before its user signed out
 // everywhere.
 func (s *Manager) checkValidAfter(ctx context.Context, session Session) error {
-	epoch, err := s.validAfter.Get(ctx, validAfterCacheKey(session.UserID))
-	if errors.Is(err, redisCache.ErrCacheMiss) {
-		return nil
-	}
+	predates, err := s.SessionPredatesEpoch(ctx, session.UserID, session.SessionID)
 	if err != nil {
 		return oops.E(oops.CodeUnavailable, err, "error checking session validity").LogError(ctx, s.logger)
 	}
-	if session.IssuedAt.IsZero() || !session.IssuedAt.After(epoch.ValidAfter) {
+	if predates {
 		return oops.C(oops.CodeUnauthorized)
 	}
 	return nil
 }
 
-// EndUserSessions invalidates every dashboard session the user holds now and
-// ends the given identity provider sessions. Sessions stored afterwards stay
-// valid.
-func (s *Manager) EndUserSessions(ctx context.Context, userID string, idpSessionIDs []string) error {
-	if err := s.validAfter.Store(ctx, validAfter{UserID: userID, ValidAfter: time.Now()}); err != nil {
-		return fmt.Errorf("store session epoch: %w", err)
+// RaiseUserEpoch invalidates every dashboard session the user was issued at or
+// before at. The stored epoch only ever moves forward.
+func (s *Manager) RaiseUserEpoch(ctx context.Context, userID string, at time.Time) error {
+	if s.redis == nil {
+		return errors.New("session epoch store is not configured")
 	}
-	for _, id := range idpSessionIDs {
-		if id == "" || s.idpClient == nil {
-			continue
-		}
-		if err := s.idpClient.RevokeSession(ctx, id); err != nil {
-			s.logger.ErrorContext(ctx, "failed to revoke WorkOS session", attr.SlogError(err))
-		}
+	if err := raiseValidAfter.Run(ctx, s.redis, []string{userValidAfterKey(userID)}, at.UnixMicro(), sessionMarkerTTL.Milliseconds()).Err(); err != nil {
+		return fmt.Errorf("raise session epoch: %w", err)
 	}
 	return nil
 }

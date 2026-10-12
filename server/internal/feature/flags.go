@@ -189,6 +189,12 @@ const (
 	// FlagOktaConnections gates the Okta integration while it is dogfooded:
 	// creating connections, resource connections and server suggestions.
 	FlagOktaConnections Flag = "okta-connections"
+
+	// FlagSSOSignInEnforcement turns on SSO sign-in linking of MCP grants,
+	// the dashboard session epoch, sign out everywhere and member sign-in
+	// revocation. Enable it only once every pod runs the code that honours
+	// it; off keeps today's behaviour. Evaluated fleet-wide.
+	FlagSSOSignInEnforcement Flag = "sso-sign-in-enforcement"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an

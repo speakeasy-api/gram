@@ -88,5 +88,6 @@ func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger,
 	growth := growthsignals.NewEmitter(logger, posthogClient, growthsignals.NewDatabaseEnricher(db), siteURL)
 	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), c.String("idp-base-url"), c.String("idp-client-id"), idpClient, workosClient, orgrepo.New(db), userrepo.New(db), pylonClient, posthogClient, growth, cache.SuffixNone)
 	manager := sessions.NewManager(logger, tracerProvider, db, redisClient, cache.SuffixNone, idpClient, billingRepo, resolver)
+	manager.SetFlags(featureFlags)
 	return &serverIdentity{Posthog: posthogClient, Features: featureFlags, WorkOS: workosClient, WorkOSAvailable: available, Stripe: stripeClient, Billing: billingRepo, BillingTracker: billingTracker, ProductFeatures: productFeatures, SiteURL: siteURL, Growth: growth, Identity: resolver, Sessions: manager, ChatSessions: chatsessions.NewManager(logger, redisClient, c.String(usersessions.JWTSigningKeyFlag))}, nil
 }
