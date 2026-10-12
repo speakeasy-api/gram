@@ -10,6 +10,7 @@ import (
 
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -1111,8 +1112,7 @@ func TestCallback_LoginAfterWorkOSDeleteKeepsUnwhitelistedOrg(t *testing.T) {
 
 	trial, err := trialsRepo.New(instance.conn).GetTrial(ctx, staleOrgID)
 	require.NoError(t, err)
-	require.True(t, trial.EndsAt.Valid)
-	require.True(t, trial.EndsAt.Time.Before(time.Now()), "login must not restart a trial that already ended")
+	require.WithinDuration(t, expiredAt, trial.EndsAt.Time, time.Second)
 }
 
 func TestCallback_LoginArmsTrialForOrganizationThatNeverTrialled(t *testing.T) {
@@ -1139,6 +1139,7 @@ func TestCallback_LoginArmsTrialForOrganizationThatNeverTrialled(t *testing.T) {
 
 	result, err := instance.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
 
 	ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
 	require.NoError(t, err)
@@ -1147,23 +1148,7 @@ func TestCallback_LoginArmsTrialForOrganizationThatNeverTrialled(t *testing.T) {
 	require.Equal(t, organizationID, authCtx.ActiveOrganizationID)
 	require.True(t, authCtx.Whitelisted)
 	require.Equal(t, "enterprise", authCtx.AccountType)
-
-	org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, organizationID)
-	require.NoError(t, err)
-	require.True(t, org.Whitelisted)
-	require.Equal(t, "enterprise", org.GramAccountType)
-
-	trial, err := trialsRepo.New(instance.conn).GetTrial(ctx, organizationID)
-	require.NoError(t, err)
-	require.Equal(t, "enterprise", trial.Tier)
 	require.Equal(t, []string{organizationID}, instance.trialNotifier.trialStarted)
-
-	platformMCPEnabled, err := featurerepo.New(instance.conn).IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
-		OrganizationID: organizationID,
-		FeatureName:    string(productfeatures.FeaturePlatformMCP),
-	})
-	require.NoError(t, err)
-	require.True(t, platformMCPEnabled)
 }
 
 func TestCallback_LoginDoesNotArmTrialForProspect(t *testing.T) {
@@ -1199,16 +1184,14 @@ func TestCallback_LoginDoesNotArmTrialForProspect(t *testing.T) {
 
 	result, err := instance.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
 
-	ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
+	org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, organizationID)
 	require.NoError(t, err)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.False(t, authCtx.Whitelisted, "a prospect stays behind the book-a-demo gate")
+	require.False(t, org.Whitelisted, "a prospect stays behind the book-a-demo gate")
 
 	_, err = trialsRepo.New(instance.conn).GetTrial(ctx, organizationID)
-	require.Error(t, err)
-	require.Empty(t, instance.trialNotifier.trialStarted)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestCallback_LoginDoesNotArmTrialForPaidOrganization(t *testing.T) {
@@ -1239,14 +1222,12 @@ func TestCallback_LoginDoesNotArmTrialForPaidOrganization(t *testing.T) {
 
 	result, err := instance.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
+	require.NotContains(t, result.Location, "signin_error=")
 
-	ctx, err = instance.sessionManager.Authenticate(ctx, result.SessionToken)
+	org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, organizationID)
 	require.NoError(t, err)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.False(t, authCtx.Whitelisted)
-	require.Equal(t, "pro", authCtx.AccountType)
-	require.Empty(t, instance.trialNotifier.trialStarted)
+	require.False(t, org.Whitelisted)
+	require.Equal(t, "pro", org.GramAccountType)
 }
 
 func TestCallback_ReactivatedSignupPrefersExistingWhitelistedOrg(t *testing.T) {

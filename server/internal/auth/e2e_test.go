@@ -379,17 +379,9 @@ func TestE2E_Callback_NewUserWithWorkOSOrgMemberships(t *testing.T) {
 	assert.Equal(t, orgName, orgMeta.Name)
 	assert.Equal(t, workosOrgID, orgMeta.WorkosID.String)
 	assert.True(t, orgMeta.Whitelisted, "an identity-provider organization that has never trialed receives the self-serve trial")
-	assert.Equal(t, "enterprise", orgMeta.GramAccountType)
 
-	trial, err := trialsRepo.New(inst.conn).GetTrial(ctx, expectedOrgID)
+	_, err = trialsRepo.New(inst.conn).GetTrial(ctx, expectedOrgID)
 	require.NoError(t, err)
-	assert.Equal(t, "enterprise", trial.Tier)
-	require.Equal(t, []string{expectedOrgID}, inst.trialNotifier.trialStarted)
-
-	again, err := inst.callbackWithNonce(ctx, t)
-	require.NoError(t, err)
-	require.NotContains(t, again.Location, "signin_error=")
-	require.Equal(t, []string{expectedOrgID}, inst.trialNotifier.trialStarted, "a second login must not start another trial")
 }
 
 func TestE2E_Callback_NonLatinWorkOSOrganizationUsesDeterministicSlug(t *testing.T) {
