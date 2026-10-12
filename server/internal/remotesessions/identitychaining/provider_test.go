@@ -2,7 +2,11 @@ package identitychaining
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"log/slog"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -274,4 +278,53 @@ func TestProviders_AnotherOrganizationsOrderDoesNotApply(t *testing.T) {
 	require.True(t, order.IsDefault)
 	_, outcome := f.chainer.Acquire(t.Context(), f.req)
 	require.True(t, outcome.Succeeded(), "outcome: %+v", outcome)
+}
+
+// interceptingSource runs afterIssue once its wrapped source has issued, so a
+// test can change the order while the attempt is between issue and publish.
+type interceptingSource struct {
+	tokenSource
+	afterIssue func()
+}
+
+func (s interceptingSource) issue(ctx context.Context, logger *slog.Logger, req Request, sel selection, ready func() Outcome) (issuedGrant, Outcome) {
+	grant, outcome := s.tokenSource.issue(ctx, logger, req, sel, ready)
+	s.afterIssue()
+	return grant, outcome
+}
+
+func TestProviders_OrderChangedMidAttemptDiscardsTheToken(t *testing.T) {
+	t.Parallel()
+	f := newDevIDPFixture(t, devIDPOptions{})
+	internalIssuer := seedSpeakeasyIssuer(t, f, f.req.OrganizationID)
+	f.chainer.sources[remotesessions.EMAProviderExternal] = func(p remotesessions.EMAProvider) tokenSource {
+		return interceptingSource{
+			tokenSource: externalSource{c: f.chainer, issuer: p.RemoteSessionIssuerID},
+			afterIssue:  func() { setPolicy(t, f, f.req.OrganizationID, speakeasy(internalIssuer)) },
+		}
+	}
+
+	_, outcome := f.chainer.Acquire(t.Context(), f.req)
+	require.Equal(t, ReasonStaleConfiguration, outcome.Reason, "a provider removed mid-attempt never publishes or releases its token")
+	require.False(t, f.chainer.HasUsableCredential(t.Context(), f.req))
+	_, outcome = f.chainer.Acquire(t.Context(), f.req)
+	require.Equal(t, ReasonProviderUnavailable, outcome.Reason)
+}
+
+func TestCacheKey_ExternalKeepsTheLegacyFormat(t *testing.T) {
+	t.Parallel()
+	req := Request{OrganizationID: "org", ProjectID: uuid.New(), UserSessionIssuerID: uuid.New(), UserID: "user", UpstreamResource: "https://upstream.example.test/mcp", RemoteSessionIssuerID: uuid.NullUUID{}}
+	sel := selection{bindingID: uuid.New(), generation: 3, trustedIssuerID: uuid.New(), trustedClientID: uuid.New(), audience: "aud", clientID: uuid.New(), resource: "https://upstream.example.test/mcp", scopes: []string{"read"}}
+	legacy := sha256.Sum256([]byte(strings.Join([]string{
+		req.OrganizationID, req.ProjectID.String(), req.UserSessionIssuerID.String(), req.UserID,
+		sel.bindingID.String(), strconv.FormatInt(sel.generation, 10),
+		sel.trustedIssuerID.String(), sel.trustedClientID.String(), sel.audience,
+		sel.clientID.String(), sel.resource, strings.Join(sel.scopes, " "),
+	}, "\n")))
+
+	sel.provider = remotesessions.EMAProvider{Kind: remotesessions.EMAProviderExternal, RemoteSessionIssuerID: sel.trustedIssuerID, InternalSessionIssuerID: uuid.Nil, Unavailable: ""}
+	require.Equal(t, "lock:"+hex.EncodeToString(legacy[:]), cacheKey("lock", req, sel), "old and new processes share single flight")
+	external := cacheKey("lock", req, sel)
+	sel.provider.Kind = remotesessions.EMAProviderSpeakeasy
+	require.NotEqual(t, external, cacheKey("lock", req, sel))
 }

@@ -88,6 +88,23 @@ func (g *Governor) servingProviders(ctx context.Context, logger *slog.Logger, re
 	return available, success
 }
 
+// stillServes rechecks that sel's provider is still an available entry in the
+// vendor's order before a token it produced is published or released, so an
+// admin's order change wins over an attempt already in flight.
+func (g *Governor) stillServes(ctx context.Context, logger *slog.Logger, req Request, sel selection) Outcome {
+	order, outcome := g.providerOrder(ctx, logger, req, sel)
+	if !outcome.Succeeded() {
+		return outcome
+	}
+	want := sel.provider
+	for _, p := range order.Available() {
+		if p.Kind == want.Kind && p.RemoteSessionIssuerID == want.RemoteSessionIssuerID && p.InternalSessionIssuerID == want.InternalSessionIssuerID {
+			return success
+		}
+	}
+	return newOutcome(StagePersistence, ReasonStaleConfiguration, ConfidenceVerified, true)
+}
+
 // source builds the token source for p.
 func (g *Governor) source(p remotesessions.EMAProvider) tokenSource {
 	if build, ok := g.sources[p.Kind]; ok {

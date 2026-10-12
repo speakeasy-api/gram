@@ -167,7 +167,7 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 	defer cancel()
 	var first Outcome
 	for i, p := range providers {
-		token, attempt := c.acquireFrom(ctx, logger.With(attr.SlogIdentityChainingProvider(string(p.Kind))), req, sel, c.source(p))
+		token, attempt := c.acquireFrom(ctx, logger.With(attr.SlogIdentityChainingProvider(string(p.Kind))), req, sel, p)
 		attempt.Provider = p.Kind
 		c.attempts.Add(ctx, 1, metric.WithAttributes(attr.IdentityChainingProvider(string(p.Kind)), attr.Outcome(attempt.Reason), attr.IdentityChainingFallback(i > 0)))
 		if attempt.Succeeded() {
@@ -185,9 +185,18 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 
 // acquireFrom obtains a token for sel from one source: a still-valid stored
 // credential, or a fresh issue and redemption under single flight.
-func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Request, sel selection, src tokenSource) (Token, Outcome) {
+func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Request, sel selection, p remotesessions.EMAProvider) (Token, Outcome) {
 	var none Token
-	sel.provider = src.kind()
+	src := c.source(p)
+	sel.provider = p
+	// A token obtained after waiting is released only while its provider can
+	// still serve, so an order changed meanwhile never hands one out.
+	release := func(token Token) (Token, Outcome) {
+		if outcome := c.stillServes(ctx, logger, req, sel); !outcome.Succeeded() {
+			return none, outcome
+		}
+		return token, success
+	}
 	if outcome := src.authorize(ctx, logger, req, &sel); !outcome.Succeeded() {
 		return none, outcome
 	}
@@ -213,7 +222,11 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 		// statement still rejects stale provenance.
 		logger.WarnContext(ctx, "identity chaining lock unavailable; exchanging without single flight", attr.SlogCacheKey(lockKey), attr.SlogError(err))
 	case !held:
-		return c.awaitConcurrentAcquisition(ctx, logger, req, sel)
+		token, outcome := c.awaitConcurrentAcquisition(ctx, logger, req, sel)
+		if !outcome.Succeeded() {
+			return none, outcome
+		}
+		return release(token)
 	default:
 		lockedAt := c.now()
 		defer o11y.LogDefer(ctx, logger, "release identity chaining lock", func() error {
@@ -228,7 +241,7 @@ func (c *Chainer) acquireFrom(ctx context.Context, logger *slog.Logger, req Requ
 		// A holder that finished while this request waited for the lock
 		// already published its credential.
 		if token, ok := c.cachedToken(ctx, logger, req, sel); ok {
-			return token, success
+			return release(token)
 		}
 	}
 
@@ -301,14 +314,20 @@ func (c *Chainer) awaitConcurrentAcquisition(ctx context.Context, logger *slog.L
 // make bounded, delimiter-safe keys. The binding generation, the trusted
 // identity provider registration and the audience are part of the identity, so
 // a rebind, changed trust or newly confirmed audience never inherits an
-// earlier failure or lock.
+// earlier failure or lock. External sources keep the key format that predates
+// EMA providers, so old and new processes share single flight during a
+// rolling deploy; other providers are qualified by kind.
 func cacheKey(prefix string, req Request, sel selection) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		req.OrganizationID, req.ProjectID.String(), req.UserSessionIssuerID.String(), req.UserID,
-		string(sel.provider), sel.bindingID.String(), strconv.FormatInt(sel.generation, 10),
+	parts := []string{req.OrganizationID, req.ProjectID.String(), req.UserSessionIssuerID.String(), req.UserID}
+	if sel.provider.Kind != remotesessions.EMAProviderExternal {
+		parts = append(parts, string(sel.provider.Kind))
+	}
+	parts = append(parts,
+		sel.bindingID.String(), strconv.FormatInt(sel.generation, 10),
 		sel.trustedIssuerID.String(), sel.trustedClientID.String(), sel.audience,
 		sel.clientID.String(), sel.resource, strings.Join(sel.scopes, " "),
-	}, "\n")))
+	)
+	digest := sha256.Sum256([]byte(strings.Join(parts, "\n")))
 	return prefix + ":" + hex.EncodeToString(digest[:])
 }
 

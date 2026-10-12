@@ -35,9 +35,9 @@ type selection struct {
 	trustedIssuerID uuid.UUID
 	trustedClientID uuid.UUID
 
-	// provider is the identity provider kind serving this attempt; set by
-	// acquireFrom and part of every cache key.
-	provider remotesessions.EMAProviderKind
+	// provider is the EMA provider serving this attempt; set by acquireFrom.
+	// A token is released or published only while it can still serve.
+	provider remotesessions.EMAProvider
 
 	// audience is the ID-JAG audience: an administrator-confirmed Okta
 	// resource app audience when one exists, else the resource authorization
@@ -119,7 +119,7 @@ func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req R
 		configuredScopes: result.Scopes,
 		trustedIssuerID:  uuid.Nil,
 		trustedClientID:  uuid.Nil,
-		provider:         "",
+		provider:         remotesessions.EMAProvider{Kind: "", RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.Nil, Unavailable: ""},
 		audience:         "",
 	}, success
 }
