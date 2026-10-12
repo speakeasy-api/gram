@@ -610,7 +610,7 @@ are unchanged.
 ## Follow-ups
 
 - **F1, tool outcomes.** Render tool results as `<tool_calls>[originating
-call]` plus `Tool outcome: <result>` so the model sees a call together with
+  call]` plus `Tool outcome: <result>` so the model sees a call together with
   what it returned. Needs retraining first (3 of 2 240 training rows populate
   the slot), then new `tool_outcome` proto fields and a prompt version gate.
 - **F2, prompt-driven controls.** PII category allow/deny lists and
