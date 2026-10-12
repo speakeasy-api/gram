@@ -6497,7 +6497,7 @@ examples:
   exportMcpMetadata:
     speakeasy-default-export-mcp-metadata:
       requestBody:
-        application/json: {"mcp_slug": "<value>"}
+        application/json: {}
       responses:
         "200":
           application/json: {"authentication": {"headers": [{"display_name": "Arden_Friesen", "name": "<value>"}], "required": false}, "name": "<value>", "server_url": "https://musty-technician.biz/", "slug": "<value>", "tools": [{"description": "blank disk where zowie", "input_schema": "<value>", "name": "<value>"}]}

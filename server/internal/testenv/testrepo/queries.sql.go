@@ -322,6 +322,25 @@ func (q *Queries) CountFunctionsAccess(ctx context.Context, arg CountFunctionsAc
 	return count, err
 }
 
+const countMcpMetadataForBackendIDFixture = `-- name: CountMcpMetadataForBackendIDFixture :one
+SELECT count(*)
+FROM mcp_metadata
+WHERE project_id = $1
+  AND (toolset_id = $2::uuid OR mcp_server_id = $2::uuid)
+`
+
+type CountMcpMetadataForBackendIDFixtureParams struct {
+	ProjectID uuid.UUID
+	BackendID uuid.UUID
+}
+
+func (q *Queries) CountMcpMetadataForBackendIDFixture(ctx context.Context, arg CountMcpMetadataForBackendIDFixtureParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countMcpMetadataForBackendIDFixture, arg.ProjectID, arg.BackendID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countOrganizationFeaturesFixture = `-- name: CountOrganizationFeaturesFixture :one
 SELECT count(*)
 FROM organization_features
@@ -4244,6 +4263,26 @@ ALTER TABLE publish_outbox ADD CONSTRAINT reject_publish_outbox_writes_fixture C
 func (q *Queries) RejectPublishOutboxWritesFixture(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, rejectPublishOutboxWritesFixture)
 	return err
+}
+
+const rekeyMcpMetadataToMcpServerFixture = `-- name: RekeyMcpMetadataToMcpServerFixture :execrows
+UPDATE mcp_metadata
+SET toolset_id = NULL, mcp_server_id = toolset_id
+WHERE project_id = $1
+  AND toolset_id = $2
+`
+
+type RekeyMcpMetadataToMcpServerFixtureParams struct {
+	ProjectID uuid.UUID
+	ToolsetID uuid.NullUUID
+}
+
+func (q *Queries) RekeyMcpMetadataToMcpServerFixture(ctx context.Context, arg RekeyMcpMetadataToMcpServerFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, rekeyMcpMetadataToMcpServerFixture, arg.ProjectID, arg.ToolsetID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const repointMCPServerToolsetFixture = `-- name: RepointMCPServerToolsetFixture :one

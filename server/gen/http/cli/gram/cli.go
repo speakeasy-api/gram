@@ -19445,7 +19445,7 @@ func mcpMetadataUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-mcp-metadata: Fetch the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.`)
 	fmt.Fprintln(os.Stderr, `    set-mcp-metadata: Create or update the metadata that powers the MCP install page. Exactly one of toolset_slug or mcp_server_id must be provided.`)
-	fmt.Fprintln(os.Stderr, `    export-mcp-metadata: Export MCP server details as JSON for documentation and integration purposes.`)
+	fmt.Fprintln(os.Stderr, `    export-mcp-metadata: Export MCP server details as JSON for documentation and integration purposes. Exactly one of mcp_slug or mcp_server_id must be provided.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s mcp-metadata COMMAND --help\n", os.Args[0])
@@ -19511,7 +19511,7 @@ func mcpMetadataExportMcpMetadataUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Export MCP server details as JSON for documentation and integration purposes.`)
+	fmt.Fprintln(os.Stderr, `Export MCP server details as JSON for documentation and integration purposes. Exactly one of mcp_slug or mcp_server_id must be provided.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -19521,7 +19521,7 @@ func mcpMetadataExportMcpMetadataUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata export-mcp-metadata --body '{\n      \"mcp_slug\": \"aaa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata export-mcp-metadata --body '{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_slug\": \"aaa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // registryDiscoveryUsage displays the usage of the registry-discovery command

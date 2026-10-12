@@ -524,7 +524,12 @@ SELECT DISTINCT
 FROM plugin_servers ps
 JOIN plugins p ON p.id = ps.plugin_id AND p.deleted IS FALSE
 JOIN toolsets t ON t.id = COALESCE(ps.toolset_id, ps.mcp_server_id) AND t.project_id = p.project_id AND t.deleted IS FALSE
-JOIN mcp_metadata md ON (md.toolset_id = t.id OR md.mcp_server_id = t.id) AND md.project_id = p.project_id
+JOIN LATERAL (
+  SELECT m.id FROM mcp_metadata m
+  WHERE (m.toolset_id = t.id OR m.mcp_server_id = t.id) AND m.project_id = p.project_id
+  ORDER BY (m.toolset_id IS NOT NULL) DESC, m.updated_at DESC
+  LIMIT 1
+) md ON TRUE
 JOIN mcp_environment_configs ec ON ec.mcp_metadata_id = md.id AND ec.project_id = p.project_id
 WHERE p.project_id = @project_id
   AND ps.deleted IS FALSE
