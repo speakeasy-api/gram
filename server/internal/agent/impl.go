@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -65,6 +66,10 @@ type Service struct {
 	blobStore       assets.BlobStore
 	telemetry       *telemetry.Logger
 	growth          *growthsignals.Emitter
+
+	// deviceAgentTokens authenticates headless devices that present a
+	// device-agent token instead of an agent API key. Nil refuses them.
+	deviceAgentTokens *deviceagenttoken.Issuer
 }
 
 var (
@@ -85,21 +90,23 @@ func NewService(
 	blobStore assets.BlobStore,
 	telemetryLogger *telemetry.Logger,
 	growthEmitter *growthsignals.Emitter,
+	deviceAgentTokens *deviceagenttoken.Issuer,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agent"))
 	return &Service{
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
-		logger:          logger,
-		db:              db,
-		repo:            repo.New(db),
-		auth:            auth.New(logger, db, sessions, authzEngine),
-		authz:           authzEngine,
-		audit:           auditLogger,
-		productFeatures: productFeatures,
-		serverURL:       serverURL,
-		blobStore:       blobStore,
-		telemetry:       telemetryLogger,
-		growth:          growthEmitter,
+		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
+		logger:            logger,
+		db:                db,
+		repo:              repo.New(db),
+		auth:              auth.New(logger, db, sessions, authzEngine),
+		authz:             authzEngine,
+		audit:             auditLogger,
+		productFeatures:   productFeatures,
+		serverURL:         serverURL,
+		blobStore:         blobStore,
+		telemetry:         telemetryLogger,
+		growth:            growthEmitter,
+		deviceAgentTokens: deviceAgentTokens,
 	}
 }
 
@@ -107,16 +114,22 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
-	)
+	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	server.Use(deviceagenttoken.BearerChallenge)
+	srv.Mount(mux, server)
 	// Public capability-URL route for minted session handoffs (see
 	// handoffs.go): unauthenticated by design, the token is the credential.
 	o11y.AttachHandler(mux, http.MethodGet, "/shared/handoffs/{token}", oops.ErrHandle(service.logger, service.ServeSessionHandoff).ServeHTTP)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	// A refused device-agent token is the better answer than a missing key
+	// for a device that sent no key.
+	if key == "" {
+		if err := deviceagenttoken.AuthFailure(ctx); err != nil {
+			return ctx, fmt.Errorf("device-agent token refused: %w", err)
+		}
+	}
 	ctx, err := s.auth.Authorize(ctx, key, schema)
 	if err != nil {
 		return ctx, err
@@ -137,6 +150,36 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 		return ctx, fmt.Errorf("authorize agent device sync: %w", err)
 	}
 	return ctx, nil
+}
+
+// JWTAuth authenticates a headless device's device-agent token. The workload
+// is admitted through its assigned agent's live policy, must hold the
+// device-sync grant as an agent key must, and then acts as that agent, so the
+// poll resolves the agent's plugins.
+//
+// A request with no device-agent token returns unchanged for the API key
+// requirement Goa tries next.
+func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTScheme) (context.Context, error) {
+	if token == "" || !deviceagenttoken.IsToken(token) || s.deviceAgentTokens == nil {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if method, _ := ctx.Value(goa.MethodKey).(string); method != "getPlugins" {
+		return ctx, oops.C(oops.CodeForbidden)
+	}
+
+	admitted, agent, err := s.deviceAgentTokens.Admit(ctx, token, s.authz)
+	if err != nil {
+		return deviceagenttoken.WithAuthFailure(ctx, err), err
+	}
+	authCtx, ok := contextvalues.GetAuthContext(admitted)
+	if !ok || authCtx == nil {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(admitted, authz.Check{Scope: authz.ScopeOrgDeviceAgentSync, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		err = fmt.Errorf("authorize workload device sync: %w", err)
+		return deviceagenttoken.WithAuthFailure(ctx, err), err
+	}
+	return deviceagenttoken.ActAsAgent(admitted, agent), nil
 }
 
 // GetPlugins returns every plugin assigned to the device user's resolved

@@ -6741,6 +6741,7 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
       security:
+        - device_agent_token_header_Authorization: []
         - apikey_header_Gram-Key: []
         - {}
       summary: getPlugins agent
@@ -24543,6 +24544,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       security:
+        - device_agent_token_header_Authorization: []
+          project_slug_header_Gram-Project: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
@@ -24650,6 +24653,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       security:
+        - device_agent_token_header_Authorization: []
+          project_slug_header_Gram-Project: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
@@ -25140,6 +25145,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       security:
+        - device_agent_token_header_Authorization: []
+          project_slug_header_Gram-Project: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
@@ -25229,6 +25236,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       security:
+        - device_agent_token_header_Authorization: []
+          project_slug_header_Gram-Project: []
         - apikey_header_Gram-Key: []
           project_slug_header_Gram-Project: []
         - {}
@@ -112261,6 +112270,10 @@ components:
     chat_sessions_token_header_Gram-Chat-Session:
       type: http
       description: Speakeasy Chat Sessions token based auth.
+      scheme: bearer
+    device_agent_token_header_Authorization:
+      type: http
+      description: Device-agent token from the workload assertion grant at /oauth/workload/device-agent/token.
       scheme: bearer
     function_token_header_Authorization:
       type: http

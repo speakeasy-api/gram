@@ -279,11 +279,16 @@ func DecodeCursorRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		}
 
 		var (
+			deviceAgentToken *string
 			apikeyToken      *string
 			projectSlugInput *string
 			hookHostname     *string
 			idempotencyKey   *string
 		)
+		deviceAgentTokenRaw := r.Header.Get("Authorization")
+		if deviceAgentTokenRaw != "" {
+			deviceAgentToken = &deviceAgentTokenRaw
+		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -300,12 +305,12 @@ func DecodeCursorRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		if idempotencyKeyRaw != "" {
 			idempotencyKey = &idempotencyKeyRaw
 		}
-		payload = NewCursorPayload(&body, apikeyToken, projectSlugInput, hookHostname, idempotencyKey)
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
+		payload = NewCursorPayload(&body, deviceAgentToken, apikeyToken, projectSlugInput, hookHostname, idempotencyKey)
+		if payload.DeviceAgentToken != nil {
+			if strings.Contains(*payload.DeviceAgentToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
+				cred := strings.SplitN(*payload.DeviceAgentToken, " ", 2)[1]
+				payload.DeviceAgentToken = &cred
 			}
 		}
 		if payload.ProjectSlugInput != nil {
@@ -313,6 +318,13 @@ func DecodeCursorRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
 				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
 			}
 		}
 
@@ -514,11 +526,16 @@ func DecodeCodexRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 		}
 
 		var (
+			deviceAgentToken *string
 			apikeyToken      *string
 			projectSlugInput *string
 			hookHostname     *string
 			idempotencyKey   *string
 		)
+		deviceAgentTokenRaw := r.Header.Get("Authorization")
+		if deviceAgentTokenRaw != "" {
+			deviceAgentToken = &deviceAgentTokenRaw
+		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -535,12 +552,12 @@ func DecodeCodexRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 		if idempotencyKeyRaw != "" {
 			idempotencyKey = &idempotencyKeyRaw
 		}
-		payload = NewCodexPayload(&body, apikeyToken, projectSlugInput, hookHostname, idempotencyKey)
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
+		payload = NewCodexPayload(&body, deviceAgentToken, apikeyToken, projectSlugInput, hookHostname, idempotencyKey)
+		if payload.DeviceAgentToken != nil {
+			if strings.Contains(*payload.DeviceAgentToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
+				cred := strings.SplitN(*payload.DeviceAgentToken, " ", 2)[1]
+				payload.DeviceAgentToken = &cred
 			}
 		}
 		if payload.ProjectSlugInput != nil {
@@ -548,6 +565,13 @@ func DecodeCodexRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.D
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
 				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
 			}
 		}
 
@@ -1420,9 +1444,14 @@ func DecodeLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		}
 
 		var (
+			deviceAgentToken *string
 			apikeyToken      *string
 			projectSlugInput *string
 		)
+		deviceAgentTokenRaw := r.Header.Get("Authorization")
+		if deviceAgentTokenRaw != "" {
+			deviceAgentToken = &deviceAgentTokenRaw
+		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -1431,12 +1460,12 @@ func DecodeLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload = NewLogsPayload(&body, apikeyToken, projectSlugInput)
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
+		payload = NewLogsPayload(&body, deviceAgentToken, apikeyToken, projectSlugInput)
+		if payload.DeviceAgentToken != nil {
+			if strings.Contains(*payload.DeviceAgentToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
+				cred := strings.SplitN(*payload.DeviceAgentToken, " ", 2)[1]
+				payload.DeviceAgentToken = &cred
 			}
 		}
 		if payload.ProjectSlugInput != nil {
@@ -1444,6 +1473,13 @@ func DecodeLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
 				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
 			}
 		}
 
@@ -1642,9 +1678,14 @@ func DecodeMetricsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp
 		}
 
 		var (
+			deviceAgentToken *string
 			apikeyToken      *string
 			projectSlugInput *string
 		)
+		deviceAgentTokenRaw := r.Header.Get("Authorization")
+		if deviceAgentTokenRaw != "" {
+			deviceAgentToken = &deviceAgentTokenRaw
+		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -1653,12 +1694,12 @@ func DecodeMetricsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload = NewMetricsPayload(&body, apikeyToken, projectSlugInput)
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
+		payload = NewMetricsPayload(&body, deviceAgentToken, apikeyToken, projectSlugInput)
+		if payload.DeviceAgentToken != nil {
+			if strings.Contains(*payload.DeviceAgentToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
+				cred := strings.SplitN(*payload.DeviceAgentToken, " ", 2)[1]
+				payload.DeviceAgentToken = &cred
 			}
 		}
 		if payload.ProjectSlugInput != nil {
@@ -1666,6 +1707,13 @@ func DecodeMetricsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
 				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
 			}
 		}
 

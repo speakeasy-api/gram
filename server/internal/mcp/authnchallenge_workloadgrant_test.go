@@ -61,16 +61,24 @@ func newWorkloadGrantFixture(t *testing.T) workloadGrantFixture {
 func newWorkloadGrantFixtureWithLogger(t *testing.T, logger *slog.Logger) workloadGrantFixture {
 	t.Helper()
 
+	return newWorkloadGrantFixtureOn(t, logger, "")
+}
+
+// newWorkloadGrantFixtureOn builds the fixture on a service whose server URL
+// is serverURL, or the harness default when empty.
+func newWorkloadGrantFixtureOn(t *testing.T, logger *slog.Logger, serverURL string) workloadGrantFixture {
+	t.Helper()
+
 	issuer := devidptest.Launch(t, devidptest.LaunchOpts{EnableWorkOS: false, Key: nil, TLS: true})
 	jwksURI := oauthtest.DiscoverWorkloadJWKSURI(t, issuer)
 
-	ctx, ti := newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, logger, testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
+	ctx, ti := newTestMCPServiceWithPoolConfigAndTemporal(t, logger, testenv.NewMeterProvider(t), &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{
 		SessionTTL:         0,
 		LiveSessionCap:     0,
 		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
 		RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
 		MaxRequestLifetime: 0,
-	}, nil, guardian.WithTLSRootCAs(issuer.RootCAs()))
+	}, nil, nil, true, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: 0}, testenv.NewTracerProvider(t), nil, nil, serverURL, guardian.WithTLSRootCAs(issuer.RootCAs()))
 	fx := newAgentConsentFixture(t, ctx, ti)
 
 	agent := createConsentAgent(t, ctx, ti, fx, "Workload deploy agent")

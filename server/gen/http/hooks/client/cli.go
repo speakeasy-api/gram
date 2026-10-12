@@ -98,13 +98,19 @@ func BuildClaudePayload(hooksClaudeBody string, hooksClaudeApikeyToken string, h
 
 // BuildCursorPayload builds the payload for the hooks cursor endpoint from CLI
 // flags.
-func BuildCursorPayload(hooksCursorBody string, hooksCursorApikeyToken string, hooksCursorProjectSlugInput string, hooksCursorHookHostname string, hooksCursorIdempotencyKey string) (*hooks.CursorPayload, error) {
+func BuildCursorPayload(hooksCursorBody string, hooksCursorDeviceAgentToken string, hooksCursorApikeyToken string, hooksCursorProjectSlugInput string, hooksCursorHookHostname string, hooksCursorIdempotencyKey string) (*hooks.CursorPayload, error) {
 	var err error
 	var body CursorRequestBody
 	{
 		err = json.Unmarshal([]byte(hooksCursorBody), &body)
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cache_read_tokens\": 1,\n      \"cache_write_tokens\": 1,\n      \"command\": \"abc123\",\n      \"composer_mode\": \"abc123\",\n      \"conversation_id\": \"abc123\",\n      \"cursor_version\": \"abc123\",\n      \"duration\": 1,\n      \"duration_ms\": 1,\n      \"error\": \"abc123\",\n      \"generation_id\": \"abc123\",\n      \"hook_event_name\": \"abc123\",\n      \"input_tokens\": 1,\n      \"is_interrupt\": false,\n      \"loop_count\": 1,\n      \"model\": \"abc123\",\n      \"output_tokens\": 1,\n      \"prompt\": \"abc123\",\n      \"result_json\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"status\": \"abc123\",\n      \"text\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"url\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }'")
+		}
+	}
+	var deviceAgentToken *string
+	{
+		if hooksCursorDeviceAgentToken != "" {
+			deviceAgentToken = &hooksCursorDeviceAgentToken
 		}
 	}
 	var apikeyToken *string
@@ -169,6 +175,7 @@ func BuildCursorPayload(hooksCursorBody string, hooksCursorApikeyToken string, h
 			v.AdditionalData[tk] = tv
 		}
 	}
+	v.DeviceAgentToken = deviceAgentToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.HookHostname = hookHostname
@@ -179,7 +186,7 @@ func BuildCursorPayload(hooksCursorBody string, hooksCursorApikeyToken string, h
 
 // BuildCodexPayload builds the payload for the hooks codex endpoint from CLI
 // flags.
-func BuildCodexPayload(hooksCodexBody string, hooksCodexApikeyToken string, hooksCodexProjectSlugInput string, hooksCodexHookHostname string, hooksCodexIdempotencyKey string) (*hooks.CodexPayload, error) {
+func BuildCodexPayload(hooksCodexBody string, hooksCodexDeviceAgentToken string, hooksCodexApikeyToken string, hooksCodexProjectSlugInput string, hooksCodexHookHostname string, hooksCodexIdempotencyKey string) (*hooks.CodexPayload, error) {
 	var err error
 	var body CodexRequestBody
 	{
@@ -192,6 +199,12 @@ func BuildCodexPayload(hooksCodexBody string, hooksCodexApikeyToken string, hook
 		}
 		if err != nil {
 			return nil, err
+		}
+	}
+	var deviceAgentToken *string
+	{
+		if hooksCodexDeviceAgentToken != "" {
+			deviceAgentToken = &hooksCodexDeviceAgentToken
 		}
 	}
 	var apikeyToken *string
@@ -240,6 +253,7 @@ func BuildCodexPayload(hooksCodexBody string, hooksCodexApikeyToken string, hook
 			v.AdditionalData[tk] = tv
 		}
 	}
+	v.DeviceAgentToken = deviceAgentToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.HookHostname = hookHostname
@@ -430,13 +444,19 @@ func BuildSkillFeedbackPayload(hooksSkillFeedbackBody string, hooksSkillFeedback
 
 // BuildLogsPayload builds the payload for the hooks logs endpoint from CLI
 // flags.
-func BuildLogsPayload(hooksLogsBody string, hooksLogsApikeyToken string, hooksLogsProjectSlugInput string) (*hooks.LogsPayload, error) {
+func BuildLogsPayload(hooksLogsBody string, hooksLogsDeviceAgentToken string, hooksLogsApikeyToken string, hooksLogsProjectSlugInput string) (*hooks.LogsPayload, error) {
 	var err error
 	var body LogsRequestBody
 	{
 		err = json.Unmarshal([]byte(hooksLogsBody), &body)
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"resourceLogs\": [\n         {\n            \"resource\": {\n               \"attributes\": [\n                  {\n                     \"key\": \"abc123\",\n                     \"value\": {\n                        \"arrayValue\": \"abc123\",\n                        \"boolValue\": false,\n                        \"bytesValue\": \"abc123\",\n                        \"doubleValue\": 1,\n                        \"intValue\": \"abc123\",\n                        \"kvlistValue\": \"abc123\",\n                        \"stringValue\": \"abc123\"\n                     }\n                  }\n               ],\n               \"droppedAttributesCount\": 1\n            },\n            \"scopeLogs\": [\n               {\n                  \"logRecords\": [\n                     {\n                        \"attributes\": [\n                           {\n                              \"key\": \"abc123\",\n                              \"value\": {\n                                 \"arrayValue\": \"abc123\",\n                                 \"boolValue\": false,\n                                 \"bytesValue\": \"abc123\",\n                                 \"doubleValue\": 1,\n                                 \"intValue\": \"abc123\",\n                                 \"kvlistValue\": \"abc123\",\n                                 \"stringValue\": \"abc123\"\n                              }\n                           }\n                        ],\n                        \"body\": {\n                           \"stringValue\": \"abc123\"\n                        },\n                        \"droppedAttributesCount\": 1,\n                        \"observedTimeUnixNano\": \"abc123\",\n                        \"spanId\": \"abc123\",\n                        \"timeUnixNano\": \"abc123\",\n                        \"traceId\": \"abc123\"\n                     }\n                  ],\n                  \"scope\": {\n                     \"name\": \"abc123\",\n                     \"version\": \"abc123\"\n                  }\n               }\n            ]\n         }\n      ]\n   }'")
+		}
+	}
+	var deviceAgentToken *string
+	{
+		if hooksLogsDeviceAgentToken != "" {
+			deviceAgentToken = &hooksLogsDeviceAgentToken
 		}
 	}
 	var apikeyToken *string
@@ -462,6 +482,7 @@ func BuildLogsPayload(hooksLogsBody string, hooksLogsApikeyToken string, hooksLo
 			v.ResourceLogs[i] = marshalOTELResourceLogRequestBodyToHooksOTELResourceLog(val)
 		}
 	}
+	v.DeviceAgentToken = deviceAgentToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -470,13 +491,19 @@ func BuildLogsPayload(hooksLogsBody string, hooksLogsApikeyToken string, hooksLo
 
 // BuildMetricsPayload builds the payload for the hooks metrics endpoint from
 // CLI flags.
-func BuildMetricsPayload(hooksMetricsBody string, hooksMetricsApikeyToken string, hooksMetricsProjectSlugInput string) (*hooks.MetricsPayload, error) {
+func BuildMetricsPayload(hooksMetricsBody string, hooksMetricsDeviceAgentToken string, hooksMetricsApikeyToken string, hooksMetricsProjectSlugInput string) (*hooks.MetricsPayload, error) {
 	var err error
 	var body MetricsRequestBody
 	{
 		err = json.Unmarshal([]byte(hooksMetricsBody), &body)
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"resourceMetrics\": [\n         {\n            \"resource\": {\n               \"attributes\": [\n                  {\n                     \"key\": \"abc123\",\n                     \"value\": {\n                        \"arrayValue\": \"abc123\",\n                        \"boolValue\": false,\n                        \"bytesValue\": \"abc123\",\n                        \"doubleValue\": 1,\n                        \"intValue\": \"abc123\",\n                        \"kvlistValue\": \"abc123\",\n                        \"stringValue\": \"abc123\"\n                     }\n                  }\n               ],\n               \"droppedAttributesCount\": 1\n            },\n            \"scopeMetrics\": [\n               {\n                  \"metrics\": [\n                     {\n                        \"description\": \"abc123\",\n                        \"exponentialHistogram\": \"abc123\",\n                        \"gauge\": \"abc123\",\n                        \"histogram\": \"abc123\",\n                        \"name\": \"abc123\",\n                        \"sum\": {\n                           \"aggregationTemporality\": \"abc123\",\n                           \"dataPoints\": [\n                              {\n                                 \"asDouble\": 1,\n                                 \"asInt\": \"abc123\",\n                                 \"attributes\": [\n                                    {\n                                       \"key\": \"abc123\",\n                                       \"value\": {\n                                          \"arrayValue\": \"abc123\",\n                                          \"boolValue\": false,\n                                          \"bytesValue\": \"abc123\",\n                                          \"doubleValue\": 1,\n                                          \"intValue\": \"abc123\",\n                                          \"kvlistValue\": \"abc123\",\n                                          \"stringValue\": \"abc123\"\n                                       }\n                                    }\n                                 ],\n                                 \"startTimeUnixNano\": \"abc123\",\n                                 \"timeUnixNano\": \"abc123\"\n                              }\n                           ],\n                           \"isMonotonic\": false\n                        },\n                        \"summary\": \"abc123\",\n                        \"unit\": \"abc123\"\n                     }\n                  ],\n                  \"scope\": {\n                     \"name\": \"abc123\",\n                     \"version\": \"abc123\"\n                  }\n               }\n            ]\n         }\n      ]\n   }'")
+		}
+	}
+	var deviceAgentToken *string
+	{
+		if hooksMetricsDeviceAgentToken != "" {
+			deviceAgentToken = &hooksMetricsDeviceAgentToken
 		}
 	}
 	var apikeyToken *string
@@ -502,6 +529,7 @@ func BuildMetricsPayload(hooksMetricsBody string, hooksMetricsApikeyToken string
 			v.ResourceMetrics[i] = marshalOTELResourceMetricsRequestBodyToHooksOTELResourceMetrics(val)
 		}
 	}
+	v.DeviceAgentToken = deviceAgentToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 

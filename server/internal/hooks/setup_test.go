@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -31,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz/mcpauthztest"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
@@ -244,6 +246,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		orghost.New(orghost.Config{ServerURL: serverURL, SiteURL: siteURL, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
 		"test-jwt-secret",
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		deviceagenttoken.New(mcpauthztest.NewIssuer(t), conn),
 	)
 
 	return ctx, &testInstance{

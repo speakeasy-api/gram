@@ -219,7 +219,7 @@ func UsageExamples() string {
 		os.Args[0] + " " + "killswitches list-capabilities --session-token \"abc123\"" + "\n" +
 		os.Args[0] + " " + "about openapi" + "\n" +
 		os.Args[0] + " " + "access list-roles --apikey-token \"abc123\" --session-token \"abc123\"" + "\n" +
-		os.Args[0] + " " + "agent get-plugins --legacy-email \"dev@acme.corp\" --apikey-token \"abc123\" --email \"dev@acme.corp\" --serial-number \"C02XK1ABCDEF\" --hostname \"dev-macbook-pro\" --environment \"ephemeral\"" + "\n" +
+		os.Args[0] + " " + "agent get-plugins --legacy-email \"dev@acme.corp\" --device-agent-token \"abc123\" --apikey-token \"abc123\" --email \"dev@acme.corp\" --serial-number \"C02XK1ABCDEF\" --hostname \"dev-macbook-pro\" --environment \"ephemeral\"" + "\n" +
 		""
 }
 
@@ -458,13 +458,14 @@ func ParseEndpoint(
 
 		agentFlags = flag.NewFlagSet("agent", flag.ContinueOnError)
 
-		agentGetPluginsFlags            = flag.NewFlagSet("get-plugins", flag.ExitOnError)
-		agentGetPluginsLegacyEmailFlag  = agentGetPluginsFlags.String("legacy-email", "", "")
-		agentGetPluginsApikeyTokenFlag  = agentGetPluginsFlags.String("apikey-token", "", "")
-		agentGetPluginsEmailFlag        = agentGetPluginsFlags.String("email", "", "")
-		agentGetPluginsSerialNumberFlag = agentGetPluginsFlags.String("serial-number", "", "")
-		agentGetPluginsHostnameFlag     = agentGetPluginsFlags.String("hostname", "", "")
-		agentGetPluginsEnvironmentFlag  = agentGetPluginsFlags.String("environment", "", "")
+		agentGetPluginsFlags                = flag.NewFlagSet("get-plugins", flag.ExitOnError)
+		agentGetPluginsLegacyEmailFlag      = agentGetPluginsFlags.String("legacy-email", "", "")
+		agentGetPluginsDeviceAgentTokenFlag = agentGetPluginsFlags.String("device-agent-token", "", "")
+		agentGetPluginsApikeyTokenFlag      = agentGetPluginsFlags.String("apikey-token", "", "")
+		agentGetPluginsEmailFlag            = agentGetPluginsFlags.String("email", "", "")
+		agentGetPluginsSerialNumberFlag     = agentGetPluginsFlags.String("serial-number", "", "")
+		agentGetPluginsHostnameFlag         = agentGetPluginsFlags.String("hostname", "", "")
+		agentGetPluginsEnvironmentFlag      = agentGetPluginsFlags.String("environment", "", "")
 
 		agentListSyncedUsersFlags            = flag.NewFlagSet("list-synced-users", flag.ExitOnError)
 		agentListSyncedUsersSessionTokenFlag = agentListSyncedUsersFlags.String("session-token", "", "")
@@ -1504,6 +1505,7 @@ func ParseEndpoint(
 
 		hooksCursorFlags                = flag.NewFlagSet("cursor", flag.ExitOnError)
 		hooksCursorBodyFlag             = hooksCursorFlags.String("body", "REQUIRED", "")
+		hooksCursorDeviceAgentTokenFlag = hooksCursorFlags.String("device-agent-token", "", "")
 		hooksCursorApikeyTokenFlag      = hooksCursorFlags.String("apikey-token", "", "")
 		hooksCursorProjectSlugInputFlag = hooksCursorFlags.String("project-slug-input", "", "")
 		hooksCursorHookHostnameFlag     = hooksCursorFlags.String("hook-hostname", "", "")
@@ -1511,6 +1513,7 @@ func ParseEndpoint(
 
 		hooksCodexFlags                = flag.NewFlagSet("codex", flag.ExitOnError)
 		hooksCodexBodyFlag             = hooksCodexFlags.String("body", "REQUIRED", "")
+		hooksCodexDeviceAgentTokenFlag = hooksCodexFlags.String("device-agent-token", "", "")
 		hooksCodexApikeyTokenFlag      = hooksCodexFlags.String("apikey-token", "", "")
 		hooksCodexProjectSlugInputFlag = hooksCodexFlags.String("project-slug-input", "", "")
 		hooksCodexHookHostnameFlag     = hooksCodexFlags.String("hook-hostname", "", "")
@@ -1535,11 +1538,13 @@ func ParseEndpoint(
 
 		hooksLogsFlags                = flag.NewFlagSet("logs", flag.ExitOnError)
 		hooksLogsBodyFlag             = hooksLogsFlags.String("body", "REQUIRED", "")
+		hooksLogsDeviceAgentTokenFlag = hooksLogsFlags.String("device-agent-token", "", "")
 		hooksLogsApikeyTokenFlag      = hooksLogsFlags.String("apikey-token", "", "")
 		hooksLogsProjectSlugInputFlag = hooksLogsFlags.String("project-slug-input", "", "")
 
 		hooksMetricsFlags                = flag.NewFlagSet("metrics", flag.ExitOnError)
 		hooksMetricsBodyFlag             = hooksMetricsFlags.String("body", "REQUIRED", "")
+		hooksMetricsDeviceAgentTokenFlag = hooksMetricsFlags.String("device-agent-token", "", "")
 		hooksMetricsApikeyTokenFlag      = hooksMetricsFlags.String("apikey-token", "", "")
 		hooksMetricsProjectSlugInputFlag = hooksMetricsFlags.String("project-slug-input", "", "")
 
@@ -9460,7 +9465,7 @@ func ParseEndpoint(
 			switch epn {
 			case "get-plugins":
 				endpoint = c.GetPlugins()
-				data, err = agentc.BuildGetPluginsPayload(*agentGetPluginsLegacyEmailFlag, *agentGetPluginsApikeyTokenFlag, *agentGetPluginsEmailFlag, *agentGetPluginsSerialNumberFlag, *agentGetPluginsHostnameFlag, *agentGetPluginsEnvironmentFlag)
+				data, err = agentc.BuildGetPluginsPayload(*agentGetPluginsLegacyEmailFlag, *agentGetPluginsDeviceAgentTokenFlag, *agentGetPluginsApikeyTokenFlag, *agentGetPluginsEmailFlag, *agentGetPluginsSerialNumberFlag, *agentGetPluginsHostnameFlag, *agentGetPluginsEnvironmentFlag)
 			case "list-synced-users":
 				endpoint = c.ListSyncedUsers()
 				data, err = agentc.BuildListSyncedUsersPayload(*agentListSyncedUsersSessionTokenFlag)
@@ -10157,10 +10162,10 @@ func ParseEndpoint(
 				data, err = hooksc.BuildClaudePayload(*hooksClaudeBodyFlag, *hooksClaudeApikeyTokenFlag, *hooksClaudeProjectSlugInputFlag, *hooksClaudeHookHostnameFlag, *hooksClaudeIdempotencyKeyFlag)
 			case "cursor":
 				endpoint = c.Cursor()
-				data, err = hooksc.BuildCursorPayload(*hooksCursorBodyFlag, *hooksCursorApikeyTokenFlag, *hooksCursorProjectSlugInputFlag, *hooksCursorHookHostnameFlag, *hooksCursorIdempotencyKeyFlag)
+				data, err = hooksc.BuildCursorPayload(*hooksCursorBodyFlag, *hooksCursorDeviceAgentTokenFlag, *hooksCursorApikeyTokenFlag, *hooksCursorProjectSlugInputFlag, *hooksCursorHookHostnameFlag, *hooksCursorIdempotencyKeyFlag)
 			case "codex":
 				endpoint = c.Codex()
-				data, err = hooksc.BuildCodexPayload(*hooksCodexBodyFlag, *hooksCodexApikeyTokenFlag, *hooksCodexProjectSlugInputFlag, *hooksCodexHookHostnameFlag, *hooksCodexIdempotencyKeyFlag)
+				data, err = hooksc.BuildCodexPayload(*hooksCodexBodyFlag, *hooksCodexDeviceAgentTokenFlag, *hooksCodexApikeyTokenFlag, *hooksCodexProjectSlugInputFlag, *hooksCodexHookHostnameFlag, *hooksCodexIdempotencyKeyFlag)
 			case "ingest":
 				endpoint = c.Ingest()
 				data, err = hooksc.BuildIngestPayload(*hooksIngestBodyFlag, *hooksIngestApikeyTokenFlag, *hooksIngestProjectSlugInputFlag, *hooksIngestIdempotencyKeyFlag, *hooksIngestReplayedFlag)
@@ -10172,10 +10177,10 @@ func ParseEndpoint(
 				data, err = hooksc.BuildSkillFeedbackPayload(*hooksSkillFeedbackBodyFlag, *hooksSkillFeedbackApikeyTokenFlag, *hooksSkillFeedbackProjectSlugInputFlag)
 			case "logs":
 				endpoint = c.Logs()
-				data, err = hooksc.BuildLogsPayload(*hooksLogsBodyFlag, *hooksLogsApikeyTokenFlag, *hooksLogsProjectSlugInputFlag)
+				data, err = hooksc.BuildLogsPayload(*hooksLogsBodyFlag, *hooksLogsDeviceAgentTokenFlag, *hooksLogsApikeyTokenFlag, *hooksLogsProjectSlugInputFlag)
 			case "metrics":
 				endpoint = c.Metrics()
-				data, err = hooksc.BuildMetricsPayload(*hooksMetricsBodyFlag, *hooksMetricsApikeyTokenFlag, *hooksMetricsProjectSlugInputFlag)
+				data, err = hooksc.BuildMetricsPayload(*hooksMetricsBodyFlag, *hooksMetricsDeviceAgentTokenFlag, *hooksMetricsApikeyTokenFlag, *hooksMetricsProjectSlugInputFlag)
 			case "get-status":
 				endpoint = c.GetStatus()
 				data, err = hooksc.BuildGetStatusPayload(*hooksGetStatusApikeyTokenFlag, *hooksGetStatusSessionTokenFlag, *hooksGetStatusProjectSlugInputFlag)
@@ -13396,6 +13401,7 @@ func agentGetPluginsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] agent get-plugins", os.Args[0])
 	fmt.Fprint(os.Stderr, " -legacy-email STRING")
+	fmt.Fprint(os.Stderr, " -device-agent-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -email STRING")
 	fmt.Fprint(os.Stderr, " -serial-number STRING")
@@ -13409,6 +13415,7 @@ func agentGetPluginsUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -legacy-email STRING: `)
+	fmt.Fprintln(os.Stderr, `    -device-agent-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -email STRING: `)
 	fmt.Fprintln(os.Stderr, `    -serial-number STRING: `)
@@ -13417,7 +13424,7 @@ func agentGetPluginsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent get-plugins --legacy-email \"dev@acme.corp\" --apikey-token \"abc123\" --email \"dev@acme.corp\" --serial-number \"C02XK1ABCDEF\" --hostname \"dev-macbook-pro\" --environment \"ephemeral\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent get-plugins --legacy-email \"dev@acme.corp\" --device-agent-token \"abc123\" --apikey-token \"abc123\" --email \"dev@acme.corp\" --serial-number \"C02XK1ABCDEF\" --hostname \"dev-macbook-pro\" --environment \"ephemeral\"")
 }
 
 func agentListSyncedUsersUsage() {
@@ -18146,6 +18153,7 @@ func hooksCursorUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] hooks cursor", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -device-agent-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprint(os.Stderr, " -hook-hostname STRING")
@@ -18158,6 +18166,7 @@ func hooksCursorUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -device-agent-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 	fmt.Fprintln(os.Stderr, `    -hook-hostname STRING: `)
@@ -18165,13 +18174,14 @@ func hooksCursorUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks cursor --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cache_read_tokens\": 1,\n      \"cache_write_tokens\": 1,\n      \"command\": \"abc123\",\n      \"composer_mode\": \"abc123\",\n      \"conversation_id\": \"abc123\",\n      \"cursor_version\": \"abc123\",\n      \"duration\": 1,\n      \"duration_ms\": 1,\n      \"error\": \"abc123\",\n      \"generation_id\": \"abc123\",\n      \"hook_event_name\": \"abc123\",\n      \"input_tokens\": 1,\n      \"is_interrupt\": false,\n      \"loop_count\": 1,\n      \"model\": \"abc123\",\n      \"output_tokens\": 1,\n      \"prompt\": \"abc123\",\n      \"result_json\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"status\": \"abc123\",\n      \"text\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"url\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\" --hook-hostname \"abc123\" --idempotency-key \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks cursor --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cache_read_tokens\": 1,\n      \"cache_write_tokens\": 1,\n      \"command\": \"abc123\",\n      \"composer_mode\": \"abc123\",\n      \"conversation_id\": \"abc123\",\n      \"cursor_version\": \"abc123\",\n      \"duration\": 1,\n      \"duration_ms\": 1,\n      \"error\": \"abc123\",\n      \"generation_id\": \"abc123\",\n      \"hook_event_name\": \"abc123\",\n      \"input_tokens\": 1,\n      \"is_interrupt\": false,\n      \"loop_count\": 1,\n      \"model\": \"abc123\",\n      \"output_tokens\": 1,\n      \"prompt\": \"abc123\",\n      \"result_json\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"status\": \"abc123\",\n      \"text\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_response\": \"abc123\",\n      \"tool_use_id\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"url\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }' --device-agent-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\" --hook-hostname \"abc123\" --idempotency-key \"abc123\"")
 }
 
 func hooksCodexUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] hooks codex", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -device-agent-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprint(os.Stderr, " -hook-hostname STRING")
@@ -18184,6 +18194,7 @@ func hooksCodexUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -device-agent-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 	fmt.Fprintln(os.Stderr, `    -hook-hostname STRING: `)
@@ -18191,7 +18202,7 @@ func hooksCodexUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks codex --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cwd\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"last_assistant_message\": \"abc123\",\n      \"model\": \"abc123\",\n      \"permission_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_output\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\" --hook-hostname \"abc123\" --idempotency-key \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks codex --body '{\n      \"additional_data\": {\n         \"abc123\": \"abc123\"\n      },\n      \"cwd\": \"abc123\",\n      \"hook_event_name\": \"PreToolUse\",\n      \"last_assistant_message\": \"abc123\",\n      \"model\": \"abc123\",\n      \"permission_type\": \"abc123\",\n      \"prompt\": \"abc123\",\n      \"session_id\": \"abc123\",\n      \"tool_input\": \"abc123\",\n      \"tool_name\": \"abc123\",\n      \"tool_output\": \"abc123\",\n      \"transcript_path\": \"abc123\",\n      \"user_email\": \"abc123\"\n   }' --device-agent-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\" --hook-hostname \"abc123\" --idempotency-key \"abc123\"")
 }
 
 func hooksIngestUsage() {
@@ -18268,6 +18279,7 @@ func hooksLogsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] hooks logs", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -device-agent-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
@@ -18278,18 +18290,20 @@ func hooksLogsUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -device-agent-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks logs --body '{\n      \"resourceLogs\": [\n         {\n            \"resource\": {\n               \"attributes\": [\n                  {\n                     \"key\": \"abc123\",\n                     \"value\": {\n                        \"arrayValue\": \"abc123\",\n                        \"boolValue\": false,\n                        \"bytesValue\": \"abc123\",\n                        \"doubleValue\": 1,\n                        \"intValue\": \"abc123\",\n                        \"kvlistValue\": \"abc123\",\n                        \"stringValue\": \"abc123\"\n                     }\n                  }\n               ],\n               \"droppedAttributesCount\": 1\n            },\n            \"scopeLogs\": [\n               {\n                  \"logRecords\": [\n                     {\n                        \"attributes\": [\n                           {\n                              \"key\": \"abc123\",\n                              \"value\": {\n                                 \"arrayValue\": \"abc123\",\n                                 \"boolValue\": false,\n                                 \"bytesValue\": \"abc123\",\n                                 \"doubleValue\": 1,\n                                 \"intValue\": \"abc123\",\n                                 \"kvlistValue\": \"abc123\",\n                                 \"stringValue\": \"abc123\"\n                              }\n                           }\n                        ],\n                        \"body\": {\n                           \"stringValue\": \"abc123\"\n                        },\n                        \"droppedAttributesCount\": 1,\n                        \"observedTimeUnixNano\": \"abc123\",\n                        \"spanId\": \"abc123\",\n                        \"timeUnixNano\": \"abc123\",\n                        \"traceId\": \"abc123\"\n                     }\n                  ],\n                  \"scope\": {\n                     \"name\": \"abc123\",\n                     \"version\": \"abc123\"\n                  }\n               }\n            ]\n         }\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks logs --body '{\n      \"resourceLogs\": [\n         {\n            \"resource\": {\n               \"attributes\": [\n                  {\n                     \"key\": \"abc123\",\n                     \"value\": {\n                        \"arrayValue\": \"abc123\",\n                        \"boolValue\": false,\n                        \"bytesValue\": \"abc123\",\n                        \"doubleValue\": 1,\n                        \"intValue\": \"abc123\",\n                        \"kvlistValue\": \"abc123\",\n                        \"stringValue\": \"abc123\"\n                     }\n                  }\n               ],\n               \"droppedAttributesCount\": 1\n            },\n            \"scopeLogs\": [\n               {\n                  \"logRecords\": [\n                     {\n                        \"attributes\": [\n                           {\n                              \"key\": \"abc123\",\n                              \"value\": {\n                                 \"arrayValue\": \"abc123\",\n                                 \"boolValue\": false,\n                                 \"bytesValue\": \"abc123\",\n                                 \"doubleValue\": 1,\n                                 \"intValue\": \"abc123\",\n                                 \"kvlistValue\": \"abc123\",\n                                 \"stringValue\": \"abc123\"\n                              }\n                           }\n                        ],\n                        \"body\": {\n                           \"stringValue\": \"abc123\"\n                        },\n                        \"droppedAttributesCount\": 1,\n                        \"observedTimeUnixNano\": \"abc123\",\n                        \"spanId\": \"abc123\",\n                        \"timeUnixNano\": \"abc123\",\n                        \"traceId\": \"abc123\"\n                     }\n                  ],\n                  \"scope\": {\n                     \"name\": \"abc123\",\n                     \"version\": \"abc123\"\n                  }\n               }\n            ]\n         }\n      ]\n   }' --device-agent-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func hooksMetricsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] hooks metrics", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -device-agent-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
@@ -18300,12 +18314,13 @@ func hooksMetricsUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -device-agent-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks metrics --body '{\n      \"resourceMetrics\": [\n         {\n            \"resource\": {\n               \"attributes\": [\n                  {\n                     \"key\": \"abc123\",\n                     \"value\": {\n                        \"arrayValue\": \"abc123\",\n                        \"boolValue\": false,\n                        \"bytesValue\": \"abc123\",\n                        \"doubleValue\": 1,\n                        \"intValue\": \"abc123\",\n                        \"kvlistValue\": \"abc123\",\n                        \"stringValue\": \"abc123\"\n                     }\n                  }\n               ],\n               \"droppedAttributesCount\": 1\n            },\n            \"scopeMetrics\": [\n               {\n                  \"metrics\": [\n                     {\n                        \"description\": \"abc123\",\n                        \"exponentialHistogram\": \"abc123\",\n                        \"gauge\": \"abc123\",\n                        \"histogram\": \"abc123\",\n                        \"name\": \"abc123\",\n                        \"sum\": {\n                           \"aggregationTemporality\": \"abc123\",\n                           \"dataPoints\": [\n                              {\n                                 \"asDouble\": 1,\n                                 \"asInt\": \"abc123\",\n                                 \"attributes\": [\n                                    {\n                                       \"key\": \"abc123\",\n                                       \"value\": {\n                                          \"arrayValue\": \"abc123\",\n                                          \"boolValue\": false,\n                                          \"bytesValue\": \"abc123\",\n                                          \"doubleValue\": 1,\n                                          \"intValue\": \"abc123\",\n                                          \"kvlistValue\": \"abc123\",\n                                          \"stringValue\": \"abc123\"\n                                       }\n                                    }\n                                 ],\n                                 \"startTimeUnixNano\": \"abc123\",\n                                 \"timeUnixNano\": \"abc123\"\n                              }\n                           ],\n                           \"isMonotonic\": false\n                        },\n                        \"summary\": \"abc123\",\n                        \"unit\": \"abc123\"\n                     }\n                  ],\n                  \"scope\": {\n                     \"name\": \"abc123\",\n                     \"version\": \"abc123\"\n                  }\n               }\n            ]\n         }\n      ]\n   }' --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "hooks metrics --body '{\n      \"resourceMetrics\": [\n         {\n            \"resource\": {\n               \"attributes\": [\n                  {\n                     \"key\": \"abc123\",\n                     \"value\": {\n                        \"arrayValue\": \"abc123\",\n                        \"boolValue\": false,\n                        \"bytesValue\": \"abc123\",\n                        \"doubleValue\": 1,\n                        \"intValue\": \"abc123\",\n                        \"kvlistValue\": \"abc123\",\n                        \"stringValue\": \"abc123\"\n                     }\n                  }\n               ],\n               \"droppedAttributesCount\": 1\n            },\n            \"scopeMetrics\": [\n               {\n                  \"metrics\": [\n                     {\n                        \"description\": \"abc123\",\n                        \"exponentialHistogram\": \"abc123\",\n                        \"gauge\": \"abc123\",\n                        \"histogram\": \"abc123\",\n                        \"name\": \"abc123\",\n                        \"sum\": {\n                           \"aggregationTemporality\": \"abc123\",\n                           \"dataPoints\": [\n                              {\n                                 \"asDouble\": 1,\n                                 \"asInt\": \"abc123\",\n                                 \"attributes\": [\n                                    {\n                                       \"key\": \"abc123\",\n                                       \"value\": {\n                                          \"arrayValue\": \"abc123\",\n                                          \"boolValue\": false,\n                                          \"bytesValue\": \"abc123\",\n                                          \"doubleValue\": 1,\n                                          \"intValue\": \"abc123\",\n                                          \"kvlistValue\": \"abc123\",\n                                          \"stringValue\": \"abc123\"\n                                       }\n                                    }\n                                 ],\n                                 \"startTimeUnixNano\": \"abc123\",\n                                 \"timeUnixNano\": \"abc123\"\n                              }\n                           ],\n                           \"isMonotonic\": false\n                        },\n                        \"summary\": \"abc123\",\n                        \"unit\": \"abc123\"\n                     }\n                  ],\n                  \"scope\": {\n                     \"name\": \"abc123\",\n                     \"version\": \"abc123\"\n                  }\n               }\n            ]\n         }\n      ]\n   }' --device-agent-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func hooksGetStatusUsage() {

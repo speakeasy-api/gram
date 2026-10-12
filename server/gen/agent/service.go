@@ -106,6 +106,8 @@ type Service interface {
 
 // Auther defines the authorization functions to be implemented by the service.
 type Auther interface {
+	// JWTAuth implements the authorization logic for the JWT security scheme.
+	JWTAuth(ctx context.Context, token string, schema *security.JWTScheme) (context.Context, error)
 	// APIKeyAuth implements the authorization logic for the APIKey security scheme.
 	APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error)
 }
@@ -343,7 +345,8 @@ type GetConfigurationPayload struct {
 
 // GetPluginsPayload is the payload type of the agent service getPlugins method.
 type GetPluginsPayload struct {
-	ApikeyToken *string
+	DeviceAgentToken *string
+	ApikeyToken      *string
 	// Email address of the enrolled user, sent in the Gram-User-Email header.
 	// Required when authenticating with an org-scoped agent install key (the MDM
 	// zero-touch path); ignored for a per-user key, whose owner is the enrolled

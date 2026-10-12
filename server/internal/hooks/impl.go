@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -104,6 +105,10 @@ type Service struct {
 	// relative to the attribute_metrics_summaries MV cutoff. Defaults to
 	// time.Now via NewService; access through now() for nil-safety.
 	nowFunc func() time.Time
+
+	// deviceAgentTokens authenticates headless devices that present a
+	// device-agent token instead of an agent API key. Nil refuses them.
+	deviceAgentTokens *deviceagenttoken.Issuer
 }
 
 // now returns the current time via the injected clock, falling back to
@@ -280,6 +285,7 @@ func NewService(
 	orgHosts *orghost.Resolver,
 	jwtSecret string,
 	riskRecorder *metering.RiskRecorder,
+	deviceAgentTokens *deviceagenttoken.Issuer,
 ) *Service {
 	return &Service{
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
@@ -312,10 +318,22 @@ func NewService(
 		orgHostCache:       newOrgDefaultHostCache(),
 		jwtSecret:          jwtSecret,
 		nowFunc:            time.Now,
+		deviceAgentTokens:  deviceAgentTokens,
 	}
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	// A refused device-agent token is the better answer than a missing key
+	// for a device that sent no key.
+	if key == "" && schema.Name == constants.KeySecurityScheme {
+		if err := deviceagenttoken.AuthFailure(ctx); err != nil {
+			return ctx, fmt.Errorf("device-agent token refused: %w", err)
+		}
+	}
+	if schema.Name == constants.ProjectSlugSecuritySchema && deviceagenttoken.IsWorkloadActor(ctx) {
+		return s.authorizeWorkloadProject(ctx, key, schema)
+	}
+
 	ctx, err := s.auth.Authorize(ctx, key, schema)
 	if err != nil {
 		return ctx, fmt.Errorf("authorize hooks api key: %w", err)
@@ -336,14 +354,67 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return ctx, nil
 }
 
+// JWTAuth authenticates a headless device's device-agent token on the
+// ingestion methods. The workload is admitted through its assigned agent's
+// live policy; the project step that follows binds the request to a project
+// and then has it act as the agent.
+//
+// A request with no device-agent token returns unchanged for the API key
+// requirement Goa tries next.
+func (s *Service) JWTAuth(ctx context.Context, token string, _ *security.JWTScheme) (context.Context, error) {
+	if token == "" || !deviceagenttoken.IsToken(token) || s.deviceAgentTokens == nil {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	switch method, _ := ctx.Value(goa.MethodKey).(string); method {
+	case "cursor", "codex", "logs", "metrics":
+	default:
+		return ctx, oops.C(oops.CodeForbidden)
+	}
+
+	admitted, _, err := s.deviceAgentTokens.Admit(ctx, token, s.authz)
+	if err != nil {
+		return deviceagenttoken.WithAuthFailure(ctx, err), err
+	}
+	return admitted, nil
+}
+
+// authorizeWorkloadProject resolves the project a workload's hooks belong to:
+// its assigned agent's project when the agent is bound to one, which the
+// request may name but not override, and otherwise the Gram-Project the
+// request sends. The request then acts as the agent, which must hold the hooks
+// grant like an agent key.
+func (s *Service) authorizeWorkloadProject(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	agent, ok := deviceagenttoken.AssignedAgentFromContext(ctx)
+	if !ok {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if agent.ProjectSlug != "" {
+		if key != "" && key != agent.ProjectSlug {
+			err := oops.E(oops.CodeForbidden, nil, "the device's agent belongs to another project")
+			return deviceagenttoken.WithAuthFailure(ctx, err), err
+		}
+		key = agent.ProjectSlug
+	}
+
+	authorized, err := s.auth.Authorize(ctx, key, schema)
+	if err != nil {
+		err = fmt.Errorf("authorize workload hooks project: %w", err)
+		return deviceagenttoken.WithAuthFailure(ctx, err), err
+	}
+	authorized = deviceagenttoken.ActAsAgent(authorized, agent)
+	if err := s.requireAgentHooksIngest(authorized); err != nil {
+		return deviceagenttoken.WithAuthFailure(ctx, err), err
+	}
+	return authorized, nil
+}
+
 func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, newHooksRequestDecoder(service.logger), goahttp.ResponseEncoder, nil, nil),
-	)
+	server := srv.New(endpoints, mux, newHooksRequestDecoder(service.logger), goahttp.ResponseEncoder, nil, nil)
+	server.Use(deviceagenttoken.BearerChallenge)
+	srv.Mount(mux, server)
 	AttachServerNames(mux, service)
 }
 

@@ -24,11 +24,17 @@ var _ = Service("agent", func() {
 		// owner and the org derives from the key. An org `agent` install key also
 		// passes (it implies `agent_user`; see auth.Authorize); the MDM profile
 		// then vouches the enrolled user's email via the Gram-User-Email header.
+		//
+		// A headless device that authenticates as a workload presents a
+		// device-agent token instead. It is tried first so a request without
+		// one falls through to the API key and keeps that key's errors.
+		Security(security.DeviceAgentToken)
 		Security(security.ByKey, func() {
 			Scope("agent_user")
 		})
 
 		Payload(func() {
+			security.DeviceAgentTokenPayload()
 			security.ByKeyPayload()
 			// Authoritative when authenticating with an org install key (`agent`
 			// scope): that key's owner is an admin, not the enrolled developer, so
@@ -85,6 +91,7 @@ var _ = Service("agent", func() {
 
 		HTTP(func() {
 			GET("/rpc/agent.getPlugins")
+			security.DeviceAgentTokenHeader()
 			security.ByKeyHeader()
 			// Headers rather than query params: all three identify a person or
 			// a machine, and the request logger records URLs but not headers.
