@@ -515,7 +515,7 @@ func insertHookToolLogWithAccount(t *testing.T, ctx context.Context, projectID s
 }
 
 // Scoping the employee page to one account must not zero the tool-call tile:
-// hook tool events carry the account discriminator while Gram MCP tool spans
+// hook tool events carry the account discriminator while Speakeasy MCP tool spans
 // do not, so the default predicate counts both arms — the same shape as the
 // data-flow graph rendered beside the tile.
 func TestGetUserMetricsSummary_AccountScopeCountsHookToolCalls(t *testing.T) {
@@ -532,7 +532,7 @@ func TestGetUserMetricsSummary_AccountScopeCountsHookToolCalls(t *testing.T) {
 	now := time.Now().UTC()
 	insertHookToolLogWithAccount(t, ctx, projectID, now.Add(-10*time.Minute), userID, "Bash", "PostToolUse", externalOrgID)
 	insertHookToolLogWithAccount(t, ctx, projectID, now.Add(-9*time.Minute), userID, "Edit", "PostToolUseFailure", externalOrgID)
-	// A Gram MCP tool span carries no account attribution.
+	// A Speakeasy MCP tool span carries no account attribution.
 	insertToolCallLogWithUser(t, ctx, projectID, deploymentID, now.Add(-8*time.Minute), "tools:http:petstore:listPets", 200, 0.5, userID, "")
 
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)

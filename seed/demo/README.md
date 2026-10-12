@@ -129,7 +129,7 @@ needs and the shared demo org must never have:
   developer's database.
 - **A default environment**, the global `Gram Recommended` MCP registry row
   (not tenant-scoped, so it cannot live in the seed proper), and the
-  Playground's MCP App: a Gram Function zipped in-memory from
+  Playground's MCP App: a Speakeasy Function zipped in-memory from
   `server/internal/demoseed/mcpapp/` and hung off the seeded deployment, so the
   demo org never gets a functions deployment production would have to run.
 

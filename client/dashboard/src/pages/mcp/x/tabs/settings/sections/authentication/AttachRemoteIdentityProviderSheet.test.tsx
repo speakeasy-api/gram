@@ -29,6 +29,49 @@ const mocks = vi.hoisted(() => ({
   setJwksUri: vi.fn(),
   setRegistrationEndpoint: vi.fn(),
   setTokenEndpoint: vi.fn(),
+  issuersPage: vi.fn(),
+  issuersSearch: vi.fn(),
+  issuerById: vi.fn(),
+  discovery: { snapshot: null as Record<string, unknown> | null },
+}));
+
+vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
+  invalidateAllRemoteSessionIssuers: vi.fn(),
+  useRemoteSessionIssuers: () => ({
+    data: { result: { items: mocks.issuersPage() } },
+  }),
+  useRemoteSessionIssuersInfinite: (request: { search?: string }) => {
+    mocks.issuersSearch(request.search);
+    return {
+      data: { pages: [{ result: { items: mocks.issuersPage() } }] },
+      isFetching: false,
+      isError: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+    };
+  },
+}));
+
+vi.mock(
+  "@gram/client/react-query/newRemoteSessionClientCallbackUrl.js",
+  () => ({
+    useNewRemoteSessionClientCallbackUrl: () => ({
+      data: {
+        callbackUrl: "https://new.example.com/mcp/remote_login_callback",
+      },
+    }),
+  }),
+);
+
+vi.mock("@gram/client/react-query/remoteSessionIssuer.js", () => ({
+  useRemoteSessionIssuer: (
+    request: { id: string },
+    _security: unknown,
+    options: { enabled: boolean },
+  ) => ({
+    data: options.enabled ? mocks.issuerById(request.id) : undefined,
+  }),
 }));
 
 vi.mock("@/components/asset-image-upload-field", () => ({
@@ -74,7 +117,7 @@ vi.mock("./useIssuerDiscovery", () => ({
     setRegistrationEndpoint: mocks.setRegistrationEndpoint,
     jwksUri: "https://id.example.test/jwks",
     setJwksUri: mocks.setJwksUri,
-    discoveredSnapshot: null,
+    discoveredSnapshot: mocks.discovery.snapshot,
     discoverPending: false,
     discoverError: null,
     clearDiscoverError: mocks.clearDiscoverError,
@@ -100,7 +143,7 @@ function target(): AuthTarget {
   };
 }
 
-function renderSheet(): void {
+function renderSheet(excludedIssuerIds?: string[]): void {
   const queryClient = new QueryClient({
     defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
   });
@@ -114,7 +157,7 @@ function renderSheet(): void {
           }}
           target={target()}
           userSessionIssuer={null}
-          selectableIssuers={[]}
+          excludedIssuerIds={excludedIssuerIds}
         />
       </TooltipProvider>
     </QueryClientProvider>,
@@ -131,6 +174,7 @@ async function submitManualClient(): Promise<void> {
 }
 
 beforeEach(() => {
+  mocks.issuersPage.mockReturnValue([]);
   mocks.createUserSessionIssuer.mockResolvedValue({
     id: "user-session-issuer-1",
   });
@@ -143,6 +187,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  mocks.discovery.snapshot = null;
 });
 
 describe("AttachRemoteIdentityProviderSheet", () => {
@@ -157,5 +202,98 @@ describe("AttachRemoteIdentityProviderSheet", () => {
       expect(mocks.createClient).toHaveBeenCalled();
       expect(mocks.linkTarget).toHaveBeenCalledWith("user-session-issuer-1");
     });
+  });
+
+  it("forwards discovered grant profiles on a new provider", async () => {
+    mocks.discovery.snapshot = {
+      url: "https://id.example.test",
+      scopesSupported: [],
+      grantTypesSupported: [],
+      authorizationGrantProfilesSupported: [
+        "urn:ietf:params:oauth:grant-profile:id-jag",
+      ],
+      responseTypesSupported: [],
+      tokenEndpointAuthMethodsSupported: [],
+    };
+    renderSheet();
+
+    await submitManualClient();
+
+    await waitFor(() =>
+      expect(mocks.createProvider).toHaveBeenCalledWith({
+        createRemoteSessionIssuerForm: expect.objectContaining({
+          authorizationGrantProfilesSupported: [
+            "urn:ietf:params:oauth:grant-profile:id-jag",
+          ],
+        }),
+      }),
+    );
+  });
+
+  it("omits grant profiles on a hand-typed provider", async () => {
+    renderSheet();
+
+    await submitManualClient();
+
+    await waitFor(() => expect(mocks.createProvider).toHaveBeenCalled());
+    const [request] = mocks.createProvider.mock.calls[0]! as [
+      { createRemoteSessionIssuerForm: Record<string, unknown> },
+    ];
+    expect(
+      request.createRemoteSessionIssuerForm.authorizationGrantProfilesSupported,
+    ).toBeUndefined();
+  });
+
+  it("searches the listing on the server and resolves the pick by id", async () => {
+    const attached = {
+      id: "provider-attached",
+      slug: "attached",
+      name: "Attached",
+      issuer: "https://attached.example.test",
+    };
+    const catalog = {
+      id: "provider-catalog",
+      slug: "catalog",
+      name: "Catalog provider",
+      issuer: "https://catalog.example.test",
+    };
+    mocks.issuersPage.mockReturnValue([attached, catalog]);
+    mocks.issuerById.mockImplementation((id: string) =>
+      id === catalog.id ? catalog : undefined,
+    );
+    renderSheet([attached.id]);
+
+    fireEvent.click(screen.getByText("Choose an identity provider…"));
+    fireEvent.change(
+      screen.getByPlaceholderText("Search identity providers…"),
+      { target: { value: "catalog" } },
+    );
+    await waitFor(() =>
+      expect(mocks.issuersSearch).toHaveBeenLastCalledWith("catalog"),
+    );
+
+    // The attached provider is left out of the choices.
+    expect(screen.queryByText(/^Attached —/)).toBeNull();
+    fireEvent.click(
+      screen.getByText("Catalog provider — https://catalog.example.test"),
+    );
+
+    // The trigger shows the pick, resolved by id rather than from the page:
+    // it stays even once no loaded page contains it.
+    await waitFor(() =>
+      expect(mocks.issuerById).toHaveBeenCalledWith(catalog.id),
+    );
+    mocks.issuersPage.mockReturnValue([]);
+    fireEvent.click(screen.getAllByRole("combobox")[0] as HTMLElement);
+    fireEvent.change(
+      screen.getByPlaceholderText("Search identity providers…"),
+      { target: { value: "nothing" } },
+    );
+    await waitFor(() =>
+      expect(mocks.issuersSearch).toHaveBeenLastCalledWith("nothing"),
+    );
+    expect(screen.getAllByRole("combobox")[0]?.textContent).toContain(
+      "Catalog provider — https://catalog.example.test",
+    );
   });
 });

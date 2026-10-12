@@ -83,8 +83,8 @@ type LiteLLMInstanceDiagnosticsView struct {
 	// Percentage of model requests in the last 24 hours that supplied a
 	// virtual-key email.
 	VirtualKeyEmailPct24h *float64
-	// Percentage of model requests in the last 24 hours that resolved to a Gram
-	// user.
+	// Percentage of model requests in the last 24 hours that resolved to a
+	// Speakeasy user.
 	PlatformUserPct24h *float64
 }
 

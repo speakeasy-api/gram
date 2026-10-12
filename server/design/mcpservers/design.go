@@ -477,7 +477,7 @@ var McpServer = Type("McpServer", func() {
 	Attribute("toolset_id", String, "The ID of the toolset used as the backend", func() {
 		Format(FormatUUID)
 	})
-	Attribute("unproxied_mcp_server_id", String, "The ID of the unproxied MCP server used as the backend, if any. A server backed by an unproxied MCP server is never proxied by Gram.", func() {
+	Attribute("unproxied_mcp_server_id", String, "The ID of the unproxied MCP server used as the backend, if any. A server backed by an unproxied MCP server is never proxied by Speakeasy.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("tool_variations_group_id", String, "The ID of the tool variations group enabling MCP tool filtering for this server, if any.", func() {

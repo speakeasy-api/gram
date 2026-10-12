@@ -116,18 +116,18 @@ func TestInitializeDeclarationControlsVersionValidation(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name, params, declared string
-		// rejected is the expected error code, or zero when the handshake
-		// proceeds.
+		// rejected is the expected error code, or zero when version
+		// validation passes and dispatch decides whether the handshake runs.
 		rejected oops.MCPCode
 	}{
 		{name: "handshake proposes 2026-07-28", params: `{"protocolVersion":"2026-07-28"}`},
 		{name: "2025-03-26 metadata", params: `{"protocolVersion":"2025-11-25","_meta":{"io.modelcontextprotocol/protocolVersion":"2025-03-26"}}`, declared: mcpversions.Version20250326},
 		{name: "unrecognized header", params: `{"protocolVersion":"2025-06-18"}`, declared: "2025-12-01"},
 		{name: "unrecognized metadata", params: `{"protocolVersion":"2025-06-18","_meta":{"io.modelcontextprotocol/protocolVersion":"2025-12-01"}}`},
-		{name: "2026-07-28 header", declared: mcpversions.Version20260728, rejected: oops.MCPCodeUnsupportedProtocolVersion},
-		{name: "2026-07-28 metadata", params: `{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}`, declared: mcpversions.Version20260728, rejected: oops.MCPCodeUnsupportedProtocolVersion},
-		{name: "2025-11-25 header with 2026-07-28 metadata", params: `{"protocolVersion":"2025-11-25","_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}`, declared: mcpversions.Version20251125, rejected: oops.MCPCodeInvalidRequest},
-		{name: "2026-07-28 header with 2025-11-25 metadata", params: `{"protocolVersion":"2025-11-25","_meta":{"io.modelcontextprotocol/protocolVersion":"2025-11-25"}}`, declared: mcpversions.Version20260728, rejected: oops.MCPCodeInvalidRequest},
+		{name: "2026-07-28 header", declared: mcpversions.Version20260728},
+		{name: "2026-07-28 metadata", params: `{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}`, declared: mcpversions.Version20260728},
+		{name: "2025-11-25 header with 2026-07-28 metadata", params: `{"protocolVersion":"2025-11-25","_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}`, declared: mcpversions.Version20251125, rejected: oops.MCPCodeHeaderMismatch},
+		{name: "2026-07-28 header with 2025-11-25 metadata", params: `{"protocolVersion":"2025-11-25","_meta":{"io.modelcontextprotocol/protocolVersion":"2025-11-25"}}`, declared: mcpversions.Version20260728, rejected: oops.MCPCodeHeaderMismatch},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -184,9 +184,9 @@ func TestRequestDeclarationsMustAgreeBeforeDispatch(t *testing.T) {
 				params, err := json.Marshal(map[string]any{"_meta": map[string]string{"io.modelcontextprotocol/protocolVersion": tc.meta}})
 				require.NoError(t, err)
 				req := &rawRequest{Method: method, ID: mcpjsonrpc.NumberID(1), Params: params}
-				// Exercise the shared hosted/platform gate with discovery enabled,
-				// so unsupported-version rejection cannot mask a conflict.
-				supported := append(mcpversions.SupportedHostedToolset(), mcpversions.Version20260728)
+				// The hosted set supports both revisions, so unsupported-version
+				// rejection cannot mask a conflict.
+				supported := mcpversions.SupportedHostedToolset()
 				resolution := mcpversions.Resolve(mcprequests.DeclaredProtocolVersion(tc.header, params), supported)
 				err = validateSupportedProtocolVersion(req, resolution, supported)
 				if !tc.conflict {
@@ -195,7 +195,12 @@ func TestRequestDeclarationsMustAgreeBeforeDispatch(t *testing.T) {
 				}
 				var rpcErr *oops.MCPError
 				require.ErrorAs(t, err, &rpcErr)
-				require.Equal(t, oops.MCPCodeInvalidRequest, rpcErr.Code)
+				require.Equal(t, oops.MCPCodeHeaderMismatch, rpcErr.Code)
+				// The declarations name no single revision, so the
+				// response follows the latest specification's rules.
+				var declErr *declarationError
+				require.ErrorAs(t, err, &declErr)
+				require.Equal(t, mcpversions.Latest(), declErr.revision)
 			})
 		}
 	}

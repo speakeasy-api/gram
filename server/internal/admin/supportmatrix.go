@@ -21,15 +21,17 @@ import (
 //go:embed supportmatrix/catalog.json
 var supportCatalog []byte
 
-// SeedSupportMatrix inserts missing global catalog entries without replacing
-// operator edits or inferring platform applicability from reference claims.
+// SeedSupportMatrix inserts missing global catalog entries, refreshes the
+// columns the catalog owns on platforms and plans, and retires plans the
+// catalog no longer names. It never replaces operator edits or infers
+// platform applicability from reference claims.
 func SeedSupportMatrix(ctx context.Context, db *pgxpool.Pool) error {
 	err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
 		q := repo.New(tx)
 		if err := q.LockSupportMatrix(ctx); err != nil {
 			return fmt.Errorf("lock support catalog: %w", err)
 		}
-		for _, seed := range []func(context.Context, []byte) error{q.SeedSupportPlatforms, q.SeedSupportMethods, q.SeedSupportCapabilities, q.SeedSupportReferences} {
+		for _, seed := range []func(context.Context, []byte) error{q.SeedSupportPlatforms, q.SeedSupportPlans, q.RetireSupportPlans, q.SeedSupportMethods, q.SeedSupportCapabilities, q.SeedSupportReferences} {
 			if err := seed(ctx, supportCatalog); err != nil {
 				return fmt.Errorf("seed support catalog: %w", err)
 			}
@@ -54,6 +56,20 @@ func readSupportMatrix(ctx context.Context, q *repo.Queries) (*gen.SupportMatrix
 	hash := sha256.Sum256(raw)
 	result.Revision = hex.EncodeToString(hash[:])
 	return &result, nil
+}
+
+// ReadSupportMatrixTx locks the global matrix and returns its complete current draft.
+// The caller owns the transaction and must keep it open through any dependent write.
+func ReadSupportMatrixTx(ctx context.Context, tx pgx.Tx) (*gen.SupportMatrix, error) {
+	if err := repo.New(tx).LockSupportMatrix(ctx); err != nil {
+		return nil, fmt.Errorf("lock support matrix: %w", err)
+	}
+	return readSupportMatrix(ctx, repo.New(tx))
+}
+
+// ValidateSupportDraft applies the same catalogue and content rules used by matrix saves.
+func ValidateSupportDraft(draft *gen.SupportDraft, catalog *gen.SupportMatrix) error {
+	return validateSupportDraft(draft, catalog)
 }
 
 func (s *Service) GetSupportMatrix(ctx context.Context, _ *gen.GetSupportMatrixPayload) (*gen.SupportMatrix, error) {

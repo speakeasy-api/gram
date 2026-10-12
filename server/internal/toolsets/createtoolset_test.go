@@ -2,11 +2,14 @@ package toolsets_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -17,8 +20,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -215,6 +221,113 @@ func TestToolsetsService_CreateToolset_DuplicateSlug(t *testing.T) {
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)
+}
+
+// A name or description the toolsets columns cannot hold is refused as a bad
+// request before anything is written, rather than reaching the column CHECK
+// and surfacing as an unexpected error.
+func TestToolsetsService_CreateToolset_RefusesInputTheColumnsCannotHold(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+
+	for _, payload := range []*gen.CreateToolsetPayload{
+		{Name: strings.Repeat("n", toolsets.MaxToolsetNameLength+1)},
+		{Name: "!!!"},
+		{Name: "Fine Name", Description: new(strings.Repeat("d", toolsets.MaxToolsetDescriptionLength+1))},
+	} {
+		_, err := ti.service.CreateToolset(ctx, payload)
+		var oopsErr *oops.ShareableError
+		require.ErrorAs(t, err, &oopsErr, payload.Name)
+		require.Equal(t, oops.CodeBadRequest, oopsErr.Code, payload.Name)
+	}
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount, afterCount, "a refused create records nothing")
+}
+
+// An empty or whitespace-only description is no description: it is stored as
+// NULL rather than reaching the column CHECK, which refuses an empty string.
+func TestToolsetsService_CreateToolset_TreatsABlankDescriptionAsNone(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	for i, description := range []string{"", "   "} {
+		result, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+			Name: fmt.Sprintf("Blank Description %d", i), Description: new(description),
+		})
+		require.NoError(t, err, "%q", description)
+		require.Nil(t, result.Description, "%q", description)
+	}
+}
+
+// failingEnabledCountTx fails only the enabled-server count, standing in for a
+// database error on exactly that read.
+type failingEnabledCountTx struct{ pgx.Tx }
+
+func (tx failingEnabledCountTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	if strings.Contains(sql, "GetEnabledServerCount") {
+		return failedRow{}
+	}
+	return tx.Tx.QueryRow(ctx, sql, args...) //nolint:glint // notestingrawsql: passes the SQLc query through unchanged; only the enabled-count read is failed.
+}
+
+type failedRow struct{}
+
+func (failedRow) Scan(...any) error { return errors.New("enabled server count unavailable") }
+
+// Whether a toolset is the organization's first decides whether it is
+// published to everyone holding the Default plugin, so an unreadable count
+// fails the creation instead of defaulting to the widest reach.
+func TestCreateToolsetInTransaction_FailsClosedWhenTheEnabledCountCannotBeRead(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	input := toolsets.ToolsetCreateInput{
+		OrganizationID: authCtx.ActiveOrganizationID, OrganizationSlug: authCtx.OrganizationSlug, ProjectID: *authCtx.ProjectID,
+		ActorUserID: authCtx.UserID, Name: "First Server",
+	}
+
+	// Rolled back whatever the outcome, so a failed assertion cannot leave a
+	// transaction holding a pooled connection open past the test.
+	failing, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction the shared create core runs in.
+	require.NoError(t, err)
+	_, err = toolsets.CreateToolsetInTransaction(ctx, failingEnabledCountTx{failing}, testenv.NewLogger(t), audit.NewLogger(), input)
+	require.NoError(t, failing.Rollback(ctx))
+	require.Error(t, err)
+
+	listed, err := toolsetsRepo.New(ti.conn).ListToolsetsByProject(ctx, *authCtx.ProjectID)
+	require.NoError(t, err)
+	require.Empty(t, listed, "nothing was created")
+	_, err = pluginsrepo.New(ti.conn).GetDefaultPlugin(ctx, pluginsrepo.GetDefaultPluginParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "no Default plugin was provisioned or published")
+
+	// The same creation with a readable count is this organization's first
+	// server, so the failure above really did stand between it and the
+	// Default plugin.
+	readable, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction the shared create core runs in.
+	require.NoError(t, err)
+	created, err := toolsets.CreateToolsetInTransaction(ctx, readable, testenv.NewLogger(t), audit.NewLogger(), input)
+	require.NoError(t, readable.Rollback(ctx))
+	require.NoError(t, err)
+	require.True(t, created.McpEnabled)
+	require.True(t, created.AddedToDefaultPlugin)
+}
+
+func TestToolsetSlugFromNameCutsToTheColumnLimit(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "order-desk", toolsets.ToolsetSlugFromName("Order Desk"))
+	// A cut that lands on a separator does not leave a trailing hyphen.
+	long := strings.Repeat("a", toolsets.MaxToolsetSlugLength-1) + " bcd"
+	got := toolsets.ToolsetSlugFromName(long)
+	require.Equal(t, strings.Repeat("a", toolsets.MaxToolsetSlugLength-1), got)
+	require.LessOrEqual(t, len(toolsets.ToolsetSlugFromName(strings.Repeat("ab ", 40))), toolsets.MaxToolsetSlugLength)
 }
 
 func TestToolsetsService_CreateToolset_InvalidEnvironment(t *testing.T) {

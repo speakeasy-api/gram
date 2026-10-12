@@ -1,3 +1,4 @@
+import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { usePluginServerQueries } from "./usePluginServerQueries";
@@ -317,6 +318,7 @@ function PluginDetailContent({
   const invalidateAll = async () => {
     await invalidateAllPlugin(queryClient);
     await invalidateAllPlugins(queryClient);
+    await invalidateAllResourceAudience(queryClient);
     await invalidateAllPublishStatus(queryClient);
   };
 
@@ -430,6 +432,7 @@ function PluginDetailContent({
       // Mark their deleted record stale without issuing a guaranteed 404.
       await invalidateAllPlugin(queryClient, { refetchType: "none" });
       await invalidateAllPlugins(queryClient);
+      await invalidateAllResourceAudience(queryClient);
       void invalidateAllPublishStatus(queryClient);
       offerPublish("Plugin deleted");
       void navigate(routes.plugins.href());
@@ -1444,7 +1447,7 @@ function PluginServerCard({
             </Badge>
           )}
           {isRemote ? (
-            // Remote/unproxied MCP servers have no Gram-side tool
+            // Remote/unproxied MCP servers have no Speakeasy-side tool
             // catalog, so the tool-collection badge is omitted.
             <Badge variant="neutral" className="text-xs">
               {mcpServer?.unproxiedMcpServerId

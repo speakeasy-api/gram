@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -23,7 +24,7 @@ func TestShadowMCPApprovalRequestURLUsesFragmentToken(t *testing.T) {
 	service := &Service{
 		logger:       testenv.NewLogger(t),
 		riskRecorder: metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
-		siteURL:      siteURL,
+		orgHosts:     orghost.New(orghost.Config{ServerURL: nil, SiteURL: siteURL, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
 		jwtSecret:    "test-jwt-secret",
 		cache:        cache.NoopCache,
 	}
@@ -71,7 +72,7 @@ func TestShadowMCPApprovalRequestURLRequiresEvidence(t *testing.T) {
 	service := &Service{
 		logger:       testenv.NewLogger(t),
 		riskRecorder: metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
-		siteURL:      siteURL,
+		orgHosts:     orghost.New(orghost.Config{ServerURL: nil, SiteURL: siteURL, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
 		jwtSecret:    "test-jwt-secret",
 		cache:        cache.NoopCache,
 	}
@@ -95,7 +96,7 @@ func TestShadowMCPApprovalRequestURLAllowsServerIdentityEvidence(t *testing.T) {
 	service := &Service{
 		logger:       testenv.NewLogger(t),
 		riskRecorder: metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
-		siteURL:      siteURL,
+		orgHosts:     orghost.New(orghost.Config{ServerURL: nil, SiteURL: siteURL, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
 		jwtSecret:    "test-jwt-secret",
 		cache:        cache.NoopCache,
 	}
@@ -154,7 +155,7 @@ func TestShadowMCPApprovalRequestURLRedactsServerURL(t *testing.T) {
 	service := &Service{
 		logger:       testenv.NewLogger(t),
 		riskRecorder: metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
-		siteURL:      siteURL,
+		orgHosts:     orghost.New(orghost.Config{ServerURL: nil, SiteURL: siteURL, PlatformHosts: nil, LegacyDefaultHost: nil, NewOrganizationDefaultHost: nil}),
 		jwtSecret:    "test-jwt-secret",
 		cache:        cache.NoopCache,
 	}

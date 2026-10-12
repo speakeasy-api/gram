@@ -56,6 +56,53 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-conversation-v1-message-event
+    name: gram-conversation-v1-message-event
+    spec:
+      definition: |
+        edition = "2024";
+        message MessageEvent {
+          enum Type {
+            TYPE_UNSPECIFIED = 0;
+            TYPE_CREATED = 1;
+            TYPE_ATTRIBUTION_UPDATED = 2;
+            TYPE_ATTACHMENTS_ADDED = 3;
+          }
+          enum Role {
+            ROLE_UNSPECIFIED = 0;
+            ROLE_SYSTEM = 1;
+            ROLE_DEVELOPER = 2;
+            ROLE_USER = 3;
+            ROLE_ASSISTANT = 4;
+            ROLE_TOOL = 5;
+          }
+          message IngestionContext {
+            string source = 1;
+            string billing_user_id = 2;
+            string assistant_id = 3;
+            string observed_user_email = 4;
+            string provider = 5;
+            string hook_source = 6;
+            string hostname = 7;
+            string account_type = 8;
+            string billing_mode = 9;
+            bool replayed = 10;
+          }
+          string id = 1;
+          Type type = 2;
+          string organization_id = 3;
+          string project_id = 4;
+          string conversation_id = 5;
+          string message_id = 6;
+          Role role = 7;
+          string occurred_at = 8;
+          string message_created_at = 9;
+          IngestionContext ingestion = 10;
+          repeated string attachment_ids = 11;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading
     name: gram-metering-v1-meter-reading
     spec:
@@ -1292,6 +1339,107 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-role-distribution-v1-role-distribution-setup-requested-v1
+    name: gram-role-distribution-v1-role-distribution-setup-requested-v1
+    spec:
+      definition: |
+        edition = "2024";
+        message RoleDistributionSetupRequestedV1 {
+          string organization_id = 1;
+          string role_urn = 2;
+          string global_role_id = 3;
+          string bootstrap_organization_id = 4;
+          string cursor = 5;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-sigint-v1-reading
+    name: gram-sigint-v1-reading
+    spec:
+      definition: |
+        edition = "2024";
+        message Reading {
+          message Actor {
+            string user_id = 1;
+            string external_user_id = 2;
+            string user_email = 3;
+          }
+          message Account {
+            string user_account_id = 1;
+            string account_type = 2;
+            string billing_mode = 3;
+          }
+          message Event {
+            string kind = 1;
+            string id = 2;
+            string occurred_at = 3;
+            oneof context {
+              ConversationMessage conversation_message = 4;
+              ToolCall tool_call = 5;
+            }
+          }
+          message ConversationMessage {
+            enum Role {
+              ROLE_UNSPECIFIED = 0;
+              ROLE_USER = 1;
+              ROLE_ASSISTANT = 2;
+            }
+            string conversation_id = 1;
+            Role role = 2;
+          }
+          message ToolCall {
+            string tool_name = 1;
+            string tool_call_id = 2;
+            string mcp_server_id = 3;
+          }
+          message Probability {
+            string signal_id = 1;
+            double probability = 2;
+            string signal_slug = 3;
+          }
+          message MultiLabel {
+            repeated Probability signals = 1;
+          }
+          message Choice {
+            string selected_signal_id = 1;
+            repeated Probability distribution = 2;
+            double confidence = 3;
+            string selected_signal_slug = 4;
+          }
+          message Score {
+            double expected_index = 1;
+            repeated Probability distribution = 2;
+            double confidence = 3;
+          }
+          string id = 1;
+          string evaluation_attempt_id = 2;
+          string organization_id = 3;
+          string project_id = 4;
+          Event event = 5;
+          string sensor_id = 6;
+          string sensor_slug = 7;
+          string evaluated_at = 8;
+          string definition_hash = 9;
+          string configured_model = 10;
+          repeated string models = 11;
+          string compiler_version = 12;
+          Actor actor = 13;
+          string billing_user_id = 14;
+          string source = 15;
+          Account account = 16;
+          string assistant_id = 17;
+          bool replayed = 18;
+          oneof result {
+            MultiLabel multi_label = 19;
+            Choice choice = 20;
+            Score score = 21;
+          }
+          string provider = 22;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-telemetry-v1-log-record
     name: gram-telemetry-v1-log-record
     spec:
@@ -1357,10 +1505,6 @@ pubsub:
     name: gram-authz-v1-challenge-ch-writer
     spec:
       ackDeadlineSeconds: 60
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-authz-v1-challenge-ch-writer-dlq
-        maxDeliveryAttempts: 10
       messageRetentionDuration: 604800s
       retainAckedMessages: true
       retryPolicy:
@@ -1375,10 +1519,6 @@ pubsub:
     name: gram-metering-v1-meter-reading-ch-writer
     spec:
       ackDeadlineSeconds: 60
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-metering-v1-meter-reading-ch-writer-dlq
-        maxDeliveryAttempts: 10
       messageRetentionDuration: 345600s
       retainAckedMessages: true
       retryPolicy:
@@ -1407,10 +1547,6 @@ pubsub:
     name: gram-networkingress-v1-reconciler
     spec:
       ackDeadlineSeconds: 60
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-networkingress-v1-reconciler-dlq
-        maxDeliveryAttempts: 10
       messageRetentionDuration: 604800s
       retainAckedMessages: false
       retryPolicy:
@@ -1425,10 +1561,6 @@ pubsub:
     name: gram-otel-v1-agent-event-log-ch-writer
     spec:
       ackDeadlineSeconds: 60
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-otel-v1-agent-event-log-ch-writer-dlq
-        maxDeliveryAttempts: 10
       messageRetentionDuration: 604800s
       retainAckedMessages: true
       retryPolicy:
@@ -1443,10 +1575,6 @@ pubsub:
     name: gram-otel-v1-agent-event-span-ch-writer
     spec:
       ackDeadlineSeconds: 60
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-otel-v1-agent-event-span-ch-writer-dlq
-        maxDeliveryAttempts: 10
       messageRetentionDuration: 604800s
       retainAckedMessages: true
       retryPolicy:
@@ -1461,10 +1589,6 @@ pubsub:
     name: gram-otel-v1-inbound-log-record-transformer
     spec:
       ackDeadlineSeconds: 60
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-otel-v1-inbound-log-record-transformer-dlq
-        maxDeliveryAttempts: 10
       messageRetentionDuration: 604800s
       retainAckedMessages: false
       retryPolicy:
@@ -1479,10 +1603,6 @@ pubsub:
     name: gram-otel-v1-inbound-metric-transformer
     spec:
       ackDeadlineSeconds: 60
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-otel-v1-inbound-metric-transformer-dlq
-        maxDeliveryAttempts: 10
       messageRetentionDuration: 604800s
       retainAckedMessages: false
       retryPolicy:
@@ -1497,10 +1617,6 @@ pubsub:
     name: gram-otel-v1-inbound-span-transformer
     spec:
       ackDeadlineSeconds: 60
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-otel-v1-inbound-span-transformer-dlq
-        maxDeliveryAttempts: 10
       messageRetentionDuration: 604800s
       retainAckedMessages: false
       retryPolicy:
@@ -1515,10 +1631,6 @@ pubsub:
     name: gram-otel-v1-log-event-ch-writer
     spec:
       ackDeadlineSeconds: 60
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-otel-v1-log-event-ch-writer-dlq
-        maxDeliveryAttempts: 10
       messageRetentionDuration: 604800s
       retainAckedMessages: true
       retryPolicy:
@@ -1533,10 +1645,6 @@ pubsub:
     name: gram-otel-v1-log-relay
     spec:
       ackDeadlineSeconds: 60
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-otel-v1-log-relay-dlq
-        maxDeliveryAttempts: 10
       messageRetentionDuration: 604800s
       retainAckedMessages: true
       retryPolicy:
@@ -1551,10 +1659,6 @@ pubsub:
     name: gram-otel-v1-metric-relay
     spec:
       ackDeadlineSeconds: 60
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-otel-v1-metric-relay-dlq
-        maxDeliveryAttempts: 10
       messageRetentionDuration: 604800s
       retainAckedMessages: true
       retryPolicy:
@@ -1569,10 +1673,6 @@ pubsub:
     name: gram-otel-v1-span-event-ch-writer
     spec:
       ackDeadlineSeconds: 60
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-otel-v1-span-event-ch-writer-dlq
-        maxDeliveryAttempts: 10
       messageRetentionDuration: 604800s
       retainAckedMessages: true
       retryPolicy:
@@ -1587,10 +1687,6 @@ pubsub:
     name: gram-otel-v1-span-relay
     spec:
       ackDeadlineSeconds: 60
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-otel-v1-span-relay-dlq
-        maxDeliveryAttempts: 10
       messageRetentionDuration: 604800s
       retainAckedMessages: true
       retryPolicy:
@@ -1605,10 +1701,6 @@ pubsub:
     name: gram-ping-v2-processor
     spec:
       ackDeadlineSeconds: 30
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-ping-v2-processor-dlq
-        maxDeliveryAttempts: 5
       messageRetentionDuration: 3600s
       retainAckedMessages: true
       retryPolicy:
@@ -1623,10 +1715,6 @@ pubsub:
     name: gram-ping-v2-py-processor
     spec:
       ackDeadlineSeconds: 30
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-ping-v2-py-processor-dlq
-        maxDeliveryAttempts: 5
       messageRetentionDuration: 3600s
       retainAckedMessages: true
       retryPolicy:
@@ -1641,10 +1729,6 @@ pubsub:
     name: gram-plugins-v1-organization-publication-scheduler
     spec:
       ackDeadlineSeconds: 60
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-plugins-v1-organization-publication-scheduler-dlq
-        maxDeliveryAttempts: 10
       messageRetentionDuration: 604800s
       retainAckedMessages: false
       retryPolicy:
@@ -1659,10 +1743,6 @@ pubsub:
     name: gram-plugins-v1-publication-scheduler
     spec:
       ackDeadlineSeconds: 60
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-plugins-v1-publication-scheduler-dlq
-        maxDeliveryAttempts: 10
       messageRetentionDuration: 604800s
       retainAckedMessages: false
       retryPolicy:
@@ -1705,10 +1785,6 @@ pubsub:
     name: gram-risk-v1-finding-otel-relay
     spec:
       ackDeadlineSeconds: 60
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-risk-v1-finding-otel-relay-dlq
-        maxDeliveryAttempts: 10
       messageRetentionDuration: 604800s
       retainAckedMessages: true
       retryPolicy:
@@ -1737,10 +1813,6 @@ pubsub:
     name: gram-risk-v1-gitleaks-enforcer
     spec:
       ackDeadlineSeconds: 10
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-risk-v1-gitleaks-enforcer-dlq
-        maxDeliveryAttempts: 5
       messageRetentionDuration: 600s
       retainAckedMessages: false
       retryPolicy:
@@ -1769,10 +1841,6 @@ pubsub:
     name: gram-risk-v1-llm-enforcer
     spec:
       ackDeadlineSeconds: 30
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-risk-v1-llm-enforcer-dlq
-        maxDeliveryAttempts: 5
       messageRetentionDuration: 600s
       retainAckedMessages: false
       retryPolicy:
@@ -1801,10 +1869,6 @@ pubsub:
     name: gram-risk-v1-presidio-enforcer
     spec:
       ackDeadlineSeconds: 10
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-risk-v1-presidio-enforcer-dlq
-        maxDeliveryAttempts: 5
       messageRetentionDuration: 600s
       retainAckedMessages: false
       retryPolicy:
@@ -1842,6 +1906,48 @@ pubsub:
         name: gram-risk-v1-prompt-policy-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-role-distribution-v1-role-distribution-setup-handler
+      topic_proto_message: gram-role-distribution-v1-role-distribution-setup-requested-v1
+    name: gram-role-distribution-v1-role-distribution-setup-handler
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 604800s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-role-distribution-v1-role-distribution-setup-requested-v1
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-sigint-v1-evaluator
+      topic_proto_message: gram-conversation-v1-message-event
+    name: gram-sigint-v1-evaluator
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 345600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-conversation-v1-message-event
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-sigint-v1-lake-primary
+      topic_proto_message: gram-sigint-v1-reading
+    name: gram-sigint-v1-lake-primary
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 345600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-sigint-v1-reading
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-telemetry-v1-noop
       topic_proto_message: gram-telemetry-v1-log-record
     name: gram-telemetry-v1-noop
@@ -1861,10 +1967,6 @@ pubsub:
     name: gram-telemetry-v1-session-observed-ch-writer
     spec:
       ackDeadlineSeconds: 60
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-telemetry-v1-session-observed-ch-writer-dlq
-        maxDeliveryAttempts: 10
       messageRetentionDuration: 604800s
       retainAckedMessages: true
       retryPolicy:
@@ -1879,10 +1981,6 @@ pubsub:
     name: gram-telemetry-v1-tool-call-log-relay
     spec:
       ackDeadlineSeconds: 60
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-telemetry-v1-tool-call-log-relay-dlq
-        maxDeliveryAttempts: 10
       messageRetentionDuration: 604800s
       retainAckedMessages: true
       retryPolicy:
@@ -1897,10 +1995,6 @@ pubsub:
     name: gram-webhooks-v1-svix-relay
     spec:
       ackDeadlineSeconds: 60
-      deadLetterPolicy:
-        deadLetterTopicRef:
-          name: gram-webhooks-v1-svix-relay-dlq
-        maxDeliveryAttempts: 10
       messageRetentionDuration: 604800s
       retainAckedMessages: true
       retryPolicy:
@@ -1920,12 +2014,15 @@ pubsub:
         schemaRef:
           name: gram-authz-v1-challenge
   - labels:
-      dlq_for: gram-authz-v1-challenge-ch-writer
       managed_by: proto-pubsub-orchestrator
-      proto_message: gram-authz-v1-challenge-ch-writer
-    name: gram-authz-v1-challenge-ch-writer-dlq
+      proto_message: gram-conversation-v1-message-event
+    name: gram-conversation-v1-message-event
     spec:
-      messageRetentionDuration: 604800s
+      messageRetentionDuration: 345600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-conversation-v1-message-event
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading
@@ -1937,13 +2034,6 @@ pubsub:
         schemaRef:
           name: gram-metering-v1-meter-reading
   - labels:
-      dlq_for: gram-metering-v1-meter-reading-ch-writer
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-metering-v1-meter-reading-ch-writer
-    name: gram-metering-v1-meter-reading-ch-writer-dlq
-    spec:
-      messageRetentionDuration: 345600s
-  - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-networkingress-v1-reconcile-requested
     name: gram-networkingress-v1-reconcile-requested
@@ -1954,27 +2044,6 @@ pubsub:
         schemaRef:
           name: gram-networkingress-v1-reconcile-requested
   - labels:
-      dlq_for: gram-networkingress-v1-reconciler
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-networkingress-v1-reconciler
-    name: gram-networkingress-v1-reconciler-dlq
-    spec:
-      messageRetentionDuration: 604800s
-  - labels:
-      dlq_for: gram-otel-v1-agent-event-log-ch-writer
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-otel-v1-agent-event-log-ch-writer
-    name: gram-otel-v1-agent-event-log-ch-writer-dlq
-    spec:
-      messageRetentionDuration: 604800s
-  - labels:
-      dlq_for: gram-otel-v1-agent-event-span-ch-writer
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-otel-v1-agent-event-span-ch-writer
-    name: gram-otel-v1-agent-event-span-ch-writer-dlq
-    spec:
-      messageRetentionDuration: 604800s
-  - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record
     name: gram-otel-v1-inbound-log-record
@@ -1983,13 +2052,6 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-otel-v1-inbound-log-record
-  - labels:
-      dlq_for: gram-otel-v1-inbound-log-record-transformer
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-otel-v1-inbound-log-record-transformer
-    name: gram-otel-v1-inbound-log-record-transformer-dlq
-    spec:
-      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-metric
@@ -2001,13 +2063,6 @@ pubsub:
         schemaRef:
           name: gram-otel-v1-inbound-metric
   - labels:
-      dlq_for: gram-otel-v1-inbound-metric-transformer
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-otel-v1-inbound-metric-transformer
-    name: gram-otel-v1-inbound-metric-transformer-dlq
-    spec:
-      messageRetentionDuration: 604800s
-  - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-span
     name: gram-otel-v1-inbound-span
@@ -2016,20 +2071,6 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-otel-v1-inbound-span
-  - labels:
-      dlq_for: gram-otel-v1-inbound-span-transformer
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-otel-v1-inbound-span-transformer
-    name: gram-otel-v1-inbound-span-transformer-dlq
-    spec:
-      messageRetentionDuration: 604800s
-  - labels:
-      dlq_for: gram-otel-v1-log-event-ch-writer
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-otel-v1-log-event-ch-writer
-    name: gram-otel-v1-log-event-ch-writer-dlq
-    spec:
-      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-log-record
@@ -2041,13 +2082,6 @@ pubsub:
         schemaRef:
           name: gram-otel-v1-log-record
   - labels:
-      dlq_for: gram-otel-v1-log-relay
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-otel-v1-log-relay
-    name: gram-otel-v1-log-relay-dlq
-    spec:
-      messageRetentionDuration: 604800s
-  - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-metric
     name: gram-otel-v1-metric
@@ -2057,13 +2091,6 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-otel-v1-metric
-  - labels:
-      dlq_for: gram-otel-v1-metric-relay
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-otel-v1-metric-relay
-    name: gram-otel-v1-metric-relay-dlq
-    spec:
-      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-span
@@ -2075,20 +2102,6 @@ pubsub:
         schemaRef:
           name: gram-otel-v1-span
   - labels:
-      dlq_for: gram-otel-v1-span-event-ch-writer
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-otel-v1-span-event-ch-writer
-    name: gram-otel-v1-span-event-ch-writer-dlq
-    spec:
-      messageRetentionDuration: 604800s
-  - labels:
-      dlq_for: gram-otel-v1-span-relay
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-otel-v1-span-relay
-    name: gram-otel-v1-span-relay-dlq
-    spec:
-      messageRetentionDuration: 604800s
-  - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-ping-v2-message
     name: gram-ping-v2-message
@@ -2098,20 +2111,6 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-ping-v2-message
-  - labels:
-      dlq_for: gram-ping-v2-processor
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-ping-v2-processor
-    name: gram-ping-v2-processor-dlq
-    spec:
-      messageRetentionDuration: 3600s
-  - labels:
-      dlq_for: gram-ping-v2-py-processor
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-ping-v2-py-processor
-    name: gram-ping-v2-py-processor-dlq
-    spec:
-      messageRetentionDuration: 3600s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-plugins-v1-organization-publication-requested
@@ -2123,13 +2122,6 @@ pubsub:
         schemaRef:
           name: gram-plugins-v1-organization-publication-requested
   - labels:
-      dlq_for: gram-plugins-v1-organization-publication-scheduler
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-plugins-v1-organization-publication-scheduler
-    name: gram-plugins-v1-organization-publication-scheduler-dlq
-    spec:
-      messageRetentionDuration: 604800s
-  - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-plugins-v1-publication-requested
     name: gram-plugins-v1-publication-requested
@@ -2139,13 +2131,6 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-plugins-v1-publication-requested
-  - labels:
-      dlq_for: gram-plugins-v1-publication-scheduler
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-plugins-v1-publication-scheduler
-    name: gram-plugins-v1-publication-scheduler-dlq
-    spec:
-      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-custom-rules-analysis
@@ -2167,13 +2152,6 @@ pubsub:
         schemaRef:
           name: gram-risk-v1-finding
   - labels:
-      dlq_for: gram-risk-v1-finding-otel-relay
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-risk-v1-finding-otel-relay
-    name: gram-risk-v1-finding-otel-relay-dlq
-    spec:
-      messageRetentionDuration: 604800s
-  - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-gitleaks-analysis
     name: gram-risk-v1-gitleaks-analysis
@@ -2193,13 +2171,6 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-risk-v1-gitleaks-enforcement
-  - labels:
-      dlq_for: gram-risk-v1-gitleaks-enforcer
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-risk-v1-gitleaks-enforcer
-    name: gram-risk-v1-gitleaks-enforcer-dlq
-    spec:
-      messageRetentionDuration: 600s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-llm-analysis
@@ -2221,13 +2192,6 @@ pubsub:
         schemaRef:
           name: gram-risk-v1-llm-enforcement
   - labels:
-      dlq_for: gram-risk-v1-llm-enforcer
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-risk-v1-llm-enforcer
-    name: gram-risk-v1-llm-enforcer-dlq
-    spec:
-      messageRetentionDuration: 600s
-  - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-presidio-analysis
     name: gram-risk-v1-presidio-analysis
@@ -2247,13 +2211,6 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-risk-v1-presidio-enforcement
-  - labels:
-      dlq_for: gram-risk-v1-presidio-enforcer
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-risk-v1-presidio-enforcer
-    name: gram-risk-v1-presidio-enforcer-dlq
-    spec:
-      messageRetentionDuration: 600s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-prompt-injection-analysis
@@ -2276,6 +2233,26 @@ pubsub:
           name: gram-risk-v1-prompt-policy-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-role-distribution-v1-role-distribution-setup-requested-v1
+    name: gram-role-distribution-v1-role-distribution-setup-requested-v1
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-role-distribution-v1-role-distribution-setup-requested-v1
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-sigint-v1-reading
+    name: gram-sigint-v1-reading
+    spec:
+      messageRetentionDuration: 345600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-sigint-v1-reading
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-telemetry-v1-log-record
     name: gram-telemetry-v1-log-record
     spec:
@@ -2295,20 +2272,6 @@ pubsub:
         schemaRef:
           name: gram-telemetry-v1-session-observed
   - labels:
-      dlq_for: gram-telemetry-v1-session-observed-ch-writer
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-telemetry-v1-session-observed-ch-writer
-    name: gram-telemetry-v1-session-observed-ch-writer-dlq
-    spec:
-      messageRetentionDuration: 604800s
-  - labels:
-      dlq_for: gram-telemetry-v1-tool-call-log-relay
-      managed_by: proto-pubsub-orchestrator
-      proto_message: gram-telemetry-v1-tool-call-log-relay
-    name: gram-telemetry-v1-tool-call-log-relay-dlq
-    spec:
-      messageRetentionDuration: 604800s
-  - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-webhooks-v1-event
     name: gram-webhooks-v1-event
@@ -2318,10 +2281,16 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-webhooks-v1-event
-  - labels:
-      dlq_for: gram-webhooks-v1-svix-relay
+storage:
+  apis:
+  - storage.googleapis.com
+  buckets:
+  - annotations:
+      cnrm.cloud.google.com/deletion-policy: abandon
+      cnrm.cloud.google.com/force-destroy: "false"
+    labels:
       managed_by: proto-pubsub-orchestrator
-      proto_message: gram-webhooks-v1-svix-relay
-    name: gram-webhooks-v1-svix-relay-dlq
+    name: lake
     spec:
-      messageRetentionDuration: 604800s
+      publicAccessPrevention: enforced
+      uniformBucketLevelAccess: true

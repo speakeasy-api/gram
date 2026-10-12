@@ -1,4 +1,4 @@
-package mcpregistry
+package mcpregistry_test
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/localfixture"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 
@@ -39,10 +40,10 @@ import (
 //nolint:paralleltest,tparallel // Subtests share mutable catalog rows and reattach the same service; sequencing is intentional.
 func TestDiscoveryRealCredentialsHTTP(t *testing.T) {
 	t.Parallel()
-	ctx, s, db := newTestService(t)
+	ctx, s, db := mcpregistry.NewTestService(t)
 	logger := testenv.NewLogger(t)
 	tracer := testenv.NewTracerProvider(t)
-	redis, err := infra.NewRedisClient(t, 0)
+	redis, err := mcpregistry.InfraForTest().NewRedisClient(t, 0)
 	require.NoError(t, err)
 	sessions := testenv.NewTestManager(t, logger, tracer, db, redis, cache.Suffix("registry-http"), billing.NewStubClient(logger, tracer))
 	fixture := testenv.InitAuthContext(t, ctx, db, sessions)
@@ -117,7 +118,9 @@ func TestDiscoveryRealCredentialsHTTP(t *testing.T) {
 	require.Contains(t, w.Body.String(), "9007199254740993")
 	w = send(path+"old?include_deleted=true", key, "")
 	require.Equal(t, 404, w.Code)
-	_, err = repo.New(db).SetEntryPublished(ctx, repo.SetEntryPublishedParams{ID: id, Published: false})
+	old, err := s.Get(ctx, id)
+	require.NoError(t, err)
+	_, err = s.SetPublished(ctx, id, mcpregistry.Token(old), false)
 	require.NoError(t, err)
 	w = send(path+"latest?include_deleted=true", key, "")
 	require.Equal(t, 404, w.Code)
@@ -178,14 +181,24 @@ func TestDiscoveryRealCredentialsHTTP(t *testing.T) {
 		}
 	})
 	t.Run("current version replacement", func(t *testing.T) {
-		_, err := repo.New(db).SetEntryPublished(ctx, repo.SetEntryPublishedParams{ID: id, Published: true})
+		old, err := s.Get(ctx, id)
 		require.NoError(t, err)
-		_, err = repo.New(db).UpdateEntry(ctx, repo.UpdateEntryParams{StoredRecordLimit: StoredRecordByteLimit, ID: id, Data: []byte(`{"server":{"name":"io.example/test","version":"2","description":"synthetic record"}}`)})
+		published, err := s.SetPublished(ctx, id, mcpregistry.Token(old), true)
+		require.NoError(t, err)
+		firstPublication := mcpregistry.PublicationDate(t, published.Data)
+		require.NotEmpty(t, firstPublication)
+		for _, status := range []bool{false, true} {
+			published, err = s.SetPublished(ctx, id, mcpregistry.Token(published), status)
+			require.NoError(t, err)
+			require.Equal(t, firstPublication, mcpregistry.PublicationDate(t, published.Data))
+		}
+		replacement, err := s.Save(ctx, id, mcpregistry.Token(published), []byte(`{"server":{"name":"io.example/test","version":"2","description":"synthetic record"}}`))
 		require.NoError(t, err)
 		require.Equal(t, 404, send(path+"1", key, "").Code)
 		w := send(path+"latest", key, "")
 		require.Equal(t, 200, w.Code)
-		require.JSONEq(t, `{"server":{"name":"io.example/test","version":"2","description":"synthetic record"}}`, w.Body.String())
+		require.JSONEq(t, string(replacement.Data), w.Body.String())
+		require.Equal(t, firstPublication, mcpregistry.PublicationDate(t, w.Body.Bytes()))
 		w = send(strings.TrimSuffix(path, "/"), key, "")
 		require.Equal(t, 200, w.Code)
 		var page struct {
@@ -225,7 +238,9 @@ func TestDiscoveryRealCredentialsHTTP(t *testing.T) {
 		// changes remain live. This is explicitly not a snapshot or removal feed.
 		insert("io.example/live-a")
 		insert("io.example/live-c")
-		_, err := repo.New(db).SetEntryPublished(ctx, repo.SetEntryPublishedParams{ID: last, Published: false})
+		old, err := s.Get(ctx, last)
+		require.NoError(t, err)
+		_, err = s.SetPublished(ctx, last, mcpregistry.Token(old), false)
 		require.NoError(t, err)
 		next := send("/v0.1/servers?search=io.example/live&limit=1&cursor="+url.QueryEscape(p.Metadata.NextCursor), key, "")
 		require.Equal(t, 200, next.Code)
@@ -288,11 +303,20 @@ func TestDiscoveryRealCredentialsHTTP(t *testing.T) {
 			t.Fatalf("dashboard SDK wire test requires installed tsx (aube install): %v: %s", err, output)
 		}
 
+		expectedPublications := make(map[string]string)
 		for _, name := range []string{"io.example/sdk-a", "io.example/sdk-z"} {
-			data, err := json.Marshal(map[string]any{"server": map[string]any{"name": name, "version": "v/1+2", "description": "synthetic record", "extension": map[string]any{"nested": "retained"}}, "_meta": map[string]any{"extension": "retained"}})
+			data, err := json.Marshal(map[string]any{"server": map[string]any{"name": name, "version": "v/1+2", "description": "synthetic record", "extension": map[string]any{"nested": "retained"}}, "_meta": map[string]any{"extension": "retained", "com.speakeasy.ai/catalog": map[string]any{"documentationUrl": "https://example.test/docs"}}})
 			require.NoError(t, err)
-			require.Empty(t, s.validator.Validate(data))
-			require.NoError(t, repo.New(db).InsertRegistryEntryFixture(ctx, repo.InsertRegistryEntryFixtureParams{ID: uuid.New(), Data: data, Published: true}))
+			validator, err := mcpregistry.LoadValidator()
+			require.NoError(t, err)
+			require.Empty(t, validator.Validate(data))
+			e, err := s.Create(ctx, data)
+			require.NoError(t, err)
+			expectedPublications[name] = mcpregistry.PublicationDate(t, e.Data)
+			for _, status := range []bool{false, true} {
+				e, err = s.SetPublished(ctx, e.ID, mcpregistry.Token(e), status)
+				require.NoError(t, err)
+			}
 		}
 		other, err := projectsrepo.New(db).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "wire-other", Slug: "wire-other", OrganizationID: ac.ActiveOrganizationID})
 		require.NoError(t, err)
@@ -302,7 +326,9 @@ func TestDiscoveryRealCredentialsHTTP(t *testing.T) {
 		defer cancel()
 		cmd := exec.CommandContext(commandCtx, "mise", "exec", "--", "aube", "exec", "--no-install", "tsx", "--", "client/dashboard/scripts/registry-discovery-wire.ts")
 		cmd.Dir = root
-		cmd.Env = append(os.Environ(), "REGISTRY_TEST_URL="+server.URL, "REGISTRY_TEST_KEY="+key, "REGISTRY_TEST_PROJECT="+*ac.ProjectSlug, "REGISTRY_TEST_OTHER_PROJECT="+other.Slug, "REGISTRY_TEST_INSUFFICIENT_KEY="+insufficient)
+		expectedJSON, err := json.Marshal(expectedPublications)
+		require.NoError(t, err)
+		cmd.Env = append(os.Environ(), "REGISTRY_TEST_PUBLICATIONS="+string(expectedJSON), "REGISTRY_TEST_URL="+server.URL, "REGISTRY_TEST_KEY="+key, "REGISTRY_TEST_PROJECT="+*ac.ProjectSlug, "REGISTRY_TEST_OTHER_PROJECT="+other.Slug, "REGISTRY_TEST_INSUFFICIENT_KEY="+insufficient)
 		output, err := cmd.CombinedOutput()
 		require.NoError(t, err, string(output))
 		t.Log(string(output))

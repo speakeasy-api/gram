@@ -104,7 +104,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		return nil, err
 	}
 
-	if _, err := s.policy.ValidateHTTPURL(ctx, payload.URL); err != nil {
+	if _, err := s.policy.ValidateHTTPURL(ctx, payload.URL, guardian.WithInternalCatalog()); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid server url").LogWarn(ctx, logger)
 	}
 
@@ -339,7 +339,7 @@ func (s *Service) probeListTools(probeCtx context.Context, serverURL string) *ge
 			return &gen.ListUnproxiedMcpServerToolsResult{
 				Status:  "auth_required",
 				Tools:   []*gen.UnproxiedMcpServerTool{},
-				Message: conv.PtrEmpty("This server requires authentication Gram doesn't manage."),
+				Message: conv.PtrEmpty("This server requires authentication Speakeasy doesn't manage."),
 			}
 		}
 		return &gen.ListUnproxiedMcpServerToolsResult{
@@ -356,7 +356,7 @@ func (s *Service) probeListTools(probeCtx context.Context, serverURL string) *ge
 			return &gen.ListUnproxiedMcpServerToolsResult{
 				Status:  "auth_required",
 				Tools:   []*gen.UnproxiedMcpServerTool{},
-				Message: conv.PtrEmpty("This server requires authentication Gram doesn't manage."),
+				Message: conv.PtrEmpty("This server requires authentication Speakeasy doesn't manage."),
 			}
 		}
 		return &gen.ListUnproxiedMcpServerToolsResult{

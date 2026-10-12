@@ -95,7 +95,7 @@ function AgentManagementPage(): JSX.Element {
         title="Agent management unavailable"
         description={
           hasUnsupportedSession
-            ? "Support and impersonated sessions cannot manage agents. Switch to an ordinary Gram session."
+            ? "Support and impersonated sessions cannot manage agents. Switch to an ordinary Speakeasy session."
             : "Agent management is disabled while an RBAC scope override is active."
         }
       >
@@ -193,6 +193,7 @@ function AgentList({
     <ResourceListPage
       title="Agents"
       description="Agents visible to you."
+      stage="preview"
       primaryAction={<Button onClick={onCreate}>New agent identity</Button>}
       search={{
         value: search,

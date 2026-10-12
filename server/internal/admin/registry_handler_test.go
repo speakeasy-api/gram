@@ -168,16 +168,10 @@ func TestRegistrySecurityAndPayloadBoundaries(t *testing.T) {
 	storedSize, err := q.SerializedRegistryRecordBytes(ctx, []byte(raw))
 	require.NoError(t, err)
 	require.Greater(t, storedSize, int32(8<<20))
-	accepted := prefix + strings.Repeat("x", (8<<20)-len(prefix)-len(suffix)-(int(storedSize)-len(raw))) + suffix
-	storedSize, err = q.SerializedRegistryRecordBytes(ctx, []byte(accepted))
-	require.NoError(t, err)
-	require.EqualValues(t, 8<<20, storedSize)
-	require.LessOrEqual(t, len(accepted), 8<<20)
-	body := encode(accepted)
-	require.Greater(t, body.Len(), 1<<20)
-	require.Less(t, body.Len(), 16<<20)
-	rec = send("POST", "/admin/registry.create", session, constants.AdminSessionCookie, "", body)
-	require.Equal(t, 200, rec.Code, rec.Body.String()[:min(300, rec.Body.Len())])
+	// Create owns publishedAt, even when the caller supplies no metadata. Obtain
+	// its actual canonical value rather than guessing a timestamp byte allowance.
+	rec = send("POST", "/admin/registry.create", session, constants.AdminSessionCookie, "", encode(prefix+suffix))
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	var entry struct {
 		ID        string `json:"id"`
 		UpdatedAt string `json:"updated_at"`
@@ -186,7 +180,41 @@ func TestRegistrySecurityAndPayloadBoundaries(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &entry))
 	require.Contains(t, entry.DataJSON, "9007199254740993")
 
-	// The same raw-size-compliant record is rejected before either mutation.
+	var canonical map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal([]byte(entry.DataJSON), &canonical))
+	require.Contains(t, string(canonical["_meta"]), `"publishedAt"`)
+	canonicalSuffix := `","_meta":` + string(canonical["_meta"]) + `}`
+	storedSize, err = q.SerializedRegistryRecordBytes(ctx, []byte(prefix+canonicalSuffix))
+	require.NoError(t, err)
+	padding := strings.Repeat("x", (8<<20)-int(storedSize))
+	accepted := prefix + padding + canonicalSuffix
+	storedSize, err = q.SerializedRegistryRecordBytes(ctx, []byte(accepted))
+	require.NoError(t, err)
+	require.EqualValues(t, 8<<20, storedSize)
+	require.LessOrEqual(t, len(accepted), 8<<20)
+	save := func(data string) *httptest.ResponseRecorder {
+		t.Helper()
+
+		body, err := json.Marshal(map[string]string{"id": entry.ID, "updated_at": entry.UpdatedAt, "data_json": data})
+		require.NoError(t, err)
+		require.Greater(t, len(body), 1<<20)
+		require.Less(t, len(body), 16<<20)
+		return send("POST", "/admin/registry.save", session, constants.AdminSessionCookie, "", bytes.NewReader(body))
+	}
+	rec = save(accepted)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String()[:min(300, rec.Body.Len())])
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &entry))
+	require.Len(t, entry.DataJSON, 8<<20)
+	require.Contains(t, entry.DataJSON, "9007199254740993")
+
+	// One additional byte fails stored admission despite satisfying raw admission.
+	oversized := prefix + padding + "x" + canonicalSuffix
+	storedSize, err = q.SerializedRegistryRecordBytes(ctx, []byte(oversized))
+	require.NoError(t, err)
+	require.EqualValues(t, (8<<20)+1, storedSize)
+	require.LessOrEqual(t, len(oversized), 8<<20)
+	// Create cannot accept a caller-owned publishedAt. The original raw-boundary
+	// fixture instead exercises its stored-size rejection after canonicalization.
 	require.Len(t, raw, 8<<20)
 	countBefore, err := q.CountRegistryEntries(ctx)
 	require.NoError(t, err)
@@ -198,9 +226,7 @@ func TestRegistrySecurityAndPayloadBoundaries(t *testing.T) {
 	require.Equal(t, countBefore, countAfter)
 	before := send("GET", "/admin/registry.get?id="+entry.ID, session, constants.AdminSessionCookie, "", nil)
 	require.Equal(t, http.StatusOK, before.Code)
-	saveBody, err := json.Marshal(map[string]string{"id": entry.ID, "updated_at": entry.UpdatedAt, "data_json": raw})
-	require.NoError(t, err)
-	rec = send("POST", "/admin/registry.save", session, constants.AdminSessionCookie, "", bytes.NewReader(saveBody))
+	rec = save(oversized)
 	require.Equal(t, http.StatusUnprocessableEntity, rec.Code, rec.Body.String())
 	require.Contains(t, rec.Body.String(), "stored record exceeds serialized byte limit")
 	after := send("GET", "/admin/registry.get?id="+entry.ID, session, constants.AdminSessionCookie, "", nil)

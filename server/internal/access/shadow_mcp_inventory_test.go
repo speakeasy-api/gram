@@ -914,26 +914,19 @@ func TestService_ResolveShadowMCPInventoryRequest_WaitsForShadowAdmissionLock(t 
 
 	lockTx := testenv.BeginTx(t, ctx, ti.conn)
 	require.NoError(t, shadowadmission.LockProject(ctx, lockTx, *authCtx.ProjectID))
-	type resolution struct {
-		result *gen.ShadowMCPInventoryURLState
-		err    error
+	// probeTimeout bounds acquisition of the held admission lock.
+	const probeTimeout = 100 * time.Millisecond
+	ti.service.db = testenv.NewLockTimeoutPool(t, ti.conn, probeTimeout)
+	payload := &gen.ResolveShadowMCPInventoryRequestPayload{
+		ProjectID: projectID, ServerURL: "https://mcp.example.com/locked",
+		Decision: "allow", PolicyIds: []string{policy.ID.String()},
 	}
-	completed := make(chan resolution, 1)
-	go func() {
-		result, resolveErr := ti.service.ResolveShadowMCPInventoryRequest(ctx, &gen.ResolveShadowMCPInventoryRequestPayload{
-			ProjectID: projectID,
-			ServerURL: "https://mcp.example.com/locked",
-			Decision:  "allow",
-			PolicyIds: []string{policy.ID.String()},
-		})
-		completed <- resolution{result: result, err: resolveErr}
-	}()
-	require.Never(t, func() bool { return len(completed) > 0 }, 100*time.Millisecond, 10*time.Millisecond)
+	_, err := ti.service.ResolveShadowMCPInventoryRequest(ctx, payload)
+	testenv.RequireLockNotAvailable(t, err)
 	require.NoError(t, lockTx.Rollback(ctx))
-	require.Eventually(t, func() bool { return len(completed) > 0 }, 10*time.Second, 10*time.Millisecond)
-	got := <-completed
-	require.NoError(t, got.err)
-	require.Equal(t, shadowMCPInventoryAccessAllowed, got.result.Access)
+	resolved, err := ti.service.ResolveShadowMCPInventoryRequest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, shadowMCPInventoryAccessAllowed, resolved.Access)
 }
 
 func TestService_ResolveShadowMCPInventoryRequest_DeniesURLAndResolvesPendingRequests(t *testing.T) {

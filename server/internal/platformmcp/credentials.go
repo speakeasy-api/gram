@@ -12,6 +12,8 @@ import (
 
 const maxPlatformCredentialLength = 4096
 
+var errInvalidCredential = errors.New("platform MCP credential is invalid")
+
 type credentialKind string
 
 const (
@@ -23,7 +25,14 @@ const (
 type credentialPayload struct {
 	Kind           credentialKind `json:"kind"`
 	OrganizationID string         `json:"organization_id"`
-	Secret         string         `json:"secret"`
+
+	// Resource is the Platform MCP resource (RFC 8707) the credential was
+	// issued for. It is empty on credentials issued before the resource
+	// followed the request's platform host; those belong to the configured
+	// base URL's resource.
+	Resource string `json:"resource,omitempty"`
+
+	Secret string `json:"secret"`
 }
 
 // CredentialCodec makes Platform MCP credentials opaque while preserving a verified
@@ -39,7 +48,8 @@ func NewCredentialCodec(encryptionClient *encryption.Client) (*CredentialCodec, 
 	return &CredentialCodec{encryption: encryptionClient}, nil
 }
 
-func (c *CredentialCodec) Issue(kind credentialKind, organizationID string) (string, error) {
+// Issue mints an opaque credential bound to organizationID and resource.
+func (c *CredentialCodec) Issue(kind credentialKind, organizationID, resource string) (string, error) {
 	if c == nil || c.encryption == nil || organizationID == "" {
 		return "", errors.New("platform MCP credential input is incomplete")
 	}
@@ -50,6 +60,7 @@ func (c *CredentialCodec) Issue(kind credentialKind, organizationID string) (str
 	payload, err := json.Marshal(credentialPayload{
 		Kind:           kind,
 		OrganizationID: organizationID,
+		Resource:       resource,
 		Secret:         base64.RawURLEncoding.EncodeToString(secret),
 	})
 	if err != nil {
@@ -67,20 +78,29 @@ func (c *CredentialCodec) Issue(kind credentialKind, organizationID string) (str
 }
 
 func (c *CredentialCodec) OrganizationID(kind credentialKind, credential string) (string, error) {
+	payload, err := c.decode(kind, credential)
+	if err != nil {
+		return "", err
+	}
+	return payload.OrganizationID, nil
+}
+
+// decode verifies and opens a credential of the given kind.
+func (c *CredentialCodec) decode(kind credentialKind, credential string) (credentialPayload, error) {
 	if c == nil || c.encryption == nil || credential == "" || len(credential) > maxPlatformCredentialLength {
-		return "", errors.New("platform MCP credential is invalid")
+		return credentialPayload{}, errInvalidCredential
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(credential)
 	if err != nil {
-		return "", errors.New("platform MCP credential is invalid")
+		return credentialPayload{}, errInvalidCredential
 	}
 	plaintext, err := c.encryption.Decrypt(base64.StdEncoding.EncodeToString(raw))
 	if err != nil {
-		return "", errors.New("platform MCP credential is invalid")
+		return credentialPayload{}, errInvalidCredential
 	}
 	var payload credentialPayload
 	if err := json.Unmarshal([]byte(plaintext), &payload); err != nil || payload.Kind != kind || payload.OrganizationID == "" || payload.Secret == "" {
-		return "", errors.New("platform MCP credential is invalid")
+		return credentialPayload{}, errInvalidCredential
 	}
-	return payload.OrganizationID, nil
+	return payload, nil
 }

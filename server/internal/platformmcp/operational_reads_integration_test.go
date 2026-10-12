@@ -405,6 +405,7 @@ func TestListRecentToolCallsUsesBoundedSafeSummaryProjection(t *testing.T) {
 	require.Empty(t, telemetry.params.HostedMCPMatchers)
 	require.Equal(t, []telemetryrepo.MCPServerMatcher{{
 		SourceID:    servers[0].RemoteMcpServerID.UUID.String(),
+		MCPServerID: servers[0].ID.String(),
 		TargetType:  telemetryrepo.ToolUsageTargetTypeHostedMCP,
 		TargetID:    servers[0].Slug.String,
 		TargetLabel: servers[0].Name.String,

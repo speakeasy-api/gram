@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
@@ -28,9 +29,7 @@ func TestChallengeLogger_skipsWithoutAuthContext(t *testing.T) {
 		Focus:     &check,
 	}.Log(t.Context(), conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
-	count, err := testrepo.New(conn).CountPublishOutboxRows(t.Context())
-	require.NoError(t, err)
-	require.Zero(t, count)
+	require.Empty(t, listChallengeOutboxRows(t, conn))
 }
 
 func TestChallengeLogger_skipsWhenImpersonating(t *testing.T) {
@@ -56,9 +55,7 @@ func TestChallengeLogger_skipsWhenImpersonating(t *testing.T) {
 		Focus:     &check,
 	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
-	count, err := testrepo.New(conn).CountPublishOutboxRows(t.Context())
-	require.NoError(t, err)
-	require.Zero(t, count)
+	require.Empty(t, listChallengeOutboxRows(t, conn))
 }
 
 func TestChallengeLogger_publishesUserPrincipal(t *testing.T) {
@@ -92,8 +89,7 @@ func TestChallengeLogger_publishesUserPrincipal(t *testing.T) {
 		EvaluatedGrantCount: 1,
 	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
-	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
-	require.NoError(t, err)
+	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
 	require.Equal(t, string(proto.MessageName(&authzv1.Challenge{})), rows[0].Topic)
 	message := &authzv1.Challenge{}
@@ -138,8 +134,7 @@ func TestChallengeLogger_publishesAPIKeyPrincipal(t *testing.T) {
 		Focus:     &check,
 	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
-	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
-	require.NoError(t, err)
+	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
 	message := &authzv1.Challenge{}
 	require.NoError(t, proto.Unmarshal(rows[0].Message, message))
@@ -188,8 +183,7 @@ func TestChallengeLogger_publishesAssistantPrincipal(t *testing.T) {
 		Focus:     &check,
 	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
-	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
-	require.NoError(t, err)
+	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
 	message := &authzv1.Challenge{}
 	require.NoError(t, proto.Unmarshal(rows[0].Message, message))
@@ -220,8 +214,7 @@ func TestChallengeLogger_stampsRequestID(t *testing.T) {
 		Focus:     &check,
 	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
-	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
-	require.NoError(t, err)
+	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
 	message := &authzv1.Challenge{}
 	require.NoError(t, proto.Unmarshal(rows[0].Message, message))
@@ -261,8 +254,7 @@ func TestChallengeLogger_publishesNestedAndExpandedFields(t *testing.T) {
 		EvaluatedGrantCount: 7,
 	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
-	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
-	require.NoError(t, err)
+	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
 	message := &authzv1.Challenge{}
 	require.NoError(t, proto.Unmarshal(rows[0].Message, message))
@@ -304,12 +296,26 @@ func TestChallengeLogger_publishesFilterCounts(t *testing.T) {
 		FilterAllowedCount:   1,
 	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
-	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
-	require.NoError(t, err)
+	rows := listChallengeOutboxRows(t, conn)
 	require.Len(t, rows, 1)
 	message := &authzv1.Challenge{}
 	require.NoError(t, proto.Unmarshal(rows[0].Message, message))
 	require.Equal(t, string(authzrepo.OperationFilter), message.GetOperation())
 	require.Equal(t, uint32(4), message.GetFilterCandidateCount())
 	require.Equal(t, uint32(1), message.GetFilterAllowedCount())
+}
+
+// Organization fixtures also enqueue bootstrap work. Challenge assertions only
+// observe the authorization topic, without suppressing unrelated source events.
+func listChallengeOutboxRows(t *testing.T, conn *pgxpool.Pool) []testrepo.ListPublishOutboxRowsRow {
+	t.Helper()
+	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	var challenges []testrepo.ListPublishOutboxRowsRow
+	for _, row := range rows {
+		if row.Topic == string(proto.MessageName(&authzv1.Challenge{})) {
+			challenges = append(challenges, row)
+		}
+	}
+	return challenges
 }

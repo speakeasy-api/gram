@@ -369,7 +369,7 @@ func TestSoftDeleteSubjectSessions_FindsGrantAfterMintingIssuerSoftDeleted(t *te
 	ctx, fx := seedSharedGrantThenSoftDeleteMintingIssuer(t)
 
 	// The revoke runs through the live sibling issuer: the minting issuer is
-	// gone, so it is never the one a Gram session revoke arrives on.
+	// gone, so it is never the one a Speakeasy session revoke arrives on.
 	creds, err := newTestUpstreamRevoker(t, fx.ti).SoftDeleteSubjectSessions(ctx, fx.ti.conn, fx.subject, fx.issuerB, fx.projectID, fx.organizationID)
 	require.NoError(t, err)
 	require.Len(t, creds, 1)
@@ -654,7 +654,7 @@ func TestRefreshRemoteSession_DerivesPerClientFallbackResource(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, int64(1), refreshCount.Load())
-	require.Equal(t, tokenPostCapture{HasResource: true, Resource: "https://upstream-refresh.example.com"}, captured.Load())
+	require.Equal(t, tokenPostCapture{HasResource: true, Resource: "https://upstream-refresh.example.com/"}, captured.Load())
 }
 
 // The lazy request-time path must also derive per client, never an
@@ -674,7 +674,7 @@ func TestResolveAccessTokens_DerivesPerClientFallbackResource(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, tokens, 1)
 	require.Equal(t, int64(1), refreshCount.Load())
-	require.Equal(t, tokenPostCapture{HasResource: true, Resource: "https://upstream-lazy.example.com"}, captured.Load())
+	require.Equal(t, tokenPostCapture{HasResource: true, Resource: "https://upstream-lazy.example.com/"}, captured.Load())
 }
 
 // tokenPostCapture is the resource param of the last refresh POST; presence

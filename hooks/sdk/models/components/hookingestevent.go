@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Type - Canonical Gram hook event type.
+// Type - Canonical Speakeasy hook event type.
 type Type string
 
 const (
@@ -69,11 +69,11 @@ func (e *Type) UnmarshalJSON(data []byte) error {
 	}
 }
 
-// HookIngestEvent - Canonical Gram feature event.
+// HookIngestEvent - Canonical Speakeasy feature event.
 type HookIngestEvent struct {
 	// RFC3339 timestamp from the local agent. Defaults to receive time when absent.
 	OccurredAt *time.Time `json:"occurred_at,omitzero"`
-	// Canonical Gram hook event type.
+	// Canonical Speakeasy hook event type.
 	Type Type `json:"type"`
 }
 

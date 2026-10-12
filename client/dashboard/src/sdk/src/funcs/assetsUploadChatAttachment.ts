@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * uploadChatAttachment assets
  *
  * @remarks
- * Upload a chat attachment to Gram.
+ * Upload a chat attachment to Speakeasy.
  */
 export function assetsUploadChatAttachment(
   client: GramCore,

@@ -93,6 +93,7 @@ func TestCommitServerIdentityConfigurationManualCreatesConfigurationAtomically(t
 	require.NoError(t, err)
 	require.Equal(t, issuerAuditBefore+1, issuerAuditAfter)
 	require.Equal(t, clientAuditBefore+1, clientAuditAfter)
+	requireLatestClientCreateSnapshot(t, ctx, ti, result.Client.ID)
 }
 
 func TestCommitServerIdentityConfigurationAutoPrefersCIMD(t *testing.T) {
@@ -519,7 +520,7 @@ func TestCommitServerIdentityConfigurationLocksUserSessionIssuerBeforeReplacingB
 		done <- err
 	}()
 
-	testenv.WaitForBlockedBackend(t, ctx, ti.conn)
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), 1)
 	select {
 	case err := <-done:
 		require.Fail(t, "atomic configuration completed while another transaction held the user-session-issuer binding lock", "%v", err)
@@ -794,7 +795,7 @@ func TestCommitServerIdentityConfigurationLocksProviderBeforeCommitting(t *testi
 		done <- err
 	}()
 
-	testenv.WaitForBlockedBackend(t, ctx, ti.conn)
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), 1)
 	select {
 	case err := <-done:
 		require.Fail(t, "atomic configuration completed while another transaction held the provider row", "%v", err)

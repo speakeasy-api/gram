@@ -5,6 +5,7 @@ import {
   buildAccessRows,
   complementTools,
   inheritedGrants,
+  keptIndividually,
   reachableTools,
   scopeState,
 } from "./accessRows";
@@ -132,12 +133,17 @@ describe("scope resolution", () => {
 
   it("unions the tools two blocks take away", () => {
     // Two roles removing different tools remove both, not whichever the row
-    // happened to look at first.
+    // happened to look at first. The person's own rule covers every server,
+    // so it names nothing here that could outrank either block.
     const person = personIn([
       role("R1", { level: "use" }),
       role("R1", { appliesTo: "resource", level: "blocked", tools: ["b"] }),
       role("R2", { appliesTo: "resource", level: "blocked", tools: ["c"] }),
-      entry({ principalUrn: "user:u1", level: "use" }),
+      entry({
+        principalUrn: "user:u1",
+        level: "use",
+        appliesTo: "all_resources",
+      }),
     ]);
 
     expect(reachableTools(person.cells.use, catalog)).toEqual(["a", "d", "e"]);
@@ -177,8 +183,8 @@ describe("scope resolution", () => {
 
 describe("a person and the roles they are in", () => {
   it("gives a person no row until a rule names them here", () => {
-    // The list is of rules; someone reached only through a role shows up
-    // under "People this reaches" instead.
+    // The list is of rules; what someone reached only through a role can do
+    // is answered by Check access instead.
     expect(
       buildAccessRows([role("Admin", { level: "manage" })]).map(
         (row) => row.principalUrn,
@@ -252,8 +258,9 @@ describe("a person and the roles they are in", () => {
     expect(scopeState(person, "use", catalog).subtracts).toBe(true);
   });
 
-  it("says a role's block cancels the person's own grant", () => {
+  it("lets a person's own grant outrank a role's block", () => {
     const person = personIn([
+      role("Admin", { level: "use" }),
       role("Admin", {
         appliesTo: "resource",
         level: "blocked",
@@ -263,12 +270,16 @@ describe("a person and the roles they are in", () => {
     ]);
     const state = scopeState(person, "use", catalog);
 
-    expect(state.granted).toBe(false);
-    expect(state.via).toBe("Admin");
-    expect(state.capped).toBe(true);
+    expect(state.granted).toBe(true);
+    expect(state.value).toBe("1 tool");
+    expect(state.via).toBeUndefined();
+    expect(state.capped).toBe(false);
+    // Revoking drops the person's own rule; the role's grant is already
+    // cancelled by its block, so nothing needs subtracting.
+    expect(state.subtracts).toBe(false);
   });
 
-  it("caps a person at what a role's narrowed block leaves", () => {
+  it("lets a person's own rule reach past a role's narrowed block", () => {
     const person = personIn([
       role("Admin", { level: "use" }),
       role("Admin", {
@@ -280,8 +291,44 @@ describe("a person and the roles they are in", () => {
     ]);
     const state = scopeState(person, "use", catalog);
 
+    expect(state.value).toBe("All tools");
+    expect(state.capped).toBe(false);
+  });
+
+  it("leaves a person reached only through a role at what its block leaves", () => {
+    const person = personIn([
+      role("Admin", { level: "use" }),
+      role("Admin", {
+        appliesTo: "resource",
+        level: "blocked",
+        tools: ["b", "c", "d", "e"],
+      }),
+      entry({
+        principalUrn: "user:u1",
+        level: "view",
+        appliesTo: "all_resources",
+      }),
+    ]);
+    const state = scopeState(person, "use", catalog);
+
     expect(state.value).toBe("1 tool");
-    expect(state.capped).toBe(true);
+    // The person's own rule here would outrank the block, so the line is not
+    // capped: widening it is written as that rule.
+    expect(state.capped).toBe(false);
+  });
+
+  it("keeps the person's own block over their own grant", () => {
+    const person = personIn([
+      entry({ principalUrn: "user:u1", level: "use" }),
+      entry({ principalUrn: "user:u1", level: "blocked", tools: ["a"] }),
+    ]);
+
+    expect(reachableTools(person.cells.use, catalog)).toEqual([
+      "b",
+      "c",
+      "d",
+      "e",
+    ]);
   });
 
   it("does not let a role's rule reach another role", () => {
@@ -344,7 +391,9 @@ describe("blocks against an agent", () => {
   const agent = () =>
     entry({ principalUrn: "agent:a1", kind: "agent", displayName: "Releaser" });
 
-  it("applies a role block to an agent despite its direct allow", () => {
+  it("applies a role block to an agent despite its own rule", () => {
+    // An agent's owner can write its rules without being an administrator,
+    // so they never outrank a block an administrator put on its role.
     const rows = buildAccessRows([
       agent(),
       agentRole("readers", { level: "blocked" }),
@@ -356,10 +405,25 @@ describe("blocks against an agent", () => {
     expect(scopeState(row, "use", catalog).capped).toBe(true);
   });
 
-  it("still applies a role block to a person", () => {
+  it("applies a role block to an agent's rule covering every server", () => {
     const rows = buildAccessRows([
-      entry(),
-      role("readers", { level: "blocked" }),
+      entry({
+        principalUrn: "agent:a1",
+        kind: "agent",
+        displayName: "Releaser",
+        appliesTo: "all_resources",
+      }),
+      agentRole("readers", { level: "blocked", appliesTo: "resource" }),
+    ]);
+    const row = rows.find((r) => r.principalUrn === "agent:a1")!;
+
+    expect(scopeState(row, "use", catalog).granted).toBe(false);
+  });
+
+  it("applies a role block to a person's rule covering every server", () => {
+    const rows = buildAccessRows([
+      entry({ appliesTo: "all_resources" }),
+      role("readers", { level: "blocked", appliesTo: "resource" }),
     ]);
     const row = rows.find((r) => r.principalUrn === "user:u1")!;
 
@@ -377,5 +441,79 @@ describe("blocks against an agent", () => {
         (r) => r.principalUrn === "agent:a1",
       )!.cells.use.grants.length,
     ).toBe(2);
+  });
+});
+
+describe("keptIndividually", () => {
+  const everyone = entry({
+    principalUrn: "user:all",
+    kind: "everyone",
+    displayName: "Everyone",
+    appliesTo: "all_resources",
+  });
+
+  it("names the people a group reaches whose own rule here is in force", () => {
+    const rows = buildAccessRows([
+      role("Staff", { memberIds: ["u1", "u2", "u4"], agentIds: ["a1"] }),
+      entry({ principalUrn: "user:u1", displayName: "Hana Sato" }),
+      entry({
+        principalUrn: "user:u2",
+        displayName: "Ravi Patel",
+        appliesTo: "all_resources",
+      }),
+      entry({
+        principalUrn: "user:u3",
+        displayName: "Outside Staff",
+      }),
+      entry({ principalUrn: "agent:a1", kind: "agent", displayName: "Bot" }),
+      entry({
+        principalUrn: "user:u4",
+        displayName: "Self Blocked",
+      }),
+      entry({
+        principalUrn: "user:u4",
+        displayName: "Self Blocked",
+        level: "blocked",
+      }),
+    ]);
+    const staff = rows.find((row) => row.principalUrn === "role:Staff")!;
+
+    expect(keptIndividually(staff, rows).map((row) => row.displayName)).toEqual(
+      ["Hana Sato"],
+    );
+  });
+
+  it("leaves out a person whose own block cancels every tool their rule names", () => {
+    const rows = buildAccessRows([
+      role("Staff", { memberIds: ["u1"] }),
+      entry({
+        principalUrn: "user:u1",
+        displayName: "Hana Sato",
+        tools: ["a"],
+      }),
+      entry({
+        principalUrn: "user:u1",
+        displayName: "Hana Sato",
+        level: "blocked",
+        tools: ["a"],
+      }),
+    ]);
+    const staff = rows.find((row) => row.principalUrn === "role:Staff")!;
+
+    expect(keptIndividually(staff, rows, catalog)).toEqual([]);
+  });
+
+  it("names everyone holding their own rule when the group is everyone", () => {
+    const rows = buildAccessRows([
+      everyone,
+      entry({ principalUrn: "user:u1", displayName: "Hana Sato" }),
+      entry({ principalUrn: "user:u3", displayName: "Outside Staff" }),
+    ]);
+    const all = rows.find((row) => row.principalUrn === "user:all")!;
+
+    expect(keptIndividually(all, rows).map((row) => row.displayName)).toEqual([
+      "Hana Sato",
+      "Outside Staff",
+    ]);
   });
 });

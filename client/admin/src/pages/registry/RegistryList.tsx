@@ -20,6 +20,7 @@ import {
 import { badgeTone } from "@/lib/badgeTone";
 import { Badge } from "@/components/ui/badge";
 import { RegistryEntrySheet, STAGE_A_NOTICE } from "./RegistryEntrySheet";
+import { RegistryOktaUnmapped } from "./RegistryOktaUnmapped";
 
 export function RegistryList(): JSX.Element {
   const [query, setQuery] = useState("");
@@ -176,6 +177,7 @@ export function RegistryList(): JSX.Element {
           Next
         </Button>
       </div>
+      <RegistryOktaUnmapped onOpen={(id) => setEditor({ id })} />
       {editor && (
         <RegistryEntrySheet
           id={editor.id}

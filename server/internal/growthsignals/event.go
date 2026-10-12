@@ -64,7 +64,7 @@ type ActivityEvent struct {
 	// emitted.
 	Activity Activity
 
-	// OrganizationID is the Gram organization the activity belongs to. It is
+	// OrganizationID is the Speakeasy organization the activity belongs to. It is
 	// the distinct id when no actor email resolves.
 	OrganizationID string
 
@@ -73,7 +73,7 @@ type ActivityEvent struct {
 	ProjectID uuid.UUID
 
 	// ActorID identifies the acting principal, and is interpreted according to
-	// ActorType: a Gram user id for a user, an email address for an email
+	// ActorType: a Speakeasy user id for a user, an email address for an email
 	// principal, a role name for a role.
 	ActorID string
 
@@ -103,7 +103,7 @@ type ActivityEvent struct {
 	// the record that produced it.
 	AuditAction audit.Action
 
-	// DashboardURL deep links to the subject in the Gram dashboard. Leaving it
+	// DashboardURL deep links to the subject in the Speakeasy dashboard. Leaving it
 	// empty is allowed: BuildEvent falls back to the organization's page and
 	// then to the site root, because the property must never be absent.
 	DashboardURL string

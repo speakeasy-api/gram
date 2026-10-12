@@ -11,6 +11,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 )
 
 func testMarketplaceURL(token string) string {
@@ -191,6 +192,43 @@ func TestBuildAgentPluginsView_OmitsObservabilityWhenDisabled(t *testing.T) {
 	require.Equal(t, []string{"engineering-tools"}, slugs,
 		"a disabled observability plugin must not be synthesized for the device agent")
 	require.NotContains(t, slugs, "acme-corp-observability")
+}
+
+// A project's published marketplace name is frozen: the org was renamed and the
+// project became non-default since it published, both of which move the
+// computed name, but the view must keep emitting the name the repo carries.
+func TestBuildAgentPluginsView_EmitsFrozenPublishedName(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 5, 29, 12, 0, 0, 0, time.UTC)
+	snapshot, err := naming.WithPublishedMarketplaceName([]byte(`{"marketplace_name":"acme-speakeasy","org_name":"Acme"}`), "acme-speakeasy")
+	require.NoError(t, err)
+	row := marketplaceRow("acme", "Renamed Corp", "tools", false, "tokA", now)
+	row.PublishedHooksConfig = snapshot
+
+	result := mv.BuildAgentPluginsView([]repo.GetAgentPluginSetRow{row}, testMarketplaceURL)
+
+	require.Len(t, result.Marketplaces, 1)
+	require.Equal(t, "acme-speakeasy", result.Marketplaces[0].Name)
+	require.Equal(t, "acme-speakeasy", result.Plugins[0].MarketplaceName)
+	// The observability slug follows the org name the hooks were published under.
+	require.Equal(t, "acme-observability", result.Plugins[0].Slug)
+}
+
+func TestBuildAgentPluginsView_OverrideWinsOverPublishedName(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 5, 29, 12, 0, 0, 0, time.UTC)
+	snapshot, err := naming.WithPublishedMarketplaceName(nil, "acme-speakeasy")
+	require.NoError(t, err)
+	row := marketplaceRow("acme", "Acme", "default", true, "tokA", now)
+	row.PublishedHooksConfig = snapshot
+	row.MarketplaceNameOverride = pgtype.Text{String: "team-tools", Valid: true}
+
+	result := mv.BuildAgentPluginsView([]repo.GetAgentPluginSetRow{row}, testMarketplaceURL)
+
+	require.Len(t, result.Marketplaces, 1)
+	require.Equal(t, "team-tools", result.Marketplaces[0].Name)
 }
 
 func TestBuildAgentPluginsView_EmptyRows(t *testing.T) {

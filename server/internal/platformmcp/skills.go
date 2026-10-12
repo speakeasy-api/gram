@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -72,6 +73,8 @@ type SkillsManagement interface {
 	ListFeedback(context.Context, *genskills.ListFeedbackPayload) (*genskills.ListSkillFeedbackResult, error)
 	ListSuggestions(context.Context, *genskills.ListSuggestionsPayload) (*genskills.ListSkillSuggestionsResult, error)
 	ListSuggestionFeedback(context.Context, *genskills.ListSuggestionFeedbackPayload) (*genskills.ListSkillSuggestionFeedbackResult, error)
+	ApproveSuggestion(context.Context, *genskills.ApproveSuggestionPayload) (*genskills.ApproveSkillSuggestionResult, error)
+	DismissSuggestion(context.Context, *genskills.DismissSuggestionPayload) (*types.SkillEditSuggestion, error)
 	Distribute(context.Context, *genskills.DistributePayload) (*types.SkillDistribution, error)
 	Undistribute(context.Context, *genskills.UndistributePayload) error
 }
@@ -182,16 +185,26 @@ type SkillsService struct {
 	grants   SkillAuthorizer
 	gate     CatalogRegistrationGateChecker
 	budget   OperationBudget
+
+	// insights and insightsBudget back the skill insight tools. Both are attached by
+	// WithInsights; a nil reader keeps those tools registered as stubs.
+	insights       SkillInsightsReader
+	insightsBudget OperationBudget
+
+	now func() time.Time
 }
 
 func NewSkillsService(skills SkillsManagement, targets SkillTargetInventory, projects SkillProjectResolver, grants SkillAuthorizer, gate CatalogRegistrationGateChecker, budget OperationBudget) *SkillsService {
 	return &SkillsService{
-		skills:   skills,
-		targets:  targets,
-		projects: projects,
-		grants:   grants,
-		gate:     gate,
-		budget:   budget,
+		skills:         skills,
+		targets:        targets,
+		projects:       projects,
+		grants:         grants,
+		gate:           gate,
+		budget:         budget,
+		insights:       nil,
+		insightsBudget: OperationBudget{Connection: nil, Organization: nil},
+		now:            time.Now,
 	}
 }
 
@@ -207,6 +220,14 @@ func (s *SkillsService) valid() bool {
 // so a caller reaches exactly the projects its own grants reach and the audit
 // row names the person, not the surface.
 func (s *SkillsService) begin(ctx context.Context, principal Principal, projectSlug string) (context.Context, ResolvedProject, error) {
+	return s.beginWith(ctx, principal, projectSlug, s.budget)
+}
+
+// beginWith is begin metered on a caller-chosen allowance. Authoring and
+// distribution share the skills budget; a read that is really a telemetry
+// aggregate is charged to the observability lane instead, so neither workflow
+// can spend the other's allowance.
+func (s *SkillsService) beginWith(ctx context.Context, principal Principal, projectSlug string, budget OperationBudget) (context.Context, ResolvedProject, error) {
 	if !s.valid() {
 		return ctx, ResolvedProject{}, ErrSkillsUnavailable
 	}
@@ -220,7 +241,7 @@ func (s *SkillsService) begin(ctx context.Context, principal Principal, projectS
 	if !enabled {
 		return ctx, ResolvedProject{}, ErrSkillsUnavailable
 	}
-	if err := s.budget.Allow(ctx, principal); err != nil {
+	if err := budget.Allow(ctx, principal); err != nil {
 		return ctx, ResolvedProject{}, err
 	}
 	project, err := s.projects.ResolveProject(ctx, principal.OrganizationID, projectSlug)
@@ -624,7 +645,7 @@ type ListSkillFeedbackOutput struct {
 
 type SkillSuggestionChange struct {
 	ID                   string `json:"id"`
-	ProposedDiff         string `json:"proposed_diff"`
+	ProposedDiff         string `json:"proposed_diff,omitempty"`
 	Rationale            string `json:"rationale"`
 	AppliesCleanly       bool   `json:"applies_cleanly"`
 	FeedbackCount        int64  `json:"feedback_count"`
@@ -654,8 +675,13 @@ type ListSkillSuggestionsInput struct {
 	ProjectSlug            string
 	SkillID                string
 	IncludeProposedContent bool
-	Cursor                 string
-	Limit                  int
+
+	// OmitDiffs leaves each change's proposed diff out, for triaging the queue
+	// from rationale and evidence counts before reading any change in full.
+	OmitDiffs bool
+
+	Cursor string
+	Limit  int
 }
 
 type ListSkillSuggestionsOutput struct {
@@ -706,7 +732,15 @@ func (s *SkillsService) ListSkillSuggestions(ctx context.Context, principal Prin
 	if err != nil {
 		return ListSkillSuggestionsOutput{}, err
 	}
-	return ListSkillSuggestionsOutput{ProjectSlug: project.Slug, Suggestions: buildSkillSuggestions(result.Suggestions, input.IncludeProposedContent), TotalOpenCount: result.TotalOpenCount, NextCursor: stringOrEmpty(result.NextCursor)}, nil
+	suggestions := buildSkillSuggestions(result.Suggestions, input.IncludeProposedContent)
+	if input.OmitDiffs {
+		for i := range suggestions {
+			for j := range suggestions[i].Changes {
+				suggestions[i].Changes[j].ProposedDiff = ""
+			}
+		}
+	}
+	return ListSkillSuggestionsOutput{ProjectSlug: project.Slug, Suggestions: suggestions, TotalOpenCount: result.TotalOpenCount, NextCursor: stringOrEmpty(result.NextCursor)}, nil
 }
 
 func (s *SkillsService) ListSkillSuggestionFeedback(ctx context.Context, principal Principal, input ListSkillSuggestionFeedbackInput) (ListSkillSuggestionFeedbackOutput, error) {
@@ -722,6 +756,177 @@ func (s *SkillsService) ListSkillSuggestionFeedback(ctx context.Context, princip
 		return ListSkillSuggestionFeedbackOutput{}, err
 	}
 	return ListSkillSuggestionFeedbackOutput{ProjectSlug: project.Slug, ChangeID: input.ChangeID, Feedback: buildSkillFeedback(result.Feedback)}, nil
+}
+
+// SkillSuggestionOutcome is what approving a suggestion did.
+type SkillSuggestionOutcome string
+
+const (
+	// SkillSuggestionApplied recorded a new version and closed the suggestion.
+	SkillSuggestionApplied SkillSuggestionOutcome = "applied"
+
+	// SkillSuggestionPartiallyApplied recorded a new version from the named
+	// changes and left the suggestion open carrying the rest, rebased onto it.
+	SkillSuggestionPartiallyApplied SkillSuggestionOutcome = "partially_applied"
+
+	// SkillSuggestionSuperseded recorded nothing: the skill had moved past the
+	// version the suggestion was written against, so it was closed as stale.
+	SkillSuggestionSuperseded SkillSuggestionOutcome = "superseded"
+)
+
+// ApproveSkillSuggestionInput names exactly what a reviewer is taking from one
+// suggestion. Either ChangeIDs or Content is set, never both.
+type ApproveSkillSuggestionInput struct {
+	// ProjectSlug is the project that owns the suggestion.
+	ProjectSlug string
+
+	// SuggestionID is the suggestion being approved.
+	SuggestionID string
+
+	// ChangeIDs are the reviewed changes to take. Naming every change takes the
+	// whole suggestion; a change proposed after the review is never taken
+	// implicitly, because it is not in the list.
+	ChangeIDs []string
+
+	// Content is a complete edited SKILL.md recorded in place of the proposed
+	// changes, for a reviewer who corrected the suggestion before taking it.
+	Content string
+}
+
+type ApproveSkillSuggestionOutput struct {
+	ProjectSlug string                  `json:"project_slug"`
+	Outcome     SkillSuggestionOutcome  `json:"outcome"`
+	Skill       SkillSummary            `json:"skill"`
+	Version     *SkillVersionSummary    `json:"version,omitempty"`
+	Remaining   *SkillSuggestionSummary `json:"remaining_suggestion,omitempty"`
+	NextAction  string                  `json:"next_action"`
+}
+
+// ApproveSkillSuggestion records a new skill version from a reviewed
+// suggestion through the same service path the dashboard uses, so the stale
+// check, version recording, suggestion state change, and audit event happen
+// in one transaction. The skill is read back afterwards so the result reports
+// the committed latest version rather than echoing the request.
+func (s *SkillsService) ApproveSkillSuggestion(ctx context.Context, principal Principal, input ApproveSkillSuggestionInput) (ApproveSkillSuggestionOutput, error) {
+	ctx, project, err := s.begin(ctx, principal, input.ProjectSlug)
+	if err != nil {
+		return ApproveSkillSuggestionOutput{}, err
+	}
+	if _, err := uuid.Parse(input.SuggestionID); err != nil {
+		return ApproveSkillSuggestionOutput{}, ErrRegistrationInvalid
+	}
+	hasContent := strings.TrimSpace(input.Content) != ""
+	if (len(input.ChangeIDs) > 0) == hasContent {
+		return ApproveSkillSuggestionOutput{}, ErrRegistrationInvalid
+	}
+	for _, id := range input.ChangeIDs {
+		if _, err := uuid.Parse(id); err != nil {
+			return ApproveSkillSuggestionOutput{}, ErrRegistrationInvalid
+		}
+	}
+	payload := &genskills.ApproveSuggestionPayload{
+		ID:               input.SuggestionID,
+		Content:          nil,
+		ChangeIds:        input.ChangeIDs,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	}
+	if hasContent {
+		if err := checkSkillContent(input.Content); err != nil {
+			return ApproveSkillSuggestionOutput{}, err
+		}
+		payload.Content = &input.Content
+		payload.ChangeIds = nil
+	}
+	result, err := s.skills.ApproveSuggestion(ctx, payload)
+	if err != nil {
+		return ApproveSkillSuggestionOutput{}, err
+	}
+
+	output := ApproveSkillSuggestionOutput{
+		ProjectSlug: project.Slug,
+		Outcome:     SkillSuggestionOutcome(result.Outcome),
+		Skill:       SkillSummary{},
+		Version:     nil,
+		Remaining:   nil,
+		NextAction:  "",
+	}
+	if result.Version != nil {
+		version := buildSkillVersionSummary(result.Version, false)
+		output.Version = &version
+	}
+	switch output.Outcome {
+	case SkillSuggestionApplied:
+		output.NextAction = "The new version is now the skill's latest. Plugins and assistants that already carry this skill and track its latest version pick it up; nobody new receives it."
+	case SkillSuggestionPartiallyApplied:
+		if result.Suggestion != nil {
+			remaining := buildSkillSuggestions([]*types.SkillEditSuggestion{result.Suggestion}, false)
+			output.Remaining = &remaining[0]
+		}
+		output.NextAction = "The changes you named are in the new version. The rest stay proposed against it; review them with list_skill_suggestions, then approve or dismiss them."
+	case SkillSuggestionSuperseded:
+		output.NextAction = "Nothing was recorded. The skill changed after this suggestion was written, so it was closed as out of date. Read the current version with get_skill before proposing the change again."
+	}
+
+	var skillID string
+	switch {
+	case result.Suggestion != nil:
+		skillID = result.Suggestion.SkillID
+	case result.Version != nil:
+		skillID = result.Version.SkillID
+	default:
+		return ApproveSkillSuggestionOutput{}, fmt.Errorf("approve skill suggestion: result names no skill")
+	}
+	current, err := s.skills.Get(ctx, &genskills.GetPayload{
+		ID:               skillID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	if err != nil {
+		return ApproveSkillSuggestionOutput{}, err
+	}
+	output.Skill = buildSkillSummary(current.Skill)
+	return output, nil
+}
+
+type DismissSkillSuggestionInput struct {
+	// ProjectSlug is the project that owns the suggestion.
+	ProjectSlug string
+
+	// SuggestionID is the suggestion being dismissed.
+	SuggestionID string
+}
+
+type DismissSkillSuggestionOutput struct {
+	ProjectSlug string                 `json:"project_slug"`
+	Suggestion  SkillSuggestionSummary `json:"suggestion"`
+}
+
+// DismissSkillSuggestion closes a suggestion without changing the skill. The
+// skills service treats a repeat as a no-op, so a retry is safe.
+func (s *SkillsService) DismissSkillSuggestion(ctx context.Context, principal Principal, input DismissSkillSuggestionInput) (DismissSkillSuggestionOutput, error) {
+	ctx, project, err := s.begin(ctx, principal, input.ProjectSlug)
+	if err != nil {
+		return DismissSkillSuggestionOutput{}, err
+	}
+	if _, err := uuid.Parse(input.SuggestionID); err != nil {
+		return DismissSkillSuggestionOutput{}, ErrRegistrationInvalid
+	}
+	dismissed, err := s.skills.DismissSuggestion(ctx, &genskills.DismissSuggestionPayload{
+		ID:               input.SuggestionID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	if err != nil {
+		return DismissSkillSuggestionOutput{}, err
+	}
+	return DismissSkillSuggestionOutput{
+		ProjectSlug: project.Slug,
+		Suggestion:  buildSkillSuggestions([]*types.SkillEditSuggestion{dismissed}, false)[0],
+	}, nil
 }
 
 func (s *SkillsService) DistributeSkill(ctx context.Context, principal Principal, input DistributeSkillInput) (DistributeSkillOutput, error) {

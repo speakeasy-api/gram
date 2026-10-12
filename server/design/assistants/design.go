@@ -82,6 +82,30 @@ var _ = Service("assistants", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "create")
 	})
 
+	Method("upgradeAssistantIdentity", func() {
+		Description("Give an existing assistant an agent and per-trigger workload identities. By default a new agent is created with access to every MCP server and skill in the project and to administering this assistant. Passing agent_id points the assistant at an existing agent of the project instead; that agent keeps its policy and gains administration of this assistant. Either way the agent is managed like any other agent afterwards. Existing assistants are never upgraded implicitly; repeating the upgrade is safe.")
+		Payload(func() {
+			Attribute("id", String, "The assistant ID.", func() { Format(FormatUUID) })
+			Attribute("agent_id", String, "An existing agent of the project to use instead of creating one. Requires owning the agent or agent:authorize on it.", func() { Format(FormatUUID) })
+			Attribute("agent_name", String, "The name of the new agent. Cannot be combined with agent_id.", func() {
+				MinLength(1)
+				MaxLength(120)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+		Result(shared.Assistant)
+		HTTP(func() {
+			POST("/rpc/assistants.upgradeIdentity")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "upgradeAssistantIdentity")
+		Meta("openapi:extension:x-speakeasy-name-override", "upgradeIdentity")
+	})
+
 	Method("updateAssistant", func() {
 		Description("Update an assistant.")
 

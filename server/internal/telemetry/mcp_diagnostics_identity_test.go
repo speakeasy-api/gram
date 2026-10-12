@@ -257,6 +257,54 @@ func TestGetActiveCounts_ScopesByConfiguredServerID(t *testing.T) {
 	require.Equal(t, uint64(2), counts.ActiveUsersCount)
 }
 
+// TestGetTopServers_IncludesProxiedServers pins that calls carrying only the
+// stable configured-server id still appear in the overview's server ranking.
+func TestGetTopServers_IncludesProxiedServers(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+	serverID := uuid.New().String()
+
+	insertProxiedToolEvent(t, ctx, ti, proxiedToolEventParams{
+		projectID: projectID, timestamp: now.Add(-time.Minute), mcpServerID: serverID,
+		toolName: "search", userID: "user-1", statusCode: 200,
+	})
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	servers, err := ti.chClient.GetTopServers(ctx, telemetryRepo.GetTopServersParams{
+		GramProjectID:     projectID,
+		TimeStart:         now.Add(-time.Hour).UnixNano(),
+		TimeEnd:           now.UnixNano(),
+		HostedMCPMatchers: nil,
+		MCPServerMatchers: []telemetryRepo.MCPServerMatcher{{
+			SourceID: serverID, MCPServerID: serverID, TargetType: telemetryRepo.ToolUsageTargetTypeHostedMCP,
+			TargetID: "search-service", TargetLabel: "Search Service",
+		}},
+		MetaMCPMatchers: nil,
+		Limit:           0,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []telemetryRepo.TopServer{{ServerName: "Search Service", ToolCallCount: 1}}, servers)
+
+	active, err := ti.chClient.GetUnifiedActiveServerCount(ctx, telemetryRepo.GetTopServersParams{
+		GramProjectID:     projectID,
+		TimeStart:         now.Add(-time.Hour).UnixNano(),
+		TimeEnd:           now.UnixNano(),
+		HostedMCPMatchers: nil,
+		MCPServerMatchers: []telemetryRepo.MCPServerMatcher{{
+			SourceID: serverID, MCPServerID: serverID, TargetType: telemetryRepo.ToolUsageTargetTypeHostedMCP,
+			TargetID: "search-service", TargetLabel: "Search Service",
+		}},
+		MetaMCPMatchers: nil,
+		Limit:           0,
+	})
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), active)
+}
+
 // TestGetActiveCounts_CountsHookObservedUsers pins that a server's active users
 // include the people whose calls only an agent hook observed. Hook rows carry
 // no mcp_server_id and a hooks: URN, so a read scoped by the configured id

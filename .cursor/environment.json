@@ -1,0 +1,7 @@
+{
+  "$schema": "https://www.cursor.com/schemas/environment.schema.json",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh",
+  "start": "bash .cursor/start.sh",
+  "terminals": []
+}

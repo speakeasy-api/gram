@@ -13,7 +13,7 @@ import { useMemo } from "react";
 
 export interface ProxiedMcpConnection {
   /**
-   * The Gram-origin display MCP URL (`/mcp/<slug>`) handed to the elements
+   * The Speakeasy-origin display MCP URL (`/mcp/<slug>`) handed to the elements
    * chat, which manages its own transport (mirrors the toolset path).
    */
   mcpUrl: string | undefined;
@@ -57,14 +57,14 @@ export function useProxiedMcpConnection(
     });
 
   // Always address the platform `/mcp/<slug>` origin, never a custom domain:
-  // the playground chat is configured against the Gram/proxy origin, so a
+  // the playground chat is configured against the Speakeasy/proxy origin, so a
   // custom-domain URL would be a cross-origin mismatch (mirrors useInternalMcpUrl).
   const mcpUrl = useMemo(() => {
     const endpoints = endpointsData?.mcpEndpoints ?? [];
     // Only a platform-domain endpoint (no customDomainId) has a slug registered
-    // on the Gram origin. A custom-domain endpoint's slug lives under that
+    // on the Speakeasy origin. A custom-domain endpoint's slug lives under that
     // domain, so `${getServerURL()}/mcp/<slug>` would 404 — never fall back to
-    // one here. A server with only custom-domain endpoints has no Gram-origin
+    // one here. A server with only custom-domain endpoints has no Speakeasy-origin
     // URL, so we return undefined (the chat surfaces the not-connected state).
     const endpoint = endpoints.find((e) => !e.customDomainId);
     return endpoint ? `${getServerURL()}/mcp/${endpoint.slug}` : undefined;

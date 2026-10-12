@@ -76,8 +76,7 @@ describe("ExploreResults", () => {
       <ExploreResults
         dataset={dataset}
         spec={spec({ chartType: "table" })}
-        chart={query()}
-        summary={query({ isFetching: true })}
+        result={query({ isFetching: true })}
       />,
     );
     expect(container.querySelector('section[aria-busy="true"]')).toBeTruthy();
@@ -89,8 +88,7 @@ describe("ExploreResults", () => {
       <ExploreResults
         dataset={dataset}
         spec={spec({ chartType: "table" })}
-        chart={query()}
-        summary={loaded([{ user: "ann", count: 1250 }])}
+        result={loaded([{ user: "ann", count: 1250 }])}
       />,
     );
     expect(screen.queryByText("sessions")).toBeNull();
@@ -103,8 +101,7 @@ describe("ExploreResults", () => {
       <ExploreResults
         dataset={dataset}
         spec={spec({ chartType: "table" })}
-        chart={query()}
-        summary={query({
+        result={query({
           isPending: false,
           isError: true,
           error: new Error(
@@ -122,14 +119,13 @@ describe("ExploreResults", () => {
       <ExploreResults
         dataset={dataset}
         spec={spec({ chartType: "table" })}
-        chart={query()}
-        summary={loaded([])}
+        result={loaded([])}
       />,
     );
     expect(screen.getByText("No rows to show")).toBeTruthy();
   });
 
-  it("tables the summary with a column per dimension and measure, values formatted by unit", () => {
+  it("tables a result with a column per dimension and measure, values formatted by unit", () => {
     render(
       <ExploreResults
         dataset={dataset}
@@ -140,8 +136,7 @@ describe("ExploreResults", () => {
             { op: "sum", field: "duration_seconds" },
           ],
         })}
-        chart={query()}
-        summary={loaded([
+        result={loaded([
           { user: "ann", count: 3, sum_duration_seconds: 90 },
           { user: "", count: 1, sum_duration_seconds: 4.25 },
         ])}
@@ -161,32 +156,26 @@ describe("ExploreResults", () => {
       <ExploreResults
         dataset={dataset}
         spec={spec({ chartType: "number" })}
-        chart={query()}
-        summary={loaded([{ count: 12500 }])}
+        result={loaded([{ count: 12500 }])}
       />,
     );
     expect(screen.getByText("COUNT")).toBeTruthy();
     expect(screen.getByText("12.5K")).toBeTruthy();
   });
 
-  it("draws a timeseries from the chart query with the summary tabled beneath", () => {
+  it("draws a timeseries as its chart alone, with no table beneath", () => {
     render(
       <ExploreResults
         dataset={dataset}
         spec={spec({ chartType: "line" })}
-        chart={loaded([
+        result={loaded([
           { time_bucket: "2026-09-14T10:00:00Z", user: "ann", count: 2 },
           { time_bucket: "2026-09-14T10:00:00Z", user: "bob", count: 1 },
-        ])}
-        summary={loaded([
-          { user: "ann", count: 2 },
-          { user: "bob", count: 1 },
         ])}
       />,
     );
     expect(screen.getByTestId("chart").textContent).toBe("ann,bob");
-    expect(screen.getByText("Summary")).toBeTruthy();
-    expect(screen.getByText("ann")).toBeTruthy();
+    expect(screen.queryByRole("table")).toBeNull();
   });
 
   it("refuses to chart measures with different units", () => {
@@ -200,14 +189,51 @@ describe("ExploreResults", () => {
             { op: "sum", field: "duration_seconds" },
           ],
         })}
-        chart={loaded([
+        result={loaded([
           { time_bucket: "t", count: 1, sum_duration_seconds: 2 },
         ])}
-        summary={loaded([{ count: 1, sum_duration_seconds: 2 }])}
       />,
     );
     expect(screen.getByText("These measures do not share a unit")).toBeTruthy();
     expect(screen.queryByTestId("chart")).toBeNull();
+  });
+
+  it("ranks the groups as horizontal bars, largest first, by the ordered measure", () => {
+    render(
+      <ExploreResults
+        dataset={dataset}
+        spec={spec({
+          chartType: "ranked",
+          measures: [
+            { op: "count", field: "" },
+            { op: "sum", field: "duration_seconds" },
+          ],
+          orderBy: "sum_duration_seconds",
+        })}
+        result={loaded([
+          { user: "ann", count: 9, sum_duration_seconds: 10 },
+          { user: "bob", count: 1, sum_duration_seconds: 40 },
+        ])}
+      />,
+    );
+    expect(screen.getByText("Ranked by SUM(duration_seconds)")).toBeTruthy();
+    const labels = screen
+      .getAllByRole("listitem")
+      .map((item) => item.textContent);
+    expect(labels).toEqual(["bob40", "ann10"]);
+    expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  it("tables projected rows rather than ranking them when nothing is measured", () => {
+    render(
+      <ExploreResults
+        dataset={dataset}
+        spec={spec({ chartType: "ranked", measures: [] })}
+        result={loaded([{ user: "ann", time: "2026-09-14T10:15:30Z" }])}
+      />,
+    );
+    expect(screen.getByRole("table")).toBeTruthy();
+    expect(screen.queryByRole("listitem")).toBeNull();
   });
 
   it("tables projected rows, time first, when nothing is measured", () => {
@@ -215,8 +241,7 @@ describe("ExploreResults", () => {
       <ExploreResults
         dataset={dataset}
         spec={spec({ chartType: "line", measures: [] })}
-        chart={query()}
-        summary={loaded([{ user: "ann", time: "2026-09-14T10:15:30Z" }])}
+        result={loaded([{ user: "ann", time: "2026-09-14T10:15:30Z" }])}
       />,
     );
     const headers = screen

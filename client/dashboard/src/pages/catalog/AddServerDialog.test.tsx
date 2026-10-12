@@ -1,7 +1,16 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/Tooltip";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render as testingRender,
+  act,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { catalogPresetState } from "@/pages/security/server-guardrails/server-guardrail-policy";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AddServerDialog } from "./AddServerDialog";
+import { AddServerDialog, GuardrailOutcomeNotice } from "./AddServerDialog";
 
 const mocks = vi.hoisted(() => ({
   getServerDetails: vi.fn(),
@@ -9,15 +18,22 @@ const mocks = vi.hoisted(() => ({
   onOpenChange: vi.fn(),
   reset: vi.fn(),
   startInstall: vi.fn(),
+  continueToGuardrails: vi.fn(),
+  skip: vi.fn(),
+  installWithGuardrail: vi.fn(),
+  installForCustomizing: vi.fn(),
+  navigate: vi.fn(),
   updateServerConfig: vi.fn(),
   workflow: vi.fn(),
 }));
 
 vi.mock("@/contexts/Auth", () => ({
   useProject: () => ({ id: "project-1", slug: "default" }),
+  useOrganization: () => ({ id: "org-1", slug: "acme" }),
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
+  useProjectSlugForRequests: () => "default",
   useSdkClient: () => ({
     mcpRegistries: { getServerDetails: mocks.getServerDetails },
   }),
@@ -30,13 +46,24 @@ vi.mock("@/hooks/useRBAC", () => ({
   }),
 }));
 
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
+  useNavigate: () => mocks.navigate,
+}));
+
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    policyCenter: { new: { href: () => "/p/risk-policies/new" } },
+  }),
+}));
+
 vi.mock("./useRemoteMcpInstallWorkflow", () => ({
   headerValueKey: (
     serverIndex: number,
     remoteUrl: string,
     headerName: string,
   ) => `${serverIndex}:${remoteUrl}:${headerName}`,
-  useRemoteMcpInstallWorkflow: () => mocks.workflow(),
+  useRemoteMcpInstallWorkflow: (options: unknown) => mocks.workflow(options),
 }));
 
 const server = {
@@ -56,6 +83,19 @@ const server = {
     },
   ],
 };
+
+function render(ui: React.ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const invalidate = vi.spyOn(client, "invalidateQueries");
+  return {
+    ...testingRender(
+      <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+    ),
+    invalidate,
+  };
+}
 
 function renderDialog(): void {
   render(
@@ -155,5 +195,223 @@ describe("AddServerDialog identity permissions", () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(false);
+  });
+});
+
+describe("AddServerDialog guardrails", () => {
+  it("continues to the guardrails step instead of installing when offered", async () => {
+    mocks.hasScope.mockReturnValue(true);
+    const configure = mocks.workflow();
+    mocks.workflow.mockReturnValue({
+      ...configure,
+      continueToGuardrails: mocks.continueToGuardrails,
+    });
+    renderDialog();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+
+    expect(mocks.continueToGuardrails).toHaveBeenCalledWith({
+      configureSkipped: false,
+    });
+    expect(mocks.startInstall).not.toHaveBeenCalled();
+  });
+
+  function guardrailsPhase(tools: { name: string; destructive: boolean }[]) {
+    return {
+      phase: "guardrails",
+      projectSlug: "default",
+      guardrail: catalogPresetState(tools),
+      updateGuardrail: vi.fn(),
+      servers: [
+        {
+          key: "test/server",
+          name: "Test Server",
+          registrySpecifier: "test/server",
+          toolCount: tools.length,
+          destructiveTools: tools
+            .filter((t) => t.destructive)
+            .map((t) => t.name),
+          oauth: true,
+        },
+      ],
+      installWithGuardrail: mocks.installWithGuardrail,
+      installForCustomizing: mocks.installForCustomizing,
+      skip: mocks.skip,
+      goBack: vi.fn(),
+      isServerAlreadyInstalled: () => false,
+      reset: mocks.reset,
+    };
+  }
+
+  it("summarizes the recommended guardrail and installs with it", async () => {
+    mocks.workflow.mockReturnValue(
+      guardrailsPhase([
+        { name: "create_issue", destructive: false },
+        { name: "delete_issue", destructive: true },
+      ]),
+    );
+    renderDialog();
+
+    expect(await screen.findByText("Guardrails for Test Server")).toBeDefined();
+    expect(screen.getByText("2 tools · 1 destructive · OAuth")).toBeDefined();
+    expect(
+      screen.getByText("Create a risk policy for this server"),
+    ).toBeDefined();
+    expect(screen.getByText("delete_issue")).toBeDefined();
+    expect(
+      screen.getByText(/Destructive tool detection supports logging only/),
+    ).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add to Project" }));
+    expect(mocks.installWithGuardrail).toHaveBeenCalledTimes(1);
+    expect(mocks.skip).not.toHaveBeenCalled();
+  });
+
+  it("logs by default and installs without a policy when switched off", async () => {
+    mocks.workflow.mockReturnValue(
+      guardrailsPhase([{ name: "search", destructive: false }]),
+    );
+    renderDialog();
+
+    expect(await screen.findByText("Log for review · Severity")).toBeDefined();
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Create a risk policy" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Add to Project" }));
+    expect(mocks.skip).toHaveBeenCalledTimes(1);
+    expect(mocks.installWithGuardrail).not.toHaveBeenCalled();
+  });
+
+  it("installs, then opens the full editor pre-filled, on customize now", async () => {
+    mocks.installForCustomizing.mockResolvedValue(["srv-1"]);
+    mocks.workflow.mockReturnValue(
+      guardrailsPhase([{ name: "search", destructive: false }]),
+    );
+    renderDialog();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "customize now" }),
+    );
+
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(1));
+    const url = new URL(
+      mocks.navigate.mock.calls[0]![0] as string,
+      "https://x",
+    );
+    expect(url.pathname).toBe("/p/risk-policies/new");
+    expect(url.searchParams.get("kind")).toBe("standard");
+    expect(url.searchParams.get("mcp_server_id")).toBe("srv-1");
+    expect(url.searchParams.get("action")).toBe("flag");
+    expect(url.searchParams.get("name")).toBe("Test Server guardrail");
+    expect(mocks.installWithGuardrail).not.toHaveBeenCalled();
+  });
+
+  it("says plainly when the guardrail could not be created", () => {
+    render(
+      <GuardrailOutcomeNotice
+        outcome={{
+          status: "failed",
+          name: "Test Server guardrail",
+          error: "policy limit reached",
+        }}
+      />,
+    );
+
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toContain("Guardrail was not created");
+    expect(alert.textContent).toContain("policy limit reached");
+  });
+
+  it("confirms a created guardrail", () => {
+    render(
+      <GuardrailOutcomeNotice
+        outcome={{ status: "created", name: "Test Server guardrail" }}
+      />,
+    );
+
+    expect(screen.getByText("Guardrail created")).toBeDefined();
+  });
+});
+
+describe("catalog admission", () => {
+  const catalogServer = { ...server, registryId: "old-source" };
+  function openCatalog() {
+    return render(
+      <TooltipProvider>
+        <AddServerDialog
+          servers={[catalogServer]}
+          open
+          onOpenChange={(open) => {
+            mocks.onOpenChange(open);
+          }}
+        />
+      </TooltipProvider>,
+    );
+  }
+  it.each(["Selected catalog changed", "Details unavailable"])(
+    "blocks before open: %s",
+    async (message) => {
+      mocks.getServerDetails.mockRejectedValue(new Error(message));
+      const { invalidate } = openCatalog();
+      await screen.findByText(message);
+      expect(invalidate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          queryKey: ["@gram/client", "mcpRegistries", "listCatalog"],
+        }),
+      );
+      expect(
+        screen.queryByRole("button", { name: "Add to Project" }),
+      ).toBeNull();
+      expect(mocks.startInstall).not.toHaveBeenCalled();
+    },
+  );
+  it("revalidates a source flip while open before accepting installation", async () => {
+    mocks.getServerDetails.mockResolvedValue({ remotes: server.remotes });
+    openCatalog();
+    await screen.findByRole("button", { name: "Add to Project" });
+    mocks.getServerDetails.mockRejectedValue(
+      new Error("Selected catalog changed"),
+    );
+    const options = mocks.workflow.mock.calls.at(-1)![0];
+    await act(async () => {
+      expect(await options.beforeInstall()).toBe(false);
+    });
+    await screen.findByText("Selected catalog changed");
+    expect(mocks.getServerDetails).toHaveBeenCalledTimes(2);
+  });
+  it("rejects cached endpoints absent from authoritative details", async () => {
+    mocks.getServerDetails.mockResolvedValue({ remotes: [] });
+    openCatalog();
+    await screen.findByText(/Catalog endpoints changed/);
+    expect(screen.queryByRole("button", { name: "Add to Project" })).toBeNull();
+  });
+
+  it("requires reselection when details change while open", async () => {
+    mocks.getServerDetails.mockResolvedValue({ remotes: server.remotes });
+    openCatalog();
+    await screen.findByRole("button", { name: "Add to Project" });
+    mocks.getServerDetails.mockResolvedValue({
+      remotes: [
+        {
+          ...server.remotes[0],
+          headers: [{ name: "X-Key", isRequired: true, isSecret: true }],
+        },
+      ],
+    });
+    const options = mocks.workflow.mock.calls.at(-1)![0];
+    await act(async () => {
+      expect(await options.beforeInstall()).toBe(false);
+    });
+    await screen.findByText(/Catalog details changed/);
+  });
+
+  it("does not admit manual URLs through the catalog", async () => {
+    renderDialog();
+    await screen.findByRole("button", { name: "Add to Project" });
+    const options = mocks.workflow.mock.calls.at(-1)![0];
+    await act(async () => {
+      expect(await options.beforeInstall()).toBe(true);
+    });
+    expect(mocks.getServerDetails).not.toHaveBeenCalled();
   });
 });

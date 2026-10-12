@@ -194,7 +194,7 @@ func renderValidationCard(t *testing.T, card remoteSessionCard) string {
 	card.IssuerDisplay = "example-issuer"
 	var page bytes.Buffer
 	err := consentTemplate.Execute(&page, consentTemplateData{
-		ClientName:         "Gram",
+		ClientName:         "Speakeasy",
 		MCPSlug:            "example",
 		MCPRouteBase:       "mcp",
 		State:              "state",

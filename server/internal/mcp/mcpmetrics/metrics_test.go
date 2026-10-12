@@ -355,6 +355,7 @@ func TestRecordMCPRequestRejected_PinsInstrumentAndDimensions(t *testing.T) {
 
 	got := collectMetric(t, reader, InstrumentMCPRequestRejected)
 	metricdatatest.AssertHasAttributes(t, got,
+		attr.McpRejectionReason(RequestRejectionReasonAuthentication),
 		attr.OAuthFailureReason("invalid_remote_session"),
 		attr.McpURL("mcp.example.com/mcp/demo"),
 		attr.McpSurface(string(SurfaceMeta)),
@@ -364,6 +365,33 @@ func TestRecordMCPRequestRejected_PinsInstrumentAndDimensions(t *testing.T) {
 	require.True(t, ok, "rejected instrument must be an int64 counter")
 	require.Len(t, sum.DataPoints, 1)
 	require.Equal(t, int64(1), sum.DataPoints[0].Value)
+}
+
+// TestRecordMCPRequestValidationRejected_SharesRejectedInstrument pins that
+// request validation failures land on the same instrument as authentication
+// rejections, distinguished by gram.mcp.rejection_reason alone.
+func TestRecordMCPRequestValidationRejected_SharesRejectedInstrument(t *testing.T) {
+	t.Parallel()
+
+	reader := sdkmetric.NewManualReader()
+	meter := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test")
+
+	m := NewMetrics(meter, testenv.NewLogger(t))
+	m.RecordMCPRequestValidationRejected(t.Context(), RequestRejectionReasonHeaderMismatch, "mcp.example.com/mcp/demo", SurfaceHosting)
+
+	got := collectMetric(t, reader, InstrumentMCPRequestRejected)
+	metricdatatest.AssertHasAttributes(t, got,
+		attr.McpRejectionReason(RequestRejectionReasonHeaderMismatch),
+		attr.McpURL("mcp.example.com/mcp/demo"),
+		attr.McpSurface(string(SurfaceHosting)),
+	)
+
+	sum, ok := got.Data.(metricdata.Sum[int64])
+	require.True(t, ok, "rejected instrument must be an int64 counter")
+	require.Len(t, sum.DataPoints, 1)
+	require.Equal(t, int64(1), sum.DataPoints[0].Value)
+	_, hasOAuthReason := sum.DataPoints[0].Attributes.Value(attr.OAuthFailureReasonKey)
+	require.False(t, hasOAuthReason, "validation rejections carry no OAuth failure reason")
 }
 
 // TestRecordMCPRequestRejected_NilSafe pins the documented contract that a

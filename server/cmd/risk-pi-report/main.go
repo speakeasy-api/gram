@@ -1150,7 +1150,8 @@ func judgeVote(ctx context.Context, client openrouter.CompletionClient, model, r
 
 	start := time.Now()
 	resp, err := client.GetCompletion(ctx, openrouter.CompletionRequest{
-		OrgID: benchOrgID, ProjectID: benchProjectID, Model: model, Messages: messages,
+		MaxTokens: new(piopenrouter.MaxVerdictTokens),
+		OrgID:     benchOrgID, ProjectID: benchProjectID, Model: model, Messages: messages,
 		Temperature: &temp, UsageSource: billing.ModelUsageSourceGram, KeyType: openrouter.KeyTypeInternal,
 		KeySlot: "", ChatID: uuid.Nil, UserID: "", ExternalUserID: "", UserEmail: "",
 		HTTPMetadata: nil, APIKeyID: "", Tools: nil, ToolChoice: nil, Stream: false, JSONSchema: &schema,
@@ -1170,6 +1171,12 @@ func judgeVote(ctx context.Context, client openrouter.CompletionClient, model, r
 	observation.CompletionTokens = resp.Usage.CompletionTokens
 	if resp.Usage.Cost != nil {
 		observation.CostUSD = *resp.Usage.Cost
+	}
+	// Match the production judge: a truncated completion is an errored vote,
+	// not a verdict, so the sweep never scores partial output.
+	if resp.FinishReason != nil && *resp.FinishReason == openrouter.FinishReasonLength {
+		observation.Err = fmt.Errorf("completion hit the %d-token cap", piopenrouter.MaxVerdictTokens)
+		return emptyTypedVerdict, observation
 	}
 	raw := strings.TrimSpace(openrouter.GetText(*resp.Message))
 	if raw == "" {

@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -82,8 +83,9 @@ func TestAssignMCPAccessRolePreservesRolesAndReplays(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(single.Close)
 	reads := NewAccessReadService(logger, single, allowBudget(), "assignment-integration-key")
-	manager := access.NewRoleManager(logger, single, workos.NewStubClient(), audit.NewLogger())
-	roles, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "assignment-integration-key", manager)
+	manager := access.NewRoleManager(logger, single, workos.NewStubClient(), audit.NewLogger(), plugins.PublicationRequests{Enabled: false}, nil)
+	backend := &countingRoleBackend{RoleManager: manager, identityReconciles: 0, memberReconciles: 0}
+	roles, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "assignment-integration-key", backend)
 	require.NoError(t, err)
 	service, err := NewAccessRoleAssignmentService(roles)
 	require.NoError(t, err)
@@ -122,6 +124,17 @@ func TestAssignMCPAccessRolePreservesRolesAndReplays(t *testing.T) {
 	replayed, err := service.Assign(ctx, principal, input)
 	require.NoError(t, err)
 	require.True(t, replayed.Receipt.Replayed)
+	require.Equal(t, 2, backend.memberReconciles, "a replay within the allowance re-runs reconciliation, so a failed sync recovers")
+
+	// Once the allowance is spent the replay still answers, but its provider
+	// reconciliation is not sent again.
+	restore := withSpentBudget(t, &roles.budget)
+	spent, err := service.Assign(ctx, principal, input)
+	require.NoError(t, err, "a replay must not be refused over a spent allowance")
+	require.True(t, spent.Receipt.Replayed)
+	require.Equal(t, 2, backend.memberReconciles, "a replay over a spent allowance must not reconcile again")
+	require.Equal(t, "rate_limited", spent.Reconciliation, "the skipped reconciliation is reported")
+	restore()
 	afterAudit, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionAccessMemberRoleUpdate)
 	require.NoError(t, err)
 	require.Equal(t, beforeAudit+1, afterAudit)
@@ -225,7 +238,7 @@ func TestAssignMCPAccessRolePreservesRolesAndReplays(t *testing.T) {
 	legacyReceipt, err := service.receipts.Execute(ctx, principal, project, "legacy-receipt", normalizedAccessRoleAssignment{
 		ProjectID: project.ID.String(), MemberID: memberID, RoleID: role.ID, ExpectedVersion: input.ExpectedVersion,
 		MCPID: "", ExpectedRoleVersion: "",
-	}, func(context.Context, pgx.Tx) (AccessRoleAssignmentReceiptResult, error) {
+	}, noReceiptCharge, func(context.Context, pgx.Tx) (AccessRoleAssignmentReceiptResult, error) {
 		return AccessRoleAssignmentReceiptResult{MaskedIdentity: first.Member.MaskedIdentity, Roles: first.Member.Roles,
 			Version: first.Member.Version, AssignedRole: first.AssignedRole, ResultCategory: first.ResultCategory, Reconciliation: "pending"}, nil
 	})
@@ -269,4 +282,11 @@ func TestAssignMCPAccessRolePreservesRolesAndReplays(t *testing.T) {
 	require.True(t, replayed.Receipt.Replayed)
 	require.Equal(t, first.Receipt.ID, replayed.Receipt.ID)
 	require.Equal(t, "not_applicable", replayed.Reconciliation)
+
+	// A member with nothing left to reconcile costs nothing to replay, so a
+	// spent allowance does not turn not_applicable into rate_limited.
+	withSpentBudget(t, &roles.budget)
+	replayed, err = service.Assign(ctx, principal, input)
+	require.NoError(t, err)
+	require.Equal(t, "not_applicable", replayed.Reconciliation, "nothing to reconcile is not charged")
 }

@@ -13,7 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
 
@@ -87,7 +87,7 @@ func defaultMarketplaceNameForTest(t *testing.T, ctx context.Context, ti *testIn
 	}
 	// The test instance's project is its org's only (hence default) project, so
 	// the default name is the bare org-derived one — the slug is ignored.
-	return plugins.DefaultMarketplaceName(orgName, "", true)
+	return naming.MarketplaceName(orgName, "", true)
 }
 
 func TestPluginsService_UpdateMarketplaceSettings_RejectsInvalidName(t *testing.T) {

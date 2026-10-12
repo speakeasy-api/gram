@@ -22,5 +22,4 @@ if ! mise run temporal:schedules --state unpause --coalesce-with-lock; then
     echo "⚠️  Some Temporal schedules remain paused while the worker starts." >&2
 fi
 
-GIT_SHA=$(git rev-parse HEAD)
-go run -ldflags="-X github.com/speakeasy-api/gram/server/cmd/gram.GitSHA=${GIT_SHA} -X goa.design/clue/health.Version=${GIT_SHA}" main.go worker
+go run main.go worker

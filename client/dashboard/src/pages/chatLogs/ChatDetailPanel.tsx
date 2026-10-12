@@ -1,5 +1,7 @@
+import { SlackChannelLink } from "@/components/slack-channel-link";
 import { claudeTagMetadata, projectClaudeTagRows } from "./claudeTag";
 import { IdentityLink } from "@/components/identity-link";
+import { AssistantActorLink } from "@/components/assistant-actor-link";
 import { format, formatDistanceToNow } from "date-fns";
 import {
   ArrowLeft,
@@ -74,6 +76,7 @@ import {
   ExclusionEditor,
   type ExclusionSheetState,
 } from "@/pages/security/exclusion-sheet";
+import { TRANSCRIPT_DENIED_REASON } from "@/pages/security/unmask";
 import { useChatTranscript } from "./useChatTranscript";
 import { useWindowedTranscript } from "./useWindowedTranscript";
 import { CreateExclusionContext } from "./exclusionContext";
@@ -274,10 +277,16 @@ function SessionSummary({
 }: {
   chat: {
     externalUserId?: string;
+    assistantId?: string;
+    assistantName?: string;
+    assistantAgentId?: string;
     accountType?: string;
     accountEmail?: string;
     source?: string;
     channelNames?: string[];
+    slackChannelId?: string;
+    slackChannelName?: string;
+    slackTeamId?: string;
     originatingClient?: string;
     litellmProxied?: boolean;
     createdAt: Date;
@@ -349,7 +358,16 @@ function SessionSummary({
         <div className="space-y-1">
           <div className="mb-1 text-sm font-semibold">Session details</div>
           <div className="divide-border divide-y">
-            <MetaRow label="User">{userLabel}</MetaRow>
+            {chat.assistantName ? (
+              <>
+                <MetaRow label="Agent">
+                  <AssistantActorLink chat={chat} className="[&_a]:pb-0.5" />
+                </MetaRow>
+                <MetaRow label="On behalf of">{userLabel}</MetaRow>
+              </>
+            ) : (
+              <MetaRow label="User">{userLabel}</MetaRow>
+            )}
             {accountEmail && (
               <MetaRow label="Account">
                 <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
@@ -369,6 +387,15 @@ function SessionSummary({
                   />
                   {formatChatSource(chat.source, chat)}
                 </span>
+              </MetaRow>
+            )}
+            {chat.slackChannelId && (
+              <MetaRow label="Channel">
+                <SlackChannelLink
+                  channelId={chat.slackChannelId}
+                  channelName={chat.slackChannelName}
+                  teamId={chat.slackTeamId}
+                />
               </MetaRow>
             )}
             {chat.channelNames && chat.channelNames.length > 0 && (
@@ -457,6 +484,15 @@ function ChatDetailMetadataBadges({
             </span>
           </Badge.Text>
         </Badge>
+      )}
+      {chat.slackChannelId && (
+        <HeaderMetadataBadge>
+          <SlackChannelLink
+            channelId={chat.slackChannelId}
+            channelName={chat.slackChannelName}
+            teamId={chat.slackTeamId}
+          />
+        </HeaderMetadataBadge>
       )}
       {chat.channelNames?.map((channel) => (
         <HeaderMetadataBadge key={channel}>
@@ -731,6 +767,24 @@ function ChatDetailHeader({
                   ({format(new Date(chat.createdAt), "yyyy-MM-dd HH:mm")})
                 </span>
               </span>
+              <span className="text-muted-foreground inline-flex max-w-full flex-wrap items-center gap-1.5 text-sm">
+                {chat.assistantName ? (
+                  <>
+                    <AssistantActorLink
+                      chat={chat}
+                      className="text-foreground [&_a]:pb-0.5"
+                    />
+                    <span>on behalf of</span>
+                    <span className="text-foreground min-w-0 break-words">
+                      {userLabel}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-foreground min-w-0 break-words">
+                    {userLabel}
+                  </span>
+                )}
+              </span>
               {compactMetadata ? (
                 <ChatDetailMetadataBadges
                   chatId={chatId}
@@ -739,7 +793,20 @@ function ChatDetailHeader({
                   toolCount={toolCount}
                 />
               ) : (
-                <HeaderMetadataBadge>{getTraceId(chatId)}</HeaderMetadataBadge>
+                <div className="flex flex-wrap items-center gap-2">
+                  <HeaderMetadataBadge>
+                    {getTraceId(chatId)}
+                  </HeaderMetadataBadge>
+                  {chat.slackChannelId && (
+                    <HeaderMetadataBadge>
+                      <SlackChannelLink
+                        channelId={chat.slackChannelId}
+                        channelName={chat.slackChannelName}
+                        teamId={chat.slackTeamId}
+                      />
+                    </HeaderMetadataBadge>
+                  )}
+                </div>
               )}
               <WorkUnitsHeaderMetrics chat={chat} />
             </div>
@@ -917,7 +984,10 @@ function SessionLinksSection({
         {inbound.map((link, i) =>
           row(
             `in-${i}-${link.createdAt.toISOString()}`,
-            <>Derived from {link.parentTitle ?? "an earlier session"}</>,
+            <>
+              {link.kind === "subagent" ? "Subagent of" : "Derived from"}{" "}
+              {link.parentTitle ?? "an earlier session"}
+            </>,
             link.createdAt,
             hop(link.parentChatId, link.parentCaptured),
             link.parentCaptured ? (
@@ -944,11 +1014,18 @@ function SessionLinksSection({
               )
             : row(
                 `out-${i}-${link.createdAt.toISOString()}`,
-                <>Moved to {formatPlatform(link.targetHarness)}</>,
+                <>
+                  {link.kind === "subagent" ? "Subagent" : "Moved to"}{" "}
+                  {link.kind === "subagent"
+                    ? (link.childTitle ?? "Claude Tag")
+                    : formatPlatform(link.targetHarness)}
+                </>,
                 link.createdAt,
                 hop(link.childChatId, link.childCaptured),
                 link.childCaptured
-                  ? (link.childTitle ?? undefined)
+                  ? link.kind === "subagent"
+                    ? undefined
+                    : (link.childTitle ?? undefined)
                   : "not yet captured",
               ),
         )}
@@ -1179,20 +1256,31 @@ function ChatDetailPanel({
     () => claudeTagMetadata(transcript.messages),
     [transcript.messages],
   );
+  const capturedSource = capturedChat?.source?.trim().toLowerCase() ?? "";
+  const claudeSource =
+    capturedSource.startsWith("claude") ||
+    capturedSource === "cowork" ||
+    (capturedSource === "litellm" &&
+      !!capturedChat?.originatingClient?.startsWith("claude-code"));
   const isClaudeTag =
-    capturedChat?.source === "claude-tag" ||
-    ((capturedChat?.source === "claude-code" ||
-      capturedChat?.source === "claude") &&
-      tagMetadata.detected);
+    capturedSource === "claude-tag" || (claudeSource && tagMetadata.detected);
   const chat = useMemo(() => {
     if (!capturedChat || !isClaudeTag) return capturedChat;
-    const title = capturedChat.title?.startsWith("<wake")
-      ? tagMetadata.title
-      : capturedChat.title;
+    const title =
+      /^<(wake|standing_owner_message|session-context)\b/.test(
+        capturedChat.title ?? "",
+      ) && tagMetadata.title
+        ? tagMetadata.title
+        : capturedChat.title;
     return {
       ...capturedChat,
       source: "claude-tag",
-      channelNames: tagMetadata.channels,
+      channelNames: tagMetadata.channels.filter(
+        (channel) =>
+          channel !== capturedChat.slackChannelId &&
+          channel.replace(/^#/, "") !==
+            capturedChat.slackChannelName?.replace(/^#/, ""),
+      ),
       title: title || "Claude Tag session",
     };
   }, [capturedChat, isClaudeTag, tagMetadata.title, tagMetadata.channels]);
@@ -1535,7 +1623,7 @@ function ChatDetailPanel({
   }, [view, fullyLoaded, loadingAllMessages, loadAllMessages]);
 
   const userLabelOverride = chat && !readableTag ? userLabel : undefined;
-  // The same key ChatOwnerLabel uses: a chat carries the Gram user when the
+  // The same key ChatOwnerLabel uses: a chat carries the Speakeasy user when the
   // owner is a member and the reported agent id otherwise. Memoized because a
   // fresh object each render would invalidate the row context below on every
   // pass, re-rendering the whole transcript.
@@ -1639,8 +1727,9 @@ function ChatDetailPanel({
     return chatLoadForbidden ? (
       <div className="p-8">
         <SheetTitle>Permission denied</SheetTitle>
-        <SheetDescription>
-          You don&apos;t have access to view this chat session.
+        <SheetDescription className="text-warning mt-2 flex items-start gap-2">
+          <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
+          <span>{TRANSCRIPT_DENIED_REASON}</span>
         </SheetDescription>
       </div>
     ) : (

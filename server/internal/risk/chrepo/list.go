@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// errEmptyPolicyIDs guards the enabled-policy pushdown contract: callers must
+// errEmptyPolicyIDs guards the visible-policy pushdown contract: callers must
 // resolve at least one visible policy id before querying; an accidental empty
 // list would otherwise silently list nothing (or, worse, everything if the
 // filter were dropped).
@@ -27,21 +27,25 @@ const uniqueMatchKey = "if(fingerprint_tenant_hs256 != '', fingerprint_tenant_hs
 
 // ListRiskFindingsParams scopes one page of the Risk Events listing. From/To
 // bound message_created_at (the event-time sort key); Cursor* resume strictly
-// after a prior page's last row. PolicyIDs is the enabled-policy pushdown: the
-// caller resolves which policies are visible (enabled ones by default, or the
-// explicitly filtered policy including disabled) from Postgres, because
-// ClickHouse cannot join risk_policies. An empty PolicyIDs matches nothing.
+// after a prior page's last row. PolicyIDs is the visible-policy pushdown: the
+// caller resolves the non-deleted policies (or the explicitly filtered one)
+// from Postgres, because ClickHouse cannot join risk_policies. An empty
+// PolicyIDs matches nothing.
 type ListRiskFindingsParams struct {
 	OrganizationID string
 	ProjectID      string
 	PolicyIDs      []string
 	MCPServerID    string
 	ChatID         string
-	From           *time.Time
-	To             *time.Time
-	Category       string
-	RuleIDSubstr   string
-	UserIDSubstr   string
+	// ResultID narrows to one finding id.
+	ResultID uuid.NullUUID
+	// ExecutionID narrows to the findings of one mediated execution.
+	ExecutionID  string
+	From         *time.Time
+	To           *time.Time
+	Category     string
+	RuleIDSubstr string
+	UserIDSubstr string
 	// ExternalUserIDs matches whole external user ids rather than a substring.
 	// The identity page needs exactly one subject's findings, and a substring
 	// of one person's id routinely matches another's.
@@ -64,6 +68,7 @@ var riskFindingListColumns = []string{
 	"content_part_id",
 	"chat_id",
 	"external_user_id",
+	"user_id",
 	"assistant_id",
 	"risk_policy_id",
 	"risk_policy_version",
@@ -98,6 +103,7 @@ type RiskFindingListRow struct {
 	ContentPartID      string
 	ChatID             string
 	ExternalUserID     string
+	UserID             string
 	AssistantID        string
 	RiskPolicyID       string
 	RiskPolicyVersion  int64
@@ -133,6 +139,7 @@ func (r *RiskFindingListRow) scanTargets() []any {
 		&r.ContentPartID,
 		&r.ChatID,
 		&r.ExternalUserID,
+		&r.UserID,
 		&r.AssistantID,
 		&r.RiskPolicyID,
 		&r.RiskPolicyVersion,
@@ -160,12 +167,9 @@ func (r *RiskFindingListRow) scanTargets() []any {
 
 // listRiskFindingsBase applies the filters shared by the list and count reads
 // that are immutable across an id's copies: tenancy, dead-letter sentinels,
-// the shadow marker and the enabled-policy pushdown. The exclusion / false-positive state is
-// deliberately NOT here: those flags change by appending a newer copy of the
-// row (the retroactive reconcile, the false-positive mirror), so filtering
-// them before the latest-copy-per-id dedup would drop the flagged copy and
-// let a stale live copy win — callers must gate on them AFTER dedup, the way
-// overview.go and signals.go do.
+// the shadow marker and the visible-policy pushdown. Suppression state is
+// deliberately NOT here: it changes by appending a newer copy, so callers
+// gate on it after latest-copy-per-id dedup.
 func listRiskFindingsBase(p ListRiskFindingsParams, columns ...string) (squirrel.SelectBuilder, error) {
 	if len(p.PolicyIDs) == 0 {
 		return squirrel.SelectBuilder{}, errEmptyPolicyIDs
@@ -180,6 +184,20 @@ func listRiskFindingsBase(p ListRiskFindingsParams, columns ...string) (squirrel
 	if p.ChatID != "" {
 		sb = sb.Where("chat_id = ?", p.ChatID)
 	}
+	if p.ResultID.Valid {
+		sb = sb.Where("id = ?", p.ResultID.UUID)
+	}
+	if p.ExecutionID != "" {
+		// Suppression copies carry no execution metadata, so the filter selects
+		// ids rather than rows and every copy still reaches the dedup.
+		sb = sb.Where(sq.Select("id").
+			From("risk_findings").
+			Where("organization_id = ?", p.OrganizationID).
+			Where("project_id = ?", p.ProjectID).
+			Where("execution_id = ?", p.ExecutionID).
+			Prefix("id IN (").
+			Suffix(")"))
+	}
 	return sb, nil
 }
 
@@ -190,23 +208,31 @@ func listRiskFindingsBase(p ListRiskFindingsParams, columns ...string) (squirrel
 // Events listing, the Dismissed listing, the overview, signals, the Watchdog,
 // reveal and the retroactive exclusion reconcile applies this condition.
 //
-// Unlike the suppression state the marker is immutable across an id's copies:
-// the scanner stamps it, the retroactive reconcile's INSERT ... SELECT passes
-// it through verbatim, and the manual-dismissal mirror republishes Postgres
-// risk_results rows only, which never hold shadow findings. It is therefore
-// safe to apply BEFORE the per-id dedup, next to the tenancy filters, where it
-// also prunes the scan.
+// Unlike suppression state, the marker is immutable across copies: scanners
+// stamp it and every INSERT ... SELECT state transition passes it through.
+// It is therefore safe to apply before per-id dedup, next to tenancy filters,
+// where it also prunes the scan.
 const notShadowCond = "shadow = 0"
 
 // withMCPServerCond narrows to one concrete server AFTER the latest-copy
-// dedup. A suppression copy mirrored from Postgres carries no execution
-// metadata, so filtering before dedup would drop it and let the live scanner
-// copy win, resurfacing a dismissed finding under the filter.
+// dedup. Legacy suppression copies mirrored from Postgres carry no execution
+// metadata, so filtering before dedup would drop them and let the live
+// scanner copy win, resurfacing a dismissed finding under the filter.
 func withMCPServerCond(sb squirrel.SelectBuilder, p ListRiskFindingsParams) squirrel.SelectBuilder {
 	if p.MCPServerID == "" {
 		return sb
 	}
 	return sb.Where("mcp_server_id = ?", p.MCPServerID)
+}
+
+// withMCPServerFilter is the params-free form of withMCPServerCond for the
+// overview and signal builders, which apply it after their latest-copy dedup
+// for the same reason.
+func withMCPServerFilter(sb squirrel.SelectBuilder, mcpServerID string) squirrel.SelectBuilder {
+	if mcpServerID == "" {
+		return sb
+	}
+	return sb.Where("mcp_server_id = ?", mcpServerID)
 }
 
 // liveStateCond gates the latest copy of a finding to live rows only — not
@@ -349,12 +375,11 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 	return out, nil
 }
 
-// CountRiskFindings mirrors the Postgres CountAllFindings semantics for the
-// listing's total count: live findings scoped to the visible policies, with no
-// time-window or per-column filters. Each id resolves to its latest copy
-// first (redelivered duplicates and appended flag copies are expected in this
-// table) and only then is the live-state gate applied, so a finding whose
-// newest copy carries an exclusion or false-positive flag is not counted.
+// CountRiskFindings is the listing's total count: live findings scoped to
+// the visible policies, with no time-window or per-column filters. Each id
+// resolves to its latest copy first (redelivered duplicates and appended flag
+// copies are expected in this table) and only then is the live-state gate
+// applied, so a finding whose newest copy carries an exclusion or false-positive flag is not counted.
 func (q *Queries) CountRiskFindings(ctx context.Context, p ListRiskFindingsParams) (uint64, error) {
 	inner, err := listRiskFindingsBase(p, "id", "excluded_at", "false_positive_at", "mcp_server_id")
 	if err != nil {

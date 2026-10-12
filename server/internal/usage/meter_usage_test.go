@@ -185,11 +185,11 @@ func TestResolveMeterUsageWindowRejectsUnpairedAndOversizedRanges(t *testing.T) 
 		End:   time.Date(2026, time.May, 1, 0, 0, 0, 0, time.UTC),
 	}
 	from := active.Start.Format(time.RFC3339)
-	_, _, err := resolveMeterUsageWindow(&from, nil, active)
+	_, _, err := ResolveMeterUsageWindow(&from, nil, active)
 	require.Error(t, err)
 
 	to := active.Start.AddDate(0, 3, 1).Format(time.RFC3339)
-	_, _, err = resolveMeterUsageWindow(&from, &to, active)
+	_, _, err = ResolveMeterUsageWindow(&from, &to, active)
 	require.Error(t, err)
 }
 
@@ -204,11 +204,11 @@ func TestResolveMeterUsageWindowClampsThreeCalendarMonths(t *testing.T) {
 		{name: "leap year and UTC normalization", from: "2023-11-30T02:00:00+02:00", to: "2024-02-29T00:00:00Z"},
 		{name: "long quarter", from: "2026-07-01T00:00:00Z", to: "2026-10-01T00:00:00Z"},
 	} {
-		_, to, err := resolveMeterUsageWindow(&test.from, &test.to, BillingCyclePeriod{})
+		_, to, err := ResolveMeterUsageWindow(&test.from, &test.to, BillingCyclePeriod{})
 		require.NoError(t, err, test.name)
 		require.Equal(t, test.to, to.Format(time.RFC3339), test.name)
 		beyond := to.AddDate(0, 0, 1).Format(time.RFC3339)
-		_, _, err = resolveMeterUsageWindow(&test.from, &beyond, BillingCyclePeriod{})
+		_, _, err = ResolveMeterUsageWindow(&test.from, &beyond, BillingCyclePeriod{})
 		require.Error(t, err, test.name)
 	}
 }
@@ -216,10 +216,10 @@ func TestResolveMeterUsageWindowClampsThreeCalendarMonths(t *testing.T) {
 func TestResolveMeterUsageWindowRejectsPartialUTCDays(t *testing.T) {
 	t.Parallel()
 	from, to := "2026-04-01T12:00:00Z", "2026-04-02T00:00:00Z"
-	_, _, err := resolveMeterUsageWindow(&from, &to, BillingCyclePeriod{})
+	_, _, err := ResolveMeterUsageWindow(&from, &to, BillingCyclePeriod{})
 	require.Error(t, err)
 	from, to = "2026-04-01T00:00:00Z", "2026-04-02T00:00:00.000000001Z"
-	_, _, err = resolveMeterUsageWindow(&from, &to, BillingCyclePeriod{})
+	_, _, err = ResolveMeterUsageWindow(&from, &to, BillingCyclePeriod{})
 	require.Error(t, err)
 }
 

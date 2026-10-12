@@ -33,9 +33,14 @@ import type { RemoteMcpCreationIdentity } from "./configureCreatedIdentity";
 import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
 import { CreationIdentityChoice } from "@/pages/mcp/x/tabs/settings/sections/authentication/CreationIdentityChoice";
 import { useAgentCredentialFields } from "@/lib/remote-identity";
+import { NewServerGuardrailSection } from "@/pages/security/server-guardrails/NewServerGuardrailSection";
+import {
+  guardrailFailureMessage,
+  useNewServerGuardrail,
+} from "@/pages/security/server-guardrails/useNewServerGuardrail";
 
 // Both backends are, to the administrator, the same thing: a server that lives
-// at a URL somewhere else. The only difference is whether Gram sits in the
+// at a URL somewhere else. The only difference is whether Speakeasy sits in the
 // request path, so that is the one question the form asks — and only of staff,
 // since unproxied servers are staff-only today.
 type ProxyMode = "proxied" | "unproxied";
@@ -57,6 +62,7 @@ function CreateRemoteMcpForm() {
   const createRemote = useCreateRemoteMcpSource();
   const createUnproxied = useCreateUnproxiedMcpSource();
   const issuerQuery = useEffectiveUserSessionIssuers();
+  const newGuardrail = useNewServerGuardrail();
 
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -77,7 +83,12 @@ function CreateRemoteMcpForm() {
   const upstreamName =
     name.trim() || deriveRemoteSessionIssuerNameFromUrl(url) || "This server";
 
-  const isPending = createRemote.isPending || createUnproxied.isPending;
+  // Covers the whole submit, including the guardrail created after the server:
+  // the server mutations settle first, and a second click in that gap would
+  // create a duplicate server.
+  const [submitting, setSubmitting] = useState(false);
+  const isPending =
+    createRemote.isPending || createUnproxied.isPending || submitting;
   // Read from the mutation the current mode would run, so switching Connection
   // after a failure doesn't leave the other backend's error standing.
   const activeCreate = mode === "unproxied" ? createUnproxied : createRemote;
@@ -89,6 +100,12 @@ function CreateRemoteMcpForm() {
   // The verify result is cleared whenever the URL changes (see
   // useVerifyRemoteMcpUrl), so this can only be true for the URL on screen.
   const isVerified = verify.result?.verified === true;
+  // Unproxied servers are often only reachable from the customer's network,
+  // so our infrastructure failing to reach one says nothing about whether it
+  // works. Verification only gates saving when we sit in the request path.
+  // Gateway members are always proxied, whatever the Connection choice says.
+  const requiresVerification = mode === "proxied" || !!flow.gatewayId;
+  const readyToSave = isVerified || !requiresVerification;
   const defaultIssuerSelection = defaultCreationUserSessionIssuerValue(
     issuerQuery.organizationIssuers,
   );
@@ -131,13 +148,16 @@ function CreateRemoteMcpForm() {
     // Connectivity is part of saving rather than a side errand: an unverified
     // URL falls through to a verify instead of creating a server nobody can
     // reach.
-    if (!isVerified) {
+    if (!readyToSave) {
       void verify.trigger();
       return;
     }
     if (issuerSelectionBlocked) return;
+    if (mode === "proxied" && isVerified && !newGuardrail.validation.ok) return;
+    if (submitting) return;
 
     const trimmedName = name.trim();
+    setSubmitting(true);
     try {
       if (mode === "unproxied" && !flow.gatewayId) {
         const { mcpServer } = await createUnproxied.mutateAsync({
@@ -165,6 +185,18 @@ function CreateRemoteMcpForm() {
               ? agentCredential.authorizationValue.trim()
               : undefined,
         });
+      // The guardrail is attempted only now that the server exists. If it
+      // fails the server stays, the failure is reported, and the user lands on
+      // the server's Guardrails tab, where the guardrail can be added again.
+      const guardrailOutcome = await newGuardrail.createFor(mcpServer);
+      const guardrailFailed = guardrailOutcome.status === "failed";
+      if (guardrailOutcome.status === "failed") {
+        toast.error(guardrailFailureMessage(guardrailOutcome), {
+          duration: 12000,
+        });
+      } else if (guardrailOutcome.status === "created") {
+        toast.success(`Guardrail "${guardrailOutcome.name}" created`);
+      }
       if (identityConfiguration.status === "setup-required") {
         toast.warning(
           `MCP server added but kept disabled. ${identityConfiguration.message}`,
@@ -181,6 +213,8 @@ function CreateRemoteMcpForm() {
       );
       if (flow.gatewayId) {
         await flow.complete(mcpServer.id);
+      } else if (guardrailFailed) {
+        routes.mcp.x.guardrails.goTo(mcpServerRouteParam(mcpServer));
       } else {
         routes.mcp.x.overview.goTo(mcpServerRouteParam(mcpServer));
       }
@@ -188,6 +222,8 @@ function CreateRemoteMcpForm() {
       const message =
         error instanceof Error ? error.message : "Failed to add MCP server";
       toast.error(message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -349,6 +385,14 @@ function CreateRemoteMcpForm() {
             />
           ) : null}
 
+          {mode === "proxied" && isVerified ? (
+            <NewServerGuardrailSection
+              guardrail={newGuardrail}
+              serverName={upstreamName}
+              disabled={creationLocked || isPending}
+            />
+          ) : null}
+
           {isCreateError && createError && (
             <Alert variant="error" dismissible={false}>
               {createError.message}
@@ -376,6 +420,9 @@ function CreateRemoteMcpForm() {
                   isVerified &&
                   identityMode === "user" &&
                   !canCreateIdentity) ||
+                (mode === "proxied" &&
+                  isVerified &&
+                  !newGuardrail.validation.ok) ||
                 issuerSelectionBlocked
               }
             >
@@ -383,7 +430,7 @@ function CreateRemoteMcpForm() {
                 <Button.LeftIcon>
                   <Loader2 className="size-4 animate-spin" />
                 </Button.LeftIcon>
-              ) : !isVerified ? (
+              ) : !readyToSave ? (
                 <Button.LeftIcon>
                   <Plug className="size-4" />
                 </Button.LeftIcon>
@@ -393,12 +440,12 @@ function CreateRemoteMcpForm() {
                   ? "Verifying"
                   : isPending
                     ? "Saving"
-                    : isVerified
+                    : readyToSave
                       ? "Save"
                       : "Verify connectivity"}
               </Button.Text>
             </Button>
-            {isVerified && (
+            {isVerified && requiresVerification && (
               <Button
                 type="button"
                 variant="secondary"

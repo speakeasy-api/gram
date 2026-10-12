@@ -1,6 +1,6 @@
-# Gram Project Structure Guide
+# Speakeasy Project Structure Guide
 
-This document provides an overview of the key directories in the Gram project to help you understand the codebase organization.
+This document provides an overview of the key directories in the Speakeasy project to help you understand the codebase organization.
 
 <tip>
 If you've just cloned this repository, then consider running `./zero --agent` to get your development environment set up.
@@ -20,36 +20,40 @@ Never include customer-identifying information in anything that gets committed o
 
 </important>
 
+## Product Naming
+
+The product is called **Speakeasy**, not Gram. Write "Speakeasy" in all new user-facing text, error messages, comments, docs, and changesets. `mise run lint:brand` (pre-commit hook and CI) fails on added lines that say "Gram". HTTP headers (`Gram-Key`, `X-Gram-*`), `GRAM_*` environment variables, import lines, and code uses of the SDK `Gram` class in code files are still allowed. Lowercase `gram` (package names, URLs) is not checked. For any other intentional use, put `brand-ok: <reason>` on the line.
+
 ## Key Directories
 
 <structure>
 
-- `/`: Root directory of the Gram project
-  - `mise.toml`: Default environment variables are configured here and support running Gram and its tasks.
+- `/`: Root directory of the Speakeasy project
+  - `mise.toml`: Default environment variables are configured here and support running Speakeasy and its tasks.
   - `mise.local.toml`: Local environment variable overrides for development. This file is ignored by git and should not be committed.
   - `.mise-tasks/**/*.{mts,sh}`: Useful tasks for working with the project
   - `go.mod`: Go module definition for the entire project
   - `pitchfork.toml`: Process manager config for `pitchfork` — runs all local services (mock-idp, server, worker, dashboard) in a single terminal with a tabbed UI. Use `pitchfork list|status|logs|start|stop|restart <daemon>` from the CLI.
   - `server/`: Main backend service codebase
-  - `cli/`: Command-line interface for Gram that users use to interact with the Gram service
-  - `functions/`: Serverless function runner powering the Gram Functions feature
+  - `cli/`: Command-line interface for Speakeasy that users use to interact with the Speakeasy service
+  - `functions/`: Serverless function runner powering the Speakeasy Functions feature
   - `ts-framework/functions/`: TypeScript SDK for function authors (`Gram.tool()` API, manifest generation, MCP passthrough)
-  - `client/`: Frontend React application for Gram. Gram Elements — a chat interface that integrates with Gram MCP servers — lives inside it at `client/dashboard/src/elements/`.
+  - `client/`: Frontend React application for Speakeasy. Speakeasy Elements — a chat interface that integrates with Speakeasy MCP servers — lives inside it at `client/dashboard/src/elements/`.
 
 </structure>
 
 ### server
 
-Contains the main application code for the Gram server:
+Contains the main application code for the Speakeasy server:
 
 <structure>
 
 - `internal/`: The implementation of the server logic.
   - `background/`: Temporal workflows and activities are implemented here.
   - `conv/`: Useful conversion functions for converting between different Go types.
-  - `mv/`: Re-usable model views for representing Gram API resources.
-  - `oops/`: Error handling utilities to be used across Gram service implementation files.
-  - `openapi/`: OpenAPI parsing package used to generate tools as part of the Gram deployments service.
+  - `mv/`: Re-usable model views for representing Speakeasy API resources.
+  - `oops/`: Error handling utilities to be used across Speakeasy service implementation files.
+  - `openapi/`: OpenAPI parsing package used to generate tools as part of the Speakeasy deployments service.
   - `testenv/`: Utilities for setting up test environments that support writing tests.
   - `**/queries.sql`: SQL queries used by various services. After editing these files run mise tasks to generate Go code.
   - `**/impl.go`: The implementation of the service logic for each service.
@@ -57,7 +61,7 @@ Contains the main application code for the Gram server:
 - `database/`: Database schemas and SQLc configuration.
   - `sqlc.yaml`: SQLc configuration file.
   - `schema.sql`: Database schema definition. Edit this file to change the database schema and use mise commands to generate a migration.
-- `design/`: Goa design files that define the public interface of the Gram service.
+- `design/`: Goa design files that define the public interface of the Speakeasy service.
 - `gen/`: Code generated types from Goa. Files in here cannot be modified directly.
 - `migrations/`: Database migration files. Files in here cannot be modified directly.
 
@@ -151,9 +155,9 @@ mise run start
 
 ## Cursor Cloud specific instructions
 
-Full environment setup is handled by `./zero --agent` (idempotent — re-run any time to reconcile): it installs tools/deps, generates keys/TLS + the dev-idp RSA key, starts the Docker infra, and runs the Postgres + ClickHouse migrations and finally starts all local services. Run it per session after starting the Docker daemon. It is deliberately NOT the startup update script — that stays minimal (`mise install` / `mise run install`), because starting infra and running migrations are too heavy and failure-prone for pod boot. Non-obvious caveats:
+Full environment setup is handled by `./zero --agent` (idempotent — re-run any time to reconcile): it installs tools/deps, generates keys/TLS + the dev-idp RSA key, starts the Docker infra, and runs the Postgres + ClickHouse migrations and finally starts all local services. Cloud boot does not run it. `.cursor/install.sh` only installs Docker packages and the `mise` toolchain; `.cursor/start.sh` only brings up the Docker daemon and logs in to Atlas. Run `./zero --agent` yourself when a task needs the local stack — dependencies, infra, migrations, and services are too heavy for every pod boot and most tasks never need them. Non-obvious caveats:
 
-- **Docker daemon must be running first.** There is no systemd auto-start, so run `sudo service docker start` before `./zero --agent`. Docker is configured with the `fuse-overlayfs` storage driver and `iptables-legacy`.
+- **Docker daemon must be running first.** Cloud start brings it up. Elsewhere there is no systemd auto-start, so run `sudo service docker start` before `./zero --agent`. Docker is configured with the `fuse-overlayfs` storage driver and `iptables-legacy`.
 - **`mise` provides all tooling** (`~/.local/bin/mise`). Resolution is automatic inside `mise run` / `mise exec` and mise tasks (including `.mts` Node scripts) — no PATH hacks needed. For bare tool calls, shims are on `PATH` via `mise activate` in `~/.bashrc` (interactive) and via `~/.bash_env` referenced by `BASH_ENV` (non-interactive _script_ shells). Bash does NOT source `BASH_ENV` for `bash -c`, so in that context prefer `mise exec` / `mise run` (or `export PATH="$HOME/.local/bin:$PATH"`).
 - **Login is credential-less** (`GRAM_DEVIDP_BACKEND=local`): click "Login", no username/password.
 - **Pitchfork manages services**: Either use the pitchfork mcp if running or fall back to the `pitchfork` CLI. These both give you access to service health and logs.

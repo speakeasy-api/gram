@@ -2,26 +2,31 @@ package k8s
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"go.opentelemetry.io/otel/metric"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const (
-	networkIngressMeterScope        = "github.com/speakeasy-api/gram/server/internal/k8s"
-	networkIngressOperationsMetric  = "gram.network_ingress.provisioner.operations"
-	networkIngressDurationMetric    = "gram.network_ingress.provisioner.operation.duration"
-	networkIngressOperationApply    = "apply"
-	networkIngressOperationObserve  = "observe"
-	networkIngressOperationDelete   = "delete"
-	networkIngressOperationUnknown  = "unknown"
-	networkIngressResultSuccess     = "success"
-	networkIngressResultError       = "error"
-	networkIngressErrorCodeNone     = "none"
-	networkIngressErrorCodeInternal = "internal"
+	networkIngressMeterScope                  = "github.com/speakeasy-api/gram/server/internal/k8s"
+	networkIngressOperationsMetric            = "gram.network_ingress.provisioner.operations"
+	networkIngressDurationMetric              = "gram.network_ingress.provisioner.operation.duration"
+	networkIngressOperationApply              = "apply"
+	networkIngressOperationObserve            = "observe"
+	networkIngressOperationDelete             = "delete"
+	networkIngressOperationUnknown            = "unknown"
+	networkIngressResultSuccess               = "success"
+	networkIngressResultPending               = "pending"
+	networkIngressResultError                 = "error"
+	networkIngressErrorCodeNone               = "none"
+	networkIngressErrorCodeInternal           = "internal"
+	networkIngressErrorCodeDeletionPending    = "deletion_pending"
+	networkIngressErrorCodeReplacementPending = "replacement_pending"
 )
 
 type NetworkIngressMetrics struct {
@@ -129,7 +134,10 @@ func (p *observedNetworkIngressProvisioner) record(ctx context.Context, operatio
 	errorCode := networkIngressErrorCodeNone
 	if err != nil {
 		result = networkIngressResultError
-		errorCode = clampNetworkIngressErrorCode(observation.ErrorCode)
+		errorCode = classifyNetworkIngressError(err, observation.ErrorCode)
+		if operation == networkIngressOperationDelete && errorCode == networkIngressErrorCodeDeletionPending {
+			result = networkIngressResultPending
+		}
 	}
 	p.metrics.Record(ctx, p.provider, operation, result, errorCode, duration)
 	if p.logger == nil {
@@ -141,6 +149,10 @@ func (p *observedNetworkIngressProvisioner) record(ctx context.Context, operatio
 		attr.SlogNetworkIngressOperation(operation),
 		attr.SlogNetworkIngressErrorCode(errorCode),
 		attr.SlogNetworkIngressDuration(duration),
+	}
+	if result == networkIngressResultPending {
+		p.logger.DebugContext(ctx, "network ingress provisioner deletion pending", attrs...)
+		return
 	}
 	if err != nil {
 		// Provider errors can contain Kubernetes request data. Only bounded
@@ -154,6 +166,37 @@ func (p *observedNetworkIngressProvisioner) record(ctx context.Context, operatio
 		return
 	}
 	p.logger.InfoContext(ctx, "network ingress provisioner operation completed", attrs...)
+}
+
+func classifyNetworkIngressError(err error, observationCode string) string {
+	switch {
+	case errors.Is(err, ErrNetworkIngressProviderCredentialsRejected):
+		return NetworkIngressErrorProviderCredentialsRejected
+	case errors.Is(err, ErrNetworkIngressInvalidDesiredState):
+		return NetworkIngressErrorInvalidDesiredState
+	case errors.Is(err, ErrNetworkIngressUnsupportedProvider):
+		return NetworkIngressErrorUnsupportedProvider
+	}
+	if _, ok := errors.AsType[interface {
+		error
+		k8serrors.APIStatus
+	}](err); ok {
+		return NetworkIngressErrorKubernetes
+	}
+	switch {
+	case errors.Is(err, ErrNetworkIngressDeletionPending):
+		return networkIngressErrorCodeDeletionPending
+	case errors.Is(err, ErrNetworkIngressReplacementPending):
+		return networkIngressErrorCodeReplacementPending
+	}
+	switch observationCode {
+	case NetworkIngressErrorInvalidDesiredState, NetworkIngressErrorUnsupportedProvider,
+		NetworkIngressErrorInvalidCredentials, NetworkIngressErrorKubernetes,
+		NetworkIngressErrorProviderCredentialsRejected:
+		return observationCode
+	default:
+		return networkIngressErrorCodeInternal
+	}
 }
 
 func clampNetworkIngressProvider(value string) string {
@@ -173,16 +216,21 @@ func clampNetworkIngressOperation(value string) string {
 }
 
 func clampNetworkIngressResult(value string) string {
-	if value == networkIngressResultSuccess {
+	switch value {
+	case networkIngressResultSuccess, networkIngressResultPending:
 		return value
+	default:
+		return networkIngressResultError
 	}
-	return networkIngressResultError
 }
 
 func clampNetworkIngressErrorCode(value string) string {
 	switch value {
 	case networkIngressErrorCodeNone,
 		networkIngressErrorCodeInternal,
+		networkIngressErrorCodeDeletionPending,
+		networkIngressErrorCodeReplacementPending,
+		NetworkIngressErrorProviderCredentialsRejected,
 		NetworkIngressErrorInvalidDesiredState,
 		NetworkIngressErrorUnsupportedProvider,
 		NetworkIngressErrorInvalidCredentials,

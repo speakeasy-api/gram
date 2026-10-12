@@ -1034,3 +1034,31 @@ func (q *Queries) ListMCPRegistries(ctx context.Context) ([]ListMCPRegistriesRow
 	}
 	return items, nil
 }
+
+const setMCPRegistryEnabledFixture = `-- name: SetMCPRegistryEnabledFixture :exec
+UPDATE mcp_registries SET enabled = $1 WHERE id = $2
+`
+
+type SetMCPRegistryEnabledFixtureParams struct {
+	Enabled pgtype.Bool
+	ID      uuid.UUID
+}
+
+func (q *Queries) SetMCPRegistryEnabledFixture(ctx context.Context, arg SetMCPRegistryEnabledFixtureParams) error {
+	_, err := q.db.Exec(ctx, setMCPRegistryEnabledFixture, arg.Enabled, arg.ID)
+	return err
+}
+
+const setMCPRegistryURLFixture = `-- name: SetMCPRegistryURLFixture :exec
+UPDATE mcp_registries SET url = $1 WHERE id = $2
+`
+
+type SetMCPRegistryURLFixtureParams struct {
+	Url string
+	ID  uuid.UUID
+}
+
+func (q *Queries) SetMCPRegistryURLFixture(ctx context.Context, arg SetMCPRegistryURLFixtureParams) error {
+	_, err := q.db.Exec(ctx, setMCPRegistryURLFixture, arg.Url, arg.ID)
+	return err
+}

@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+import { isProdHost } from "@/lib/utils";
 import { nullTelemetry, type Telemetry } from "./Telemetry";
 import {
   failOpenMissingFlags,
   isGramHost,
-  isProdHost,
   shouldFailOpenMissingFlags,
   shouldUseDevTelemetry,
 } from "./TelemetryProvider";

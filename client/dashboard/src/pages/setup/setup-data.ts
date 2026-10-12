@@ -1,3 +1,7 @@
+import {
+  CLAUDE_CODE_EXACT_NAME_NOTE,
+  CLAUDE_CODE_REQUIRE_MARKETPLACE_DOCS_URL,
+} from "@/lib/claude-code-marketplace";
 import { getCursorInstallCommand } from "@/lib/cursor-install-command";
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import {
@@ -6,16 +10,17 @@ import {
   COMING_SOON_AGENT_PROVIDER_IDS,
   type AgentProviderId,
 } from "@/components/agent-providers/agent-providers";
+import { agentEgressHosts, getServerURL } from "@/lib/utils";
 import type { AgentPlatform } from "./types";
 
 // Claude Code reads the same keys from Managed Settings (org rollout) and from
 // a user's ~/.claude/settings.json (personal plans), so both paths share it.
-const CLAUDE_CODE_SETTINGS_JSON = `{
+const claudeCodeSettingsJSON = (origin: string) => `{
   "env": {
     "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
     "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": "1",
-    "OTEL_EXPORTER_OTLP_ENDPOINT": "https://app.getgram.ai/otel",
-    "OTEL_EXPORTER_OTLP_HEADERS": "Gram-Project={{GRAM_PROJECT_SLUG}},Gram-Key={{GRAM_API_KEY}}",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "${origin}/otel",
+    "OTEL_EXPORTER_OTLP_HEADERS": "Speakeasy-AI-Project={{GRAM_PROJECT_SLUG}},Speakeasy-AI-Key={{GRAM_API_KEY}}",
     "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
     "OTEL_LOGS_EXPORTER": "otlp",
     "OTEL_METRICS_EXPORTER": "otlp",
@@ -36,10 +41,19 @@ const CLAUDE_CODE_SETTINGS_JSON = `{
   }
 }`;
 
-const SETUP_AGENT_PLATFORMS: Array<{
+// Every step carrying the settings block reminds the reader that the
+// marketplace keys must stay the marketplace.json name shown in the snippet.
+const claudeCodeMarketplaceNameNote = [` ${CLAUDE_CODE_EXACT_NAME_NOTE}`];
+
+// Setup copy names the host the reader is on (app.getgram.ai or
+// ai.speakeasy.com): every platform host serves the OTLP and hooks endpoints.
+const setupAgentPlatforms = (
+  origin: string,
+  egressHosts: string[],
+): Array<{
   id: AgentProviderId;
   setupSteps: AgentPlatform["setupSteps"];
-}> = [
+}> => [
   {
     id: "claude",
     setupSteps: [
@@ -64,8 +78,9 @@ const SETUP_AGENT_PLATFORMS: Array<{
                   fallback: "~/.claude/settings.json",
                 },
                 `, preserving existing values. It registers the marketplace, enables the plugin, and configures logs, metrics, and beta traces for export. Higher-precedence policy can override user settings. The API key and token-bearing marketplace URL are secrets: share privately and never commit them. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`,
+                ...claudeCodeMarketplaceNameNote,
               ],
-              code: CLAUDE_CODE_SETTINGS_JSON,
+              code: claudeCodeSettingsJSON(origin),
               language: "json",
               requiresApiKey: true,
               helpLink: {
@@ -105,14 +120,21 @@ const SETUP_AGENT_PLATFORMS: Array<{
       },
       {
         title: "Update Managed settings on Claude.ai",
-        description:
+        description: [
           "Merge this block into existing server-managed JSON to register the marketplace, enable the plugin, and configure logs, metrics, and beta trace export for eligible sessions. Treat both the API key and token-bearing marketplace URL as secrets; never commit or distribute them publicly. Settings are fetched at the next startup or hourly poll, not instantly.",
+          ...claudeCodeMarketplaceNameNote,
+        ],
+        helpLink: {
+          url: CLAUDE_CODE_REQUIRE_MARKETPLACE_DOCS_URL,
+          linkLabel: "Require a marketplace and its plugins",
+          sentence: "See {LINK} in the Claude Code docs",
+        },
         screenshot: {
           src: "/setup/claude-managed-settings-editor.png",
           alt: "Claude Code Managed settings JSON editor dialog with Update settings button",
           caption: 'Paste in the JSON below and click "Update settings"',
         },
-        code: CLAUDE_CODE_SETTINGS_JSON,
+        code: claudeCodeSettingsJSON(origin),
         language: "json",
         requiresApiKey: true,
       },
@@ -236,12 +258,13 @@ const SETUP_AGENT_PLATFORMS: Array<{
         fields: [
           {
             label: "OTLP endpoint",
-            value: "https://app.getgram.ai/rpc/hooks.otel",
+            value: `${origin}/rpc/hooks.otel`,
           },
           { label: "OTLP protocol", value: "http/json" },
           {
             label: "OTLP headers",
-            value: "Gram-Project=default,Gram-Key={{GRAM_API_KEY}}",
+            value:
+              "Speakeasy-AI-Project=default,Speakeasy-AI-Key={{GRAM_API_KEY}}",
             requiresApiKey: true,
           },
         ],
@@ -257,10 +280,11 @@ const SETUP_AGENT_PLATFORMS: Array<{
       {
         title: "Verify hook and bootstrap network access",
         description:
-          "Native OTEL automatically allowlists its collector hostname; it does not require a manual egress exception. Hook scripts and bootstrap binary downloads are separate traffic. If they are blocked, review Admin settings → Capabilities → Network egress and allow only the destinations they need, including the hook endpoint below.",
-        fields: [
-          { label: "Additional allowed domains", value: "app.getgram.ai" },
-        ],
+          "Native OTEL automatically allowlists its collector hostname; it does not require a manual egress exception. Hook scripts and bootstrap binary downloads are separate traffic. If they are blocked, review Admin settings → Capabilities → Network egress and allow only the destinations they need, including the hook endpoints below.",
+        fields: egressHosts.map((host) => ({
+          label: "Additional allowed domains",
+          value: host,
+        })),
         afterFields:
           "Start a new Cowork session, run a tool, and confirm hook events and native monitoring separately in Speakeasy. A successful plugin install or a single allowlisted domain does not prove bootstrap downloads and hooks can run.",
       },
@@ -372,6 +396,34 @@ const SETUP_AGENT_PLATFORMS: Array<{
     ],
   },
   {
+    id: "copilot",
+    setupSteps: [
+      {
+        title: "Download the Copilot CLI observability plugin",
+        description:
+          "Download a self-contained plugin with a hooks-scoped credential embedded. Downloading requires a Speakeasy org admin and enabled project observability. Distribute the ZIP privately and never commit it or upload it publicly. Coordinate rotation and replacement; a new download does not revoke keys in older copies.",
+        download: { platform: "copilot", label: "Download for Copilot CLI" },
+      },
+      {
+        title: "Load the plugin in Copilot CLI",
+        description:
+          "Extract the ZIP and launch GitHub Copilot CLI with the plugin directory. Hooks run in Copilot CLI only, not the VS Code extension or the Copilot app. After publishing changes, download a fresh ZIP and start a new session.",
+        code: "unzip observability-copilot.zip -d speakeasy-hooks && copilot --plugin-dir speakeasy-hooks",
+        language: "bash",
+      },
+      {
+        title: "Verify hook events",
+        description:
+          "Run a tool in the CLI and confirm the session and hook events appear in Speakeasy. Loading a plugin does not by itself prove telemetry or policy enforcement is working.",
+        helpLink: {
+          url: "https://docs.github.com/en/copilot/reference/hooks-reference",
+          linkLabel: "GitHub Copilot hooks",
+          sentence: "See {LINK} for supported events",
+        },
+      },
+    ],
+  },
+  {
     id: "pi",
     setupSteps: [
       {
@@ -385,7 +437,7 @@ const SETUP_AGENT_PLATFORMS: Array<{
         title: "Render the extension into your repo",
         description:
           "Run this from the repo you use Pi in. It writes .pi/extensions/speakeasy-observability/index.ts and speakeasy.json, which map Pi's lifecycle events to Speakeasy's dashboard. Pi loads project-local extensions only after you trust the project, so answer its trust prompt on first start.",
-        code: `GRAM_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
+        code: `SPEAKEASY_AI_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
 speakeasy-hooks install --provider=pi --dir=. --project={{GRAM_PROJECT_SLUG}}`,
         language: "bash",
         requiresApiKey: true,
@@ -406,7 +458,7 @@ speakeasy-hooks install --provider=pi --dir=. --project={{GRAM_PROJECT_SLUG}}`,
         title: "Render the plugin into your repo",
         description:
           "Run this from the repo you use opencode in. It writes .opencode/plugin/agenthooks.ts and speakeasy.json, which map opencode's events to Speakeasy's dashboard.",
-        code: `GRAM_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
+        code: `SPEAKEASY_AI_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
 speakeasy-hooks install --provider=opencode --dir=. --project={{GRAM_PROJECT_SLUG}}`,
         language: "bash",
         requiresApiKey: true,
@@ -432,17 +484,27 @@ function toAgentPlatform(
   };
 }
 
-export const AGENT_PLATFORMS: AgentPlatform[] = [
-  ...ACTIVE_AGENT_PROVIDER_IDS.setup.map((id) =>
-    toAgentPlatform(
-      id,
-      SETUP_AGENT_PLATFORMS.find((platform) => platform.id === id)!.setupSteps,
+/** The setup platforms, with copy-paste values for the given server's host. */
+export function getAgentPlatforms(
+  serverURL: string = getServerURL(),
+): AgentPlatform[] {
+  const server = new URL(serverURL, window.location.origin);
+  const platforms = setupAgentPlatforms(
+    server.origin,
+    agentEgressHosts(server.href),
+  );
+  return [
+    ...ACTIVE_AGENT_PROVIDER_IDS.setup.map((id) =>
+      toAgentPlatform(
+        id,
+        platforms.find((platform) => platform.id === id)!.setupSteps,
+      ),
     ),
-  ),
-  ...COMING_SOON_AGENT_PROVIDER_IDS.map((id) =>
-    toAgentPlatform(id, [] as AgentPlatform["setupSteps"], false),
-  ),
-];
+    ...COMING_SOON_AGENT_PROVIDER_IDS.map((id) =>
+      toAgentPlatform(id, [] as AgentPlatform["setupSteps"], false),
+    ),
+  ];
+}
 
 /**
  * The steps a platform shows given the answer to its plan question: the org

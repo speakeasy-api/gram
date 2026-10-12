@@ -1117,6 +1117,14 @@
   }
 }
 
+@utility bg-btn-success-active {
+  background-color: var(--color-feedback-green-700);
+
+  @variant dark {
+    background-color: var(--color-feedback-green-600);
+  }
+}
+
 /* Surface Background utilities */
 @utility bg-surface-primary-default {
   background-color: var(--bg-surface-primary-default);

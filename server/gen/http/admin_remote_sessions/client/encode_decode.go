@@ -3837,6 +3837,7 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 		IntrospectionEndpoint:             v.IntrospectionEndpoint,
 		BackchannelLogoutSupported:        v.BackchannelLogoutSupported,
 		AuthorizationResponseIssParameterSupported: v.AuthorizationResponseIssParameterSupported,
+		OmitScopeFallback:                          v.OmitScopeFallback,
 		ResourceIndicatorSupported:                 v.ResourceIndicatorSupported,
 		CreatedAt:                                  *v.CreatedAt,
 		UpdatedAt:                                  *v.UpdatedAt,
@@ -3923,6 +3924,9 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		TokenEndpointAuthAudienceFormat: v.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 v.JSONWebKeySetID,
 		Audience:                        v.Audience,
+		LegacyCallbackURL:               *v.LegacyCallbackURL,
+		CredentialOwner:                 *v.CredentialOwner,
+		CallbackURL:                     v.CallbackURL,
 		CreatedAt:                       *v.CreatedAt,
 		UpdatedAt:                       *v.UpdatedAt,
 	}

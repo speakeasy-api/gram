@@ -48,6 +48,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	telemrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -128,8 +129,8 @@ type Service struct {
 	trialBundleSeeder auth.EnterpriseTrialBundleSeeder
 	posthog           onboardingTelemetry
 	growth            *growthsignals.Emitter
-	serverURL         string // API server URL; used to build invite links
-	siteURL           string // frontend URL; used for post-callback browser redirects
+	siteURL           string            // frontend URL; used for post-callback browser redirects
+	orgHosts          *orghost.Resolver // resolves the host of links sent by email
 	audit             *audit.Logger
 	svix              *svix.Svix
 }
@@ -138,7 +139,7 @@ var _ gen.Service = (*Service)(nil)
 
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, hooks HookEventReader, authzEngine *authz.Engine, emailService EmailSender, trialNotifier trialemails.Notifier, trialBundleSeeder auth.EnterpriseTrialBundleSeeder, posthog onboardingTelemetry, growthEmitter *growthsignals.Emitter, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, hooks HookEventReader, authzEngine *authz.Engine, emailService EmailSender, trialNotifier trialemails.Notifier, trialBundleSeeder auth.EnterpriseTrialBundleSeeder, posthog onboardingTelemetry, growthEmitter *growthsignals.Emitter, siteURL string, orgHosts *orghost.Resolver, auditLogger *audit.Logger, svix *svix.Svix) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
 	if trialNotifier == nil {
 		trialNotifier = trialemails.NoopNotifier{}
@@ -160,8 +161,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		trialBundleSeeder: trialBundleSeeder,
 		posthog:           posthog,
 		growth:            growthEmitter,
-		serverURL:         serverURL,
 		siteURL:           siteURL,
+		orgHosts:          orgHosts,
 		audit:             auditLogger,
 		svix:              svix,
 	}
@@ -179,7 +180,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
 
-	// Raw HTTP handler for Gram invite-token acceptance.
+	// Raw HTTP handler for Speakeasy invite-token acceptance.
 	mux.Handle("GET", inviteCallbackPath, service.handleInviteCallback)
 
 	// Raw HTTP handler for onboarding setup portal callback.
@@ -337,7 +338,7 @@ func (s *Service) SendInvite(ctx context.Context, payload *gen.SendInvitePayload
 
 	inviteLink := ""
 	if s.email != nil {
-		inviteURL, err := url.Parse(s.serverURL + inviteCallbackPath)
+		inviteURL, err := url.Parse(s.orgHosts.ServerURL(org.DefaultHost).String() + inviteCallbackPath)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build invite link").LogError(ctx, logger)
 		}
@@ -422,7 +423,7 @@ func (s *Service) resolveInviteRoleSlug(ctx context.Context, organizationID stri
 		return pgtype.Text{String: "", Valid: false}, oops.E(oops.CodeBadRequest, nil, "role id is required").LogError(ctx, logger)
 	}
 
-	// The dashboard sends a Gram local role UUID (as returned by
+	// The dashboard sends a Speakeasy local role UUID (as returned by
 	// /rpc/access.listRoles). Resolve it against the local roles table to
 	// recover the WorkOS slug stored on the invite for acceptance time.
 	roleUUID, err := uuid.Parse(roleID)
@@ -655,9 +656,9 @@ func (s *Service) ListInvites(ctx context.Context, _ *gen.ListInvitesPayload) (*
 	return &gen.ListInvitesResult{Invitations: out}, nil
 }
 
-// ListUsers returns Gram organization members from organization_user_relationships.
+// ListUsers returns Speakeasy organization members from organization_user_relationships.
 // That table is the in-app source of truth for roster and RemoveUser; WorkOS owns
-// invite/membership lifecycle but the dashboard "team" list should match what Gram authorizes.
+// invite/membership lifecycle but the dashboard "team" list should match what Speakeasy authorizes.
 func (s *Service) ListUsers(ctx context.Context, _ *gen.ListUsersPayload) (*gen.ListUsersResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -1188,15 +1189,15 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
 	orgSlug := org.Slug
 
-	config, err := LoadOnboardingConfiguration(ctx, s.db, org.ID)
+	tasks, err := projectSetupTasks(ctx, orgrepo.New(s.db), org.ID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "setup callback: read onboarding configuration", attr.SlogError(err))
-		span.SetStatus(codes.Error, "read onboarding configuration failed")
+		s.logger.ErrorContext(ctx, "setup callback: project setup tasks", attr.SlogError(err))
+		span.SetStatus(codes.Error, "project setup tasks failed")
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	visible := make(map[string]bool, len(config.Tasks))
-	for _, task := range config.Tasks {
+	visible := make(map[string]bool, len(tasks))
+	for _, task := range tasks {
 		visible[task.Key] = !task.Hidden
 	}
 	// All identity setup steps belong to the combined card. Refresh domains even
@@ -1238,7 +1239,7 @@ func (s *Service) SendEnterpriseAdminOnboardingEmail(ctx context.Context, payloa
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to read organization details").LogError(ctx, s.logger)
 	}
 
-	setupLink := fmt.Sprintf("%s/%s/setup", strings.TrimRight(s.siteURL, "/"), org.Slug)
+	setupLink := fmt.Sprintf("%s/%s/setup", strings.TrimRight(s.orgHosts.SiteURL(org.DefaultHost).String(), "/"), org.Slug)
 
 	tmpl := email.EnterpriseAdminOnboarding{SetupLink: setupLink}
 
@@ -1623,10 +1624,10 @@ func (s *Service) reconcileInvitationWorkOSMembership(ctx context.Context, invit
 	}
 }
 
-// handleInviteCallback processes Gram invite-token links. Flow: invitee clicks
-// the Gram invite link, we validate the invite token, authenticate the invitee
+// handleInviteCallback processes Speakeasy invite-token links. Flow: invitee clicks
+// the Speakeasy invite link, we validate the invite token, authenticate the invitee
 // with a server-created WorkOS Magic Auth code, verify the email, accept the
-// invite, add the user to the org, then create a Gram session.
+// invite, add the user to the org, then create a Speakeasy session.
 func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 	ctx, span := s.tracer.Start(r.Context(), "organizations.handleInviteCallback")
 	defer span.End()
@@ -1770,7 +1771,7 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Create a Gram session directly. The invitee is already authenticated
+	// Create a Speakeasy session directly. The invitee is already authenticated
 	// by Magic Auth, and the WorkOS session ID is stored for logout revocation.
 	sessionID := uuid.New().String()
 	session := sessions.Session{

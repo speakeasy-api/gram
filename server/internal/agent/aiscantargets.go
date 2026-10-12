@@ -114,7 +114,7 @@ func (s *Service) UpsertAiScanTarget(ctx context.Context, payload *gen.UpsertAiS
 	// contract: a hand-rolled call must not be able to silently redefine what
 	// every agent in the organization probes for.
 	if _, isBuiltin := aitargets.DefaultByID(target.ID); isBuiltin {
-		return nil, oops.E(oops.CodeBadRequest, nil, "%q is a built-in scan target: Gram supplies its definition and every organization is served it, so there is nothing to write here; record an access decision about it through the AI tool decision endpoint instead", target.ID)
+		return nil, oops.E(oops.CodeBadRequest, nil, "%q is a built-in scan target: Speakeasy supplies its definition and every organization is served it, so there is nothing to write here; record an access decision about it through the AI tool decision endpoint instead", target.ID)
 	}
 	if _, err := queries.UpsertAIScanTarget(ctx, aitargets.UpsertParams(organizationID, target)); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "save ai scan target").LogError(ctx, s.logger)

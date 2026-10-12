@@ -158,6 +158,14 @@ const LLM_RULE_CATEGORY_META: Partial<Record<RuleCategory, RuleCategoryMeta>> =
     },
   };
 
+/**
+ * Display name for a category key from the API, or the key itself when this
+ * build doesn't know it.
+ */
+export function ruleCategoryLabel(category: string): string {
+  return RULE_CATEGORY_META[category as RuleCategory]?.label ?? category;
+}
+
 /** Label, description and icon for a category under `mode`. Prefer this over
  *  indexing `RULE_CATEGORY_META` directly anywhere the policy editor renders a
  *  category, so the LLM-analyzer copy applies without mutating the constant. */

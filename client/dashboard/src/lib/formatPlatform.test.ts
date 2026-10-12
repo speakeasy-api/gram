@@ -27,12 +27,26 @@ describe("formatPlatform", () => {
     expect(formatPlatform("CODEX_WEB")).toBe("Codex Web");
     expect(formatPlatform("chatgpt")).toBe("ChatGPT");
     expect(formatPlatform("ChatGPT")).toBe("ChatGPT");
+    expect(formatPlatform("chatgpt-desktop")).toBe("ChatGPT Desktop");
+    expect(formatPlatform("ChatGPT Desktop")).toBe("ChatGPT Desktop");
     expect(formatPlatform("chatgpt-work")).toBe("ChatGPT Work");
     expect(formatPlatform("opencode")).toBe("opencode");
     expect(formatPlatform("pi")).toBe("Pi");
     expect(formatPlatform("PI")).toBe("Pi");
     expect(formatPlatform("litellm")).toBe("LiteLLM");
     expect(formatPlatform("aws-bedrock")).toBe("AWS Bedrock");
+  });
+
+  it("distinguishes Copilot CLI from Microsoft Copilot", () => {
+    for (const source of [
+      "copilot",
+      "github-copilot",
+      "copilot-cli",
+      "GitHub Copilot CLI",
+    ]) {
+      expect(formatPlatform(source)).toBe("Copilot CLI");
+    }
+    expect(formatPlatform("microsoft-copilot")).toBe("Microsoft Copilot");
   });
 
   it("title-cases unknown delimited sources", () => {

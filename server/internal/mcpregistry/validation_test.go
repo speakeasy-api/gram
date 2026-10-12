@@ -122,3 +122,28 @@ func TestApprovedRecordSizeLimit(t *testing.T) {
 	require.Empty(t, v.Validate(raw))
 	require.Equal(t, []Issue{{Message: "record exceeds byte limit"}}, v.Validate(append(raw, ' ')))
 }
+
+func TestLogPathMasksSubmittedKeys(t *testing.T) {
+	t.Parallel()
+
+	v, err := LoadValidator()
+	require.NoError(t, err)
+
+	issues := v.Validate([]byte(`{"server":{"name":"io.example/test","description":"test","version":"1","remotes":[{"type":"streamable-http","url":"https://example.test/mcp","variables":{"SECRET_KEY":{"format":5}}}]}}`))
+	require.NotEmpty(t, issues)
+	for _, issue := range issues {
+		require.Contains(t, issue.Path, "SECRET_KEY")
+		require.True(t, strings.HasPrefix(LogPath(issue.Path), "/server/remotes/0/variables/*"), LogPath(issue.Path))
+		require.NotContains(t, LogPath(issue.Path), "SECRET")
+	}
+
+	for path, want := range map[string]string{
+		"":             "",
+		"/server/name": "/server/name",
+		"/_meta/com.speakeasy.ai~1okta/oinNames/31": "/_meta/com.speakeasy.ai~1okta/oinNames/31",
+		"/_meta/com.speakeasy.ai~1other/a~0b":       "/_meta/*/*",
+		"/server/remotes/-1/url":                    "/server/remotes/*/url",
+	} {
+		require.Equal(t, want, LogPath(path), path)
+	}
+}

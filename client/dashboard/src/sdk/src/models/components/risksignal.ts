@@ -64,6 +64,10 @@ export type RiskSignal = {
    */
   lastSeen: Date;
   /**
+   * Concrete MCP server IDs the findings in this signal were observed on. Empty when no finding carries server attribution.
+   */
+  mcpServerIds: Array<string>;
+  /**
    * Finding count in the equal-length window immediately before from.
    */
   previousFindings: number;
@@ -87,6 +91,10 @@ export type RiskSignal = {
    * Distinct teams with at least one finding in the window. Zero until team attribution is recorded on findings.
    */
   teams: number;
+  /**
+   * Concrete tool names the findings in this signal were observed on. Empty when no finding carries tool attribution.
+   */
+  toolNames: Array<string>;
   /**
    * Top users by finding count within the signal.
    */
@@ -120,12 +128,14 @@ export const RiskSignal$inboundSchema: z.ZodMiniType<RiskSignal, unknown> = z
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
+      mcp_server_ids: z.array(z.string()),
       previous_findings: z.int(),
       risk_score: z.number(),
       rule_id: z.string(),
       severity: RiskSignalSeverity$inboundSchema,
       sparkline: z.array(z.int()),
       teams: z.int(),
+      tool_names: z.array(z.string()),
       top_users: z.array(RiskSignalTopUser$inboundSchema),
       users: z.int(),
     }),
@@ -134,9 +144,11 @@ export const RiskSignal$inboundSchema: z.ZodMiniType<RiskSignal, unknown> = z
         "detection_sources": "detectionSources",
         "first_seen": "firstSeen",
         "last_seen": "lastSeen",
+        "mcp_server_ids": "mcpServerIds",
         "previous_findings": "previousFindings",
         "risk_score": "riskScore",
         "rule_id": "ruleId",
+        "tool_names": "toolNames",
         "top_users": "topUsers",
       });
     }),

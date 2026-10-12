@@ -119,7 +119,7 @@ var _ = Service("organizations", func() {
 	})
 
 	Method("listUsers", func() {
-		Description("List users in the active organization from Gram organization_user_relationships.")
+		Description("List users in the active organization from Speakeasy organization_user_relationships.")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -139,10 +139,10 @@ var _ = Service("organizations", func() {
 	})
 
 	Method("removeUser", func() {
-		Description("Remove a user from the active organization in Gram and delete their WorkOS organization membership.")
+		Description("Remove a user from the active organization in Speakeasy and delete their WorkOS organization membership.")
 
 		Payload(func() {
-			Attribute("user_id", String, "Gram user ID to remove.")
+			Attribute("user_id", String, "Speakeasy user ID to remove.")
 			Required("user_id")
 			security.SessionPayload()
 		})
@@ -236,7 +236,7 @@ var _ = Service("organizations", func() {
 	})
 
 	Method("verifyOnboardingHooksSetup", func() {
-		Description("Return recent hook events for the active organization so the onboarding wizard can confirm that coding agent instrumentation is delivering events to Gram. Polled from the confirm-traffic step.")
+		Description("Return recent hook events for the active organization so the onboarding wizard can confirm that coding agent instrumentation is delivering events to Speakeasy. Polled from the confirm-traffic step.")
 
 		Payload(func() {
 			Attribute("since_unix_nano", String, "Only return events with time_unix_nano greater than this value. Pass the previous response's latest_unix_nano to poll for new events. Stringified to preserve int64 precision.")
@@ -401,7 +401,7 @@ var OrganizationInvitation = Type("OrganizationInvitation", func() {
 	Attribute("revoked_at", String, "When the invitation was revoked.", func() {
 		Format(FormatDateTime)
 	})
-	Attribute("inviter_user_id", String, "Gram user ID of the inviter, when known.")
+	Attribute("inviter_user_id", String, "Speakeasy user ID of the inviter, when known.")
 	Attribute("role_slug", String, "WorkOS role slug assigned when the invite is accepted.")
 	Attribute("expires_at", String, "When the invitation expires.", func() {
 		Format(FormatDateTime)
@@ -423,16 +423,16 @@ var OrganizationInvitationAccept = Type("OrganizationInvitationAccept", func() {
 	Attribute("state", String, "Invitation lifecycle state.", func() {
 		Enum("pending", "accepted", "expired", "revoked")
 	})
-	Attribute("organization_name", String, "Gram organization display name when the org is linked in Gram; empty if unknown.")
+	Attribute("organization_name", String, "Speakeasy organization display name when the org is linked in Speakeasy; empty if unknown.")
 	Attribute("accept_invitation_url", String, "URL to complete acceptance in WorkOS (may be empty when not actionable).")
 	Required("email", "state", "organization_name", "accept_invitation_url")
 })
 
 // OrganizationUser is a row from organization_user_relationships joined with the users table.
 var OrganizationUser = Type("OrganizationUser", func() {
-	Attribute("id", String, "Gram relationship row ID.")
-	Attribute("organization_id", String, "Gram organization ID.")
-	Attribute("user_id", String, "Gram user ID.")
+	Attribute("id", String, "Speakeasy relationship row ID.")
+	Attribute("organization_id", String, "Speakeasy organization ID.")
+	Attribute("user_id", String, "Speakeasy user ID.")
 	Attribute("name", String, "User display name.")
 	Attribute("email", String, "User email address.")
 	Attribute("photo_url", String, "User photo URL.")
@@ -457,7 +457,7 @@ var ListInvitesResult = Type("ListInvitesResult", func() {
 
 var ListUsersResult = Type("ListUsersResult", func() {
 	Required("users")
-	Attribute("users", ArrayOf(OrganizationUser), "Users linked to the organization in Gram.")
+	Attribute("users", ArrayOf(OrganizationUser), "Users linked to the organization in Speakeasy.")
 })
 
 var CreatePortalSessionResult = Type("CreatePortalSessionResult", func() {
@@ -501,10 +501,10 @@ var OnboardingHookEvent = Type("OnboardingHookEvent", func() {
 	Attribute("source", String, "Hook source: claude_code, cursor, or codex.")
 	Attribute("tool_name", String, "Tool invoked by the hook, if any.")
 	Attribute("event_name", String, "Hook event name (e.g. PreToolUse, SessionStart).")
-	Attribute("project_slug", String, "Slug of the Gram project that received the event.")
+	Attribute("project_slug", String, "Slug of the Speakeasy project that received the event.")
 	Attribute("status", String, "Outcome status: allowed, blocked, failure, or pending.")
 	Attribute("user_email", String, "Email of the user whose session produced the event, when present in hook attributes.")
-	Attribute("chat_id", String, "Gram chat/session ID that owns this event, when present.")
+	Attribute("chat_id", String, "Speakeasy chat/session ID that owns this event, when present.")
 
 	Required("time_unix_nano", "source", "project_slug")
 })
@@ -551,10 +551,12 @@ var SetupTask = Type("SetupTask", func() {
 	Attribute("assignee", SetupTaskAssignee, "Current resolved user or email assignee.")
 	Attribute("blocked_by", ArrayOf(String), "Incomplete prerequisite task keys.")
 	Attribute("hidden", Boolean, "Whether a platform administrator hid the task.")
-	Required("key", "title", "description", "status", "completed_by_fact", "blocked_by", "hidden")
+	Attribute("parent_key", String, "Key of the group this card sits under. Absent for a top-level card or a group.")
+	Attribute("group", Boolean, "True for a group that nests cards. A group has no card of its own: it is hidden when every card under it is, done when every visible card is, and cannot be assigned or marked by hand.")
+	Required("key", "title", "description", "status", "completed_by_fact", "blocked_by", "hidden", "group")
 })
 
 var ListSetupTasksResult = Type("ListSetupTasksResult", func() {
-	Attribute("tasks", ArrayOf(SetupTask), "Setup tasks in catalog order.")
+	Attribute("tasks", ArrayOf(SetupTask), "Setup tasks in catalog order. A group precedes the cards under it.")
 	Required("tasks")
 })

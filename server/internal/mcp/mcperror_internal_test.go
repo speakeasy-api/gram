@@ -82,7 +82,7 @@ func TestMCPErrorHTTPStatus_UnsupportedVersionAlwaysUsesBadRequest(t *testing.T)
 
 // TestMCPErrorHTTPStatus_UnmandatedCodesKeep200OnModernRevision guards the
 // scope of the change. The specification assigns a status to five conditions
-// and says nothing about the rest, which is most of what Gram emits; giving
+// and says nothing about the rest, which is most of what Speakeasy emits; giving
 // those a status of our choosing would move traffic on a guess.
 func TestMCPErrorHTTPStatus_UnmandatedCodesKeep200OnModernRevision(t *testing.T) {
 	t.Parallel()
@@ -100,7 +100,7 @@ func TestMCPErrorHTTPStatus_UnmandatedCodesKeep200OnModernRevision(t *testing.T)
 }
 
 // TestMCPErrorHTTPStatus_RetiredNotFoundBecomesBadRequestOnModernRevision
-// covers the two revision-conditional rules meeting on one error. Gram's
+// covers the two revision-conditional rules meeting on one error. Speakeasy's
 // general not-found — an unknown tool, toolset, or endpoint — maps to -32602
 // under 2026-07-28, and that code is answered with 400 rather than the 404 the
 // internal error code alone would suggest.

@@ -66,7 +66,7 @@ export type RiskResultRedacted = {
    */
   enforcementOutcome?: RiskResultRedactedEnforcementOutcome | undefined;
   /**
-   * Identity of the concrete mediated execution.
+   * The mediated MCP execution (tool call, resource read or prompt get) that raised this finding. Filter listResults by it to list that execution's non-dismissed findings.
    */
   executionId?: string | undefined;
   /**
@@ -98,7 +98,7 @@ export type RiskResultRedacted = {
    */
   metaMcpServerId?: string | undefined;
   /**
-   * Execution phase inspected by risk.
+   * Which phase of the mediated MCP execution was scanned: its request or its response.
    */
   phase?: string | undefined;
   /**

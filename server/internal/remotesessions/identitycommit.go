@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -125,14 +126,26 @@ type IdentityCommitter struct {
 	db        *pgxpool.Pool
 	enc       *encryption.Client
 	audit     *audit.Logger
-	serverURL *url.URL
+	origins   CallbackOrigins
 	policy    *guardian.Policy
 	tunnels   *tunnelrouting.HTTPClient
 	telemetry registration.Recorder
 }
 
 func NewIdentityCommitter(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, auditLogger *audit.Logger, serverURL *url.URL, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, telemetry registration.Recorder) *IdentityCommitter {
-	return &IdentityCommitter{logger: logger, db: db, enc: enc, audit: auditLogger, serverURL: serverURL, policy: policy, tunnels: tunnels, telemetry: telemetry}
+	return &IdentityCommitter{logger: logger, db: db, enc: enc, audit: auditLogger, origins: DefaultCallbackOrigins(serverURL), policy: policy, tunnels: tunnels, telemetry: telemetry}
+}
+
+// SetCallbackOrigins replaces the default origins, which pin every client to
+// the server URL. Call it during wiring, before any commit runs.
+func (c *IdentityCommitter) SetCallbackOrigins(origins CallbackOrigins) {
+	c.origins = origins
+}
+
+// newClientBaseURL is the callback_base_url recorded on a client this commit
+// creates. The DCR registration and the stored row must agree on it.
+func (c *IdentityCommit) newClientBaseURL() pgtype.Text {
+	return c.committer.origins.NewClientBaseURL(c.plan.Scope.OrganizationID != "")
 }
 
 // IdentityScope is the tenant and actor every read and write of a commit uses.
@@ -221,7 +234,7 @@ func ManualClient(credentials ClientCredentials) ClientChoice {
 	return ClientChoice{kind: clientManual, linkID: uuid.Nil, credentials: credentials, policy: RegistrationPolicy{}} //nolint:exhaustruct // Unused for a manual client.
 }
 
-// RegisterClient obtains a client from the provider: a Gram-hosted Client ID
+// RegisterClient obtains a client from the provider: a Speakeasy-hosted Client ID
 // Metadata Document when the policy allows one and the provider supports it,
 // otherwise dynamic client registration.
 func RegisterClient(policy RegistrationPolicy) ClientChoice {
@@ -387,6 +400,8 @@ type IdentityCommit struct {
 	locked             bool
 	userIssuerOrgLevel bool
 	result             IdentityResult
+	// createCapabilities pins registration to the submitted form, before create-time discovery fills it in.
+	createCapabilities providerCapabilities
 }
 
 // IdentityTx is the transaction a commit writes in.
@@ -402,6 +417,13 @@ func (c *IdentityCommitter) Prepare(plan IdentityPlan) *IdentityCommit {
 	var commit IdentityCommit
 	commit.committer = c
 	commit.plan = plan
+	if create := plan.Provider.create; create != nil {
+		commit.createCapabilities = providerCapabilities{
+			registrationEndpoint:              create.RegistrationEndpoint,
+			tokenEndpointAuthMethodsSupported: slices.Clone(create.TokenEndpointAuthMethodsSupported),
+			clientIDMetadataDocumentSupported: create.ClientIDMetadataDocumentSupported,
+		}
+	}
 	return &commit
 }
 
@@ -577,7 +599,7 @@ func (c *IdentityCommit) register(ctx context.Context, reg Registration) (Regist
 	if c.provider.TunneledMcpServerID.Valid && !c.plan.Scope.ActorIsPlatformAdmin {
 		return reg, identityRefusal(ErrIdentityForbidden, nil, "registering through an MCP tunnel requires a platform admin")
 	}
-	response, err := RegisterDynamicClient(ctx, c.committer.policy, c.committer.tunnels, c.committer.serverURL, ProxyRegisterRequest{
+	response, err := RegisterDynamicClient(ctx, c.committer.policy, c.committer.tunnels, c.committer.origins.ForClient(c.newClientBaseURL()), ProxyRegisterRequest{
 		RegistrationEndpoint:    endpoint,
 		TunneledMcpServerID:     conv.PtrEmpty(tunnelBindingID(c.provider.TunneledMcpServerID)),
 		Scope:                   conv.PtrEmpty(strings.Join(policy.Scope, " ")),
@@ -647,22 +669,14 @@ type providerCapabilities struct {
 }
 
 func (p providerCapabilities) supportsCIMD() bool {
-	if !p.clientIDMetadataDocumentSupported {
-		return false
-	}
-	methods := p.tokenEndpointAuthMethodsSupported
-	return len(methods) == 0 || slices.Contains(methods, string(TokenEndpointAuthMethodNone))
+	return SupportsClientIDMetadataDocument(p.clientIDMetadataDocumentSupported, p.tokenEndpointAuthMethodsSupported)
 }
 
-// capabilities is what registration is chosen from: the new provider's
+// capabilities is what registration is chosen from: the new provider's submitted
 // parameters or the stored provider's row.
 func (c *IdentityCommit) capabilities() providerCapabilities {
-	if create := c.plan.Provider.create; create != nil {
-		return providerCapabilities{
-			registrationEndpoint:              create.RegistrationEndpoint,
-			tokenEndpointAuthMethodsSupported: create.TokenEndpointAuthMethodsSupported,
-			clientIDMetadataDocumentSupported: create.ClientIDMetadataDocumentSupported,
-		}
+	if c.plan.Provider.create != nil {
+		return c.createCapabilities
 	}
 	return providerCapabilities{
 		registrationEndpoint:              c.provider.RegistrationEndpoint,
@@ -1144,7 +1158,7 @@ func (c *IdentityCommit) linkClient(ctx context.Context, tx *IdentityTx) (repo.R
 	return existing.RemoteSessionClient, existing.UserSessionIssuerIds, nil
 }
 
-// createCIMDClient creates a client identified by a Gram-hosted Client ID
+// createCIMDClient creates a client identified by a Speakeasy-hosted Client ID
 // Metadata Document.
 func (c *IdentityCommit) createCIMDClient(ctx context.Context, tx *IdentityTx) (repo.RemoteSessionClient, error) {
 	// Generated here so the document URL, which embeds the id, can be the
@@ -1154,15 +1168,17 @@ func (c *IdentityCommit) createCIMDClient(ctx context.Context, tx *IdentityTx) (
 		return repo.RemoteSessionClient{}, fmt.Errorf("generate client id: %w", err)
 	}
 	policy := c.plan.Client.policy
+	callbackBaseURL := c.newClientBaseURL()
 	client, err := tx.q.CreateRemoteSessionClientCIMD(ctx, repo.CreateRemoteSessionClientCIMDParams{
 		ID:                    id,
 		ProjectID:             conv.ToNullUUID(c.plan.Scope.ProjectID),
 		OrganizationID:        conv.ToPGTextEmpty(c.plan.Scope.OrganizationID),
 		RemoteSessionIssuerID: c.provider.ID,
-		ClientIDMetadataUri:   ClientMetadataDocumentURL(c.committer.serverURL, id),
+		ClientIDMetadataUri:   ClientMetadataDocumentURL(c.committer.origins.ForClient(callbackBaseURL), id),
 		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
 		Scope:                 policy.Scope,
 		Audience:              conv.PtrToPGText(policy.Audience),
+		CallbackBaseUrl:       callbackBaseURL,
 	})
 	if err != nil {
 		return repo.RemoteSessionClient{}, fmt.Errorf("create cimd client: %w", err)
@@ -1204,6 +1220,9 @@ func (c *IdentityCommit) createClient(ctx context.Context, tx *IdentityTx, crede
 		Scope:                        credentials.Scope,
 		Audience:                     conv.PtrToPGText(credentials.Audience),
 		LegacyCallbackUrl:            false,
+		CallbackBaseUrl:              c.newClientBaseURL(),
+		GrantTypes:                   nil,
+		CredentialOwner:              pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return repo.RemoteSessionClient{}, fmt.Errorf("create client: %w", err)
@@ -1261,6 +1280,13 @@ func (c *IdentityCommit) attach(ctx context.Context, tx *IdentityTx, client repo
 }
 
 func (c *IdentityCommit) auditClientCreate(ctx context.Context, tx *IdentityTx, client repo.RemoteSessionClient) error {
+	// The client is audited before attach binds it, and the binding records
+	// its own event, so the snapshot carries no user session issuers.
+	snapshot, err := mv.BuildRemoteSessionClientView(client, nil)
+	if err != nil {
+		return fmt.Errorf("build created client view: %w", err)
+	}
+
 	if err := c.committer.audit.LogRemoteSessionClientCreate(ctx, tx.tx, audit.LogRemoteSessionClientCreateEvent{
 		OrganizationID:         c.plan.Scope.OrganizationID,
 		ProjectID:              c.plan.Scope.ProjectID,
@@ -1269,6 +1295,7 @@ func (c *IdentityCommit) auditClientCreate(ctx context.Context, tx *IdentityTx, 
 		ActorSlug:              nil,
 		RemoteSessionClientURN: urn.NewRemoteSessionClient(client.ID),
 		ClientID:               client.ClientID,
+		SnapshotAfter:          snapshot,
 	}); err != nil {
 		return fmt.Errorf("audit client creation: %w", err)
 	}

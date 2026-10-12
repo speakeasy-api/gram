@@ -139,8 +139,9 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// definition — the challenge below snapshots it — and the issuer derives
 	// from it, so both the error redirect below and every response built later
 	// in the flow agree on it. On the authentication host it is the platform
-	// origin.
-	baseURL := s.BaseURLForRequest(r)
+	// origin, and on a shared authorization server it is the origin of the
+	// resource the client named.
+	baseURL := s.resourceBaseURL(r, endpoint)
 
 	// The RFC 9207 `iss` on every authorization response, equal to the AS
 	// metadata issuer. It names the authentication host when the endpoint's
@@ -252,7 +253,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			http.Redirect(w, r, federatedURL.String(), http.StatusFound)
 			return nil
 		}
-		callbackURL, err := endpoint.IDPCallbackURL(s.serverURL.String())
+		callbackURL, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
 			return oops.E(oops.CodeUnexpected, err, "build IDP callback URL").LogError(ctx, logger)
@@ -277,7 +278,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 
 	// Consent is an authorization server page, so it is served where the
 	// issuer lives.
-	consentURL, err := endpoint.ConsentURL(s.authorizationServerBaseURL(endpoint, baseURL), challengeID)
+	consentURL, err := s.consentURL(endpoint, s.authorizationServerBaseURL(endpoint, baseURL), challengeID)
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
 		return oops.E(oops.CodeUnexpected, err, "build consent URL").LogError(ctx, logger)

@@ -120,3 +120,17 @@ func alignTranscript(stored []messageIdentity, frame []Message) (start int, prev
 	}
 	return 0, nil, false
 }
+
+// prefixIdentities returns the stored identity each prefix of messages would
+// carry when archived from the start of a conversation: index k holds the
+// chain of messages[:k+1]. A chat whose newest stored message has identity k
+// stores exactly messages[:k+1].
+func prefixIdentities(messages []Message) [][]byte {
+	chains := make([][]byte, len(messages))
+	var prev []byte
+	for index, msg := range messages {
+		prev = chainHash(prev, contentHash(msg))
+		chains[index] = prev
+	}
+	return chains
+}

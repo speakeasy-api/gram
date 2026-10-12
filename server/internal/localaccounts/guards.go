@@ -58,7 +58,7 @@ type Config struct {
 	// DockerContext identifies the local Docker context.
 	DockerContext string
 
-	// DatabaseURL is the explicit local Gram PostgreSQL URL.
+	// DatabaseURL is the explicit local Speakeasy PostgreSQL URL.
 	DatabaseURL string
 
 	// IDPDatabase is the file URI of this worktree's SQLite identity store.
@@ -95,10 +95,10 @@ type Config struct {
 
 // Target identifies the sole account linked in both local stores.
 type Target struct {
-	// UserID is the Gram user primary key.
+	// UserID is the Speakeasy user primary key.
 	UserID string
 
-	// OrganizationID is the Gram organization primary key.
+	// OrganizationID is the Speakeasy organization primary key.
 	OrganizationID string
 
 	// WorkOSUserID is the local IdP UUID mapped to a WorkOS-style subject.
@@ -155,7 +155,7 @@ func validateConfig(c Config) (*pgxpool.Config, error) {
 	}
 	for _, name := range []string{".git", "compose.yml", "go.mod"} {
 		if _, err := os.Stat(filepath.Join(c.Root, name)); err != nil {
-			return nil, errors.New("root is not a Gram repository worktree")
+			return nil, errors.New("root is not a Speakeasy repository worktree")
 		}
 	}
 	expected := filepath.Join(c.Root, "local", "devidp", "devidp.db")
@@ -390,7 +390,7 @@ func Resolve(ctx context.Context, pool Queryer, c Config) (Target, error) {
 
 func soleTarget(targets []Target, workosID, organizationID string) (Target, error) {
 	if len(targets) != 1 {
-		return Target{}, errors.New("selected identity must have exactly one active Gram membership; log in locally first or resolve ambiguity")
+		return Target{}, errors.New("selected identity must have exactly one active Speakeasy membership; log in locally first or resolve ambiguity")
 	}
 	t := targets[0]
 	if t.UserID == "" || t.OrganizationID == "" || t.WorkOSUserID != workosID || organizationID == "" || t.WorkOSOrganizationID != organizationID {
@@ -448,7 +448,7 @@ func readLocalIDP(ctx context.Context, c Config, path, payload string) ([]byte, 
 }
 
 // Local IdP memberships are hard-deleted, not status-filtered. Their organization
-// UUID is not Gram's organization ID or its WorkOS link; read the stored link
+// UUID is not Speakeasy's organization ID or its WorkOS link; read the stored link
 // explicitly instead of using the WorkOS emulation API's UUID fallback.
 func selectedOrganization(ctx context.Context, c Config, userID uuid.UUID) (string, error) {
 	body, err := readLocalIDP(ctx, c, "/rpc/memberships.list", fmt.Sprintf(`{"user_id":%q,"limit":2}`, userID.String()))

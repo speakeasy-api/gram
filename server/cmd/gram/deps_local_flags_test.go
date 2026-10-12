@@ -26,7 +26,8 @@ func TestNewLocalFeatureFlagsAcceptsRowsWithAndWithoutVariant(t *testing.T) { //
 			"org_four,gram-risk-llm-analyzer,true,shadow\n"+
 			"# a comment line\n"+
 			"org_empty,gram-risk-llm-analyzer,true,\n"+
-			"org_off,gram-risk-watchdog,false\n",
+			"org_off,gram-risk-watchdog,false\n"+
+			"org_no_pubsub,risk-enforcement-pubsub,false\n",
 	), 0o600))
 
 	flags := newLocalFeatureFlags(t.Context(), slog.New(slog.DiscardHandler), path)
@@ -41,6 +42,8 @@ func TestNewLocalFeatureFlagsAcceptsRowsWithAndWithoutVariant(t *testing.T) { //
 		{distinctID: "org_four", flag: feature.FlagRiskLLMAnalyzer, enabled: true, variant: feature.VariantRiskLLMShadow},
 		{distinctID: "org_empty", flag: feature.FlagRiskLLMAnalyzer, enabled: true, variant: ""},
 		{distinctID: "org_off", flag: feature.FlagRiskWatchdog, enabled: false, variant: ""},
+		{distinctID: "org_three", flag: feature.FlagRiskEnforcementPubsub, enabled: true, variant: ""},
+		{distinctID: "org_no_pubsub", flag: feature.FlagRiskEnforcementPubsub, enabled: false, variant: ""},
 	} {
 		enabled, err := flags.IsFlagEnabled(t.Context(), tc.flag, tc.distinctID, nil)
 		require.NoError(t, err, tc.distinctID)

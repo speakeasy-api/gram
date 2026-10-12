@@ -8,12 +8,14 @@ import (
 	"net/url"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/agents"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -87,22 +89,22 @@ func (t AgentAuthorizationTarget) connectCheck() authz.Check {
 }
 
 // agentAuthorizationRollout reports whether agent authorization is switched on
-// for the endpoint's organization. Every caller hides the feature when it is
+// for an organization. Every caller hides the feature when it is
 // off, so the boolean is false whenever the answer is not a confident yes.
 //
 // The error separates "off" from "unknown". An organization row or flag
 // evaluation that could not be read leaves the rollout state undetermined,
 // which callers that report why a request was refused must not record as a
 // deliberate rollout decision.
-func (s *Service) agentAuthorizationRollout(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) (bool, string, error) {
-	organization, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, endpoint.OrganizationID)
+func (s *Service) agentAuthorizationRollout(ctx context.Context, logger *slog.Logger, organizationID string) (bool, string, error) {
+	organization, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
 	if err != nil {
 		logger.WarnContext(ctx, "agent authorization rollout organization unavailable")
 		return false, "", fmt.Errorf("read organization metadata: %w", err)
 	}
 	groups := feature.OrgProjectGroups(organization.Slug, "")
 	for _, flag := range []feature.Flag{feature.FlagAgentManagement, feature.FlagAgentIdentityCredentials} {
-		evaluation, err := feature.EvaluateFlag(ctx, s.features, flag, endpoint.OrganizationID, groups)
+		evaluation, err := feature.EvaluateFlag(ctx, s.features, flag, organizationID, groups)
 		if err != nil {
 			logger.WarnContext(ctx, "agent authorization rollout evaluation unavailable")
 			return false, "", fmt.Errorf("evaluate flag %s: %w", flag, err)
@@ -119,15 +121,36 @@ func (s *Service) agentAuthorizationRollout(ctx context.Context, logger *slog.Lo
 	return true, setupURL, nil
 }
 
+// Only positive authorization denials are forbidden. Dependency failures must
+// remain retryable, not tell the human that their identity is ineligible.
+var errConsentAgentDenied = errors.New("agent consent denied")
+
+func consentAgentAuthorizationError(err error, message string) *oops.ShareableError {
+	code := oops.CodeUnavailable
+	if errors.Is(err, errConsentAgentDenied) {
+		code = oops.CodeForbidden
+	}
+	return oops.E(code, err, "%s", message)
+}
+
+// Final approval has already consumed the single-use challenge. A dependency
+// failure cannot be retried on that page; the client must start a new flow.
+func consumedConsentAgentAuthorizationError(err error) *oops.ShareableError {
+	if errors.Is(err, errConsentAgentDenied) {
+		return consentAgentAuthorizationError(err, "selected agent is not eligible")
+	}
+	return oops.E(oops.CodeUnavailable, err, "Agent authorization could not be completed. Restart authorization from your client.")
+}
+
 func (s *Service) loadConsentHuman(ctx context.Context, state AuthnChallengeState, target AgentAuthorizationTarget) (consentHumanAuthorization, error) {
 	if state.Subject == nil || state.Subject.Kind != urn.SessionSubjectKindUser || state.Subject.ID == "" || state.AuthorizerUserID == "" || state.AuthorizerUserID != state.Subject.ID {
-		return consentHumanAuthorization{}, errors.New("agent authorization requires an authenticated human")
+		return consentHumanAuthorization{}, fmt.Errorf("%w: agent authorization requires an authenticated human", errConsentAgentDenied)
 	}
 	if state.AuthorizerImpersonated == nil {
-		return consentHumanAuthorization{}, errors.New("agent authorizer provenance is unavailable")
+		return consentHumanAuthorization{}, fmt.Errorf("%w: agent authorizer provenance is unavailable", errConsentAgentDenied)
 	}
 	if *state.AuthorizerImpersonated {
-		return consentHumanAuthorization{}, errors.New("impersonated support sessions cannot authorize agents")
+		return consentHumanAuthorization{}, fmt.Errorf("%w: impersonated support sessions cannot authorize agents", errConsentAgentDenied)
 	}
 
 	active, err := orgrepo.New(s.db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{
@@ -138,7 +161,7 @@ func (s *Service) loadConsentHuman(ctx context.Context, state AuthnChallengeStat
 		return consentHumanAuthorization{}, fmt.Errorf("check authorizer membership: %w", err)
 	}
 	if !active {
-		return consentHumanAuthorization{}, errors.New("agent authorizer is not an active organization member")
+		return consentHumanAuthorization{}, fmt.Errorf("%w: agent authorizer is not an active organization member", errConsentAgentDenied)
 	}
 
 	principals, err := authz.ResolveUserPrincipals(ctx, s.db, target.OrganizationID, state.AuthorizerUserID)
@@ -155,7 +178,7 @@ func (s *Service) loadConsentHuman(ctx context.Context, state AuthnChallengeStat
 func (s *Service) eligibleConsentAgents(ctx context.Context, state AuthnChallengeState, endpoint *ResolvedMcpEndpoint) ([]consentAgentOption, error) {
 	target := state.AgentAuthorizationTarget
 	if target == nil || !target.matches(endpoint) {
-		return nil, errors.New("agent authorization target does not match endpoint")
+		return nil, fmt.Errorf("%w: agent authorization target does not match endpoint", errConsentAgentDenied)
 	}
 	human, err := s.loadConsentHuman(ctx, state, *target)
 	if err != nil {
@@ -221,7 +244,7 @@ func (s *Service) eligibleConsentAgents(ctx context.Context, state AuthnChalleng
 func (s *Service) authorizeConsentAgent(ctx context.Context, state AuthnChallengeState, endpoint *ResolvedMcpEndpoint, rawAgentID string) (*AgentAuthorizationResult, error) {
 	target := state.AgentAuthorizationTarget
 	if target == nil || !target.matches(endpoint) {
-		return nil, errors.New("agent authorization target does not match endpoint")
+		return nil, fmt.Errorf("%w: agent authorization target does not match endpoint", errConsentAgentDenied)
 	}
 	human, err := s.loadConsentHuman(ctx, state, *target)
 	if err != nil {
@@ -229,21 +252,24 @@ func (s *Service) authorizeConsentAgent(ctx context.Context, state AuthnChalleng
 	}
 	agentID, err := uuid.Parse(rawAgentID)
 	if err != nil {
-		return nil, errors.New("selected agent is not eligible")
+		return nil, fmt.Errorf("%w: selected agent is not eligible", errConsentAgentDenied)
 	}
 	agent, err := agentsrepo.New(s.db).GetAgentByID(ctx, agentsrepo.GetAgentByIDParams{
 		OrganizationID: target.OrganizationID,
 		ID:             agentID,
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("%w: selected agent is not eligible", errConsentAgentDenied)
+	}
 	if err != nil {
-		return nil, errors.New("selected agent is not eligible")
+		return nil, fmt.Errorf("load selected agent: %w", err)
 	}
 	eligible, err := s.consentAgentEligible(ctx, human, agent, *target)
 	if err != nil {
 		return nil, err
 	}
 	if !eligible {
-		return nil, errors.New("selected agent is not eligible")
+		return nil, fmt.Errorf("%w: selected agent is not eligible", errConsentAgentDenied)
 	}
 	return &AgentAuthorizationResult{AgentID: agent.ID, AuthorizerUserID: human.userID, Target: *target}, nil
 }

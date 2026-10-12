@@ -14,6 +14,7 @@ type WorkloadIssuer struct {
 	OrganizationID         string
 	ProjectID              uuid.NullUUID
 	Name                   string
+	Description            pgtype.Text
 	Tags                   []string
 	Issuer                 string
 	JwksUri                string

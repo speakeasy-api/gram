@@ -15,7 +15,7 @@ import (
 func newInstallCursorCommand() *cli.Command {
 	return &cli.Command{
 		Name:   "cursor",
-		Usage:  "Install a Gram toolset as an MCP server in Cursor (opens browser-based installation)",
+		Usage:  "Install a toolset as an MCP server in Cursor (opens browser-based installation)",
 		Flags:  baseInstallFlags,
 		Action: doInstallCursor,
 	}

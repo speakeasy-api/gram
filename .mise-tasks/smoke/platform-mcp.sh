@@ -11,7 +11,7 @@ phase="${1:-read-only}"
 
 read_only() {
   mise exec -- go test ./server/internal/plugins -run '^TestPublicPlatformMCPFiles' -count=1
-  mise exec -- go test ./server/internal/platformmcp -run '^(TestOAuthHTTPCompletesChallengeStateHandoff|TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents|TestRegistrationStoreDoesNotCountPendingRegistrationsTowardActiveCap|TestRuntimeHandlerRecordsReadyAfterSuccessfulToolsList|TestReadinessToolOutputDoesNotExposeProviderAuthorizationIdentity|TestRepairActionsAreBoundedAndStateSpecific|TestReadinessFreshnessIsSeparateFromState)$' -count=1
+  mise exec -- go test ./server/internal/platformmcp -run '^(TestOAuthHTTPCompletesChallengeStateHandoff|TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents|TestRuntimeHandlerRecordsReadyAfterSuccessfulToolsList|TestReadinessToolOutputDoesNotExposeProviderAuthorizationIdentity|TestRepairActionsAreBoundedAndStateSpecific|TestReadinessFreshnessIsSeparateFromState)$' -count=1
 }
 
 case "$phase" in
@@ -19,14 +19,14 @@ case "$phase" in
     read_only
     ;;
   registration)
-    mise exec -- go test ./server/internal/platformmcp -run '^(TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents|TestRegistrationStoreDoesNotCountPendingRegistrationsTowardActiveCap|TestRegistrationStoreEnforcesActiveRegistrationCap|TestRegistrationStoreSerializesCapRejectionsForDistinctCandidates)$' -count=1
+    mise exec -- go test ./server/internal/platformmcp -run '^(TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents|TestRegistrationStoreRegistersManyServersInOneProject)$' -count=1
     ;;
   readiness)
     mise exec -- go test ./server/internal/platformmcp -run '^(TestRuntimeHandlerRecordsReadyAfterSuccessfulToolsList|TestReadinessToolOutputDoesNotExposeProviderAuthorizationIdentity|TestRepairActionsAreBoundedAndStateSpecific|TestReadinessFreshnessIsSeparateFromState)$' -count=1
     ;;
   full|all)
     read_only
-    mise exec -- go test ./server/internal/platformmcp -run '^(TestRegistrationStoreEnforcesActiveRegistrationCap|TestRegistrationStoreSerializesCapRejectionsForDistinctCandidates)$' -count=1
+    mise exec -- go test ./server/internal/platformmcp -run '^TestRegistrationStoreRegistersManyServersInOneProject$' -count=1
     ;;
   *)
     echo "usage: mise run smoke:platform-mcp [read-only|registration|readiness|full|all]" >&2

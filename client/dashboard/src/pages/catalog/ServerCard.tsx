@@ -2,7 +2,7 @@ import { catalogLogoClassName } from "./logo";
 import { cn } from "@/lib/utils";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Card } from "@/components/ui/Card";
-import { useIconConfetti } from "@/components/icon-confetti";
+import { useIconDither } from "@/components/icon-dither";
 import { Text } from "@/components/ui/Text";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -36,7 +36,7 @@ export function ServerCard({
   onAdd,
 }: ServerCardProps): JSX.Element {
   const displayName = server.title ?? server.registrySpecifier;
-  const { canvasRef, start, stop } = useIconConfetti();
+  const { canvasRef, start, stop } = useIconDither();
 
   // The catalog list carries a precomputed tool count, not the tool defs.
   const toolCount = server.toolCount;

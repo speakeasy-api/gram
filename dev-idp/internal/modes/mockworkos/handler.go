@@ -4,7 +4,7 @@
 // and proxies upstream instead when it is workos.
 //
 // Wire-shape compatibility with the workos-go SDK is preserved so
-// Gram-side's `*workos.Client` can swap api.workos.com for this listener
+// Speakeasy-side's `*workos.Client` can swap api.workos.com for this listener
 // with no code changes.
 package mockworkos
 

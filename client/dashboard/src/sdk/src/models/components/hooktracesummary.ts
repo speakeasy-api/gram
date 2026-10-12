@@ -36,7 +36,7 @@ export type HookTraceSummary = {
    */
   eventSource?: string | undefined;
   /**
-   * Gram URN associated with this hook trace
+   * Speakeasy URN associated with this hook trace
    */
   gramUrn: string;
   /**

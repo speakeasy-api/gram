@@ -2,9 +2,7 @@ package usersessions_test
 
 import (
 	"context"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -24,6 +22,7 @@ import (
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -422,20 +421,14 @@ func TestOrganizationUserSessionIssuerUpdateSerializesWithOwnerBinding(t *testin
 	require.NoError(t, usersessionsrepo.New(tx).LockUserSessionIssuerForOwnerBinding(ctx, issuerID))
 
 	mode := "interactive"
-	blockedCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
-	_, err = ti.service.UpdateIssuer(blockedCtx, &orggen.UpdateIssuerPayload{
-		ID:                 created.ID,
-		AuthnChallengeMode: &mode,
-	})
-	cancel()
-	require.ErrorIs(t, err, context.DeadlineExceeded, "update must wait for the owner-binding lock")
-
+	done := make(chan error, 1)
+	go func() {
+		_, err := ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{ID: created.ID, AuthnChallengeMode: &mode})
+		done <- err
+	}()
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), 1)
 	require.NoError(t, tx.Rollback(ctx))
-	_, err = ti.service.UpdateIssuer(ctx, &orggen.UpdateIssuerPayload{
-		ID:                 created.ID,
-		AuthnChallengeMode: &mode,
-	})
-	require.NoError(t, err, "update must complete after the owner-binding lock is released")
+	require.NoError(t, <-done, "update must complete after the owner-binding lock is released")
 }
 
 func TestProjectIssuerMutationsRejectOrganizationOwnedIssuer(t *testing.T) {

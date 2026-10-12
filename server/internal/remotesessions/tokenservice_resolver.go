@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -45,6 +46,9 @@ func remoteSessionCallerPrincipal(ctx context.Context, subject urn.SessionSubjec
 // attachment never falls back to the agent's, owner's, or authorizer's grant.
 func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, caller urn.SessionSubject, resource string) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
+	if credential, ok := principalcredential.FromContext(ctx); ok {
+		return m.resolveAuthorizerUpstreamToken(ctx, projectID, organizationID, userSessionIssuerID, clientID, resource, credential.Credential.AuthorizerUserID)
+	}
 	principalID, attached, err := remoteSessionCallerPrincipal(ctx, caller)
 	if err != nil {
 		return zero, err
@@ -90,5 +94,31 @@ func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, proje
 		return zero, nil
 	}
 	m.touchResolvedCredential(ctx, source)
+	return resolved, nil
+}
+
+// resolveAuthorizerUpstreamToken serves a request made with a principal
+// credential from the upstream session of the user the credential acts for,
+// on the fly: the session is the user's own, never bound to the credential's
+// principal. A credential with no authorizing user, such as a workload, has
+// no session to use. Neither case falls back to another user's or the
+// principal's own sessions.
+func (m *ChallengeManager) resolveAuthorizerUpstreamToken(ctx context.Context, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, resource, authorizerUserID string) (resolvedUpstreamToken, error) {
+	var zero resolvedUpstreamToken
+	if authorizerUserID == "" {
+		return zero, nil
+	}
+	selected, err := remotesessions_repo.New(m.db).GetTenantUserRemoteSession(ctx, remotesessions_repo.GetTenantUserRemoteSessionParams{SubjectUrn: urn.NewUserSubject(authorizerUserID), RemoteSessionClientID: clientID, ProjectID: projectID, OrganizationID: organizationID, UserSessionIssuerID: userSessionIssuerID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return zero, nil
+	}
+	if err != nil {
+		return zero, fmt.Errorf("select authorizing user credential: %w", err)
+	}
+	resolved, err := m.resolveCredentialToken(ctx, selected, resource)
+	if err != nil || resolved.Token == "" {
+		return resolved, err
+	}
+	m.touchResolvedCredential(ctx, selected)
 	return resolved, nil
 }

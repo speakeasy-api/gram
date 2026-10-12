@@ -15,10 +15,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { OnboardingPlaybook } from "@/pages/organization/OnboardingPlaybook";
+import { OnboardingStack } from "@/pages/organization/OnboardingStack";
 import { TrialFacts, TrialSummary } from "@/pages/organization/TrialFacts";
 import { OrganizationActions } from "@/pages/organizations/OrganizationActions";
 import { canStartTrial } from "@/pages/organizations/rowActions";
 import { SetStripeCustomer } from "@/pages/organization/SetStripeCustomer";
+import { SetStripeSubscription } from "@/pages/organization/SetStripeSubscription";
 import {
   Select,
   SelectContent,
@@ -418,15 +421,11 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
             />
           </Row>
           <Row label="Stripe subscription ID">
-            {org.stripe_subscription_id ? (
-              <CopyValue
-                label="Stripe subscription ID"
-                value={org.stripe_subscription_id}
-                className="text-sm"
-              />
-            ) : (
-              <span className="text-muted-foreground text-sm">-</span>
-            )}
+            <SetStripeSubscription
+              key={org.id}
+              org={org}
+              focusFallbackRef={detailsHeading}
+            />
           </Row>
           <Row label="Account type">
             <Select
@@ -481,7 +480,14 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
               </span>
             </div>
           </Row>
+          <Row label="Playbook">
+            <OnboardingPlaybook organizationId={org.id} />
+          </Row>
           <TrialFacts org={org} />
+        </Panel>
+
+        <Panel title="Stack">
+          <OnboardingStack organizationId={org.id} />
         </Panel>
 
         <Panel
@@ -498,7 +504,7 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
               <p className="text-muted-foreground mt-0.5 text-sm">
                 {org.disabled_at
                   ? `Disabled ${fmtDateShort(org.disabled_at)}. Re-enabling restores organization access for every member and takes effect at once. Model provider keys with admin, billing, or unknown disable causes remain disabled.`
-                  : "Every member loses access to Gram until the organization is re-enabled. Sessions end immediately; nothing is deleted."}
+                  : "Every member loses access to Speakeasy until the organization is re-enabled. Sessions end immediately; nothing is deleted."}
               </p>
             </div>
             <OrganizationActions

@@ -303,3 +303,91 @@ func TestArrayDimFilter_MixedCombinesWithOr(t *testing.T) {
 	require.Equal(t, "(hasAny(groups, ?) OR empty(groups))", sql)
 	require.Equal(t, []any{[]string{"eng"}}, args)
 }
+
+// TestToolUsageTraceTargetFilter_ConfiguredServerSelectorsOmitShadowRows pins
+// that the selectors an mcp_id-scoped search builds from a configured server
+// never reach the shadow target type. A shadow row's target id is the name the
+// calling app reported, so matching one by a configured server's own slug would
+// attribute an unrelated same-named server's calls to it.
+func TestToolUsageTraceTargetFilter_ConfiguredServerSelectorsOmitShadowRows(t *testing.T) {
+	t.Parallel()
+
+	filter := toolUsageTraceTargetFilter(ListToolUsageTracesParams{
+		HostedToolsetSlugs: []string{"billing-toolset"},
+		MCPServerTargetIDs: []string{"billing", "00000000-0000-0000-0000-000000000004"},
+		ShadowServerNames:  nil,
+	})
+	require.NotNil(t, filter)
+	sql, args, err := filter.ToSql()
+	require.NoError(t, err)
+	require.NotContains(t, args, ToolUsageTargetTypeShadowMCP,
+		"a configured server's selectors must never match the shadow target type")
+	require.Equal(t, "((target_type = ? AND target_id IN (?)) OR (target_type IN (?,?) AND target_id IN (?,?)))", sql)
+	require.Equal(t, []any{
+		ToolUsageTargetTypeHostedMCP, "billing-toolset",
+		ToolUsageTargetTypeHostedMCP, ToolUsageTargetTypeTunneledMCP, "billing", "00000000-0000-0000-0000-000000000004",
+	}, args)
+}
+
+func TestToolUsageTraceTargetFilter_MatchesConfiguredServersByTargetType(t *testing.T) {
+	t.Parallel()
+
+	require.Nil(t, toolUsageTraceTargetFilter(ListToolUsageTracesParams{}))
+
+	filter := toolUsageTraceTargetFilter(ListToolUsageTracesParams{
+		HostedToolsetSlugs: []string{"payments"},
+		MCPServerTargetIDs: []string{"billing", "00000000-0000-0000-0000-000000000002"},
+		ShadowServerNames:  []string{"Billing"},
+	})
+	require.NotNil(t, filter)
+	sql, args, err := filter.ToSql()
+	require.NoError(t, err)
+	require.Equal(t, "((target_type = ? AND target_id IN (?)) OR (target_type IN (?,?) AND target_id IN (?,?)) OR (target_type = ? AND target_id IN (?)))", sql)
+	require.Equal(t, []any{
+		ToolUsageTargetTypeHostedMCP, "payments",
+		ToolUsageTargetTypeHostedMCP, ToolUsageTargetTypeTunneledMCP, "billing", "00000000-0000-0000-0000-000000000002",
+		ToolUsageTargetTypeShadowMCP, "Billing",
+	}, args)
+}
+
+// TestToolUsageTraceUserFilter_FoldsTheEmailKind pins that an email identity
+// filter folds through the identity map on both sides when the organization is
+// in the fold, so an address a folded list produced selects the calls stored
+// under a linked alias. Ids stay literal — the map is email-keyed.
+func TestToolUsageTraceUserFilter_FoldsTheEmailKind(t *testing.T) {
+	t.Parallel()
+
+	require.Nil(t, toolUsageTraceUserFilter(ListToolUsageTracesParams{}))
+
+	literal, literalArgs, err := toolUsageTraceUserFilter(ListToolUsageTracesParams{
+		UserFilters: []ToolUsageUserFilter{{Kind: toolUsageUserKindEmail, Key: "work@example.com"}},
+	}).ToSql()
+	require.NoError(t, err)
+	require.Equal(t, "((user_kind = ? AND user_key = ?))", literal)
+	require.Equal(t, []any{toolUsageUserKindEmail, "work@example.com"}, literalArgs)
+
+	folded, foldedArgs, err := toolUsageTraceUserFilter(ListToolUsageTracesParams{
+		CanonicalIdentityOrg: "org_0123456789",
+		UserFilters:          []ToolUsageUserFilter{{Kind: toolUsageUserKindEmail, Key: "Work@Example.com"}},
+	}).ToSql()
+	require.NoError(t, err)
+	require.Contains(t, folded, "joinGet('identity_map', 'canonical_email', 'org_0123456789', lowerUTF8(user_key))",
+		"the column side must fold, or a row stored under a linked alias can never match")
+	require.Contains(t, folded, "user_kind = ?")
+	require.Equal(t, []any{toolUsageUserKindEmail, "work@example.com", "work@example.com"}, foldedArgs,
+		"the requested address must fold through the same map, lowercased")
+
+	// An id-keyed identity is not an email and keeps exact matching even in the
+	// fold: a folded list reports such a person by their raw id.
+	ids, idArgs, err := toolUsageTraceUserFilter(ListToolUsageTracesParams{
+		CanonicalIdentityOrg: "org_0123456789",
+		UserFilters: []ToolUsageUserFilter{
+			{Kind: toolUsageUserKindUserID, Key: "user_42"},
+			{Kind: toolUsageUserKindExternalUserID, Key: "ext-7"},
+		},
+	}).ToSql()
+	require.NoError(t, err)
+	require.NotContains(t, ids, "identity_map")
+	require.Equal(t, "((user_kind = ? AND user_key = ?) OR (user_kind = ? AND user_key = ?))", ids)
+	require.Equal(t, []any{toolUsageUserKindUserID, "user_42", toolUsageUserKindExternalUserID, "ext-7"}, idArgs)
+}

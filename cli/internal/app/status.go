@@ -22,7 +22,7 @@ func newStatusCommand() *cli.Command {
 		Description: `
 Check the status of a deployment.
 
-If no deployment ID is provided, shows the status of the latest deployment.`,
+If no deployment ID is provided, shows the status of the latest deployment.`[1:],
 		Flags: []cli.Flag{
 			flags.APIEndpoint(),
 			flags.APIKey(),

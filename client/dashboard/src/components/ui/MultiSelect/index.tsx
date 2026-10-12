@@ -320,6 +320,14 @@ interface MultiSelectProps
    * Optional, defaults to false.
    */
   creatable?: boolean;
+
+  /**
+   * If true, a created value only counts as existing when it matches an
+   * option or selection exactly. Use for case-sensitive tokens, where `Read`
+   * and `read` are different values.
+   * Optional, defaults to false.
+   */
+  caseSensitiveCreate?: boolean;
 }
 
 /**
@@ -434,6 +442,7 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
       resetOnDefaultValueChange = true,
       closeOnSelect = false,
       creatable = false,
+      caseSensitiveCreate = false,
       ...props
     },
     ref,
@@ -808,15 +817,22 @@ export const MultiSelect = React.forwardRef<MultiSelectRef, MultiSelectProps>(
     const trimmedSearchValue = searchValue.trim();
     const canCreateFromSearch = React.useMemo(() => {
       if (!creatable || !trimmedSearchValue) return false;
-      const needle = trimmedSearchValue.toLowerCase();
+      const fold = (text: string) =>
+        caseSensitiveCreate ? text : text.toLowerCase();
+      const needle = fold(trimmedSearchValue);
       const matchesExisting = getAllOptions().some(
         (option) =>
-          option.value.toLowerCase() === needle ||
-          option.label.toLowerCase() === needle,
+          fold(option.value) === needle || fold(option.label) === needle,
       );
       if (matchesExisting) return false;
-      return !selectedValues.some((value) => value.toLowerCase() === needle);
-    }, [creatable, trimmedSearchValue, getAllOptions, selectedValues]);
+      return !selectedValues.some((value) => fold(value) === needle);
+    }, [
+      creatable,
+      caseSensitiveCreate,
+      trimmedSearchValue,
+      getAllOptions,
+      selectedValues,
+    ]);
 
     const handleCreate = () => {
       if (disabled || !canCreateFromSearch) return;

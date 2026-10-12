@@ -46,10 +46,14 @@ const (
 	ToolCallSourceDirect ToolCallSource = "direct"
 	ToolCallSourceMCP    ToolCallSource = "mcp"
 
-	// gramUserEmailEnvVar is the environment variable injected into function
-	// payloads when authInput.gramEmail is enabled and Gram has authenticated
+	// userEmailEnvVar is the environment variable injected into function
+	// payloads when authInput.gramEmail is enabled and Speakeasy has authenticated
 	// the identity accessing the MCP server.
-	gramUserEmailEnvVar = "GRAM_USER_EMAIL"
+	userEmailEnvVar = "SPEAKEASY_AI_USER_EMAIL"
+
+	// legacyUserEmailEnvVar is the deprecated name of userEmailEnvVar. It is
+	// set to the same value so existing function code keeps working.
+	legacyUserEmailEnvVar = "GRAM_USER_EMAIL"
 )
 
 const (
@@ -421,12 +425,7 @@ func (tp *ToolProxy) doFunction(
 		}
 	}
 
-	// GRAM_USER_EMAIL is a platform-controlled variable — remove any
-	// user-supplied value and only set it from the authenticated context.
-	delete(payloadEnv, gramUserEmailEnvVar)
-	if plan.AuthInput != nil && plan.AuthInput.GramEmail && env.GramEmail != "" {
-		payloadEnv[gramUserEmailEnvVar] = env.GramEmail
-	}
+	setUserEmailEnv(payloadEnv, plan.AuthInput != nil && plan.AuthInput.GramEmail, env.GramEmail)
 
 	req, err := tp.functions.ToolCall(ctx, functions.RunnerToolCallRequest{
 		RunnerBaseRequest: functions.RunnerBaseRequest{
@@ -955,6 +954,12 @@ func (tp *ToolProxy) doExternalMCP(
 	// Connect to the external MCP server
 	client, err := externalmcp.NewClient(ctx, logger, tp.policy, plan.RemoteURL, plan.TransportType, opts)
 	if err != nil {
+		if authErr, ok := errors.AsType[*externalmcp.AuthRejectedError](err); ok {
+			upstreamReportedError = true
+			responseStatusCode = http.StatusOK
+			logger.WarnContext(ctx, "external MCP authentication rejected", attr.SlogHTTPResponseStatusCode(authErr.StatusCode))
+			return writeExternalMCPAuthRejection(w, plan.RequiresOAuth)
+		}
 		return oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").LogError(ctx, logger)
 	}
 	defer o11y.LogDefer(ctx, logger, "failed to close external mcp client", client.Close)
@@ -962,6 +967,12 @@ func (tp *ToolProxy) doExternalMCP(
 	// Call the tool on the external MCP server
 	callResult, err := client.CallTool(ctx, toolName, arguments, plan.InputSchema)
 	if err != nil {
+		if authErr, ok := errors.AsType[*externalmcp.AuthRejectedError](err); ok {
+			upstreamReportedError = true
+			responseStatusCode = http.StatusOK
+			logger.WarnContext(ctx, "external MCP authentication rejected", attr.SlogHTTPResponseStatusCode(authErr.StatusCode))
+			return writeExternalMCPAuthRejection(w, plan.RequiresOAuth)
+		}
 		return oops.E(oops.CodeUnexpected, err, "failed to call external MCP tool").LogError(ctx, logger)
 	}
 
@@ -999,6 +1010,29 @@ func (tp *ToolProxy) doExternalMCP(
 		return oops.E(oops.CodeUnexpected, err, "failed to write external MCP tool result").LogError(ctx, logger)
 	}
 
+	return nil
+}
+
+// An upstream rejection is a tool error, not a rejection of the caller's Speakeasy
+// bearer. Never relay its WWW-Authenticate challenge: it names a different
+// audience and may contain sensitive, upstream-controlled values.
+func writeExternalMCPAuthRejection(w http.ResponseWriter, requiresOAuth bool) error {
+	message := "The upstream MCP server rejected authentication. Ask the MCP server administrator to check its configured credentials and permissions."
+	if requiresOAuth {
+		message = "The upstream MCP server rejected authentication. Reauthorize this MCP server to reconnect your upstream account. If the problem persists, check that your account has the required permissions."
+	}
+	response := struct {
+		Content []map[string]string `json:"content"`
+		IsError bool                `json:"isError"`
+	}{
+		Content: []map[string]string{{"type": "text", "text": message}},
+		IsError: true,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to write external MCP tool result")
+	}
 	return nil
 }
 
@@ -1269,5 +1303,17 @@ func formEncodeValue(values url.Values, key string, value any) {
 	default:
 		// Handle primitives
 		values.Set(key, fmt.Sprintf("%v", value))
+	}
+}
+
+// setUserEmailEnv sets the user email variables in payloadEnv to email when
+// enabled and email is known. They are platform-controlled, so any
+// user-supplied values are removed first.
+func setUserEmailEnv(payloadEnv map[string]string, enabled bool, email string) {
+	for _, name := range []string{userEmailEnvVar, legacyUserEmailEnvVar} {
+		delete(payloadEnv, name)
+		if enabled && email != "" {
+			payloadEnv[name] = email
+		}
 	}
 }

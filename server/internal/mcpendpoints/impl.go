@@ -82,7 +82,7 @@ func NewService(
 		audit:                 auditLogger,
 		temporalEnv:           temporalEnv,
 		pluginsGitHubEnabled:  pluginsGitHubEnabled,
-		distributionAdmission: admission.NewGuard(nil, nil),
+		distributionAdmission: admission.NewGuard(),
 		publicationRequests:   plugins.PublicationRequests{Enabled: false},
 	}
 }
@@ -139,9 +139,6 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	if err := validateSlugPrefix(slug, customDomainID, authCtx.OrganizationSlug); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid slug").LogError(ctx, logger)
 	}
-	var rollout admission.RolloutConfig
-	var rolloutErr error
-	rollout, rolloutErr = s.distributionAdmission.ResolveProject(ctx, s.db, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, *authCtx.ProjectID)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -245,13 +242,19 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	// or marketplace publishing; that flow is exclusive to generic MCP servers.
 	attached, pluginCreated := false, false
 	if mcpServerID.Valid && mcpServer.Visibility != mcpservers.VisibilityDisabled {
-		if err := s.distributionAdmission.CheckProspectiveDefaultAttachment(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServerID.UUID); err != nil {
-			if errors.Is(err, admission.ErrApprovalRequired) || errors.Is(err, admission.ErrDistributionDisabled) {
+		admissionCtx, err := admission.AdministratorWriteContext(ctx, s.authz, authCtx.ActiveOrganizationID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnavailable, err, "distribution approval could not be verified safely").LogError(ctx, logger)
+		}
+		if err := s.distributionAdmission.CheckProspectiveDefaultAttachment(admissionCtx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, mcpServerID.UUID); err != nil {
+			if errors.Is(err, admission.ErrApprovalRequired) {
 				return nil, oops.E(oops.CodeConflict, err, "direct-remote distribution is not admitted")
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "check direct-remote distribution admission").LogError(ctx, logger)
 		}
-		attached, pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, mcpServer)
+		// Role plugins are checked by the same guard inside the attachment, so
+		// the administrator's write must be marked there too.
+		attached, pluginCreated, err = s.attachToDefaultPlugin(admissionCtx, dbtx, authCtx, mcpServer)
 		if err != nil {
 			return nil, err
 		}
@@ -283,18 +286,18 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 // own transaction commits, since this runs pre-commit and the DB writes
 // could still roll back.
 func (s *Service) attachToDefaultPlugin(ctx context.Context, dbtx pgx.Tx, authCtx *contextvalues.AuthContext, server mcpserversrepo.McpServer) (bool, bool, error) {
-	pluginCreated, err := plugins.AttachToDefaultPluginAudited(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
+	outcome, err := plugins.AttachToDefaultAndRolePluginsAuditedWithOutcome(ctx, dbtx, s.audit, authCtx, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
 		ToolsetID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		McpServerID:    uuid.NullUUID{UUID: server.ID, Valid: true},
 		DisplayName:    mcpservers.ServerDisplayName(server),
-	})
+	}, s.distributionAdmission)
 	if err != nil {
 		return false, false, oops.E(oops.CodeUnexpected, err, "attach mcp server to default plugin").LogError(ctx, s.logger)
 	}
 
-	return true, pluginCreated, nil
+	return outcome.Attached, outcome.PluginCreated, nil
 }
 
 // triggerPluginPublish enqueues the marketplace publish for the project whose

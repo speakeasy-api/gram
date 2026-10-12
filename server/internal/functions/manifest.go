@@ -7,6 +7,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/jsonschema"
+	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 )
 
 type ManifestV0 struct {
@@ -103,6 +104,11 @@ func validateManifestToolV0(tool ManifestToolV0) (err error) {
 		err = errors.Join(err, fmt.Errorf("tool tags exceed maximum of %d", constants.MaxFunctionToolTags))
 	}
 
+	err = errors.Join(err, validateManifestVariableNames(tool.Variables))
+	if tool.AuthInput != nil && httpheaders.IsReservedVariableHeaderName(tool.AuthInput.Variable) {
+		err = errors.Join(err, reservedVariableNameError(tool.AuthInput.Variable))
+	}
+
 	return
 }
 
@@ -119,5 +125,24 @@ func validateManifestResourceV0(resource ManifestResourceV0) (err error) {
 		err = errors.Join(err, errors.New("resource URI is required"))
 	}
 
+	err = errors.Join(err, validateManifestVariableNames(resource.Variables))
+
 	return
+}
+
+// validateManifestVariableNames rejects variables whose MCP-<name> request
+// header is a standard MCP protocol header (such as Mcp-Name). The hosted
+// runtime never reads those headers as variables, so the install page would
+// advertise a header that can never supply a value.
+func validateManifestVariableNames(variables map[string]*ManifestVariableAttributeV0) (err error) {
+	for name := range variables {
+		if httpheaders.IsReservedVariableHeaderName(name) {
+			err = errors.Join(err, reservedVariableNameError(name))
+		}
+	}
+	return
+}
+
+func reservedVariableNameError(name string) error {
+	return fmt.Errorf("variable name %q is reserved: its %s request header is a standard MCP protocol header", name, httpheaders.VariableHeaderName(name))
 }

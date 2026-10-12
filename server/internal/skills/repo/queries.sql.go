@@ -2960,6 +2960,43 @@ func (q *Queries) GetValidSkillVersion(ctx context.Context, arg GetValidSkillVer
 	return id, err
 }
 
+const hasPublishedPluginDistributionForSkills = `-- name: HasPublishedPluginDistributionForSkills :one
+SELECT (
+  EXISTS (
+    SELECT 1
+    FROM skill_distributions sd
+    JOIN plugins p ON p.id = sd.plugin_id AND p.project_id = sd.project_id AND p.deleted IS FALSE
+    WHERE sd.project_id = $1
+      AND sd.skill_id = ANY($2::uuid[])
+      AND sd.channel = 'plugin'
+      AND sd.assistant_id IS NULL
+      AND sd.revoked_at IS NULL
+      AND (NOT $3::bool OR sd.pinned_version_id IS NULL)
+  )
+  AND EXISTS (
+    SELECT 1 FROM plugin_github_connections c WHERE c.project_id = $1
+  )
+)::bool AS published
+`
+
+type HasPublishedPluginDistributionForSkillsParams struct {
+	ProjectID  uuid.UUID
+	SkillIds   []uuid.UUID
+	LatestOnly bool
+}
+
+// Reports whether a change to any of the skills can move a published
+// marketplace package: the project has a marketplace connection and a live
+// plugin carries one of the skills. latest_only narrows the check to
+// distributions that follow the latest valid version, the only ones a new or
+// restored version changes.
+func (q *Queries) HasPublishedPluginDistributionForSkills(ctx context.Context, arg HasPublishedPluginDistributionForSkillsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPublishedPluginDistributionForSkills, arg.ProjectID, arg.SkillIds, arg.LatestOnly)
+	var published bool
+	err := row.Scan(&published)
+	return published, err
+}
+
 const insertCapturedSkillVersionOrigin = `-- name: InsertCapturedSkillVersionOrigin :exec
 INSERT INTO skill_version_origins (skill_version_id, skill_id, project_id, origin)
 SELECT sv.id, sv.skill_id, s.project_id, 'captured'

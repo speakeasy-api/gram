@@ -36,3 +36,32 @@ type RemoteMcpServerHeader struct {
 	DeletedAt              pgtype.Timestamptz
 	Deleted                bool
 }
+
+type RemoteProtectedResource struct {
+	ID                                    uuid.UUID
+	ProjectID                             uuid.UUID
+	OrganizationID                        string
+	ResourceIdentifier                    string
+	MetadataUrl                           pgtype.Text
+	AuthorizationServers                  []string
+	ScopesSupported                       []string
+	BearerMethodsSupported                []string
+	ResourceName                          pgtype.Text
+	ResourceDocumentation                 pgtype.Text
+	ResourcePolicyUri                     pgtype.Text
+	ResourceTosUri                        pgtype.Text
+	DpopBoundAccessTokensRequired         pgtype.Bool
+	DpopSigningAlgValuesSupported         []string
+	TlsClientCertificateBoundAccessTokens pgtype.Bool
+	ScopeOverride                         []string
+	ChallengeScopes                       []string
+	ChallengeScopesSeenAt                 pgtype.Timestamptz
+	Metadata                              []byte
+	MetadataFetchedAt                     pgtype.Timestamptz
+	MetadataLastError                     pgtype.Text
+	MetadataLastErrorAt                   pgtype.Timestamptz
+	CreatedAt                             pgtype.Timestamptz
+	UpdatedAt                             pgtype.Timestamptz
+	DeletedAt                             pgtype.Timestamptz
+	Deleted                               bool
+}

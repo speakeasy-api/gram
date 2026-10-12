@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const mockCreatePolicy = vi.fn();
 const mockCreateServer = vi.fn();
 const mockDeleteServer = vi.fn();
 const mockCreateServerHeader = vi.fn();
@@ -21,6 +22,7 @@ const mockUseEffectiveUserSessionIssuers = vi.fn();
 
 // Return a stable client reference to avoid re-render loops from useCallback deps
 const mockClient = {
+  risk: { policies: { create: mockCreatePolicy } },
   remoteMcp: {
     createServer: mockCreateServer,
     deleteServer: mockDeleteServer,
@@ -105,6 +107,10 @@ vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
 vi.mock("@gram/client/react-query/remoteSessionClients.js", () => ({
   invalidateAllRemoteSessionClients: vi.fn(() => Promise.resolve()),
 }));
+vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
+  invalidateAllRiskListPolicies: vi.fn(() => Promise.resolve()),
+}));
+
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({}),
 }));
@@ -214,6 +220,79 @@ describe("useRemoteMcpInstallWorkflow", () => {
   // -------------------------------------------------------------------------
   // initial state
   // -------------------------------------------------------------------------
+
+  it("cancels pending admission on reset", async () => {
+    const servers = [makeServer()];
+    let admit!: (value: boolean) => void;
+    const beforeInstall = () =>
+      new Promise<boolean>((resolve) => {
+        admit = resolve;
+      });
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers, beforeInstall }),
+    );
+    let pending!: Promise<void>;
+    act(() => {
+      if (result.current.phase === "configure")
+        pending = result.current.startInstall();
+    });
+    act(() => result.current.reset());
+    await act(async () => {
+      admit(true);
+      await pending;
+    });
+    expect(mockCreateServer).not.toHaveBeenCalled();
+  });
+
+  it("retains accepted servers when policy creation fails", async () => {
+    const servers = [makeServer()];
+    const beforeInstall = vi.fn().mockResolvedValue(true);
+    mockCreatePolicy.mockImplementation(async () => {
+      throw new Error("Policy unavailable");
+    });
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({
+        servers,
+        beforeInstall,
+        offerGuardrails: true,
+      }),
+    );
+    act(() => {
+      if (result.current.phase === "configure")
+        result.current.continueToGuardrails?.();
+    });
+    await act(async () => {
+      if (result.current.phase === "guardrails")
+        await result.current.installWithGuardrail();
+    });
+    expect(beforeInstall).toHaveBeenCalledOnce();
+    expect(mockCreatePolicy).toHaveBeenCalledOnce();
+    expect(mockMcpServersCreate).toHaveBeenCalledOnce();
+    expect(mockMcpServersCreate.mock.invocationCallOrder[0]).toBeLessThan(
+      mockCreatePolicy.mock.invocationCallOrder[0]!,
+    );
+    expect(mockDeleteServer).not.toHaveBeenCalled();
+    expect(result.current.phase).toBe("complete");
+    if (result.current.phase === "complete") {
+      expect(result.current.statuses[0]?.status).toBe("completed");
+      expect(result.current.guardrail?.status).toBe("failed");
+    }
+  });
+
+  it("blocks creation when submit admission fails", async () => {
+    const servers = [makeServer()];
+    const beforeInstall = vi.fn().mockResolvedValue(false);
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers, beforeInstall }),
+    );
+    await act(async () => {
+      if (result.current.phase === "configure")
+        await result.current.startInstall();
+    });
+    expect(beforeInstall).toHaveBeenCalledOnce();
+    expect(mockCreateServer).not.toHaveBeenCalled();
+    expect(mockMcpServersCreate).not.toHaveBeenCalled();
+  });
 
   it("starts in configure phase with no configs", () => {
     const { result } = renderHook(() =>

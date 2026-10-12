@@ -133,10 +133,9 @@ func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeB
 			ToolCalls:        toolCalls,
 			OrganizationSlug: &orgSlug,
 			Sources:          sources,
-			// The streams consumer applies the analyzer's input caps and
-			// reports truncation on its own span; the request carries the
-			// full text.
-			ContentTruncated: new(false),
+			// The streams consumer applies the analyzer's own input caps on
+			// top of batchScanMaxContentBytes and reports those on its span.
+			ContentTruncated: &msg.Truncated,
 			Shadow:           &shadow,
 		}.Build()))
 	}

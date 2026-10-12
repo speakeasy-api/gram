@@ -2,28 +2,65 @@ import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Page } from "@/components/page-layout";
 import { WorkbenchPage } from "@/components/page-templates";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { PageTabsList, PageTabsTrigger, Tabs } from "@/components/ui/Tabs";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
+import { useRoutes } from "@/routes";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
+import type { Widget } from "@gram/client/models/components/widget.js";
 import { useAnalyticsDescribe } from "@gram/client/react-query/analyticsDescribe.js";
-import { useMemo, useState, type JSX } from "react";
+import { useWidgets } from "@gram/client/react-query/widgets.js";
+import { useEffect, useMemo, useState, type JSX, type ReactNode } from "react";
+import {
+  Link,
+  Navigate,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from "react-router";
 import {
   findDataset,
-  hasChartShape,
   initialSpec,
   queryBodyFromSpec,
   type ExploreSpec,
 } from "./exploreModel";
-import { ExploreResults } from "./ExploreResults";
-import { QueryBuilder } from "./QueryBuilder";
+import { encodeSpec, TAB_PARAM } from "./exploreUrl";
+import { ExploreResults, ResultsFrame } from "./ExploreResults";
+import { QueryBuilder, ResultsToolbar } from "./QueryBuilder";
+import { RequireExplore } from "./RequireExplore";
+import { useQueryUrl } from "./useQueryUrl";
+import { WidgetBar } from "./WidgetBar";
+import { DiscardChangesDialog } from "./WidgetDialogs";
+import { WidgetList } from "./WidgetList";
+import {
+  differsFromWidget,
+  specFromStoredWidget,
+  type StoredWidget,
+} from "./widgetSpec";
 import { useRunQuery } from "./useRunQuery";
 
 // Explore: ask questions of this project's agent activity. The page is
 // strictly project-scoped — the active project is the only one queried — and
 // the builder it shows is generated from the analytics catalog.
 export default function Explore(): JSX.Element {
+  const [params] = useSearchParams();
+  const routes = useRoutes();
+  // Dashboards were once a tab of Explore, so links shared from then still
+  // say ?tab=dashboards: they go on to the page dashboards have now.
+  // The rest of the query, the dashboard's filter bar, comes along.
+  if (params.get(TAB_PARAM) === "dashboards") {
+    const id = params.get("dashboard");
+    const rest = new URLSearchParams(params);
+    rest.delete(TAB_PARAM);
+    rest.delete("dashboard");
+    const search = rest.toString();
+    const path = id
+      ? routes.dashboards.detail.href(id)
+      : routes.dashboards.href();
+    return <Navigate replace to={search ? `${path}?${search}` : path} />;
+  }
   return (
     <WorkbenchPage scope="project:read">
       {/* WorkbenchPage owns overflow-hidden; the builder and results scroll
@@ -54,33 +91,16 @@ function ExploreHeader(): JSX.Element {
   );
 }
 
-/**
- * Explore is dogfooded before it ships, so the page is gated as well as the
- * nav entry: hiding the link alone would leave the URL open to anyone who
- * guessed it. The flag is a rollout control, not authorization — the queries
- * behind this page are scoped by project:read whatever it says.
- */
 function ExploreBody(): JSX.Element {
-  const rollout = useFeatureFlag(FEATURE_FLAGS.explore);
-
-  // PostHog answers after the first paint, so wait rather than telling
-  // someone who does have Explore that they do not.
-  if (rollout.status === "loading") return <BuilderSkeleton />;
-  if (rollout.status !== "enabled") {
-    return (
-      <InlineEmptyState
-        icon="telescope"
-        heading="Explore is not available yet"
-        description="It is in preview with a few organizations. Ask your Speakeasy contact to turn it on."
-      />
-    );
-  }
-  return <ExploreCatalog />;
+  return (
+    <RequireExplore loading={<BuilderSkeleton />}>
+      <ExploreCatalog />
+    </RequireExplore>
+  );
 }
 
 function ExploreCatalog(): JSX.Element {
   const describe = useAnalyticsDescribe();
-  const [draft, setDraft] = useState<ExploreSpec | null>(null);
 
   if (describe.isPending) return <BuilderSkeleton />;
   // A refetch that fails still leaves the cached catalog usable, so the
@@ -104,62 +124,97 @@ function ExploreCatalog(): JSX.Element {
     );
   }
 
-  return (
-    <ExploreWorkbench
-      datasets={describe.data.datasets}
-      draft={draft}
-      onChange={setDraft}
-    />
-  );
+  return <ExploreWorkbench datasets={describe.data.datasets} />;
 }
 
 function ExploreWorkbench({
   datasets,
-  draft,
-  onChange,
 }: {
   datasets: AnalyticsDataset[];
-  draft: ExploreSpec | null;
-  onChange: (spec: ExploreSpec) => void;
 }): JSX.Element {
-  // Until the user edits something, the builder opens on the catalog's first
-  // dataset. Memoized so a run can tell it apart from an edit by reference.
-  const opening = useMemo(() => initialSpec(datasets), [datasets]);
-  // A draft naming a dataset the catalog has since dropped is stale, so it
-  // opens afresh rather than querying a dataset that is no longer there.
-  const live = draft && findDataset(datasets, draft.dataset) ? draft : null;
-  const spec = live ?? opening;
-
   // Queries run when asked, never as a side effect of editing: a query scans
   // the dataset across its whole window, so the builder waits for Run. The
   // spec the last run answered is kept apart from the one being edited, so
   // the results panel keeps describing the query that produced them.
   const [submitted, setSubmitted] = useState<ExploreSpec | null>(null);
+
+  // The query being edited lives in the URL, so it is a link at every step.
+  // A link opened, or a question stepped back to, runs as it arrives.
+  const url = useQueryUrl(datasets, setSubmitted);
+  const tab = useTab();
+  // Without a query in the URL — or with one the catalog can no longer
+  // answer — the builder opens on the catalog's first dataset.
+  const opening = useMemo(() => initialSpec(datasets), [datasets]);
+  // A widget the catalog has since broken stays open for editing, so it can
+  // be fixed and saved again; a plain link that broke just opens the
+  // default view.
+  const broken = url.widgetId !== null ? url.stale : null;
+  const spec = url.spec ?? broken?.spec ?? opening;
+
+  const gramProject = useProjectSlugForRequests();
+  const list = useWidgets({ gramProject });
+  const widgets = list.data?.widgets ?? [];
+  const openWidget = url.widgetId
+    ? widgets.find((widget) => widget.id === url.widgetId)
+    : undefined;
+  const problem =
+    widgetProblem(spec, openWidget) ??
+    (broken ? { unreadable: false, reason: broken.problem } : null);
+  // The last answer belongs to the question being left, so it goes; a
+  // widget that still runs brings its own as it opens. A card opens the
+  // question it ran, which a page may have changed from the saved widget's.
+  const openQuery = (next: ExploreSpec, widgetId: string | null) => {
+    setSubmitted(null);
+    url.open(next, widgetId);
+  };
+  const open = (widget: Widget) => {
+    setSubmitted(null);
+    url.open(specFromStoredWidget(widget), widget.id);
+  };
+  // Leaving an open widget with edits not yet saved asks first; the edits
+  // are only in this entry's URL, which is hard to find again.
+  const unsaved =
+    spec !== null &&
+    openWidget !== undefined &&
+    specFromStoredWidget(openWidget) !== null &&
+    differsFromWidget(spec, openWidget);
+  const [leaving, setLeaving] = useState<(() => void) | null>(null);
+  const confirmLeave = (proceed: () => void) => {
+    if (unsaved) setLeaving(() => proceed);
+    else proceed();
+  };
   const ran =
     submitted && findDataset(datasets, submitted.dataset) ? submitted : null;
-  const chartBody = useMemo(
-    () => (ran && hasChartShape(ran) ? queryBodyFromSpec(ran, "chart") : null),
-    [ran],
-  );
-  const summaryBody = useMemo(
-    () => (ran ? queryBodyFromSpec(ran, "summary") : null),
-    [ran],
-  );
-  const chart = useRunQuery(chartBody);
-  const summary = useRunQuery(summaryBody);
+  // One question, one query: a timeseries draws its buckets and nothing
+  // else; the whole-window figures are a table chart away.
+  const body = useMemo(() => (ran ? queryBodyFromSpec(ran) : null), [ran]);
+  const result = useRunQuery(body);
 
-  // Every edit replaces the spec object, so the same reference means nothing
-  // changed since the last run: Run then asks the same question again rather
-  // than serving the cached answer.
-  const unchanged = ran !== null && ran === spec;
+  // The same query text means nothing changed since the last run: Run then
+  // asks the same question again rather than serving the cached answer.
+  const unchanged =
+    ran !== null && spec !== null && encodeSpec(ran) === encodeSpec(spec);
+
+  // A run that returns claims its history entry, so the next edit starts a
+  // new one and Back returns to this question.
+  const { ran: markRan } = url;
+  const answered = result.isSuccess && !result.isPlaceholderData;
+  useEffect(() => {
+    if (ran && answered) markRan(ran);
+  }, [ran, answered, markRan]);
   const run = () => {
     if (!unchanged) {
       setSubmitted(spec);
       return;
     }
-    if (chartBody) void chart.refetch();
-    void summary.refetch();
+    void result.refetch();
   };
+
+  // A dashboard is a page of its own; leaving for one with edits not yet
+  // saved asks first, as leaving for another widget does.
+  const routes = useRoutes();
+  const openDashboard = (id: string) =>
+    confirmLeave(() => routes.dashboards.detail.goTo(id));
 
   if (!spec) {
     return (
@@ -171,39 +226,248 @@ function ExploreWorkbench({
     );
   }
   return (
+    <Tabs value={tab.current} className="flex flex-col gap-6">
+      <div className="border-b">
+        <PageTabsList className="h-auto w-max gap-6 bg-transparent p-0">
+          <PageTabsTrigger value="explore" asChild>
+            <Link to={tab.href("explore")} state={tab.state}>
+              Explore
+            </Link>
+          </PageTabsTrigger>
+          <PageTabsTrigger value="widgets" asChild>
+            <Link
+              to={tab.href("widgets")}
+              state={tab.state}
+              className="inline-flex items-center gap-2"
+            >
+              Widgets
+              {list.data ? (
+                <span className="text-muted-foreground tabular-nums">
+                  {widgets.length}
+                </span>
+              ) : null}
+            </Link>
+          </PageTabsTrigger>
+        </PageTabsList>
+      </div>
+
+      {tab.current === "widgets" ? (
+        <WidgetList
+          widgets={widgets}
+          isPending={list.isPending}
+          isError={list.isError}
+          onOpen={open}
+          onOpenQuery={openQuery}
+          confirmLeave={confirmLeave}
+          onDeleted={(id) => {
+            // The deleted widget may be the one the builder has open.
+            if (id === url.widgetId) url.setWidgetId(null);
+          }}
+          onExplore={() => tab.go("explore")}
+          onOpenDashboard={openDashboard}
+          onRetry={() => void list.refetch()}
+        />
+      ) : null}
+      {/* The builder stays mounted behind the other tabs, so its last
+          answer is still there on the way back. */}
+      <div hidden={tab.current !== "explore"} className="flex flex-col gap-6">
+        <ExploreTab
+          datasets={datasets}
+          spec={spec}
+          widgetId={url.widgetId}
+          widgets={widgets}
+          listResolving={list.isPending || list.isFetching}
+          problem={problem}
+          ran={ran}
+          unchanged={unchanged}
+          result={result}
+          onOpen={open}
+          confirmLeave={confirmLeave}
+          onWidgetIdChange={url.setWidgetId}
+          onOpenDashboard={openDashboard}
+          onChange={url.edit}
+          onRun={run}
+        />
+      </div>
+      <DiscardChangesDialog
+        name={openWidget?.name ?? ""}
+        open={leaving !== null}
+        onCancel={() => setLeaving(null)}
+        onConfirm={() => {
+          const proceed = leaving;
+          setLeaving(null);
+          proceed?.();
+        }}
+      />
+    </Tabs>
+  );
+}
+
+function ExploreTab({
+  datasets,
+  spec,
+  widgetId,
+  widgets,
+  listResolving,
+  problem,
+  ran,
+  unchanged,
+  result,
+  onOpen,
+  confirmLeave,
+  onWidgetIdChange,
+  onOpenDashboard,
+  onChange,
+  onRun,
+}: {
+  datasets: AnalyticsDataset[];
+  spec: ExploreSpec;
+  widgetId: string | null;
+  widgets: Widget[];
+  listResolving: boolean;
+  problem: WidgetProblem | null;
+  ran: ExploreSpec | null;
+  unchanged: boolean;
+  result: ReturnType<typeof useRunQuery>;
+  onOpen: (widget: Widget) => void;
+  confirmLeave: (proceed: () => void) => void;
+  onWidgetIdChange: (widgetId: string | null) => void;
+  onOpenDashboard: (dashboardId: string) => void;
+  onChange: (spec: ExploreSpec) => void;
+  onRun: () => void;
+}): JSX.Element {
+  // How and over when the question is answered sit on the results panel's
+  // header, whichever panel is showing.
+  const toolbar = (
+    <ResultsToolbar
+      spec={spec}
+      onChange={onChange}
+      onRun={onRun}
+      changed={ran !== null && !unchanged}
+    />
+  );
+  return (
     <>
+      {problem?.unreadable ? (
+        <Alert variant="error" dismissible={false}>
+          This widget can't be opened in the builder: {problem.reason}. Save the
+          builder as a new widget, or delete it.
+        </Alert>
+      ) : problem ? (
+        <Alert variant="error" dismissible={false}>
+          This widget no longer works: {problem.reason}. Edit it below, then
+          save it again.
+        </Alert>
+      ) : null}
       <QueryBuilder
         datasets={datasets}
         spec={spec}
         onChange={onChange}
-        onRun={run}
-        changed={ran !== null && !unchanged}
+        actions={
+          <WidgetBar
+            spec={spec}
+            widgetId={widgetId}
+            widgets={widgets}
+            listResolving={listResolving}
+            onOpen={onOpen}
+            confirmLeave={confirmLeave}
+            onWidgetIdChange={onWidgetIdChange}
+            onOpenDashboard={onOpenDashboard}
+          />
+        }
       />
       {ran ? (
         <ExploreResults
           dataset={findDataset(datasets, ran.dataset)}
           spec={ran}
-          chart={chart}
-          summary={summary}
+          result={result}
+          toolbar={toolbar}
         />
       ) : (
-        <ResultsPrompt />
+        <ResultsPrompt toolbar={toolbar} />
       )}
     </>
   );
 }
 
+/** What is wrong with the open widget, and whether the builder can show it. */
+interface WidgetProblem {
+  /**
+   * The builder cannot read the widget, so it is not what the builder shows
+   * and saving over it would replace it with something unrelated.
+   */
+  unreadable: boolean;
+  reason: string;
+}
+
+/**
+ * Why the open widget does not work: the builder cannot read it, or the
+ * server said it no longer works when it last read it — while the builder
+ * still holds what was saved, so a fix in progress is not reported as
+ * broken.
+ */
+function widgetProblem(
+  spec: ExploreSpec | null,
+  widget: (StoredWidget & { invalidReason?: string | undefined }) | undefined,
+): WidgetProblem | null {
+  if (!spec || !widget) return null;
+  if (specFromStoredWidget(widget) === null) {
+    return {
+      unreadable: true,
+      reason:
+        widget.invalidReason ||
+        "its query uses options the builder doesn't offer",
+    };
+  }
+  if (widget.invalidReason && !differsFromWidget(spec, widget)) {
+    return { unreadable: false, reason: widget.invalidReason };
+  }
+  return null;
+}
+
+type ExploreTabName = "explore" | "widgets";
+
+/**
+ * The page's tab, kept in the URL beside the query so a link can open
+ * straight onto the widget list. Switching tabs keeps the query and the
+ * history entry's state, so coming back does not rerun or forget anything.
+ */
+function useTab(): {
+  current: ExploreTabName;
+  href: (to: ExploreTabName) => string;
+  state: unknown;
+  go: (to: ExploreTabName) => void;
+} {
+  const [params] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const current: ExploreTabName =
+    params.get(TAB_PARAM) === "widgets" ? "widgets" : "explore";
+  const href = (to: ExploreTabName) => {
+    const out = new URLSearchParams(params);
+    if (to === "explore") out.delete(TAB_PARAM);
+    else out.set(TAB_PARAM, to);
+    const search = out.toString();
+    return search === "" ? location.pathname : `?${search}`;
+  };
+  return {
+    current,
+    href,
+    state: location.state,
+    go: (to) => void navigate(href(to), { state: location.state }),
+  };
+}
+
 // The results panel before the first run: the same frame, waiting.
-function ResultsPrompt(): JSX.Element {
+function ResultsPrompt({ toolbar }: { toolbar: ReactNode }): JSX.Element {
   return (
-    <section className="border-border bg-card flex flex-col gap-4 border p-5">
-      <span className="text-eyebrow">Results</span>
+    <ResultsFrame toolbar={toolbar}>
       <InlineEmptyState
         icon="telescope"
         heading="Nothing has run yet"
         description="Compose a query above and press Run query."
       />
-    </section>
+    </ResultsFrame>
   );
 }
 

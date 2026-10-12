@@ -58,7 +58,9 @@ type RefreshResult struct {
 // carries the issuer URL and outcome the upstream-refresh metric recorded for
 // the attempt, so a failure log can name the provider and be joined to its
 // metric series, and it wraps the underlying cause: errors.Is on
-// ErrNoValidToken and errors.As on *TokenRefreshError see through it.
+// ErrNoValidToken and errors.As on *TokenRefreshError see through it. errors.Is
+// also matches ErrRemoteSessionUnavailable or ErrRemoteSessionMisconfigured
+// when the failure calls for that remedy rather than a re-link.
 type RefreshError struct {
 	// IssuerURL is the upstream identity provider's issuer URL; empty when the
 	// attempt died before the session's client and issuer rows could be
@@ -75,6 +77,53 @@ type RefreshError struct {
 func (e *RefreshError) Error() string { return e.err.Error() }
 
 func (e *RefreshError) Unwrap() error { return e.err }
+
+// Is matches ErrRemoteSessionUnavailable when retrying the same request is
+// expected to succeed and ErrRemoteSessionMisconfigured when only an
+// administrator can repair the issuer or client. A failure matching neither
+// leaves the grant itself unusable, and only re-linking replaces it.
+func (e *RefreshError) Is(target error) bool {
+	switch e.Outcome {
+	case remotesessionmetrics.RefreshOutcomeUpstreamError,
+		remotesessionmetrics.RefreshOutcomeRateLimited,
+		remotesessionmetrics.RefreshOutcomeUnreachable,
+		remotesessionmetrics.RefreshOutcomeCanceled:
+		return target == ErrRemoteSessionUnavailable
+	case remotesessionmetrics.RefreshOutcomeRejected,
+		remotesessionmetrics.RefreshOutcomeRejectedUnparsed:
+		// The upstream refused the client's request rather than the grant, so
+		// the grant stays stored and re-linking would send the same request
+		// again. Only a configuration change repairs it.
+		return target == ErrRemoteSessionMisconfigured
+	case remotesessionmetrics.RefreshOutcomeInternalError:
+		// Internal errors split on whether Speakeasy raised a classified
+		// TokenRefreshError before or after the POST. A plain error is a
+		// database, cache, or response-decoding failure that clears on retry.
+		tokenErr, ok := errors.AsType[*TokenRefreshError](e.err)
+		if !ok {
+			return target == ErrRemoteSessionUnavailable
+		}
+		switch tokenErr.remedy {
+		case refreshRemedyRetry:
+			return target == ErrRemoteSessionUnavailable
+		case refreshRemedyAdministrator:
+			return target == ErrRemoteSessionMisconfigured
+		case refreshRemedyReconnect, refreshRemedyUnset:
+			return false
+		}
+		return false
+	case remotesessionmetrics.RefreshOutcomeInvalidGrant,
+		// invalid_client marks the client for re-registration at the next
+		// login before clearing the grant, so re-linking repairs it.
+		remotesessionmetrics.RefreshOutcomeInvalidClient,
+		remotesessionmetrics.RefreshOutcomeNoGrant,
+		remotesessionmetrics.RefreshOutcomeSessionInactive,
+		remotesessionmetrics.RefreshOutcomeRefreshed,
+		remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner:
+		return false
+	}
+	return false
+}
 
 // RefreshService owns the single-flighted refresh of a remote session. It is
 // deliberately constructible without any HTTP-serving context so the
@@ -181,29 +230,68 @@ func (s *RefreshService) FallbackResourceForClient(ctx context.Context, clientID
 // connected through upstream, weighed against the other clients bound to the
 // same endpoint; see claimableUpstream. Siblings are only consulted when the
 // client's own attachments leave the claim open.
-func (s *RefreshService) ResourceForClientAtUpstream(ctx context.Context, clientID uuid.UUID, siblingIDs []uuid.UUID, upstream string) (string, error) {
-	q := remotesessions_repo.New(s.db)
-	own, err := q.ListOrganizationMcpServersForClient(ctx, clientID)
+func (s *RefreshService) ResourceForClientAtUpstream(ctx context.Context, organizationID string, clientID uuid.UUID, siblingIDs []uuid.UUID, upstream string) (string, error) {
+	attachments, err := attachmentsForClients(ctx, s.db, organizationID, append([]uuid.UUID{clientID}, siblingIDs...))
 	if err != nil {
-		return "", fmt.Errorf("list mcp servers for client: %w", err)
+		return "", err
 	}
-	resource, claimable := claimableUpstream(own, upstream)
+	return resourceAmongSiblings(attachments, clientID, upstream), nil
+}
+
+// ResourcesForClientsAtUpstream is ResourceForClientAtUpstream for every
+// client bound to one endpoint, each weighed against the others, from a
+// single load of their attachments.
+func (s *RefreshService) ResourcesForClientsAtUpstream(ctx context.Context, organizationID string, clientIDs []uuid.UUID, upstream string) (map[uuid.UUID]string, error) {
+	attachments, err := attachmentsForClients(ctx, s.db, organizationID, clientIDs)
+	if err != nil {
+		return nil, err
+	}
+	resources := make(map[uuid.UUID]string, len(clientIDs))
+	for _, id := range clientIDs {
+		resources[id] = resourceAmongSiblings(attachments, id, upstream)
+	}
+	return resources, nil
+}
+
+// attachmentsForClients loads the MCP servers attached to each client in one
+// round trip, within organizationID. A client with no attachments has no entry.
+func attachmentsForClients(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientIDs []uuid.UUID) (map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, error) {
+	rows, err := remotesessions_repo.New(db).ListOrganizationMcpServersForClients(ctx, remotesessions_repo.ListOrganizationMcpServersForClientsParams{
+		RemoteSessionClientIds: clientIDs,
+		OrganizationID:         organizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list mcp servers for bound clients: %w", err)
+	}
+	attachments := make(map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, len(clientIDs))
+	for _, row := range rows {
+		attachments[row.ClientID] = append(attachments[row.ClientID], remotesessions_repo.ListOrganizationMcpServersForClientRow{
+			ID:          row.ID,
+			ProjectID:   row.ProjectID,
+			ProjectSlug: row.ProjectSlug,
+			Name:        row.Name,
+			Slug:        row.Slug,
+			Url:         row.Url,
+		})
+	}
+	return attachments, nil
+}
+
+// resourceAmongSiblings decides clientID's resource at upstream from the
+// loaded attachments of every client bound to the endpoint: its own
+// derivation when it has one, otherwise a claim on upstream that stands only
+// while no sibling serves it.
+func resourceAmongSiblings(attachments map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, clientID uuid.UUID, upstream string) string {
+	resource, claimable := claimableUpstream(attachments[clientID], upstream)
 	if !claimable {
-		return resource, nil
+		return resource
 	}
-	for _, id := range siblingIDs {
-		if id == clientID {
-			continue
-		}
-		rows, err := q.ListOrganizationMcpServersForClient(ctx, id)
-		if err != nil {
-			return "", fmt.Errorf("list mcp servers for sibling client: %w", err)
-		}
-		if rowsServeUpstream(rows, resource) {
-			return "", nil
+	for id, rows := range attachments {
+		if id != clientID && rowsServeUpstream(rows, resource) {
+			return ""
 		}
 	}
-	return resource, nil
+	return resource
 }
 
 var errRefreshNotApplied = errors.New("remotesessions: refreshed tokens matched no active session")
@@ -260,7 +348,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 	// either way.
 	client, err := q.GetRemoteSessionClientWithIssuerByID(ctx, sess.RemoteSessionClientID)
 	if err != nil {
-		err = fmt.Errorf("load remote_session_client for refresh: %w", err)
+		err = refreshClientLoadError(err)
 		outcome := refreshOutcomeForError(ctx, err)
 		s.metrics.Record(ctx, "", trigger, outcome)
 		return zero, &RefreshError{IssuerURL: "", Outcome: outcome, err: err}
@@ -298,17 +386,28 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 	return result, nil
 }
 
+// refreshClientLoadError wraps a failed load of the client and issuer a
+// refresh must use. A missing row means the client or its issuer was deleted
+// while a session still depends on it, which only an administrator repairs;
+// any other failure is the database answering and may clear on retry.
+func refreshClientLoadError(err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return newTokenRefreshError("the session's client or identity provider no longer exists; check the issuer's configuration", err, refreshRemedyAdministrator)
+	}
+	return fmt.Errorf("load remote_session_client for refresh: %w", err)
+}
+
 // refreshOutcomeForError maps a failed refresh onto the metric outcome set.
 //
 // The caller going away is checked before the transport marker because an
 // aborted POST surfaces as a transport error too, and it is neither the
-// upstream's fault nor Gram's. A deadline is the caller's own only when ctx
+// upstream's fault nor Speakeasy's. A deadline is the caller's own only when ctx
 // itself has expired; otherwise it was the POST's internal timeout, which is
 // the upstream not answering.
 //
 // invalid_grant and invalid_client are checked before the status-based
 // buckets because refresh clears the grant on either regardless of status,
-// and the metric describes what Gram did: a 429 or 5xx that also carried one
+// and the metric describes what Speakeasy did: a 429 or 5xx that also carried one
 // of them left the session without a refresh grant.
 func refreshOutcomeForError(ctx context.Context, err error) remotesessionmetrics.RefreshOutcome {
 	var tokenErr *TokenRefreshError
@@ -459,7 +558,7 @@ func (s *RefreshService) refresh(
 	// a client secret or token endpoint rotated meanwhile must reach the POST.
 	client, err := q.GetRemoteSessionClientWithIssuerByID(ctx, sess.RemoteSessionClientID)
 	if err != nil {
-		return zero, nil, nil, fmt.Errorf("load remote_session_client for refresh: %w", err)
+		return zero, nil, nil, refreshClientLoadError(err)
 	}
 
 	updated, tok, refreshErr := s.refreshSessionTokens(ctx, q, client, sess, resource)

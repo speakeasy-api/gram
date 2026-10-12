@@ -30,6 +30,7 @@ import { ServiceError } from "../models/errors/serviceerror.js";
 import {
   ListOrganizationRemoteSessionIssuersRequest,
   ListOrganizationRemoteSessionIssuersSecurity,
+  Tier,
 } from "../models/operations/listorganizationremotesessionissuers.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -223,6 +224,7 @@ export function setOrganizationRemoteSessionIssuersData(
     parameters: {
       cursor?: string | undefined;
       limit?: number | undefined;
+      tier?: Tier | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
     },
@@ -243,6 +245,7 @@ export function invalidateOrganizationRemoteSessionIssuers(
     [parameters: {
       cursor?: string | undefined;
       limit?: number | undefined;
+      tier?: Tier | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
     }]

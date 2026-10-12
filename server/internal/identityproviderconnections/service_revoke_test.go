@@ -30,10 +30,12 @@ func listManagedLeftovers(t *testing.T, ctx context.Context, si *serviceInstance
 	require.NoError(t, err)
 
 	issuers, err := remotesessionsrepo.New(si.conn.conn).ListOrganizationRemoteSessionIssuers(ctx, remotesessionsrepo.ListOrganizationRemoteSessionIssuersParams{
-		OrganizationID: conv.ToPGText(si.orgID),
-		IncludeGlobal:  false,
-		Cursor:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		LimitValue:     100,
+		OrganizationID:         conv.ToPGText(si.orgID),
+		IncludeOrganizational:  true,
+		IncludeProjectSpecific: true,
+		IncludeGlobal:          false,
+		Cursor:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		LimitValue:             100,
 	})
 	require.NoError(t, err)
 	clients, err := remotesessionsrepo.New(si.conn.conn).ListOrganizationRemoteSessionClientsByIssuerID(ctx, remotesessionsrepo.ListOrganizationRemoteSessionClientsByIssuerIDParams{
@@ -59,10 +61,10 @@ func listManagedLeftovers(t *testing.T, ctx context.Context, si *serviceInstance
 		out.client = out.client || row.RemoteSessionClient.ID == managed.ClientRowID
 	}
 	for _, row := range sets {
-		out.set = out.set || row.ID == managed.JSONWebKeySetID
+		out.set = out.set || row.ID == managed.JSONWebKeySetID.UUID
 	}
 	for _, row := range keys {
-		out.key = out.key || row.ID == managed.ExternalKeyID
+		out.key = out.key || row.ID == managed.ExternalKeyID.UUID
 	}
 	return out
 }

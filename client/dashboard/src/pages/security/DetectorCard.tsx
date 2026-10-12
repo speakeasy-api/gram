@@ -22,6 +22,8 @@ export type DetectorCardProps = {
   mode?: DetectorMode;
   onToggle: (checked: boolean) => void;
   onCustomize: () => void;
+  /** Hide the Customize action, for forms that do not edit per-rule settings. */
+  hideCustomize?: boolean;
 };
 
 /** The rules the card can offer for customization. A category-level detector
@@ -42,11 +44,12 @@ export function DetectorCard({
   mode = "presidio",
   onToggle,
   onCustomize,
+  hideCustomize = false,
 }: DetectorCardProps): JSX.Element {
   const meta = ruleCategoryMeta(category, mode);
   const available = availableCategories(mode).has(category);
   const rules = customizableRules(category, mode);
-  const customizable = available && rules.length > 1;
+  const customizable = available && !hideCustomize && rules.length > 1;
   const enabledCount = rules.filter(
     (rule) => !disabledRules.has(rule.id),
   ).length;

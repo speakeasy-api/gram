@@ -91,6 +91,7 @@ func TestGetToolUsageSummaryAttributesToConfiguredServers(t *testing.T) {
 	require.Equal(t, 2, toolUsage.calls)
 	expectedMatchers := []telemetryrepo.MCPServerMatcher{{
 		SourceID:    configured.RemoteMcpServerID.UUID.String(),
+		MCPServerID: configured.ID.String(),
 		TargetType:  telemetryrepo.ToolUsageTargetTypeHostedMCP,
 		TargetID:    configured.Slug.String,
 		TargetLabel: configured.Name.String,

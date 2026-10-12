@@ -96,7 +96,8 @@ func staffMutation(ctx context.Context, authority writeAuthority) (context.Conte
 // proposalView is the readable form of a stored preview on the approval page.
 type proposalView struct {
 	// Summary is a one-line description of the change.
-	Summary string
+	Summary        string
+	PlatformGlobal bool
 	// OrganizationID, OrganizationName and OrganizationSlug identify the target.
 	OrganizationID   string
 	OrganizationName string
@@ -225,9 +226,14 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, features *productfeatures
 	auditLogger := audit.NewLogger()
 	store := oauth.Approval.store
 	tools := newWriteTools(store, writes, oauth.Resource(), map[WriteOperation]operationWriter{ //nolint:exhaustive // Only implemented operations are listed.
-		OperationSetOrganizationFeature:    &featureWriter{store: store, mutator: productfeatures.NewMutator(features, auditLogger), writes: writes, baseURL: oauth.Resource()},
-		OperationSetOrganizationOnboarding: &onboardingWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource()},
-		OperationExtendOrganizationTrial:   &trialWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource()},
+		OperationSetOrganizationFeature:               &featureWriter{store: store, mutator: productfeatures.NewMutator(features, auditLogger), writes: writes, baseURL: oauth.Resource()},
+		OperationAssignOrganizationOnboardingPlaybook: &onboardingPlaybookWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource()},
+		OperationSetOrganizationWhitelist:             &organizationWhitelistWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource(), now: time.Now},
+		OperationExtendOrganizationTrial:              &trialWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource()},
+		OperationSetChatAnalysisSettings:              &chatAnalysisWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource(), now: time.Now},
+		OperationEnableOrganization:                   &organizationAccessWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource(), operation: OperationEnableOrganization},
+		OperationDisableOrganization:                  &organizationAccessWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource(), operation: OperationDisableOrganization},
+		OperationUpdateSupportMatrix:                  &supportMatrixWriter{store: store, writes: writes, baseURL: oauth.Resource()},
 	})
 	for _, op := range writes.EnabledOperations() {
 		if tools.writers[op] == nil {
@@ -239,6 +245,7 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, features *productfeatures
 		approvals[op] = writer
 	}
 	oauth.Approval.operations = approvals
+	runtime.writes = tools
 	registerWriteTools(runtime.server, tools)
 	return nil
 }

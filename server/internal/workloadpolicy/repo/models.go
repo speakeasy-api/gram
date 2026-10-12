@@ -30,6 +30,7 @@ type WorkloadIdentityAdmission struct {
 	Subject          string
 	MatchKind        string
 	Name             pgtype.Text
+	Tags             []string
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	DeletedAt        pgtype.Timestamptz
@@ -41,6 +42,7 @@ type WorkloadIssuer struct {
 	OrganizationID         string
 	ProjectID              uuid.NullUUID
 	Name                   string
+	Description            pgtype.Text
 	Tags                   []string
 	Issuer                 string
 	JwksUri                string

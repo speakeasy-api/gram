@@ -91,7 +91,11 @@ import { useDetectionRulesStore } from "./detection-rules-data";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
 import { Outlet } from "react-router";
-import { ACTION_OPTIONS, categoriesToPayload } from "./policy-form";
+import {
+  ACTION_OPTIONS,
+  categoriesToPayload,
+  mcpCompatibleAction,
+} from "./policy-form";
 import { useDetectorMode } from "./use-detector-mode";
 import {
   getPolicyDeleteImpactText,
@@ -1817,47 +1821,66 @@ function ActionBadge({ action }: { action: PolicyAction }): JSX.Element {
     </Badge>
   );
 }
+function actionDisabledReason(
+  action: PolicyAction,
+  flagOnlySelected: boolean,
+  mcpScoped: boolean,
+): string | undefined {
+  if (mcpScoped && (action === "warn" || action === "quarantine")) {
+    return "MCP-scoped policies support flag and block only.";
+  }
+  if (flagOnlySelected && action !== "flag") {
+    return "Destructive Tools and Destructive CLI Commands support flagging only.";
+  }
+  return undefined;
+}
 
 export function ActionPicker({
   formAction,
   setFormAction,
   flagOnlySelected = false,
+  mcpScoped = false,
   pinnedAction,
 }: {
   formAction: PolicyAction;
   setFormAction: (v: PolicyAction) => void;
   flagOnlySelected?: boolean;
+  mcpScoped?: boolean;
   /** Pins the picker to one action and shows `reason` on every other option.
    *  For policies whose action the server refuses to change at all. */
   pinnedAction?: { value: PolicyAction; reason: string };
 }): JSX.Element {
-  // Flag-only sources reject both block and warn (blocking-class); present them
-  // as flag. Mirrors validateSourceAction in server/internal/risk/impl.go.
-  const actionValue = pinnedAction
-    ? pinnedAction.value
-    : flagOnlySelected && formAction !== "flag"
-      ? "flag"
-      : formAction;
+  // A pin means the server refuses any change, so it outranks the source and
+  // scope rules.
+  const disabledReason = (action: PolicyAction): string | undefined =>
+    pinnedAction && action !== pinnedAction.value
+      ? pinnedAction.reason
+      : actionDisabledReason(action, flagOnlySelected, mcpScoped);
+
+  let actionValue = formAction;
+  if (pinnedAction) {
+    actionValue = pinnedAction.value;
+  } else if (flagOnlySelected) {
+    actionValue = "flag";
+  } else if (mcpScoped) {
+    actionValue = mcpCompatibleAction(formAction);
+  }
 
   return (
     <RadioGroup
       value={actionValue}
-      onValueChange={(v) => {
-        if (pinnedAction && v !== pinnedAction.value) {
+      onValueChange={(value) => {
+        const action = value as PolicyAction;
+        if (disabledReason(action) !== undefined) {
           return;
         }
-        if (flagOnlySelected && v !== "flag") {
-          return;
-        }
-        setFormAction(v as PolicyAction);
+        setFormAction(action);
       }}
       className="space-y-2.5"
     >
       {ACTION_OPTIONS.map((opt) => {
-        const pinnedOut =
-          pinnedAction !== undefined && opt.value !== pinnedAction.value;
-        const disabled =
-          pinnedOut || (flagOnlySelected && opt.value !== "flag");
+        const reason = disabledReason(opt.value);
+        const disabled = reason !== undefined;
         const selected = actionValue === opt.value;
 
         return (
@@ -1866,11 +1889,13 @@ export function ActionPicker({
             htmlFor={`action-${opt.value}`}
             className={cn(
               "flex items-start gap-3 border p-3.5 transition-colors",
-              disabled
-                ? "border-border cursor-not-allowed opacity-60"
-                : selected
-                  ? "border-foreground bg-muted/40 cursor-pointer"
-                  : "border-border hover:bg-muted/30 cursor-pointer",
+              disabled && "border-border cursor-not-allowed opacity-60",
+              !disabled &&
+                selected &&
+                "border-foreground bg-muted/40 cursor-pointer",
+              !disabled &&
+                !selected &&
+                "border-border hover:bg-muted/30 cursor-pointer",
             )}
           >
             <RadioGroupItem
@@ -1887,11 +1912,9 @@ export function ActionPicker({
               <div className="text-muted-foreground mt-1.5 text-xs">
                 {opt.description}
               </div>
-              {disabled && (
+              {reason && (
                 <div className="text-destructive mt-1 text-xs font-medium">
-                  {pinnedOut
-                    ? pinnedAction.reason
-                    : "Destructive Tools and Destructive CLI Commands support flagging only."}
+                  {reason}
                 </div>
               )}
             </div>

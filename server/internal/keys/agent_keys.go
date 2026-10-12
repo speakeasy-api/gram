@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -241,6 +242,9 @@ func (s *Service) prepareAgentKey(ctx context.Context, agentIDRaw, name string, 
 			return preparedAgentKey{}, oops.E(oops.CodeBadRequest, runtimepolicy.ErrInvalidDelegatedPolicy, "delegated grants must use allow effect")
 		}
 		requested = append(requested, authz.NewGrantWithSelector(authz.Scope(form.Scope), selectorFromForm(form.Selector)))
+	}
+	if !slices.ContainsFunc(requested, func(grant authz.Grant) bool { return !authz.IsBlocklistScope(grant.Scope) }) {
+		return preparedAgentKey{}, oops.E(oops.CodeBadRequest, runtimepolicy.ErrInvalidDelegatedPolicy, "agent keys require at least one allowed grant")
 	}
 	version := runtimepolicy.DelegatedPolicyVersion(versionRaw)
 	policy, err := runtimepolicy.NewDelegatedPolicy(version, requested)

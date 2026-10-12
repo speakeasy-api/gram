@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/publish_outbox"
-	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -159,10 +158,14 @@ func seedOrg(t *testing.T, conn *pgxpool.Pool) string {
 	t.Helper()
 
 	orgID := uuid.NewString()
-	_, err := orgsrepo.New(conn).UpsertOrganizationMetadata(t.Context(), orgsrepo.UpsertOrganizationMetadataParams{
-		ID:   orgID,
-		Name: orgID,
-		Slug: orgID,
+	// Relay tests seed only their subject messages, not organization bootstrap work.
+	err := testrepo.New(conn).CreateOrganizationMetadataFixture(t.Context(), testrepo.CreateOrganizationMetadataFixtureParams{
+		GramAccountType:    "free",
+		FreeTrialStartedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		FreeTrialEndsAt:    pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true},
+		ID:                 orgID,
+		Name:               orgID,
+		Slug:               orgID,
 	})
 	require.NoError(t, err)
 

@@ -29,6 +29,10 @@ type memoryStore struct {
 	loadErr  error
 }
 
+func (s *memoryStore) ResolveConversation(_ context.Context, config Config, frame Frame) (uuid.UUID, string, error) {
+	return conversationID(config, frame), conversationOutcomeSession, nil
+}
+
 func (s *memoryStore) ResolveActor(_ context.Context, _ Config, _ Frame) (string, error) {
 	return s.userID, nil
 }
@@ -381,4 +385,14 @@ func TestServiceReservesCheckpointAndResponseHeadroom(t *testing.T) {
 			})
 		})
 	}
+}
+
+func TestMetricApplicationIsBounded(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "claude-chat-web", metricApplication("claude-ai"))
+	require.Equal(t, "claude-code-web", metricApplication("claude-code"))
+	require.Equal(t, "claude-design", metricApplication("claude-design"))
+	require.Equal(t, "anthropic-inference", metricApplication(""))
+	require.Equal(t, "other", metricApplication("some-future-product"))
+	require.Equal(t, "anthropic-inference", metricApplication("  "), "whitespace trims to the absent application")
 }

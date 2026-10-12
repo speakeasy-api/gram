@@ -38,7 +38,7 @@ var (
 
 	// ModelUsageSourceRiskAnalysis tags the platform's own risk-policy
 	// analysis inference (risk judge, prompt-injection scanner) — the
-	// textbook case of tokens Gram spends REACTING to observed traffic, so
+	// textbook case of tokens Speakeasy spends REACTING to observed traffic, so
 	// it must never count as tokens under management.
 	//
 	// Callers tagging gram or risk-analysis (platform-initiated inference)
@@ -53,7 +53,7 @@ var (
 
 // ModelUsageSourceAssistants tags assistants completions in telemetry but is
 // deliberately NOT registered above so it is not a customer-configurable model
-// key slot. It is still Gram-spent inference, so GramHostedHookSourceStrings
+// key slot. It is still Speakeasy-spent inference, so GramHostedHookSourceStrings
 // appends it to the TUM exclusion list explicitly.
 const (
 	ModelUsageSourceAssistants ModelUsageSource = "assistants"
@@ -102,21 +102,21 @@ func ModelUsageSourceStrings() []string {
 	return out
 }
 
-// GramHostedHookSourceStrings lists every hook_source value Gram-server-run
+// GramHostedHookSourceStrings lists every hook_source value Speakeasy-server-run
 // completions are tagged with: the registered surfaces, the internal assistants
-// and skill-efficacy tags, and the empty string for rows recorded before Gram
+// and skill-efficacy tags, and the empty string for rows recorded before Speakeasy
 // completions were tagged (observed agent traffic is always tagged at ingest —
-// claude-code, cursor, codex — so an untagged row can only be Gram-era history). This is
+// claude-code, cursor, codex — so an untagged row can only be Speakeasy-era history). This is
 // the tokens-under-management EXCLUSION list — billing counts observed agent
-// traffic, and everything Gram itself spends (reactive scanning inference
+// traffic, and everything Speakeasy itself spends (reactive scanning inference
 // and user-initiated hosted chat alike) is out of scope.
 func GramHostedHookSourceStrings() []string {
 	return append(GramHostedHookSourceNames(), "")
 }
 
-// GramHostedHookSourceNames lists only the NAMED Gram-hosted hook_source
+// GramHostedHookSourceNames lists only the NAMED Speakeasy-hosted hook_source
 // values, without the empty-string entry. Raw telemetry_logs readers must use
-// this variant: on the summaries an untagged row can only be Gram-era
+// this variant: on the summaries an untagged row can only be Speakeasy-era
 // history, but raw logs legitimately carry an empty hook_source on hook, tool
 // call, and import rows, and excluding the empty string there would drop real usage.
 func GramHostedHookSourceNames() []string {

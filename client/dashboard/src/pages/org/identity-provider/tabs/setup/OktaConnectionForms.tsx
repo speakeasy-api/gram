@@ -3,15 +3,21 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { ApiErrorAlert } from "@/components/api-error-alert";
+import { describeApiError } from "@/lib/api-error";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/Field";
+import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Input } from "@/components/ui/Input";
 import { SettingsSection } from "@/components/page-templates";
+import { Text } from "@/components/ui/Text";
 import type { OktaIdentityProviderConnection } from "@gram/client/models/components/oktaidentityproviderconnection.js";
 import { useCreateIdentityProviderConnectionMutation } from "@gram/client/react-query/createIdentityProviderConnection.js";
+import { useSetIdentityProviderConnectionSetupMethodMutation } from "@gram/client/react-query/setIdentityProviderConnectionSetupMethod.js";
 import { useRecordIdentityProviderConnectionAgentMutation } from "@gram/client/react-query/recordIdentityProviderConnectionAgent.js";
 import { useSubmitIdentityProviderConnectionClientIdMutation } from "@gram/client/react-query/submitIdentityProviderConnectionClientId.js";
 
+import { usesClientSecret } from "../../connectionView";
 import {
   inlineError,
   invalidateIdentityProviderQueries,
@@ -23,6 +29,20 @@ import {
   CLIENT_ID_SECTION_ID,
   scrollToConnectionCard,
 } from "../../tabs";
+
+type ListingMode = "custom_app" | "oin";
+
+const DEFAULT_LISTING_MODE: ListingMode = "oin";
+
+/** The one create failure a custom API Services app resolves: discovery found no client-secret authentication. */
+function clientSecretUnsupported(error: unknown): boolean {
+  return (
+    error != null &&
+    describeApiError(error).message.includes(
+      "does not advertise client_secret_basic",
+    )
+  );
+}
 
 export function CreateConnectionForm(): JSX.Element {
   const queryClient = useQueryClient();
@@ -36,15 +56,19 @@ export function CreateConnectionForm(): JSX.Element {
   });
   const trimmed = orgUrl.trim();
   const normalizedOrgUrl = normalizeOktaOrgUrl(trimmed);
+  const invalid = trimmed !== "" && normalizedOrgUrl === undefined;
 
-  const createConnection = () => {
+  const createConnection = (
+    listingMode: ListingMode = DEFAULT_LISTING_MODE,
+  ) => {
     if (create.isPending || normalizedOrgUrl === undefined) return;
+    setOrgUrl(normalizedOrgUrl);
     create.mutate({
       security: SESSION_SECURITY,
       request: {
         createIdentityProviderConnectionRequestBody: {
           orgUrl: normalizedOrgUrl,
-          listingMode: "custom_app",
+          listingMode,
         },
       },
     });
@@ -71,57 +95,200 @@ export function CreateConnectionForm(): JSX.Element {
             <Input
               id="okta-org-url"
               disabled={create.isPending}
-              onEnter={createConnection}
+              onEnter={() => createConnection()}
               inputMode="url"
               autoCapitalize="none"
-              aria-invalid={trimmed !== "" && normalizedOrgUrl === undefined}
+              aria-invalid={invalid}
               aria-describedby={
-                trimmed !== "" && normalizedOrgUrl === undefined
+                invalid
                   ? "okta-org-url-help okta-org-url-error"
                   : "okta-org-url-help"
               }
               value={orgUrl}
               onChange={setOrgUrl}
+              onBlur={() => {
+                if (normalizedOrgUrl !== undefined) setOrgUrl(normalizedOrgUrl);
+              }}
               placeholder="https://example.okta.com"
               className="font-mono"
               autoComplete="off"
               spellCheck={false}
-              error={trimmed !== "" && normalizedOrgUrl === undefined}
+              error={invalid}
             />
             <FieldDescription id="okta-org-url-help">
               Use your organization’s address starting with https:// and ending
-              in .okta.com, .oktapreview.com, .okta-emea.com, or .okta.mil. Do
-              not include a page address after the domain.
+              in .okta.com, .oktapreview.com, .okta-emea.com, or .okta.mil. You
+              can also paste your Okta Admin Console address.
             </FieldDescription>
-            {trimmed !== "" && normalizedOrgUrl === undefined && (
+            {invalid && (
               <p
                 id="okta-org-url-error"
                 role="alert"
                 className="text-destructive text-sm"
               >
-                Enter an HTTPS Okta organization URL, such as
-                https://example.okta.com, with nothing after the domain.
+                Enter an HTTPS Okta organization or Admin Console URL, such as
+                https://example.okta.com.
               </p>
             )}
           </Field>
           <ApiErrorAlert error={create.error} />
+          {clientSecretUnsupported(create.error) && (
+            <div className="flex flex-col items-start gap-2">
+              <Text muted small>
+                This Okta organization does not offer client-secret
+                authentication, so the Okta Integration Network install cannot
+                connect. Use a custom API Services app instead.
+              </Text>
+              <Button
+                variant="secondary"
+                disabled={normalizedOrgUrl === undefined || create.isPending}
+                onClick={() => createConnection("custom_app")}
+              >
+                Continue with a custom API Services app
+              </Button>
+            </div>
+          )}
         </SettingsSection.Body>
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>
             You’ll need Okta admin access to create the app and grant the
-            required permissions (called scopes in Okta).
+            required scopes in Okta.
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <Button
               disabled={normalizedOrgUrl === undefined || create.isPending}
-              onClick={createConnection}
+              onClick={() => createConnection()}
             >
-              {create.isPending ? "Creating..." : "Create connection"}
+              {create.isPending ? "Creating..." : "Continue"}
             </Button>
           </SettingsSection.FooterActions>
         </SettingsSection.Footer>
       </SettingsSection.Panel>
     </SettingsSection>
+  );
+}
+
+/** Picks how the pending connection connects to Okta; switching is allowed until the client ID is submitted. */
+export function SetupMethodChooser({
+  connection,
+}: {
+  connection: OktaIdentityProviderConnection;
+}): JSX.Element {
+  const queryClient = useQueryClient();
+  const current: ListingMode = usesClientSecret(connection)
+    ? "oin"
+    : "custom_app";
+  const setMethod = useSetIdentityProviderConnectionSetupMethodMutation({
+    onSuccess: () => void invalidateIdentityProviderQueries(queryClient),
+    onError: inlineError,
+  });
+
+  const switchTo = (next: ListingMode) => {
+    if (setMethod.isPending || next === current) return;
+    setMethod.mutate({
+      security: SESSION_SECURITY,
+      request: {
+        setIdentityProviderConnectionSetupMethodRequestBody: {
+          id: connection.id,
+          listingMode: next,
+        },
+      },
+    });
+  };
+
+  return (
+    <SettingsSection>
+      <SettingsSection.Header>
+        <SettingsSection.Title>
+          Choose how to set up the Okta app
+        </SettingsSection.Title>
+        <SettingsSection.Description>
+          The steps below follow your choice. You can switch until you enter the
+          app’s client ID.
+        </SettingsSection.Description>
+      </SettingsSection.Header>
+      <SettingsSection.Panel>
+        <SettingsSection.Body>
+          <RadioCardGroup
+            size="sm"
+            className="max-w-xl"
+            value={current}
+            onValueChange={(value) =>
+              switchTo(value === "oin" ? "oin" : "custom_app")
+            }
+            disabled={setMethod.isPending}
+            aria-label="Installation method"
+          >
+            <RadioCard
+              value="oin"
+              title={
+                <span className="flex items-center gap-2">
+                  Okta Integration Network (client secret)
+                  <Badge variant="success" size="sm">
+                    Recommended
+                  </Badge>
+                </span>
+              }
+            >
+              <Text muted small>
+                Install the Speakeasy integration from the Okta catalog and
+                paste its client ID and client secret.
+              </Text>
+            </RadioCard>
+            <RadioCard
+              value="custom_app"
+              title="Custom API Services app (private key)"
+            >
+              <Text muted small>
+                Create an API Services app in Okta that signs in with a private
+                key Speakeasy holds.
+              </Text>
+            </RadioCard>
+          </RadioCardGroup>
+          <ApiErrorAlert error={setMethod.error} />
+        </SettingsSection.Body>
+      </SettingsSection.Panel>
+    </SettingsSection>
+  );
+}
+
+/** Write-only: the saved secret is never read back, so the field always starts empty. */
+export function ClientSecretField({
+  id = "okta-client-secret",
+  value,
+  onChange,
+  disabled,
+  onEnter,
+  replacement = false,
+}: {
+  id?: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+  onEnter: () => void;
+  replacement?: boolean;
+}): JSX.Element {
+  return (
+    <Field className="max-w-xl">
+      <FieldLabel htmlFor={id}>
+        {replacement ? "New client secret" : "Client secret"}
+      </FieldLabel>
+      <Input
+        id={id}
+        type="password"
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        onEnter={onEnter}
+        autoComplete="new-password"
+        spellCheck={false}
+        aria-describedby={`${id}-help`}
+      />
+      <FieldDescription id={`${id}-help`}>
+        Copy the client secret from the Speakeasy integration in Okta. It is
+        encrypted when saved and never displayed again.
+      </FieldDescription>
+    </Field>
   );
 }
 
@@ -132,13 +299,19 @@ export function ClientIdForm({
 }): JSX.Element {
   const queryClient = useQueryClient();
   const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const secretMode = usesClientSecret(connection);
   const submit = useSubmitIdentityProviderConnectionClientIdMutation({
+    // The request variables can carry the plaintext secret; reset clears them.
+    gcTime: 0,
     onSuccess: (updated) => {
+      submit.reset();
+      setClientSecret("");
       if (updated.status === "verified") {
         toast.success("Connection verified");
       } else {
         toast.warning(
-          "Client ID saved. Review the verification results below.",
+          "Credentials saved. Review the verification results below.",
         );
       }
       void invalidateIdentityProviderQueries(queryClient).then(
@@ -151,13 +324,19 @@ export function ClientIdForm({
   const validClientId = /^0oa[A-Za-z0-9]{17,}$/.test(trimmed);
   const showClientIdError = trimmed !== "" && !validClientId;
   const submitClientId = () => {
-    if (!validClientId || submit.isPending) return;
+    if (
+      !validClientId ||
+      (secretMode && !clientSecret.trim()) ||
+      submit.isPending
+    )
+      return;
     submit.mutate({
       security: SESSION_SECURITY,
       request: {
         submitIdentityProviderConnectionClientIDRequestBody: {
           id: connection.id,
           clientId: trimmed,
+          ...(secretMode ? { clientSecret } : {}),
         },
       },
     });
@@ -186,9 +365,10 @@ export function ClientIdForm({
           spellCheck={false}
         />
         <FieldDescription id="okta-client-id-help">
-          Use the API Services app&apos;s client ID, not the single sign-on
-          (SSO) app or AI agent ID. You can save this ID only once. To change
-          it, revoke this connection and connect again.
+          Use the {secretMode ? "Speakeasy integration" : "API Services app"}
+          &apos;s client ID, not the single sign-on (SSO) app or AI agent ID.
+          You can save this ID only once. To change it, revoke this connection
+          and connect again.
         </FieldDescription>
         {showClientIdError && (
           <p
@@ -201,10 +381,27 @@ export function ClientIdForm({
           </p>
         )}
       </Field>
-      <ApiErrorAlert error={submit.error} />
+      {secretMode && (
+        <ClientSecretField
+          value={clientSecret}
+          onChange={setClientSecret}
+          disabled={submit.isPending}
+          onEnter={submitClientId}
+        />
+      )}
+      {secretMode && submit.error && (
+        <p role="alert" className="text-destructive text-sm">
+          Unable to save credentials. Check the Okta app settings and try again.
+        </p>
+      )}
+      {!secretMode && <ApiErrorAlert error={submit.error} />}
       <div>
         <Button
-          disabled={!validClientId || submit.isPending}
+          disabled={
+            !validClientId ||
+            (secretMode && !clientSecret.trim()) ||
+            submit.isPending
+          }
           onClick={submitClientId}
         >
           {submit.isPending ? "Verifying..." : "Submit and verify"}
@@ -288,10 +485,11 @@ export function AgentSetupForm({
       <ApiErrorAlert error={record.error} />
       <FieldDescription id="okta-agent-help">
         The agent ID is the wlp... value in the Okta agent page URL, and it
-        drives the deep links on the Cross App Access tab. The bound application
-        ID is the Client ID of the app Okta created with the agent; with it,
-        Speakeasy can check that app after each applications sync. Okta does not
-        expose either through its API. Leave a field empty to clear it.
+        drives the Okta deep links in the Server connections table below. The
+        bound application ID is the 0oa... value in the page URL of the app Okta
+        created with the agent, not its Client ID; with it, Speakeasy can check
+        that app after each applications sync. Okta does not expose either
+        through its API. Leave a field empty to clear it.
       </FieldDescription>
       <a
         href="https://help.okta.com/oie/en-us/content/topics/ai-agents/ai-agent-add-manually.htm"

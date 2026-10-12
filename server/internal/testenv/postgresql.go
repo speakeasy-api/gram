@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -27,17 +26,15 @@ func nextPostgresCloneSuffix() string {
 	return fmt.Sprintf("%d", uuid.New().ID())
 }
 
-func rootPath(elem ...string) string {
-	_, thisFile, _, _ := runtime.Caller(0)
-	serverDir := filepath.Join(filepath.Dir(thisFile), "..", "..")
-	return filepath.Join(append([]string{serverDir}, elem...)...)
-}
-
 // NewTestPostgres creates a new Postgres container with a template database built
 // from a SQL init script. A reference to the container is returned as well as
 // a function to create test databases from the template. All clone databases
 // are automatically dropped when the test ends using t.Cleanup hooks.
 func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, PostgresDBCloneFunc, error) {
+	root, err := FindRepoRoot(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("locate Postgres test schema: %w", err)
+	}
 	if err := ensureDockerReady(ctx); err != nil {
 		return nil, nil, fmt.Errorf("wait for docker: %w", err)
 	}
@@ -48,7 +45,7 @@ func NewTestPostgres(ctx context.Context) (*postgres.PostgresContainer, Postgres
 		postgres.WithUsername("gotest"),
 		postgres.WithPassword("gotest"),
 		postgres.WithDatabase("gotestdb"),
-		postgres.WithInitScripts(rootPath("database", "schema.sql")),
+		postgres.WithInitScripts(filepath.Join(root, "server", "database", "schema.sql")),
 		testcontainers.WithWaitStrategy(
 			// The log appears twice because postgres restarts itself after
 			// the init-script bootstrap run.

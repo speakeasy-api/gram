@@ -108,6 +108,7 @@ async function $do(
 
   const query = encodeFormQuery({
     "from": payload?.from,
+    "mcp_server_id": payload?.mcp_server_id,
     "to": payload?.to,
   });
 

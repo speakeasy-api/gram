@@ -31,8 +31,9 @@ func TestNormalizeAndValidateMCPScope(t *testing.T) {
 		MCPServerID: serverID,
 		Tools:       []string{"read", "write"},
 	}}, scope.Servers)
-	require.NoError(t, ValidateMCPScopeOwnership(scope, []uuid.UUID{serverID}))
-	require.Error(t, ValidateMCPScopeOwnership(scope, nil))
+	require.NoError(t, ValidateMCPScopeOwnership(scope, []uuid.UUID{serverID}, nil))
+	require.NoError(t, ValidateMCPScopeOwnership(scope, nil, []uuid.UUID{serverID}))
+	require.Error(t, ValidateMCPScopeOwnership(scope, nil, nil))
 
 	allServers, err := NormalizeMCPScope(&MCPScopeInput{
 		AllServers:      true,
@@ -106,6 +107,24 @@ func TestValidateMCPScopeSources(t *testing.T) {
 		t,
 		ValidateMCPScopeSources(scope, []string{shadowmcp.SourceShadowMCP}),
 		`source "shadow_mcp" cannot be used by an MCP-scoped policy`,
+	)
+}
+func TestValidateMCPScopeAction(t *testing.T) {
+	t.Parallel()
+
+	scope := &MCPScope{AllServers: true}
+	require.NoError(t, ValidateMCPScope(nil, nil, "warn"))
+	require.NoError(t, ValidateMCPScope(scope, nil, "flag"))
+	require.NoError(t, ValidateMCPScope(scope, nil, "block"))
+	require.EqualError(
+		t,
+		ValidateMCPScope(scope, nil, "warn"),
+		`action "warn" cannot be used by an MCP-scoped policy; use flag or block`,
+	)
+	require.EqualError(
+		t,
+		ValidateMCPScope(scope, nil, "quarantine"),
+		`action "quarantine" cannot be used by an MCP-scoped policy; use flag or block`,
 	)
 }
 

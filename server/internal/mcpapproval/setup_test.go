@@ -390,7 +390,7 @@ func (p *testProbes) ListToolDeclarations(_ context.Context, _ string) ([]capabi
 	return nil, nil
 }
 
-func (p *testProbes) Lookup(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
+func (p *testProbes) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
 	if p.fail {
 		return nil, errors.New("catalog unreachable")
 	}

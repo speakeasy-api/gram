@@ -101,6 +101,7 @@ func TestNoop_MetricsCountUnsampledScansWithBoundedDimensions(t *testing.T) {
 		attrs := attribute.NewSet(
 			attribute.String("gram.mcp.risk.scan.surface", seam.surface),
 			attribute.String("gram.mcp.risk.scan.method", seam.method),
+			attribute.String("gram.mcp.risk.scan.phase", mcpriskscan.PhaseRequest),
 			attribute.String("gram.mcp.risk.scan.decision", "allow"),
 		)
 		wantCounts[attrs] = 2
@@ -135,7 +136,7 @@ func TestNoop_MetricsCountUnsampledScansWithBoundedDimensions(t *testing.T) {
 	for _, point := range scans.DataPoints {
 		counts[point.Attributes] = point.Value
 	}
-	require.Equal(t, wantCounts, counts, "phase, identifiers, principal and payload must not create metric series")
+	require.Equal(t, wantCounts, counts, "identifiers, principal and payload must not create metric series")
 
 	duration, ok := collected["mcp.risk.scan.duration"].Data.(metricdata.Histogram[float64])
 	require.True(t, ok, "scan duration must be a seconds histogram")

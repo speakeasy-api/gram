@@ -9,7 +9,14 @@ import (
 
 func watchdogAlertTestParams() RiskSignalWindowParams {
 	from := time.Date(2026, 1, 1, 0, 0, 0, 123456789, time.FixedZone("test-offset", 3600))
-	return RiskSignalWindowParams{OrganizationID: "org-test", ProjectID: "project-test", From: from, To: from.Add(time.Hour), WideFrom: from.Add(-time.Hour)}
+	return RiskSignalWindowParams{
+		OrganizationID: "org-test",
+		ProjectID:      "project-test",
+		MCPServerID:    "",
+		WideFrom:       from.Add(-time.Hour),
+		From:           from,
+		To:             from.Add(time.Hour),
+	}
 }
 
 func TestWatchdogAlertsQuery(t *testing.T) {

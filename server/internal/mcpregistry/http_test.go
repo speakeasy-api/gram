@@ -58,7 +58,7 @@ func TestDiscoveryMountDisabledAndFailClosed(t *testing.T) {
 	m.ServeHTTP(w, httptest.NewRequest("GET", "/v0.1/servers", nil))
 	require.Equal(t, 404, w.Code)
 	require.EqualError(t, s.AttachDiscovery(ctx, nil, m, true, nil, nil), "registry discovery authorization unavailable")
-	_, err := db.Exec(ctx, "DROP TABLE mcp_registry_entries") //nolint:glint // notestingrawsql: drop only this test database table to exercise readiness failure.
+	_, err := db.Exec(ctx, "DROP TABLE mcp_registry_entries CASCADE") //nolint:glint // notestingrawsql: drop only this test database table to exercise readiness failure.
 	require.NoError(t, err)
 	// Admission only checks that auth dependencies exist; no request is authenticated here.
 	err = s.AttachDiscovery(ctx, nil, m, true, &auth.Auth{}, &authz.Engine{})

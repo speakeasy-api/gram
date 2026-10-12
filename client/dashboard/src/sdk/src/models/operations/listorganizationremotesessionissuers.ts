@@ -5,6 +5,7 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import {
   ListOrganizationRemoteSessionIssuersResult,
@@ -17,6 +18,19 @@ export type ListOrganizationRemoteSessionIssuersSecurity = {
   apikeyHeaderGramKey?: string | undefined;
 };
 
+/**
+ * Only issuers from one tier: organizational (organization), project-specific (project), or from the platform catalog (platform). Omitted lists all three.
+ */
+export const Tier = {
+  Organization: "organization",
+  Project: "project",
+  Platform: "platform",
+} as const;
+/**
+ * Only issuers from one tier: organizational (organization), project-specific (project), or from the platform catalog (platform). Omitted lists all three.
+ */
+export type Tier = ClosedEnum<typeof Tier>;
+
 export type ListOrganizationRemoteSessionIssuersRequest = {
   /**
    * Pagination cursor.
@@ -26,6 +40,10 @@ export type ListOrganizationRemoteSessionIssuersRequest = {
    * Page size (default 50, max 100).
    */
   limit?: number | undefined;
+  /**
+   * Only issuers from one tier: organizational (organization), project-specific (project), or from the platform catalog (platform). Omitted lists all three.
+   */
+  tier?: Tier | undefined;
   /**
    * Session header
    */
@@ -76,9 +94,13 @@ export function listOrganizationRemoteSessionIssuersSecurityToJSON(
 }
 
 /** @internal */
+export const Tier$outboundSchema: z.ZodMiniEnum<typeof Tier> = z.enum(Tier);
+
+/** @internal */
 export type ListOrganizationRemoteSessionIssuersRequest$Outbound = {
   cursor?: string | undefined;
   limit?: number | undefined;
+  tier?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
 };
@@ -92,6 +114,7 @@ export const ListOrganizationRemoteSessionIssuersRequest$outboundSchema:
     z.object({
       cursor: z.optional(z.string()),
       limit: z.optional(z.int()),
+      tier: z.optional(Tier$outboundSchema),
       gramSession: z.optional(z.string()),
       gramKey: z.optional(z.string()),
     }),

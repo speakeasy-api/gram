@@ -15,6 +15,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	extcredrepo "github.com/speakeasy-api/gram/server/internal/externalcredentials/repo"
 	extkeysrepo "github.com/speakeasy-api/gram/server/internal/externalkeys/repo"
@@ -95,16 +96,16 @@ func TestProvisionClient_CreatesManagedRows(t *testing.T) {
 	require.Equal(t, string(remotesessions.TokenEndpointAuthMethodPrivateKeyJWT), rsc.TokenEndpointAuthMethod.String)
 	require.Equal(t, string(remotesessions.TokenEndpointAuthAudienceTokenEndpoint), rsc.TokenEndpointAuthAudienceFormat.String)
 	require.Equal(t, fx.ConnectionID, rsc.IdentityProviderConnectionID.UUID)
-	require.Equal(t, client.JSONWebKeySetID, rsc.JsonWebKeySetID.UUID)
+	require.Equal(t, client.JSONWebKeySetID.UUID, rsc.JsonWebKeySetID.UUID)
 	require.False(t, rsc.ClientSecretEncrypted.Valid, "a private_key_jwt client carries no secret")
 
-	set, err := jwksrepo.New(ti.conn).GetJsonWebKeySet(ctx, jwksrepo.GetJsonWebKeySetParams{ID: client.JSONWebKeySetID, OrganizationID: ti.orgID})
+	set, err := jwksrepo.New(ti.conn).GetJsonWebKeySet(ctx, jwksrepo.GetJsonWebKeySetParams{ID: client.JSONWebKeySetID.UUID, OrganizationID: ti.orgID})
 	require.NoError(t, err)
 	require.Equal(t, fx.ConnectionID, set.IdentityProviderConnectionID.UUID)
-	require.Equal(t, client.ExternalKeyID, set.ExternalKeyID)
+	require.Equal(t, client.ExternalKeyID.UUID, set.ExternalKeyID)
 	require.Equal(t, "Okta connection "+fx.ConnectionID.String()+" keys", set.Name)
 
-	key, err := extkeysrepo.New(ti.conn).GetGcpKmsKey(ctx, extkeysrepo.GetGcpKmsKeyParams{ID: client.ExternalKeyID, OrganizationID: conv.ToPGText(ti.orgID)})
+	key, err := extkeysrepo.New(ti.conn).GetGcpKmsKey(ctx, extkeysrepo.GetGcpKmsKeyParams{ID: client.ExternalKeyID.UUID, OrganizationID: conv.ToPGText(ti.orgID)})
 	require.NoError(t, err)
 	require.Equal(t, fx.ConnectionID, key.ExternalKey.IdentityProviderConnectionID.UUID)
 	require.Equal(t, fx.CredentialID, key.ExternalKey.ExternalCredentialID, "the backing credential is the platform-tier one")
@@ -139,6 +140,13 @@ func TestProvisionClient_AuditsAsSystem(t *testing.T) {
 		{"system:identity-provider-connections", "json_web_key:publish"},
 		{"system:identity-provider-connections", "remote-session-client:create"},
 	}, auditActions(t, ctx, ti.conn, ti.orgID))
+
+	entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionRemoteSessionClientCreate)
+	require.NoError(t, err)
+	snapshot, err := audittest.DecodeAuditData(entry.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, entry.SubjectID, snapshot["ID"])
+	require.Equal(t, "subject", snapshot["CredentialOwner"])
 }
 
 // A second run for the same connection adopts the first run's rows rather than
@@ -378,7 +386,7 @@ func TestMintPath_AdmitsPlatformCredentialOnlyForManagedKeys(t *testing.T) {
 
 	q := jwksrepo.New(ti.conn)
 
-	managed, err := q.GetExternalKeyForMint(ctx, jwksrepo.GetExternalKeyForMintParams{ID: fx.Client.ExternalKeyID, OrganizationID: conv.ToPGText(ti.orgID)})
+	managed, err := q.GetExternalKeyForMint(ctx, jwksrepo.GetExternalKeyForMintParams{ID: fx.Client.ExternalKeyID.UUID, OrganizationID: conv.ToPGText(ti.orgID)})
 	require.NoError(t, err)
 	require.True(t, managed.CredentialID.Valid, "a managed key reaches the platform credential")
 	require.Equal(t, fx.CredentialID, managed.CredentialID.UUID)
@@ -426,11 +434,11 @@ func TestRotateClient_OverlapsThenRevokes(t *testing.T) {
 	require.Len(t, publishedKids(t, docBefore.Document), 2, "pending key is committed and publicly visible")
 	current, err := repo.New(ti.conn).GetManagedClient(ctx, repo.GetManagedClientParams{OrganizationID: conv.ToPGText(ti.orgID), IdentityProviderConnectionID: conv.ToNullUUID(connectionID)})
 	require.NoError(t, err)
-	require.Equal(t, before.ExternalKeyID, current.ExternalKeyID, "publication must not change the signer")
+	require.Equal(t, before.ExternalKeyID.UUID, current.ExternalKeyID.UUID, "publication must not change the signer")
 	// Stay inside the database-clock cache window, then cross its boundary
 	// below without advancing any application clock.
 	err = repo.New(ti.conn).BackdatePendingRotationPublication(ctx, repo.BackdatePendingRotationPublicationParams{
-		JsonWebKeySetID: before.JSONWebKeySetID,
+		JsonWebKeySetID: before.JSONWebKeySetID.UUID,
 		OrganizationID:  ti.orgID,
 		AgeSeconds:      int32(identityproviderconnections.ManagedJWKSCacheTTL/time.Second) - 30,
 	})
@@ -439,7 +447,7 @@ func TestRotateClient_OverlapsThenRevokes(t *testing.T) {
 	require.ErrorAs(t, err, &pending)
 	require.Len(t, rotatingKMS.Created(), 1, "retry must reuse the published pending key")
 	err = repo.New(ti.conn).BackdatePendingRotationPublication(ctx, repo.BackdatePendingRotationPublicationParams{
-		JsonWebKeySetID: before.JSONWebKeySetID,
+		JsonWebKeySetID: before.JSONWebKeySetID.UUID,
 		OrganizationID:  ti.orgID,
 		AgeSeconds:      int32(identityproviderconnections.ManagedJWKSCacheTTL / time.Second),
 	})
@@ -448,13 +456,13 @@ func TestRotateClient_OverlapsThenRevokes(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, before.ClientRowID, after.ClientRowID)
-	require.Equal(t, before.JSONWebKeySetID, after.JSONWebKeySetID)
+	require.Equal(t, before.JSONWebKeySetID.UUID, after.JSONWebKeySetID.UUID)
 	require.NotEqual(t, before.ActiveKid, after.ActiveKid)
-	require.NotEqual(t, before.ExternalKeyID, after.ExternalKeyID, "the set now backs onto the new external key")
+	require.NotEqual(t, before.ExternalKeyID.UUID, after.ExternalKeyID.UUID, "the set now backs onto the new external key")
 	require.Len(t, rotatingKMS.Created(), 1)
 	require.Empty(t, rotatingKMS.Disabled())
 
-	newKey, err := extkeysrepo.New(ti.conn).GetGcpKmsKey(ctx, extkeysrepo.GetGcpKmsKeyParams{ID: after.ExternalKeyID, OrganizationID: conv.ToPGText(ti.orgID)})
+	newKey, err := extkeysrepo.New(ti.conn).GetGcpKmsKey(ctx, extkeysrepo.GetGcpKmsKeyParams{ID: after.ExternalKeyID.UUID, OrganizationID: conv.ToPGText(ti.orgID)})
 	require.NoError(t, err)
 	require.Equal(t, connectionID, newKey.ExternalKey.IdentityProviderConnectionID.UUID)
 	require.Equal(t, rotatingKMS.Created()[0], newKey.GcpKmsKey.ResourceName)
@@ -469,7 +477,7 @@ func TestRotateClient_OverlapsThenRevokes(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{before.ActiveKid, after.ActiveKid}, publishedKids(t, doc.Document), "old key still verifies during overlap")
 
-	keys, err := jwksrepo.New(ti.conn).ListJsonWebKeys(ctx, jwksrepo.ListJsonWebKeysParams{JsonWebKeySetID: after.JSONWebKeySetID, OrganizationID: ti.orgID, IncludeRevoked: false})
+	keys, err := jwksrepo.New(ti.conn).ListJsonWebKeys(ctx, jwksrepo.ListJsonWebKeysParams{JsonWebKeySetID: after.JSONWebKeySetID.UUID, OrganizationID: ti.orgID, IncludeRevoked: false})
 	require.NoError(t, err)
 	states := map[string]string{}
 	for _, key := range keys {
@@ -481,7 +489,7 @@ func TestRotateClient_OverlapsThenRevokes(t *testing.T) {
 	retried, err := rotator.RotateClient(ctx, params)
 	require.NoError(t, err)
 	require.Equal(t, after.ActiveKid, retried.ActiveKid)
-	require.Equal(t, after.ExternalKeyID, retried.ExternalKeyID)
+	require.Equal(t, after.ExternalKeyID.UUID, retried.ExternalKeyID.UUID)
 	require.Len(t, rotatingKMS.Created(), 1)
 
 	revoked, err := rotator.RevokeClient(ctx, ti.orgID, connectionID)
@@ -571,7 +579,7 @@ func TestRevokeClient_ServesEmptyKeySet(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, fx.Client.JSONWebKeySetURL, url, "the JWKS URL survives revocation")
 
-	keys, err := jwksrepo.New(ti.conn).ListJsonWebKeys(ctx, jwksrepo.ListJsonWebKeysParams{JsonWebKeySetID: fx.Client.JSONWebKeySetID, OrganizationID: ti.orgID, IncludeRevoked: true})
+	keys, err := jwksrepo.New(ti.conn).ListJsonWebKeys(ctx, jwksrepo.ListJsonWebKeysParams{JsonWebKeySetID: fx.Client.JSONWebKeySetID.UUID, OrganizationID: ti.orgID, IncludeRevoked: true})
 	require.NoError(t, err)
 	require.Len(t, keys, 1)
 	require.Equal(t, "revoked", keys[0].State)
@@ -746,7 +754,7 @@ func TestRotateClient_RefusesCredentialMutatedUnderLock(t *testing.T) {
 	require.Len(t, kms.Created(), 1)
 	require.Equal(t, kms.Created(), kms.Disabled())
 
-	keys, err := jwksrepo.New(ti.conn).ListJsonWebKeys(ctx, jwksrepo.ListJsonWebKeysParams{JsonWebKeySetID: before.JSONWebKeySetID, OrganizationID: ti.orgID, IncludeRevoked: true})
+	keys, err := jwksrepo.New(ti.conn).ListJsonWebKeys(ctx, jwksrepo.ListJsonWebKeysParams{JsonWebKeySetID: before.JSONWebKeySetID.UUID, OrganizationID: ti.orgID, IncludeRevoked: true})
 	require.NoError(t, err)
 	require.Len(t, keys, 1, "no pending key was published")
 }
@@ -759,11 +767,11 @@ func TestProvisionClient_MarksEveryRow(t *testing.T) {
 	issuerID := createIssuer(t, ctx, ti.conn, ti.orgID, noProject, tokenEndpoint)
 	fx := provisiontest.Provision(t, ctx, ti.conn, ti.orgID, issuerID, testServerURL)
 
-	locked, err := jwksrepo.New(ti.conn).LockExternalKeyForJwksWrite(ctx, jwksrepo.LockExternalKeyForJwksWriteParams{ID: fx.Client.ExternalKeyID, OrganizationID: conv.ToPGText(ti.orgID)})
+	locked, err := jwksrepo.New(ti.conn).LockExternalKeyForJwksWrite(ctx, jwksrepo.LockExternalKeyForJwksWriteParams{ID: fx.Client.ExternalKeyID.UUID, OrganizationID: conv.ToPGText(ti.orgID)})
 	require.NoError(t, err)
 	require.Equal(t, fx.ConnectionID, locked.IdentityProviderConnectionID.UUID)
 
-	deleteLock, err := extkeysrepo.New(ti.conn).LockExternalKeyForDelete(ctx, extkeysrepo.LockExternalKeyForDeleteParams{ID: fx.Client.ExternalKeyID, OrganizationID: conv.ToPGText(ti.orgID), Provider: "gcp_kms"})
+	deleteLock, err := extkeysrepo.New(ti.conn).LockExternalKeyForDelete(ctx, extkeysrepo.LockExternalKeyForDeleteParams{ID: fx.Client.ExternalKeyID.UUID, OrganizationID: conv.ToPGText(ti.orgID), Provider: "gcp_kms"})
 	require.NoError(t, err)
 	require.Equal(t, fx.ConnectionID, deleteLock.IdentityProviderConnectionID.UUID)
 
@@ -805,7 +813,7 @@ func TestRotateClient_ConcurrentRetriesAndRevocation(t *testing.T) {
 	require.Len(t, kms.Disabled(), len(kms.Created())-1)
 	require.Subset(t, kms.Created(), kms.Disabled())
 	minted := len(kms.Created())
-	keys, err := jwksrepo.New(ti.conn).ListJsonWebKeys(ctx, jwksrepo.ListJsonWebKeysParams{JsonWebKeySetID: before.JSONWebKeySetID, OrganizationID: ti.orgID, IncludeRevoked: false})
+	keys, err := jwksrepo.New(ti.conn).ListJsonWebKeys(ctx, jwksrepo.ListJsonWebKeysParams{JsonWebKeySetID: before.JSONWebKeySetID.UUID, OrganizationID: ti.orgID, IncludeRevoked: false})
 	require.NoError(t, err)
 	require.Len(t, keys, 2)
 	for _, key := range keys {
@@ -852,7 +860,7 @@ func TestRotateClient_ConcurrentRetriesAfterActivationAreIdempotent(t *testing.T
 	require.ErrorAs(t, err, &pending)
 	require.Len(t, kms.Created(), 1)
 	require.NoError(t, repo.New(ti.conn).BackdatePendingRotationPublication(ctx, repo.BackdatePendingRotationPublicationParams{
-		JsonWebKeySetID: before.JSONWebKeySetID,
+		JsonWebKeySetID: before.JSONWebKeySetID.UUID,
 		OrganizationID:  ti.orgID,
 		AgeSeconds:      int32(identityproviderconnections.ManagedJWKSCacheTTL / time.Second),
 	}))
@@ -888,7 +896,7 @@ func TestRotateClient_ConcurrentRetriesAfterActivationAreIdempotent(t *testing.T
 	require.Equal(t, activeKid, retried.ActiveKid)
 	require.Len(t, kms.Created(), 1)
 
-	keys, err := jwksrepo.New(ti.conn).ListJsonWebKeys(ctx, jwksrepo.ListJsonWebKeysParams{JsonWebKeySetID: before.JSONWebKeySetID, OrganizationID: ti.orgID, IncludeRevoked: false})
+	keys, err := jwksrepo.New(ti.conn).ListJsonWebKeys(ctx, jwksrepo.ListJsonWebKeysParams{JsonWebKeySetID: before.JSONWebKeySetID.UUID, OrganizationID: ti.orgID, IncludeRevoked: false})
 	require.NoError(t, err)
 	states := map[string]string{}
 	for _, key := range keys {
@@ -973,7 +981,7 @@ func TestSignClientAssertion_RefusesManagedKeyWithUnpinnedSigner(t *testing.T) {
 	factory := func(ctx context.Context, ts oauth2.TokenSource) (gcpkms.SigningClient, error) {
 		return kms.Factory(ctx, ts)
 	}
-	request := remotesessions.ClientAssertionRequest{RemoteSessionClientID: client.ClientRowID, OrganizationID: ti.orgID, JSONWebKeySetID: client.JSONWebKeySetID, ClientID: "0oaclient", Audience: tokenEndpoint}
+	request := remotesessions.ClientAssertionRequest{RemoteSessionClientID: client.ClientRowID, OrganizationID: ti.orgID, JSONWebKeySetID: client.JSONWebKeySetID.UUID, ClientID: "0oaclient", Audience: tokenEndpoint}
 
 	signer := remotesessions.NewKMSClientAssertionSigner(testenv.NewLogger(t), ti.conn, gcpauth.NewIdentity(gcpauth.NewStubResolver()), factory)
 	signer.PinManagedSigner(provisiontest.SigningServiceAccount())

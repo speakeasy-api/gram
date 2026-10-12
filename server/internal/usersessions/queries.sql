@@ -52,6 +52,56 @@ WHERE id = @id
   AND (project_id = @project_id::uuid OR (project_id IS NULL AND organization_id = @organization_id::text))
   AND deleted IS FALSE;
 
+-- name: GetSharedUserSessionIssuerByID :one
+-- Loads an issuer by id alone for its shared authorization server, served at
+-- <origin>/oauth/usi/{id}. That URL carries no project or organization, so
+-- the id is the only scope available; callers must confirm the issuer is in
+-- 'shared' mode before serving anything for it. The organization is resolved
+-- through the owning project for project-level issuers.
+SELECT
+    sqlc.embed(issuer),
+    COALESCE(issuer.organization_id, project.organization_id)::text AS resolved_organization_id
+FROM user_session_issuers AS issuer
+LEFT JOIN projects AS project ON project.id = issuer.project_id
+WHERE issuer.id = @id
+  AND issuer.deleted IS FALSE;
+
+-- name: HasWorkloadGrantResourceForIssuer :one
+-- Discovery is issuer-scoped and advisory; the token endpoint re-resolves
+-- the exact resource and applies its live trust and agent policy. Meta MCP
+-- does not carry workload sessions. Private-only and public tunnel servers
+-- expose no shared OAuth surface.
+SELECT EXISTS (
+    SELECT 1
+    FROM mcp_servers AS server
+    JOIN projects AS project ON project.id = server.project_id
+    JOIN mcp_endpoints AS endpoint ON endpoint.mcp_server_id = server.id AND endpoint.project_id = server.project_id
+    WHERE server.user_session_issuer_id = @user_session_issuer_id
+      AND project.organization_id = @organization_id::text
+      AND project.deleted IS FALSE
+      AND server.deleted IS FALSE
+      AND endpoint.deleted IS FALSE
+      AND server.visibility <> 'disabled'
+      AND NOT (server.tunneled_mcp_server_id IS NOT NULL AND server.visibility = 'public')
+      AND COALESCE(NULLIF(server.network_access_mode, ''), 'public_only') IN ('public_only', 'dual')
+    UNION ALL
+    SELECT 1
+    FROM toolsets AS toolset
+    JOIN projects AS project ON project.id = toolset.project_id
+    WHERE toolset.user_session_issuer_id = @user_session_issuer_id
+      AND project.organization_id = @organization_id::text
+      AND project.deleted IS FALSE
+      AND toolset.deleted IS FALSE
+      AND toolset.mcp_enabled IS TRUE
+      AND toolset.mcp_slug IS NOT NULL
+      AND NOT EXISTS (
+          SELECT 1 FROM mcp_servers AS server
+          WHERE server.toolset_id = toolset.id
+            AND server.project_id = toolset.project_id
+            AND server.deleted IS FALSE
+      )
+) AS available;
+
 -- name: GetProjectUserSessionIssuerByID :one
 SELECT *
 FROM user_session_issuers
@@ -95,6 +145,35 @@ WHERE project_id IS NULL
   AND (sqlc.narg('cursor')::uuid IS NULL OR id < sqlc.narg('cursor')::uuid)
 ORDER BY id DESC
 LIMIT sqlc.arg('limit_value');
+
+-- name: ListSharedUserSessionIssuersInOrganization :many
+-- Every shared-mode issuer an organization owns, at the organization level and
+-- in its live projects, for showing which token endpoint an external platform
+-- is pointed at. A project-owned issuer's tenancy is read through its project
+-- alone, never its own organization_id. A caller selecting a project sees that
+-- project's issuers and no other project's. Organization-level issuers first,
+-- then by project name and slug, so the list reads the same way every time.
+SELECT
+    sqlc.embed(user_session_issuers),
+    projects.name AS project_name,
+    projects.slug AS project_slug
+FROM user_session_issuers
+LEFT JOIN projects ON projects.id = user_session_issuers.project_id
+WHERE (
+    (
+      user_session_issuers.project_id IS NULL
+      AND user_session_issuers.organization_id = @organization_id::text
+    )
+    OR (
+      user_session_issuers.project_id IS NOT NULL
+      AND projects.organization_id = @organization_id::text
+      AND projects.deleted IS FALSE
+      AND (sqlc.narg('project_id')::uuid IS NULL OR user_session_issuers.project_id = sqlc.narg('project_id')::uuid)
+    )
+  )
+  AND user_session_issuers.authorization_server_mode = 'shared'
+  AND user_session_issuers.deleted IS FALSE
+ORDER BY (user_session_issuers.project_id IS NULL) DESC, projects.name, user_session_issuers.slug, user_session_issuers.id;
 
 -- name: UpdateUserSessionIssuer :one
 UPDATE user_session_issuers
@@ -1344,6 +1423,12 @@ SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, 
        s.created_at, s.updated_at, s.deleted_at, s.deleted,
        iss.slug AS issuer_slug,
        c.client_name AS client_name,
+       -- A dashboard mint stores no user_session_clients row. The refresh-token
+       -- sentinel (sessiontokens.DashboardMintRefreshTokenHashPrefix) is the
+       -- only mark, and the view turns it into FirstPartyClientName. Real
+       -- refresh hashes are base64url and cannot contain ':', so the prefix
+       -- cannot match one of those.
+       COALESCE(s.refresh_token_hash LIKE 'dashboard-mint:%', false)::boolean AS dashboard_mint,
        c.client_id_metadata_uri AS client_id_metadata_uri,
        c.token_endpoint_auth_method AS client_token_endpoint_auth_method,
        -- Whether the client stores a secret, never the hash itself: the
@@ -1418,13 +1503,17 @@ WHERE user_session_issuer_id = @user_session_issuer_id
   AND deleted IS FALSE
 RETURNING *;
 
--- name: GetUserSessionToolSelectionByJTI :one
--- Serve-path lookup for the consent-screen tool selection, keyed the same way
+-- name: GetUserSessionPolicyByJTI :one
+-- Serve-path lookup for immutable session policy, keyed the same way
 -- runtime requests are addressed (issuer + jti). Deliberately narrow: request
 -- handling must not haul refresh-token material around. Project scoping is
 -- intentionally NOT applied here -- the OAuth surface is public and the
 -- issuer_id is the authoritative scope.
-SELECT tool_selection, expires_at
+-- Actual refresh tokens are stored as a 43-character base64url SHA-256 hash.
+-- Access-only sessions instead store NULL or a colon-delimited source marker.
+-- Only the derived capability leaves SQL.
+SELECT tool_selection, expires_at,
+       COALESCE(refresh_token_hash ~ '^[A-Za-z0-9_-]{43}$', false)::boolean AS refreshable
 FROM user_sessions
 WHERE user_session_issuer_id = @user_session_issuer_id
   AND jti = @jti
@@ -1759,7 +1848,8 @@ INSERT INTO user_sessions (
     refresh_token_hash,
     refresh_expires_at,
     expires_at,
-    tool_selection
+    tool_selection,
+    resource
 )
 SELECT
     issuer.project_id,
@@ -1774,7 +1864,8 @@ SELECT
     @refresh_token_hash,
     @refresh_expires_at,
     @expires_at,
-    @tool_selection
+    @tool_selection,
+    sqlc.narg('resource')
 FROM issuer
 RETURNING *;
 

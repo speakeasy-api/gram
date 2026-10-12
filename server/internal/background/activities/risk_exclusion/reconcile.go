@@ -591,22 +591,27 @@ func (a *Reconcile) forEachRegexCandidate(
 			activity.RecordHeartbeat(ctx, reconcileProgress{Phase: phase, Cursor: uuid.UUID{}, Day: dayKey})
 
 			row := &chrepo.RiskFindingUnmaskRow{
-				ID:             c.ID,
-				CreatedAt:      time.Time{},
-				ChatMessageID:  c.ChatMessageID,
-				ContentPartID:  c.ContentPartID,
-				ChatID:         c.ChatID,
-				Source:         c.Source,
-				RuleID:         c.RuleID,
-				StartPos:       c.StartPos,
-				EndPos:         c.EndPos,
-				MatchLen:       c.MatchLen,
-				MatchRedacted:  c.MatchRedacted,
-				Surface:        c.Surface,
-				Field:          c.Field,
-				Path:           c.Path,
-				ToolCallID:     c.ToolCallID,
-				OrganizationID: run.organizationID,
+				ID:               c.ID,
+				CreatedAt:        time.Time{},
+				ChatMessageID:    c.ChatMessageID,
+				ContentPartID:    c.ContentPartID,
+				ChatID:           c.ChatID,
+				Source:           c.Source,
+				RuleID:           c.RuleID,
+				StartPos:         c.StartPos,
+				EndPos:           c.EndPos,
+				MatchLen:         c.MatchLen,
+				MatchRedacted:    c.MatchRedacted,
+				Surface:          c.Surface,
+				MediationSurface: "",
+				Field:            c.Field,
+				Path:             c.Path,
+				ToolCallID:       c.ToolCallID,
+				OrganizationID:   run.organizationID,
+				// Reconstruction never reads the policy; visibility is the reveal endpoint's concern.
+				RiskPolicyID: "",
+				ExecutionID:  "",
+				Phase:        "",
 			}
 
 			anchorKey := c.ChatMessageID + "\x00" + c.ContentPartID

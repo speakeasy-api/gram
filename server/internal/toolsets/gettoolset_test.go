@@ -1,12 +1,17 @@
 package toolsets_test
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 
+	httptoolsets "github.com/speakeasy-api/gram/server/gen/http/toolsets/server"
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -17,6 +22,34 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
+
+func TestGetToolsetHTTPTransport_ValidatesStoredSlugLength(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name    string
+		length  int
+		wantErr bool
+	}{
+		{name: "maximum", length: 60},
+		{name: "too long", length: 61, wantErr: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			slug := strings.Repeat("a", tt.length)
+			request := httptest.NewRequest(http.MethodGet, "/rpc/toolsets.get?slug="+slug, nil)
+			payload, err := httptoolsets.DecodeGetToolsetRequest(goahttp.NewMuxer(), goahttp.RequestDecoder)(request)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, slug, payload.Slug)
+		})
+	}
+}
 
 func TestToolsetsService_GetToolset_Success(t *testing.T) {
 	t.Parallel()
@@ -48,7 +81,7 @@ func TestToolsetsService_GetToolset_Success(t *testing.T) {
 
 	// Get the toolset
 	result, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{
-		Slug:             created.Slug,
+		Slug:             string(created.Slug),
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
@@ -90,7 +123,7 @@ func TestToolsetsService_GetToolset_ExternalOAuthResponseSources(t *testing.T) {
 			Slug: "issuer-response", AuthorizationServerIssuer: &issuer,
 		})
 
-		result, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: types.Slug(external.Toolset.Slug)})
+		result, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: external.Toolset.Slug})
 		require.NoError(t, err)
 		require.NotNil(t, result.ExternalOauthServer)
 		require.Nil(t, result.ExternalOauthServer.Metadata)
@@ -105,7 +138,7 @@ func TestToolsetsService_GetToolset_ExternalOAuthResponseSources(t *testing.T) {
 		require.True(t, ok)
 		external := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{Slug: "metadata-response"})
 
-		result, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: types.Slug(external.Toolset.Slug)})
+		result, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: external.Toolset.Slug})
 		require.NoError(t, err)
 		require.NotNil(t, result.ExternalOauthServer)
 		require.NotNil(t, result.ExternalOauthServer.Metadata)
@@ -125,7 +158,7 @@ func TestToolsetsService_GetToolset_ExternalOAuthResponseSources(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		result, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: types.Slug(external.Toolset.Slug)})
+		result, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: external.Toolset.Slug})
 		require.NoError(t, err)
 		require.Nil(t, result.ExternalOauthServer)
 	})
@@ -151,7 +184,7 @@ func TestToolsetsService_GetToolset_IncludesOrigin(t *testing.T) {
 	require.NoError(t, err)
 
 	result, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{
-		Slug:             created.Slug,
+		Slug:             string(created.Slug),
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
@@ -197,7 +230,7 @@ func TestToolsetsService_GetToolset_WithEnvironment(t *testing.T) {
 
 	// Get the toolset
 	result, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{
-		Slug:             created.Slug,
+		Slug:             string(created.Slug),
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
@@ -297,7 +330,7 @@ func TestToolsetsService_GetToolset_VerifyAllFields(t *testing.T) {
 
 	// Get the toolset and verify all fields
 	result, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{
-		Slug:             created.Slug,
+		Slug:             string(created.Slug),
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
@@ -357,7 +390,7 @@ func TestToolsetsService_GetToolset_WithFunctionTools(t *testing.T) {
 
 	// Get the toolset
 	result, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{
-		Slug:             created.Slug,
+		Slug:             string(created.Slug),
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
@@ -414,7 +447,7 @@ func TestToolsetsService_GetToolset_WithResources(t *testing.T) {
 
 	// Get the toolset and verify resources are populated
 	result, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{
-		Slug:             created.Slug,
+		Slug:             string(created.Slug),
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
@@ -482,7 +515,7 @@ func TestToolsetsService_GetToolset_MixedToolsAndResources(t *testing.T) {
 
 	// Get the toolset and verify both tools and resources are populated
 	result, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{
-		Slug:             created.Slug,
+		Slug:             string(created.Slug),
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
@@ -551,7 +584,7 @@ func TestToolsetsService_GetToolset_VerifyResourceDetails(t *testing.T) {
 
 	// Get the toolset
 	result, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{
-		Slug:             created.Slug,
+		Slug:             string(created.Slug),
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})
@@ -617,7 +650,7 @@ func TestToolsetsService_GetToolset_WithMultipleFunctionToolsAndResources(t *tes
 
 	// Get the toolset
 	result, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{
-		Slug:             created.Slug,
+		Slug:             string(created.Slug),
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 	})

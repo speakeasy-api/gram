@@ -2,8 +2,8 @@
 # `zero:remap-ports` remaps the host ports, so each worktree gets its own
 # Postgres, Redis, ClickHouse, and Temporal without colliding.
 # Services shared safely through explicit worktree namespaces live in
-# compose.shared.yml and run once for the whole machine: Pub/Sub,
-# Presidio, and the LGTM observability stack.
+# compose.shared.yml and run once for the whole machine. Pub/Sub starts
+# with `mise run infra:start`, as does a cheap OTLP sink on 4317/4318.
 name: ${COMPOSE_PROJECT_NAME:-gram}
 
 services:
@@ -122,7 +122,7 @@ services:
       retries: 12
 
   clickhouse:
-    image: clickhouse/clickhouse-server:26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd
+    image: clickhouse/clickhouse-server:26.4.5.143-distroless@sha256:d7c4cf5575c3d0d49cf1beb7ce8d938d64f707789d9fa3fa538c7d3f898b0649
     restart: unless-stopped
     ports:
       - "${CLICKHOUSE_HTTP_PORT}:8123"

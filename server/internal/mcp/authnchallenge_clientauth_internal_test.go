@@ -3,6 +3,7 @@ package mcp
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -26,6 +27,7 @@ func TestVerifyClientAssertion_NoVerifierRefuses(t *testing.T) {
 		TokenEndpointAuthMethod: pgtype.Text{String: "private_key_jwt", Valid: true},
 		ClientJwks:              []byte(`{"keys":[]}`),
 	}
-	reason := svc.verifyClientAssertion(t.Context(), testenv.NewLogger(t), &ResolvedMcpEndpoint{}, clientAssertionAtToken, row, privatekeyjwt.Assertion{Value: "x", Type: privatekeyjwt.AssertionType}, "https://gram.example.com")
+	urls := AuthorizationServerURLs{Issuer: "https://gram.example.com/mcp/example", Token: "https://gram.example.com/mcp/example/token"}
+	reason := svc.verifyClientAssertion(t.Context(), testenv.NewLogger(t), uuid.New(), urls, clientAssertionAtToken, row, privatekeyjwt.Assertion{Value: "x", Type: privatekeyjwt.AssertionType})
 	require.Equal(t, "assertion_verifier_unavailable", reason)
 }

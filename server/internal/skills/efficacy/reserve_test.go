@@ -883,31 +883,42 @@ func TestLoadReservedLeaseGivesTheRowToExactlyOneClaimer(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, reserved, 1)
 
-	// The reservation's own updated_at bump starts the lease, so both claimers
-	// come back empty until it ages out and then exactly one of them wins. A
-	// short lease keeps the poll short; production uses ReservedClaimLease.
-	const lease = time.Second
-	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		var group sync.WaitGroup
-		counts := make([]int, 2)
-		errs := make([]error, 2)
-		for i := range counts {
-			group.Go(func() {
-				claimed, claimErr := loadReserved(ctx, fixture.db, fixture.projectID, 1, lease)
-				counts[i] = len(claimed)
-				errs[i] = claimErr
-			})
-		}
-		group.Wait()
+	// Expire the reservation's lease while keeping the row younger than the
+	// recovery threshold, so it is eligible before either contender starts.
+	aged, err := repo.New(fixture.db).BackdateReservedSkillEfficacyEvaluationsFixture(ctx, repo.BackdateReservedSkillEfficacyEvaluationsFixtureParams{
+		BackdateBy: pgtype.Interval{Microseconds: (2 * ReservedClaimLease).Microseconds(), Days: 0, Months: 0, Valid: true},
+		ProjectID:  fixture.projectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), aged)
 
-		assert.NoError(collect, errs[0])
-		assert.NoError(collect, errs[1])
-		assert.Equal(collect, 1, counts[0]+counts[1], "the row locks and the lease leave the row to one claimer")
-	}, 30*time.Second, 100*time.Millisecond)
+	// claimTimeout bounds stalled database calls without waiting for lease expiry.
+	const claimTimeout = 10 * time.Second
+	ctx, cancel := context.WithTimeout(ctx, claimTimeout)
+	defer cancel()
+
+	var group sync.WaitGroup
+	start := make(chan struct{})
+	claimed := make([][]Evaluation, 2)
+	errs := make([]error, 2)
+	for i := range claimed {
+		group.Go(func() {
+			<-start
+			claimed[i], errs[i] = LoadReserved(ctx, fixture.db, fixture.projectID, 1)
+		})
+	}
+	close(start)
+	group.Wait()
+
+	require.NoError(t, errs[0])
+	require.NoError(t, errs[1])
+	winners := slices.Concat(claimed[0], claimed[1])
+	require.Len(t, winners, 1, "the lease leaves the row to exactly one claimer")
+	require.Equal(t, reserved[0].ID, winners[0].ID)
 
 	// The same holds for a claim raised after the winner committed: the bump is
 	// fresh, so the row is still owned.
-	repeat, err := loadReserved(ctx, fixture.db, fixture.projectID, 1, lease)
+	repeat, err := LoadReserved(ctx, fixture.db, fixture.projectID, 1)
 	require.NoError(t, err)
 	require.Empty(t, repeat, "a second claim inside the lease sees nothing")
 

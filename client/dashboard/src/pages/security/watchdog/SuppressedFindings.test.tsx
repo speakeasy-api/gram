@@ -12,6 +12,7 @@ import { format } from "date-fns";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getRuleTitleFallback } from "../risk-utils";
+import type { MCPFindingNames } from "../mcp-finding-context";
 import { SuppressedFindings } from "./SuppressedFindings";
 
 const restore = vi.fn((_ids: string[]) => Promise.resolve(true));
@@ -198,7 +199,7 @@ function resetPages() {
 }
 resetPages();
 
-function renderSection() {
+function renderSection(mcpFindingNames?: MCPFindingNames) {
   // The section hands session viewing off to the shared chat sheet, which
   // owns a delete mutation — hence the real QueryClient rather than a mock.
   const queryClient = new QueryClient({
@@ -207,7 +208,7 @@ function renderSection() {
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={["/acme/projects/default/watchdog"]}>
-        <SuppressedFindings />
+        <SuppressedFindings mcpFindingNames={mcpFindingNames} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -575,5 +576,41 @@ describe("SuppressedFindings", () => {
     expect(
       screen.getByRole("button", { name: "Previous" }).hasAttribute("disabled"),
     ).toBe(false);
+  });
+});
+
+describe("Suppressed MCP finding context", () => {
+  it("replaces the session section with server, tool, and outcome context", () => {
+    PAGES[""] = {
+      results: [
+        makeResult({
+          id: "mcp-row",
+          ruleId: "secret.github-token",
+          suppressedReason: "manual",
+          suppressedAt: new Date("2026-08-10T12:00:00Z"),
+          mcpServerId: "server-1",
+          toolsetId: "toolset-1",
+          toolName: "create_issue",
+          mediationSurface: "hosted_mcp",
+          mcpMethod: "tools/call",
+          enforcementOutcome: "denied",
+        }),
+      ],
+      totalCount: 1,
+    };
+    renderSection({
+      serverNames: new Map([["server-1", "Issue tracker MCP"]]),
+      toolsetNames: new Map([["toolset-1", "Issue tools"]]),
+    });
+    expand();
+    openRow("secret.github-token");
+
+    expect(drawer().getByText("MCP context")).toBeTruthy();
+    expect(drawer().getByText("Issue tracker MCP")).toBeTruthy();
+    expect(
+      drawer().getByText("create_issue · Hosted MCP · Blocked"),
+    ).toBeTruthy();
+    expect(drawer().queryByText("Untitled")).toBeNull();
+    expect(drawer().queryByRole("button", { name: "View session" })).toBeNull();
   });
 });

@@ -268,7 +268,7 @@ describe("Agent key MCP servers", () => {
     expect(screen.queryByText(/account_example|client_example/)).toBeNull();
     expect(screen.getByText("Access: read")).toBeTruthy();
   });
-  it("uses the selected canonical session's stored identity, not the Gram subject", async () => {
+  it("uses the selected canonical session's stored identity, not the Speakeasy subject", async () => {
     mocks.candidates.mockResolvedValue([
       {
         id: "account_example",
@@ -276,7 +276,7 @@ describe("Agent key MCP servers", () => {
         scopes: ["read"],
         upstreamDisplayName: "Example upstream user",
         upstreamEmail: "upstream@example.test",
-        subjectDisplayName: "Gram subject",
+        subjectDisplayName: "Speakeasy subject",
         subjectEmail: "gram@example.test",
       },
     ]);
@@ -284,7 +284,9 @@ describe("Agent key MCP servers", () => {
     expect(
       await screen.findByText("Example upstream user · upstream@example.test"),
     ).toBeTruthy();
-    expect(screen.queryByText(/Gram subject|gram@example.test/)).toBeNull();
+    expect(
+      screen.queryByText(/Speakeasy subject|gram@example.test/),
+    ).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Use account" }));
     await waitFor(() =>
       expect(mocks.attach).toHaveBeenCalledWith(

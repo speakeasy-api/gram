@@ -66,7 +66,7 @@ var (
 	ErrClientRotationInProgress = errors.New("remotesessions: client registration rotation already in progress")
 
 	// ErrIssuerHasNoRegistrationEndpoint reports that the client's issuer
-	// publishes no RFC 7591 registration endpoint, so Gram has nowhere to
+	// publishes no RFC 7591 registration endpoint, so Speakeasy has nowhere to
 	// re-register the client.
 	ErrIssuerHasNoRegistrationEndpoint = errors.New("remotesessions: issuer publishes no registration endpoint to re-register at")
 
@@ -76,8 +76,10 @@ var (
 
 	// ErrClientNotRotatable reports a client whose registration is not the
 	// kind a dynamic registration produces: a CIMD-mode client, whose client_id
-	// is the metadata document URL, or a private_key_jwt client, whose
-	// registration is bound to a key set.
+	// is the metadata document URL, a private_key_jwt client, whose
+	// registration is bound to a key set, or a self client, which uses the
+	// client_credentials grant that the replacement registration does not
+	// request.
 	ErrClientNotRotatable = errors.New("remotesessions: client registration cannot be replaced by dynamic registration")
 
 	// ErrClientStillRecognized reports that the issuer's token endpoint still
@@ -172,7 +174,9 @@ type ClientRotator struct {
 	// re-registers the client by hand.
 	tunnels *tunnelrouting.HTTPClient
 
-	serverURL   *url.URL
+	// origins decides the redirect_uri a re-registration submits. A rotation
+	// keeps the client's recorded origin, so it never moves an existing row.
+	origins     CallbackOrigins
 	locks       cache.Cache
 	revoker     *UpstreamRevoker
 	auditLogger *audit.Logger
@@ -192,7 +196,7 @@ func NewClientRotator(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Cli
 		enc:         enc,
 		policy:      policy,
 		tunnels:     tunnels,
-		serverURL:   serverURL,
+		origins:     DefaultCallbackOrigins(serverURL),
 		locks:       locks,
 		revoker:     revoker,
 		auditLogger: auditLogger,
@@ -244,6 +248,13 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	initial, err := repo.New(r.db).GetRemoteSessionClientForRotation(ctx, params.ClientID)
 	if err != nil {
 		return zero, fmt.Errorf("load remote session client for rotation: %w", err)
+	}
+	// A self client's credentials are provisioned by an administrator, and
+	// its upstream rejection marker records a refused client credentials
+	// grant, not a lost dynamic registration. Only an administrator replaces
+	// them.
+	if CredentialOwner(initial.RemoteSessionClient.CredentialOwner) == CredentialOwnerSelf && params.Trigger != RotationTriggerManual {
+		return zero, fmt.Errorf("%w: automatic registration rotation", ErrSelfCredentialClient)
 	}
 
 	releaseAdmission, err := admitRegistration(ctx, r.db)
@@ -342,7 +353,7 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	// its users just re-established, and probing the replacement only to hand
 	// back the caller's snapshot would send its user out with the dead
 	// client_id. This runs before every refusal below: a row another caller
-	// already repaired is the one to use even when Gram could not rotate it
+	// already repaired is the one to use even when Speakeasy could not rotate it
 	// again, such as an issuer whose metadata has since lost its registration
 	// endpoint.
 	if params.Trigger != RotationTriggerManual {
@@ -371,8 +382,12 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 		return zero, err
 	}
 
-	// A managed client's registration belongs to its identity provider connection.
-	if current.ClientIDMetadataUri.Valid || current.IdentityProviderConnectionID.Valid || TokenEndpointAuthMethod(current.TokenEndpointAuthMethod.String) == TokenEndpointAuthMethodPrivateKeyJWT {
+	// Only a registration a dynamic registration could reproduce is replaced:
+	// a CIMD client's client_id is its document URL, a managed client's
+	// registration belongs to its identity provider connection, a
+	// private_key_jwt client's is bound to a key set, and a self client's uses
+	// a grant the replacement registration does not request.
+	if current.ClientIDMetadataUri.Valid || current.IdentityProviderConnectionID.Valid || TokenEndpointAuthMethod(current.TokenEndpointAuthMethod.String) == TokenEndpointAuthMethodPrivateKeyJWT || CredentialOwner(current.CredentialOwner) == CredentialOwnerSelf {
 		return zero, ErrClientNotRotatable
 	}
 	endpoint := strings.TrimSpace(row.IssuerRegistrationEndpoint.String)
@@ -420,7 +435,7 @@ func (r *ClientRotator) Rotate(ctx context.Context, params RotateClientRegistrat
 	// the rotator's own system path: it re-registers a client an administrator
 	// already authorized, at the endpoint the issuer row already carries, so
 	// it does not widen who can create a tunnel binding.
-	registered, err := RegisterDynamicClient(ctx, r.policy, r.tunnels, r.serverURL, ProxyRegisterRequest{
+	registered, err := RegisterDynamicClient(ctx, r.policy, r.tunnels, r.origins.ForClient(current.CallbackBaseUrl), ProxyRegisterRequest{
 		RegistrationEndpoint:    endpoint,
 		Scope:                   conv.PtrEmpty(strings.Join(current.Scope, " ")),
 		TokenEndpointAuthMethod: conv.PtrEmpty(current.TokenEndpointAuthMethod.String),
@@ -676,7 +691,7 @@ func (r *ClientRotator) upstreamRecognizesClient(ctx context.Context, row repo.G
 
 	probeCtx, cancel := context.WithTimeout(ctx, registrationProbeTimeout)
 	defer cancel()
-	req, err := newTokenEndpointRequest(probeCtx, tokenEndpoint, form, tokenEndpointClientAuth{
+	req, err := NewTokenEndpointRequest(probeCtx, tokenEndpoint, form, TokenEndpointClientAuth{
 		Method:                method,
 		RemoteSessionClientID: client.ID,
 		OrganizationID:        client.OrganizationID.String,

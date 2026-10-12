@@ -24,26 +24,29 @@ func (q *Queries) CountRegistryEntries(ctx context.Context) (int64, error) {
 }
 
 const createEntry = `-- name: CreateEntry :one
-INSERT INTO mcp_registry_entries(data, published)
+INSERT INTO mcp_registry_entries(data, published, published_at)
 SELECT
     $1::jsonb,
-    true
-WHERE octet_length($1::jsonb::text) <= $2::bigint
-RETURNING id, data, published, created_at, updated_at
+    true,
+    $2::timestamptz
+WHERE octet_length($1::jsonb::text) <= $3::bigint
+RETURNING id, data, published, published_at, created_at, updated_at
 `
 
 type CreateEntryParams struct {
 	Data              []byte
+	PublishedAt       pgtype.Timestamptz
 	StoredRecordLimit int64
 }
 
 func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (McpRegistryEntry, error) {
-	row := q.db.QueryRow(ctx, createEntry, arg.Data, arg.StoredRecordLimit)
+	row := q.db.QueryRow(ctx, createEntry, arg.Data, arg.PublishedAt, arg.StoredRecordLimit)
 	var i McpRegistryEntry
 	err := row.Scan(
 		&i.ID,
 		&i.Data,
 		&i.Published,
+		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -145,7 +148,7 @@ func (q *Queries) DiscoverEntries(ctx context.Context, arg DiscoverEntriesParams
 }
 
 const discoverVersion = `-- name: DiscoverVersion :one
-SELECT id, data, published, created_at, updated_at FROM mcp_registry_entries
+SELECT id, data, published, published_at, created_at, updated_at FROM mcp_registry_entries
 WHERE published
 AND data #>> '{server,name}' = $1::text
 AND ($2::boolean OR COALESCE(data #>> '{_meta,io.modelcontextprotocol.registry/official,status}', '') <> 'deleted')
@@ -165,6 +168,7 @@ func (q *Queries) DiscoverVersion(ctx context.Context, arg DiscoverVersionParams
 		&i.ID,
 		&i.Data,
 		&i.Published,
+		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -172,7 +176,7 @@ func (q *Queries) DiscoverVersion(ctx context.Context, arg DiscoverVersionParams
 }
 
 const getEntry = `-- name: GetEntry :one
-SELECT id, data, published, created_at, updated_at
+SELECT id, data, published, published_at, created_at, updated_at
 FROM mcp_registry_entries
 WHERE id = $1
 `
@@ -184,6 +188,7 @@ func (q *Queries) GetEntry(ctx context.Context, id uuid.UUID) (McpRegistryEntry,
 		&i.ID,
 		&i.Data,
 		&i.Published,
+		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -191,7 +196,7 @@ func (q *Queries) GetEntry(ctx context.Context, id uuid.UUID) (McpRegistryEntry,
 }
 
 const getEntryByName = `-- name: GetEntryByName :one
-SELECT id, data, published, created_at, updated_at
+SELECT id, data, published, published_at, created_at, updated_at
 FROM mcp_registry_entries
 WHERE data #>> '{server,name}' = $1::text
 `
@@ -203,6 +208,7 @@ func (q *Queries) GetEntryByName(ctx context.Context, name string) (McpRegistryE
 		&i.ID,
 		&i.Data,
 		&i.Published,
+		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -365,8 +371,56 @@ func (q *Queries) ListEntries(ctx context.Context, arg ListEntriesParams) ([]Lis
 	return items, nil
 }
 
+const listOktaMappingConflicts = `-- name: ListOktaMappingConflicts :many
+SELECT DISTINCT
+    (n.value #>> '{}')::text AS oin_name,
+    COALESCE(e.data #>> '{server,name}', '')::text AS entry_name
+FROM mcp_registry_entries e
+CROSS JOIN LATERAL jsonb_array_elements(
+    CASE WHEN jsonb_typeof(e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}') = 'array'
+        THEN e.data #> '{_meta,com.speakeasy.ai/okta,oinNames}'
+        ELSE '[]'::jsonb
+    END
+) AS n(value)
+WHERE e.id <> $1::uuid
+AND jsonb_typeof(n.value) = 'string'
+AND (n.value #>> '{}') = ANY($2::text[])
+`
+
+type ListOktaMappingConflictsParams struct {
+	ID    uuid.UUID
+	Names []string
+}
+
+type ListOktaMappingConflictsRow struct {
+	OinName   string
+	EntryName string
+}
+
+// Invalid historical rows may hold a non-array, non-string elements or no
+// name; none of those can claim or be blamed for a key.
+func (q *Queries) ListOktaMappingConflicts(ctx context.Context, arg ListOktaMappingConflictsParams) ([]ListOktaMappingConflictsRow, error) {
+	rows, err := q.db.Query(ctx, listOktaMappingConflicts, arg.ID, arg.Names)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOktaMappingConflictsRow
+	for rows.Next() {
+		var i ListOktaMappingConflictsRow
+		if err := rows.Scan(&i.OinName, &i.EntryName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockEntry = `-- name: LockEntry :one
-SELECT id, data, published, created_at, updated_at
+SELECT id, data, published, published_at, created_at, updated_at
 FROM mcp_registry_entries
 WHERE id = $1
 FOR UPDATE
@@ -379,10 +433,23 @@ func (q *Queries) LockEntry(ctx context.Context, id uuid.UUID) (McpRegistryEntry
 		&i.ID,
 		&i.Data,
 		&i.Published,
+		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const lockOktaMappings = `-- name: LockOktaMappings :exec
+SELECT pg_advisory_xact_lock(hashtextextended('mcp_registry_entries:com.speakeasy.ai/okta', 0))
+`
+
+// Serialize writers that claim OIN names; no index can enforce element-wise
+// uniqueness on a jsonb array. The conflict scan below relies on READ COMMITTED
+// taking its snapshot after this lock is granted.
+func (q *Queries) LockOktaMappings(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockOktaMappings)
+	return err
 }
 
 const registryReady = `-- name: RegistryReady :one
@@ -411,27 +478,54 @@ const setEntryPublished = `-- name: SetEntryPublished :one
 UPDATE mcp_registry_entries
 SET
     published = $1,
+    published_at = CASE WHEN NOT published AND $1 THEN COALESCE(published_at, $2::timestamptz) ELSE published_at END,
+    data = $3::jsonb,
     updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
-WHERE id = $2
-RETURNING id, data, published, created_at, updated_at
+WHERE id = $4
+AND (NOT $1::boolean OR octet_length($3::jsonb::text) <= $5::bigint)
+RETURNING id, data, published, published_at, created_at, updated_at
 `
 
 type SetEntryPublishedParams struct {
-	Published bool
-	ID        uuid.UUID
+	Published         bool
+	PublishedAt       pgtype.Timestamptz
+	Data              []byte
+	ID                uuid.UUID
+	StoredRecordLimit int64
 }
 
 func (q *Queries) SetEntryPublished(ctx context.Context, arg SetEntryPublishedParams) (McpRegistryEntry, error) {
-	row := q.db.QueryRow(ctx, setEntryPublished, arg.Published, arg.ID)
+	row := q.db.QueryRow(ctx, setEntryPublished,
+		arg.Published,
+		arg.PublishedAt,
+		arg.Data,
+		arg.ID,
+		arg.StoredRecordLimit,
+	)
 	var i McpRegistryEntry
 	err := row.Scan(
 		&i.ID,
 		&i.Data,
 		&i.Published,
+		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const setRegistryEntryPublishedFixture = `-- name: SetRegistryEntryPublishedFixture :exec
+UPDATE mcp_registry_entries SET published = $1 WHERE id = $2
+`
+
+type SetRegistryEntryPublishedFixtureParams struct {
+	Published bool
+	ID        uuid.UUID
+}
+
+func (q *Queries) SetRegistryEntryPublishedFixture(ctx context.Context, arg SetRegistryEntryPublishedFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRegistryEntryPublishedFixture, arg.Published, arg.ID)
+	return err
 }
 
 const updateEntry = `-- name: UpdateEntry :one
@@ -441,7 +535,7 @@ SET
     updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
 WHERE id = $2
 AND octet_length($1::jsonb::text) <= $3::bigint
-RETURNING id, data, published, created_at, updated_at
+RETURNING id, data, published, published_at, created_at, updated_at
 `
 
 type UpdateEntryParams struct {
@@ -457,6 +551,7 @@ func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) (McpRe
 		&i.ID,
 		&i.Data,
 		&i.Published,
+		&i.PublishedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

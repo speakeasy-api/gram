@@ -9,6 +9,11 @@ export interface Step {
   /** Optional inline marker after the title, e.g. "Required" / "Optional". */
   badge?: string;
   /**
+   * A label above the title for the first step of a section, such as the
+   * group a card sits under. Sections do not break the numbering or the line.
+   */
+  section?: string;
+  /**
    * Whether this step's outcome has landed. Sub-steps finish out of order —
    * the reader can jump anywhere in the rail — so a check mark is only ever
    * this signal, never the step's position relative to the current one.
@@ -114,6 +119,9 @@ export function OnboardingStepper({
 
             {/* Step content */}
             <div className="min-w-0 pt-1 pb-8">
+              {step.section ? (
+                <p className="text-eyebrow mb-1">{step.section}</p>
+              ) : null}
               <h3
                 className={cn(
                   "flex items-center gap-2 text-sm leading-tight font-semibold",

@@ -10,10 +10,10 @@ logs. Use only synthetic values and placeholders such as `<ORG_ID>`.
 
 ## What the clocks control
 
-Stripe test clocks advance Stripe objects only. They do not advance Gram's
+Stripe test clocks advance Stripe objects only. They do not advance Speakeasy's
 Postgres clock, Temporal clock, worker schedules, or activity `Now` inputs.
 The sandbox portion below validates real Stripe subscription and invoice state.
-The deterministic Gram tests use explicit timestamps to validate billing-period
+The deterministic Speakeasy tests use explicit timestamps to validate billing-period
 and invoice-allocation transitions without waiting for wall-clock time.
 
 Stripe advances a clock asynchronously. After every advance, poll until its
@@ -115,7 +115,7 @@ References:
    ```
 
    **Listener readiness is not verified webhook delivery.** A connected CLI
-   and matching signing secret do not prove that Gram accepted and processed
+   and matching signing secret do not prove that Speakeasy accepted and processed
    an event. After the local mocked checks pass, separately validate a real
    sandbox checkout and its resulting webhook, checking the expected local
    billing transition and successful HTTP delivery. Do not interpret mere
@@ -145,7 +145,7 @@ M3_CLOCK_ID="$({
   curl --fail --silent --show-error https://api.stripe.com/v1/test_helpers/test_clocks \
     -u "$STRIPE_API_KEY:" \
     -d frozen_time="$M3_CLOCK_START" \
-    -d name='Gram M3 validation'
+    -d name='Speakeasy M3 validation'
 } | jq -r .id)"
 export M3_CLOCK_ID
 
@@ -237,7 +237,7 @@ curl --fail --silent --show-error \
 wait_for_m3_clock
 ```
 
-## Validate Gram's explicit-time billing transitions
+## Validate Speakeasy's explicit-time billing transitions
 
 Run the deterministic acceptance suites. They seed synthetic Postgres state,
 invoke the real activities and webhook handler with explicit timestamps, and
@@ -302,7 +302,7 @@ meters; TUM has no separate streaming toggle.
 Cancel the current sandbox subscription. Wait for
 `customer.subscription.deleted`, then verify:
 
-- Gram is `free` and not admitted;
+- Speakeasy is `free` and not admitted;
 - the stored subscription ID and exact Stripe anchor are cleared, while the
   Stripe customer remains;
 - the Other inference key is disabled locally and upstream;
@@ -319,10 +319,10 @@ cause current-state reconciliation to re-enable the same Other inference key
 with a $100 monthly cap and restore the Security inference key to its most
 recent chosen cap, or $100 when no chosen cap exists.
 
-The voluntary cancellation proves Gram's terminal event behavior. Separately,
+The voluntary cancellation proves Speakeasy's terminal event behavior. Separately,
 confirm the sandbox Dashboard still has the required Smart Retries end action:
 8 attempts within 2 weeks, then cancel. Stripe owns the retry schedule and
-customer retry emails; Gram reacts only to the terminal deletion.
+customer retry emails; Speakeasy reacts only to the terminal deletion.
 
 ## Cleanup and mandatory repetition
 
@@ -334,10 +334,10 @@ curl --fail --silent --show-error -X DELETE \
   -u "$STRIPE_API_KEY:"
 ```
 
-Delete the synthetic Gram organization through the normal local administration
+Delete the synthetic Speakeasy organization through the normal local administration
 path. Do not reuse its billing rows for the second run.
 
-Repeat the complete runbook with a new clock, customer, and synthetic Gram
+Repeat the complete runbook with a new clock, customer, and synthetic Speakeasy
 organization. The second run must require no manual database repair and must
 produce the same invariants. File a discrepancy before expanding beyond the
 internal sandbox cohort.

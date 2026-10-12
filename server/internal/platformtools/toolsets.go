@@ -1,6 +1,10 @@
 package platformtools
 
-import "net/url"
+import (
+	"net/url"
+
+	"github.com/google/uuid"
+)
 
 // AssistantsPlatformToolsetSlug is the reserved slug for the platform
 // toolset granted to every assistant runtime.
@@ -23,6 +27,8 @@ const PlatformMCPReadToolsetSlug = "platform"
 // research-agent runner attaches it explicitly, and its tools are gated on
 // the mcp_approval feature.
 const ResearchToolsetSlug = "research"
+
+var platformToolsetNamespace = uuid.NewSHA1(uuid.NameSpaceURL, []byte("https://app.getgram.ai/platform/mcp"))
 
 // Toolset is a virtual collection of platform tools exposed at runtime via a
 // dedicated MCP endpoint. Platform toolsets are not persisted; the slug is
@@ -82,6 +88,26 @@ func BuildToolsets(deps ToolsetDependencies) map[string]Toolset {
 		out[ts.Slug] = ts
 	}
 	return out
+}
+
+// PlatformToolsetID returns the stable policy and finding identity for a
+// code-owned Platform MCP toolset.
+func PlatformToolsetID(slug string) uuid.UUID {
+	return uuid.NewSHA1(platformToolsetNamespace, []byte(slug))
+}
+
+// PlatformToolsetName returns the dashboard label for a Platform MCP toolset.
+func PlatformToolsetName(slug string) string {
+	switch slug {
+	case AssistantsPlatformToolsetSlug:
+		return "Speakeasy assistant tools"
+	case ManagedAssistantPlatformToolsetSlug:
+		return "Speakeasy managed assistant tools"
+	case PlatformMCPReadToolsetSlug:
+		return "Speakeasy Platform MCP"
+	default:
+		return slug
+	}
 }
 
 // NewAssistantsToolset returns the assistants platform toolset bound to the

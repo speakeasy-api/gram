@@ -81,6 +81,7 @@ export const VerificationReasons = {
   MissingRole: "missing_role",
   DpopNotBound: "dpop_not_bound",
   KeyNotFetched: "key_not_fetched",
+  SecretRejected: "secret_rejected",
   ReadFailedOktaAppsRead: "read_failed:okta.apps.read",
   ReadFailedOktaUsersRead: "read_failed:okta.users.read",
   ReadFailedOktaGroupsRead: "read_failed:okta.groups.read",
@@ -88,7 +89,7 @@ export const VerificationReasons = {
 export type VerificationReasons = ClosedEnum<typeof VerificationReasons>;
 
 /**
- * An organization's Okta connection: the service application Gram authenticates to the Okta Management API with, its verification state, and the console checklist. Never carries key material or tokens.
+ * An organization's Okta connection: the service application Speakeasy authenticates to the Okta Management API with, its verification state, and the console checklist. Never carries key material or tokens.
  */
 export type OktaIdentityProviderConnection = {
   /**
@@ -137,9 +138,9 @@ export type OktaIdentityProviderConnection = {
    */
   issuerUrl: string;
   /**
-   * Public JWKS URL the Okta app is configured to trust for private_key_jwt.
+   * Public JWKS URL the Okta app is configured to trust for private_key_jwt. Omitted for connections installed from the Okta Integration Network, which authenticate with a client secret.
    */
-  jwksUrl: string;
+  jwksUrl?: string | undefined;
   /**
    * Why the last verification did not complete: Okta rejected the credential, or could not be reached. Omitted when it completed.
    */
@@ -231,7 +232,7 @@ export const OktaIdentityProviderConnection$inboundSchema: z.ZodMiniType<
     granted_scopes: z.array(z.string()),
     id: z.string(),
     issuer_url: z.string(),
-    jwks_url: z.string(),
+    jwks_url: z.optional(z.string()),
     last_error: z.optional(LastError$inboundSchema),
     last_verified_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),

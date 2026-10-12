@@ -28,6 +28,7 @@ type pluginSummary struct {
 	Slug        string
 	Description *string
 	IsDefault   bool
+	AutoCreated bool
 	ServerCount int64
 	SkillCount  int64
 }
@@ -105,6 +106,7 @@ func (t *ListPlugins) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payloa
 			Slug:        plugin.Slug,
 			Description: plugin.Description,
 			IsDefault:   conv.PtrValOr(plugin.IsDefault, false),
+			AutoCreated: plugin.AutoCreated,
 			ServerCount: conv.PtrValOr(plugin.ServerCount, 0),
 			SkillCount:  conv.PtrValOr(plugin.SkillCount, 0),
 		})

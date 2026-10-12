@@ -42,6 +42,8 @@ function snapshot(
     jwksUri: record.jwksUri ?? "",
     scopesSupported: record.scopesSupported ?? [],
     grantTypesSupported: record.grantTypesSupported ?? [],
+    authorizationGrantProfilesSupported:
+      record.authorizationGrantProfilesSupported ?? [],
     responseTypesSupported: record.responseTypesSupported ?? [],
     tokenEndpointAuthMethodsSupported:
       record.tokenEndpointAuthMethodsSupported ?? [],
@@ -240,6 +242,7 @@ export function IssuerEditor({
                   discoveredSnapshot: discoverRan
                     ? form.discoveredSnapshot
                     : null,
+                  savedIssuerUrl: issuer.issuer,
                 }),
               )
             : await adminCreateGlobalIssuer(buildCreateIssuerForm(form));

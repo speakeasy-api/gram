@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import {
-  effectiveGrantCount,
   visiblePermissionCount,
   grantKeysString,
   hasFormChanges,
@@ -46,32 +45,6 @@ function makeInput(overrides: Partial<SaveButtonInput> = {}): SaveButtonInput {
     ...overrides,
   };
 }
-
-// --- effectiveGrantCount ---
-
-describe("effectiveGrantCount", () => {
-  it("counts grants with null selectors (unrestricted)", () => {
-    expect(
-      effectiveGrantCount({
-        "project:read": grant("project:read"),
-        "mcp:read": grant("mcp:read"),
-      }),
-    ).toBe(2);
-  });
-
-  it("excludes grants with empty selector arrays", () => {
-    expect(
-      effectiveGrantCount({
-        "project:read": grant("project:read"),
-        "mcp:read": grant("mcp:read", []),
-      }),
-    ).toBe(1);
-  });
-
-  it("returns 0 for empty grants", () => {
-    expect(effectiveGrantCount({})).toBe(0);
-  });
-});
 
 describe("visiblePermissionCount", () => {
   it("excludes risk policy grants from role permission counts", () => {
@@ -226,10 +199,12 @@ describe("isSaveDisabled", () => {
       ).toBe(false);
     });
 
-    it("no grants → disabled", () => {
-      expect(isSaveDisabled(makeInput({ isEditing: false, grants: {} }))).toBe(
-        true,
-      );
+    it("valid name without description or grants → enabled", () => {
+      expect(
+        isSaveDisabled(
+          makeInput({ isEditing: false, description: "", grants: {} }),
+        ),
+      ).toBe(false);
     });
 
     it("mutating → disabled", () => {
@@ -489,6 +464,26 @@ describe("computeRuleLabel", () => {
       ),
     ).toBe("2 projects");
   });
+
+  it("assistant selectors describe projects", () => {
+    expect(
+      computeRuleLabel(
+        [sel({ resourceKind: "assistant", projectId: "p1" })],
+        "assistant",
+        projects,
+      ),
+    ).toBe("Project: ecommerce-api");
+  });
+
+  it("assistant selectors naming one assistant describe assistants", () => {
+    expect(
+      computeRuleLabel(
+        [sel({ resourceKind: "assistant", resourceId: "a1" })],
+        "assistant",
+        projects,
+      ),
+    ).toBe("1 assistant");
+  });
 });
 
 // --- computeRuleTooltip ---
@@ -610,5 +605,16 @@ describe("computeRuleTooltip", () => {
         projects,
       ),
     ).toBe("Permits access to skills in ecommerce-api");
+  });
+
+  it("assistant selectors describe project access", () => {
+    expect(
+      computeRuleTooltip(
+        "allow",
+        [sel({ resourceKind: "assistant", projectId: "p1" })],
+        "assistant",
+        projects,
+      ),
+    ).toBe("Permits access to all assistants in ecommerce-api");
   });
 });

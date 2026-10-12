@@ -71,14 +71,22 @@ func (f *fakeOpenRouterUsage) GetCreditsUsed(_ context.Context, _ string, keyTyp
 }
 
 type fakeBillingOperations struct {
-	mu              sync.Mutex
-	organizationID  string
-	cancel          *bool
-	actor           usage.BillingActor
-	subscription    *usage.StripeSubscription
-	customer        *stripeclient.CustomerDetails
-	customerErr     error
-	customerLookups []string
+	mu                     sync.Mutex
+	organizationID         string
+	cancel                 *bool
+	actor                  usage.BillingActor
+	subscription           *usage.StripeSubscription
+	customer               *stripeclient.CustomerDetails
+	customerErr            error
+	customerLookups        []string
+	subscriptionByID       *stripeclient.SubscriptionState
+	subscriptionCustomerID string
+	subscriptionErr        error
+	liveSubscriptionErr    error
+	subscriptionLookups    []string
+	customerUsageOrgs      []usage.CustomerUsageOrganization
+	customerUsageInterval  usage.CustomerUsageInterval
+	customerUsageErrs      map[string]error
 }
 
 func (f *fakeBillingOperations) GetPaygBillingSummaryForOrganization(_ context.Context, organizationID string) (*usage.PaygBillingSummary, error) {
@@ -137,6 +145,39 @@ func (f *fakeBillingOperations) GetSpendBreakdownForOrganization(_ context.Conte
 	}, nil
 }
 
+func (f *fakeBillingOperations) GetCustomerUsage(_ context.Context, organizations []usage.CustomerUsageOrganization, interval usage.CustomerUsageInterval) (*usage.CustomerUsageReport, error) {
+	f.customerUsageOrgs = organizations
+	f.customerUsageInterval = interval
+	cycle := usage.BillingCyclePeriod{
+		Start: time.Date(2026, time.September, 25, 0, 0, 0, 0, time.UTC),
+		End:   time.Date(2026, time.October, 25, 0, 0, 0, 0, time.UTC),
+	}
+	previous := usage.BillingCyclePeriod{
+		Start: time.Date(2026, time.August, 25, 0, 0, 0, 0, time.UTC),
+		End:   time.Date(2026, time.September, 7, 0, 0, 0, 0, time.UTC),
+	}
+	report := &usage.CustomerUsageReport{QueriedAt: time.Date(2026, time.October, 7, 12, 0, 0, 0, time.UTC), Customers: nil}
+	for _, organization := range organizations {
+		if err := f.customerUsageErrs[organization.ID]; err != nil {
+			report.Customers = append(report.Customers, usage.CustomerUsage{OrganizationID: organization.ID, CurrentCycle: cycle, Err: err})
+			continue
+		}
+		report.Customers = append(report.Customers, usage.CustomerUsage{
+			OrganizationID: organization.ID,
+			CurrentCycle:   cycle,
+			Window:         cycle,
+			Products: []*usagegen.SpendProduct{{
+				ID: "agent_session_storage", Label: "Agent session storage", Unit: "stokens", Quantity: "1000000",
+				RateQuantity: "1000000", RateUsd: "0.35", CostUsd: "0.35",
+				Buckets: []*usagegen.SpendBucket{{From: "2026-09-25T00:00:00Z", To: "2026-10-25T00:00:00Z", Quantity: "1000000", CostUsd: "0.35"}},
+			}},
+			PreviousPeriod:      &previous,
+			PreviousPeriodCosts: []usage.CustomerUsageProductCost{{ProductID: "agent_session_storage", CostUSD: "0.1"}},
+		})
+	}
+	return report, nil
+}
+
 func (f *fakeBillingOperations) GetStripeCustomer(_ context.Context, customerID string) (*stripeclient.CustomerDetails, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -154,6 +195,37 @@ func (f *fakeBillingOperations) customerLookupCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.customerLookups)
+}
+
+func (f *fakeBillingOperations) GetStripeSubscriptionByID(_ context.Context, subscriptionID string) (*stripeclient.SubscriptionState, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.subscriptionLookups = append(f.subscriptionLookups, subscriptionID)
+	if f.subscriptionErr != nil {
+		return nil, f.subscriptionErr
+	}
+	if f.liveSubscriptionErr != nil && len(f.subscriptionLookups) > 1 {
+		return nil, f.liveSubscriptionErr
+	}
+	if f.subscriptionByID != nil {
+		return f.subscriptionByID, nil
+	}
+	customerID := f.subscriptionCustomerID
+	if customerID == "" {
+		customerID = "cus_default"
+	}
+	return &stripeclient.SubscriptionState{
+		ID:                 subscriptionID,
+		CustomerID:         customerID,
+		Status:             "active",
+		BillingCycleAnchor: time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC),
+	}, nil
+}
+
+func (f *fakeBillingOperations) subscriptionLookupCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.subscriptionLookups)
 }
 
 func (f *fakeBillingOperations) GetStripeSubscriptionForOrganization(_ context.Context, organizationID string) (*usage.StripeSubscription, error) {

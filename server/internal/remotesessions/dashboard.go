@@ -82,9 +82,13 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 		return nil, err
 	}
 
-	commit := s.identity.Prepare(req.plan(authCtx, target))
+	plan := req.plan(authCtx, target)
+	commit := s.identity.Prepare(plan)
 	if err := commit.Preflight(ctx); err != nil {
 		return nil, identityOopsError(err, "check identity configuration").LogError(ctx, logger)
+	}
+	if plan.Provider.create != nil {
+		s.recordCreateDiscovery(ctx, logger, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, plan.Provider.create, time.Now())
 	}
 	reg, err := commit.Register(ctx)
 	if err != nil {
@@ -112,7 +116,7 @@ func (s *Service) CommitServerIdentityConfiguration(ctx context.Context, payload
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit identity configuration").LogError(ctx, logger)
 	}
-	result, err := serverIdentityResultView(res, req.clientMode)
+	result, err := s.serverIdentityResultView(res, req.clientMode)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvariantViolation, err, "build remote session client view").LogError(ctx, logger)
 	}
@@ -312,8 +316,8 @@ func identityOopsError(err error, message string) *oops.ShareableError {
 	return oops.E(code, err, "%s", refusal.Message)
 }
 
-func serverIdentityResultView(res IdentityResult, clientMode string) (*gen.CommitServerIdentityConfigurationResult, error) {
-	clientView, err := mv.BuildRemoteSessionClientView(res.Client, res.Bindings)
+func (s *Service) serverIdentityResultView(res IdentityResult, clientMode string) (*gen.CommitServerIdentityConfigurationResult, error) {
+	clientView, err := s.clientView(res.Client, res.Bindings)
 	if err != nil {
 		return nil, fmt.Errorf("build remote session client view: %w", err)
 	}
@@ -481,6 +485,7 @@ func createServerIdentityProviderParams(projectID uuid.UUID, organizationID stri
 		BackchannelLogoutSupported:                 conv.PtrToPGBool(form.BackchannelLogoutSupported),
 		AuthorizationResponseIssParameterSupported: conv.PtrToPGBool(form.AuthorizationResponseIssParameterSupported),
 		ScopeOverride:                              scopeOverride(form.ScopeOverride),
+		OmitScopeFallback:                          conv.PtrToPGBool(form.OmitScopeFallback),
 		ResourceIndicatorSupported:                 conv.PtrToPGBool(form.ResourceIndicatorSupported),
 		Metadata:                                   nil,
 		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},

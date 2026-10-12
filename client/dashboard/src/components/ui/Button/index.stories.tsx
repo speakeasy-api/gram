@@ -17,6 +17,7 @@ const meta: Meta<typeof Button> = {
         "primary",
         "secondary",
         "tertiary",
+        "success",
         "destructive-primary",
         "destructive-secondary",
         // Deprecated variants
@@ -85,6 +86,14 @@ export const Tertiary: Story = {
     ...baseProps,
     children: "Tertiary Button",
     variant: "tertiary",
+  },
+};
+
+export const Success: Story = {
+  args: {
+    ...baseProps,
+    children: "Add server",
+    variant: "success",
   },
 };
 

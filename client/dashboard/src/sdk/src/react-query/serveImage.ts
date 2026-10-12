@@ -56,7 +56,7 @@ export type ServeImageQueryError =
  * serveImage assets
  *
  * @remarks
- * Serve an image from Gram.
+ * Serve an image from Speakeasy.
  */
 export function useServeImage(
   request: ServeImageRequest,
@@ -77,7 +77,7 @@ export function useServeImage(
  * serveImage assets
  *
  * @remarks
- * Serve an image from Gram.
+ * Serve an image from Speakeasy.
  */
 export function useServeImageSuspense(
   request: ServeImageRequest,

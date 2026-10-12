@@ -18,10 +18,10 @@ import (
 func newUploadCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "upload",
-		Usage: "Upload an asset to Gram",
+		Usage: "Upload an asset to the Speakeasy AI Control Plane",
 		Description: `
 Example:
-  gram upload --type openapiv3 \
+  speakeasy upload --type openapiv3 \
     --location https://raw.githubusercontent.com/my/spec.yaml \
     --name "My API" \
     --slug my-api`[1:],

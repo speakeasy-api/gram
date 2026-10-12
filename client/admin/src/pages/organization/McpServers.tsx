@@ -1,13 +1,14 @@
 import { useMemo, type JSX } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Link,
   Navigate,
   useNavigate,
   useParams,
   useSearch,
 } from "@tanstack/react-router";
 import { createColumnHelper, useTable } from "@tanstack/react-table";
-import { FolderIcon } from "lucide-react";
+import { ChevronRightIcon, FolderIcon } from "lucide-react";
 
 import { CopyValue } from "@/components/CopyValue";
 import {
@@ -30,25 +31,12 @@ import {
 } from "@/lib/adminQueries";
 import type {
   AdminMcpServer,
-  AdminMcpServerSource,
   AdminOrganization,
   AdminProject,
 } from "@/lib/gramAdminApi";
 import { byOldestFirst, fmtDateShort } from "@/lib/utils";
 
-const SOURCE_LABELS: Record<AdminMcpServerSource, string> = {
-  toolset: "Toolset",
-  remote: "Remote",
-  tunneled: "Tunneled",
-  unproxied: "Unproxied",
-  toolset_only: "Legacy toolset",
-};
-
-const VISIBILITY_LABELS: Record<AdminMcpServer["visibility"], string> = {
-  public: "Public",
-  private: "Private",
-  disabled: "Disabled",
-};
+import { SOURCE_LABELS, VISIBILITY_LABELS } from "./mcpServerLabels";
 
 // `isPending`, not `isLoading`, for the reason `projectsMessage` in Projects
 // gives: a paused read would otherwise fall through to "none".
@@ -60,54 +48,82 @@ function serversMessage(isPending: boolean, isError: boolean): string {
 
 const serverColumn = createColumnHelper<DataTableFeatures, AdminMcpServer>();
 
-const serverColumns = serverColumn.columns([
-  serverColumn.accessor("name", {
-    header: "Name",
-    // A floor, because the URL column takes the rest of the width and would
-    // otherwise fold a two-word name onto three lines.
-    meta: { cellClassName: "min-w-48 whitespace-normal" },
-    cell: ({ row }) => <span className="text-sm">{row.original.name}</span>,
-  }),
-  serverColumn.accessor("url", {
-    header: "Server URL",
-    // `max-w-0 w-full` gives the column whatever the others leave, and lets a
-    // long URL truncate there rather than push them out of the border.
-    meta: { cellClassName: "max-w-0 w-full" },
-    cell: ({ row }) =>
-      row.original.url ? (
-        <CopyValue
-          label={`${row.original.name} server URL`}
-          value={row.original.url}
-        />
-      ) : (
-        <span className="text-muted-foreground text-sm">-</span>
+// Built per organization and project, because the name links to the server's
+// health page and that address carries both.
+function serverColumns(idOrSlug: string, project: string) {
+  return serverColumn.columns([
+    serverColumn.accessor("name", {
+      header: "Name",
+      // A floor, because the URL column takes the rest of the width and would
+      // otherwise fold a two-word name onto three lines.
+      meta: { cellClassName: "min-w-48 whitespace-normal" },
+      // The link, not the row, carries the keyboard path and the accessible
+      // name. It also lets the operator open the health page in a new tab.
+      cell: ({ row }) => (
+        <Link
+          to="/organizations/$idOrSlug/mcp-servers/$serverId"
+          params={{ idOrSlug, serverId: row.original.id }}
+          search={{ project }}
+          className="text-sm underline-offset-4 hover:underline focus-visible:underline"
+        >
+          {row.original.name}
+        </Link>
       ),
-  }),
-  serverColumn.accessor("visibility", {
-    header: "Visibility",
-    cell: ({ row }) => (
-      <Badge
-        variant={row.original.visibility === "public" ? "secondary" : "outline"}
-      >
-        {VISIBILITY_LABELS[row.original.visibility] ?? row.original.visibility}
-      </Badge>
-    ),
-  }),
-  serverColumn.accessor("source", {
-    header: "Source",
-    cell: ({ row }) => (
-      <span className="text-muted-foreground text-sm">
-        {SOURCE_LABELS[row.original.source] ?? row.original.source}
-      </span>
-    ),
-  }),
-  serverColumn.accessor("created_at", {
-    header: "Created",
-    cell: ({ row }) => (
-      <span className="text-sm">{fmtDateShort(row.original.created_at)}</span>
-    ),
-  }),
-]);
+    }),
+    serverColumn.accessor("url", {
+      header: "Server URL",
+      // `max-w-0 w-full` gives the column whatever the others leave, and lets a
+      // long URL truncate there rather than push them out of the border.
+      meta: { cellClassName: "max-w-0 w-full" },
+      cell: ({ row }) =>
+        row.original.url ? (
+          <CopyValue
+            label={`${row.original.name} server URL`}
+            value={row.original.url}
+          />
+        ) : (
+          <span className="text-muted-foreground text-sm">-</span>
+        ),
+    }),
+    serverColumn.accessor("visibility", {
+      header: "Visibility",
+      cell: ({ row }) => (
+        <Badge
+          variant={
+            row.original.visibility === "public" ? "secondary" : "outline"
+          }
+        >
+          {VISIBILITY_LABELS[row.original.visibility] ??
+            row.original.visibility}
+        </Badge>
+      ),
+    }),
+    serverColumn.accessor("source", {
+      header: "Source",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground text-sm">
+          {SOURCE_LABELS[row.original.source] ?? row.original.source}
+        </span>
+      ),
+    }),
+    serverColumn.accessor("created_at", {
+      header: "Created",
+      cell: ({ row }) => (
+        <span className="text-sm">{fmtDateShort(row.original.created_at)}</span>
+      ),
+    }),
+    serverColumn.display({
+      id: "open",
+      header: () => <span className="sr-only">Open</span>,
+      cell: () => (
+        <ChevronRightIcon
+          aria-hidden="true"
+          className="text-muted-foreground size-4"
+        />
+      ),
+    }),
+  ]);
+}
 
 export function McpServersRoute(): JSX.Element | null {
   const { idOrSlug } = useParams({ from: "/organizations/$idOrSlug" });
@@ -117,11 +133,12 @@ export function McpServersRoute(): JSX.Element | null {
 }
 
 export function McpServers({ org }: { org: AdminOrganization }): JSX.Element {
+  const { idOrSlug } = useParams({ from: "/organizations/$idOrSlug" });
   const navigate = useNavigate({
-    from: "/organizations/$idOrSlug/mcp-servers",
+    from: "/organizations/$idOrSlug/mcp-servers/",
   });
   const { project: requested } = useSearch({
-    from: "/organizations/$idOrSlug/mcp-servers",
+    from: "/organizations/$idOrSlug/mcp-servers/",
   });
   const projectsRead = useQuery(organizationProjectsQuery(org.id));
 
@@ -140,9 +157,15 @@ export function McpServers({ org }: { org: AdminOrganization }): JSX.Element {
     enabled: !!selected,
   });
 
+  const selectedId = selected?.id ?? "";
+  const columns = useMemo(
+    () => serverColumns(idOrSlug, selectedId),
+    [idOrSlug, selectedId],
+  );
+
   const table = useTable({
     features: dataTableFeatures,
-    columns: serverColumns,
+    columns,
     data: serversRead.data?.mcp_servers ?? EMPTY,
     getRowId: (server) => server.id,
   });
@@ -173,7 +196,7 @@ export function McpServers({ org }: { org: AdminOrganization }): JSX.Element {
           that named nothing. */}
       {selected.id !== requested && (
         <Navigate
-          from="/organizations/$idOrSlug/mcp-servers"
+          from="/organizations/$idOrSlug/mcp-servers/"
           search={{ project: selected.id }}
           replace
         />
@@ -228,7 +251,21 @@ export function McpServers({ org }: { org: AdminOrganization }): JSX.Element {
                 </span>
               </Table.NoResultsMessage>
             ) : (
-              rows.map((row) => <Table.Row key={row.id} row={row} />)
+              rows.map((row) => (
+                <Table.Row
+                  key={row.id}
+                  row={row}
+                  // The copy button is a control, so the row leaves its
+                  // click alone and copying never navigates.
+                  onClick={(server) => {
+                    void navigate({
+                      to: "/organizations/$idOrSlug/mcp-servers/$serverId",
+                      params: { idOrSlug, serverId: server.id },
+                      search: { project: selected.id },
+                    });
+                  }}
+                />
+              ))
             )}
           </Table.Body>
         </Table>

@@ -26,18 +26,18 @@ Usage:
   ${packageManager} create @gram-ai/function [options]
 
 Options:
-  --template <name>      Template to use (gram, mcp)
+  --template <name>      Template to use (functions, mcp)
   --name <name>          Project name
   --dir <path>           Directory to create project in
   --git <yes|no>         Initialize git repository
   --install <yes|no>     Install dependencies
-  --install-cli <yes|no> Install the Gram CLI
+  --install-cli <yes|no> Install the Speakeasy AI Control Plane CLI
   -y, --yes              Skip all prompts and use defaults
 
 Examples:
   ${packageManager} create @gram-ai/function
   ${packageManager} create @gram-ai/function --template mcp --name ecommerce
-  ${packageManager} create @gram-ai/function --yes --template gram
+  ${packageManager} create @gram-ai/function --yes --template functions
 `);
 }
 
@@ -59,12 +59,16 @@ async function init(argv: string[]): Promise<void> {
     return;
   }
 
+  log.warn(
+    "This scaffolder is superseded by `speakeasy functions init`, which creates the same projects. Install the CLI with `brew install speakeasy-api/tap/cli` or `npm i -g @speakeasy-api/cli`.",
+  );
+
   const template = await selectOrClack<string>({
     message: "Pick a framework",
     options: [
       {
-        value: "gram",
-        label: "Gram Functions",
+        value: "functions",
+        label: "Speakeasy Functions",
         hint: "Simplest path to start building your own tools - comes with batteries included",
       },
       {
@@ -73,7 +77,7 @@ async function init(argv: string[]): Promise<void> {
         hint: "For advanced use cases where you need more control over MCP responses",
       },
     ],
-  })(args.template);
+  })(args.template === "gram" ? "functions" : args.template); // "gram" is the deprecated name
   if (isCancel(template)) {
     log.info("Operation cancelled.");
     return;
@@ -82,7 +86,7 @@ async function init(argv: string[]): Promise<void> {
   const nameArg = args.name?.trim();
   const name = await textOrClack({
     message: "What do you want to call your project?",
-    defaultValue: "gram-mcp-server",
+    defaultValue: "my-mcp-server",
     validate: (value) => {
       if (packageNameRE.test(value || "")) {
         return undefined;
@@ -100,7 +104,7 @@ async function init(argv: string[]): Promise<void> {
     return;
   }
 
-  const rootDir = name.split("/").pop()?.trim() || "gram-func";
+  const rootDir = name.split("/").pop()?.trim() || "my-functions";
   const dirArg = args.dir?.trim();
   let dir = await textOrClack({
     message: "What directory should we create the project in?",
@@ -142,11 +146,17 @@ async function init(argv: string[]): Promise<void> {
   }
 
   let installCli = false;
-  const proc = await $`which gram`.quiet().nothrow();
+  // The project's build and push scripts run `speakeasy`, so look for the AI
+  // Control Plane CLI under that name rather than the old `gram` binary.
+  const proc =
+    await $`speakeasy --control-plane-cli 2>/dev/null | grep -qx speakeasy-ai-control-plane-cli`
+      .quiet()
+      .nothrow();
   // check exit code and decide if we should prompt
   if (proc.exitCode !== 0) {
     const res = await confirmOrClack({
-      message: "Install the Gram CLI? Required to deploy tools to Gram.",
+      message:
+        "Install the Speakeasy AI Control Plane CLI? Required to deploy your tools.",
     })(args.yes || yn(args.installCli));
     if (isCancel(res)) {
       log.info("Operation cancelled.");
@@ -159,11 +169,15 @@ async function init(argv: string[]): Promise<void> {
     title: "Setting up project",
   });
 
-  const isLocalDev = yn(process.env["GRAM_DEV"]);
+  const isLocalDev = yn(
+    process.env["SPEAKEASY_AI_DEV"] || process.env["GRAM_DEV"],
+  );
 
   tlog.message("Scaffolding");
   const dirname = import.meta.dirname;
-  const templateDir = resolve(join(dirname, "..", `gram-template-${template}`));
+  // The templates come from the speakeasy CLI, which embeds them; the build
+  // copies them into this package.
+  const templateDir = resolve(join(dirname, "..", "templates", template));
   await fs.cp(templateDir, dir, {
     recursive: true,
     filter: (src) => {
@@ -178,18 +192,18 @@ async function init(argv: string[]): Promise<void> {
     },
   });
 
-  let gramFuncsVersion = pkg.devDependencies["@gram-ai/functions"];
-  if (gramFuncsVersion == null || gramFuncsVersion.startsWith("workspace:")) {
-    // This templating package and `@gram-ai/functions` are versioned in
+  let funcsVersion = pkg.devDependencies["@speakeasy-api/functions"];
+  if (funcsVersion == null || funcsVersion.startsWith("workspace:")) {
+    // This templating package and `@speakeasy-api/functions` are versioned in
     // lockstep so we can just use the matching version.
-    gramFuncsVersion = `^${pkg.version}`;
+    funcsVersion = `^${pkg.version}`;
   }
   if (isLocalDev && existsSync(resolve(dirname, "..", "..", "functions"))) {
-    // For local development, use the local version of `@gram-ai/functions`
-    // if it exists.
+    // For local development, use the local version of
+    // `@speakeasy-api/functions` if it exists.
     const localPkgPath = resolve(dirname, "..", "..", "functions");
-    gramFuncsVersion = `file:${localPkgPath}`;
-    tlog.message(`Using local @gram-ai/functions from ${localPkgPath}`);
+    funcsVersion = `file:${localPkgPath}`;
+    tlog.message(`Using local @speakeasy-api/functions from ${localPkgPath}`);
   }
 
   let mcpSDKVersion = pkg.devDependencies["@modelcontextprotocol/sdk"];
@@ -203,8 +217,8 @@ async function init(argv: string[]): Promise<void> {
   dstPkg.version = "0.0.0";
   dstPkg.name = name;
   const deps = dstPkg.dependencies;
-  if (deps?.["@gram-ai/functions"] != null) {
-    deps["@gram-ai/functions"] = gramFuncsVersion;
+  if (deps?.["@speakeasy-api/functions"] != null) {
+    deps["@speakeasy-api/functions"] = funcsVersion;
   }
   if (deps?.["@modelcontextprotocol/sdk"] != null) {
     deps["@modelcontextprotocol/sdk"] = mcpSDKVersion;
@@ -248,11 +262,16 @@ async function init(argv: string[]): Promise<void> {
   }
 
   if (installCli) {
-    tlog.message("Installing Gram CLI");
-    await $`which gram || (curl -fsSL https://go.getgram.ai/cli.sh | bash; gram auth)`;
+    tlog.message("Installing the Speakeasy AI Control Plane CLI");
+    // A `speakeasy` on PATH may be the Speakeasy SDK generator CLI, which
+    // shares the name, so only skip the installer when the binary prints the
+    // AI Control Plane CLI marker. The installer puts the CLI in
+    // ${INSTALL_DIR:-/usr/local/bin}, so authenticate with that path rather
+    // than whatever `speakeasy` comes first on PATH.
+    await $`speakeasy --control-plane-cli 2>/dev/null | grep -qx speakeasy-ai-control-plane-cli || (curl -fsSL https://ai.speakeasy.com/cli.sh | bash && "\${INSTALL_DIR:-/usr/local/bin}/speakeasy" auth)`;
   }
 
-  let successMessage = `All done! Run \`cd ${dir} && ${packageManager} run build\` to build your first Gram Function.`;
+  let successMessage = `All done! Run \`cd ${dir} && ${packageManager} run build\` to build your first function.`;
   successMessage = await fs
     .readFile(join(templateDir, "NEXT_STEPS.txt"), "utf-8")
     .catch(() => successMessage);

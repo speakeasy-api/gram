@@ -92,10 +92,7 @@ func TestPreparationOrganizationDetachRevalidatesScopeAfterWait(t *testing.T) {
 			go func() {
 				done <- ti.service.RemoveClientFromMcpServer(ctx, &orgclientsgen.RemoveClientFromMcpServerPayload{ClientID: client.String(), McpServerID: serverID.String()})
 			}()
-			require.Eventually(t, func() bool {
-				blocked, err := testrepo.New(ti.conn).IsQueryBlockedOnLockFixture(ctx, pattern)
-				return err == nil && blocked
-			}, 5*time.Second, 10*time.Millisecond)
+			testenv.WaitForQueryBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), pattern)
 			if kind == "client" {
 				_, err = testrepo.New(tx).MovePreparationFixtureClientProject(ctx, testrepo.MovePreparationFixtureClientProjectParams{ID: client, ProjectID: conv.ToNullUUID(server.ProjectID), TargetProjectID: conv.ToNullUUID(foreign.ProjectID)})
 			} else {
@@ -167,10 +164,9 @@ func TestPreparationSerializesWithInteractiveRotation(t *testing.T) {
 	// Observe the actual advisory-lock wait in this fixture's database, not
 	// an arbitrary error from a short deadline. The binding lock is new and
 	// uncontended; rotation holds the shared issuer-registration lock.
-	require.Eventually(t, func() bool {
-		blocked, err := testrepo.New(ti.conn).IsQueryBlockedOnLockFixture(ctx, "%LockPreparationSubmission :exec%")
-		return err == nil && blocked
-	}, 5*time.Second, 10*time.Millisecond, "preparation must wait on the registration advisory lock")
+	holderPID, err := testrepo.New(ti.conn).GetAdvisoryLockHolderFixture(ctx, "ema-registration-issuer:"+in.RemoteSessionIssuerID.String())
+	require.NoError(t, err)
+	testenv.WaitForQueryBlockedBy(t, ctx, ti.conn, uint32(holderPID), "%LockPreparationSubmission :exec%")
 	select {
 	case outcome := <-preparationDone:
 		t.Fatalf("preparation completed before rotation released the lock: %v", outcome.err)

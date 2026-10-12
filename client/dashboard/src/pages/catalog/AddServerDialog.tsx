@@ -1,16 +1,21 @@
 import { catalogLogoClassName } from "./logo";
+import { CatalogGuardrailsPhase } from "./CatalogGuardrailsPhase";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { useOrganization } from "@/contexts/Auth";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { CreationIdentityChoice } from "@/pages/mcp/x/tabs/settings/sections/authentication/CreationIdentityChoice";
 import { useAgentCredentialFields } from "@/lib/remote-identity";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
-import { useSdkClient } from "@/contexts/Sdk";
+import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { invalidateAllListMCPCatalog } from "@gram/client/react-query/listMCPCatalog.js";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
-import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
@@ -77,106 +82,88 @@ export interface AddServerDialogProps {
  * strip their headers, so the details call is the authoritative source for the
  * endpoint data the install flow needs.
  */
-function useEnrichedServers(servers: PulseMCPServer[], open: boolean) {
+const EMPTY_SERVERS: PulseMCPServer[] = [];
+
+function useEnrichedServers(
+  servers: PulseMCPServer[],
+  open: boolean,
+  targetProjectSlug?: string,
+) {
   const client = useSdkClient();
-  const [enrichedServers, setEnrichedServers] = useState<PulseMCPServer[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Track the server specifiers to avoid re-fetching for the same servers
-  const fetchedForRef = useRef<string | null>(null);
-  const serversKey = servers.map((s) => s.registrySpecifier).join(",");
-
-  // Fetch details when dialog opens
-  useEffect(() => {
-    if (!open) {
-      // Reset when dialog closes
-      setEnrichedServers([]);
-      setIsLoading(false);
-      setError(null);
-      fetchedForRef.current = null;
-      return;
-    }
-
-    if (servers.length === 0) {
-      setEnrichedServers([]);
-      return;
-    }
-
-    // Skip if we've already fetched for these servers
-    if (fetchedForRef.current === serversKey) {
-      return;
-    }
-
-    const fetchServerDetails = async () => {
-      setIsLoading(true);
-      setError(null);
-      fetchedForRef.current = serversKey;
-
-      let result: PulseMCPServer[];
-      try {
-        result = await Promise.all(
-          servers.map(async (server) => {
-            try {
-              if (!server.registryId) {
-                return server;
-              }
-              const details = await client.mcpRegistries.getServerDetails({
-                registryId: server.registryId,
-                serverSpecifier: server.registrySpecifier,
-              });
-
-              return {
-                ...server,
-                remotes: mergeRemoteHeaders(
-                  server.remotes,
-                  details.remotes as ExternalMCPRemote[] | undefined,
-                ),
-              };
-            } catch (err) {
-              // If we can't fetch details for a specific server, just use original
-              console.warn(
-                `Failed to fetch details for ${server.registrySpecifier}:`,
-                err,
-              );
-              return server;
-            }
-          }),
-        );
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to fetch details",
-        );
-        result = servers;
-      }
-
-      setEnrichedServers(result.map(filterToHttpRemotes));
-      setIsLoading(false);
-    };
-
-    void fetchServerDetails();
-  }, [open, serversKey, servers, client]);
-
-  return { enrichedServers, isLoading, error };
-}
-
-// Keep the list entry's remote selection but adopt header requirements from
-// the details response when the list variant lacked them.
-function mergeRemoteHeaders(
-  existing: ExternalMCPRemote[] | undefined,
-  fromDetails: ExternalMCPRemote[] | undefined,
-): ExternalMCPRemote[] | undefined {
-  if (!existing || existing.length === 0) return fromDetails ?? existing;
-  if (!fromDetails || fromDetails.length === 0) return existing;
-
-  const detailsByUrl = new Map(fromDetails.map((r) => [r.url, r]));
-  return existing.map((remote) => {
-    if (remote.headers && remote.headers.length > 0) return remote;
-    const detailed = detailsByUrl.get(remote.url);
-    return detailed?.headers?.length
-      ? { ...remote, headers: detailed.headers }
-      : remote;
+  const currentProjectSlug = useProjectSlugForRequests();
+  const projectSlug = targetProjectSlug ?? currentProjectSlug;
+  const queryClient = useQueryClient();
+  const [admissionError, setAdmissionError] = useState<string | null>(null);
+  const query = useQuery({
+    queryKey: ["catalog-install-details", projectSlug, servers],
+    enabled: open && servers.length > 0,
+    staleTime: 0,
+    retry: false,
+    refetchOnMount: "always",
+    // Do not change the install configuration behind an open dialog.
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    queryFn: () =>
+      Promise.all(
+        servers.map(async (server) => {
+          if (!server.registryId) return filterToHttpRemotes(server);
+          const details = await client.mcpRegistries.getServerDetails({
+            registryId: server.registryId,
+            serverSpecifier: server.registrySpecifier,
+            gramProject: projectSlug,
+          });
+          // Callers may select a subset of endpoints, but never retain an endpoint
+          // or its header requirements that the authoritative detail no longer has.
+          const remotes = server.remotes?.length
+            ? server.remotes.map((remote) => {
+                const current = details.remotes?.find(
+                  (candidate) =>
+                    candidate.url === remote.url &&
+                    candidate.transportType === remote.transportType,
+                );
+                if (!current)
+                  throw new Error(
+                    "Catalog endpoints changed. Close this dialog and select the server again.",
+                  );
+                return current;
+              })
+            : details.remotes;
+          return filterToHttpRemotes({
+            ...server,
+            tools: details.tools,
+            remotes,
+          });
+        }),
+      ),
   });
+  const error = admissionError ?? query.error?.message ?? null;
+  useEffect(() => {
+    if (!open) setAdmissionError(null);
+  }, [open]);
+  useEffect(() => {
+    if (error)
+      void invalidateAllListMCPCatalog(queryClient).catch(() => undefined);
+  }, [error, queryClient]);
+
+  const beforeInstall = async () => {
+    // A flag can flip while Configure/Guardrails is open. Never reuse the
+    // successful opening request as admission for a later install.
+    const current = await query.refetch();
+    if (current.isError) return false;
+    if (JSON.stringify(current.data) !== JSON.stringify(query.data)) {
+      setAdmissionError(
+        "Catalog details changed. Close this dialog and select the server again.",
+      );
+      return false;
+    }
+    return true;
+  };
+  return {
+    enrichedServers: error ? EMPTY_SERVERS : (query.data ?? EMPTY_SERVERS),
+    isLoading: open && servers.length > 0 && query.isFetching,
+    error,
+    beforeInstall,
+  };
 }
 
 export function AddServerDialog({
@@ -195,15 +182,30 @@ export function AddServerDialog({
     enrichedServers,
     isLoading: isLoadingDetails,
     error: detailsError,
-  } = useEnrichedServers(servers, open);
+    beforeInstall,
+  } = useEnrichedServers(servers, open, projectSlug);
 
   // Use enriched servers (with remotes) for the workflow. Callers that run
   // without a visible dialog can never answer the selectRemotes phase, so
   // multi-remote servers install every endpoint for them.
+  // Guardrails are an interactive step (there is nobody to draft a policy in a
+  // headless or auto-started install) and follow the policy admin permission.
+  const organization = useOrganization();
+  const { hasScope } = useRBAC();
+  const mcpScoped =
+    useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies).status === "enabled";
   const releaseState = useRemoteMcpInstallWorkflow({
     servers: enrichedServers,
+    beforeInstall,
     projectSlug,
     autoSelectRemotes: !!(autoStartInstall || headless),
+    offerGuardrails:
+      mcpScoped &&
+      !autoStartInstall &&
+      !headless &&
+      hasScope("org:admin", organization.id) &&
+      // Unproxied servers (e.g. Figma) never pass through Speakeasy.
+      enrichedServers.some((server) => !isFigmaCatalogServer(server)),
   });
   const serversKey = servers.map((s) => s.registrySpecifier).join(",");
   const autoStartRef = useRef(false);
@@ -228,6 +230,8 @@ export function AddServerDialog({
     if (
       !open ||
       !autoStartInstall ||
+      isLoadingDetails ||
+      !!detailsError ||
       autoStartRef.current ||
       releaseState.phase !== "configure" ||
       !releaseState.canInstall
@@ -237,7 +241,7 @@ export function AddServerDialog({
 
     autoStartRef.current = true;
     void releaseState.startInstall();
-  }, [autoStartInstall, open, releaseState]);
+  }, [autoStartInstall, open, releaseState, isLoadingDetails, detailsError]);
 
   // Clean up Radix body scroll-lock on unmount (e.g. when navigating away mid-dialog)
   useEffect(() => {
@@ -442,6 +446,10 @@ function dialogTitle(
   switch (releaseState.phase) {
     case "complete":
       return "Added to Project";
+    case "guardrails":
+      return releaseState.servers.length === 1
+        ? `Guardrails for ${releaseState.servers[0]!.name}`
+        : `Guardrails for ${releaseState.servers.length} servers`;
     case "installing":
       return "Adding to Project";
     case "selectRemotes": {
@@ -467,6 +475,10 @@ function phaseDescription(
       return isSingle
         ? "Add this MCP server to your project."
         : "Configure and add these MCP servers to your project.";
+    case "guardrails":
+      return isSingle
+        ? "Protect this server before it takes traffic. Suggested from the catalog's tool annotations."
+        : "Protect these servers before they take traffic. Suggested from the catalog's tool annotations.";
     case "installing":
       return "Creating MCP servers...";
     case "complete":
@@ -500,6 +512,10 @@ function PhaseContent({
           bulk={bulk}
           onClose={onClose}
         />
+      );
+    case "guardrails":
+      return (
+        <CatalogGuardrailsPhase releaseState={releaseState} onClose={onClose} />
       );
     case "installing":
       return <InstallStatusList statuses={releaseState.statuses} />;
@@ -744,16 +760,26 @@ function ConfigurePhaseContent({
     missingRequiredHeaders === 0 &&
     !userIdentityPermissionBlocked;
 
+  // With guardrails on offer, finishing Configure moves to that step; the
+  // install itself starts from there.
+  const advance = (configureSkipped = false) => {
+    if (releaseState.continueToGuardrails) {
+      releaseState.continueToGuardrails({ configureSkipped });
+    } else {
+      void releaseState.startInstall();
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && canSubmit) {
       e.preventDefault();
-      void releaseState.startInstall();
+      advance();
     }
   };
 
   useEffect(() => {
     if (nothingToConfigure && releaseState.canInstall) {
-      void releaseState.startInstall();
+      advance(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only trigger on install readiness changes, not on every releaseState update
   }, [nothingToConfigure, releaseState.canInstall]);
@@ -819,20 +845,17 @@ function ConfigurePhaseContent({
               disabled={
                 !releaseState.canInstall || userIdentityPermissionBlocked
               }
-              onClick={() => {
-                void releaseState.startInstall();
-              }}
+              onClick={() => advance()}
             >
               <Button.Text>Skip for now</Button.Text>
             </Button>
           )}
-          <Button
-            disabled={!canSubmit}
-            onClick={() => {
-              void releaseState.startInstall();
-            }}
-          >
-            <Button.Text>Add to Project</Button.Text>
+          <Button disabled={!canSubmit} onClick={() => advance()}>
+            <Button.Text>
+              {releaseState.continueToGuardrails
+                ? "Continue"
+                : "Add to Project"}
+            </Button.Text>
           </Button>
         </div>
       </Dialog.Footer>
@@ -1314,6 +1337,8 @@ function CompletePhaseContent({
         </div>
       )}
 
+      <GuardrailOutcomeNotice outcome={releaseState.guardrail} />
+
       {/* Per-server results — only shown if something failed */}
       {!allSucceeded && (
         <div>
@@ -1341,6 +1366,40 @@ function CompletePhaseContent({
           </Button>
         </Dialog.Footer>
       )}
+    </div>
+  );
+}
+
+/** What became of the guardrail requested during install. A failure is spelled
+ *  out: the servers exist either way, and the fix is a step on each server. */
+export function GuardrailOutcomeNotice({
+  outcome,
+}: {
+  outcome: CompletePhase["guardrail"];
+}): JSX.Element | null {
+  if (!outcome) return null;
+  if (outcome.status === "created") {
+    return (
+      <div className="border p-3">
+        <Text small className="font-medium">
+          Guardrail created
+        </Text>
+        <Text small muted>
+          {outcome.name} is active and scoped to the added servers. Review it
+          under the server&apos;s Guardrails tab.
+        </Text>
+      </div>
+    );
+  }
+  return (
+    <div className="border-destructive/40 border p-3" role="alert">
+      <Text small className="text-destructive font-medium">
+        Guardrail was not created
+      </Text>
+      <Text small muted>
+        The servers were added, but &quot;{outcome.name}&quot; could not be
+        created: {outcome.error}. Add it from each server&apos;s Guardrails tab.
+      </Text>
     </div>
   );
 }

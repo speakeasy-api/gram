@@ -56,13 +56,12 @@ func (c *ToolsetsClient) GetToolset(
 	projectSlug string,
 	toolsetSlug string,
 ) (*types.Toolset, error) {
-	slug := types.Slug(toolsetSlug)
 	key := apiKey.Reveal()
 	payload := &toolsets.GetToolsetPayload{
 		ApikeyToken:      &key,
 		SessionToken:     nil,
 		ProjectSlugInput: &projectSlug,
-		Slug:             slug,
+		Slug:             toolsetSlug,
 	}
 
 	result, err := c.client.GetToolset(ctx, payload)

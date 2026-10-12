@@ -84,7 +84,7 @@ func (quietProbes) ListToolDeclarations(_ context.Context, _ string) ([]capabili
 	return nil, nil
 }
 
-func (quietProbes) Lookup(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
+func (quietProbes) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
 	return nil, nil
 }
 
@@ -363,7 +363,7 @@ func (failingProbes) ListToolDeclarations(_ context.Context, _ string) ([]capabi
 	return nil, errors.New("server refused unauthenticated tools/list")
 }
 
-func (failingProbes) Lookup(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
+func (failingProbes) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
 	return nil, errors.New("registry unreachable")
 }
 
@@ -397,7 +397,7 @@ func (declaringProbes) ListToolDeclarations(_ context.Context, _ string) ([]capa
 	}, nil
 }
 
-func (declaringProbes) Lookup(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
+func (declaringProbes) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
 	return &catalog.Match{
 		Registry:  "Test Registry",
 		Specifier: "com.example/server",
@@ -422,7 +422,7 @@ func (cataloguedOnlyProbes) ListToolDeclarations(_ context.Context, _ string) ([
 	return nil, errors.New("server refused unauthenticated tools/list")
 }
 
-func (cataloguedOnlyProbes) Lookup(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
+func (cataloguedOnlyProbes) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
 	readOnly := true
 	return &catalog.Match{
 		Registry:  "Test Registry",
@@ -490,7 +490,7 @@ func (cataloguedNoToolMetadata) ListToolDeclarations(_ context.Context, _ string
 	return nil, errors.New("server refused unauthenticated tools/list")
 }
 
-func (cataloguedNoToolMetadata) Lookup(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
+func (cataloguedNoToolMetadata) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
 	return &catalog.Match{
 		Registry:  "Test Registry",
 		Specifier: "com.example/server",
@@ -640,7 +640,7 @@ func (authorityFailsToolsAnswer) ListToolDeclarations(_ context.Context, _ strin
 	}}, nil
 }
 
-func (authorityFailsToolsAnswer) Lookup(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
+func (authorityFailsToolsAnswer) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
 	return nil, nil
 }
 
@@ -942,4 +942,21 @@ func TestAssemble_DomainFailureIsAGap(t *testing.T) {
 	raw, err = pkg.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server"))
 	require.NoError(t, err)
 	require.NotContains(t, decode(t, raw), "domain")
+}
+
+type projectCatalogProbe struct{ projectID uuid.UUID }
+
+func (p *projectCatalogProbe) Lookup(_ context.Context, projectID uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
+	p.projectID = projectID
+	return nil, nil
+}
+
+func TestAssembleCatalogReceivesResearchProjectWithoutAuthContext(t *testing.T) {
+	t.Parallel()
+	probe := &projectCatalogProbe{}
+	assembler := evidence.NewAssembler(&fakePackages{}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{}, quietProbes{}, quietProbes{}, probe)
+	projectID := uuid.New()
+	_, err := assembler.Assemble(t.Context(), projectID, identity.Resolve("https://example.com/mcp"))
+	require.NoError(t, err)
+	require.Equal(t, projectID, probe.projectID)
 }

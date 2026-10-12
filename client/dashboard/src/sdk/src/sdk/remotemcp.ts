@@ -10,9 +10,11 @@ import { remoteMcpDeleteServerHeader } from "../funcs/remoteMcpDeleteServerHeade
 import { remoteMcpDiscoverProtectedResourceMetadata } from "../funcs/remoteMcpDiscoverProtectedResourceMetadata.js";
 import { remoteMcpGetServer } from "../funcs/remoteMcpGetServer.js";
 import { remoteMcpGetServerHeader } from "../funcs/remoteMcpGetServerHeader.js";
+import { remoteMcpGetServerScopes } from "../funcs/remoteMcpGetServerScopes.js";
 import { remoteMcpListServerHeaders } from "../funcs/remoteMcpListServerHeaders.js";
 import { remoteMcpListServers } from "../funcs/remoteMcpListServers.js";
 import { remoteMcpProbeURL } from "../funcs/remoteMcpProbeURL.js";
+import { remoteMcpSetServerScopePin } from "../funcs/remoteMcpSetServerScopePin.js";
 import { remoteMcpUpdateServer } from "../funcs/remoteMcpUpdateServer.js";
 import { remoteMcpUpdateServerHeader } from "../funcs/remoteMcpUpdateServerHeader.js";
 import { remoteMcpVerifyURL } from "../funcs/remoteMcpVerifyURL.js";
@@ -24,6 +26,7 @@ import { ProbeURLResult } from "../models/components/probeurlresult.js";
 import { ProtectedResourceMetadataDiscovery } from "../models/components/protectedresourcemetadatadiscovery.js";
 import { RemoteMcpServer } from "../models/components/remotemcpserver.js";
 import { RemoteMcpServerHeader } from "../models/components/remotemcpserverheader.js";
+import { RemoteMcpServerScopes } from "../models/components/remotemcpserverscopes.js";
 import { VerifyURLResult } from "../models/components/verifyurlresult.js";
 import {
   CreateRemoteMcpServerRequest,
@@ -58,6 +61,10 @@ import {
   GetRemoteMcpServerHeaderSecurity,
 } from "../models/operations/getremotemcpserverheader.js";
 import {
+  GetRemoteMcpServerScopesRequest,
+  GetRemoteMcpServerScopesSecurity,
+} from "../models/operations/getremotemcpserverscopes.js";
+import {
   ListRemoteMcpServerHeadersRequest,
   ListRemoteMcpServerHeadersSecurity,
 } from "../models/operations/listremotemcpserverheaders.js";
@@ -69,6 +76,10 @@ import {
   ProbeRemoteMcpURLRequest,
   ProbeRemoteMcpURLSecurity,
 } from "../models/operations/proberemotemcpurl.js";
+import {
+  SetRemoteMcpServerScopePinRequest,
+  SetRemoteMcpServerScopePinSecurity,
+} from "../models/operations/setremotemcpserverscopepin.js";
 import {
   UpdateRemoteMcpServerRequest,
   UpdateRemoteMcpServerSecurity,
@@ -237,6 +248,25 @@ export class RemoteMcp extends ClientSDK {
   }
 
   /**
+   * getServerScopes remoteMcp
+   *
+   * @remarks
+   * Report the scope state of the protected resource a remote-backed MCP server's logins are for: the operator pin, which belongs to the protected resource and so is shared by every server in the project with the same upstream URL, the scopes the resource advertises and last challenged with, the organization's resource scope discovery flag, and what a login through each bound client would request now. Requires read access to the server only. Reads cached state only; never contacts the resource.
+   */
+  async getServerScopes(
+    request: GetRemoteMcpServerScopesRequest,
+    security?: GetRemoteMcpServerScopesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RemoteMcpServerScopes> {
+    return unwrapAsync(remoteMcpGetServerScopes(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listServerHeaders remoteMcp
    *
    * @remarks
@@ -286,6 +316,25 @@ export class RemoteMcp extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ProbeURLResult> {
     return unwrapAsync(remoteMcpProbeURL(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setServerScopePin remoteMcp
+   *
+   * @remarks
+   * Pin the scopes logins to a remote-backed MCP server's protected resource request, or clear the pin with an empty list. The pin belongs to the protected resource, so it applies to every server in the project with the same upstream URL, and the caller needs write access to all of them. Returns the scope state re-read after the write.
+   */
+  async setServerScopePin(
+    request: SetRemoteMcpServerScopePinRequest,
+    security?: SetRemoteMcpServerScopePinSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RemoteMcpServerScopes> {
+    return unwrapAsync(remoteMcpSetServerScopePin(
       this,
       request,
       security,

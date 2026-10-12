@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -20,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -110,21 +110,23 @@ func TestNetworkModeAdmissionLockSerializesIngressDisable(t *testing.T) {
 	finalizeNetworkAccess, err := admission.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: ti.orgID, Mode: networkaccess.ModeDual})
 	require.NoError(t, err)
 
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, finalizeNetworkAccess.Finalize(ctx, tx))
 	disabled := false
-	err = pgx.BeginFunc(ctx, ti.conn, func(tx pgx.Tx) error {
-		require.NoError(t, finalizeNetworkAccess.Finalize(ctx, tx))
-
-		lockCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
-		defer cancel()
-		_, updateErr := ti.service.UpdateIngress(lockCtx, &gen.UpdateIngressPayload{Enabled: &disabled})
-		require.Error(t, updateErr)
-		require.ErrorIs(t, updateErr, context.DeadlineExceeded)
-		return nil
-	})
-	require.NoError(t, err)
-
-	updated, err := ti.service.UpdateIngress(ctx, &gen.UpdateIngressPayload{Enabled: &disabled})
-	require.NoError(t, err)
+	type outcome struct {
+		result *gen.NetworkIngress
+		err    error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		result, err := ti.service.UpdateIngress(ctx, &gen.UpdateIngressPayload{Enabled: &disabled})
+		done <- outcome{result: result, err: err}
+	}()
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(tx), 1)
+	require.NoError(t, tx.Commit(ctx))
+	completed := <-done
+	require.NoError(t, completed.err)
+	updated := completed.result
 	require.False(t, updated.Enabled)
 }
 

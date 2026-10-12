@@ -65,6 +65,18 @@ vi.mock("@/contexts/Auth", async (importOriginal) => ({
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ isFeatureEnabled: () => true }),
 }));
+vi.mock("@/pages/security/server-guardrails/useNewServerGuardrail", () => ({
+  useNewServerGuardrail: () => ({
+    available: false,
+    enabled: false,
+    setEnabled: vi.fn(),
+    state: {},
+    updateState: vi.fn(),
+    validation: { ok: true },
+    createFor: () => Promise.resolve({ status: "skipped" }),
+  }),
+  guardrailFailureMessage: () => "",
+}));
 vi.mock("@/hooks/useEffectiveUserSessionIssuers", () => ({
   useEffectiveUserSessionIssuers: () => ({
     issuers: [],
@@ -304,6 +316,29 @@ it("disables direct connections only in gateway context", () => {
   ).toBe(false);
 });
 
+it("saves an unproxied server without verifying connectivity", async () => {
+  state.flow.gatewayId = null;
+  state.verifyResult.mockReturnValue(undefined);
+  const view = render(<CreateRemoteMcp />);
+  fireEvent.change(screen.getByLabelText("MCP server URL"), {
+    target: { value: "https://example.com/mcp" },
+  });
+  expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+  fireEvent.click(
+    screen.getByRole("radio", { name: /Clients connect directly/ }),
+  );
+  state.verifyResult.mockReturnValue({ verified: true });
+  view.rerender(<CreateRemoteMcp />);
+  expect(screen.queryByRole("button", { name: "Re-verify" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() =>
+    expect(state.create).toHaveBeenCalledWith({
+      name: undefined,
+      url: "https://example.com/mcp",
+    }),
+  );
+});
+
 it("preselects User Identity only when the challenge advertised OAuth", () => {
   // A bare 401 from a Basic or API-key upstream reports the same outcome as an
   // OAuth challenge. Only the advertised metadata URL tells them apart, and
@@ -316,7 +351,7 @@ it("preselects User Identity only when the challenge advertised OAuth", () => {
   const view = render(<CreateRemoteMcp />);
   expect(
     screen
-      .getByRole("radio", { name: /No Identity/ })
+      .getByRole("radio", { name: "Manual", description: /static headers/ })
       .getAttribute("data-state"),
   ).toBe("checked");
 

@@ -9,7 +9,7 @@ import (
 // InjectToolsetIDConstant injects a required [XGramToolsetIDField] string
 // property into a tool's input JSON Schema, fixed via "const" to the given
 // scopeID. Tool callers must echo the value back so downstream validators
-// can recover which Gram toolset authored the call.
+// can recover which Speakeasy toolset authored the call.
 //
 // Only the toolset-backed `/mcp` path injects today. The remote MCP proxy
 // (`/x/mcp`, plus `/mcp` remote-backed and tunneled servers) stopped
@@ -45,7 +45,7 @@ func InjectToolsetIDConstant(schema json.RawMessage, scopeID string) (json.RawMe
 	props[XGramToolsetIDField] = map[string]any{
 		"type":        "string",
 		"const":       scopeID,
-		"description": "Internal Gram toolset identifier. Must be passed through unchanged.",
+		"description": "Internal Speakeasy toolset identifier. Must be passed through unchanged.",
 	}
 	schemaMap["properties"] = props
 

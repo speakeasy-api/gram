@@ -7,10 +7,12 @@ import { riskPoliciesDelete } from "../funcs/riskPoliciesDelete.js";
 import { riskPoliciesGet } from "../funcs/riskPoliciesGet.js";
 import { riskPoliciesList } from "../funcs/riskPoliciesList.js";
 import { riskPoliciesListForMcpServer } from "../funcs/riskPoliciesListForMcpServer.js";
+import { riskPoliciesListMcpPlatformToolsets } from "../funcs/riskPoliciesListMcpPlatformToolsets.js";
 import { riskPoliciesStatus } from "../funcs/riskPoliciesStatus.js";
 import { riskPoliciesTrigger } from "../funcs/riskPoliciesTrigger.js";
 import { riskPoliciesUpdate } from "../funcs/riskPoliciesUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { ListMCPPlatformToolsetsResult } from "../models/components/listmcpplatformtoolsetsresult.js";
 import { ListRiskPoliciesResult } from "../models/components/listriskpoliciesresult.js";
 import { RiskPolicy } from "../models/components/riskpolicy.js";
 import { RiskPolicyStatus } from "../models/components/riskpolicystatus.js";
@@ -30,6 +32,10 @@ import {
   GetRiskPolicyStatusRequest,
   GetRiskPolicyStatusSecurity,
 } from "../models/operations/getriskpolicystatus.js";
+import {
+  ListMCPPlatformToolsetsRequest,
+  ListMCPPlatformToolsetsSecurity,
+} from "../models/operations/listmcpplatformtoolsets.js";
 import {
   ListRiskPoliciesRequest,
   ListRiskPoliciesSecurity,
@@ -118,6 +124,25 @@ export class Policies extends ClientSDK {
     options?: RequestOptions,
   ): Promise<RiskPolicyStatus> {
     return unwrapAsync(riskPoliciesStatus(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listMCPPlatformToolsets risk
+   *
+   * @remarks
+   * List code-owned Platform MCP toolsets available as risk policy scope targets.
+   */
+  async listMcpPlatformToolsets(
+    request?: ListMCPPlatformToolsetsRequest | undefined,
+    security?: ListMCPPlatformToolsetsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListMCPPlatformToolsetsResult> {
+    return unwrapAsync(riskPoliciesListMcpPlatformToolsets(
       this,
       request,
       security,

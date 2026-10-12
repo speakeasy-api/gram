@@ -51,7 +51,7 @@ type workosDirectoryGroupMembershipEventPayload struct {
 }
 
 // handleDirectoryUserEvent applies a dsync.user.* event.
-func handleDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event) (postCommitEffects, error) {
+func handleDirectoryUserEvent(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, event events.Event) (postCommitEffects, error) {
 	var none postCommitEffects
 
 	var payload workosDirectoryUserEventPayload
@@ -237,10 +237,10 @@ func upsertDirectoryUser(ctx context.Context, dbtx database.DBTX, event events.E
 
 // deactivateDirectoryUser handles a dsync.user.{created,updated} event whose
 // state is not active. It soft-deletes the directory user row and, when the
-// directory user maps to a Gram user with a live organization relationship,
+// directory user maps to a Speakeasy user with a live organization relationship,
 // deprovisions that user's access, mirroring what an
 // organization_membership.deleted event does.
-func deactivateDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, event events.Event, payload workosDirectoryUserEventPayload) (postCommitEffects, error) {
+func deactivateDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx pgx.Tx, event events.Event, payload workosDirectoryUserEventPayload) (postCommitEffects, error) {
 	var none postCommitEffects
 
 	org, err := organizationsrepo.New(dbtx).GetOrganizationByWorkosID(ctx, conv.ToPGText(payload.OrganizationID))
@@ -264,7 +264,7 @@ func deactivateDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx data
 		}
 	}
 
-	// Resolve the linked Gram user before soft-deleting the directory row:
+	// Resolve the linked Speakeasy user before soft-deleting the directory row:
 	// email is the canonical linkage (mirroring upsertDirectoryUser), with the
 	// stored user_id as a fallback for directory users whose email changed.
 	var gramUserID string
@@ -297,7 +297,7 @@ func deactivateDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx data
 	}
 
 	if gramUserID == "" {
-		logger.WarnContext(ctx, "directory user deactivated but no linked Gram user found",
+		logger.WarnContext(ctx, "directory user deactivated but no linked Speakeasy user found",
 			attr.SlogWorkOSDirectoryUserID(payload.ID),
 		)
 		return none, nil

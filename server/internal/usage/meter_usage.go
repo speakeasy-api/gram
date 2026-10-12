@@ -59,7 +59,7 @@ func (s *Service) GetMeterUsageForOrganization(ctx context.Context, organization
 	}
 	cycles := BillingCycles(queriedAt, int(meta.BillingCycleAnchorDay), tumHistoryCycles)
 
-	from, to, err := resolveMeterUsageWindow(payload.From, payload.To, cycles[len(cycles)-1])
+	from, to, err := ResolveMeterUsageWindow(payload.From, payload.To, cycles[len(cycles)-1])
 	if err != nil {
 		if boundaryErr, ok := errors.AsType[*oops.ShareableError](err); ok {
 			return nil, boundaryErr.LogWarn(ctx, s.logger)
@@ -84,7 +84,9 @@ func (s *Service) GetMeterUsageForOrganization(ctx context.Context, organization
 	return response, nil
 }
 
-func resolveMeterUsageWindow(fromText, toText *string, activeCycle BillingCyclePeriod) (time.Time, time.Time, error) {
+// ResolveMeterUsageWindow validates paired UTC-midnight bounds up to three calendar months,
+// or returns the active cycle when both bounds are omitted.
+func ResolveMeterUsageWindow(fromText, toText *string, activeCycle BillingCyclePeriod) (time.Time, time.Time, error) {
 	if (fromText == nil) != (toText == nil) {
 		return time.Time{}, time.Time{}, oops.E(oops.CodeBadRequest, nil, "from and to must be provided together")
 	}

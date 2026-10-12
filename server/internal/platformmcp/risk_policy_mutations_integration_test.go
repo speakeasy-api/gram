@@ -343,6 +343,17 @@ func TestRiskPolicyUpdateRejectsSessionSourceOnMCPScopedPolicy(t *testing.T) {
 		"patch":            map[string]any{"sources": []string{"account_identity"}},
 	})
 	requireRiskMutationRefusal(t, err, "invalid_request")
+	_, _, err = handlers.UpdatePolicy(ctx, nil, map[string]any{
+		"project_slug":     project.Slug,
+		"policy_id":        policyID.String(),
+		"expected_version": read.Policy.Version,
+		"idempotency_key":  "update-scoped-policy-action-key",
+		"patch":            map[string]any{"action": "warn"},
+	})
+	var refusal *ToolRefusalError
+	require.ErrorAs(t, err, &refusal)
+	require.Contains(t, refusal.Payload, "MCP-scoped policy")
+	require.Contains(t, refusal.Payload, "use flag or block")
 
 	stored, err := queries.GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: policyID, ProjectID: project.ID})
 	require.NoError(t, err)

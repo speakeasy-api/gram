@@ -74,11 +74,7 @@ func TestUpdateMcpServer_DisableSerializesWithRootSelection(t *testing.T) {
 				disabled <- updateErr
 			}()
 
-			select {
-			case updateErr := <-disabled:
-				require.Failf(t, "disable returned before root selection committed", "error: %v", updateErr)
-			case <-time.After(100 * time.Millisecond):
-			}
+			testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(setterTx), 1)
 
 			require.NoError(t, setterTx.Commit(ctx))
 			select {
@@ -154,11 +150,7 @@ func TestUpdateMcpServer_DisableClearsNewlyCommittedRoot(t *testing.T) {
 		disabled <- updateErr
 	}()
 
-	select {
-	case updateErr := <-disabled:
-		require.Failf(t, "disable returned before new root committed", "error: %v", updateErr)
-	case <-time.After(100 * time.Millisecond):
-	}
+	testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, testenv.BackendPID(setterTx), 1)
 
 	require.NoError(t, setterTx.Commit(ctx))
 	select {

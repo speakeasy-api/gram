@@ -9,7 +9,13 @@ import (
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
+
+	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
+
+// sharedTaskQueue is the queue the dev, prod, and local workers poll. PR
+// previews each poll their own queue in the dev namespace.
+const sharedTaskQueue tenv.TaskQueueName = "main"
 
 // setScheduleCatchup changes only outage recovery policy, preserving operator
 // pauses, notes, overlap behavior, and pause-on-failure. Zero means the server's

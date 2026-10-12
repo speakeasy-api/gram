@@ -68,7 +68,7 @@ func TestReviewedRemoteSessionProviderVerticalSlice(t *testing.T) {
 
 	upstream := newReviewedUpstream(t)
 	principal, project := seedPlatformRegistration(t, ctx, conn)
-	store, err := platformmcp.NewRegistrationStore(conn, platformmcp.RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	store, err := platformmcp.NewRegistrationStore(conn)
 	require.NoError(t, err)
 	registration := registerReviewedMCP(t, ctx, conn, store, principal, project, upstream.URL+"/mcp")
 

@@ -20,21 +20,23 @@ const (
 type WriteOperation string
 
 const (
-	OperationSetOrganizationFeature    WriteOperation = "set_organization_feature"
-	OperationSetOrganizationOnboarding WriteOperation = "set_organization_onboarding"
-	OperationSetChatAnalysisSettings   WriteOperation = "set_organization_chat_analysis_settings"
-	OperationExtendOrganizationTrial   WriteOperation = "extend_organization_trial"
-	OperationEnableOrganization        WriteOperation = "enable_organization"
-	OperationDisableOrganization       WriteOperation = "disable_organization"
-	OperationCreateGlobalIssuer        WriteOperation = "create_global_issuer"
-	OperationUpdateGlobalIssuer        WriteOperation = "update_global_issuer"
-	OperationUpdateSupportMatrix       WriteOperation = "update_support_matrix"
+	OperationSetOrganizationFeature               WriteOperation = "set_organization_feature"
+	OperationSetOrganizationWhitelist             WriteOperation = "set_organization_whitelist"
+	OperationAssignOrganizationOnboardingPlaybook WriteOperation = "assign_organization_onboarding_playbook"
+	OperationSetChatAnalysisSettings              WriteOperation = "set_organization_chat_analysis_settings"
+	OperationExtendOrganizationTrial              WriteOperation = "extend_organization_trial"
+	OperationEnableOrganization                   WriteOperation = "enable_organization"
+	OperationDisableOrganization                  WriteOperation = "disable_organization"
+	OperationCreateGlobalIssuer                   WriteOperation = "create_global_issuer"
+	OperationUpdateGlobalIssuer                   WriteOperation = "update_global_issuer"
+	OperationUpdateSupportMatrix                  WriteOperation = "update_support_matrix"
 )
 
 // AllWriteOperations is the complete allowlist, in a stable order.
 var AllWriteOperations = []WriteOperation{
 	OperationSetOrganizationFeature,
-	OperationSetOrganizationOnboarding,
+	OperationSetOrganizationWhitelist,
+	OperationAssignOrganizationOnboardingPlaybook,
 	OperationSetChatAnalysisSettings,
 	OperationExtendOrganizationTrial,
 	OperationEnableOrganization,
@@ -86,13 +88,28 @@ func ParseWriteOperations(raw string) (map[WriteOperation]bool, error) {
 	return operations, nil
 }
 
+// implemented reports whether a reviewed writer is shipped. AttachWrites tests
+// keep this consent allowlist aligned with the operation registry.
+func (op WriteOperation) implemented() bool {
+	switch op {
+	case OperationSetOrganizationFeature, OperationSetOrganizationWhitelist, OperationAssignOrganizationOnboardingPlaybook,
+		OperationSetChatAnalysisSettings, OperationExtendOrganizationTrial,
+		OperationEnableOrganization, OperationDisableOrganization, OperationUpdateSupportMatrix:
+		return true
+	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer:
+		return false
+	default:
+		return false
+	}
+}
+
 // WritesAvailable reports whether consent may offer admin:write at all.
 func (c WriteConfig) WritesAvailable() bool {
 	if !c.Enabled {
 		return false
 	}
 	for _, op := range AllWriteOperations {
-		if c.Operations[op] {
+		if c.Operations[op] && op.implemented() {
 			return true
 		}
 	}

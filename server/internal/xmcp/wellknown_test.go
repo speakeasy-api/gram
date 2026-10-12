@@ -155,7 +155,7 @@ func TestHandleWellKnownOAuthServerMetadata_ToolsetBackendWithExternalOAuth(t *t
 	require.Contains(t, w.Header().Get("Content-Type"), "application/json")
 
 	// External OAuth toolsets re-serve the upstream provider's captured
-	// metadata, but the issuer is rewritten to the Gram resource URL so the
+	// metadata, but the issuer is rewritten to the Speakeasy resource URL so the
 	// document satisfies RFC 8414 §3.3 (served issuer must equal the URL the
 	// client fetched it under, i.e. the /x/mcp/{slug} surface). The upstream's
 	// own authorization/token endpoints are preserved verbatim.

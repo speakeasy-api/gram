@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -22,8 +23,9 @@ import (
 // returns either the parsed metadata or a typed unavailability reason.
 // Probe failures (including 404 — the expected outcome for non-OAuth resource
 // servers) are not errors at this layer; the handler always returns HTTP 200
-// with available=false. Only auth, validation, and unexpected database errors
-// are returned as errors.
+// with available=false. Auth, validation, and failures to load the configured
+// server are returned as errors. Recording the discovery outcome is best effort:
+// a persistence failure is logged but does not change the diagnostic response.
 func (s *Service) DiscoverProtectedResourceMetadata(ctx context.Context, payload *gen.DiscoverProtectedResourceMetadataPayload) (*gen.ProtectedResourceMetadataDiscovery, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -55,6 +57,9 @@ func (s *Service) DiscoverProtectedResourceMetadata(ctx context.Context, payload
 	doc, warnings, probeErr := wellknown.DiscoverProtectedResourceMetadata(ctx, s.policy, server.Url)
 	if probeErr != nil {
 		if typed, ok := errors.AsType[*wellknown.ProtectedResourceDiscoveryError](probeErr); ok {
+			if err := protectedresource.RecordFetchError(ctx, s.db, *authCtx.ProjectID, authCtx.ActiveOrganizationID, server.Url, typed); err != nil {
+				logger.ErrorContext(ctx, "record protected resource fetch error", attr.SlogError(err))
+			}
 			return &gen.ProtectedResourceMetadataDiscovery{
 				Available: false,
 				Metadata:  nil,
@@ -69,6 +74,12 @@ func (s *Service) DiscoverProtectedResourceMetadata(ctx context.Context, payload
 		// untyped probe error is a programming bug, not a user-visible
 		// upstream failure.
 		return nil, oops.E(oops.CodeUnexpected, probeErr, "discover protected resource metadata").LogError(ctx, logger)
+	}
+
+	// Keep the diagnostic response even for invalid metadata, but record the
+	// failed validation rather than refreshing the last successful fetch.
+	if err := protectedresource.Record(ctx, s.db, *authCtx.ProjectID, authCtx.ActiveOrganizationID, server.Url, doc); err != nil {
+		logger.ErrorContext(ctx, "record protected resource", attr.SlogError(err))
 	}
 
 	return &gen.ProtectedResourceMetadataDiscovery{

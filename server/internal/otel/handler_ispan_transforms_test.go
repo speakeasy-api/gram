@@ -3,6 +3,12 @@ package otel
 import (
 	"testing"
 
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/stretchr/testify/mock"
+
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/stretchr/testify/require"
 	otelattr "go.opentelemetry.io/otel/attribute"
@@ -199,7 +205,7 @@ func TestRewriteInstrumentationScopePreservesOriginalName(t *testing.T) {
 	require.Len(t, span.GetAttributes(), 2)
 	require.Equal(t, existingKey, span.GetAttributes()[0].GetKey())
 	require.Equal(t, existingValue, span.GetAttributes()[0].GetValue().GetStringValue())
-	require.Equal(t, string(OriginalInstrumentationScopeNameKey), span.GetAttributes()[1].GetKey())
+	require.Equal(t, string(enrich.OriginalInstrumentationScopeNameKey), span.GetAttributes()[1].GetKey())
 	require.Equal(t, originalName, span.GetAttributes()[1].GetValue().GetStringValue())
 }
 
@@ -226,4 +232,192 @@ func TestRewriteInstrumentationScopeLeavesNormalizedScopeUnchanged(t *testing.T)
 
 	require.Equal(t, normalizedInstrumentationScopeName, span.GetScope().GetName())
 	require.Empty(t, span.GetAttributes())
+}
+
+func TestSpanTransformHandlerClassifiesAndPublishes(t *testing.T) {
+	t.Parallel()
+
+	inbound := (&otelv1.InboundSpan_builder{
+		TraceId:           []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+		SpanId:            []byte{1, 2, 3, 4, 5, 6, 7, 8},
+		Name:              new("chat gpt-4o"),
+		StartTimeUnixNano: new(uint64(1_724_500_000_000_000_001)),
+		EndTimeUnixNano:   new(uint64(1_724_500_000_000_000_501)),
+		Scope:             (&otelv1.InboundSpan_InstrumentationScope_builder{Name: new("litellm")}).Build(),
+		Resource: (&otelv1.InboundSpan_Resource_builder{
+			Attributes: []*otelv1.InboundSpan_KeyValue{spanTestStringAttribute("service.name", "LiteLLM")},
+		}).Build(),
+		Provenance: (&otelv1.InboundSpan_Provenance_builder{
+			Source:         new("speakeasy"),
+			OrganizationId: new(testLogOrganizationID),
+			ProjectId:      new(testLogProjectID),
+		}).Build(),
+		Attributes: []*otelv1.InboundSpan_KeyValue{
+			spanTestStringAttribute("gen_ai.operation.name", "chat"),
+			spanTestStringAttribute("gen_ai.provider.name", "openai"),
+			spanTestStringAttribute("gen_ai.conversation.id", "session-9"),
+		},
+	}).Build()
+
+	var published *otelv1.Span
+	publisher := gcp.NewMockPublisher[*otelv1.Span]()
+	publisher.On("Publish", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		span, ok := args.Get(1).(*otelv1.Span)
+		require.True(t, ok)
+		published = span
+	}).Return(gcp.NewSuccessPublishResult()).Once()
+	handler := NewSpanTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher, newTestDatabase(t), cache.NoopCache)
+
+	require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
+	publisher.AssertExpectations(t)
+	require.NotNil(t, published)
+
+	attributes := make(map[string]*otelv1.Span_AnyValue, len(published.GetAttributes()))
+	for _, item := range published.GetAttributes() {
+		attributes[item.GetKey()] = item.GetValue()
+	}
+	require.Equal(t, normalizedInstrumentationScopeName, published.GetScope().GetName())
+	require.Equal(t, "litellm", attributes[string(enrich.OriginalInstrumentationScopeNameKey)].GetStringValue())
+	require.Equal(t, testLogOrganizationID, attributes[string(enrich.OrganizationIDKey)].GetStringValue())
+	require.Equal(t, testLogProjectID, attributes[string(enrich.ProjectIDKey)].GetStringValue())
+
+	// The column enrichers classified the span on the way through and
+	// filled the columns its tables name.
+	require.Equal(t, "api_request", attributes[string(enrich.AgentEventTypeKey)].GetStringValue())
+	require.Equal(t, "chat gpt-4o", attributes[string(enrich.AgentRawEventNameKey)].GetStringValue())
+	require.Equal(t, "litellm", attributes[string(enrich.AgentSourceKey)].GetStringValue())
+	require.Equal(t, "openai", attributes[string(enrich.AgentProviderKey)].GetStringValue())
+	require.Equal(t, "session-9", attributes[string(enrich.AgentSessionIDKey)].GetStringValue())
+	require.Equal(t, int64(500), attributes[string(enrich.AgentDurationNanoKey)].GetIntValue())
+}
+
+func spanTestStringAttribute(key, value string) *otelv1.InboundSpan_KeyValue {
+	return (&otelv1.InboundSpan_KeyValue_builder{
+		Key:   &key,
+		Value: (&otelv1.InboundSpan_AnyValue_builder{StringValue: &value}).Build(),
+	}).Build()
+}
+
+// A producer that writes Speakeasy's own speakeasy.agent namespace on a span is
+// dropped, exactly as for a log record: only what the agent attribute
+// enrichers wrote reaches a consumer.
+func TestSpanTransformHandlerDropsForgedCanonicalColumns(t *testing.T) {
+	t.Parallel()
+
+	// publish runs one span through the handler and returns what reached
+	// the topic.
+	publish := func(t *testing.T, inbound *otelv1.InboundSpan) map[string]*otelv1.Span_AnyValue {
+		t.Helper()
+		var published *otelv1.Span
+		publisher := gcp.NewMockPublisher[*otelv1.Span]()
+		publisher.On("Publish", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+			span, ok := args.Get(1).(*otelv1.Span)
+			require.True(t, ok)
+			published = span
+		}).Return(gcp.NewSuccessPublishResult()).Once()
+		meterProvider := testenv.NewMeterProvider(t)
+		handler := NewSpanTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopCache)
+		require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
+		require.NotNil(t, published)
+		attributes := make(map[string]*otelv1.Span_AnyValue, len(published.GetAttributes()))
+		for _, item := range published.GetAttributes() {
+			attributes[item.GetKey()] = item.GetValue()
+		}
+		return attributes
+	}
+
+	span := func(name string, attributes ...*otelv1.InboundSpan_KeyValue) *otelv1.InboundSpan {
+		return (&otelv1.InboundSpan_builder{
+			TraceId:           []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+			SpanId:            []byte{1, 2, 3, 4, 5, 6, 7, 8},
+			Name:              new(name),
+			StartTimeUnixNano: new(uint64(1_724_500_000_000_000_001)),
+			EndTimeUnixNano:   new(uint64(1_724_500_000_000_000_501)),
+			Scope:             (&otelv1.InboundSpan_InstrumentationScope_builder{Name: new("litellm")}).Build(),
+			Provenance: (&otelv1.InboundSpan_Provenance_builder{
+				Source:         new("speakeasy"),
+				OrganizationId: new(testLogOrganizationID),
+				ProjectId:      new(testLogProjectID),
+			}).Build(),
+			Attributes: attributes,
+		}).Build()
+	}
+
+	t.Run("a classified span keeps the enricher's classification, not the producer's", func(t *testing.T) {
+		t.Parallel()
+		attributes := publish(t, span("chat gpt-4o",
+			spanTestStringAttribute("gen_ai.operation.name", "chat"),
+			spanTestStringAttribute("gen_ai.provider.name", "openai"),
+			spanTestStringAttribute(string(enrich.AgentEventTypeKey), "tool_call"),
+			spanTestStringAttribute(string(enrich.AgentProviderKey), "forged"),
+			spanTestStringAttribute(string(enrich.AgentCostUSDKey), "999"),
+		))
+		require.Equal(t, "api_request", attributes[string(enrich.AgentEventTypeKey)].GetStringValue())
+		require.Equal(t, "openai", attributes[string(enrich.AgentProviderKey)].GetStringValue())
+		require.NotContains(t, attributes, string(enrich.AgentCostUSDKey), "a key no enricher writes is gone, not kept")
+	})
+
+	t.Run("an unclassified span gets no type key however hard the producer tries", func(t *testing.T) {
+		t.Parallel()
+		attributes := publish(t, span("GET /health",
+			spanTestStringAttribute(string(enrich.AgentEventTypeKey), "api_request"),
+			spanTestStringAttribute("http.request.method", "GET"),
+		))
+		require.NotContains(t, attributes, string(enrich.AgentEventTypeKey))
+		require.Contains(t, attributes, "http.request.method", "the producer's own attributes stay")
+	})
+
+	t.Run("a span that sends nothing reserved keeps its own attributes", func(t *testing.T) {
+		t.Parallel()
+		attributes := publish(t, span("chat gpt-4o", spanTestStringAttribute("gen_ai.operation.name", "chat")))
+		require.Equal(t, "chat", attributes["gen_ai.operation.name"].GetStringValue())
+	})
+}
+
+// A producer that sends the pipeline's own keys on a span is treated as for
+// a log record: every speakeasy.* key it sent is dropped before the
+// transform writes its own, so the relays can trust the one copy left.
+func TestSpanTransformHandlerDropsProducerSentPipelineKeys(t *testing.T) {
+	t.Parallel()
+
+	inbound := (&otelv1.InboundSpan_builder{
+		TraceId:           []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+		SpanId:            []byte{1, 2, 3, 4, 5, 6, 7, 8},
+		Name:              new("chat gpt-4o"),
+		StartTimeUnixNano: new(uint64(1_724_500_000_000_000_001)),
+		EndTimeUnixNano:   new(uint64(1_724_500_000_000_000_501)),
+		Scope:             (&otelv1.InboundSpan_InstrumentationScope_builder{Name: new("litellm")}).Build(),
+		Provenance: (&otelv1.InboundSpan_Provenance_builder{
+			Source:         new("speakeasy"),
+			OrganizationId: new(testLogOrganizationID),
+			ProjectId:      new(testLogProjectID),
+		}).Build(),
+		Attributes: []*otelv1.InboundSpan_KeyValue{
+			spanTestStringAttribute("gen_ai.operation.name", "chat"),
+			spanTestStringAttribute(string(enrich.OriginalInstrumentationScopeNameKey), "com.example.forged"),
+			spanTestStringAttribute(string(enrich.OrganizationIDKey), "forged-org"),
+			spanTestStringAttribute(string(enrich.DirectoryIDKey), "forged-directory"),
+		},
+	}).Build()
+
+	var published *otelv1.Span
+	publisher := gcp.NewMockPublisher[*otelv1.Span]()
+	publisher.On("Publish", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		span, ok := args.Get(1).(*otelv1.Span)
+		require.True(t, ok)
+		published = span
+	}).Return(gcp.NewSuccessPublishResult()).Once()
+	meterProvider := testenv.NewMeterProvider(t)
+	handler := NewSpanTransformHandler(testenv.NewLogger(t), meterProvider, publisher, newTestDatabase(t), cache.NoopCache)
+
+	require.NoError(t, handler.Handle(t.Context(), inbound, gcp.MessageMetadata{}))
+	require.NotNil(t, published)
+
+	values := make(map[string][]string)
+	for _, item := range published.GetAttributes() {
+		values[item.GetKey()] = append(values[item.GetKey()], item.GetValue().GetStringValue())
+	}
+	require.Equal(t, []string{"litellm"}, values[string(enrich.OriginalInstrumentationScopeNameKey)], "the transform's copy of the scope is the only one")
+	require.Equal(t, []string{testLogOrganizationID}, values[string(enrich.OrganizationIDKey)], "tenancy comes from provenance, not from the producer")
+	require.Empty(t, values[string(enrich.DirectoryIDKey)], "a directory id the lookup did not find stays empty rather than taking the producer's")
 }

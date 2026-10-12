@@ -181,7 +181,7 @@ export function ClientsAndSessionsTab({
             <Text variant="subheading">Connections</Text>
             <Text small muted>
               Who is connected to this server, what they connect through, and
-              the upstream providers Gram reaches on their behalf.
+              the upstream providers Speakeasy reaches on their behalf.
             </Text>
           </Stack>
           <ViewOrgSessionsButton />

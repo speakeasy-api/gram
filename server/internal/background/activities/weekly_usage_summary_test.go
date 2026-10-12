@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/metering/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -42,7 +43,7 @@ func TestWeeklyUsageSummary_UsesCompletedUTCDaysAndExactPaygProductCosts(t *test
 	captured := &captureLoopsClient{sent: nil, failNext: 0}
 	activity := activities.NewWeeklyUsageSummary(testenv.NewLogger(t), db, chConn, email.NewService(testenv.NewLogger(t), captured, email.NewTemplateIDs(map[string]string{
 		"weekly_usage_summary": "weekly-usage-summary-test-id",
-	}), true), nil)
+	}), true), orghost.New(orghost.Config{}))
 	require.NoError(t, activity.Send(ctx, activities.SendWeeklyUsageSummaryArgs{
 		Target: activities.WeeklyUsageSummaryTarget{
 			OrganizationID:   orgID,
@@ -93,7 +94,7 @@ func TestWeeklyUsageSummary_EnterpriseOmitsEveryCost(t *testing.T) {
 	captured := &captureLoopsClient{sent: nil, failNext: 0}
 	activity := activities.NewWeeklyUsageSummary(testenv.NewLogger(t), db, chConn, email.NewService(testenv.NewLogger(t), captured, email.NewTemplateIDs(map[string]string{
 		"weekly_usage_summary": "weekly-usage-summary-test-id",
-	}), true), nil)
+	}), true), orghost.New(orghost.Config{}))
 	require.NoError(t, activity.Send(ctx, activities.SendWeeklyUsageSummaryArgs{
 		Target: activities.WeeklyUsageSummaryTarget{
 			OrganizationID:   orgID,
@@ -125,7 +126,7 @@ func TestWeeklyUsageSummary_SkipsWhenBothWindowsAreEmpty(t *testing.T) {
 	captured := &captureLoopsClient{sent: nil, failNext: 0}
 	activity := activities.NewWeeklyUsageSummary(testenv.NewLogger(t), db, chConn, email.NewService(testenv.NewLogger(t), captured, email.NewTemplateIDs(map[string]string{
 		"weekly_usage_summary": "weekly-usage-summary-test-id",
-	}), true), nil)
+	}), true), orghost.New(orghost.Config{}))
 
 	require.NoError(t, activity.Send(ctx, activities.SendWeeklyUsageSummaryArgs{
 		Target: activities.WeeklyUsageSummaryTarget{
@@ -151,7 +152,7 @@ func TestWeeklyUsageSummary_SkipsFirstCycleDay(t *testing.T) {
 	captured := &captureLoopsClient{sent: nil, failNext: 0}
 	activity := activities.NewWeeklyUsageSummary(testenv.NewLogger(t), db, chConn, email.NewService(testenv.NewLogger(t), captured, email.NewTemplateIDs(map[string]string{
 		"weekly_usage_summary": "weekly-usage-summary-test-id",
-	}), true), nil)
+	}), true), orghost.New(orghost.Config{}))
 
 	require.NoError(t, activity.Send(ctx, activities.SendWeeklyUsageSummaryArgs{
 		Target:  activities.WeeklyUsageSummaryTarget{OrganizationID: "org-first-day", AnchorDay: 21},

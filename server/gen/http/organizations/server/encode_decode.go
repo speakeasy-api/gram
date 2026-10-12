@@ -3564,6 +3564,8 @@ func marshalOrganizationsSetupTaskToSetupTaskResponseBody(v *organizations.Setup
 		Status:          v.Status,
 		CompletedByFact: v.CompletedByFact,
 		Hidden:          v.Hidden,
+		ParentKey:       v.ParentKey,
+		Group:           v.Group,
 	}
 	if v.Assignee != nil {
 		res.Assignee = marshalOrganizationsSetupTaskAssigneeToSetupTaskAssigneeResponseBody(v.Assignee)

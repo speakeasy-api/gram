@@ -26,7 +26,7 @@ vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({ deviceAgent: { href: () => "/acme/device-agent" } }),
 }));
 
-import { AGENT_PLATFORMS } from "../setup-data";
+import { getAgentPlatforms } from "../setup-data";
 import {
   usePlatformApiKeys,
   usePlatformPlaceholders,
@@ -119,9 +119,9 @@ describe("usePlatformPlaceholders", () => {
         cursorObservabilityPlugin,
       };
       const { result } = renderHook(() => usePlatformPlaceholders());
-      const cursorStep = AGENT_PLATFORMS.find(
-        ({ id }) => id === "cursor",
-      )!.setupSteps[0]!.eligibility!.personalSteps.find(({ code }) => code)!;
+      const cursorStep = platform(
+        "cursor",
+      ).setupSteps[0]!.eligibility!.personalSteps.find(({ code }) => code)!;
       expect(result.current.snippetFor(cursorStep)).toBeUndefined();
     },
   );
@@ -149,18 +149,19 @@ describe("usePlatformPlaceholders", () => {
     const { result } = renderHook(() => usePlatformPlaceholders());
     const keyed: PlatformSetupStep = {
       title: "keyed",
-      code: "Gram-Key={{GRAM_API_KEY}}",
+      code: "Speakeasy-AI-Key={{GRAM_API_KEY}}",
       requiresApiKey: true,
     };
 
     expect(result.current.snippetFor(keyed)).toBeUndefined();
     expect(result.current.snippetFor(keyed, "gram_live_x")).toBe(
-      "Gram-Key=gram_live_x",
+      "Speakeasy-AI-Key=gram_live_x",
     );
   });
 });
 
-const platform = (id: string) => AGENT_PLATFORMS.find((p) => p.id === id)!;
+const platform = (id: string) =>
+  getAgentPlatforms("https://app.getgram.ai").find((p) => p.id === id)!;
 const callbacks = (index = 0) =>
   mocks.mutate.mock.calls[index]![1] as {
     onSuccess: (data: { key?: string }) => void;

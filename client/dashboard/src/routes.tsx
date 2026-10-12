@@ -58,7 +58,13 @@ import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
 import Costs from "./pages/costs/Costs";
+import {
+  DashboardRoute,
+  DashboardsIndex,
+  DashboardsRoot,
+} from "./pages/explore/Dashboards";
 import Explore from "./pages/explore/Explore";
+import SignalsIntelligenceRoute from "./components/signals-intelligence-route";
 import IdentitiesIndex, {
   IdentityDetailIndexRedirect,
   IdentitiesRoot,
@@ -68,6 +74,7 @@ import IdentityOverview from "./pages/identities/IdentityOverview";
 import IdentityAccess from "./pages/identities/IdentityAccess";
 import IdentityUsage from "./pages/identities/IdentityUsage";
 import IdentitySecurity from "./pages/identities/IdentitySecurity";
+import IdentityFindingsPage from "./pages/identities/IdentityFindings";
 import IdentityCost from "./pages/identities/IdentityCost";
 import IdentityDevices from "./pages/identities/IdentityDevices";
 import IdentityConnections from "./pages/identities/IdentityConnections";
@@ -108,9 +115,12 @@ import {
   RemoteIdentityProvidersRoot,
 } from "./pages/remote-identity-providers/RemoteIdentityProviders";
 import {
-  WorkloadIdentitiesPage,
-  WorkloadIdentitiesRoot,
-} from "./pages/workload-identities/WorkloadIdentities";
+  WorkloadIssuersPage,
+  WorkloadIssuersRoot,
+} from "./pages/workload-identities/WorkloadIssuers";
+import { WorkloadIssuerDetailPage } from "./pages/workload-identities/WorkloadIssuerDetail";
+import { CatalogPlatformPage } from "./pages/workload-identities/setup/CatalogPlatformPage";
+import AccessHubRedirect from "./pages/workload-identities/AccessHubRedirect";
 import RemoteIdentityProviderDetail from "./pages/remote-identity-providers/RemoteIdentityProviderDetail";
 import RemoteSessionClientDetail from "./pages/remote-identity-providers/RemoteSessionClientDetail";
 import PlatformAdminOverview from "./pages/platform-admin/Overview";
@@ -363,6 +373,13 @@ const ROUTE_STRUCTURE = {
       },
     },
   },
+  signalsIntelligence: {
+    title: "Signals intelligence",
+    url: "signals-intelligence",
+    icon: "radio",
+    stage: "preview",
+    component: SignalsIntelligenceRoute,
+  },
   skills: {
     title: "Skills",
     url: "skills",
@@ -544,6 +561,10 @@ const ROUTE_STRUCTURE = {
             title: "MCP Server Team Access",
             url: "team-access",
           },
+          guardrails: {
+            title: "MCP Server Guardrails",
+            url: "guardrails",
+          },
           sessions: {
             title: "MCP Server Clients and Sessions",
             url: "sessions",
@@ -695,25 +716,37 @@ const ROUTE_STRUCTURE = {
           overview: { title: "Overview", url: "overview" },
           mcpServers: { title: "MCP Servers", url: "mcp-servers" },
           sessions: { title: "Sessions", url: "sessions" },
-          settings: { title: "Settings", url: "settings" },
+          // Merged into Overview; RemoteSessionClientDetail redirects it there.
+          settings: {
+            title: "Settings",
+            url: "settings",
+            legacyRedirect: true,
+          },
         },
       },
     },
   },
 
-  workloadIdentities: {
+  // Legacy project-scoped URLs for the Access Hub and the Workload Identities
+  // page redirect to the organization-level Access Hub.
+  legacyWorkloadIdentities: {
     title: "Workload Identities",
     url: "workload-identities",
-    icon: "cpu",
-    stage: "preview",
-    component: WorkloadIdentitiesRoot,
-    indexComponent: WorkloadIdentitiesPage,
+    legacyRedirect: true,
+    component: AccessHubRedirect,
+  },
+  legacyAccessHub: {
+    title: "Access Hub",
+    url: "access-hub/*",
+    legacyRedirect: true,
+    component: AccessHubRedirect,
   },
 
   agents: {
     title: "Agent Identity",
     url: "agent-management",
     icon: "bot",
+    stage: "preview",
     component: AgentsPage,
   },
   // One page per person, reached from every surface that renders a human. The
@@ -758,6 +791,11 @@ const ROUTE_STRUCTURE = {
             title: "Identity Security",
             url: "security",
             component: IdentitySecurity,
+          },
+          findings: {
+            title: "Identity Findings",
+            url: "findings",
+            component: IdentityFindingsPage,
           },
           cost: {
             title: "Identity Cost",
@@ -805,6 +843,21 @@ const ROUTE_STRUCTURE = {
     icon: "telescope",
     component: Explore,
     stage: "preview",
+  },
+  dashboards: {
+    title: "Dashboards",
+    url: "dashboards",
+    icon: "layout-grid",
+    component: DashboardsRoot,
+    indexComponent: DashboardsIndex,
+    stage: "preview",
+    subPages: {
+      detail: {
+        title: "Dashboard",
+        url: ":dashboardId",
+        component: DashboardRoute,
+      },
+    },
   },
   logs: {
     title: "Tool Logs",
@@ -1429,6 +1482,28 @@ const ORG_ROUTE_STRUCTURE = {
       },
     },
   },
+  // The trust policy is configured for the organization as a whole, so the
+  // Access Hub names no project.
+  workloadIssuers: {
+    title: "Access Hub",
+    url: "access-hub",
+    icon: "cpu",
+    stage: "preview",
+    component: WorkloadIssuersRoot,
+    indexComponent: WorkloadIssuersPage,
+    subPages: {
+      issuerDetail: {
+        title: "Trusted Platform",
+        url: ":issuerId",
+        component: WorkloadIssuerDetailPage,
+      },
+      catalogPlatform: {
+        title: "Catalog Platform",
+        url: "catalog/:platformKey",
+        component: CatalogPlatformPage,
+      },
+    },
+  },
   auditLogs: {
     title: "Audit Logs",
     url: "audit-logs",
@@ -1605,10 +1680,24 @@ const ORG_ROUTE_STRUCTURE = {
 type OrgRouteStructure = typeof ORG_ROUTE_STRUCTURE;
 type OrgRoutesWithGoTo = TransformRouteToGoTo<OrgRouteStructure>;
 
-/** The URL segments used by org-level routes (for redirect logic). */
-export const orgRoutePaths = Object.values(ORG_ROUTE_STRUCTURE)
-  .map((r) => r.url)
-  .filter(Boolean);
+function routePaths(
+  routes: Record<string, RouteEntry>,
+  parent?: string,
+): string[] {
+  return Object.values(routes).flatMap((route) => {
+    if (!route.url) return [];
+    const path = parent ? `${parent}/${route.url}` : route.url;
+    return [path, ...routePaths(route.subPages ?? {}, path)];
+  });
+}
+
+/**
+ * The org-relative path of every org-level route, nested pages included (for
+ * redirect logic). A detail page such as "access-hub/:issuerId" has to be
+ * listed with its parent, or its URL reads as a path inside a project that
+ * happens to share the parent's slug.
+ */
+export const orgRoutePaths = routePaths(ORG_ROUTE_STRUCTURE);
 
 export const useOrgRoutes = (): OrgRoutesWithGoTo => {
   const location = useLocation();

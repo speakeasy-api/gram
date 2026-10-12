@@ -14,9 +14,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
-// Identity is the resolver every Gram service holds: a Resolver plus the two
+// Identity is the resolver every Speakeasy service holds: a Resolver plus the two
 // things a service needs before it acts on a customer-supplied service account —
-// who Gram itself is, and whether a nominated impersonation target is one Gram
+// who Speakeasy itself is, and whether a nominated impersonation target is one Speakeasy
 // may assume at all.
 //
 // It exists as one type rather than a resolver and a separate policy helper so a
@@ -31,7 +31,7 @@ type Identity struct {
 	// gramPrincipalMu guards gramPrincipal and gramPrincipalOK.
 	gramPrincipalMu sync.Mutex
 
-	// gramPrincipal memoizes Gram's own resolved GCP identity. It is fixed for
+	// gramPrincipal memoizes Speakeasy's own resolved GCP identity. It is fixed for
 	// the process lifetime, so re-probing would add an outbound round trip to
 	// every screen for no new information. Only successful resolutions are
 	// cached, so a transient failure (or an environment that has not yet been
@@ -88,7 +88,7 @@ func (i *Identity) TokenSource(ctx context.Context, cred Credential) (oauth2.Tok
 	return source, nil
 }
 
-// GramPrincipal reports Gram's own service account: the identity a customer
+// GramPrincipal reports Speakeasy's own service account: the identity a customer
 // grants impersonation rights to. An empty email with a nil error is a
 // successful resolve against a source that carries no service-account email
 // (local development backed by a user login), not a failure.
@@ -185,11 +185,11 @@ func (i *Identity) ImpersonationTargetProblem(ctx context.Context, logger *slog.
 
 	gramProject := serviceAccountProject(gramSA)
 	if gramProject == "" {
-		// Gram is running as something this cannot place in a project — most
+		// Speakeasy is running as something this cannot place in a project — most
 		// likely a default compute service account. Refusing is deliberate: the
 		// alternative is comparing against nothing and silently accepting every
 		// target, and a loud failure here is a deployment problem to fix (give
-		// Gram a dedicated service account) rather than a hole to leave open.
+		// Speakeasy a dedicated service account) rather than a hole to leave open.
 		logger.ErrorContext(ctx, "gram's own gcp identity is not a user-managed service account, cannot screen impersonation targets",
 			attr.SlogError(errors.New("unrecognized service account form")))
 		return TargetUnknown, "", fmt.Errorf("gram's own gcp identity %q is not a user-managed service account", gramSA)
@@ -237,11 +237,11 @@ var managedAgentNamespaces = []string{"cloudservices", "container-engine-robot",
 // *.iam.gserviceaccount.com address names a customer project rather than one of
 // Google's managed service-agent namespaces.
 //
-// This matters because the caller compares the extracted value against Gram's
+// This matters because the caller compares the extracted value against Speakeasy's
 // own project to refuse targets inside it. A managed agent such as
 // service-NUMBER@gcp-sa-cloudkms.iam.gserviceaccount.com would otherwise yield
 // "gcp-sa-cloudkms", which never equals any project id, so an agent belonging to
-// Gram's own project would slip through the very comparison meant to catch it.
+// Speakeasy's own project would slip through the very comparison meant to catch it.
 func isProjectNamespace(project string) bool {
 	if strings.HasPrefix(project, "gcp-sa-") || strings.HasSuffix(project, "-system") {
 		return false

@@ -17,7 +17,7 @@ func TestNewUsesProductionBaseURLByDefault(t *testing.T) {
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
 	require.NoError(t, err)
 
-	client := New(testenv.NewLogger(t), tracerProvider, policy, nil, "test", "provisioning-key", nil, nil, nil, nil)
+	client := New(testenv.NewLogger(t), tracerProvider, policy, nil, "test", "provisioning-key", nil, nil, nil)
 	require.Equal(t, OpenRouterBaseURL, client.baseURL)
 }
 
@@ -39,7 +39,7 @@ func TestWithTestBaseURLAcceptsAndNormalizesLoopbackHTTP(t *testing.T) {
 			policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
 			require.NoError(t, err)
 
-			client := New(testenv.NewLogger(t), tracerProvider, policy, nil, "test", "provisioning-key", nil, nil, nil, nil, option)
+			client := New(testenv.NewLogger(t), tracerProvider, policy, nil, "test", "provisioning-key", nil, nil, nil, option)
 			require.Equal(t, strings.TrimSuffix(testURL, "/"), client.baseURL)
 		})
 	}

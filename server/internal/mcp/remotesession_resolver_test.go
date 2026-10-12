@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -35,8 +36,7 @@ func TestServePublic_UserSessionIssuerRemoteSessionNoValidTokenChallenges(t *tes
 
 	sessionToken := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, requestSubject)
 	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), sessionToken, nil)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "unauthorized")
+	requireOopsCode(t, err, oops.CodeUnauthorized)
 	require.Contains(t, w.Header().Get("WWW-Authenticate"), "/.well-known/oauth-protected-resource/mcp/"+fixture.Toolset.McpSlug.String,
 		"resolver must surface a WWW-Authenticate challenge when no valid remote_session exists for the subject")
 }
@@ -61,8 +61,7 @@ func TestServePublic_UserSessionIssuerRemoteSessionNoRowsChallenges(t *testing.T
 
 	sessionToken := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, requestSubject)
 	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), sessionToken, nil)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "unauthorized")
+	requireOopsCode(t, err, oops.CodeUnauthorized)
 	require.Contains(t, w.Header().Get("WWW-Authenticate"), "/.well-known/oauth-protected-resource/mcp/"+fixture.Toolset.McpSlug.String,
 		"resolver must surface a WWW-Authenticate challenge when the subject has no remote_sessions rows")
 }

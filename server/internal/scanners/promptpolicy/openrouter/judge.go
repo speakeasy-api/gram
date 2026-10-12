@@ -48,6 +48,11 @@ const (
 	// defaultJudgeTemperature keeps verdicts deterministic when a policy does
 	// not pin its own temperature.
 	defaultJudgeTemperature = 0.0
+	// maxVerdictTokens caps generated tokens, reasoning included. Uncapped,
+	// OpenRouter reserves the model's full 65,536-token ceiling against the
+	// key's remaining monthly limit and refuses the call. Generous on purpose:
+	// truncating a verdict degrades the policy, over-reserving costs nothing.
+	maxVerdictTokens = 8192
 	// maxRationaleLen caps the stored rationale. Previously enforced via the
 	// response schema's maxLength, now enforced in code because Anthropic routes
 	// reject that constraint (see call()).
@@ -242,6 +247,7 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input, judgePrompt str
 	defer cancel()
 
 	response, err := j.client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
+		MaxTokens:              new(maxVerdictTokens),
 		OrgID:                  in.OrgID,
 		ProjectID:              in.ProjectID,
 		Model:                  judgeModel,
@@ -264,6 +270,11 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input, judgePrompt str
 	}
 	if response == nil || response.Message == nil {
 		return judgeCallResult{}, fmt.Errorf("empty completion response")
+	}
+	// A truncated completion often still parses, so reject it on the finish
+	// reason rather than the body.
+	if response.FinishReason != nil && *response.FinishReason == openrouter.FinishReasonLength {
+		return judgeCallResult{}, fmt.Errorf("completion hit the %d-token cap", maxVerdictTokens)
 	}
 	raw := strings.TrimSpace(openrouter.GetText(*response.Message))
 	if raw == "" {

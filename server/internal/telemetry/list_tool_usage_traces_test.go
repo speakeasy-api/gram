@@ -337,6 +337,87 @@ func TestListToolUsageTraces_KeepsClassificationAfterServerDeleted(t *testing.T)
 	require.Equal(t, "Tunneled Postgres MCP", trace.TargetLabel)
 }
 
+// TestListToolUsageTraces_ConfiguredServerSelectorsExcludeASameNamedShadowServer
+// pins the separation an mcp_id-scoped search depends on. A shadow row's target
+// id is the name the calling app reported and nothing verifies it, so a
+// personal server someone calls "billing" must never appear in the configured
+// "billing" server's history. Both rows are inserted under the same project and
+// the same name; the configured-server selectors must return only the
+// configured one, and the shadow row must be reachable only by naming it as a
+// shadow server explicitly.
+func TestListToolUsageTraces_ConfiguredServerSelectorsExcludeASameNamedShadowServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	// The configured server's own traffic, recorded under its toolset.
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID:   projectID,
+		timestamp:   now.Add(-20 * time.Minute),
+		toolsetSlug: "billing",
+		toolName:    "charge",
+		userEmail:   "alice@example.com",
+		statusCode:  200,
+	})
+	// An unrelated server the calling app merely reported as "billing". No URL
+	// resolved it, so it is classified shadow under that reported name.
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID:      projectID,
+		deploymentID:   uuid.New().String(),
+		timestamp:      now.Add(-15 * time.Minute),
+		traceID:        uuid.New().String(),
+		userEmail:      "mallory@example.com",
+		hookSource:     "cursor",
+		toolSource:     "billing",
+		toolName:       "drop_table",
+		result:         `"ok"`,
+		conversationID: "conv-same-name-shadow",
+	})
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	// Both rows are present in the project, so what follows is an exclusion
+	// rather than a row that never landed.
+	all := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+		From:  from,
+		To:    to,
+		Limit: 10,
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 2
+	})
+	require.Len(t, all.Traces, 2)
+
+	configured := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+		From:               from,
+		To:                 to,
+		HostedToolsetSlugs: []string{"billing"},
+		Limit:              10,
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 1
+	})
+	require.Len(t, configured.Traces, 1, "the same-named shadow row must not be folded into the configured server")
+	require.Equal(t, gen.ToolUsageTargetType("hosted_mcp_server"), configured.Traces[0].TargetType)
+	require.Equal(t, "charge", configured.Traces[0].ToolName)
+
+	// Naming the shadow server explicitly, which only the Tool Logs page does,
+	// still reaches it, and reaches only it.
+	shadow := waitForToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+		From:              from,
+		To:                to,
+		ShadowServerNames: []string{"billing"},
+		Limit:             10,
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 1
+	})
+	require.Len(t, shadow.Traces, 1)
+	require.Equal(t, gen.ToolUsageTargetType("shadow_mcp_server"), shadow.Traces[0].TargetType)
+	require.Equal(t, "drop_table", shadow.Traces[0].ToolName)
+}
+
 func TestListToolUsageTraces_FiltersByTargetsUsersAndHookSource(t *testing.T) {
 	t.Parallel()
 

@@ -37,6 +37,16 @@ func DiscoverProtectedResourceMetadataRemoteMcpPath() string {
 	return "/rpc/remoteMcp.discoverProtectedResourceMetadata"
 }
 
+// GetServerScopesRemoteMcpPath returns the URL path to the remoteMcp service getServerScopes HTTP endpoint.
+func GetServerScopesRemoteMcpPath() string {
+	return "/rpc/remoteMcp.getServerScopes"
+}
+
+// SetServerScopePinRemoteMcpPath returns the URL path to the remoteMcp service setServerScopePin HTTP endpoint.
+func SetServerScopePinRemoteMcpPath() string {
+	return "/rpc/remoteMcp.setServerScopePin"
+}
+
 // ProbeURLRemoteMcpPath returns the URL path to the remoteMcp service probeURL HTTP endpoint.
 func ProbeURLRemoteMcpPath() string {
 	return "/rpc/remoteMcp.probeURL"

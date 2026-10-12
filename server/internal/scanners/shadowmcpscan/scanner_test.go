@@ -38,10 +38,10 @@ func (f *fakeValidator) ValidateToolsetCall(_ context.Context, _ any, toolName s
 }
 
 // fakeHosted resolves no extra trusted hosts, leaving the scanner to match
-// against the real built-in Gram hosts. Host matching itself is the production
+// against the real built-in Speakeasy hosts. Host matching itself is the production
 // implementation, so tests exercise the same URL parsing and exact-host rules
 // rather than a looser substring check that would pass a raw stdio command
-// containing a Gram hostname anywhere in it.
+// containing a Speakeasy hostname anywhere in it.
 type fakeHosted struct {
 	calls int
 	err   error
@@ -121,7 +121,7 @@ func gramHosted() *fakeHosted {
 	return &fakeHosted{calls: 0, err: nil}
 }
 
-// A call whose provenance resolves to a Gram-hosted URL is clean even though
+// A call whose provenance resolves to a Speakeasy-hosted URL is clean even though
 // its arguments carry no x-gram-toolset-id — this is the /x/mcp false-flag the
 // provenance-first rework exists to fix.
 func TestScanner_HostedProvenanceIsCleanWithoutSignature(t *testing.T) {
@@ -143,7 +143,7 @@ func TestScanner_HostedProvenanceIsCleanWithoutSignature(t *testing.T) {
 	})
 
 	require.Len(t, out, 1)
-	require.Empty(t, out[0], "Gram-hosted provenance must not be flagged")
+	require.Empty(t, out[0], "Speakeasy-hosted provenance must not be flagged")
 	require.Empty(t, validator.orgIDs, "resolved provenance must not consult the signature validator")
 	require.Equal(t, []recordedResolution{{hookSource: "claude", resolution: ResolutionHosted}}, coverage.got)
 }
@@ -473,7 +473,7 @@ func TestScanner_ServerURLPreferredOverMatch(t *testing.T) {
 		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
 	})
 
-	require.Empty(t, out[0], "server URL resolves to a Gram host despite the degraded match")
+	require.Empty(t, out[0], "server URL resolves to a Speakeasy host despite the degraded match")
 	require.Empty(t, validator.orgIDs)
 }
 
@@ -641,23 +641,23 @@ func TestIsHostedIdentity(t *testing.T) {
 		{"third party stdio command", "npx -y @acme/mcp", false},
 		{"bare token", "db", false},
 		{"empty", "", false},
-		// Gram's own install snippet for OAuth-backed servers is a stdio
-		// entry fronting a Gram URL; it must not read as shadow MCP.
+		// Speakeasy's own install snippet for OAuth-backed servers is a stdio
+		// entry fronting a Speakeasy URL; it must not read as shadow MCP.
 		{"gram mcp-remote snippet", "npx mcp-remote@0.1.25 https://app.getgram.ai/mcp/team-foo", true},
 		{"mcp-remote with -y launcher flag", "npx -y mcp-remote https://app.getgram.ai/mcp/x", true},
 		{"mcp-remote with headers", "npx mcp-remote https://app.getgram.ai/mcp/x --header Authorization:${TOKEN}", true},
 		// A scoped package is a different package. Trusting any name ending in
 		// "mcp-remote" would let @evil/mcp-remote, which can connect anywhere,
-		// launder a Gram URL argument into a hosted verdict.
+		// launder a Speakeasy URL argument into a hosted verdict.
 		{"scoped lookalike rejected", "npx @evil/mcp-remote https://app.getgram.ai/mcp/x", false},
 		{"scoped vendor fork rejected", "npx @speakeasy/mcp-remote@1.2.3 https://app.getgram.ai/mcp/x", false},
 		{"path lookalike rejected", "npx foo/mcp-remote https://app.getgram.ai/mcp/x", false},
 		{"mcp-remote to third party", "npx mcp-remote https://evil.example/mcp", false},
-		// A Gram-shaped path on a foreign host stays shadow: the hosted check
+		// A Speakeasy-shaped path on a foreign host stays shadow: the hosted check
 		// is on the host, never the path.
 		{"gram path on foreign host", "npx mcp-remote https://evil.example/mcp/team-foo", false},
 		// Only the proxy's target counts. A local server carrying an unrelated
-		// Gram URL must not clear the check, or evasion costs one extra flag.
+		// Speakeasy URL must not clear the check, or evasion costs one extra flag.
 		{"unrelated gram url argument", "npx @evil/mcp --docs https://app.getgram.ai/docs", false},
 		{"gram url without mcp-remote", "node server.js --ref https://app.getgram.ai/mcp/x", false},
 		// First URL after the spec wins, so a trailing argument cannot
@@ -670,7 +670,7 @@ func TestIsHostedIdentity(t *testing.T) {
 	}
 }
 
-// A custom domain resolved for the org counts as Gram-hosted.
+// A custom domain resolved for the org counts as Speakeasy-hosted.
 func TestIsHostedIdentity_TrustedHosts(t *testing.T) {
 	t.Parallel()
 
@@ -706,7 +706,7 @@ func TestScanner_ResolvesTrustedHostsOncePerScan(t *testing.T) {
 	require.Equal(t, 1, hosted.calls)
 }
 
-// Without a trusted-host list the scanner cannot tell a Gram host from a third
+// Without a trusted-host list the scanner cannot tell a Speakeasy host from a third
 // party, so it must not judge on the incomplete list. Judging anyway would
 // persist shadow findings for calls to an org's own verified custom domain.
 func TestScanner_HostResolutionFailureFallsBackToSignature(t *testing.T) {
@@ -773,9 +773,9 @@ func TestScanner_NoMCPCallsSkipsHostLookup(t *testing.T) {
 	require.Zero(t, hosted.calls)
 }
 
-// A Gram server installed through Gram's own stdio snippet resolves to a
+// A Speakeasy server installed through Speakeasy's own stdio snippet resolves to a
 // launch command, not a URL. Flagging every stdio server would flag calls to
-// Gram's own servers — the exact false positive this scanner exists to avoid.
+// Speakeasy's own servers — the exact false positive this scanner exists to avoid.
 func TestScanner_StdioCommandFrontingGramURLIsClean(t *testing.T) {
 	t.Parallel()
 
@@ -794,7 +794,7 @@ func TestScanner_StdioCommandFrontingGramURLIsClean(t *testing.T) {
 		{ToolCalls: []ToolCall{{ID: "call-1", Name: "mcp__db__delete", Arguments: `{}`, CreatedAt: time.Now()}}},
 	})
 
-	require.Empty(t, out[0], "a stdio server fronting a Gram URL is Gram-hosted")
+	require.Empty(t, out[0], "a stdio server fronting a Speakeasy URL is Speakeasy-hosted")
 	require.Empty(t, validator.orgIDs)
 	require.Equal(t, []recordedResolution{{hookSource: "claude", resolution: ResolutionHosted}}, coverage.got)
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -60,16 +61,14 @@ func TestServePublic_HostedToolsCallKillswitch(t *testing.T) {
 	attachMissingRemoteSession(t, ctx, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, issuerID)
 
 	response, err := servePublicHTTP(t, ctx, ti, endpointSlug, makeToolsListBody(), userToken, sessionHeaders)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "unauthorized")
+	requireOopsCode(t, err, oops.CodeUnauthorized)
 	require.NotEmpty(t, response.Header().Get("WWW-Authenticate"))
 
 	// Only well-formed requests can supply protocol metadata to the pre-auth
 	// version gate. Malformed input retains the endpoint's normal authentication
 	// ordering and cannot bypass credential resolution.
 	response, err = servePublicHTTP(t, ctx, ti, endpointSlug, []byte(`{`), userToken, sessionHeaders)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "unauthorized")
+	requireOopsCode(t, err, oops.CodeUnauthorized)
 	require.NotEmpty(t, response.Header().Get("WWW-Authenticate"))
 
 	for _, toolName := range []string{"missing_tool", "search_tools", "describe_tools", "execute_tool"} {

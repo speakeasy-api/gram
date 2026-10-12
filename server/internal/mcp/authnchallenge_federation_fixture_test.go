@@ -41,14 +41,15 @@ type federationTokenRequest struct {
 
 type federationProvider struct {
 	*httptest.Server
-	signer         jose.Signer
-	jwks           jose.JSONWebKeySet
-	mu             sync.Mutex
-	codes          map[string]federationToken
-	issued         map[string]bool
-	requests       []federationTokenRequest
-	errors         []error
-	metadataIssuer string // Optional issuer override for live configuration drift tests.
+	signer                    jose.Signer
+	jwks                      jose.JSONWebKeySet
+	mu                        sync.Mutex
+	codes                     map[string]federationToken
+	issued                    map[string]bool
+	requests                  []federationTokenRequest
+	errors                    []error
+	metadataIssuer            string // Optional issuer override for live configuration drift tests.
+	unsupportedResponseIssuer bool
 }
 
 func newFederationProvider(t *testing.T) *federationProvider {
@@ -102,11 +103,12 @@ func (p *federationProvider) serveHTTP(issuer string, w http.ResponseWriter, r *
 	case "/.well-known/openid-configuration", "/changed/.well-known/openid-configuration":
 		p.mu.Lock()
 		metadataIssuer := p.metadataIssuer
+		supportsResponseIssuer := !p.unsupportedResponseIssuer
 		p.mu.Unlock()
 		if metadataIssuer == "" {
 			metadataIssuer = issuer
 		}
-		response = map[string]any{"issuer": metadataIssuer, "authorization_endpoint": issuer + "/authorize", "token_endpoint": issuer + "/token", "jwks_uri": issuer + "/jwks", "response_types_supported": []string{"code"}, "subject_types_supported": []string{"public"}, "id_token_signing_alg_values_supported": []string{"ES256"}, "token_endpoint_auth_methods_supported": []string{"client_secret_basic"}, "code_challenge_methods_supported": []string{"S256"}, "authorization_response_iss_parameter_supported": true}
+		response = map[string]any{"issuer": metadataIssuer, "authorization_endpoint": issuer + "/authorize", "token_endpoint": issuer + "/token", "jwks_uri": issuer + "/jwks", "response_types_supported": []string{"code"}, "subject_types_supported": []string{"public"}, "id_token_signing_alg_values_supported": []string{"ES256"}, "token_endpoint_auth_methods_supported": []string{"client_secret_basic"}, "code_challenge_methods_supported": []string{"S256"}, "authorization_response_iss_parameter_supported": supportsResponseIssuer}
 	case "/jwks":
 		response = p.jwks
 	case "/token":

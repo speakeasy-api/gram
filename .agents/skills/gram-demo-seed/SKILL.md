@@ -17,7 +17,7 @@ and what the test will reject.
 
 ## When the seed must change
 
-The demo org (`app.getgram.ai/explore-demo`) is how customers explore Gram before
+The demo org (`app.getgram.ai/explore-demo`) is how customers explore Speakeasy before
 their own org is set up, and the same seed provisions every developer's local
 org. So a feature that ships without seed data shows an empty page to both.
 

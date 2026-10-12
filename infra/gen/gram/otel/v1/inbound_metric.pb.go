@@ -106,11 +106,11 @@ func (x InboundMetric_DataPointFlags) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// InboundMetric is an OTLP metric received by Gram's ingest edge.
+// InboundMetric is an OTLP metric received by Speakeasy's ingest edge.
 //
 // NOTICE: THIS IS A CARBON COPY OF `./metric.proto` AND MUST BE KEPT IN SYNC.
 //
-// OTLP fields retain their exact field numbers and wire types. Gram-only fields
+// OTLP fields retain their exact field numbers and wire types. Speakeasy-only fields
 // live at 1000+, where an OTLP parser treats them as unknown fields.
 type InboundMetric struct {
 	state                        protoimpl.MessageState              `protogen:"opaque.v1"`

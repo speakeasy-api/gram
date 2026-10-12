@@ -9,17 +9,24 @@ import {
   PageTabsList,
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
-import { useOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
+import {
+  invalidateAllOrganizationRemoteSessionClient,
+  useOrganizationRemoteSessionClient,
+} from "@gram/client/react-query/organizationRemoteSessionClient.js";
 import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
+import { useUpdateOrganizationRemoteSessionClientMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionClient.js";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Link, Navigate, useLocation, useParams } from "react-router";
 import { ScopeBadge } from "@/lib/remote-identity";
+import { LegacyCallbackAlert } from "./clientAlerts";
 import { remoteSessionClientDisplayName } from "./clientDisplay";
 import { issuerDisplayName } from "./issuerDisplay";
 import { OverviewTab } from "./tabs/client/OverviewTab";
 import { McpServersTab } from "./tabs/client/McpServersTab";
 import { SessionsTab } from "./tabs/client/SessionsTab";
-import { SettingsTab } from "./tabs/client/SettingsTab";
 import { activeDetailTab } from "@/lib/detail-tabs";
 import { CLIENT_TABS, type ClientTab } from "./tabs";
 
@@ -27,12 +34,11 @@ import { CLIENT_TABS, type ClientTab } from "./tabs";
 // segment is "mcp-servers" but its route key is camelCase "mcpServers").
 const CLIENT_TAB_ROUTE_KEY: Record<
   ClientTab,
-  "overview" | "mcpServers" | "sessions" | "settings"
+  "overview" | "mcpServers" | "sessions"
 > = {
   overview: "overview",
   "mcp-servers": "mcpServers",
   sessions: "sessions",
-  settings: "settings",
 };
 
 export default function RemoteSessionClientDetail(): JSX.Element {
@@ -49,7 +55,25 @@ export default function RemoteSessionClientDetail(): JSX.Element {
   } = useOrganizationRemoteSessionClient({
     id: clientId,
   });
-  const { data: issuer } = useOrganizationRemoteSessionIssuer({ id: issuerId });
+  const { data: issuer, isLoading: isIssuerLoading } =
+    useOrganizationRemoteSessionIssuer({ id: issuerId });
+  const queryClient = useQueryClient();
+  // The organization update endpoint requires org:admin, which a platform
+  // admin browsing with org:read alone does not have.
+  const { hasAnyScope } = useRBAC();
+  const migrate = useUpdateOrganizationRemoteSessionClientMutation({
+    onSuccess: async () => {
+      await invalidateAllOrganizationRemoteSessionClient(queryClient, {
+        refetchType: "all",
+      });
+      toast.success("Client migrated to the new callback URL");
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to migrate client",
+      );
+    },
+  });
 
   const activeTab = activeDetailTab(location.pathname, CLIENT_TABS);
   const tabHref = (tab: ClientTab) =>
@@ -76,7 +100,8 @@ export default function RemoteSessionClientDetail(): JSX.Element {
     );
   }
 
-  // The bare /:clientId URL has no tab; canonicalize to the Overview tab.
+  // The bare /:clientId URL has no tab, and the retired /settings tab merged
+  // into Overview; canonicalize both to the Overview tab.
   if (!activeTab) {
     return <Navigate to={tabHref("overview")} replace />;
   }
@@ -121,31 +146,46 @@ export default function RemoteSessionClientDetail(): JSX.Element {
                   <PageTabsTrigger value="sessions" asChild>
                     <Link to={tabHref("sessions")}>Sessions</Link>
                   </PageTabsTrigger>
-                  <PageTabsTrigger value="settings" asChild>
-                    <Link to={tabHref("settings")}>Settings</Link>
-                  </PageTabsTrigger>
                 </PageTabsList>
               </div>
             </div>
 
             <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
+              {client && (
+                <LegacyCallbackAlert
+                  legacyCallbackUrl={client.legacyCallbackUrl}
+                  callbackUrl={client.callbackUrl}
+                  onMigrate={() =>
+                    migrate.mutate({
+                      request: {
+                        updateRemoteSessionClientForm: {
+                          id: client.id,
+                          legacyCallbackUrl: false,
+                        },
+                      },
+                    })
+                  }
+                  isMigrating={migrate.isPending}
+                  canMigrate={hasAnyScope(["org:admin"])}
+                  className="mb-6 max-w-3xl"
+                />
+              )}
               <TabsContent value="overview" className="mt-0">
-                {client && <OverviewTab client={client} />}
+                {client && (
+                  <OverviewTab
+                    key={client.id}
+                    client={client}
+                    issuer={issuer}
+                    isIssuerLoading={isIssuerLoading}
+                    issuerId={issuerId}
+                  />
+                )}
               </TabsContent>
               <TabsContent value="mcp-servers" className="mt-0">
                 <McpServersTab clientId={clientId} />
               </TabsContent>
               <TabsContent value="sessions" className="mt-0">
                 <SessionsTab clientId={clientId} />
-              </TabsContent>
-              <TabsContent value="settings" className="mt-0">
-                {client && (
-                  <SettingsTab
-                    key={client.id}
-                    client={client}
-                    issuerId={issuerId}
-                  />
-                )}
               </TabsContent>
             </div>
           </Tabs>

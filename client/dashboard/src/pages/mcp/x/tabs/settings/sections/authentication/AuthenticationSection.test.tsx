@@ -8,14 +8,24 @@ const {
   attachSheet,
   remoteIdentitySection,
   useAllRemoteSessionClients,
+  useRemoteSessionIssuersByIds,
   useUserSessionIssuer,
   useEffectiveUserSessionIssuers,
+  useGetRemoteMcpServerScopes,
 } = vi.hoisted(() => ({
   attachSheet: vi.fn(),
   remoteIdentitySection: vi.fn(),
   useAllRemoteSessionClients: vi.fn(),
+  useRemoteSessionIssuersByIds: vi.fn(),
   useUserSessionIssuer: vi.fn(),
   useEffectiveUserSessionIssuers: vi.fn(),
+  useGetRemoteMcpServerScopes: vi.fn(),
+}));
+
+vi.mock("@gram/client/react-query/getRemoteMcpServerScopes.js", () => ({
+  useGetRemoteMcpServerScopes: (...args: unknown[]) =>
+    useGetRemoteMcpServerScopes(...args),
+  invalidateAllGetRemoteMcpServerScopes: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/userSessionIssuer.js", () => ({
@@ -49,6 +59,11 @@ vi.mock("@/lib/remote-identity/queries/useAllRemoteSessionClients", () => ({
     useAllRemoteSessionClients(...args),
 }));
 
+vi.mock("@/lib/remote-identity/queries/useRemoteSessionIssuersByIds", () => ({
+  useRemoteSessionIssuersByIds: (...args: unknown[]) =>
+    useRemoteSessionIssuersByIds(...args),
+}));
+
 vi.mock("./AttachRemoteIdentityProviderSheet", () => ({
   AttachRemoteIdentityProviderSheet: (props: { open: boolean }) => {
     attachSheet(props);
@@ -65,15 +80,23 @@ vi.mock("./RemoteMcpIdentitySection", () => ({
 
 vi.mock("./RemoteIdentityProvidersField", () => ({
   RemoteIdentityProvidersField: ({
+    associatedIssuers,
+    isError,
     onAdd,
     readOnly,
   }: {
+    associatedIssuers: Array<{ id: string }>;
+    isError?: boolean;
     onAdd: () => void;
     readOnly?: boolean;
   }) => (
     <>
       <button onClick={onAdd}>Add provider</button>
       <output>providers-{readOnly ? "read-only" : "editable"}</output>
+      <output>
+        attached-{associatedIssuers.map(({ id }) => id).join(",")}
+      </output>
+      {isError && <output>attached-error</output>}
     </>
   ),
 }));
@@ -129,6 +152,11 @@ vi.mock("./CimdCustomClientsField", () => ({
 }));
 
 beforeEach(() => {
+  useRemoteSessionIssuersByIds.mockImplementation((ids: string[]) => ({
+    items: ids.map((id) => ({ id })),
+    isLoading: false,
+    isError: false,
+  }));
   useEffectiveUserSessionIssuers.mockReturnValue({
     issuers: [],
     organizationIssuers: [],
@@ -178,6 +206,44 @@ describe("AuthenticationSectionBody", () => {
     );
 
     expect(screen.getByText("Configure External OAuth")).toBeDefined();
+  });
+
+  it("renders an attached provider the issuer listing does not contain", () => {
+    // The listing mock above returns no issuers at all, standing in for an
+    // attached issuer pushed past the first page by the platform catalog.
+    useAllRemoteSessionClients.mockReturnValue({
+      items: [{ id: "client-1", remoteSessionIssuerId: "issuer-far" }],
+      isLoading: false,
+    });
+    render(
+      <AuthenticationSectionBody target={standardTargetWithSessionIssuer} />,
+    );
+
+    expect(useRemoteSessionIssuersByIds).toHaveBeenLastCalledWith(
+      ["issuer-far"],
+      { enabled: true },
+    );
+    expect(screen.getByText("attached-issuer-far")).toBeDefined();
+    // The scope pin is a Remote MCP control only.
+    expect(useGetRemoteMcpServerScopes).not.toHaveBeenCalled();
+    expect(screen.queryByText("Pinned scopes")).toBeNull();
+  });
+
+  it("reports a failed provider lookup instead of an empty provider list", () => {
+    useAllRemoteSessionClients.mockReturnValue({
+      items: [{ id: "client-1", remoteSessionIssuerId: "issuer-gone" }],
+      isLoading: false,
+    });
+    useRemoteSessionIssuersByIds.mockReturnValue({
+      items: [],
+      isLoading: false,
+      isError: true,
+    });
+    render(
+      <AuthenticationSectionBody target={standardTargetWithSessionIssuer} />,
+    );
+
+    expect(screen.getByText("attached-error")).toBeDefined();
   });
 
   it.each(["presets", "reporting"])(

@@ -237,6 +237,7 @@ func TestPrivateRouteCensus(t *testing.T) {
 		{http.MethodGet, "/marketplace/repository"},
 		{http.MethodGet, "/mcp/idp_callback"},
 		{http.MethodGet, "/mcp/remote_login_callback"},
+		{http.MethodGet, "/mcp/remote_login_bind"},
 		{http.MethodGet, "/x/mcp/idp_callback"},
 		{http.MethodGet, "/x/mcp/remote_login_callback"},
 		{http.MethodPost, "/mcp/idp_callback/"},

@@ -395,6 +395,7 @@ func mergeSessionFindings(ids []batchMessage, findings [][]scanners.Finding, ses
 				UserID:                 "",
 				CreatedAt:              time.Time{},
 				Source:                 "",
+				Truncated:              false,
 			})
 			findings = append(findings, kept)
 		}
@@ -435,11 +436,24 @@ func (a *AnalyzeBatch) fetchContent(ctx context.Context, args AnalyzeBatchArgs) 
 		}
 		messages = append(messages, newContentPartBatchMessages(rows, contents)...)
 	}
+	for _, msg := range messages {
+		if !msg.Truncated {
+			continue
+		}
+		a.logger.WarnContext(ctx, "risk analysis: truncated oversized batch input",
+			attr.SlogProjectID(args.ProjectID.String()),
+			attr.SlogMessageID(msg.ID.String()),
+		)
+		a.metrics.RecordBatchInputTruncation(ctx, args.OrganizationID, msg.ContentPart)
+	}
 	return messages, nil
 }
 
 const maxConcurrentContentPartAssetReads = 32
-const maxContentPartAssetReadSize = 20 * 1024 * 1024 // 20 MiB
+
+// contentPartAssetReadLimit reads one byte past the bound so bound can tell a
+// cut asset from one that fits exactly.
+const contentPartAssetReadLimit = batchScanMaxContentBytes + 1
 
 func (a *AnalyzeBatch) hydrateContentPartBatch(ctx context.Context, rows []repo.GetContentPartBatchRow) ([]string, error) {
 	contents := make([]string, len(rows))
@@ -462,7 +476,7 @@ func (a *AnalyzeBatch) hydrateContentPartBatch(ctx context.Context, rows []repo.
 }
 
 func (a *AnalyzeBatch) readContentPartAsset(ctx context.Context, contentPartID uuid.UUID, rawURL string) (string, error) {
-	content, err := blobio.ReadAllString(ctx, a.assetStorage, rawURL, maxContentPartAssetReadSize)
+	content, err := blobio.ReadAllString(ctx, a.assetStorage, rawURL, contentPartAssetReadLimit)
 	if err != nil {
 		return "", fmt.Errorf("read content part asset for %s: %w", contentPartID, err)
 	}

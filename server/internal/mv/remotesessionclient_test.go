@@ -26,3 +26,14 @@ func TestRemoteSessionClientIssuedAt(t *testing.T) {
 		}
 	}
 }
+
+func TestRemoteSessionClientLegacyCallbackURL(t *testing.T) {
+	t.Parallel()
+	for _, legacy := range []bool{false, true} {
+		row := repo.RemoteSessionClient{LegacyCallbackUrl: legacy}
+		project, err := BuildRemoteSessionClientView(row, nil)
+		require.NoError(t, err)
+		require.Equal(t, legacy, project.LegacyCallbackURL)
+		require.Equal(t, legacy, BuildGlobalRemoteSessionClientView(row).LegacyCallbackURL)
+	}
+}

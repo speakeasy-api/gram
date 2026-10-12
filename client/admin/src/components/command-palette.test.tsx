@@ -21,6 +21,9 @@ type Mounted = Awaited<ReturnType<typeof renderRouteTree>>;
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
+  listUsers: vi
+    .fn()
+    .mockResolvedValue({ users: [], total: 0, page: 1, limit: 50 }),
   listOrganizations: vi.fn(),
   getOrganization: vi.fn(),
   getOrganizationStats: vi.fn(),
@@ -33,6 +36,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
   return {
     ...actual,
     getSession: mocks.getSession,
+    listUsers: mocks.listUsers,
     listOrganizations: mocks.listOrganizations,
     getOrganization: mocks.getOrganization,
     getOrganizationStats: mocks.getOrganizationStats,
@@ -280,6 +284,24 @@ describe("CommandPalette", () => {
     );
   });
 
+  it("asks for paying organizations ahead of free ones", async () => {
+    // The palette shows a handful of rows, so the order is decided where the
+    // cut is made: on the server, before the limit applies.
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    pressTheShortcut();
+    await screen.findByRole("dialog");
+    type("umbrella");
+
+    await within(palette()).findByRole("option", {
+      name: /^Umbrella Freight/,
+    });
+
+    expect(mocks.listOrganizations).toHaveBeenCalledWith(
+      expect.objectContaining({ q: "umbrella", sort: "account_tier" }),
+    );
+  });
+
   it("says a disabled record is disabled", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
@@ -515,7 +537,7 @@ describe("CommandPalette", () => {
     ).toBeTruthy();
   });
 
-  it("goes to a top-level page", async () => {
+  it.each(["Projects", "Users"])("goes to the %s page", async (destination) => {
     const { router } = await renderRouteTree(routeTree, {
       initialPath: "/organizations",
     });
@@ -524,11 +546,13 @@ describe("CommandPalette", () => {
     await screen.findByRole("dialog");
 
     fireEvent.click(
-      within(palette()).getByRole("option", { name: "Projects" }),
+      within(palette()).getByRole("option", { name: destination }),
     );
 
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe("/projects");
+      expect(router.state.location.pathname).toBe(
+        `/${destination.toLowerCase()}`,
+      );
     });
   });
 

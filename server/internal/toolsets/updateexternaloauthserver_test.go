@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func externalOAuthDiscoveryPolicy(t *testing.T, handler http.HandlerFunc) (string, *guardian.Policy, func()) {
@@ -189,7 +190,7 @@ func TestToolsetsService_AddExternalOAuthServer_FailedDiscoveryDoesNotPersist(t 
 	})
 	require.ErrorContains(t, err, "invalid authorization server issuer")
 
-	unchanged, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: toolset.Slug})
+	unchanged, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(toolset.Slug)})
 	require.NoError(t, err)
 	require.Nil(t, unchanged.ExternalOauthServer)
 }
@@ -230,7 +231,7 @@ func TestToolsetsService_UpdateExternalOAuthServer_DiscoversBeforeTakingToolsetL
 	<-requested
 
 	probe := testenv.BeginTx(t, ctx, ti.conn)
-	_, lockErr := probe.Exec(ctx, `SELECT id FROM toolsets WHERE project_id = $1 AND slug = $2 FOR UPDATE NOWAIT`, toolset.ProjectID, toolset.Slug) //nolint:glint // notestingrawsql: NOWAIT proves discovery does not hold the toolset lock
+	_, lockErr := testrepo.New(probe).LockToolsetNowaitFixture(ctx, testrepo.LockToolsetNowaitFixtureParams{ProjectID: uuid.MustParse(toolset.ProjectID), Slug: string(toolset.Slug)})
 	_ = probe.Rollback(ctx)
 	releaseDiscovery()
 	require.NoError(t, <-result)
@@ -257,7 +258,7 @@ func TestToolsetsService_UpdateExternalOAuthServer_FailedDiscoveryIsAtomic(t *te
 	})
 	require.ErrorContains(t, err, "invalid authorization server issuer")
 
-	unchanged, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: toolset.Slug})
+	unchanged, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(toolset.Slug)})
 	require.NoError(t, err)
 	require.Equal(t, created.ExternalOauthServer, unchanged.ExternalOauthServer)
 }
@@ -288,7 +289,7 @@ func TestToolsetsService_ExternalOAuthServer_RequiresExactlyOneSource(t *testing
 		require.Error(t, err)
 	}
 
-	unchanged, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: toolset.Slug})
+	unchanged, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: string(toolset.Slug)})
 	require.NoError(t, err)
 	require.Equal(t, created.ExternalOauthServer, unchanged.ExternalOauthServer)
 }

@@ -47,3 +47,29 @@ func TestFederatedBrowserCookieCannotCrossChallenges(t *testing.T) {
 	require.Error(t, validateFederatedBrowser(req, AuthnChallengeState{ID: "challenge-id", CreatedAt: time.Now(), Federation: &FederatedChallenge{BrowserHash: sha256Hex("browser-proof")}}))
 	require.Error(t, validateFederatedBrowser(req, AuthnChallengeState{}))
 }
+
+// The IdP callback recorded on a challenge is accepted on whichever origin it
+// was minted with, but only as this endpoint's HTTPS callback.
+func TestRecordedIDPCallbackOrigin(t *testing.T) {
+	t.Parallel()
+	endpoint := &ResolvedMcpEndpoint{RouteBase: "mcp"}
+	for _, test := range []struct {
+		callback, want string
+		wantErr        bool
+	}{
+		{callback: "https://reg.example/mcp/idp_callback", want: "https://reg.example"},
+		{callback: "https://app.example/mcp/idp_callback", want: "https://app.example"},
+		{callback: "http://reg.example/mcp/idp_callback", wantErr: true},
+		{callback: "https://reg.example/x/mcp/idp_callback", wantErr: true},
+		{callback: "https://reg.example/mcp/idp_callback?x=1", wantErr: true},
+		{callback: "", wantErr: true},
+	} {
+		origin, err := recordedIDPCallbackOrigin(endpoint, test.callback)
+		if test.wantErr {
+			require.Error(t, err, test.callback)
+			continue
+		}
+		require.NoError(t, err, test.callback)
+		require.Equal(t, test.want, origin.String())
+	}
+}

@@ -36,6 +36,10 @@ export const ListRoleGrantScope = {
   SkillBlockedRead: "skill:blocked_read",
   SkillWrite: "skill:write",
   SkillBlockedWrite: "skill:blocked_write",
+  AssistantRead: "assistant:read",
+  AssistantBlockedRead: "assistant:blocked_read",
+  AssistantWrite: "assistant:write",
+  AssistantBlockedWrite: "assistant:blocked_write",
   PluginWrite: "plugin:write",
   PluginBlockedWrite: "plugin:blocked_write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
@@ -82,6 +86,10 @@ export const SubScopes = {
   SkillBlockedRead: "skill:blocked_read",
   SkillWrite: "skill:write",
   SkillBlockedWrite: "skill:blocked_write",
+  AssistantRead: "assistant:read",
+  AssistantBlockedRead: "assistant:blocked_read",
+  AssistantWrite: "assistant:write",
+  AssistantBlockedWrite: "assistant:blocked_write",
   PluginWrite: "plugin:write",
   PluginBlockedWrite: "plugin:blocked_write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
@@ -103,6 +111,10 @@ export const SubScopes = {
 export type SubScopes = ClosedEnum<typeof SubScopes>;
 
 export type ListRoleGrant = {
+  /**
+   * The subset of this scope's selectors granted to the calling user by name rather than through a role or everyone. For allow scopes it holds only selectors naming a concrete resource, which outrank blocks inherited from roles or everyone on that resource. For blocked scopes it holds the caller's own blocks, which always apply. Omitted when empty.
+   */
+  directSelectors?: Array<Selector> | undefined;
   /**
    * The scope slug this grant applies to.
    */
@@ -133,12 +145,14 @@ export const ListRoleGrant$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    direct_selectors: z.optional(z.array(Selector$inboundSchema)),
     scope: ListRoleGrantScope$inboundSchema,
     selectors: z.optional(z.array(Selector$inboundSchema)),
     sub_scopes: z.optional(z.array(SubScopes$inboundSchema)),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "direct_selectors": "directSelectors",
       "sub_scopes": "subScopes",
     });
   }),

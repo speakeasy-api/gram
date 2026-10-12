@@ -61,6 +61,10 @@ type Client struct {
 	// the listRemoteSessionClients endpoint.
 	ListRemoteSessionClientsDoer goahttp.Doer
 
+	// GetNewClientCallbackURL Doer is the HTTP client used to make requests to the
+	// getNewClientCallbackUrl endpoint.
+	GetNewClientCallbackURLDoer goahttp.Doer
+
 	// GetRemoteSessionClient Doer is the HTTP client used to make requests to the
 	// getRemoteSessionClient endpoint.
 	GetRemoteSessionClientDoer goahttp.Doer
@@ -101,6 +105,7 @@ func NewClient(
 		AttachKeySetDoer:              doer,
 		DetachKeySetDoer:              doer,
 		ListRemoteSessionClientsDoer:  doer,
+		GetNewClientCallbackURLDoer:   doer,
 		GetRemoteSessionClientDoer:    doer,
 		DeleteRemoteSessionClientDoer: doer,
 		RestoreResponseBody:           restoreBody,
@@ -370,6 +375,30 @@ func (c *Client) ListRemoteSessionClients() goa.Endpoint {
 		resp, err := c.ListRemoteSessionClientsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("remoteSessionClients", "listRemoteSessionClients", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetNewClientCallbackURL returns an endpoint that makes HTTP requests to the
+// remoteSessionClients service getNewClientCallbackUrl server.
+func (c *Client) GetNewClientCallbackURL() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetNewClientCallbackURLRequest(c.encoder)
+		decodeResponse = DecodeGetNewClientCallbackURLResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetNewClientCallbackURLRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetNewClientCallbackURLDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteSessionClients", "getNewClientCallbackUrl", err)
 		}
 		return decodeResponse(resp)
 	}

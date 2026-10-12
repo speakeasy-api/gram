@@ -470,7 +470,7 @@ func (src *chatgptConversationSource) upsertConversationChat(ctx context.Context
 		return err
 	}
 
-	chatID, err := chatrepo.New(src.svc.db).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
+	upserted, err := chatrepo.New(src.svc.db).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
 		ID:             uuid.New(),
 		ProjectID:      src.cfg.ProjectID,
 		OrganizationID: src.cfg.OrganizationID,
@@ -488,6 +488,7 @@ func (src *chatgptConversationSource) upsertConversationChat(ctx context.Context
 	if err != nil {
 		return fmt.Errorf("upsert chatgpt compliance chat: %w", err)
 	}
+	chatID := upserted.ID
 	if !known {
 		if _, err := chatrepo.New(src.svc.db).LinkAIIntegrationConfigChat(ctx, chatrepo.LinkAIIntegrationConfigChatParams{
 			AiIntegrationConfigID: src.cfg.ID,

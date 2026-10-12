@@ -81,47 +81,77 @@
           <div
             role="radiogroup"
             aria-labelledby="consent-agent-choice-label"
-            class="flex flex-col border"
+            class="grid grid-cols-2 border"
           >
             <label
-              class="has-[:checked]:bg-accent hover:bg-accent flex cursor-pointer items-start gap-2.5 px-4 py-3"
+              class="has-[:checked]:bg-accent hover:bg-accent flex min-w-0 cursor-pointer items-center gap-2.5 px-4 py-3"
             >
               <input
                 type="radio"
-                name="agent_id"
-                value=""
-                form="consent-approve-form"
+                name="consent_actor"
+                value="self"
                 checked
-                data-agent-select
+                data-agent-mode
                 data-subject-display="{{.SubjectDisplay}}"
-                class="checked:border-foreground focus-visible:outline-2 focus-visible:outline-offset-2 mt-0.5 size-3.5 shrink-0 cursor-pointer appearance-none rounded-full border checked:border-[4.5px]"
+                class="checked:border-foreground focus-visible:outline-2 focus-visible:outline-offset-2 size-3.5 shrink-0 cursor-pointer appearance-none rounded-full border checked:border-[4.5px]"
               />
-              <span class="flex min-w-0 flex-col gap-0.5">
-                <span class="text-sm font-medium">Myself</span>
+              <span class="flex min-w-0 items-center gap-2">
+                <span class="shrink-0 text-sm font-medium">Myself</span>
                 <span class="text-muted-foreground truncate font-mono text-xs"
                   >{{.SubjectDisplay}}</span
                 >
               </span>
             </label>
-            {{range .AgentOptions}}
             <label
-              class="has-[:checked]:bg-accent hover:bg-accent flex cursor-pointer items-start gap-2.5 border-t px-4 py-3"
+              class="has-[:checked]:bg-accent hover:bg-accent flex min-w-0 cursor-pointer items-center gap-2.5 border-l px-4 py-3"
             >
               <input
                 type="radio"
-                name="agent_id"
-                value="{{.ID}}"
-                form="consent-approve-form"
-                data-agent-select
-                data-subject-display="{{.Name}}"
-                class="checked:border-foreground focus-visible:outline-2 focus-visible:outline-offset-2 mt-0.5 size-3.5 shrink-0 cursor-pointer appearance-none rounded-full border checked:border-[4.5px]"
+                name="consent_actor"
+                value="agent"
+                disabled
+                data-agent-mode
+                class="checked:border-foreground focus-visible:outline-2 focus-visible:outline-offset-2 size-3.5 shrink-0 cursor-pointer appearance-none rounded-full border checked:border-[4.5px]"
               />
-              <span class="flex min-w-0 flex-col gap-0.5">
-                <span class="truncate text-sm font-medium">{{.Name}}</span>
-                <span class="text-muted-foreground text-xs">Agent</span>
-              </span>
+              <span class="text-sm font-medium">Agent</span>
             </label>
-            {{end}}
+          </div>
+          <input type="hidden" name="agent_id" value="" form="consent-approve-form" data-agent-self />
+          <div data-agent-picker hidden>
+            <label for="consent-agent-search" class="text-sm font-medium">Search agents</label>
+            <input
+              id="consent-agent-search"
+              type="search"
+              placeholder="Search by name"
+              autocomplete="off"
+              data-agent-search
+              class="bg-background mt-2 w-full border px-4 py-3 text-sm"
+            />
+            <div
+              role="radiogroup"
+              aria-label="Choose an agent"
+              class="mt-2 max-h-64 overflow-y-auto border"
+            >
+              {{range .AgentOptions}}
+              <label
+                data-agent-option
+                class="has-[:checked]:bg-accent hover:bg-accent flex cursor-pointer items-start gap-2.5 border-b px-4 py-3"
+              >
+                <input
+                  type="radio"
+                  name="agent_id"
+                  value="{{.ID}}"
+                  form="consent-approve-form"
+                  disabled
+                  data-agent-select
+                  data-subject-display="{{.Name}}"
+                  class="checked:border-foreground focus-visible:outline-2 focus-visible:outline-offset-2 mt-0.5 size-3.5 shrink-0 cursor-pointer appearance-none rounded-full border checked:border-[4.5px]"
+                />
+                <span class="truncate text-sm font-medium">{{.Name}}</span>
+              </label>
+              {{end}}
+              <p data-agent-empty hidden role="status" class="text-muted-foreground px-4 py-3 text-sm">No agents match your search.</p>
+            </div>
           </div>
           <div
             data-agent-policy
@@ -144,7 +174,7 @@
               continuing.{{end}} The agent's tool policy is never changed here.
             </p>
           </div>
-          <p class="text-muted-foreground text-xs">
+          <p data-agent-setup hidden class="text-muted-foreground text-xs">
             Missing an agent?
             <a
               href="{{.AgentSetupURL}}"
@@ -175,7 +205,7 @@
         {{if .RemoteSessionCards}}
         <div
           data-service-connections
-          data-action-url="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect/remote-session"
+          data-action-url="{{.ConsentPath}}/remote-session"
           class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8"
         >
           <div class="flex items-baseline justify-between gap-3">
@@ -259,7 +289,7 @@
 
               <form
                 method="POST"
-                action="/{{$.MCPRouteBase}}/{{$.MCPSlug}}/connect/remote-session"
+                action="{{$.ConsentPath}}/remote-session"
                 class="flex flex-wrap items-center justify-end gap-1.5"
               >
                 <input type="hidden" name="state" value="{{$.State}}" />
@@ -599,7 +629,7 @@
         {{if .AutoRefreshPolicy.IsUserControlled}}
         <form
           method="POST"
-          action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect/remote-session"
+          action="{{.ConsentPath}}/remote-session"
           id="auto-refresh-form"
           class="sr-only"
           {{if .AutoRefreshHasSessions}}data-auto-refresh-persist{{end}}
@@ -621,7 +651,7 @@
         <div class="flex flex-col gap-3 px-6 py-6 sm:flex-row sm:px-8">
           <form
             method="POST"
-            action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect"
+            action="{{.ConsentPath}}"
             id="consent-approve-form"
             data-approve-form
           >
@@ -646,7 +676,7 @@
             </p>
             {{end}}
           </form>
-          <form method="POST" action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect">
+          <form method="POST" action="{{.ConsentPath}}">
             <input type="hidden" name="state" value="{{.State}}" />
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}" />
             <button

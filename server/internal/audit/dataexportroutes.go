@@ -16,6 +16,8 @@ const (
 	ActionDataExportRouteCreate Action = "data_export_route:create"
 	ActionDataExportRouteUpdate Action = "data_export_route:update"
 	ActionDataExportRouteDelete Action = "data_export_route:delete"
+	ActionDataExportRoutePause  Action = "data_export_route:pause"
+	ActionDataExportRouteResume Action = "data_export_route:resume"
 )
 
 type DataExportRouteSnapshot struct {
@@ -62,6 +64,9 @@ func (l *Logger) LogDataExportRouteCreate(ctx context.Context, dbtx repo.DBTX, e
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.DataExportRouteV1})
 }
 
+// LogDataExportRouteUpdateEvent describes a change to an existing route with
+// its before and after state. Pause and resume record the same shape under
+// their own actions, so one event type serves all three.
 type LogDataExportRouteUpdateEvent struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
@@ -77,7 +82,22 @@ type LogDataExportRouteUpdateEvent struct {
 }
 
 func (l *Logger) LogDataExportRouteUpdate(ctx context.Context, dbtx repo.DBTX, event LogDataExportRouteUpdateEvent) error {
-	action := ActionDataExportRouteUpdate
+	return l.logDataExportRouteChange(ctx, dbtx, ActionDataExportRouteUpdate, event)
+}
+
+// LogDataExportRoutePause records a route's export being stopped. Its
+// snapshots show that only the enabled flag moved.
+func (l *Logger) LogDataExportRoutePause(ctx context.Context, dbtx repo.DBTX, event LogDataExportRouteUpdateEvent) error {
+	return l.logDataExportRouteChange(ctx, dbtx, ActionDataExportRoutePause, event)
+}
+
+// LogDataExportRouteResume records a paused route exporting again. Its
+// snapshots show that only the enabled flag moved.
+func (l *Logger) LogDataExportRouteResume(ctx context.Context, dbtx repo.DBTX, event LogDataExportRouteUpdateEvent) error {
+	return l.logDataExportRouteChange(ctx, dbtx, ActionDataExportRouteResume, event)
+}
+
+func (l *Logger) logDataExportRouteChange(ctx context.Context, dbtx repo.DBTX, action Action, event LogDataExportRouteUpdateEvent) error {
 	beforeSnapshot, err := marshalAuditPayload(event.RouteSnapshotBefore)
 	if err != nil {
 		return fmt.Errorf("marshal %s before snapshot: %w", action, err)

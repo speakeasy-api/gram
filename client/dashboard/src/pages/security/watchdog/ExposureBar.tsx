@@ -6,7 +6,7 @@ import { useState } from "react";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import type { RiskExposureSlice } from "@gram/client/models/components/riskexposureslice.js";
-import { RULE_CATEGORY_META, type RuleCategory } from "../policy-data";
+import { ruleCategoryLabel } from "../policy-data";
 import { getRiskCategoryChartColor } from "../riskTrendChartData";
 
 const FALLBACK_SLICE_COLOR = "hsl(0, 0%, 60%)";
@@ -15,10 +15,6 @@ const FALLBACK_SLICE_COLOR = "hsl(0, 0%, 60%)";
 // one. A single fixed grey would out-glow the dark ramp's mid-tone hues.
 const INACTIVE_GREY_LIGHT = "hsl(0, 0%, 88%)";
 const INACTIVE_GREY_DARK = "hsl(0, 0%, 27%)";
-
-function categoryLabel(category: string): string {
-  return RULE_CATEGORY_META[category as RuleCategory]?.label ?? category;
-}
 
 /**
  * Horizontal stacked bar of finding counts by category with an inline legend,
@@ -85,8 +81,8 @@ export function ExposureBar({
                 key={slice.category}
                 type="button"
                 aria-pressed={active.has(slice.category)}
-                aria-label={`Filter by ${categoryLabel(slice.category)}`}
-                title={`${categoryLabel(slice.category)} · ${Math.round(slice.share * 100)}%`}
+                aria-label={`Filter by ${ruleCategoryLabel(slice.category)}`}
+                title={`${ruleCategoryLabel(slice.category)} · ${Math.round(slice.share * 100)}%`}
                 onClick={() => onToggleCategory(slice.category)}
                 onMouseEnter={() => setHovered(slice.category)}
                 onMouseLeave={() => setHovered(null)}
@@ -137,7 +133,7 @@ export function ExposureBar({
                     }),
                   }}
                 />
-                {categoryLabel(slice.category)}
+                {ruleCategoryLabel(slice.category)}
                 <span
                   className={cn(
                     "tabular-nums",

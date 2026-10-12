@@ -21,7 +21,7 @@ interface PlaygroundElementsProps {
 }
 
 /**
- * The toolset-backed playground variant: resolves a toolset to its Gram-hosted
+ * The toolset-backed playground variant: resolves a toolset to its Speakeasy-hosted
  * `/mcp/<slug>` URL, mints an issuer-gated gateway token, surfaces
  * missing-auth / login notices, then renders the shared {@link PlaygroundChat}.
  */

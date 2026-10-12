@@ -495,3 +495,27 @@ func TestFederatedLoginBootstrapCannotTransferBrowsers(t *testing.T) {
 		}
 	}
 }
+
+// A provider usable for back-channel exchange must still be refused for login
+// when it cannot identify the authorization response issuer at our shared callback.
+func TestFederatedLoginRejectsUnsupportedResponseIssuer(t *testing.T) {
+	t.Parallel()
+	ctx, f := newFederationLoginFixture(t, true)
+	f.provider.mu.Lock()
+	f.provider.unsupportedResponseIssuer = true
+	f.provider.mu.Unlock()
+	query := url.Values{"response_type": {"code"}, "client_id": {f.downstreamClientID}, "redirect_uri": {"http://127.0.0.1/callback"}, "state": {"downstream-state"}, "code_challenge": {"downstream-pkce"}, "code_challenge_method": {"S256"}}
+	route := chi.NewRouteContext()
+	route.URLParams.Add("mcpSlug", f.toolsetSlug)
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+f.toolsetSlug+"/authorize?"+query.Encode(), nil).WithContext(context.WithValue(ctx, chi.RouteCtxKey, route))
+	response := httptest.NewRecorder()
+	err := f.ti.service.HandleAuthorize(response, req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusFound, response.Code)
+	redirect, err := url.Parse(response.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "127.0.0.1", redirect.Host, "return the failure to the client, never start provider login")
+	require.Equal(t, "server_error", redirect.Query().Get("error"))
+	require.Empty(t, redirect.Query().Get("code"))
+	require.Zero(t, f.provider.exchangeCount())
+}

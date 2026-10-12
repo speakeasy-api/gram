@@ -19,7 +19,7 @@ import {
 } from "./riskpolicymodelconfig.js";
 
 /**
- * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session).
+ * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.
  */
 export const RiskPolicyAction = {
   Flag: "flag",
@@ -28,7 +28,7 @@ export const RiskPolicyAction = {
   Quarantine: "quarantine",
 } as const;
 /**
- * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session).
+ * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.
  */
 export type RiskPolicyAction = ClosedEnum<typeof RiskPolicyAction>;
 
@@ -57,14 +57,14 @@ export const RiskPolicyPolicyType = {
 export type RiskPolicyPolicyType = ClosedEnum<typeof RiskPolicyPolicyType>;
 
 /**
- * Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.
+ * Default disposition for shadow MCP blocking policies: block_all blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.
  */
 export const RiskPolicyShadowMcpDisposition = {
   BlockAll: "block_all",
   AllowAll: "allow_all",
 } as const;
 /**
- * Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.
+ * Default disposition for shadow MCP blocking policies: block_all blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.
  */
 export type RiskPolicyShadowMcpDisposition = ClosedEnum<
   typeof RiskPolicyShadowMcpDisposition
@@ -72,7 +72,7 @@ export type RiskPolicyShadowMcpDisposition = ClosedEnum<
 
 export type RiskPolicy = {
   /**
-   * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session).
+   * Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.
    */
   action: RiskPolicyAction;
   /**
@@ -154,7 +154,7 @@ export type RiskPolicy = {
    */
   score: number;
   /**
-   * Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.
+   * Default disposition for shadow MCP blocking policies: block_all blocks every non-Speakeasy-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.
    */
   shadowMcpDisposition?: RiskPolicyShadowMcpDisposition | undefined;
   /**

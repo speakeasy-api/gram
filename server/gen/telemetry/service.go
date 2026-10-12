@@ -14,7 +14,7 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Fetch telemetry data for tools in Gram.
+// Fetch telemetry data for tools in Speakeasy.
 type Service interface {
 	// Search and list telemetry logs that match a search filter
 	SearchLogs(context.Context, *SearchLogsPayload) (res *SearchLogsResult, err error)
@@ -503,7 +503,7 @@ type GetToolUsageClientToolBreakdownPayload struct {
 	// and are excluded when this filter is set.
 	HookSources []string
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
@@ -549,7 +549,7 @@ type GetToolUsageClientsPayload struct {
 	// and are excluded when this filter is set.
 	HookSources []string
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
@@ -624,7 +624,7 @@ type GetToolUsageSummaryPayload struct {
 	// and are excluded when this filter is set.
 	HookSources []string
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
@@ -686,7 +686,7 @@ type GetToolUsageTargetTimeSeriesPayload struct {
 	// and are excluded when this filter is set.
 	HookSources []string
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
@@ -732,7 +732,7 @@ type GetToolUsageTargetToolBreakdownPayload struct {
 	// and are excluded when this filter is set.
 	HookSources []string
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
@@ -778,7 +778,7 @@ type GetToolUsageTargetsPayload struct {
 	// and are excluded when this filter is set.
 	HookSources []string
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
@@ -824,7 +824,7 @@ type GetToolUsageTotalsPayload struct {
 	// and are excluded when this filter is set.
 	HookSources []string
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
@@ -870,7 +870,7 @@ type GetToolUsageUserTimeSeriesPayload struct {
 	// and are excluded when this filter is set.
 	HookSources []string
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
@@ -916,7 +916,7 @@ type GetToolUsageUsersByTargetPayload struct {
 	// and are excluded when this filter is set.
 	HookSources []string
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
@@ -962,7 +962,7 @@ type GetToolUsageUsersPayload struct {
 	// and are excluded when this filter is set.
 	HookSources []string
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal').
 	AccountType *string
@@ -1133,7 +1133,7 @@ type HookTraceSummary struct {
 	HookStatus *string
 	// Reason set when hook_status is 'blocked' (e.g. shadow-MCP guard rejection)
 	BlockReason *string
-	// Gram URN associated with this hook trace
+	// Speakeasy URN associated with this hook trace
 	GramUrn string
 	// Tool name (from materialized column)
 	ToolName *string
@@ -1346,7 +1346,7 @@ type ListToolUsageTracesPayload struct {
 	// and are excluded when this filter is set.
 	HookSources []string
 	// MCP client keys (lowercased self-reported client names; 'unattributed'
-	// selects calls Gram never saw an initialize handshake for) to include
+	// selects calls Speakeasy never saw an initialize handshake for) to include
 	ClientKeys []string
 	// Optional account type filter ('team' or 'personal'). 'team' includes
 	// unclassified traces.
@@ -1355,7 +1355,7 @@ type ListToolUsageTracesPayload struct {
 	// all.
 	Statuses []ToolUsageStatus
 	// Free-text attribute search string from the q URL param. Matches useful
-	// identifier attributes such as Gram URN, conversation ID, and trigger
+	// identifier attributes such as Speakeasy URN, conversation ID, and trigger
 	// instance ID.
 	Query *string
 	// Arbitrary attribute filter conditions from the af URL param
@@ -1722,7 +1722,7 @@ type SearchChatsFilter struct {
 	To *string
 	// Deployment ID filter
 	DeploymentID *string
-	// Gram URN filter (single URN, use gram_urns for multiple)
+	// Speakeasy URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string
 	// User ID filter
 	UserID *string
@@ -1769,7 +1769,7 @@ type SearchLogsFilter struct {
 	HTTPMethod *string
 	// Service name filter
 	ServiceName *string
-	// Gram URN filter (one or more URNs)
+	// Speakeasy URN filter (one or more URNs)
 	GramUrns []string
 	// Chat ID filter
 	GramChatID *string
@@ -1787,7 +1787,7 @@ type SearchLogsFilter struct {
 	DeploymentID *string
 	// Function ID filter
 	FunctionID *string
-	// Gram URN filter (single URN, use gram_urns for multiple)
+	// Speakeasy URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string
 }
 
@@ -1834,7 +1834,7 @@ type SearchToolCallsFilter struct {
 	DeploymentID *string
 	// Function ID filter
 	FunctionID *string
-	// Gram URN filter (single URN, use gram_urns for multiple)
+	// Speakeasy URN filter (single URN, use gram_urns for multiple)
 	GramUrn *string
 }
 
@@ -2079,7 +2079,7 @@ type ToolCallSummary struct {
 	LogCount uint64
 	// HTTP status code (if applicable)
 	HTTPStatusCode *int32
-	// Gram URN associated with this tool call
+	// Speakeasy URN associated with this tool call
 	GramUrn string
 	// Tool name (from attributes.gram.tool.name)
 	ToolName *string
@@ -2320,7 +2320,7 @@ type ToolUsageTraceSummary struct {
 	StartTimeUnixNano string
 	// Number of logs in the trace
 	LogCount uint64
-	// Gram URN associated with the trace
+	// Speakeasy URN associated with the trace
 	GramUrn string
 	// Tool name shown in the row
 	ToolName string
@@ -2573,8 +2573,8 @@ type UserAccount struct {
 	// Account record id (user_accounts.id); used to scope chat/session views to
 	// this account
 	ID *string
-	// Gram user id of the directory owner of this account; the authoritative link
-	// between account-email-keyed usage and the org member
+	// Speakeasy user id of the directory owner of this account; the authoritative
+	// link between account-email-keyed usage and the org member
 	UserID *string
 	// AI provider the account belongs to ('anthropic', 'openai', 'cursor')
 	Provider string

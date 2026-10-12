@@ -119,11 +119,17 @@ vi.mock("@/components/scope-gated-nav-group", () => ({
     items: {
       item: { title: string; href: () => string };
       label?: string;
+      scope?: string | string[];
     }[];
   }) => (
     <>
-      {items.map(({ item, label }) => (
-        <a key={item.title} href={item.href()} aria-label={item.title}>
+      {items.map(({ item, label, scope }) => (
+        <a
+          key={item.title}
+          href={item.href()}
+          aria-label={item.title}
+          data-scope={[scope ?? []].flat().join(" ")}
+        >
           {label ?? item.title}
         </a>
       ))}
@@ -161,6 +167,7 @@ it.each([
   ["access", "Team"],
   ["identity", "Team"],
   ["auditLogs", "Secure"],
+  ["workloadIssuers", "Secure"],
 ])("selects the correct group for %s", (active, group) => {
   mocks.active = active;
   render(<OrgSidebar />);
@@ -169,6 +176,15 @@ it.each([
   );
   expect(screen.getByTestId("selection").getAttribute("data-item")).toBe(
     active === "identity" ? "IDP and SSO" : active,
+  );
+});
+
+it("lists the Access Hub under Secure, gated on the workload scopes", () => {
+  render(<OrgSidebar />);
+  const accessHub = screen.getByRole("link", { name: "workloadIssuers" });
+  expect(accessHub.getAttribute("href")).toBe("/workloadIssuers");
+  expect(accessHub.getAttribute("data-scope")).toBe(
+    "workload:read workload:write",
   );
 });
 

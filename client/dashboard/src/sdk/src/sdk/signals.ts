@@ -4,13 +4,19 @@
 
 import { riskSignalsAnalysisStatus } from "../funcs/riskSignalsAnalysisStatus.js";
 import { riskSignalsGet } from "../funcs/riskSignalsGet.js";
+import { riskSignalsMcpServerCounts } from "../funcs/riskSignalsMcpServerCounts.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { RiskAnalysisStatusResult } from "../models/components/riskanalysisstatusresult.js";
+import { RiskMcpServerCountsResult } from "../models/components/riskmcpservercountsresult.js";
 import { RiskSignalsResult } from "../models/components/risksignalsresult.js";
 import {
   GetRiskAnalysisStatusRequest,
   GetRiskAnalysisStatusSecurity,
 } from "../models/operations/getriskanalysisstatus.js";
+import {
+  GetRiskMcpServerCountsRequest,
+  GetRiskMcpServerCountsSecurity,
+} from "../models/operations/getriskmcpservercounts.js";
 import {
   GetRiskSignalsRequest,
   GetRiskSignalsSecurity,
@@ -30,6 +36,25 @@ export class Signals extends ClientSDK {
     options?: RequestOptions,
   ): Promise<RiskAnalysisStatusResult> {
     return unwrapAsync(riskSignalsAnalysisStatus(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getRiskMcpServerCounts risk
+   *
+   * @remarks
+   * Get live finding counts per concrete MCP server over a window, largest first. Powers the MCP server filter pickers on Risk Events and Watchdog. Served from the ClickHouse findings store.
+   */
+  async mcpServerCounts(
+    request?: GetRiskMcpServerCountsRequest | undefined,
+    security?: GetRiskMcpServerCountsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RiskMcpServerCountsResult> {
+    return unwrapAsync(riskSignalsMcpServerCounts(
       this,
       request,
       security,

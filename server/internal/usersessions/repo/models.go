@@ -26,6 +26,7 @@ type UserSession struct {
 	ExpiresAt              pgtype.Timestamptz
 	ToolSelection          []byte
 	LastUsedAt             pgtype.Timestamptz
+	Resource               pgtype.Text
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
@@ -83,6 +84,8 @@ type UserSessionIssuer struct {
 	TrustedRemoteSessionIssuerID  uuid.NullUUID
 	TrustedRemoteSessionClientID  uuid.NullUUID
 	UseAuthenticationHost         bool
+	AuthorizationServerMode       string
+	PinnedIssuerUrl               pgtype.Text
 	CreatedAt                     pgtype.Timestamptz
 	UpdatedAt                     pgtype.Timestamptz
 	DeletedAt                     pgtype.Timestamptz

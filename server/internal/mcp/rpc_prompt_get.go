@@ -57,17 +57,18 @@ func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		serverID = payload.mcpServerID.String()
 	}
 	decision := scan.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
-		Surface:        mcpriskscan.SurfaceHostedMCP,
-		Method:         mcpriskscan.MethodPromptsGet,
-		OrganizationID: payload.organizationID,
-		ProjectID:      payload.projectID.String(),
-		ServerID:       serverID,
-		MetaServerID:   payload.metaMcpServerID,
-		ToolsetID:      "",
-		ToolName:       "",
-		ResourceURI:    "",
-		PromptName:     params.Name,
-		ChatID:         payload.chatID,
+		Surface:         mcpriskscan.SurfaceHostedMCP,
+		Method:          mcpriskscan.MethodPromptsGet,
+		OrganizationID:  payload.organizationID,
+		ProjectID:       payload.projectID.String(),
+		ServerID:        serverID,
+		MetaServerID:    payload.metaMcpServerID,
+		ToolsetID:       "",
+		ToolName:        "",
+		ResourceURI:     "",
+		PromptName:      params.Name,
+		ChatID:          payload.chatID,
+		ToolAnnotations: nil,
 	}, mcpriskscan.BorrowPayload(params.Arguments)))
 	if decision.Denied() {
 		return nil, oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)

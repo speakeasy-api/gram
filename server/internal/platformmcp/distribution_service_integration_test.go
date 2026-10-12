@@ -29,7 +29,7 @@ func TestDistributionServiceAttachesAndRemovesOnlyWorkflowSelectedReadyMCP(t *te
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	store, err := NewRegistrationStore(conn)
 	require.NoError(t, err)
 	request := registrationRequest(project, "distribution-fixture", "distribution-registration")
 	receipt, err := store.BeginReceipt(ctx, principal, project, request, time.Now().UTC())
@@ -332,7 +332,7 @@ func seedReadyDistributionTarget(t *testing.T, ctx context.Context, conn *pgxpoo
 	t.Helper()
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	store, err := NewRegistrationStore(conn)
 	require.NoError(t, err)
 	request := registrationRequest(project, "distribution-publisher-fixture", "distribution-publisher-registration")
 	receipt, err := store.BeginReceipt(ctx, principal, project, request, time.Now().UTC())
@@ -397,7 +397,7 @@ func TestCatalogRegistrationToolBindsOnboardingSoTheMCPCanBeDistributed(t *testi
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	store, err := NewRegistrationStore(conn)
 	require.NoError(t, err)
 	onboarding := NewOnboardingService(conn)
 	registrations := newRegistrationService(testCatalog{details: CatalogDetails{

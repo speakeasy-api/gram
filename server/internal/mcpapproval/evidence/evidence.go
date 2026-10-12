@@ -357,12 +357,12 @@ type ToolProber interface {
 	ListToolDeclarations(ctx context.Context, serverURL string) ([]capability.Declaration, error)
 }
 
-// CatalogLookup matches a server URL against the configured MCP registries.
+// CatalogLookup matches a server URL against the research project's selected catalog.
 // A nil match with a nil error is checked-and-absent. includeTools asks for
 // the entry's tool declarations, which cost an extra registry round trip;
 // when false, a match carries provenance only. *catalog.Source satisfies it.
 type CatalogLookup interface {
-	Lookup(ctx context.Context, serverURL string, includeTools bool) (*catalog.Match, error)
+	Lookup(ctx context.Context, projectID uuid.UUID, serverURL string, includeTools bool) (*catalog.Match, error)
 }
 
 var _ CatalogLookup = (*catalog.Source)(nil)
@@ -500,7 +500,7 @@ func (a *Assembler) Assemble(ctx context.Context, projectID uuid.UUID, resolved 
 
 		authorityConsulted := a.probeAuthority(ctx, target, &document)
 		serverDeclared := a.probeToolDeclarations(ctx, target, &document, authorityConsulted)
-		a.lookupCatalog(ctx, target, &document, serverDeclared)
+		a.lookupCatalog(ctx, projectID, target, &document, serverDeclared)
 		a.lookupDomain(ctx, resolved.RegistrableDomain, &document)
 	}
 
@@ -719,21 +719,21 @@ func recordUnauthenticatedListing(document *Document, declarations []capability.
 	document.Authority.UnauthenticatedTools = names
 }
 
-// lookupCatalog matches the server against the configured registries. A match
+// lookupCatalog matches the server against the project's selected catalog. A match
 // always fills the provenance section; its tool declarations fill the
 // capability section only when the server itself refused to answer, labeled
 // as the registry's copy. When the server refused and no registry supplies
 // declarations either, the tool-declarations gap lands here — declarations
 // could not be consulted anywhere, which must never read as a clean empty
 // list.
-func (a *Assembler) lookupCatalog(ctx context.Context, serverURL string, document *Document, serverDeclared bool) {
+func (a *Assembler) lookupCatalog(ctx context.Context, projectID uuid.UUID, serverURL string, document *Document, serverDeclared bool) {
 	lookupCtx, cancel := context.WithTimeout(ctx, a.sourceTimeout)
 	defer cancel()
 
 	// Tool declarations are only requested when the server itself refused to
 	// answer: the details fetch is an extra registry round trip whose result
 	// would otherwise be discarded in favor of the server's own words.
-	match, err := a.catalog.Lookup(lookupCtx, serverURL, !serverDeclared)
+	match, err := a.catalog.Lookup(lookupCtx, projectID, serverURL, !serverDeclared)
 	if err != nil {
 		document.Gaps = append(document.Gaps, GapCatalogLookup)
 		if !serverDeclared {

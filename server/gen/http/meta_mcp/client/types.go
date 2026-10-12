@@ -42,11 +42,11 @@ type UpdateMetaMcpServerRequestBody struct {
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// The allowed network surfaces. Omit to preserve the stored mode.
 	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
-	// Custom server instructions replace Gram's built-in gateway instructions in
-	// MCP initialize and server/discover responses. Omit to leave them unchanged;
-	// send an empty string to restore Gram's built-in gateway instructions.
-	// Limited to 10000 Unicode characters after removing NUL characters and
-	// trimming whitespace.
+	// Custom server instructions replace Speakeasy's built-in gateway instructions
+	// in MCP initialize and server/discover responses. Omit to leave them
+	// unchanged; send an empty string to restore Speakeasy's built-in gateway
+	// instructions. Limited to 10000 Unicode characters after removing NUL
+	// characters and trimming whitespace.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 }
 
@@ -89,7 +89,7 @@ type CreateMetaMcpServerResponseBody struct {
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// Operator-authored server instructions returned in the gateway's MCP
-	// initialize response. Null when the gateway serves Gram's built-in
+	// initialize response. Null when the gateway serves Speakeasy's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// When the meta MCP server was created
@@ -119,7 +119,7 @@ type GetMetaMcpServerResponseBody struct {
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// Operator-authored server instructions returned in the gateway's MCP
-	// initialize response. Null when the gateway serves Gram's built-in
+	// initialize response. Null when the gateway serves Speakeasy's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// When the meta MCP server was created
@@ -155,7 +155,7 @@ type UpdateMetaMcpServerResponseBody struct {
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// Operator-authored server instructions returned in the gateway's MCP
-	// initialize response. Null when the gateway serves Gram's built-in
+	// initialize response. Null when the gateway serves Speakeasy's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// When the meta MCP server was created
@@ -1895,7 +1895,7 @@ type MetaMcpServerResponseBody struct {
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
 	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// Operator-authored server instructions returned in the gateway's MCP
-	// initialize response. Null when the gateway serves Gram's built-in
+	// initialize response. Null when the gateway serves Speakeasy's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
 	// When the meta MCP server was created

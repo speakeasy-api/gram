@@ -411,7 +411,7 @@ func TestOAuthHTTPRefreshReturnsTransientGateError(t *testing.T) {
 	connection := platformoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "user:user-1", OrganizationID: "org-1", Generation: "generation-1", AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime)}
 	require.NoError(t, store.RegisterClient(t.Context(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
 	require.NoError(t, store.RegisterConnection(t.Context(), connection))
-	refreshToken, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID)
+	refreshToken, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID, "")
 	require.NoError(t, err)
 	require.NoError(t, store.CreateSession(t.Context(), platformoauth.Session{ID: "session-1", ClientID: "client-1", Connection: connection, JTI: "jti-1", RefreshHash: opaqueHash(refreshToken), ExpiresAt: time.Now().Add(time.Hour), RefreshExpiresAt: time.Now().Add(time.Hour)}))
 	service.gate = oauthTestGate{err: errors.New("feature provider unavailable")}
@@ -445,9 +445,9 @@ func TestOAuthHTTPRefreshReplayIsRejectedBeforeAuthorization(t *testing.T) {
 	connection := platformoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "user:user-1", OrganizationID: "org-1", Generation: "generation-1", AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime)}
 	require.NoError(t, store.RegisterClient(context.Background(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
 	require.NoError(t, store.RegisterConnection(context.Background(), connection))
-	refreshOld, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID)
+	refreshOld, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID, "")
 	require.NoError(t, err)
-	refreshNew, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID)
+	refreshNew, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID, "")
 	require.NoError(t, err)
 	old := platformoauth.Session{ID: "session-old", ClientID: "client-1", Connection: connection, JTI: "jti-old", RefreshHash: opaqueHash(refreshOld), ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(time.Hour)}
 	require.NoError(t, store.CreateSession(context.Background(), old))
@@ -475,11 +475,11 @@ func TestOAuthHTTPRevokesExpiredAccessToken(t *testing.T) {
 	connection := platformoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "user:user-1", OrganizationID: "org-1", Generation: "generation-1", AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime)}
 	require.NoError(t, store.RegisterClient(t.Context(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
 	require.NoError(t, store.RegisterConnection(t.Context(), connection))
-	jti, err := service.credentials.Issue(accessJTICredential, connection.OrganizationID)
+	jti, err := service.credentials.Issue(accessJTICredential, connection.OrganizationID, "")
 	require.NoError(t, err)
-	accessToken, _, err := service.signer.Mint(sessiontokens.MintParams{Subject: urn.SessionSubject{Kind: urn.SessionSubjectKindUser, ID: "user-1"}, Audience: service.audience, Issuer: service.issuer, Lifetime: -time.Minute, ClientID: "client-1", JTI: jti})
+	accessToken, _, err := service.signer.Mint(sessiontokens.MintParams{Subject: urn.SessionSubject{Kind: urn.SessionSubjectKindUser, ID: "user-1"}, Audience: platformResource(service.baseURL), Issuer: platformResource(service.baseURL), Lifetime: -time.Minute, ClientID: "client-1", JTI: jti})
 	require.NoError(t, err)
-	refreshToken, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID)
+	refreshToken, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID, "")
 	require.NoError(t, err)
 	require.NoError(t, store.CreateSession(t.Context(), platformoauth.Session{ID: "session-1", ClientID: "client-1", Connection: connection, JTI: jti, RefreshHash: opaqueHash(refreshToken), ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(time.Hour)}))
 
@@ -504,7 +504,7 @@ func TestOAuthHTTPRejectsMalformedRefreshSubject(t *testing.T) {
 	require.NoError(t, store.RegisterClient(context.Background(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
 	connection := platformoauth.Connection{ID: "connection-1", ClientID: "client-1", Subject: "malformed", OrganizationID: "org-1", Generation: "generation-1", AuthorizationExpiresAt: now.Add(platformoauth.AuthorizationLifetime)}
 	require.NoError(t, store.RegisterConnection(context.Background(), connection))
-	refreshToken, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID)
+	refreshToken, err := service.credentials.Issue(refreshTokenCredential, connection.OrganizationID, "")
 	require.NoError(t, err)
 	require.NoError(t, store.CreateSession(context.Background(), platformoauth.Session{ID: "session-1", ClientID: "client-1", Connection: connection, JTI: "jti-1", RefreshHash: opaqueHash(refreshToken), ExpiresAt: now.Add(time.Hour), RefreshExpiresAt: now.Add(time.Hour)}))
 
@@ -549,4 +549,67 @@ func testEncryption(t *testing.T) *encryption.Client {
 	client, err := encryption.NewWithBytes(make([]byte, 32))
 	require.NoError(t, err)
 	return client
+}
+
+// callbackRecordingIdentity records the callback URL sent to the identity
+// provider.
+type callbackRecordingIdentity struct {
+	testIdentity
+	callbacks *[]string
+}
+
+func (i callbackRecordingIdentity) BuildAuthorizationURL(ctx context.Context, params identity.AuthorizationURLParams) (*url.URL, error) {
+	*i.callbacks = append(*i.callbacks, params.CallbackURL)
+	return i.testIdentity.BuildAuthorizationURL(ctx, params)
+}
+
+func TestOAuthHTTPPinsIDPCallbackToOutboundOrigin(t *testing.T) {
+	t.Parallel()
+
+	base, err := url.Parse("https://ai.example.test")
+	require.NoError(t, err)
+	outbound, err := url.Parse("https://app.example.test")
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name     string
+		pinned   *url.URL
+		callback string
+	}{
+		{name: "default", pinned: nil, callback: "https://ai.example.test/platform-mcp/idp_callback"},
+		{name: "pinned", pinned: outbound, callback: "https://app.example.test/platform-mcp/idp_callback"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var callbacks []string
+			service, err := NewOAuthHTTP(OAuthHTTPConfig{
+				BaseURL:            base,
+				IDPCallbackBaseURL: tc.pinned,
+				Cache:              &memoryCache{values: map[string]any{}},
+				Store:              platformoauth.NewInMemoryStore(),
+				Identity:           callbackRecordingIdentity{callbacks: &callbacks},
+				Gate:               allowGate{},
+				Authorizer:         allowAuthorizer{},
+				Organizations:      testOrganizationSelector{organizations: []OrganizationOption{{ID: "org-1", Name: "Organization one"}}},
+				Signer:             sessiontokens.NewSigner("test-key"),
+				Encryption:         testEncryption(t),
+			})
+			require.NoError(t, err)
+			require.NoError(t, testStore(t, service).RegisterClient(context.Background(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
+
+			authorize := httptest.NewRecorder()
+			service.AuthorizeHandler().ServeHTTP(authorize, httptest.NewRequest(http.MethodGet, "https://ai.example.test/platform-mcp/authorize?response_type=code&client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A3000%2Fcallback&code_challenge=challenge&code_challenge_method=S256", nil))
+			require.Equal(t, http.StatusFound, authorize.Code)
+			require.Equal(t, []string{tc.callback}, callbacks)
+			idpURL, err := url.Parse(authorize.Header().Get("Location"))
+			require.NoError(t, err)
+
+			// The callback host returns the browser to the origin it started on.
+			callback := httptest.NewRecorder()
+			service.IDPCallbackHandler().ServeHTTP(callback, httptest.NewRequest(http.MethodGet, tc.callback+"?state="+url.QueryEscape(idpURL.Query().Get("state"))+"&code=idp-code", nil))
+			require.Equal(t, http.StatusFound, callback.Code)
+			selection, err := url.Parse(callback.Header().Get("Location"))
+			require.NoError(t, err)
+			require.Equal(t, "ai.example.test", selection.Host)
+		})
+	}
 }

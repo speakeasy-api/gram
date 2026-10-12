@@ -91,6 +91,7 @@ type hookedKMSClients struct {
 	inner *provisiontest.KMSClients
 
 	mu            sync.Mutex
+	opened        int
 	created       []string
 	disabled      []string
 	revokedGrants []string
@@ -100,12 +101,23 @@ type hookedKMSClients struct {
 }
 
 func (c *hookedKMSClients) Factory(ctx context.Context, tokenSource oauth2.TokenSource) (gcpkms.ProvisioningClient, error) {
+	c.mu.Lock()
+	c.opened++
+	c.mu.Unlock()
+
 	client, err := c.inner.Factory(ctx, tokenSource)
 	if err != nil {
 		return nil, fmt.Errorf("build fixture kms client: %w", err)
 	}
 
 	return &hookedProvisioningClient{ProvisioningClient: client, hooks: c}, nil
+}
+
+// Opened counts KMS client constructions.
+func (c *hookedKMSClients) Opened() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.opened
 }
 
 func (c *hookedKMSClients) Created() []string {

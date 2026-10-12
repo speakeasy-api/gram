@@ -121,10 +121,22 @@ export type SpendChartData = {
   maximum: number;
 };
 
+// "bucket" charts the buckets exactly as the server returned them, for data the
+// server already grouped (such as billing-cycle-aligned months). The other
+// values regroup the server's daily buckets on the client.
+export type SpendGrouping = MeterGranularity | "bucket";
+
+// The fields a chart reads. A per-organization breakdown has them, and so does
+// each customer on the customer usage page.
+export type SpendChartSource = Pick<
+  AdminSpendBreakdown,
+  "products" | "queriedAt" | "window"
+>;
+
 export function spendChartData(
-  data: AdminSpendBreakdown,
+  data: SpendChartSource,
   selectedProductIDs: ReadonlySet<SpendProductID>,
-  granularity: MeterGranularity,
+  granularity: SpendGrouping,
   cumulative: boolean,
 ): SpendChartData {
   const products = data.products.filter((product) =>
@@ -144,10 +156,15 @@ export function spendChartData(
 
   for (const product of products) {
     const grouped = new Map<number, bigint>();
+    const bucketEnds = new Map<number, number>();
     for (const bucket of product.buckets) {
       const bucketFrom = bucket.from.getTime();
       if (bucketFrom > data.queriedAt.getTime()) continue;
-      const start = meterGroupStart(bucketFrom, granularity);
+      const start =
+        granularity === "bucket"
+          ? bucketFrom
+          : meterGroupStart(bucketFrom, granularity);
+      bucketEnds.set(start, bucket.to.getTime());
       grouped.set(
         start,
         (grouped.get(start) ?? 0n) +
@@ -161,7 +178,9 @@ export function spendChartData(
     )) {
       const cost = cumulative ? (running += groupCost) : groupCost;
       const end = Math.min(
-        meterGroupEnd(start, granularity),
+        granularity === "bucket"
+          ? (bucketEnds.get(start) ?? start)
+          : meterGroupEnd(start, granularity),
         data.window.to.getTime(),
       );
       totalsByStart.set(start, (totalsByStart.get(start) ?? 0n) + cost);

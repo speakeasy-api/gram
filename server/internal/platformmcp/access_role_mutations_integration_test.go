@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -16,10 +17,84 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+// countingRoleBackend counts the provider reconciliations a role write sends
+// after its receipt commits.
+type countingRoleBackend struct {
+	*access.RoleManager
+	identityReconciles int
+	memberReconciles   int
+}
+
+func (b *countingRoleBackend) ReconcileRoleIdentity(ctx context.Context, workosOrgID, slug, name, description string, create bool) {
+	b.identityReconciles++
+	b.RoleManager.ReconcileRoleIdentity(ctx, workosOrgID, slug, name, description, create)
+}
+
+func (b *countingRoleBackend) ReconcileMemberRoles(ctx context.Context, reconciliation access.MemberRoleReconciliation) {
+	b.memberReconciles++
+	b.RoleManager.ReconcileMemberRoles(ctx, reconciliation)
+}
+
+func TestAccessRoleMutationsCreateWithoutGrantsAndReplay(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_access_role_mutations")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+
+	organization, err := organizationsrepo.New(conn).GetOrganizationMetadata(ctx, principal.OrganizationID)
+	require.NoError(t, err)
+	_, err = organizationsrepo.New(conn).UpsertOrganizationMetadata(ctx, organizationsrepo.UpsertOrganizationMetadataParams{
+		ID: principal.OrganizationID, Name: organization.Name, Slug: organization.Slug,
+		WorkosID: conv.ToPGText("workos-" + uuid.NewString()), Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagPlatformMCPAccessRoleMutations, principal.OrganizationID, true)
+	logger := testenv.NewLogger(t)
+	reads := NewAccessReadService(logger, conn, allowBudget(), "access-role-integration-key")
+	manager := access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger(), plugins.PublicationRequests{Enabled: false}, admission.NewGuard())
+	service, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "access-role-integration-key", manager)
+	require.NoError(t, err)
+
+	input := CreateMCPAccessRoleInput{
+		ProjectID: project.ID.String(), Name: "Grantless role", Rules: []MCPAccessRoleRule{},
+		IdempotencyKey: "create-grantless-role", Confirmed: true,
+	}
+	created, err := service.Create(ctx, principal, input)
+	require.NoError(t, err)
+	require.Equal(t, "Grantless role", created.Role.Name)
+	require.NotEmpty(t, created.Role.Reference)
+	require.NotEmpty(t, created.Role.Version)
+	require.False(t, created.Receipt.Replayed)
+	require.Equal(t, "pending", created.Reconciliation)
+
+	roleID, err := reads.references.Decode(created.Role.Reference, principal, subjectKindAccessRole, reads.now())
+	require.NoError(t, err)
+	stored, err := manager.GetRoleByID(ctx, principal.OrganizationID, roleID)
+	require.NoError(t, err)
+	require.False(t, stored.IsSystem)
+	require.Empty(t, stored.Grants)
+
+	replayed, err := service.Create(ctx, principal, input)
+	require.NoError(t, err)
+	require.True(t, replayed.Receipt.Replayed)
+	require.Equal(t, created.Receipt.ID, replayed.Receipt.ID)
+	require.Equal(t, created.Role.Version, replayed.Role.Version)
+	require.Equal(t, created.Role.MCPAccess, replayed.Role.MCPAccess)
+	replayedRoleID, err := reads.references.Decode(replayed.Role.Reference, principal, subjectKindAccessRole, reads.now())
+	require.NoError(t, err)
+	require.Equal(t, roleID, replayedRoleID)
+}
 
 func TestAccessRoleMutationsCommitReplayAndPreserveOtherGrants(t *testing.T) {
 	t.Parallel()
@@ -50,8 +125,9 @@ func TestAccessRoleMutationsCommitReplayAndPreserveOtherGrants(t *testing.T) {
 	flags.SetFlag(feature.FlagPlatformMCPAccessRoleMutations, principal.OrganizationID, true)
 	logger := testenv.NewLogger(t)
 	reads := NewAccessReadService(logger, conn, allowBudget(), "access-role-integration-key")
-	manager := access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger())
-	service, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "access-role-integration-key", manager)
+	manager := access.NewRoleManager(logger, conn, workos.NewStubClient(), audit.NewLogger(), plugins.PublicationRequests{Enabled: false}, admission.NewGuard())
+	backend := &countingRoleBackend{RoleManager: manager, identityReconciles: 0, memberReconciles: 0}
+	service, err := NewAccessRoleMutationService(reads, flags, allowBudget(), "access-role-integration-key", backend)
 	require.NoError(t, err)
 
 	createAuditsBefore, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionAccessRoleCreate)
@@ -93,6 +169,18 @@ func TestAccessRoleMutationsCommitReplayAndPreserveOtherGrants(t *testing.T) {
 	createAuditsReplayed, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionAccessRoleCreate)
 	require.NoError(t, err)
 	require.Equal(t, createAuditsAfter, createAuditsReplayed)
+	require.Equal(t, 2, backend.identityReconciles, "a replay within the allowance re-runs reconciliation, so a failed sync recovers")
+
+	// The replay itself stays free once the allowance is spent, but its
+	// provider reconciliation is charged, so a retry loop cannot send
+	// unbounded provider work.
+	restore := withSpentBudget(t, &service.budget)
+	spent, err := service.Create(ctx, principal, createInput)
+	require.NoError(t, err, "a replay must not be refused over a spent allowance")
+	require.True(t, spent.Receipt.Replayed)
+	require.Equal(t, 2, backend.identityReconciles, "a replay over a spent allowance must not reconcile again")
+	require.Equal(t, "rate_limited", spent.Reconciliation, "the skipped reconciliation is reported")
+	restore()
 
 	projectSelector := authz.NewSelector(authz.ScopeProjectRead, project.ID.String())
 	encodedProjectSelector, err := projectSelector.MarshalJSON()

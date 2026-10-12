@@ -908,7 +908,7 @@ function buildAssistantTools(deps: ToolDeps) {
   const attach_mcp_server = defineFrontendTool<AttachMCPServerArgs, ToolResult>(
     {
       description:
-        "Attach an MCP server registered in this project (a remote external-SaaS MCP server) to the assistant so it can call those tools at runtime. Use this for MCP servers that are NOT backed by a Gram toolset — attach_toolset covers toolset-backed ones. Find the slug with list_mcp_servers; tunnelled or disabled servers are rejected. Pass environment_slug only when the server needs a specific environment's variables; most remote servers carry their own connection auth and need none. Replaces any prior reference to the same mcp_server_slug.",
+        "Attach an MCP server registered in this project (a remote external-SaaS MCP server) to the assistant so it can call those tools at runtime. Use this for MCP servers that are NOT backed by a Speakeasy toolset — attach_toolset covers toolset-backed ones. Find the slug with list_mcp_servers; tunnelled or disabled servers are rejected. Pass environment_slug only when the server needs a specific environment's variables; most remote servers carry their own connection auth and need none. Replaces any prior reference to the same mcp_server_slug.",
       parameters: z.object({
         mcp_server_slug: z.string(),
         environment_slug: z
@@ -1152,7 +1152,7 @@ function buildAssistantTools(deps: ToolDeps) {
   >(
     {
       description:
-        "List MCP servers registered in the current project — remote (external SaaS) and tunnelled servers as well as toolset-backed ones. Use this to find the slug for attach_mcp_server when the user asks to add an MCP server that is not a Gram toolset. Only enabled, non-tunnelled servers are attachable.",
+        "List MCP servers registered in the current project — remote (external SaaS) and tunnelled servers as well as toolset-backed ones. Use this to find the slug for attach_mcp_server when the user asks to add an MCP server that is not a Speakeasy toolset. Only enabled, non-tunnelled servers are attachable.",
       parameters: z.object({}),
       execute: async () => {
         try {
@@ -1662,7 +1662,7 @@ function buildAssistantTools(deps: ToolDeps) {
   const create_trigger = defineFrontendTool<CreateTriggerArgs, ToolResult>(
     {
       description:
-        "Create a trigger instance pointed at the current assistant. The assistant must already exist (call update_assistant first if needed). The trigger is bound to the assistant's shared environment by default — omit environment_id in almost all cases. For Slack triggers the env can be empty at creation time (Gram's webhook answers Slack's url_verification challenge without a signing secret), but SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET must be populated before real events fire. For cron triggers the config must include a 5-field cron string in 'schedule'. After creation: if SLACK_BOT_TOKEN is NOT yet populated on the assistant's env (check via list_environments → populated_entry_names), pass webhook_url to show_slack_app_guide so the manifest pre-fills event_subscriptions.request_url. Otherwise the bot already exists — skip the guide and use show_webhook_url (or nothing, if the trigger is just being reconfigured).",
+        "Create a trigger instance pointed at the current assistant. The assistant must already exist (call update_assistant first if needed). The trigger is bound to the assistant's shared environment by default — omit environment_id in almost all cases. For Slack triggers the env can be empty at creation time (Speakeasy's webhook answers Slack's url_verification challenge without a signing secret), but SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET must be populated before real events fire. For cron triggers the config must include a 5-field cron string in 'schedule'. After creation: if SLACK_BOT_TOKEN is NOT yet populated on the assistant's env (check via list_environments → populated_entry_names), pass webhook_url to show_slack_app_guide so the manifest pre-fills event_subscriptions.request_url. Otherwise the bot already exists — skip the guide and use show_webhook_url (or nothing, if the trigger is just being reconfigured).",
       parameters: z.object({
         name: z.string().min(1),
         definition_slug: z.string().describe("e.g. 'slack' or 'cron'."),
@@ -1935,7 +1935,7 @@ function buildAssistantTools(deps: ToolDeps) {
   >(
     {
       description:
-        "List Gram integrations (packaged toolsets) the user can install. Returns name, summary, keywords, and tool names. Use this to discover what an assistant could do.",
+        "List Speakeasy integrations (packaged toolsets) the user can install. Returns name, summary, keywords, and tool names. Use this to discover what an assistant could do.",
       parameters: z.object({
         keywords: z.array(z.string()).optional(),
       }),
@@ -2415,6 +2415,115 @@ function buildAssistantTools(deps: ToolDeps) {
 }
 
 type OnboardingTools = ReturnType<typeof buildAssistantTools>;
+export type OnboardingToolName = keyof OnboardingTools;
+
+export type OnboardingToolPermissions = {
+  canWriteAssistant: boolean;
+  canReadProject: boolean;
+  canWriteProject: boolean;
+  canReadMCP: boolean;
+  canWriteMCP: boolean;
+  canReadSkills: boolean;
+  canWriteEnvironment: boolean;
+};
+
+const ASSISTANT_READ_TOOLS = new Set<OnboardingToolName>([
+  "list_skills",
+  "list_mcp_servers",
+  "list_toolsets",
+  "list_available_tools",
+  "list_environments",
+  "list_trigger_definitions",
+  "list_triggers",
+  "show_webhook_url",
+  "show_slack_app_guide",
+  "list_integrations",
+  "list_docs",
+  "read_docs",
+  "finish_onboarding",
+]);
+
+const PROJECT_READ_TOOLS = new Set<OnboardingToolName>([
+  "list_available_tools",
+  "list_environments",
+  "list_trigger_definitions",
+  "list_triggers",
+  "show_slack_app_guide",
+  "propose_slack_setup",
+]);
+
+const PROJECT_WRITE_TOOLS = new Set<OnboardingToolName>([
+  "create_trigger",
+  "update_trigger",
+  "propose_slack_setup",
+]);
+
+const MCP_READ_TOOLS = new Set<OnboardingToolName>([
+  "list_mcp_servers",
+  "list_toolsets",
+  "propose_slack_setup",
+]);
+
+const MCP_WRITE_TOOLS = new Set<OnboardingToolName>([
+  "create_toolset",
+  "add_tools_to_toolset",
+  "propose_slack_setup",
+]);
+
+const SKILL_TOOLS = new Set<OnboardingToolName>([
+  "list_skills",
+  "attach_skill",
+  "detach_skill",
+]);
+
+const SKILL_MUTATION_TOOLS = new Set<OnboardingToolName>([
+  "attach_skill",
+  "detach_skill",
+]);
+
+const ENVIRONMENT_WRITE_TOOLS = new Set<OnboardingToolName>([
+  "update_assistant",
+  "attach_toolset",
+  "create_trigger",
+  "create_environment",
+  "add_environment_keys",
+  "request_environment_secrets",
+  "propose_slack_setup",
+]);
+
+export function isOnboardingToolAllowed(
+  tool: OnboardingToolName,
+  permissions: OnboardingToolPermissions,
+): boolean {
+  if (!permissions.canWriteAssistant && !ASSISTANT_READ_TOOLS.has(tool)) {
+    return false;
+  }
+  if (SKILL_TOOLS.has(tool) && !permissions.canReadSkills) {
+    return false;
+  }
+  if (
+    SKILL_MUTATION_TOOLS.has(tool) &&
+    (!permissions.canWriteAssistant || !permissions.canWriteProject)
+  ) {
+    return false;
+  }
+  if (PROJECT_READ_TOOLS.has(tool) && !permissions.canReadProject) {
+    return false;
+  }
+  if (PROJECT_WRITE_TOOLS.has(tool) && !permissions.canWriteProject) {
+    return false;
+  }
+  if (MCP_READ_TOOLS.has(tool) && !permissions.canReadMCP) {
+    return false;
+  }
+  if (MCP_WRITE_TOOLS.has(tool) && !permissions.canWriteMCP) {
+    return false;
+  }
+  if (ENVIRONMENT_WRITE_TOOLS.has(tool) && !permissions.canWriteEnvironment) {
+    return false;
+  }
+  return true;
+}
 
 export function useOnboardingTools(): {
   frontendTools: Record<string, FrontendTool<Record<string, unknown>, unknown>>;
@@ -2427,25 +2536,46 @@ export function useOnboardingTools(): {
   const { hasScope } = useRBAC();
   const draft = useAssistantDraft();
   const organizationId = session.activeOrganizationId;
+  const canWriteAssistant = hasScope(
+    "assistant:write",
+    draft.assistantId ?? project.id,
+    project.id,
+  );
+  const canReadProject = hasScope("project:read", project.id);
+  const canWriteProject = hasScope("project:write", project.id);
+  const canReadMCP = hasScope("mcp:read", project.id);
+  const canWriteMCP = hasScope("mcp:write", project.id);
+  const canReadSkills = hasScope("skill:read", project.id);
+  const canWriteEnvironment = hasScope("environment:write", project.id);
 
   const frontendTools = useMemo<Partial<OnboardingTools>>(() => {
     const tools = buildAssistantTools({ sdk, organizationId, draft });
-    if (!hasScope("skill:read", project.id)) {
-      const { list_skills, attach_skill, detach_skill, ...enabledTools } =
-        tools;
-      void list_skills;
-      void attach_skill;
-      void detach_skill;
-      return enabledTools;
-    }
-    if (!hasScope("project:write", project.id)) {
-      const { attach_skill, detach_skill, ...readableTools } = tools;
-      void attach_skill;
-      void detach_skill;
-      return readableTools;
-    }
-    return tools;
-  }, [sdk, organizationId, draft, hasScope, project.id]);
+    const permissions: OnboardingToolPermissions = {
+      canWriteAssistant,
+      canReadProject,
+      canWriteProject,
+      canReadMCP,
+      canWriteMCP,
+      canReadSkills,
+      canWriteEnvironment,
+    };
+    return Object.fromEntries(
+      Object.entries(tools).filter(([name]) =>
+        isOnboardingToolAllowed(name as OnboardingToolName, permissions),
+      ),
+    );
+  }, [
+    sdk,
+    organizationId,
+    draft,
+    canWriteAssistant,
+    canReadProject,
+    canWriteProject,
+    canReadMCP,
+    canWriteMCP,
+    canReadSkills,
+    canWriteEnvironment,
+  ]);
 
   const components = useMemo<Record<string, ToolCallMessagePartComponent>>(
     () => ({

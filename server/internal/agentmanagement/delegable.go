@@ -71,7 +71,14 @@ func (s *Service) ListDelegableGrants(ctx context.Context, payload *gen.ListDele
 				ResourceID: resourceID, OrganizationID: human.Auth.ActiveOrganizationID,
 			})
 			if errors.Is(err, pgx.ErrNoRows) {
-				return oops.C(oops.CodeNotFound)
+				// Inventory can outlive a resource (including a server's backing
+				// toolset). An unavailable batch member contributes no grants;
+				// it must not prevent discovery for the remaining live resources.
+				// Preserve the legacy single-resource not-found contract.
+				if payload.ToolsetID != nil && toolsetID == *payload.ToolsetID {
+					return oops.C(oops.CodeNotFound)
+				}
+				continue
 			}
 			if err != nil {
 				return fmt.Errorf("load delegable MCP resource: %w", err)

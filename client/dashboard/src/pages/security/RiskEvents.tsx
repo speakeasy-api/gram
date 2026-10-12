@@ -14,6 +14,8 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { MoreActions, type Action } from "@/components/ui/MoreActions";
 import { useOrganization } from "@/contexts/Auth";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
 import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
 import { cn } from "@/lib/utils";
@@ -21,10 +23,16 @@ import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { getPresetRange } from "@/elements";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useAssistantsList } from "@gram/client/react-query/assistantsList.js";
+import { useProject } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { useMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { useRiskMcpServerCounts } from "@gram/client/react-query/riskMcpServerCounts.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
+import { useRiskListMcpPlatformToolsets } from "@gram/client/react-query/riskListMcpPlatformToolsets.js";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { useInfiniteQuery } from "@tanstack/react-query";
@@ -33,6 +41,19 @@ import { History } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
+import {
+  enforcementOutcomeLabel,
+  isBlockingOutcome,
+  mcpServerDisplayName,
+} from "./risk-outcome";
+import { chatFindingDetail } from "./finding-kind";
+import { FindingDrawer } from "./FindingDrawer";
+import { MCPFindingContext } from "./MCPFindingContext";
+import {
+  buildMCPFindingNames,
+  isMCPFinding,
+  type MCPFindingNames,
+} from "./mcp-finding-context";
 import { useDismissFinding } from "./useDismissFinding";
 import { useSetupExclusionRule } from "./useSetupExclusionRule";
 import {
@@ -46,10 +67,13 @@ import {
 import {
   isRationaleSource,
   isShadowMcpSource,
-  scoreToRating,
   SEVERITY_RATING_LABEL,
-  type SeverityRating,
 } from "./risk-utils";
+import {
+  displayedScoreRating,
+  SEVERITY_EDGE,
+  SEVERITY_TEXT,
+} from "./risk-severity";
 
 // Signal-list layout (Risk Watchdog idiom): the severity score leads each row
 // as a big serif numeral, so it sits directly after the checkbox.
@@ -60,39 +84,10 @@ import {
 // alone rather than an empty Rule cell.
 //
 // Evidence gets the widest track: for judge and LLM analyzer findings it holds
-// a sentence or two of rationale, where every other column holds a label.
+// a sentence or two of rationale, where every other column holds a label. The
+// actions track also holds the enforcement outcome of MCP findings.
 const RISK_EVENTS_GRID =
-  "grid grid-cols-[28px_88px_172px_minmax(0,1.3fr)_minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,2.4fr)_minmax(0,0.9fr)_110px] gap-3";
-
-// Signal severity palette: band → text / row-edge classes. Colors are
-// token-derived — brand red hsl(4,67%,47%) (--color-brand-red-500) is reserved
-// for critical, the feedback-orange ramp covers high/medium, low stays neutral
-// ink. Applied to the score numeral, the severity word, and the row's 2px
-// left edge.
-const SEVERITY_TEXT: Record<SeverityRating, string> = {
-  critical: "text-[var(--color-brand-red-500)]",
-  high: "text-[var(--color-feedback-orange-600)]",
-  medium: "text-[var(--color-feedback-orange-400)]",
-  low: "text-foreground",
-};
-
-const SEVERITY_EDGE: Record<SeverityRating, string> = {
-  critical: "border-l-[var(--color-brand-red-500)]",
-  high: "border-l-[var(--color-feedback-orange-600)]",
-  medium: "border-l-[var(--color-feedback-orange-400)]",
-  low: "border-l-border",
-};
-
-// Ratings key off the rounded value we display, so a score sitting just below
-// a band boundary (e.g. 3.96 → shown as "4.0") never renders in a color that
-// disagrees with the band its displayed value falls in.
-function displayedScoreRating(score: number): {
-  displayed: number;
-  rating: SeverityRating;
-} {
-  const displayed = Math.round(score * 10) / 10;
-  return { displayed, rating: scoreToRating(displayed) };
-}
+  "grid grid-cols-[28px_80px_156px_minmax(0,1.2fr)_minmax(0,1.35fr)_minmax(0,0.9fr)_minmax(0,1.9fr)_minmax(0,0.9fr)_120px] gap-3";
 
 // The signal-list score block: thin display-serif numeral over a mono
 // uppercase severity word, both colored by band. The numeral carries the exact
@@ -125,13 +120,14 @@ function SignalScore({ score }: { score: number | undefined }): JSX.Element {
 }
 
 // Strongly-typed filter schema for Risk Events. `policy_id` and the date range
-// are pinned (always visible in the bar); the rest live behind "More filters".
+// and the MCP server are pinned (always visible in the bar); the rest live
+// behind "More filters".
 // `listRiskResults` already accepts from/to, so the date range needs no backend
 // change. (Source isn't a list param, so it's intentionally omitted here.)
 const RISK_FILTERS = defineFilters([
   { id: "policy_id", label: "Policy", kind: "select", pinned: true },
   { id: "date", label: "Date range", kind: "daterange", pinned: true },
-  { id: "mcp_server_id", label: "MCP server", kind: "select" },
+  { id: "mcp_server_id", label: "MCP server", kind: "select", pinned: true },
   {
     id: "rule_id",
     label: "Rule ID",
@@ -144,6 +140,10 @@ const RISK_FILTERS = defineFilters([
     kind: "text",
     placeholder: "User contains...",
   },
+  // Whole external user ids, set by an identity's "Open in Risk Events" so a
+  // person known by several ids lands on all of their events and nobody
+  // else's. Not offered for picking: its only options are the ids it holds.
+  { id: "identifier", label: "Identifier", kind: "multiselect" },
   {
     id: "unique",
     label: "Unique matches only",
@@ -153,12 +153,18 @@ const RISK_FILTERS = defineFilters([
   { id: "assistant", label: "Assistant", kind: "select" },
 ]);
 
+// The per-server counts endpoint rejects windows longer than this.
+const MAX_COUNTS_WINDOW_MS = 31 * 24 * 60 * 60 * 1000;
+
 // Sentinel option value for the assistant filter meaning "chats with no
 // assistant link" — maps to the API's non_assistant flag rather than an
 // assistant_id. Assistant ids are UUIDs, so this can't collide.
 const NO_ASSISTANT = "none";
 
 export default function RiskEvents(): JSX.Element {
+  const project = useProject();
+  const { hasScope } = useRBAC();
+  const canReadAssistants = hasScope("assistant:read", undefined, project.id);
   const client = useSdkClient();
   const gramProject = useProjectSlugForRequests();
   const organization = useOrganization();
@@ -171,6 +177,7 @@ export default function RiskEvents(): JSX.Element {
     featuresQuery.data?.logsEnabled === false;
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedChatId = searchParams.get("chat_id");
+  const selectedFindingId = searchParams.get("finding");
   const containerRef = useRef<HTMLDivElement>(null);
   const headerMeasure = useMeasuredHeight<HTMLDivElement>();
 
@@ -180,6 +187,10 @@ export default function RiskEvents(): JSX.Element {
   const mcpServerFilter = values.mcp_server_id ?? "";
   const ruleFilter = values.rule_id;
   const userFilter = values.user_id;
+  const identifierFilter = values.identifier;
+  // A stable dependency: the array is rebuilt whenever any param changes,
+  // including opening a row.
+  const identifierKey = identifierFilter.join(",");
   const uniqueOnly = values.unique;
   // "No assistant" pre-selects the non-assistant events (the API's
   // non_assistant flag); any other value scopes to that assistant's chats.
@@ -217,6 +228,26 @@ export default function RiskEvents(): JSX.Element {
     [setSearchParams],
   );
 
+  const setSelectedFindingId = useCallback(
+    (findingId: string | null) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (findingId) {
+            next.set("finding", findingId);
+          } else {
+            next.delete("finding");
+          }
+          // The transcript belongs to the finding it was opened from.
+          next.delete("chat_id");
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   const { data: policiesData, isLoading: policiesLoading } =
     useRiskListPolicies();
   const policies = useMemo(
@@ -224,12 +255,69 @@ export default function RiskEvents(): JSX.Element {
     [policiesData?.policies],
   );
 
+  const mcpScopedFlag = useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies);
+  const mcpScoped = mcpScopedFlag.status === "enabled";
+
   const { data: mcpServersData } = useMcpServers({ gramProject }, undefined, {
     throwOnError: false,
   });
   const mcpServers = useMemo(
     () => mcpServersData?.mcpServers ?? [],
     [mcpServersData?.mcpServers],
+  );
+  // Per-server finding counts for the picker, for the selected range. The
+  // endpoint rejects windows over 31 days, so longer or open-ended ranges show
+  // the servers without counts rather than counts for a different range.
+  const countsWindow = useMemo(() => {
+    if (!from) return null;
+    const end = to ?? new Date();
+    if (end.getTime() - from.getTime() > MAX_COUNTS_WINDOW_MS) return null;
+    return { from, to: end };
+  }, [from, to]);
+  const { data: serverCountsData } = useRiskMcpServerCounts(
+    countsWindow ?? {},
+    undefined,
+    { throwOnError: false, enabled: mcpScoped && countsWindow !== null },
+  );
+  const findingsByServer = useMemo(
+    () =>
+      new Map(
+        (serverCountsData?.servers ?? []).map((row) => [
+          row.mcpServerId,
+          row.findings,
+        ]),
+      ),
+    [serverCountsData?.servers],
+  );
+
+  const { data: platformToolsetsData } = useRiskListMcpPlatformToolsets(
+    { gramProject },
+    undefined,
+    { throwOnError: false },
+  );
+  const platformToolsets = useMemo(
+    () => platformToolsetsData?.toolsets ?? [],
+    [platformToolsetsData?.toolsets],
+  );
+  const { data: metaMcpServersData } = useMetaMcpServers(
+    { gramProject },
+    undefined,
+    { throwOnError: false },
+  );
+  const metaMcpServers = useMemo(
+    () => metaMcpServersData?.metaMcpServers ?? [],
+    [metaMcpServersData?.metaMcpServers],
+  );
+  const { data: toolsetsData } = useListToolsets({ gramProject }, undefined, {
+    throwOnError: false,
+  });
+  const toolsets = useMemo(
+    () => toolsetsData?.toolsets ?? [],
+    [toolsetsData?.toolsets],
+  );
+  const mcpFindingNames = useMemo(
+    () => buildMCPFindingNames([...mcpServers, ...metaMcpServers], toolsets),
+    [mcpServers, metaMcpServers, toolsets],
   );
   // Powers the rule_id filter autocomplete: surface only rules that actually
   // have findings in this project's recent window.
@@ -240,11 +328,16 @@ export default function RiskEvents(): JSX.Element {
     () => (overviewData?.topRules ?? []).map((r) => r.ruleId).filter(Boolean),
     [overviewData?.topRules],
   );
+  // The default view includes disabled policies' historical findings, so their
+  // rows carry the same "(inactive)" label as the policy filter.
   const policyNameById = useMemo(() => {
     const m = new Map<string, string>();
     for (const policy of policies) {
       if (policy.name && policy.name.trim() !== "") {
-        m.set(policy.id, policy.name);
+        m.set(
+          policy.id,
+          policy.enabled === false ? `${policy.name} (inactive)` : policy.name,
+        );
       }
     }
     return m;
@@ -262,9 +355,8 @@ export default function RiskEvents(): JSX.Element {
   }, [policies]);
 
   // The policy currently selected in the filter, if any. When it's disabled the
-  // list still returns its historical findings (the backend drops the
-  // enabled-only filter for explicit policy selections), so we surface a notice
-  // that the user is viewing data for an inactive policy.
+  // list returns only its historical findings, so we surface a notice that the
+  // user is viewing data for an inactive policy.
   const selectedPolicy = useMemo(
     () => policies.find((p) => p.id === policyFilter),
     [policies, policyFilter],
@@ -275,12 +367,17 @@ export default function RiskEvents(): JSX.Element {
   // Powers the assistant filter options; "No assistant" is always offered so
   // findings missing user attribution can be surfaced even before any
   // assistant exists in the project.
-  const { data: assistantsData } = useAssistantsList(undefined, undefined, {
-    throwOnError: false,
-  });
+  const { data: assistantsData } = useAssistantsList(
+    { gramProject: project.slug },
+    undefined,
+    {
+      enabled: canReadAssistants,
+      throwOnError: false,
+    },
+  );
   const assistants = useMemo(
-    () => assistantsData?.assistants ?? [],
-    [assistantsData?.assistants],
+    () => (canReadAssistants ? (assistantsData?.assistants ?? []) : []),
+    [assistantsData?.assistants, canReadAssistants],
   );
 
   // Page-supplied option lists for the schema's select/text dimensions.
@@ -292,17 +389,40 @@ export default function RiskEvents(): JSX.Element {
         label: p.enabled === false ? `${p.name} (inactive)` : p.name,
         value: p.id,
       })),
-      mcp_server_id: mcpServers.map((server) => ({
-        label: server.name?.trim() || server.slug || server.id.slice(0, 8),
-        value: server.id,
-      })),
+      mcp_server_id: [
+        ...mcpServers.map((server) => {
+          const findings = findingsByServer.get(server.id);
+          const name = mcpServerDisplayName(server);
+          return {
+            label:
+              mcpScoped && findings != null
+                ? `${name} · ${findings.toLocaleString()} findings`
+                : name,
+            value: server.id,
+          };
+        }),
+        ...platformToolsets.map((toolset) => ({
+          label: `${toolset.name} (Platform MCP)`,
+          value: toolset.id,
+        })),
+      ],
       rule_id: ruleSuggestions.map((r) => ({ label: r, value: r })),
+      identifier: identifierFilter.map((id) => ({ label: id, value: id })),
       assistant: [
         { label: "No assistant", value: NO_ASSISTANT },
         ...assistants.map((a) => ({ label: a.name, value: a.id })),
       ],
     }),
-    [policies, mcpServers, ruleSuggestions, assistants],
+    [
+      policies,
+      mcpServers,
+      platformToolsets,
+      mcpScoped,
+      findingsByServer,
+      ruleSuggestions,
+      assistants,
+      identifierFilter,
+    ],
   );
 
   const fromIso = from?.toISOString();
@@ -317,6 +437,7 @@ export default function RiskEvents(): JSX.Element {
     mcpServerFilter,
     ruleFilter,
     userFilter,
+    identifierKey,
     uniqueOnly,
     assistantFilter,
     fromIso,
@@ -332,6 +453,7 @@ export default function RiskEvents(): JSX.Element {
       mcpServerFilter,
       ruleFilter,
       userFilter,
+      identifierKey,
       uniqueOnly,
       assistantFilter,
       fromIso,
@@ -345,6 +467,8 @@ export default function RiskEvents(): JSX.Element {
         mcpServerId: mcpServerFilter || undefined,
         ruleId: ruleFilter || undefined,
         userId: userFilter || undefined,
+        externalUserIds:
+          identifierFilter.length > 0 ? identifierFilter : undefined,
         uniqueMatch: uniqueOnly || undefined,
         nonAssistant: nonAssistantOnly || undefined,
         assistantId,
@@ -503,12 +627,28 @@ export default function RiskEvents(): JSX.Element {
           ) : null
         }
         detail={
-          <ChatDetailSheet
-            chatId={selectedChatId}
-            onClose={() => setSelectedChatId(null)}
-            onDelete={() => setSelectedChatId(null)}
-            riskFocus
-          />
+          <>
+            <FindingDrawer
+              findingId={selectedFindingId}
+              results={visibleResults}
+              policyNameById={policyNameById}
+              policyScoreById={policyScoreById}
+              mcpFindingNames={mcpFindingNames}
+              transcriptChatId={selectedChatId}
+              onSelect={setSelectedFindingId}
+              onOpenTranscript={setSelectedChatId}
+              onDismiss={(r) => dismiss([r])}
+              onSetupExclusion={(r) => exclusionRule.open([r])}
+            />
+            {/* Older links open a transcript straight from the list; with a
+                finding open the drawer hosts the transcript instead. */}
+            <ChatDetailSheet
+              chatId={selectedFindingId ? null : selectedChatId}
+              onClose={() => setSelectedChatId(null)}
+              onDelete={() => setSelectedChatId(null)}
+              riskFocus
+            />
+          </>
         }
         scrollRef={containerRef}
         onScroll={handleScroll}
@@ -533,8 +673,10 @@ export default function RiskEvents(): JSX.Element {
           results={visibleResults}
           policyNameById={policyNameById}
           policyScoreById={policyScoreById}
+          mcpFindingNames={mcpFindingNames}
           scrollRef={containerRef}
-          onSelectChat={setSelectedChatId}
+          selectedFindingId={selectedFindingId}
+          onSelectFinding={setSelectedFindingId}
           selection={selection}
           onDismiss={(r) => dismiss([r])}
           onSetupExclusion={(r) => exclusionRule.open([r])}
@@ -598,7 +740,7 @@ function RiskEventsHeader({
       <div className="min-w-0">Severity</div>
       <div className="min-w-0">Timestamp</div>
       <div className="min-w-0">Category / Rule</div>
-      <div className="min-w-0 whitespace-nowrap">Session Name</div>
+      <div className="min-w-0 whitespace-nowrap">Session · Tool</div>
       <div className="min-w-0">User</div>
       <div className="min-w-0">Evidence</div>
       <div className="min-w-0">Policy</div>
@@ -614,8 +756,10 @@ function RiskEventsRows({
   results,
   policyNameById,
   policyScoreById,
+  mcpFindingNames,
   scrollRef,
-  onSelectChat,
+  selectedFindingId,
+  onSelectFinding,
   selection,
   onDismiss,
   onSetupExclusion,
@@ -625,9 +769,11 @@ function RiskEventsRows({
   isLoading: boolean;
   results: RiskResult[];
   policyNameById: Map<string, string>;
+  mcpFindingNames: MCPFindingNames;
   policyScoreById: Map<string, number>;
   scrollRef: RefObject<HTMLDivElement | null>;
-  onSelectChat: (chatId: string | null) => void;
+  selectedFindingId: string | null;
+  onSelectFinding: (findingId: string | null) => void;
   selection: RowSelection<RiskResult>;
   onDismiss: (result: RiskResult) => void;
   onSetupExclusion: (result: RiskResult) => void;
@@ -640,6 +786,16 @@ function RiskEventsRows({
     estimateSize: () => 68,
     overscan: 12,
   });
+
+  // Keeps the drawer's j/k selection on screen.
+  const selectedIndex = selectedFindingId
+    ? results.findIndex((r) => r.id === selectedFindingId)
+    : -1;
+  useEffect(() => {
+    if (selectedIndex >= 0) {
+      rowVirtualizer.scrollToIndex(selectedIndex, { align: "auto" });
+    }
+  }, [selectedIndex, rowVirtualizer]);
 
   if (error) {
     return (
@@ -691,7 +847,9 @@ function RiskEventsRows({
               result={result}
               policyName={policyNameById.get(result.policyId)}
               policyScore={policyScoreById.get(result.policyId)}
-              onSelectChat={onSelectChat}
+              mcpFindingNames={mcpFindingNames}
+              selected={result.id === selectedFindingId}
+              onSelect={onSelectFinding}
               selection={selection}
               onDismiss={onDismiss}
               onSetupExclusion={onSetupExclusion}
@@ -707,7 +865,9 @@ export function RiskEventsRow({
   result,
   policyName,
   policyScore,
-  onSelectChat,
+  mcpFindingNames,
+  selected = false,
+  onSelect,
   selection,
   onDismiss,
   onSetupExclusion,
@@ -715,11 +875,14 @@ export function RiskEventsRow({
   result: RiskResult;
   policyName: string | undefined;
   policyScore: number | undefined;
-  onSelectChat: (chatId: string | null) => void;
+  mcpFindingNames?: MCPFindingNames;
+  selected?: boolean;
+  onSelect: (findingId: string) => void;
   selection: RowSelection<RiskResult>;
   onDismiss: (result: RiskResult) => void;
   onSetupExclusion: (result: RiskResult) => void;
 }): JSX.Element {
+  const outcomeLabel = enforcementOutcomeLabel(result.enforcementOutcome);
   const isShadowMCP = isShadowMcpSource(result.source);
   // Judge and LLM analyzer findings carry their evidence as a rationale.
   const isEventSource = isRationaleSource(result.source);
@@ -728,42 +891,41 @@ export function RiskEventsRow({
   const edgeRating =
     policyScore != null ? displayedScoreRating(policyScore).rating : null;
 
-  // A row click opens the chat only when the gesture both starts and ends inside
+  // A row click opens the drawer only when the gesture both starts and ends inside
   // the row. This rejects the stray click Radix's outside-dismiss sends here:
   // closing the View-event dialog by clicking its overlay fires pointerdown on
   // the (portaled) overlay, which unmounts, so the trailing click lands on a row
-  // cell and would otherwise open the chat.
+  // cell and would otherwise open the drawer.
   const pointerDownInsideRef = useRef(false);
 
   const handleShare = useCallback(async () => {
-    if (!result.chatId) return;
     const url = new URL(window.location.href);
-    url.searchParams.set("chat_id", result.chatId);
+    url.searchParams.set("finding", result.id);
+    url.searchParams.delete("chat_id");
     try {
       await navigator.clipboard.writeText(url.toString());
       toast.success("Link copied to clipboard");
     } catch {
       toast.error("Failed to copy link");
     }
-  }, [result.chatId]);
+  }, [result.id]);
 
   const rowActions: Action[] = [
-    ...(result.chatId
-      ? [{ label: "Copy link", onClick: () => void handleShare() }]
-      : []),
+    { label: "Copy link", onClick: () => void handleShare() },
     { label: "Suppress Once", onClick: () => onDismiss(result) },
     { label: "Create Rule", onClick: () => onSetupExclusion(result) },
   ];
 
   return (
     <div
-      role={result.chatId ? "button" : undefined}
-      tabIndex={result.chatId ? 0 : undefined}
+      role="button"
+      tabIndex={0}
+      aria-current={selected || undefined}
       className={cn(
         RISK_EVENTS_GRID,
-        "hover:bg-muted/30 w-full items-center border-b border-l-2 px-5 py-3 text-left text-sm transition-colors",
+        "w-full cursor-pointer items-center border-b border-l-2 px-5 py-3 text-left text-sm transition-colors",
+        selected ? "bg-muted/50" : "hover:bg-muted/30",
         edgeRating ? SEVERITY_EDGE[edgeRating] : "border-l-transparent",
-        !result.chatId && "cursor-default",
       )}
       onPointerDown={(e) => {
         pointerDownInsideRef.current = e.currentTarget.contains(
@@ -778,24 +940,21 @@ export function RiskEventsRow({
         if (!startedInside) return;
         // The row wraps its own interactive controls (match reveal, the
         // View-event dialog trigger, copy-link); a click on one of those must
-        // not also open the chat. stopPropagation on those children doesn't
+        // not also open the drawer. stopPropagation on those children doesn't
         // reliably stop this handler under React's event delegation, so guard on
         // the real target too.
         if ((e.target as HTMLElement).closest("button, a")) return;
-        if (result.chatId) {
-          onSelectChat(result.chatId);
-        }
+        onSelect(result.id);
       }}
       onKeyDown={(e) => {
         // Only the row itself activates on Enter/Space. Key events bubbling up
         // from a focused child control (match reveal, the event dialog trigger,
         // copy-link) must reach that control instead — preventing them here
-        // would swallow the control's own activation and wrongly open the chat.
+        // would swallow the control's own activation and wrongly open the drawer.
         if (e.target !== e.currentTarget) return;
-        if (!result.chatId) return;
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          onSelectChat(result.chatId);
+          onSelect(result.id);
         }
       }}
     >
@@ -816,8 +975,12 @@ export function RiskEventsRow({
         <CategoryLabel source={result.source} ruleId={result.ruleId} />
         <RuleLabel source={result.source} ruleId={result.ruleId} />
       </div>
-      <div className="text-muted-foreground min-w-0 truncate font-mono text-xs">
-        {result.chatTitle ?? "Untitled"}
+      <div className="text-muted-foreground min-w-0 font-mono text-xs">
+        {isMCPFinding(result) ? (
+          <MCPFindingContext finding={result} names={mcpFindingNames} />
+        ) : (
+          <ChatFindingContext result={result} />
+        )}
       </div>
       <div className="text-muted-foreground min-w-0 truncate font-mono text-xs">
         <IdentityLink identifier={identityRefForUserKey(result.userId)}>
@@ -855,12 +1018,42 @@ export function RiskEventsRow({
         {policyName ?? "-"}
       </div>
       <div
-        className="flex min-w-0 justify-center"
+        className="flex min-w-0 items-center justify-center gap-2"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >
+        {outcomeLabel ? (
+          <span
+            className={cn(
+              "truncate font-mono text-xs",
+              isBlockingOutcome(result.enforcementOutcome)
+                ? "text-foreground font-medium"
+                : "text-muted-foreground",
+            )}
+            title={outcomeLabel}
+          >
+            {outcomeLabel}
+          </span>
+        ) : null}
         <MoreActions actions={rowActions} />
       </div>
+    </div>
+  );
+}
+
+function ChatFindingContext({ result }: { result: RiskResult }): JSX.Element {
+  const title = result.chatTitle ?? "Untitled";
+  const detail = chatFindingDetail(result);
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="text-foreground block truncate" title={title}>
+        {title}
+      </span>
+      {detail && (
+        <span className="block truncate" title={detail}>
+          {detail}
+        </span>
+      )}
     </div>
   );
 }

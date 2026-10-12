@@ -2,11 +2,13 @@ package remotesessions_test
 
 import (
 	"context"
-	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -81,14 +83,7 @@ func TestPreparationPostLockAuthorization_RevokedWhileBlocked(t *testing.T) {
 						done <- err
 					}()
 					// Observe a real lock waiter: the initial scope check has passed.
-					require.Eventually(t, func() bool {
-						var blocked bool
-						err := ti.conn.QueryRow( //nolint:glint // notestingrawsql: pg_blocking_pids is a PostgreSQL test synchronization primitive unavailable to SQLc generation
-							ctx, `SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND $1 = ANY(pg_blocking_pids(pid)))`, holder.Conn().PgConn().PID(),
-						).Scan(&blocked)
-						require.NoError(t, err)
-						return blocked
-					}, 5*time.Second, 10*time.Millisecond)
+					testenv.WaitForBackendsBlockedBy(t, ctx, ti.conn, holder.Conn().PgConn().PID(), 1)
 					requestCtx.current.Store(&denied)
 					require.NoError(t, q.UnlockPreparationSubmission(ctx, key))
 					select {

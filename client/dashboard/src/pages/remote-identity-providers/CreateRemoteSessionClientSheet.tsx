@@ -43,6 +43,7 @@ import {
   parseScopes,
   TUNNELED_DCR_PERMISSION_MESSAGE,
 } from "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
+import { IssuerScopeOverrideAlert } from "./clientAlerts";
 import { issuerDocumentationLinks } from "./issuerDocumentationLinks";
 
 // Sentinel for the unselected project in the org-level-issuer scope picker.
@@ -52,7 +53,7 @@ const UNSELECTED_PROJECT = "";
 
 // DocumentationLinks surfaces the issuer's documentation so customers can create
 // the upstream OAuth client themselves, owning its credentials, access, and rate
-// limits rather than sharing a Gram-owned client. Renders nothing when the
+// limits rather than sharing a Speakeasy-owned client. Renders nothing when the
 // issuer carries no documentation URLs.
 function DocumentationLinks({ issuer }: { issuer: RemoteSessionIssuer }) {
   const links = issuerDocumentationLinks(issuer);
@@ -413,6 +414,7 @@ export function CreateRemoteSessionClientSheet({
               audienceOverride={audienceOverride}
               onScopeOverrideChange={setScopeOverride}
               onAudienceOverrideChange={setAudienceOverride}
+              scopeWarning={<IssuerScopeOverrideAlert issuer={issuer} />}
             />
           </Stack>
 

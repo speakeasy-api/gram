@@ -26,13 +26,7 @@ func InstallViaClaudeCLI(info *ToolsetInfo, useEnvVar bool, scope string) error 
 		headerValue = fmt.Sprintf("%s:%s", info.HeaderName, info.APIKey)
 	}
 
-	// Map our scope terminology to claude CLI's scope terminology
-	// Our "project" -> Claude CLI's "local" (.mcp.json in current directory)
-	// Our "user" -> Claude CLI's "user" (~/.claude/settings.local.json)
-	claudeScope := scope
-	if scope == "project" {
-		claudeScope = "local"
-	}
+	claudeScope := claudeCLIScope(scope)
 
 	// Build command: claude mcp add --transport http --scope <scope> "name" "url" --header "Header:value"
 	args := []string{
@@ -55,4 +49,27 @@ func InstallViaClaudeCLI(info *ToolsetInfo, useEnvVar bool, scope string) error 
 	}
 
 	return nil
+}
+
+// RemoveViaClaudeCLI removes the MCP server called name with the native claude
+// CLI: claude mcp remove --scope <scope> "name". scope is "project" or "user",
+// as for InstallViaClaudeCLI.
+func RemoveViaClaudeCLI(name string, scope string) error {
+	// #nosec G204 -- Executing claude CLI with user-provided args is intentional
+	cmd := exec.Command("claude", "mcp", "remove", "--scope", claudeCLIScope(scope), name)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("claude CLI command failed: %w\nOutput: %s", err, string(output))
+	}
+	return nil
+}
+
+// claudeCLIScope maps our scope terminology to the claude CLI's. Our "project"
+// is the claude CLI's "local" (.mcp.json in the current directory); "user" is
+// the same in both (~/.claude/settings.local.json).
+func claudeCLIScope(scope string) string {
+	if scope == "project" {
+		return "local"
+	}
+	return scope
 }

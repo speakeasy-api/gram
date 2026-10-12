@@ -30,7 +30,7 @@ export type MatchKind = ClosedEnum<typeof MatchKind>;
  */
 export type MCPSetupGuide = {
   /**
-   * How the server is meant to be added in Gram, when the guide states one (e.g., 'catalog', 'custom-remote')
+   * How the server is meant to be added in Speakeasy, when the guide states one (e.g., 'catalog', 'custom-remote')
    */
   addServerFlow?: string | undefined;
   /**
@@ -58,7 +58,7 @@ export type MCPSetupGuide = {
    */
   slug: string;
   /**
-   * Markdown instructions for the setup work that happens in Gram
+   * Markdown instructions for the setup work that happens in Speakeasy
    */
   speakeasyMarkdown: string;
   /**

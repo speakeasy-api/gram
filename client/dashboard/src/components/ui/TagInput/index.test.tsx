@@ -107,4 +107,23 @@ describe("TagInput", () => {
     fireEvent.keyDown(screen.getByLabelText("Tags"), { key: "Backspace" });
     expect(onChange).toHaveBeenLastCalledWith([]);
   });
+
+  it("marks the input invalid and points it at its error only when told to", () => {
+    const { rerender } = render(
+      <TagInput
+        ariaLabel="Tags"
+        value={[]}
+        onChange={() => {}}
+        error
+        ariaDescribedBy="tags-error"
+      />,
+    );
+    const input = screen.getByLabelText("Tags");
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(input.getAttribute("aria-describedby")).toBe("tags-error");
+
+    rerender(<TagInput ariaLabel="Tags" value={[]} onChange={() => {}} />);
+    expect(input.hasAttribute("aria-invalid")).toBe(false);
+    expect(input.hasAttribute("aria-describedby")).toBe(false);
+  });
 });

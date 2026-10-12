@@ -369,7 +369,7 @@ func fetchJSON[T any](ctx context.Context, logger *slog.Logger, guardianPolicy *
 	}
 	req.Header.Set("Accept", "application/json")
 
-	client := guardianPolicy.Client()
+	client := guardianPolicy.Client(guardian.WithInternalCatalog())
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
 			return fmt.Errorf("stopped after 10 redirects")

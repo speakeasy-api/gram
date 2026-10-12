@@ -10,9 +10,10 @@ import (
 )
 
 type McpRegistryEntry struct {
-	ID        uuid.UUID
-	Data      []byte
-	Published bool
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+	ID          uuid.UUID
+	Data        []byte
+	Published   bool
+	PublishedAt pgtype.Timestamptz
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
 }

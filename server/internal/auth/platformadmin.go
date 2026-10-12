@@ -33,7 +33,7 @@ type PlatformAdminEntitlementReader interface {
 }
 
 // RequireFreshPlatformAdminSession authorizes incident-sensitive platform paths.
-// It accepts only an ordinary validated Gram session, rejects impersonation and
+// It accepts only an ordinary validated Speakeasy session, rejects impersonation and
 // alternate credentials, and re-reads the durable platform-admin entitlement.
 func RequireFreshPlatformAdminSession(ctx context.Context, logger *slog.Logger, reader PlatformAdminEntitlementReader) (*contextvalues.AuthContext, *slog.Logger, error) {
 	authCtx, logger, err := platformAdminContext(ctx, logger)

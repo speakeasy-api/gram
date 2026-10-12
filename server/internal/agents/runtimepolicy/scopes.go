@@ -13,8 +13,10 @@ type RuntimeScopeRegistryVersion int
 const (
 	RuntimeScopeRegistryVersion1 RuntimeScopeRegistryVersion = 1
 	RuntimeScopeRegistryVersion2 RuntimeScopeRegistryVersion = 2
+	RuntimeScopeRegistryVersion3 RuntimeScopeRegistryVersion = 3
+	RuntimeScopeRegistryVersion4 RuntimeScopeRegistryVersion = 4
 
-	CurrentRuntimeScopeRegistryVersion = RuntimeScopeRegistryVersion2
+	CurrentRuntimeScopeRegistryVersion = RuntimeScopeRegistryVersion4
 )
 
 // RuntimeScopeLifecycle distinguishes active scope registrations from retained
@@ -74,23 +76,27 @@ var runtimeScopeDefinitions = map[authz.Scope]runtimeScopeDefinition{
 	authz.ScopeOrgAdmin:                activeRuntimeScope(),
 	authz.ScopeOrgBlockedAdmin:         activeRuntimeScope(),
 	authz.ScopeProjectRead:             safeRuntimeScope(),
-	authz.ScopeProjectBlockedRead:      activeRuntimeScope(),
+	authz.ScopeProjectBlockedRead:      safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
 	authz.ScopeProjectWrite:            safeRuntimeScope(),
-	authz.ScopeProjectBlockedWrite:     activeRuntimeScope(),
+	authz.ScopeProjectBlockedWrite:     safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
 	authz.ScopeMCPRead:                 safeRuntimeScope(),
-	authz.ScopeMCPBlockedRead:          activeRuntimeScope(),
+	authz.ScopeMCPBlockedRead:          safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
 	authz.ScopeMCPWrite:                safeRuntimeScope(),
-	authz.ScopeMCPBlockedWrite:         activeRuntimeScope(),
+	authz.ScopeMCPBlockedWrite:         safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
 	authz.ScopeMCPConnect:              safeRuntimeScope(),
-	authz.ScopeMCPBlockedConnect:       activeRuntimeScope(),
+	authz.ScopeMCPBlockedConnect:       safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
 	authz.ScopeEnvironmentRead:         safeRuntimeScope(),
-	authz.ScopeEnvironmentBlockedRead:  activeRuntimeScope(),
+	authz.ScopeEnvironmentBlockedRead:  safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
 	authz.ScopeEnvironmentWrite:        safeRuntimeScope(),
-	authz.ScopeEnvironmentBlockedWrite: activeRuntimeScope(),
+	authz.ScopeEnvironmentBlockedWrite: safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
 	authz.ScopeSkillRead:               safeRuntimeScope(),
-	authz.ScopeSkillBlockedRead:        activeRuntimeScope(),
+	authz.ScopeSkillBlockedRead:        safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
 	authz.ScopeSkillWrite:              safeRuntimeScope(),
-	authz.ScopeSkillBlockedWrite:       activeRuntimeScope(),
+	authz.ScopeSkillBlockedWrite:       safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
+	authz.ScopeAssistantRead:           safeRuntimeScopeSince(RuntimeScopeRegistryVersion3),
+	authz.ScopeAssistantBlockedRead:    safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
+	authz.ScopeAssistantWrite:          safeRuntimeScopeSince(RuntimeScopeRegistryVersion3),
+	authz.ScopeAssistantBlockedWrite:   safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
 	authz.ScopePluginWrite:             activeRuntimeScope(),
 	authz.ScopePluginBlockedWrite:      activeRuntimeScope(),
 	authz.ScopeRiskPolicyEvaluate:      safeRuntimeScope(),

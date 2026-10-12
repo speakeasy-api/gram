@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oktaapplications/repo"
+	"github.com/speakeasy-api/gram/server/internal/oktacredentials"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/okta"
 )
@@ -357,8 +358,9 @@ func (s *Syncer) client(target repo.GetSyncTargetRow) (okta.Client, error) {
 	if s.clients == nil {
 		return nil, errClientUnavailable
 	}
-	if !target.JsonWebKeySetID.Valid {
-		return nil, fmt.Errorf("okta applications: managed client has no key set")
+	var credentials okta.CredentialProvider
+	if remotesessions.TokenEndpointAuthMethod(target.TokenEndpointAuthMethod.String) == remotesessions.TokenEndpointAuthMethodBasic {
+		credentials = oktacredentials.Provider{DB: s.db, Tx: nil, ConnectionID: target.ConnectionID, ObservedDPoP: nil}
 	}
 	client, err := s.clients.Client(okta.Config{
 		OrgURL:                target.OrgUrl,
@@ -366,7 +368,11 @@ func (s *Syncer) client(target repo.GetSyncTargetRow) (okta.Client, error) {
 		AudienceFormat:        string(remotesessions.TokenEndpointAuthAudienceTokenEndpoint),
 		RemoteSessionClientID: target.RemoteSessionClientID,
 		OrganizationID:        target.OrganizationID,
+		AuthMethod:            remotesessions.TokenEndpointAuthMethod(target.TokenEndpointAuthMethod.String),
 		JSONWebKeySetID:       target.JsonWebKeySetID.UUID,
+		ClientSecretEncrypted: target.ClientSecretEncrypted.String,
+		Credentials:           credentials,
+		RequireDPoP:           target.DpopRequired,
 		MaxPages:              maxAssignmentPages,
 	})
 	if err != nil {

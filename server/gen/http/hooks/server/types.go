@@ -271,6 +271,18 @@ type IngestResponseBody struct {
 	Effects map[string]any `form:"effects,omitempty" json:"effects,omitempty" xml:"effects,omitempty"`
 }
 
+// GetStatusResponseBody is the type of the "hooks" service "getStatus"
+// endpoint HTTP response body.
+type GetStatusResponseBody struct {
+	// True when at least one hook source is configured for the organization.
+	Configured bool `form:"configured" json:"configured" xml:"configured"`
+	// An active hooks-scoped API key exists, as minted by the hooks setup dialog,
+	// the plugin download or the setup wizard.
+	AgentHooksKey bool `form:"agent_hooks_key" json:"agent_hooks_key" xml:"agent_hooks_key"`
+	// An enabled Anthropic inference hooks integration is connected.
+	AnthropicInferenceHooks bool `form:"anthropic_inference_hooks" json:"anthropic_inference_hooks" xml:"anthropic_inference_hooks"`
+}
+
 // ClaudeUnauthorizedResponseBody is the type of the "hooks" service "claude"
 // endpoint HTTP response body for the "unauthorized" error.
 type ClaudeUnauthorizedResponseBody struct {
@@ -1717,6 +1729,186 @@ type MetricsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetStatusUnauthorizedResponseBody is the type of the "hooks" service
+// "getStatus" endpoint HTTP response body for the "unauthorized" error.
+type GetStatusUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStatusForbiddenResponseBody is the type of the "hooks" service
+// "getStatus" endpoint HTTP response body for the "forbidden" error.
+type GetStatusForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStatusBadRequestResponseBody is the type of the "hooks" service
+// "getStatus" endpoint HTTP response body for the "bad_request" error.
+type GetStatusBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStatusNotFoundResponseBody is the type of the "hooks" service "getStatus"
+// endpoint HTTP response body for the "not_found" error.
+type GetStatusNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStatusConflictResponseBody is the type of the "hooks" service "getStatus"
+// endpoint HTTP response body for the "conflict" error.
+type GetStatusConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStatusUnsupportedMediaResponseBody is the type of the "hooks" service
+// "getStatus" endpoint HTTP response body for the "unsupported_media" error.
+type GetStatusUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStatusInvalidResponseBody is the type of the "hooks" service "getStatus"
+// endpoint HTTP response body for the "invalid" error.
+type GetStatusInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStatusInvariantViolationResponseBody is the type of the "hooks" service
+// "getStatus" endpoint HTTP response body for the "invariant_violation" error.
+type GetStatusInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStatusUnexpectedResponseBody is the type of the "hooks" service
+// "getStatus" endpoint HTTP response body for the "unexpected" error.
+type GetStatusUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetStatusGatewayErrorResponseBody is the type of the "hooks" service
+// "getStatus" endpoint HTTP response body for the "gateway_error" error.
+type GetStatusGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // HookIngestSourceRequestBody is used to define fields on request body types.
 type HookIngestSourceRequestBody struct {
 	// Stable adapter slug, e.g. claude, cursor, codex, or a customer hook name.
@@ -1747,7 +1939,7 @@ type HookIngestSessionRequestBody struct {
 
 // HookIngestEventRequestBody is used to define fields on request body types.
 type HookIngestEventRequestBody struct {
-	// Canonical Gram hook event type.
+	// Canonical Speakeasy hook event type.
 	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
 	// RFC3339 timestamp from the local agent. Defaults to receive time when absent.
 	OccurredAt *string `form:"occurred_at,omitempty" json:"occurred_at,omitempty" xml:"occurred_at,omitempty"`
@@ -2120,6 +2312,17 @@ func NewIngestResponseBody(res *hooks.IngestHookResult) *IngestResponseBody {
 			tv := val
 			body.Effects[tk] = tv
 		}
+	}
+	return body
+}
+
+// NewGetStatusResponseBody builds the HTTP response body from the result of
+// the "getStatus" endpoint of the "hooks" service.
+func NewGetStatusResponseBody(res *hooks.HooksStatus) *GetStatusResponseBody {
+	body := &GetStatusResponseBody{
+		Configured:              res.Configured,
+		AgentHooksKey:           res.AgentHooksKey,
+		AnthropicInferenceHooks: res.AnthropicInferenceHooks,
 	}
 	return body
 }
@@ -3246,6 +3449,146 @@ func NewMetricsGatewayErrorResponseBody(res *goa.ServiceError) *MetricsGatewayEr
 	return body
 }
 
+// NewGetStatusUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "getStatus" endpoint of the "hooks" service.
+func NewGetStatusUnauthorizedResponseBody(res *goa.ServiceError) *GetStatusUnauthorizedResponseBody {
+	body := &GetStatusUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStatusForbiddenResponseBody builds the HTTP response body from the
+// result of the "getStatus" endpoint of the "hooks" service.
+func NewGetStatusForbiddenResponseBody(res *goa.ServiceError) *GetStatusForbiddenResponseBody {
+	body := &GetStatusForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStatusBadRequestResponseBody builds the HTTP response body from the
+// result of the "getStatus" endpoint of the "hooks" service.
+func NewGetStatusBadRequestResponseBody(res *goa.ServiceError) *GetStatusBadRequestResponseBody {
+	body := &GetStatusBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStatusNotFoundResponseBody builds the HTTP response body from the
+// result of the "getStatus" endpoint of the "hooks" service.
+func NewGetStatusNotFoundResponseBody(res *goa.ServiceError) *GetStatusNotFoundResponseBody {
+	body := &GetStatusNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStatusConflictResponseBody builds the HTTP response body from the
+// result of the "getStatus" endpoint of the "hooks" service.
+func NewGetStatusConflictResponseBody(res *goa.ServiceError) *GetStatusConflictResponseBody {
+	body := &GetStatusConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStatusUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "getStatus" endpoint of the "hooks" service.
+func NewGetStatusUnsupportedMediaResponseBody(res *goa.ServiceError) *GetStatusUnsupportedMediaResponseBody {
+	body := &GetStatusUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStatusInvalidResponseBody builds the HTTP response body from the
+// result of the "getStatus" endpoint of the "hooks" service.
+func NewGetStatusInvalidResponseBody(res *goa.ServiceError) *GetStatusInvalidResponseBody {
+	body := &GetStatusInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStatusInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "getStatus" endpoint of the "hooks" service.
+func NewGetStatusInvariantViolationResponseBody(res *goa.ServiceError) *GetStatusInvariantViolationResponseBody {
+	body := &GetStatusInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStatusUnexpectedResponseBody builds the HTTP response body from the
+// result of the "getStatus" endpoint of the "hooks" service.
+func NewGetStatusUnexpectedResponseBody(res *goa.ServiceError) *GetStatusUnexpectedResponseBody {
+	body := &GetStatusUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetStatusGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "getStatus" endpoint of the "hooks" service.
+func NewGetStatusGatewayErrorResponseBody(res *goa.ServiceError) *GetStatusGatewayErrorResponseBody {
+	body := &GetStatusGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewClaudePayload builds a hooks service claude endpoint payload.
 func NewClaudePayload(body *ClaudeRequestBody, apikeyToken *string, projectSlugInput *string, hookHostname *string, idempotencyKey *string) *hooks.ClaudePayload {
 	v := &hooks.ClaudePayload{
@@ -3450,6 +3793,16 @@ func NewMetricsPayload(body *MetricsRequestBody, apikeyToken *string, projectSlu
 		}
 	}
 	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetStatusPayload builds a hooks service getStatus endpoint payload.
+func NewGetStatusPayload(apikeyToken *string, sessionToken *string, projectSlugInput *string) *hooks.GetStatusPayload {
+	v := &hooks.GetStatusPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v

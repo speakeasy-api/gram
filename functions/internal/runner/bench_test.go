@@ -82,7 +82,7 @@ func benchService(tb testing.TB, userCode string) *Service {
 func benchToolRequest(tb testing.TB) callRequest {
 	tb.Helper()
 
-	reqArg, err := json.Marshal(CallToolPayload{
+	request, err := json.Marshal(CallToolPayload{
 		ToolName:    "bench_tool",
 		Input:       json.RawMessage(`{"hello":"world"}`),
 		Environment: nil,
@@ -93,7 +93,7 @@ func benchToolRequest(tb testing.TB) callRequest {
 	}
 
 	return callRequest{
-		requestArg:  reqArg,
+		request:     request,
 		environment: map[string]string{"GRAM_USER_EMAIL": "bench@example.com"},
 		requestType: "tool",
 	}

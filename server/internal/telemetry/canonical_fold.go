@@ -240,8 +240,8 @@ func (s *Service) canonicalOrgFor(ctx context.Context, orgID string) string {
 
 // resolveUserScope resolves an employee identifier into either a canonical
 // map-backed identity (fold flag on) or the legacy Postgres-expanded set —
-// exactly one of the two is populated, and the repo's identity filter prefers
-// the canonical one when enabled.
+// exactly one of the two is populated, so the repo's identity filter (which
+// unions whichever are supplied) applies just the one returned here.
 func (s *Service) resolveUserScope(ctx context.Context, orgID, identifier string) (repo.UserIdentity, repo.CanonicalUserIdentity) {
 	none := repo.CanonicalUserIdentity{OrgID: "", UserID: "", EmailLower: ""}
 	if identifier == "" {

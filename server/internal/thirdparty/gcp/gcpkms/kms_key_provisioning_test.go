@@ -234,7 +234,7 @@ func TestValidateKeyName(t *testing.T) {
 }
 
 // The key is created for signing, with the KMS algorithm the JOSE algorithm
-// maps to, and the returned version name is the one Gram records: a
+// maps to, and the returned version name is the one Speakeasy records: a
 // cryptoKeyVersions path GetPublicKey and AsymmetricSign accept.
 func TestCreateSigningKey_CreatesAsymmetricSignKeyAndWaitsForEnabled(t *testing.T) {
 	t.Parallel()

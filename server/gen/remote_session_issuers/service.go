@@ -16,7 +16,7 @@ import (
 )
 
 // Manage remote_session_issuer records — upstream Authorization Server
-// identity records that Gram talks to as an OAuth client.
+// identity records that Speakeasy talks to as an OAuth client.
 type Service interface {
 	// Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server
 	// document and return a draft suitable for createRemoteSessionIssuer. Keyed by
@@ -26,7 +26,7 @@ type Service interface {
 	// Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and
 	// persist the discovered values. Keyed by issuer id. Only RFC 8414-derived
 	// columns are written — endpoints, the *_supported arrays,
-	// client_id_metadata_document_supported, and the documentation URLs. Gram
+	// client_id_metadata_document_supported, and the documentation URLs. Speakeasy
 	// behavior and display fields (oidc, passthrough, name, slug, logo, client
 	// setup documentation) are left alone. Requires project:write.
 	RefreshRemoteSessionIssuerMetadata(context.Context, *RefreshRemoteSessionIssuerMetadataPayload) (res *types.RemoteSessionIssuerRefresh, err error)
@@ -34,7 +34,10 @@ type Service interface {
 	CreateRemoteSessionIssuer(context.Context, *CreateRemoteSessionIssuerPayload) (res *types.RemoteSessionIssuer, err error)
 	// Update fields on an existing remote_session_issuer.
 	UpdateRemoteSessionIssuer(context.Context, *UpdateRemoteSessionIssuerPayload) (res *types.RemoteSessionIssuer, err error)
-	// List remote_session_issuers in the caller's project.
+	// List the remote_session_issuers the caller's project can use: its own, plus
+	// those inherited from its organization and from the platform catalog. Newest
+	// first; the search, upstream_host and tier filters narrow the listing without
+	// changing its order or cursor.
 	ListRemoteSessionIssuers(context.Context, *ListRemoteSessionIssuersPayload) (res *ListRemoteSessionIssuersResult, err error)
 	// Get a remote_session_issuer by id, by slug, or by upstream issuer URL.
 	// Provide exactly one.
@@ -193,6 +196,11 @@ type CreateRemoteSessionIssuerPayload struct {
 	// authorize redirect in place of the resolved scope set. Omit or send an empty
 	// array to leave it unset.
 	ScopeOverride []string
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Omit to leave it unset: such a login requests the provider's whole
+	// scopes_supported.
+	OmitScopeFallback *bool
 	// Whether the issuer accepts the RFC 8707 resource parameter. Omit to leave it
 	// unset: the parameter is then sent, and a login or refresh the issuer answers
 	// with invalid_target is retried once without it. Set false to never send it.
@@ -251,7 +259,19 @@ type ListRemoteSessionIssuersPayload struct {
 	// Pagination cursor.
 	Cursor *string
 	// Page size (default 50, max 100).
-	Limit            *int
+	Limit *int
+	// Only issuers whose name, slug or issuer URL contains this text, ignoring
+	// case.
+	Search *string
+	// Only issuers that could sign users in to an upstream at this host (e.g.
+	// mcp.linear.app): those whose issuer URL host equals it or is one of its
+	// parent domains (linear.app). Host only, optionally with a port; no scheme or
+	// path.
+	UpstreamHost *string
+	// Only issuers from one tier: the project's own (project), inherited from its
+	// organization (organization), or from the platform catalog (platform).
+	// Omitted lists all three.
+	Tier             *string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -364,6 +384,11 @@ type UpdateRemoteSessionIssuerPayload struct {
 	// Set or clear the operator-pinned scope request. Omitting the field (or
 	// sending null) leaves the stored value unchanged; an empty array clears it.
 	ScopeOverride []string `json:"scope_override"`
+	// When true, a login that would otherwise request the authorization server's
+	// whole scopes_supported omits the scope parameter so the server applies its
+	// default. Omit or send null to keep the stored value; false restores the
+	// default.
+	OmitScopeFallback *bool
 	// Whether the issuer accepts the RFC 8707 resource parameter. Omitting the
 	// field leaves the stored value unchanged.
 	ResourceIndicatorSupported *bool

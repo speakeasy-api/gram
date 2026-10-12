@@ -1,5 +1,5 @@
 // The workload assertion grant: a workload presents the identity token its
-// platform issued and receives a resource-scoped Gram session (RFC 7523 §2.1).
+// platform issued and receives a resource-scoped Speakeasy session (RFC 7523 §2.1).
 // It holds no client registration and receives no refresh token; when the
 // session lapses it presents a fresh platform token.
 
@@ -24,6 +24,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
@@ -112,12 +113,12 @@ func newWorkloadGrant(db *pgxpool.Pool, redisClient *redis.Client, policy *guard
 }
 
 // workloadIssuerStoreLookup resolves an assertion's iss to a workload issuer in
-// the endpoint's own project or organization.
+// the tenancy's project or the organization above it.
 func workloadIssuerStoreLookup(db workloadidentity_repo.DBTX) workloadIssuerLookup {
-	return func(ctx context.Context, endpoint *ResolvedMcpEndpoint, issuerURL string) (workloadidentity_repo.WorkloadIssuer, bool, error) {
+	return func(ctx context.Context, tenancy workloadTenancy, issuerURL string) (workloadidentity_repo.WorkloadIssuer, bool, error) {
 		issuer, err := workloadidentity.ResolveIssuerByURL(ctx, db, workloadidentity.ResolveIssuerParams{
-			OrganizationID: endpoint.OrganizationID,
-			ProjectID:      uuid.NullUUID{UUID: endpoint.ProjectID, Valid: endpoint.ProjectID != uuid.Nil},
+			OrganizationID: tenancy.OrganizationID,
+			ProjectID:      uuid.NullUUID{UUID: tenancy.ProjectID, Valid: tenancy.ProjectID != uuid.Nil},
 			IssuerURL:      issuerURL,
 		})
 		switch {
@@ -191,7 +192,7 @@ type presentedWorkload struct {
 }
 
 // admitWorkloadAssertion runs the grant's verification stages in order:
-// resolve iss to a workload issuer in the endpoint's tenancy, verify the
+// resolve iss to a workload issuer in the grant's tenancy, verify the
 // assertion against that issuer's key set, then check the tenant admits the
 // subject. Admission is the security boundary; every earlier stage only
 // establishes that the platform minted the token.
@@ -201,7 +202,7 @@ type presentedWorkload struct {
 func admitWorkloadAssertion(
 	ctx context.Context,
 	grant *workloadGrant,
-	endpoint *ResolvedMcpEndpoint,
+	tenancy workloadTenancy,
 	audiences []string,
 	raw string,
 ) (presentedWorkload, error) {
@@ -221,13 +222,13 @@ func admitWorkloadAssertion(
 	switch {
 	case len(claims.Audience) != 1:
 		// A token naming several audiences is valid at each of them; the
-		// grant accepts only one minted for this endpoint alone.
+		// grant accepts only one minted for this authorization server alone.
 		return presented, refuseWorkloadGrant("assertion_audience_not_single", fmt.Errorf("aud names %d values", len(claims.Audience)))
 	case claims.Subject == "" || claims.Subject == claims.Issuer:
 		return presented, refuseWorkloadGrant("assertion_subject_invalid", errors.New("sub is empty or equals iss"))
 	}
 
-	issuer, err := grant.issuers.admit(ctx, endpoint, claims.Issuer)
+	issuer, err := grant.issuers.admit(ctx, tenancy, claims.Issuer)
 	switch {
 	case errors.Is(err, errWorkloadIssuerUntrusted):
 		return presented, refuseWorkloadGrant("issuer_untrusted", err)
@@ -242,7 +243,7 @@ func admitWorkloadAssertion(
 	}
 	presented.issuerID = issuer.ID
 
-	source, err := workloadIssuerKeySource(endpoint, &issuer)
+	source, err := workloadIssuerKeySource(tenancy, &issuer)
 	if err != nil {
 		return presented, refuseWorkloadGrant("issuer_jwks_uri_invalid", err)
 	}
@@ -251,7 +252,7 @@ func admitWorkloadAssertion(
 		Issuer:       issuer.Issuer,
 		Subject:      claims.Subject,
 		KeySource:    source,
-		ReplayIssuer: endpoint.UserSessionIssuerID.String(),
+		ReplayIssuer: tenancy.UserSessionIssuerID.String(),
 		ReplayParty:  issuer.ID.String(),
 		Audiences:    audiences,
 		MaxLifetime:  workloadAssertionMaxLifetime,
@@ -273,7 +274,7 @@ func admitWorkloadAssertion(
 		}
 	}
 
-	err = admitWorkloadIdentity(ctx, grant.identities, endpoint, issuer.ID, claims.Subject)
+	err = admitWorkloadIdentity(ctx, grant.identities, tenancy, issuer.ID, claims.Subject)
 	switch {
 	case errors.Is(err, errWorkloadNotAdmitted):
 		return presented, refuseWorkloadGrant("subject_not_admitted", err)
@@ -320,28 +321,12 @@ func (s *Service) handleWorkloadAssertionGrant(
 	baseURL string,
 	logger *slog.Logger,
 ) error {
-	presented := presentedWorkload{issuerURL: "", subject: "", issuerID: uuid.Nil}
-
-	// A deployment without the grant's dependencies answers as it did before
-	// the grant existed. Reaching the workload path at all still takes the
-	// agent authorization rollout below, a trusted issuer row and an admitted
-	// subject.
-	if s.workloadGrant == nil {
-		return refuseClientlessTokenGrant(ctx, w, r, creds, logger)
-	}
-	// A workload acts through its assigned agent's policy, which the MCP side
-	// honours only under the agent authorization rollout. Minting without it
-	// would issue sessions refused on first use.
-	rolloutEnabled, _, err := s.agentAuthorizationRollout(ctx, logger, endpoint)
-	switch {
-	case err != nil:
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("agent_rollout_unavailable", err))
-	case !rolloutEnabled:
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("agent_rollout_disabled", errWorkloadRolloutDisabled))
+	if refused, err := s.refuseUnservedWorkloadGrant(ctx, w, r, creds, endpoint.OrganizationID, logger); refused {
+		return err
 	}
 
-	assertion := r.PostForm.Get("assertion")
-	resources := r.PostForm["resource"]
+	assertion := r.PostForm.Get(oauthwire.ParamAssertion)
+	resources := r.PostForm[oauthwire.ParamResource]
 	switch {
 	case assertion == "":
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "assertion is required")
@@ -360,7 +345,7 @@ func (s *Service) handleWorkloadAssertionGrant(
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build workload assertion audiences").LogError(ctx, logger)
 	}
-	presented, err = admitWorkloadAssertion(ctx, s.workloadGrant, endpoint, []string{urls.Issuer, urls.Token}, assertion)
+	presented, err := admitWorkloadAssertion(ctx, s.workloadGrant, endpoint.workloadTenancy(), []string{urls.Issuer, urls.Token}, assertion)
 	if err != nil {
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
 	}
@@ -378,23 +363,156 @@ func (s *Service) handleWorkloadAssertionGrant(
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "encode workload session policy").LogError(ctx, logger)
 	}
-	credential := workloadSessionCredential{DelegatedGrants: delegatedGrants, DelegatedGrantsVersion: int32(version)}
-
-	// The same admission the MCP side runs on every request with the session,
-	// so a workload with no live assigned agent is refused here rather than on
-	// first use, where the client would exchange again and loop. The session
-	// does not exist yet, but authz treats an AuthContext without a session as
-	// an internal call, so a namespaced id makes this context session-like.
-	authorizationCtx, err := s.contextForSessionSubject(ctx, endpoint, subject, "workload-grant:"+uuid.NewString(), "")
+	// The same check the MCP side applies to the stored row, so a session it
+	// would refuse is never written.
+	credential, err := loadWorkloadSessionCredential(
+		endpoint, subject, subject, pgtype.Text{String: endpoint.OrganizationID, Valid: true},
+		delegatedGrants, pgtype.Int4{Int32: int32(version), Valid: true},
+	)
 	if err != nil {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("agent_admission_unavailable", err))
+		return oops.E(oops.CodeUnexpected, err, "validate workload session policy").LogError(ctx, logger)
 	}
-	authorizationCtx, err = s.admitWorkloadSession(authorizationCtx, endpoint, subject, credential)
+	issuerURL, err := s.issuerURL(endpoint, baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, logger)
+	}
+
+	projectID := endpoint.ProjectID
+	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{
+		presented:  presented,
+		credential: credential,
+		projectID:  &projectID,
+		endpoint:   endpoint,
+		session: workloadSessionIssuance(workloadSessionTarget{
+			userSessionIssuerID: endpoint.UserSessionIssuerID,
+			projectID:           endpoint.ProjectID,
+			organizationID:      endpoint.OrganizationID,
+			issuer:              issuerURL,
+			audience:            canonicalResource,
+		}, subject, credential),
+	})
+}
+
+// refuseUnservedWorkloadGrant refuses a workload grant the deployment or the
+// organization does not serve, and reports whether it did.
+//
+// A deployment without the grant's dependencies answers as it did before the
+// grant existed. A workload acts through its assigned agent's policy, which
+// the MCP side honours only under the agent authorization rollout, so minting
+// without it would issue sessions refused on first use.
+func (s *Service) refuseUnservedWorkloadGrant(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	creds presentedClientCredentials,
+	organizationID string,
+	logger *slog.Logger,
+) (bool, error) {
+	unresolved := presentedWorkload{issuerURL: "", subject: "", issuerID: uuid.Nil}
+	if s.workloadGrant == nil {
+		return true, refuseClientlessTokenGrant(ctx, w, r, creds, logger)
+	}
+	rolloutEnabled, _, err := s.agentAuthorizationRollout(ctx, logger, organizationID)
+	switch {
+	case err != nil:
+		return true, s.writeWorkloadGrantRefusal(ctx, w, logger, unresolved, workloadGrantStageUnavailable("agent_rollout_unavailable", err))
+	case !rolloutEnabled:
+		return true, s.writeWorkloadGrantRefusal(ctx, w, logger, unresolved, refuseWorkloadGrant("agent_rollout_disabled", errWorkloadRolloutDisabled))
+	}
+	return false, nil
+}
+
+// workloadGrantIssuance is a workload grant whose assertion verified, ready
+// for admission and minting.
+type workloadGrantIssuance struct {
+	// presented is the identity the assertion presented, for logs.
+	presented presentedWorkload
+
+	// credential is the ceiling the session is minted with.
+	credential workloadSessionCredential
+
+	// projectID is the project admission acts in, or nil for none.
+	projectID *uuid.UUID
+
+	// endpoint is the one MCP server a grant naming a resource is minted for;
+	// admission also checks the agent may connect to it. Nil for a session
+	// minted for all of an issuer's MCP servers, each of which checks on use.
+	endpoint *ResolvedMcpEndpoint
+
+	// session is the session issueSession mints.
+	session sessionIssuance
+}
+
+// workloadSessionTarget is where a workload session is minted.
+type workloadSessionTarget struct {
+	// userSessionIssuerID is the issuer the session row belongs to.
+	userSessionIssuerID uuid.UUID
+
+	// projectID and organizationID scope the issuer lookup that bounds the
+	// session's lifetime; projectID is uuid.Nil for an organization issuer.
+	projectID uuid.UUID
+
+	// organizationID is the organization the session acts in.
+	organizationID string
+
+	// issuer is the access token's `iss`.
+	issuer string
+
+	// audience is the access token's audience.
+	audience string
+}
+
+// workloadSessionIssuance is the session a workload grant mints at target:
+// for subject with credential as its ceiling, clientless, never refreshable,
+// and authorized for exactly as long as its access token.
+func workloadSessionIssuance(target workloadSessionTarget, subject urn.SessionSubject, credential workloadSessionCredential) sessionIssuance {
+	lifetime := workloadSessionLifetime
+	return sessionIssuance{
+		UserSessionIssuerID:    target.userSessionIssuerID,
+		ProjectID:              target.projectID,
+		OrganizationID:         target.organizationID,
+		Issuer:                 target.issuer,
+		Audience:               target.audience,
+		Resource:               "",
+		Refreshable:            false,
+		StoresRefreshHash:      false,
+		Subject:                subject,
+		AuthorizerUserID:       pgtype.Text{String: "", Valid: false},
+		DelegatedGrants:        credential.DelegatedGrants,
+		DelegatedGrantsVersion: pgtype.Int4{Int32: credential.DelegatedGrantsVersion, Valid: true},
+		ToolSelection:          nil,
+		AuthorizationExpiresAt: nil,
+		DesiredSessionDuration: &lifetime,
+		Replayable:             false,
+	}
+}
+
+// issueWorkloadGrantSession admits a verified workload grant and mints its
+// session.
+//
+// Admission is the one the MCP side runs on every request with the session,
+// so a workload with no live assigned agent is refused here rather than on
+// first use, where the client would exchange again and loop. The session does
+// not exist yet, but authz treats an AuthContext without a session as an
+// internal call, so a namespaced id makes this context session-like.
+func (s *Service) issueWorkloadGrantSession(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, grant workloadGrantIssuance) error {
+	organizationID := grant.session.OrganizationID
+	subject := grant.session.Subject
+
+	authCtx, err := s.sessionAuthContext(ctx, organizationID, grant.projectID, "workload-grant:"+uuid.NewString())
+	if err != nil {
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, workloadGrantStageUnavailable("agent_admission_unavailable", err))
+	}
+	authorizationCtx := contextvalues.WithAuthenticatedActor(ctx, authCtx, urn.NewWorkloadPrincipal(grant.presented.issuerID, grant.presented.subject))
+	authorizationCtx, err = s.admitWorkloadSession(authorizationCtx, organizationID, subject, grant.credential)
+	if err == nil && grant.endpoint != nil {
+		authorizationCtx, err = s.requireWorkloadSessionAuthorization(authorizationCtx, grant.endpoint, workloadSessionReachResource)
+	}
 	switch {
 	case errors.Is(err, errWorkloadRolloutDisabled), errors.Is(err, errCredentialRejected), err != nil && isCredentialDenial(err):
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("agent_admission_denied", err))
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, refuseWorkloadGrant("agent_admission_denied", err))
 	case err != nil:
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("agent_admission_unavailable", err))
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, workloadGrantStageUnavailable("agent_admission_unavailable", err))
 	}
 
 	// A database that cannot start or commit the transaction is an outage,
@@ -402,29 +520,16 @@ func (s *Service) handleWorkloadAssertionGrant(
 	// handed a permanent failure.
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("session_persist_unavailable", err))
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, workloadGrantStageUnavailable("session_persist_unavailable", err))
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	lifetime := workloadSessionLifetime
-	minted, err := s.mintSession(authorizationCtx, endpoint, nil, usersessions_repo.New(dbtx), mintSessionParams{
-		Audience:               canonicalResource,
-		AuthorizationExpiresAt: nil,
-		AuthorizerUserID:       pgtype.Text{String: "", Valid: false},
-		BaseURL:                baseURL,
-		DelegatedGrants:        delegatedGrants,
-		DelegatedGrantsVersion: pgtype.Int4{Int32: int32(version), Valid: true},
-		DesiredSessionDuration: &lifetime,
-		Replayable:             false,
-		Policy:                 sessionIssuancePolicyWorkload,
-		Subject:                subject,
-		ToolSelection:          nil,
-	}, logger)
+	minted, err := s.issueSession(authorizationCtx, nil, usersessions_repo.New(dbtx), grant.session, logger)
 	if err != nil {
 		return err
 	}
 	if err := dbtx.Commit(ctx); err != nil {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("session_persist_unavailable", err))
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, workloadGrantStageUnavailable("session_persist_unavailable", err))
 	}
 
 	if err := writeTokenSuccess(ctx, w, logger, minted.Body); err != nil {
@@ -432,9 +537,9 @@ func (s *Service) handleWorkloadAssertionGrant(
 	}
 	logger.InfoContext(ctx, "workload session issued",
 		attr.SlogOAuthGrant(oauthwire.GrantTypeJWTBearer),
-		attr.SlogWorkloadIssuerID(presented.issuerID.String()),
-		attr.SlogWorkloadSubject(presented.subject),
-		attr.SlogOAuthResource(canonicalResource),
+		attr.SlogWorkloadIssuerID(grant.presented.issuerID.String()),
+		attr.SlogWorkloadSubject(grant.presented.subject),
+		attr.SlogOAuthTokenAudience([]string{minted.Audience}),
 		attr.SlogUserSessionID(minted.ID.String()),
 	)
 	return nil

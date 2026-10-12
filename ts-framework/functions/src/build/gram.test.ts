@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { createZipArchive } from "./gram.ts";
+import { createZipArchive, pushArgs } from "./gram.ts";
 
 let outDir: string;
 
@@ -43,4 +43,35 @@ test("createZipArchive produces a zip with manifest and function entries", async
   const eocd = zip.subarray(zip.length - 22);
   expect(eocd.subarray(0, 4)).toEqual(Buffer.from("PK\x05\x06", "binary"));
   expect(eocd.readUInt16LE(10)).toBe(2);
+});
+
+test("pushArgs leaves the API URL to the CLI", () => {
+  const args = pushArgs({
+    entrypoint: "src/gram.ts",
+    outDir: "dist",
+    cwd: ".",
+    deployStagingFile: "gram.deploy.json",
+    requireInterop: true,
+  });
+
+  expect(args).toEqual([
+    "--log-pretty=false",
+    "push",
+    "--config",
+    "gram.deploy.json",
+  ]);
+  expect(args).not.toContain("--api-url");
+});
+
+test("pushArgs passes the configured project", () => {
+  const args = pushArgs({
+    entrypoint: "src/gram.ts",
+    outDir: "dist",
+    cwd: ".",
+    deployStagingFile: "gram.deploy.json",
+    deployProject: "my-project",
+    requireInterop: true,
+  });
+
+  expect(args.slice(-2)).toEqual(["--project", "my-project"]);
 });

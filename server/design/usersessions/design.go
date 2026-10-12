@@ -182,14 +182,14 @@ var UserSession = Type("UserSession", func() {
 	Attribute("client_token_endpoint_auth_method", String, "The raw RFC 7591 token_endpoint_auth_method the client declared, for debugging against the spec. Null both for a session with no bound client and for a client registered before the value was recorded; client_credential_kind separates those cases and is what should be displayed.")
 	Attribute("subject_type", String, "Subject kind: 'user', 'apikey', 'agent', 'anonymous', or 'workload'.")
 	Attribute("subject_display_name", String, "Resolved human-readable name of the subject, if known.")
-	Attribute("subject_photo_url", String, "Avatar URL for the subject when it resolves to a Gram user with one. Null for API key and anonymous subjects, and for users who have no photo.")
+	Attribute("subject_photo_url", String, "Avatar URL for the subject when it resolves to a Speakeasy user with one. Null for API key and anonymous subjects, and for users who have no photo.")
 	Attribute("revoked_at", String, "When the session was revoked, if it has been.", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("last_used_at", String, "When this session last carried an MCP request. Recorded on the request path and coalesced to a five-minute resolution, so treat it as accurate to within that. Null means the session has not been used since the column was introduced — unknown, not never.", func() {
 		Format(FormatDateTime)
 	})
-	Attribute("upstreams", ArrayOf(UserSessionUpstream), "The upstream providers Gram holds tokens for on this session's subject, through the same issuer. Empty when the session reaches only Gram-native tools. A session can have several: an issuer may have more than one remote_session_client attached.")
+	Attribute("upstreams", ArrayOf(UserSessionUpstream), "The upstream providers Speakeasy holds tokens for on this session's subject, through the same issuer. Empty when the session reaches only Speakeasy-native tools. A session can have several: an issuer may have more than one remote_session_client attached.")
 	Attribute("workload", UserSessionWorkload, "Set only when subject_type is 'workload': the external issuer that vouched for the machine, the subject it asserted, and the agent the workload inherits its authority from.")
 
 	Required("id", "user_session_issuer_id", "subject_urn", "jti", "refresh_expires_at", "expires_at", "created_at", "updated_at", "issuer_slug", "subject_type", "upstreams")
@@ -224,7 +224,7 @@ var UserSessionWorkload = Type("UserSessionWorkload", func() {
 })
 
 // UserSessionWorkloadAdmission is one admission that lets a workload exchange
-// its platform token for a Gram session.
+// its platform token for a Speakeasy session.
 var UserSessionWorkloadAdmission = Type("UserSessionWorkloadAdmission", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -242,7 +242,7 @@ var UserSessionWorkloadAdmission = Type("UserSessionWorkloadAdmission", func() {
 })
 
 // UserSessionUpstream is the outbound leg of a brokered connection. A
-// user_session says an agent can reach Gram; this says what Gram can reach on
+// user_session says an agent can reach Speakeasy; this says what Speakeasy can reach on
 // that subject's behalf. The two are joined on (subject_urn,
 // user_session_issuer_id), which both tables carry.
 var UserSessionUpstream = Type("UserSessionUpstream", func() {

@@ -65,33 +65,36 @@ func TestCreateRemoteSessionClient_Manual(t *testing.T) {
 func TestCreateRemoteSessionClient_SerializedAgainstOrganizationIssuerDeletion(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
+	// probeTimeout bounds the server lock probe, independently of goroutine scheduling.
+	const probeTimeout = 100 * time.Millisecond
+	ctx, ti := newTestServiceWithConfig(t, testServiceConfig{lockTimeout: probeTimeout})
 	remoteIssuerID := createRemoteIssuer(t, ctx, ti, "rsc-org-issuer-lock", "")
 	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "usi-org-issuer-lock")
 
 	tx := testenv.BeginTx(t, ctx, ti.conn)
 	require.NoError(t, usersessionsrepo.New(tx).LockUserSessionIssuerForOwnerBinding(ctx, userIssuerID))
 
-	done := make(chan error, 1)
-	go func() {
-		_, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
-			RemoteSessionIssuerID: remoteIssuerID,
-			UserSessionIssuerIds:  []string{userIssuerID.String()},
-			ClientID:              "org-issuer-lock-client",
-			ClientSecret:          nil,
-			SessionToken:          nil,
-			ApikeyToken:           nil,
-			ProjectSlugInput:      nil,
-		})
-		done <- err
-	}()
-
-	require.Never(t, func() bool { return len(done) > 0 }, 500*time.Millisecond, 25*time.Millisecond,
-		"client create completed while organization issuer deletion could hold the owner-binding lock")
+	_, probeErr := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: remoteIssuerID,
+		UserSessionIssuerIds:  []string{userIssuerID.String()},
+		ClientID:              "org-issuer-lock-client",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	testenv.RequireLockNotAvailable(t, probeErr)
 	require.NoError(t, tx.Rollback(ctx))
-	require.Eventually(t, func() bool { return len(done) > 0 }, 30*time.Second, 25*time.Millisecond,
-		"client create did not complete after the owner-binding lock was released")
-	require.NoError(t, <-done)
+	_, probeErr = ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: remoteIssuerID,
+		UserSessionIssuerIds:  []string{userIssuerID.String()},
+		ClientID:              "org-issuer-lock-client",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, probeErr)
 }
 
 func TestCreateRemoteSessionClient_PersistsOrganizationID(t *testing.T) {
@@ -588,6 +591,43 @@ func TestUpdateRemoteSessionClient(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
+func TestUpdateRemoteSessionClient_LegacyCallbackURLRequiresPlatformAdmin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "rsc-legacycb", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-legacycb").String()
+	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: issuerID,
+		UserSessionIssuerIds:  []string{userIssuerID},
+		ClientID:              "legacycb-client-id",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+
+	enabled := true
+	payload := &clientsgen.UpdateRemoteSessionClientPayload{
+		ID:                created.ID,
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		LegacyCallbackURL: &enabled,
+	}
+	_, err = ti.service.UpdateRemoteSessionClient(ctx, payload)
+	requireOopsCode(t, err, oops.CodeForbidden)
+	unchanged, err := ti.service.GetRemoteSessionClient(ctx, &clientsgen.GetRemoteSessionClientPayload{ID: created.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.False(t, unchanged.LegacyCallbackURL, "a refused update must not change the flag")
+
+	updated, err := ti.service.UpdateRemoteSessionClient(withAdmin(t, ctx), payload)
+	require.NoError(t, err)
+	require.True(t, updated.LegacyCallbackURL)
+}
+
 func TestUpdateRemoteSessionClient_SwitchAuthMethod(t *testing.T) {
 	t.Parallel()
 
@@ -977,7 +1017,9 @@ func TestAttachUserSessionIssuer(t *testing.T) {
 func TestAttachUserSessionIssuer_SerializedAgainstOrganizationIssuerDeletion(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestService(t)
+	// probeTimeout bounds the server lock probe, independently of goroutine scheduling.
+	const probeTimeout = 100 * time.Millisecond
+	ctx, ti := newTestServiceWithConfig(t, testServiceConfig{lockTimeout: probeTimeout})
 	remoteIssuerID := createRemoteIssuer(t, ctx, ti, "attach-org-issuer-lock", "")
 	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "attach-usi-org-issuer-lock")
 	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
@@ -994,24 +1036,23 @@ func TestAttachUserSessionIssuer_SerializedAgainstOrganizationIssuerDeletion(t *
 	tx := testenv.BeginTx(t, ctx, ti.conn)
 	require.NoError(t, usersessionsrepo.New(tx).LockUserSessionIssuerForOwnerBinding(ctx, userIssuerID))
 
-	done := make(chan error, 1)
-	go func() {
-		_, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{
-			ID:                  created.ID,
-			UserSessionIssuerID: userIssuerID.String(),
-			SessionToken:        nil,
-			ApikeyToken:         nil,
-			ProjectSlugInput:    nil,
-		})
-		done <- err
-	}()
-
-	require.Never(t, func() bool { return len(done) > 0 }, 500*time.Millisecond, 25*time.Millisecond,
-		"client attach completed while organization issuer deletion could hold the owner-binding lock")
+	_, probeErr := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{
+		ID:                  created.ID,
+		UserSessionIssuerID: userIssuerID.String(),
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+	})
+	testenv.RequireLockNotAvailable(t, probeErr)
 	require.NoError(t, tx.Rollback(ctx))
-	require.Eventually(t, func() bool { return len(done) > 0 }, 30*time.Second, 25*time.Millisecond,
-		"client attach did not complete after the owner-binding lock was released")
-	require.NoError(t, <-done)
+	_, probeErr = ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{
+		ID:                  created.ID,
+		UserSessionIssuerID: userIssuerID.String(),
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+	})
+	require.NoError(t, probeErr)
 }
 
 func TestDetachUserSessionIssuer(t *testing.T) {

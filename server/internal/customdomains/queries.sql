@@ -115,7 +115,8 @@ FOR UPDATE;
 -- can carry several endpoints on a domain: prefer the root one, then the
 -- oldest) so callers can distinguish attach-and-set from set. Slugless
 -- servers are omitted unless already attached: the by-server path needs a
--- slug to name the endpoint it creates.
+-- slug to name the endpoint it creates. A hosted server's canonical wrapper
+-- (id = toolset id) is offered only when its one endpoint is on this domain.
 SELECT
     s.id,
     s.name,
@@ -142,6 +143,7 @@ WHERE p.organization_id = @organization_id
   AND s.deleted IS FALSE
   AND s.visibility <> 'disabled'
   AND (COALESCE(s.slug, '') <> '' OR e.id IS NOT NULL)
+  AND (s.toolset_id IS DISTINCT FROM s.id OR e.id IS NOT NULL)
 ORDER BY p.name, s.name NULLS LAST, s.id;
 
 -- name: GetEligibleRootMcpServerForOrganization :one
@@ -251,8 +253,8 @@ WHERE d.activated IS TRUE
   AND d.ingress_name IS NOT NULL
   AND d.deleted IS FALSE;
 
--- name: GetOrganizationSlugForHealthNotification :one
-SELECT slug
+-- name: GetOrganizationForHealthNotification :one
+SELECT slug, default_host
 FROM organization_metadata
 WHERE id = @organization_id;
 

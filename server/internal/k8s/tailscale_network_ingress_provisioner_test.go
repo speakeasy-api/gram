@@ -515,6 +515,37 @@ func TestTailscaleNetworkIngressDeletePreservesFinalizerDependencies(t *testing.
 	require.True(t, k8serrors.IsNotFound(err))
 }
 
+func TestTailscaleNetworkIngressDeleteReportsRejectedTailnetCredentials(t *testing.T) {
+	t.Parallel()
+	provisioner, _, dynamicClient, desired := newTestTailscaleProvisioner(t)
+	_, err := provisioner.Apply(t.Context(), desired)
+	require.NoError(t, err)
+	now := metav1.Now()
+	proxyGroup, err := dynamicClient.Resource(proxyGroupGVR).Get(t.Context(), desired.Resources.ProxyGroup, metav1.GetOptions{})
+	require.NoError(t, err)
+	proxyGroup.SetDeletionTimestamp(&now)
+	proxyGroup.SetFinalizers([]string{"tailscale.com/finalizer"})
+	_, err = dynamicClient.Resource(proxyGroupGVR).Update(t.Context(), proxyGroup, metav1.UpdateOptions{})
+	require.NoError(t, err)
+
+	setUnstructuredReady(t, dynamicClient, tailnetGVR, "", desired.Resources.Tailnet, "TailnetReady")
+	err = provisioner.Delete(t.Context(), desired.Resources)
+	require.ErrorIs(t, err, ErrNetworkIngressDeletionPending, "a healthy Tailnet keeps the ordinary pending state")
+	require.NotErrorIs(t, err, ErrNetworkIngressProviderCredentialsRejected)
+
+	for _, reason := range []string{tailscaleReasonInvalidOAuth, tailscaleReasonInvalidSecret} {
+		tailnet, err := dynamicClient.Resource(tailnetGVR).Get(t.Context(), desired.Resources.Tailnet, metav1.GetOptions{})
+		require.NoError(t, err)
+		require.NoError(t, unstructured.SetNestedSlice(tailnet.Object, []any{map[string]any{"type": "TailnetReady", "status": "False", "reason": reason, "message": "tskey-client-sentinel rejected"}}, "status", "conditions"))
+		_, err = dynamicClient.Resource(tailnetGVR).UpdateStatus(t.Context(), tailnet, metav1.UpdateOptions{})
+		require.NoError(t, err)
+
+		err = provisioner.Delete(t.Context(), desired.Resources)
+		require.ErrorIs(t, err, ErrNetworkIngressProviderCredentialsRejected, reason)
+		require.NotContains(t, err.Error(), "sentinel", "provider messages must not leak into the error")
+	}
+}
+
 func TestTailscaleNetworkIngressDeletePreservesIsolationWhilePodsRemain(t *testing.T) {
 	t.Parallel()
 	provisioner, typed, _, desired := newTestTailscaleProvisioner(t)

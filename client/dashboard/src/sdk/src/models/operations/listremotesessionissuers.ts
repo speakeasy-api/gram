@@ -5,6 +5,7 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import {
   ListRemoteSessionIssuersResult,
@@ -27,6 +28,19 @@ export type ListRemoteSessionIssuersSecurity = {
   option2?: ListRemoteSessionIssuersSecurityOption2 | undefined;
 };
 
+/**
+ * Only issuers from one tier: the project's own (project), inherited from its organization (organization), or from the platform catalog (platform). Omitted lists all three.
+ */
+export const QueryParamTier = {
+  Project: "project",
+  Organization: "organization",
+  Platform: "platform",
+} as const;
+/**
+ * Only issuers from one tier: the project's own (project), inherited from its organization (organization), or from the platform catalog (platform). Omitted lists all three.
+ */
+export type QueryParamTier = ClosedEnum<typeof QueryParamTier>;
+
 export type ListRemoteSessionIssuersRequest = {
   /**
    * Pagination cursor.
@@ -36,6 +50,18 @@ export type ListRemoteSessionIssuersRequest = {
    * Page size (default 50, max 100).
    */
   limit?: number | undefined;
+  /**
+   * Only issuers whose name, slug or issuer URL contains this text, ignoring case.
+   */
+  search?: string | undefined;
+  /**
+   * Only issuers that could sign users in to an upstream at this host (e.g. mcp.linear.app): those whose issuer URL host equals it or is one of its parent domains (linear.app). Host only, optionally with a port; no scheme or path.
+   */
+  upstreamHost?: string | undefined;
+  /**
+   * Only issuers from one tier: the project's own (project), inherited from its organization (organization), or from the platform catalog (platform). Omitted lists all three.
+   */
+  tier?: QueryParamTier | undefined;
   /**
    * Session header
    */
@@ -162,9 +188,17 @@ export function listRemoteSessionIssuersSecurityToJSON(
 }
 
 /** @internal */
+export const QueryParamTier$outboundSchema: z.ZodMiniEnum<
+  typeof QueryParamTier
+> = z.enum(QueryParamTier);
+
+/** @internal */
 export type ListRemoteSessionIssuersRequest$Outbound = {
   cursor?: string | undefined;
   limit?: number | undefined;
+  search?: string | undefined;
+  upstream_host?: string | undefined;
+  tier?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -178,12 +212,16 @@ export const ListRemoteSessionIssuersRequest$outboundSchema: z.ZodMiniType<
   z.object({
     cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
+    search: z.optional(z.string()),
+    upstreamHost: z.optional(z.string()),
+    tier: z.optional(QueryParamTier$outboundSchema),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      upstreamHost: "upstream_host",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",

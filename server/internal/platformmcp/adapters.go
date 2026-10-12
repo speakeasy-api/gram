@@ -25,15 +25,24 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// JWTAuthenticator validates Platform MCP access tokens. A token is accepted
+// only on the platform origin it was minted for: its issuer and audience must
+// equal the resource of the origin the request arrived on (RFC 8707), so a
+// token minted on one platform host is rejected on another.
 type JWTAuthenticator struct {
 	signer      *sessiontokens.Signer
 	store       *platformrepo.Queries
 	credentials *CredentialCodec
-	issuer      string
-	audience    string
+
+	// baseURL is the configured server URL, whose resource applies to
+	// requests that carry no platform origin.
+	baseURL *url.URL
 }
 
-func NewJWTAuthenticator(signer *sessiontokens.Signer, db *pgxpool.Pool, encryptionClient *encryption.Client, issuer, audience string) (*JWTAuthenticator, error) {
+func NewJWTAuthenticator(signer *sessiontokens.Signer, db *pgxpool.Pool, encryptionClient *encryption.Client, baseURL *url.URL) (*JWTAuthenticator, error) {
+	if baseURL == nil || baseURL.Scheme == "" || baseURL.Host == "" {
+		return nil, errors.New("platform MCP authenticator requires a base URL")
+	}
 	credentials, err := NewCredentialCodec(encryptionClient)
 	if err != nil {
 		return nil, fmt.Errorf("create platform MCP credential codec: %w", err)
@@ -42,18 +51,18 @@ func NewJWTAuthenticator(signer *sessiontokens.Signer, db *pgxpool.Pool, encrypt
 		signer:      signer,
 		store:       platformrepo.New(db),
 		credentials: credentials,
-		issuer:      issuer,
-		audience:    audience,
+		baseURL:     baseURL,
 	}, nil
 }
 
 func (a *JWTAuthenticator) Authenticate(ctx context.Context, token string) (Principal, error) {
-	if a.signer == nil || a.store == nil || a.credentials == nil || a.issuer == "" || a.audience == "" {
+	if a.signer == nil || a.store == nil || a.credentials == nil || a.baseURL == nil {
 		return Principal{}, ErrUnavailable
 	}
 
-	claims, err := a.signer.ValidateExactAudience(token, a.audience)
-	if err != nil || claims.Issuer != a.issuer {
+	resource := platformResource(platformBaseURL(ctx, a.baseURL))
+	claims, err := a.signer.ValidateExactAudience(token, resource)
+	if err != nil || claims.Issuer != resource {
 		return Principal{}, ErrUnauthorized
 	}
 	subject, err := urn.ParseSessionSubject(claims.Subject)
@@ -90,6 +99,7 @@ type LiveOrgAdminAuthorizer struct {
 	db           *pgxpool.Pool
 	engine       *authz.Engine
 	dashboardURL *url.URL
+	serverURL    *url.URL
 }
 
 func jwtAuthenticationStoreError(err error) error {
@@ -100,13 +110,23 @@ func jwtAuthenticationStoreError(err error) error {
 }
 
 func NewLiveOrgAdminAuthorizer(db *pgxpool.Pool, engine *authz.Engine) *LiveOrgAdminAuthorizer {
-	return &LiveOrgAdminAuthorizer{db: db, engine: engine, dashboardURL: nil}
+	return &LiveOrgAdminAuthorizer{db: db, engine: engine, dashboardURL: nil, serverURL: nil}
 }
 
 func (a *LiveOrgAdminAuthorizer) WithDashboardURL(dashboardURL *url.URL) *LiveOrgAdminAuthorizer {
 	if a != nil && validDashboardURL(dashboardURL) {
 		copyURL := *dashboardURL
 		a.dashboardURL = &copyURL
+	}
+	return a
+}
+
+// WithServerURL sets the configured server URL, which tells an extra platform
+// host apart from the canonical one when building request-access links.
+func (a *LiveOrgAdminAuthorizer) WithServerURL(serverURL *url.URL) *LiveOrgAdminAuthorizer {
+	if a != nil && serverURL != nil && serverURL.Host != "" {
+		copyURL := *serverURL
+		a.serverURL = &copyURL
 	}
 	return a
 }
@@ -332,6 +352,7 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 }
 
 type PostgresReader struct {
+	xaaReadiness              *xaaReadinessService
 	logger                    *slog.Logger
 	db                        *pgxpool.Pool
 	reader                    *readmodel.Reader
@@ -342,8 +363,10 @@ type PostgresReader struct {
 	riskAnalysisStatus        *RiskAnalysisStatusService
 	riskFindings              riskFindingsLister
 	riskFindingList           riskFindingListLister
+	chatMetadata              *ChatMetadataService
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
+	dataExportRouteToggle     *DataExportRouteToggleService
 	recentToolCalls           *RecentToolCallReadService
 	networkTraffic            MCPNetworkTrafficReader
 	networkTrafficLogsEnabled FeatureChecker
@@ -355,6 +378,10 @@ type PostgresReader struct {
 	shadowAI                  *ShadowAIService
 	reviewRequests            MCPReviewRequestService
 	reviewRequestBudget       OperationBudget
+	reviewLinks               ShadowMCPReviewLinker
+	toolExposure              *MCPToolExposureService
+	projectLifecycle          *ProjectLifecycleService
+	analytics                 *AnalyticsService
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
@@ -369,25 +396,51 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		riskAnalysisStatus:        nil,
 		riskFindings:              nil,
 		riskFindingList:           nil,
+		chatMetadata:              nil,
 		dataExports:               nil,
 		dataExportMutations:       nil,
+		dataExportRouteToggle:     nil,
 		recentToolCalls:           nil,
 		networkTraffic:            nil,
 		networkTrafficLogsEnabled: nil,
 		eventFeed:                 nil,
 		networkIngress:            nil,
+		xaaReadiness:              nil,
 		authz:                     nil,
 		shadowInventory:           nil,
 		shadowDecisions:           nil,
 		shadowAI:                  nil,
 		reviewRequests:            nil,
 		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
+		reviewLinks:               nil,
+		toolExposure:              nil,
+		projectLifecycle:          nil,
+		analytics:                 nil,
 	}
 }
 
 func (r *PostgresReader) WithAuthorization(engine *authz.Engine) *PostgresReader {
 	if r != nil {
 		r.authz = engine
+	}
+	return r
+}
+
+// WithToolExposure composes the reads and writes that decide which tools a
+// hosted MCP server exposes. Without it the tools stay in the catalogue as
+// stable refusals rather than disappearing from it.
+func (r *PostgresReader) WithToolExposure(service *MCPToolExposureService) *PostgresReader {
+	if r != nil {
+		r.toolExposure = service
+	}
+	return r
+}
+
+// WithProjectLifecycle composes project creation and renaming. Without it the
+// tools stay in the catalogue as stable refusals rather than disappearing.
+func (r *PostgresReader) WithProjectLifecycle(service *ProjectLifecycleService) *PostgresReader {
+	if r != nil {
+		r.projectLifecycle = service
 	}
 	return r
 }
@@ -460,6 +513,15 @@ func (r *PostgresReader) WithReviewRequests(service MCPReviewRequestService, bud
 	return r
 }
 
+// WithShadowMCPReviewLinks lets review-request tools return the dashboard page
+// where a request is reviewed.
+func (r *PostgresReader) WithShadowMCPReviewLinks(links ShadowMCPReviewLinker) *PostgresReader {
+	if r != nil && links != nil {
+		r.reviewLinks = links
+	}
+	return r
+}
+
 func (r *PostgresReader) WithShadowDecisions(service *ShadowDecisionService) *PostgresReader {
 	if r != nil && service != nil && service.valid() {
 		r.shadowDecisions = service
@@ -492,12 +554,30 @@ func (r *PostgresReader) WithRiskFindings(service *RiskFindingsService, budget O
 	return r
 }
 
+// WithAnalytics attaches the analytics reads. A nil or incomplete service
+// leaves the three tools served as stubs.
+func (r *PostgresReader) WithAnalytics(service *AnalyticsService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.analytics = service
+	}
+	return r
+}
+
 // WithRiskFindingList attaches the per-finding reads behind the same required
 // row-level budget as the Watchdog alerts. A missing budget leaves the tools
 // served as stubs.
 func (r *PostgresReader) WithRiskFindingList(service *RiskFindingListService, budget OperationBudget) *PostgresReader {
 	if r != nil && service.valid() {
 		r.riskFindingList = &budgetedRiskFindingList{service: service, budget: budget}
+	}
+	return r
+}
+
+// WithChatMetadata attaches the metadata-only chat listing. A nil or
+// incomplete service leaves list_chats served as a stub.
+func (r *PostgresReader) WithChatMetadata(service *ChatMetadataService) *PostgresReader {
+	if r != nil && service.valid() {
+		r.chatMetadata = service
 	}
 	return r
 }
@@ -701,7 +781,20 @@ func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input 
 		}
 		return MCP{}, err
 	}
-	return r.getMCPInventory(ctx, principal, projectID, mcpID, true)
+	// A tool_cursor's signature and binding are checked before the inventory
+	// is read, so a malformed or foreign one costs no queries. Whether the
+	// list it pins still stands is checked by the page read itself. Without an
+	// exposure read nothing could continue any cursor, so that is reported as
+	// the read being unavailable, the same as ExposurePage reports it.
+	if input.ToolCursor != "" {
+		if !r.toolExposure.valid() {
+			return MCP{}, ErrUnavailable
+		}
+		if _, err := r.toolExposure.openExposureCursor(principal, projectID, mcpID, input.ToolCursor); err != nil {
+			return MCP{}, err
+		}
+	}
+	return r.getMCPInventory(ctx, principal, projectID, mcpID, true, input.ToolCursor)
 }
 
 // GetMCPForDiagnostics reads one MCP after project:read has been enforced. The
@@ -717,14 +810,14 @@ func (r *PostgresReader) GetMCPForDiagnostics(ctx context.Context, principal Pri
 	if err != nil {
 		return MCP{}, fmt.Errorf("parse mcp id: %w", err)
 	}
-	return r.getMCPInventory(ctx, principal, project.ID, mcpID, false)
+	return r.getMCPInventory(ctx, principal, project.ID, mcpID, false, "")
 }
 
 // getMCPInventory reads one MCP. withPluginMembership stays false for callers
 // admitted on project-read alone: which plugins carry a server is inventory
 // detail, and a caller who has not cleared the MCP-read boundary has no claim
 // on it.
-func (r *PostgresReader) getMCPInventory(ctx context.Context, principal Principal, projectID, mcpID uuid.UUID, withPluginMembership bool) (MCP, error) {
+func (r *PostgresReader) getMCPInventory(ctx context.Context, principal Principal, projectID, mcpID uuid.UUID, withPluginMembership bool, toolCursor string) (MCP, error) {
 	if r == nil || r.inventory == nil {
 		return MCP{}, ErrUnavailable
 	}
@@ -761,6 +854,25 @@ func (r *PostgresReader) getMCPInventory(ctx context.Context, principal Principa
 	}
 	mcp := mcpFromInventoryItem(row, byMCPServer)
 	r.setInventoryVersion(&mcp)
+	// The exposure read rides the same mcp:read boundary as the rest of the
+	// detail, so it is filled in only where plugin membership is: a caller
+	// admitted on project read alone gets the operational projection, not the
+	// server's configuration.
+	if withPluginMembership && r.toolExposure.valid() && row.McpServerID != uuid.Nil {
+		exposure, err := r.toolExposure.ExposurePage(ctx, principal, projectID, row.McpServerID, toolCursor)
+		switch {
+		case err == nil:
+			mcp.ToolExposure = &exposure
+		case errors.Is(err, ErrMCPToolExposureMissing):
+			// Not a hosted toolset-backed server: its tools are its upstream's.
+		default:
+			return MCP{}, fmt.Errorf("read platform MCP tool exposure: %w", err)
+		}
+	} else if toolCursor != "" {
+		// Ignoring the cursor would hand back the first page's projection as
+		// if it continued the read.
+		return MCP{}, toolExposureCursorInvalid()
+	}
 	return mcp, nil
 }
 
