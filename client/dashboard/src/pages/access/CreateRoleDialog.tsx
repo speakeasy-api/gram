@@ -53,7 +53,10 @@ import { indexServers, MCP_CONNECT_SCOPE } from "./mcpAccessModel";
 import { McpAccessPanel } from "./McpAccessPanel";
 import { useMcpAccessCount } from "./useMcpAccessCount";
 import { useOrgMcpServers } from "./useOrgMcpServers";
-import { PermissionScopeControl } from "./PermissionScopeControl";
+import {
+  BlockedScopeControl,
+  PermissionScopeControl,
+} from "./PermissionScopeControl";
 import { RolePermissionsSection } from "./RolePermissionsSection";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { Selector } from "@gram/client/models/components/selector.js";
@@ -95,7 +98,9 @@ function getAllowLevel(
   rules: ScopeRule[],
 ): "all" | "project" | "server" | "tool" | "annotation" | null {
   const allows = rules.filter((r) => r.effect === "allow");
-  if (allows.length === 0) return null;
+  // A block with no grant beside it subtracts from what other roles grant,
+  // which can be everything, so it may name anything.
+  if (allows.length === 0) return rules.length > 0 ? "all" : null;
   if (allows.some((r) => r.selectors === null)) return "all";
   const allSels = allows.flatMap((r) => r.selectors ?? []);
   if (allSels.some((s) => s.projectId)) return "project";
@@ -896,24 +901,22 @@ export function CreateRoleDialog({
                   .map((rule, index) => ({ rule, index }))
                   .filter(({ rule }) => rule.effect === "deny");
                 if (allowRules.length === 0) {
-                  // A block with nothing granted beside it. It still wins
-                  // over every other role, which is what makes it easy to
-                  // miss, so the row says so.
                   return (
-                    <Text muted small>
-                      Takes this permission away on{" "}
-                      <span className="text-foreground">
-                        {denyRules
-                          .map(({ rule }) =>
-                            blockedResourceLabel(
-                              rule.selectors,
-                              scopeDef.resourceType,
-                            ),
-                          )
-                          .join(", ")}
-                      </span>
-                      , even when another role grants it.
-                    </Text>
+                    <BlockedScopeControl
+                      denyRules={denyRules}
+                      denyLabel={(rule) =>
+                        blockedResourceLabel(
+                          rule.selectors,
+                          scopeDef.resourceType,
+                        )
+                      }
+                      onEditException={(index) =>
+                        openRuleEditor(scopeDef.slug, index)
+                      }
+                      onRemoveException={(index) =>
+                        removeRule(scopeDef.slug, index)
+                      }
+                    />
                   );
                 }
                 return allowRules.map(

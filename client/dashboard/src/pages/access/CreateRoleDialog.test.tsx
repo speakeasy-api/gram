@@ -75,7 +75,10 @@ vi.mock("./useOrgMcpServers", () => ({
       {
         projectId: "project-a",
         projectName: "Default",
-        servers: [{ id: "server-a", name: "GitHub", slug: "github" }],
+        servers: [
+          { id: "server-a", name: "GitHub", slug: "github" },
+          { id: "server-b", name: "Linear", slug: "linear" },
+        ],
       },
     ],
     settled: true,
@@ -105,7 +108,11 @@ vi.mock("./RolePermissionsSection", () => ({
     </>
   ),
 }));
-vi.mock("./PermissionScopeControl", () => ({
+vi.mock("./PermissionScopeControl", async (importActual) => ({
+  // The block-only row is what these tests read, so it renders for real.
+  BlockedScopeControl: (
+    await importActual<typeof import("./PermissionScopeControl")>()
+  ).BlockedScopeControl,
   PermissionScopeControl: ({
     onChooseSpecific,
     onResetToAll,
@@ -330,15 +337,17 @@ describe("a permission the role only blocks", () => {
     grants: [
       {
         scope: "mcp:blocked_connect",
-        selectors: [{ resourceKind: "mcp", resourceId: "server-a" }],
+        selectors: [{ resourceKind: "mcp", resourceId: "server-b" }],
       },
     ],
   };
 
   it("names the blocked server instead of reading as a grant", () => {
     renderEditor(blockingRole);
-    expect(screen.getByText("GitHub")).toBeTruthy();
-    expect(screen.getByText(/even when another role grants it/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Linear" })).toBeTruthy();
+    expect(
+      screen.getByText(/Applies even when another role grants it/),
+    ).toBeTruthy();
   });
 
   it("keeps the block when the permission is granted beside it", () => {
@@ -353,5 +362,26 @@ describe("a permission the role only blocks", () => {
       expect.objectContaining({ scope: "mcp:connect" }),
     ]);
     expect(form.removeGrants ?? []).toEqual([]);
+  });
+
+  it("edits which server a block covers without granting anything", () => {
+    renderEditor(blockingRole);
+    fireEvent.click(screen.getByRole("button", { name: "Linear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select server A" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    const form = mocks.update.mock.calls[0]![0].request.updateRoleForm;
+    expect(form.addGrants).toEqual([
+      {
+        scope: "mcp:blocked_connect",
+        selectors: [{ resourceKind: "mcp", resourceId: "server-a" }],
+      },
+    ]);
+    expect(form.removeGrants).toEqual([
+      {
+        scope: "mcp:blocked_connect",
+        selectors: [{ resourceKind: "mcp", resourceId: "server-b" }],
+      },
+    ]);
   });
 });
