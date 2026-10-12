@@ -5262,6 +5262,27 @@ func (q *Queries) SetMCPServerRemoteSessionIssuerFixture(ctx context.Context, ar
 	return result.RowsAffected(), nil
 }
 
+const setMcpMetadataHeaderDisplayNamesFixture = `-- name: SetMcpMetadataHeaderDisplayNamesFixture :execrows
+UPDATE mcp_metadata
+SET header_display_names = $1
+WHERE id = $2
+  AND project_id = $3
+`
+
+type SetMcpMetadataHeaderDisplayNamesFixtureParams struct {
+	HeaderDisplayNames []byte
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+}
+
+func (q *Queries) SetMcpMetadataHeaderDisplayNamesFixture(ctx context.Context, arg SetMcpMetadataHeaderDisplayNamesFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setMcpMetadataHeaderDisplayNamesFixture, arg.HeaderDisplayNames, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setMetaMCPServerNetworkAccessModeFixture = `-- name: SetMetaMCPServerNetworkAccessModeFixture :execrows
 UPDATE meta_mcp_servers
 SET network_access_mode = $1

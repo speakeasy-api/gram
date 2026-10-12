@@ -472,7 +472,25 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 		installationOverrideURL = conv.ToPGText(*payload.InstallationOverrideURL)
 	}
 
+	// The mcp_server path can't express a default environment, so keep the one on the row it updates.
+	if backend.mcpServer != nil && existingRow != nil {
+		defaultEnvironmentID = existingRow.DefaultEnvironmentID
+	}
+
 	toolsetKey, serverKey := backend.writeKey(existingRow)
+
+	// A toolset-keyed row created beside a server-keyed one wins every read, so it takes over the env configs.
+	environmentConfigs := payload.EnvironmentConfigs
+	if environmentConfigs == nil && existing != nil && existingRow != nil && toolsetKey.Valid && !existingRow.ToolsetID.Valid {
+		environmentConfigs = make([]*types.McpEnvironmentConfigInput, 0, len(existing.EnvironmentConfigs))
+		for _, config := range existing.EnvironmentConfigs {
+			environmentConfigs = append(environmentConfigs, &types.McpEnvironmentConfigInput{
+				VariableName:      config.VariableName,
+				HeaderDisplayName: config.HeaderDisplayName,
+				ProvidedBy:        config.ProvidedBy,
+			})
+		}
+	}
 
 	var result repo.McpMetadatum
 	switch {
@@ -504,13 +522,13 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	}
 
 	// Update environment entries
-	if payload.EnvironmentConfigs != nil {
+	if environmentConfigs != nil {
 		// Delete all existing entries
 		if err := mcpr.DeleteAllEnvironmentConfigs(ctx, result.ID); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "delete existing environment configs").LogError(ctx, logger)
 		}
 
-		for _, config := range payload.EnvironmentConfigs {
+		for _, config := range environmentConfigs {
 			var headerDisplayName pgtype.Text
 			if config.HeaderDisplayName != nil {
 				headerDisplayName = conv.ToPGText(*config.HeaderDisplayName)
@@ -834,13 +852,14 @@ func (b *resolvedMetadataBackend) backendID() uuid.UUID {
 	return b.mcpServer.ID
 }
 
-// writeKey keeps an existing row under its key so a write never re-keys or creates a twin.
+// writeKey keeps toolset_slug writes toolset-keyed so pods that read only toolset_id see them;
+// an mcp_server_id write updates the row it read in place.
 func (b *resolvedMetadataBackend) writeKey(existing *repo.McpMetadatum) (toolsetKey, serverKey uuid.NullUUID) {
 	switch {
-	case existing != nil:
-		return existing.ToolsetID, existing.McpServerID
 	case b.toolset != nil:
 		return uuid.NullUUID{UUID: b.toolset.ID, Valid: true}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	case existing != nil:
+		return existing.ToolsetID, existing.McpServerID
 	default:
 		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.NullUUID{UUID: b.mcpServer.ID, Valid: true}
 	}

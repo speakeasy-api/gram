@@ -178,6 +178,8 @@ func TestSetMcpMetadata_ToolsetKeyedRowUpdatesInPlace(t *testing.T) {
 	require.Equal(t, original.ID, viaServer.ID)
 	require.Equal(t, toolset.ID.String(), *viaServer.ToolsetID)
 	require.Len(t, viaServer.EnvironmentConfigs, 1)
+	require.NotNil(t, viaServer.DefaultEnvironmentID)
+	require.Equal(t, env.ID.String(), *viaServer.DefaultEnvironmentID)
 	requireSingleMetadataRow(t, ctx, ti, toolset.ID)
 
 	for _, payload := range []*gen.ExportMcpMetadataPayload{
@@ -190,7 +192,7 @@ func TestSetMcpMetadata_ToolsetKeyedRowUpdatesInPlace(t *testing.T) {
 	}
 }
 
-func TestSetMcpMetadata_ServerKeyedRowUpdatesInPlace(t *testing.T) {
+func TestSetMcpMetadata_ServerKeyedRow(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPMetadataService(t)
@@ -218,12 +220,36 @@ func TestSetMcpMetadata_ServerKeyedRowUpdatesInPlace(t *testing.T) {
 		require.Equal(t, original.EnvironmentConfigs[0].ID, got.Metadata.EnvironmentConfigs[0].ID)
 	}
 
-	updated := setBySlug(t, ctx, ti, toolset, &gen.SetMcpMetadataPayload{Instructions: new("after")})
-	require.Equal(t, original.ID, updated.ID)
-	require.Nil(t, updated.ToolsetID)
-	require.Equal(t, toolset.ID.String(), *updated.McpServerID)
-	require.Len(t, updated.EnvironmentConfigs, 1)
+	// Runtime readers keyed by toolset id find the server-keyed row.
+	queries := repo.New(ti.conn)
+	row, err := queries.GetMetadataByBackendID(ctx, repo.GetMetadataByBackendIDParams{ProjectID: *authCtx.ProjectID, BackendID: toolset.ID})
+	require.NoError(t, err)
+	require.Equal(t, original.ID, row.ID.String())
+	_, err = queries.GetHeaderDisplayNames(ctx, repo.GetHeaderDisplayNamesParams{ProjectID: *authCtx.ProjectID, BackendID: toolset.ID})
+	require.NoError(t, err)
+	names, err := queries.GetHeaderDisplayNamesByToolsetIDs(ctx, repo.GetHeaderDisplayNamesByToolsetIDsParams{ProjectID: *authCtx.ProjectID, ToolsetIds: []uuid.UUID{toolset.ID}})
+	require.NoError(t, err)
+	require.Len(t, names, 1)
+	require.Equal(t, toolset.ID, names[0].ToolsetID)
+
+	viaServer, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+		McpServerID:  new(toolset.ID.String()),
+		Instructions: new("via server"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, original.ID, viaServer.ID)
+	require.Nil(t, viaServer.ToolsetID)
+	require.Len(t, viaServer.EnvironmentConfigs, 1)
 	requireSingleMetadataRow(t, ctx, ti, toolset.ID)
+
+	// A toolset_slug write stays toolset-keyed so pods that read only toolset_id still see it.
+	viaSlug := setBySlug(t, ctx, ti, toolset, &gen.SetMcpMetadataPayload{Instructions: new("after")})
+	require.NotEqual(t, original.ID, viaSlug.ID)
+	require.Equal(t, toolset.ID.String(), *viaSlug.ToolsetID)
+	require.Nil(t, viaSlug.McpServerID)
+	require.Len(t, viaSlug.EnvironmentConfigs, 1)
+	require.Equal(t, "API_KEY", viaSlug.EnvironmentConfigs[0].VariableName)
+	require.Equal(t, "user", viaSlug.EnvironmentConfigs[0].ProvidedBy)
 
 	// A dashboard read-modify-write echoes mcp_server_id alongside toolset_slug.
 	echoed, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
@@ -232,8 +258,7 @@ func TestSetMcpMetadata_ServerKeyedRowUpdatesInPlace(t *testing.T) {
 		Instructions: new("echoed"),
 	})
 	require.NoError(t, err)
-	require.Equal(t, original.ID, echoed.ID)
-	requireSingleMetadataRow(t, ctx, ti, toolset.ID)
+	require.Equal(t, viaSlug.ID, echoed.ID)
 
 	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
 		ToolsetSlug: new(types.Slug(toolset.Slug)),
@@ -249,18 +274,6 @@ func TestSetMcpMetadata_ServerKeyedRowUpdatesInPlace(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "echoed", *got.Instructions)
 	}
-
-	// Runtime readers keyed by toolset id find the server-keyed row.
-	queries := repo.New(ti.conn)
-	row, err := queries.GetMetadataByBackendID(ctx, repo.GetMetadataByBackendIDParams{ProjectID: *authCtx.ProjectID, BackendID: toolset.ID})
-	require.NoError(t, err)
-	require.Equal(t, original.ID, row.ID.String())
-	_, err = queries.GetHeaderDisplayNames(ctx, repo.GetHeaderDisplayNamesParams{ProjectID: *authCtx.ProjectID, BackendID: toolset.ID})
-	require.NoError(t, err)
-	names, err := queries.GetHeaderDisplayNamesByToolsetIDs(ctx, repo.GetHeaderDisplayNamesByToolsetIDsParams{ProjectID: *authCtx.ProjectID, ToolsetIds: []uuid.UUID{toolset.ID}})
-	require.NoError(t, err)
-	require.Len(t, names, 1)
-	require.Equal(t, toolset.ID, names[0].ToolsetID)
 }
 
 func TestGetMcpMetadata_PrefersToolsetKeyedTwin(t *testing.T) {
@@ -319,4 +332,51 @@ func TestExportMcpMetadata_ByMcpServerID(t *testing.T) {
 
 	_, err = ti.service.ExportMcpMetadata(ctx, &gen.ExportMcpMetadataPayload{McpServerID: new(uuid.NewString())})
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestHeaderDisplayNames_PreferToolsetKeyedTwin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	toolset := createHostedToolset(t, ctx, ti, "hosted-twin-names")
+	createCanonicalWrapper(t, ctx, ti, toolset)
+	toolsetRow := setBySlug(t, ctx, ti, toolset, &gen.SetMcpMetadataPayload{Instructions: new("toolset")})
+
+	queries := repo.New(ti.conn)
+	serverRow, err := queries.UpsertMetadataByMcpServerID(ctx, repo.UpsertMetadataByMcpServerIDParams{
+		McpServerID:               uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ProjectID:                 toolset.ProjectID,
+		ExternalDocumentationUrl:  pgtype.Text{String: "", Valid: false},
+		ExternalDocumentationText: pgtype.Text{String: "", Valid: false},
+		LogoID:                    uuid.NullUUID{},
+		Instructions:              conv.ToPGText("server"),
+		DefaultEnvironmentID:      uuid.NullUUID{},
+		InstallationOverrideUrl:   pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+
+	fixtures := testrepo.New(ti.conn)
+	for id, names := range map[string]string{
+		toolsetRow.ID:         `{"API_KEY":"X-Toolset"}`,
+		serverRow.ID.String(): `{"API_KEY":"X-Server"}`,
+	} {
+		rows, err := fixtures.SetMcpMetadataHeaderDisplayNamesFixture(ctx, testrepo.SetMcpMetadataHeaderDisplayNamesFixtureParams{
+			HeaderDisplayNames: []byte(names),
+			ID:                 uuid.MustParse(id),
+			ProjectID:          toolset.ProjectID,
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 1, rows)
+	}
+
+	single, err := queries.GetHeaderDisplayNames(ctx, repo.GetHeaderDisplayNamesParams{ProjectID: toolset.ProjectID, BackendID: toolset.ID})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"API_KEY":"X-Toolset"}`, string(single))
+
+	rows, err := queries.GetHeaderDisplayNamesByToolsetIDs(ctx, repo.GetHeaderDisplayNamesByToolsetIDsParams{ProjectID: toolset.ProjectID, ToolsetIds: []uuid.UUID{toolset.ID}})
+	require.NoError(t, err)
+	require.NotEmpty(t, rows)
+	last := rows[len(rows)-1]
+	require.Equal(t, toolset.ID, last.ToolsetID)
+	require.JSONEq(t, `{"API_KEY":"X-Toolset"}`, string(last.HeaderDisplayNames))
 }
