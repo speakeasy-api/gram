@@ -25,6 +25,7 @@ export function KeySetPicker({
   value,
   onChange,
   suggestedSetId,
+  suggestionLoading = false,
   newSetPlaceholder,
   disabled = false,
 }: {
@@ -32,6 +33,8 @@ export function KeySetPicker({
   onChange: (choice: KeySetChoice) => void;
   /** A set another client at the same identity provider signs with. */
   suggestedSetId?: string | null;
+  /** Still looking for a suggestion; the default waits rather than guess. */
+  suggestionLoading?: boolean;
   /** The name a new set starts with. */
   newSetPlaceholder: string;
   disabled?: boolean;
@@ -55,13 +58,28 @@ export function KeySetPicker({
     (keysData?.keys ?? []).map((key) => [key.id, key.name]),
   );
 
-  // Start on the suggestion, else the first set.
+  // Start on the suggestion, else the first set. A chosen set that is no
+  // longer listed, such as one deleted elsewhere, starts over the same way;
+  // not mid-refetch, so a set just created is kept until the list has it.
   const loaded = !setsQuery.isPending && !setsQuery.isError;
+  const missing =
+    value?.kind === "existing" &&
+    !setsQuery.isFetching &&
+    !sets.some((set) => set.id === value.id);
   useEffect(() => {
-    if (value || !loaded || sets.length === 0) return;
+    if (!loaded || suggestionLoading || sets.length === 0) return;
+    if (value && !missing) return;
     const suggested = sets.find((set) => set.id === suggestedSetId);
     onChange({ kind: "existing", id: (suggested ?? sets[0]!).id });
-  }, [value, loaded, sets, suggestedSetId, onChange]);
+  }, [
+    value,
+    missing,
+    loaded,
+    suggestionLoading,
+    sets,
+    suggestedSetId,
+    onChange,
+  ]);
 
   const openCreate = () => setCreating(true);
   const sheet = (

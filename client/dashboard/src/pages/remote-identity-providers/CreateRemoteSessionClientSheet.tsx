@@ -199,7 +199,7 @@ export function CreateRemoteSessionClientSheet({
   const siblingsQuery = buildOrganizationRemoteSessionClientsQuery(gramClient, {
     issuerId: issuer.id,
   });
-  const { data: siblingsData } = useQuery({
+  const { data: siblingsData, isLoading: siblingsLoading } = useQuery({
     ...siblingsQuery,
     queryKey: [...siblingsQuery.queryKey, { organizationId: organization.id }],
     enabled: open && selfKey,
@@ -590,6 +590,7 @@ export function CreateRemoteSessionClientSheet({
                       value={keySet}
                       onChange={setKeySet}
                       suggestedSetId={suggestedKeySetId}
+                      suggestionLoading={siblingsLoading}
                       newSetPlaceholder={`${issuer.name} signing key`}
                       disabled={submitting}
                     />

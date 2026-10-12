@@ -10,6 +10,7 @@ export function StepMarker({
 }): JSX.Element {
   return done ? (
     <span
+      role="img"
       aria-label="Done"
       className="bg-primary text-primary-foreground flex size-6 shrink-0 items-center justify-center rounded-full"
     >

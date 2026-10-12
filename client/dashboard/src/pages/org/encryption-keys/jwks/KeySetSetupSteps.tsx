@@ -185,6 +185,14 @@ export function KeySetSetupSteps({
   } | null>(null);
   const [finishing, setFinishing] = useState(false);
   const [finishError, setFinishError] = useState<string | null>(null);
+  // Keys belong to a credential, so switching it drops a choice or
+  // registration made under the last one.
+  const [keysFor, setKeysFor] = useState(credentialId);
+  if (keysFor !== credentialId) {
+    setKeysFor(credentialId);
+    setKeyChoice(NEW);
+    setRegistered(null);
+  }
 
   // A credential created but not yet verified; retries verify it, not a copy.
   const [pendingCredentialId, setPendingCredentialId] = useState<string | null>(
@@ -290,14 +298,16 @@ export function KeySetSetupSteps({
             invalidateAllListGcpKmsKeys(queryClient),
           ]);
         }
-        const probe = await client.externalKeys.verifyGcpKms(
-          { id: keyId },
-          SECURITY,
-        );
-        if (!probe.verified) {
-          setFinishError(keyProbeMessage(probe));
-          return;
-        }
+      }
+      // An already registered key is probed too: its grant or version may
+      // have changed since it was added.
+      const probe = await client.externalKeys.verifyGcpKms(
+        { id: keyId },
+        SECURITY,
+      );
+      if (!probe.verified) {
+        setFinishError(keyProbeMessage(probe));
+        return;
       }
       const created = await client.jsonWebKeySets.create(
         {

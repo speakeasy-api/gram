@@ -407,14 +407,26 @@ export function RemoteMcpIdentitySectionBody({
       return;
     setConfirmOpen(false);
     try {
-      if (leavingUser) await detachUserIdentity();
-      if (leavingSelf) await detachSelfClient();
+      // Binding a service account client replaces the user clients in the
+      // same commit, so they are only detached here when nothing is bound.
+      if (leavingUser && !oauthFormat) await detachUserIdentity();
+      // Leaving for a static credential unbinds the client only once that
+      // credential is written, below.
+      if (leavingSelf && selectedMode === "none") await detachSelfClient();
       if (oauthFormat) {
         // Bind first, so a failed commit never leaves the server with no
-        // identity; then drop the static credential the client replaces.
-        if (!(await clientDraft.save(oauthFormat))) return;
-        if (leavingAgent) await deleteStaticCredential();
-        setFormatPick(null);
+        // identity; then drop the static credential the client replaces. An
+        // unchanged bound client has nothing to bind, and a header or pin
+        // edit still goes through.
+        const binding = clientDraft.canSave(oauthFormat);
+        if (binding && !(await clientDraft.save(oauthFormat))) return;
+        if (
+          leavingAgent &&
+          (binding || clientDraft.showingBound(oauthFormat))
+        ) {
+          await deleteStaticCredential();
+        }
+        if (binding) setFormatPick(null);
       } else if (selectedMode === "user" && leavingAgent) {
         // Bind the client before dropping the credential, so a failed commit
         // never leaves the server with no identity; the client outranks the
@@ -424,7 +436,14 @@ export function RemoteMcpIdentitySectionBody({
       } else {
         if (leavingAgent) await removeAgentCredential();
         if (selectedMode === "agent") {
-          await agentDraft.save();
+          const written = await agentDraft.save();
+          if (leavingSelf) {
+            // A failed write has already said so; stop there. Otherwise
+            // unbind only with a credential to fall back on, new or already
+            // on the server, or the server is left with no identity.
+            if (agentDraft.canSave && !written) return;
+            if (written || authorizationHeader) await detachSelfClient();
+          }
         } else if (
           selectedMode === "user" &&
           (actualMode !== "user" || userDraft.canSave)

@@ -40,6 +40,8 @@ export type ServiceAccountClientDraft = {
   keySet: KeySetChoice | null;
   setKeySet: (value: KeySetChoice | null) => void;
   suggestedKeySetId: string | null;
+  /** The sibling clients a suggestion comes from are still loading. */
+  suggestionLoading: boolean;
   /** A signing key client made by "Create client" and not yet bound. */
   created: RemoteSessionClient | null;
   creating: boolean;
@@ -110,14 +112,17 @@ export function useServiceAccountClientDraft({
   // The operator chose to replace the bound client rather than keep it.
   const [replacing, setReplacing] = useState(false);
 
-  // Suggest the key set another client at this provider already signs with.
-  const { items: siblings } = useAllRemoteSessionClients(
+  // Suggest the key set another client at this provider already signs with,
+  // fetched only once a key set is being picked. A failed page stops the wait
+  // rather than holding the default back for good.
+  const siblingsQuery = useAllRemoteSessionClients(
     { remoteSessionIssuerId: issuerId ?? undefined },
-    { enabled: !!issuerId },
+    { enabled: !!issuerId && keySource === "kms" },
   );
   const suggestedKeySetId =
-    siblings.find((sibling) => sibling.jsonWebKeySetId != null)
+    siblingsQuery.items.find((sibling) => sibling.jsonWebKeySetId != null)
       ?.jsonWebKeySetId ?? null;
+  const suggestionLoading = siblingsQuery.isLoading && !siblingsQuery.isError;
 
   const reset = useCallback(() => {
     setIssuerPick(null);
@@ -184,12 +189,14 @@ export function useServiceAccountClientDraft({
     setCreating(true);
     try {
       const jsonWebKeySetId = await resolveKeySet(keySet);
+      // Pinned before the client, so a retry after a failed create reuses the
+      // set rather than making another.
+      setKeySet({ kind: "existing", id: jsonWebKeySetId });
       const made = await createSelfClient({
         tokenEndpointAuthMethod: "private_key_jwt",
         tokenEndpointAuthAudienceFormat: assertionAudience,
         jsonWebKeySetId,
       });
-      setKeySet({ kind: "existing", id: jsonWebKeySetId });
       setCreated(made);
       await invalidateAllRemoteSessionClients(queryClient);
       return true;
@@ -256,6 +263,7 @@ export function useServiceAccountClientDraft({
     keySet,
     setKeySet,
     suggestedKeySetId,
+    suggestionLoading,
     created,
     creating,
     signingReady,

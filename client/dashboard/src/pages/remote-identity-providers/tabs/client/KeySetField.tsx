@@ -145,18 +145,38 @@ export function KeySetField({
   const [newSetName, setNewSetName] = useState("");
   const [newSetKeyId, setNewSetKeyId] = useState("");
   const [creatingSet, setCreatingSet] = useState(false);
+  // A set created by an attempt whose attach failed, reused by a retry with
+  // the same name and key rather than created again.
+  const [madeSet, setMadeSet] = useState<{
+    id: string;
+    name: string;
+    externalKeyId: string;
+  } | null>(null);
 
   const createAndAttach = async () => {
     setCreatingSet(true);
     try {
-      const jsonWebKeySetId = await resolveKeySet({
-        kind: "new",
-        name: newSetName,
-        externalKeyId: newSetKeyId,
-      });
+      let jsonWebKeySetId = madeSet?.id;
+      if (
+        !jsonWebKeySetId ||
+        madeSet?.name !== newSetName ||
+        madeSet.externalKeyId !== newSetKeyId
+      ) {
+        jsonWebKeySetId = await resolveKeySet({
+          kind: "new",
+          name: newSetName,
+          externalKeyId: newSetKeyId,
+        });
+        setMadeSet({
+          id: jsonWebKeySetId,
+          name: newSetName,
+          externalKeyId: newSetKeyId,
+        });
+      }
       await attach.mutateAsync({
         request: { attachKeySetForm: { id: client.id, jsonWebKeySetId } },
       });
+      setMadeSet(null);
       setNewSetOpen(false);
       setNewSetName("");
       setNewSetKeyId("");

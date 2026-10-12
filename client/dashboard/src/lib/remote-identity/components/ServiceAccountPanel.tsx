@@ -575,6 +575,7 @@ function SigningKeySteps({
                   value={draft.keySet}
                   onChange={draft.setKeySet}
                   suggestedSetId={draft.suggestedKeySetId}
+                  suggestionLoading={draft.suggestionLoading}
                   newSetPlaceholder={`${providerName} signing key`}
                   disabled={disabled || draft.creating}
                 />

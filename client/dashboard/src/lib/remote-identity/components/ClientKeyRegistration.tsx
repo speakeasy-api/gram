@@ -20,27 +20,27 @@ export function ClientKeyRegistration({
   const client = useSdkClient();
   const url = clientKeySetUrl(clientRowId);
 
-  // Only the keys a verifier should trust: pending keys are published so
-  // caches warm, retired and revoked ones must not be registered again.
+  // Providers that take a pasted key want one JWK, not a set: the key that
+  // signs now, else the one about to. Retired and revoked keys must not be
+  // registered again.
   const copyPublicKey = async () => {
     try {
       const result = await client.jsonWebKeySets.listKeys(
         { setId: keySetId },
         { sessionHeaderGramSession: "" },
       );
-      const keys = result.keys
-        .filter(
-          (key) => key.keyState === "active" || key.keyState === "pending",
-        )
-        .map((key) => key.publicJwk as unknown);
-      if (keys.length === 0) {
+      const newest = (state: "active" | "pending") =>
+        result.keys
+          .filter((key) => key.keyState === state)
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+      const key = newest("active") ?? newest("pending");
+      if (!key) {
         toast.error("This key set has no published key yet.");
         return;
       }
-      // Providers that take a pasted key want one JWK, not a set, so a single
-      // published key is copied on its own.
-      const copied = keys.length === 1 ? keys[0] : { keys };
-      await navigator.clipboard.writeText(JSON.stringify(copied, null, 2));
+      await navigator.clipboard.writeText(
+        JSON.stringify(key.publicJwk, null, 2),
+      );
       toast.success("Public key copied");
     } catch (error) {
       toast.error(

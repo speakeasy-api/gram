@@ -58,10 +58,16 @@ export function RadioRows({
               value === row.value && "bg-muted/40",
             )}
           >
+            {/* Named by the title alone; the badge and description would
+                otherwise be read as part of every option's name. */}
             <RadioGroupItem
               id={itemId}
               value={row.value}
               disabled={row.disabled}
+              aria-labelledby={`${itemId}-title`}
+              aria-describedby={
+                row.description ? `${itemId}-description` : undefined
+              }
               className="mt-0.5"
             />
             <span className="flex min-w-0 flex-col gap-0.5">
@@ -71,11 +77,14 @@ export function RadioRows({
                   row.mono && "font-mono text-[13px] font-normal",
                 )}
               >
-                {row.title}
+                <span id={`${itemId}-title`}>{row.title}</span>
                 {row.badge}
               </span>
               {row.description ? (
-                <span className="text-muted-foreground truncate text-[13px]">
+                <span
+                  id={`${itemId}-description`}
+                  className="text-muted-foreground truncate text-[13px]"
+                >
                   {row.description}
                 </span>
               ) : null}

@@ -25,7 +25,7 @@ export function AutoHeight({
     const element = inner.current;
     if (!element) return;
     const observer = new ResizeObserver(([entry]) => {
-      setHeight(entry?.borderBoxSize[0]?.blockSize ?? element.offsetHeight);
+      setHeight(entry?.borderBoxSize?.[0]?.blockSize ?? element.offsetHeight);
     });
     observer.observe(element);
     return () => observer.disconnect();
