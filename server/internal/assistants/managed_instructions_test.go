@@ -6,7 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 )
 
 // preRenameInstructions rebuilds the shipped prompt from before the product
@@ -36,4 +40,36 @@ func TestCurrentAssistantInstructionsKeepsEditedPrompt(t *testing.T) {
 	for _, stored := range []string{"", "You are a custom assistant.", preRenameInstructions() + "\nAlways answer in French."} {
 		require.Equal(t, stored, currentAssistantInstructions(stored))
 	}
+}
+
+func TestBuildThreadBootstrapRefreshesOnlyManagedAssistantPrompt(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistant_bootstrap_managed_prompt")
+	old := preRenameInstructions()
+
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test", false)
+	require.NoError(t, err)
+	_, err = svc.core.UpdateAssistant(ctx, projectID, managed.ID, nil, nil, &old, nil, nil, nil, nil, nil)
+	require.NoError(t, err)
+	custom, err := svc.core.CreateAssistant(ctx, "org-test", projectID, "user-test", "Custom assistant", "test-model", old, nil, nil, 60, 1, StatusActive, false)
+	require.NoError(t, err)
+
+	bootstrap := func(assistantID uuid.UUID, correlationID string) string {
+		chatID := uuid.New()
+		require.NoError(t, assistantrepo.New(conn).UpsertAssistantChat(ctx, assistantrepo.UpsertAssistantChatParams{
+			ChatID: chatID, ProjectID: projectID, OrganizationID: "org-test", Title: pgtype.Text{},
+		}))
+		threadID, err := assistantrepo.New(conn).UpsertAssistantThread(ctx, assistantrepo.UpsertAssistantThreadParams{
+			AssistantID: assistantID, ProjectID: projectID, CorrelationID: correlationID, ChatID: chatID,
+			SourceKind: sourceKindSlack, SourceRefJson: []byte(`{}`),
+		})
+		require.NoError(t, err)
+		got, err := svc.core.BuildThreadBootstrap(ctx, projectID, threadID, assistantID)
+		require.NoError(t, err)
+		return got.Instructions
+	}
+
+	require.Contains(t, bootstrap(managed.ID, "managed-prompt"), managedAssistantInstructions)
+	require.Contains(t, bootstrap(custom.ID, "custom-prompt"), old)
 }
