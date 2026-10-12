@@ -382,6 +382,17 @@ export function splitMcpToolLimit(
   return setMcpToolLimit(next, target, limit);
 }
 
+/** Take back every MCP grant and block, including other rules. */
+export function clearMcp(
+  grants: Record<string, RoleGrant>,
+): Record<string, RoleGrant> {
+  let next = grants;
+  for (const level of LEVELS) {
+    next = withGrant(next, MCP_LEVEL_SCOPE[level], undefined);
+  }
+  return next;
+}
+
 /** A stored MCP row the matrix has no cell for. */
 export interface OtherMcpRule {
   key: string;
@@ -598,6 +609,20 @@ export function setPlatformBlocked(
       scope: target,
       rules: [{ id: crypto.randomUUID(), effect: "deny", selectors: null }],
     });
+  }
+  return next;
+}
+
+/** Take back every View and Manage grant and block; extras stay. */
+export function clearPlatform(
+  grants: Record<string, RoleGrant>,
+  areas: PlatformArea[],
+): Record<string, RoleGrant> {
+  let next = grants;
+  for (const area of areas) {
+    for (const def of [area.view, area.manage]) {
+      if (def) next = withGrant(next, def.slug as Scope, undefined);
+    }
   }
   return next;
 }

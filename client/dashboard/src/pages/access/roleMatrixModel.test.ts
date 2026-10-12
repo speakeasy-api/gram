@@ -20,6 +20,8 @@ import {
   setPlatformAllow,
   setPlatformBlocked,
   splitMcpToolLimit,
+  clearMcp,
+  clearPlatform,
 } from "./roleMatrixModel";
 import type { RoleGrant } from "./types";
 
@@ -281,5 +283,30 @@ describe("platform areas", () => {
     ]);
     expect(platformBlock(blocked, "project:read")).toBe("all");
     expect(save(setPlatformBlocked(blocked, area, false))).toEqual([]);
+  });
+});
+
+describe("clearing a table", () => {
+  it("empties the MCP grid and leaves the platform alone", () => {
+    const grants = load([
+      { scope: "mcp:connect", selectors: [mcp("gh", { tool: "a" })] },
+      { scope: "mcp:blocked_read", selectors: [mcp("lin")] },
+      { scope: "org:read" },
+    ]);
+    expect(save(clearMcp(grants))).toEqual([
+      { scope: "org:read", selectors: undefined },
+    ]);
+  });
+
+  it("empties the platform grid and keeps extras", () => {
+    const grants = load([
+      { scope: "project:read" },
+      { scope: "org:blocked_read" },
+      { scope: "org:hooks_ingest" },
+      { scope: "mcp:connect" },
+    ]);
+    expect(
+      save(clearPlatform(grants, platformAreas(scopes))).map((g) => g.scope),
+    ).toEqual(["org:hooks_ingest", "mcp:connect"]);
   });
 });

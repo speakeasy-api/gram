@@ -47,6 +47,8 @@ import {
   setPlatformAllow,
   setPlatformBlocked,
   splitMcpToolLimit,
+  clearMcp,
+  clearPlatform,
 } from "./roleMatrixModel";
 import { ToolAccessSheet, type ToolAccessTarget } from "./ToolAccessSheet";
 import type { RoleGrant } from "./types";
@@ -55,6 +57,13 @@ import type { OrgMcpServers } from "./useOrgMcpServers";
 
 type Grants = Record<string, RoleGrant>;
 type ProjectRef = { id: string; name: string };
+
+/** Where each MCP level is stored in the form's grants. */
+const MCP_SCOPE_KEYS: Record<Level, string> = {
+  use: "mcp:connect",
+  view: "mcp:read",
+  manage: "mcp:write",
+};
 
 /** Above this many servers the table gets a search box. */
 const SEARCH_THRESHOLD = 8;
@@ -279,12 +288,15 @@ function MatrixTable({
   title,
   columns,
   trailing,
+  onClear,
   children,
 }: {
   title: string;
   /** One per level slot; null leaves the slot empty. */
   columns: ({ label: string; hint: string } | null)[];
   trailing: string;
+  /** Empties every cell in the table; disabled when there is nothing. */
+  onClear?: () => void;
   children: ReactNode;
 }): JSX.Element {
   return (
@@ -316,7 +328,17 @@ function MatrixTable({
               ),
             )}
             <th scope="col" className={cn(TH, "pr-4 text-left")}>
-              {trailing}
+              <span className="flex items-center justify-between gap-2">
+                {trailing}
+                <button
+                  type="button"
+                  onClick={onClear}
+                  disabled={!onClear}
+                  className="text-eyebrow hover:text-foreground cursor-pointer underline-offset-4 hover:underline disabled:cursor-default disabled:opacity-40 disabled:hover:no-underline"
+                >
+                  Clear
+                </button>
+              </span>
             </th>
           </tr>
         </thead>
@@ -672,6 +694,11 @@ function McpMatrix({
           },
         ]}
         trailing="Tools"
+        onClear={
+          LEVELS.some((level) => grants[MCP_SCOPE_KEYS[level]])
+            ? () => onChange(clearMcp)
+            : undefined
+        }
       >
         {visibleRows.map((view) => {
           const blocked = blockedState(view);
@@ -992,6 +1019,13 @@ function PlatformMatrix({
           null,
         ]}
         trailing="Applies to"
+        onClear={
+          areas.some((area) =>
+            [area.view, area.manage].some((def) => def && grants[def.slug]),
+          )
+            ? () => onChange((prev) => clearPlatform(prev, areas))
+            : undefined
+        }
       >
         {areas
           .filter((area) => area.view)
