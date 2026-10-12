@@ -157,6 +157,20 @@ func (f hostedAttachmentFixture) updateWrapper(t *testing.T, ms mcpserversrepo.M
 	require.NoError(t, err)
 }
 
+func (f hostedAttachmentFixture) toolset(t *testing.T) toolsetsrepo.Toolset {
+	t.Helper()
+	ts, err := toolsetsrepo.New(f.db).GetToolsetByIDAndProject(t.Context(), toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.hosted.ID, ProjectID: f.projectID})
+	require.NoError(t, err)
+	return ts
+}
+
+func (f hostedAttachmentFixture) wrapper(t *testing.T) mcpserversrepo.McpServer {
+	t.Helper()
+	ms, err := mcpserversrepo.New(f.db).GetMCPServerByIDAndProjectID(t.Context(), mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: f.hosted.ID, ProjectID: f.projectID})
+	require.NoError(t, err)
+	return ms
+}
+
 func (f hostedAttachmentFixture) view(t *testing.T) *types.Assistant {
 	t.Helper()
 	record, err := f.core.GetAssistant(t.Context(), f.projectID, f.assistant)
@@ -386,21 +400,40 @@ func TestHostedAttachmentCreateByServerSlug(t *testing.T) {
 	require.ElementsMatch(t, []string{"billing", "remote"}, runtimeIDs(f.runtime(t)))
 }
 
-// Attaching by server ref turns MCP on, as attaching by toolset does.
-func TestHostedAttachmentByServerSlugEnablesMCP(t *testing.T) {
+// Only the toolsets path turns MCP on; a server ref never enables a disabled hosted server.
+func TestHostedAttachmentByServerSlugLeavesMCPOff(t *testing.T) {
 	t.Parallel()
-	f := newHostedAttachmentFixture(t, "hosted_attach_enables")
-	f.setToolsetMCPEnabled(t, false)
 	name := "updated"
 
-	_, err := f.core.UpdateAssistant(t.Context(), f.projectID, f.assistant, &name, nil, nil, nil,
-		[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil)
-	require.NoError(t, err)
-	ts, err := toolsetsrepo.New(f.db).GetToolsetByIDAndProject(t.Context(), toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.hosted.ID, ProjectID: f.projectID})
-	require.NoError(t, err)
-	require.True(t, ts.McpEnabled)
-	require.EqualValues(t, 1, f.counts(t).Toolsets)
-	require.Equal(t, []string{"billing"}, runtimeIDs(f.runtime(t)))
+	t.Run("new attach of a disabled hosted server is rejected", func(t *testing.T) {
+		t.Parallel()
+		f := newHostedAttachmentFixture(t, "hosted_attach_disabled_rejected")
+		f.setToolsetMCPEnabled(t, false)
+		wrapper := f.wrapper(t)
+
+		_, err := f.core.UpdateAssistant(t.Context(), f.projectID, f.assistant, &name, nil, nil, nil,
+			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil)
+		require.ErrorIs(t, err, errAssistantValidation)
+		require.ErrorContains(t, err, "is disabled")
+		require.False(t, f.toolset(t).McpEnabled)
+		require.Equal(t, wrapper.Visibility, f.wrapper(t).Visibility)
+		require.Zero(t, f.counts(t).Toolsets)
+	})
+
+	t.Run("echo of an attached disabled hosted server is left as it is", func(t *testing.T) {
+		t.Parallel()
+		f := newHostedAttachmentFixture(t, "hosted_attach_disabled_echo")
+		f.addLegacyRow(t, f.hosted.ID, uuid.NullUUID{})
+		f.setToolsetMCPEnabled(t, false)
+		wrapper := f.wrapper(t)
+
+		_, err := f.core.UpdateAssistant(t.Context(), f.projectID, f.assistant, &name, nil, nil, nil,
+			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil)
+		require.NoError(t, err)
+		require.False(t, f.toolset(t).McpEnabled)
+		require.Equal(t, wrapper.Visibility, f.wrapper(t).Visibility)
+		require.EqualValues(t, 1, f.counts(t).Toolsets)
+	})
 }
 
 // Legacy rows follow the toolset, as on main, when the wrapper has drifted from it.

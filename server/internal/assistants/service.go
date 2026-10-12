@@ -800,15 +800,14 @@ type resolvedToolsetInsert struct {
 // create/update time. Resolve and lock targets in the write transaction before
 // touching the assistant or attachments: toolsets first, then MCP servers, each
 // ordered by ID. Deletion takes the target lock before detaching assistants too.
-// serverRefs only add the toolsets behind hosted servers to the lock set; every
-// locked toolset ID is returned second.
+// serverRefs only add the toolsets behind hosted servers to the lock set.
 func (s *ServiceCore) resolveToolsetRefsForWrite(
 	ctx context.Context,
 	tx pgx.Tx,
 	projectID uuid.UUID,
 	refs []*types.AssistantToolsetRef,
 	serverRefs []*types.AssistantMCPServerRef,
-) ([]resolvedToolsetInsert, []uuid.UUID, error) {
+) ([]resolvedToolsetInsert, error) {
 	serverSlugs := make([]string, 0, len(serverRefs))
 	for _, ref := range serverRefs {
 		if ref != nil {
@@ -816,7 +815,7 @@ func (s *ServiceCore) resolveToolsetRefsForWrite(
 		}
 	}
 	if len(refs) == 0 && len(serverSlugs) == 0 {
-		return nil, nil, nil
+		return nil, nil
 	}
 
 	toolsetSlugs := make([]string, 0, len(refs))
@@ -847,21 +846,17 @@ func (s *ServiceCore) resolveToolsetRefsForWrite(
 		McpServerSlugs: serverSlugs,
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("resolve toolset slugs: %w", err)
-	}
-	locked := make([]uuid.UUID, 0, len(toolsetRows))
-	for _, row := range toolsetRows {
-		locked = append(locked, row.ID)
+		return nil, fmt.Errorf("resolve toolset slugs: %w", err)
 	}
 	if len(toolsetSlugs) == 0 {
-		return nil, locked, nil
+		return nil, nil
 	}
 	for _, row := range toolsetRows {
 		toolsetIDs[row.Slug] = row.ID
 	}
 	for _, slug := range toolsetSlugs {
 		if _, ok := toolsetIDs[slug]; !ok {
-			return nil, nil, assistantValidationError("toolset %q not found in project", slug)
+			return nil, assistantValidationError("toolset %q not found in project", slug)
 		}
 	}
 
@@ -872,14 +867,14 @@ func (s *ServiceCore) resolveToolsetRefsForWrite(
 			Slugs:     envSlugs,
 		})
 		if err != nil {
-			return nil, nil, fmt.Errorf("resolve environment slugs: %w", err)
+			return nil, fmt.Errorf("resolve environment slugs: %w", err)
 		}
 		for _, row := range envRows {
 			envIDs[row.Slug] = row.ID
 		}
 		for _, slug := range envSlugs {
 			if _, ok := envIDs[slug]; !ok {
-				return nil, nil, assistantValidationError("environment %q not found in project", slug)
+				return nil, assistantValidationError("environment %q not found in project", slug)
 			}
 		}
 	}
@@ -892,7 +887,7 @@ func (s *ServiceCore) resolveToolsetRefsForWrite(
 		}
 		toolsetID := toolsetIDs[ref.ToolsetSlug]
 		if _, dup := seenPair[toolsetID]; dup {
-			return nil, nil, assistantValidationError("toolset %q listed more than once", ref.ToolsetSlug)
+			return nil, assistantValidationError("toolset %q listed more than once", ref.ToolsetSlug)
 		}
 		seenPair[toolsetID] = struct{}{}
 		var envID uuid.NullUUID
@@ -901,7 +896,7 @@ func (s *ServiceCore) resolveToolsetRefsForWrite(
 		}
 		out = append(out, resolvedToolsetInsert{ToolsetID: toolsetID, Slug: ref.ToolsetSlug, EnvironmentID: envID})
 	}
-	return out, locked, nil
+	return out, nil
 }
 
 // AttachmentTargetIDs resolves the toolset and MCP server slugs a create or
@@ -949,15 +944,12 @@ type resolvedMcpServerInsert struct {
 // resolveToolsetRefsForWrite. Failing fast turns silent dispatch-time errors
 // ("unknown mcp server") into 400s at create/update time. Hosted servers in
 // skipHosted (already attached, or in this write's toolsets) are left as they are.
-// lockedToolsetIDs are the toolsets resolveToolsetRefsForWrite locked.
 func (s *ServiceCore) resolveMcpServerRefsForWrite(
 	ctx context.Context,
 	tx pgx.Tx,
 	projectID uuid.UUID,
 	refs []*types.AssistantMCPServerRef,
 	skipHosted map[uuid.UUID]struct{},
-	lockedToolsetIDs []uuid.UUID,
-	actor hostedmcp.Actor,
 ) ([]resolvedMcpServerInsert, error) {
 	if len(refs) == 0 {
 		return nil, nil
@@ -981,18 +973,6 @@ func (s *ServiceCore) resolveMcpServerRefsForWrite(
 				envSlugs = append(envSlugs, *ref.EnvironmentSlug)
 			}
 		}
-	}
-
-	// Hosted servers attached by server ref get MCP turned on, as the toolsets path
-	// does, before the server rows lock (the sync locks domain -> endpoint -> server).
-	var enable []resolvedToolsetInsert
-	for _, id := range lockedToolsetIDs {
-		if _, skip := skipHosted[id]; !skip {
-			enable = append(enable, resolvedToolsetInsert{ToolsetID: id, Slug: "", EnvironmentID: uuid.NullUUID{}})
-		}
-	}
-	if err := enableAssistantToolsets(ctx, tx, s.audit, actor, projectID, enable); err != nil {
-		return nil, err
 	}
 
 	queries := assistantrepo.New(tx)
@@ -1365,7 +1345,7 @@ func (s *ServiceCore) CreateAssistant(
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	resolved, lockedToolsetIDs, err := s.resolveToolsetRefsForWrite(ctx, tx, projectID, toolsets, mcpServers)
+	resolved, err := s.resolveToolsetRefsForWrite(ctx, tx, projectID, toolsets, mcpServers)
 	if err != nil {
 		return assistantRecord{}, err
 	}
@@ -1390,7 +1370,7 @@ func (s *ServiceCore) CreateAssistant(
 		return assistantRecord{}, err
 	}
 	// Server rows lock after the hosted sync's domain -> endpoint -> server locks.
-	resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers, toolsetIDSet(resolved), lockedToolsetIDs, assistantActor(ctx, createdByUserID))
+	resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers, toolsetIDSet(resolved))
 	if err != nil {
 		return assistantRecord{}, err
 	}
@@ -1500,7 +1480,7 @@ func (s *ServiceCore) UpdateAssistant(
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	resolved, lockedToolsetIDs, err := s.resolveToolsetRefsForWrite(ctx, tx, projectID, toolsets, mcpServers)
+	resolved, err := s.resolveToolsetRefsForWrite(ctx, tx, projectID, toolsets, mcpServers)
 	if err != nil {
 		return assistantRecord{}, err
 	}
@@ -1537,7 +1517,7 @@ func (s *ServiceCore) UpdateAssistant(
 			skipHosted[id] = struct{}{}
 		}
 		// Server rows lock after the hosted sync's domain -> endpoint -> server locks.
-		resolvedMcpServers, err = s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers, skipHosted, lockedToolsetIDs, assistantActor(ctx, record.CreatedByUserID))
+		resolvedMcpServers, err = s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers, skipHosted)
 		if err != nil {
 			return assistantRecord{}, err
 		}
