@@ -133,7 +133,9 @@ const CELL_BASE =
   "inline-flex h-8 w-9 shrink-0 items-center justify-center border align-middle text-sm transition-colors focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none";
 
 const CELL_STYLE: Record<CellState, string> = {
-  on: "bg-foreground text-background border-foreground",
+  // Emerald rather than the design system's olive success green, which reads
+  // as disabled at this size.
+  on: "bg-emerald-700 border-emerald-700 text-white dark:bg-emerald-600 dark:border-emerald-600",
   inherited: "border-foreground border-dashed text-foreground bg-background",
   blocked: "border-destructive text-destructive bg-background",
   "inherited-blocked":
