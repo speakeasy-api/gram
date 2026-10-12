@@ -149,14 +149,14 @@ func (s *Service) HandleGetProtectedResource(w http.ResponseWriter, r *http.Requ
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
 	}
-	toolset, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
+	toolset, wrapperID, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
-	s.metrics.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackWellKnownProtectedResource)
+	s.recordToolsetSlugFallback(ctx, s.logger, mcpmetrics.LegacyFallbackWellKnownProtectedResource, mcpSlug, toolset, wrapperID)
 
 	if toolset.UserSessionIssuerID.Valid {
 		endpoint := newResolvedMcpEndpointFromToolset(toolset, "mcp")
@@ -204,14 +204,14 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
 	}
-	toolset, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
+	toolset, wrapperID, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
-	s.metrics.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackWellKnownAuthorizationServer)
+	s.recordToolsetSlugFallback(ctx, s.logger, mcpmetrics.LegacyFallbackWellKnownAuthorizationServer, mcpSlug, toolset, wrapperID)
 
 	if toolset.UserSessionIssuerID.Valid {
 		endpoint := newResolvedMcpEndpointFromToolset(toolset, "mcp")
