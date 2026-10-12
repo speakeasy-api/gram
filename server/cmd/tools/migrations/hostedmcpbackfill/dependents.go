@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -52,14 +53,14 @@ func twinViolation(table string, err error) (string, bool) {
 	return want, true
 }
 
-// CollapsedTwin is a server-keyed row a move removed in favour of the toolset-keyed row; Row is its to_jsonb image.
+// CollapsedTwin is a server-keyed row a move removed in favour of the toolset-keyed row; Row is its to_jsonb image (apply only).
 type CollapsedTwin struct {
 	Table string    `json:"table"`
 	ID    uuid.UUID `json:"id"`
 
 	// Deletion is "deleted" (hard delete) or "soft_deleted" (plugin_servers).
 	Deletion string          `json:"deletion"`
-	Row      json.RawMessage `json:"row"`
+	Row      json.RawMessage `json:"row,omitempty"`
 
 	// EnvironmentConfigs are the mcp_environment_configs rows deleted with a metadata twin.
 	EnvironmentConfigs json.RawMessage `json:"environment_configs,omitempty"`
@@ -263,6 +264,10 @@ func (r *Runner) moveOne(ctx context.Context, toolsetID uuid.UUID, dep ListTools
 	}
 
 	row.CollapsedTwin = move.twin
+	if move.twin != nil && !r.options.Apply {
+		// A dry-run report may reuse an existing file, so it carries no row snapshot.
+		row.CollapsedTwin = &CollapsedTwin{Table: move.twin.Table, ID: move.twin.ID, Deletion: move.twin.Deletion, Row: nil, EnvironmentConfigs: nil}
+	}
 	row.Wrote = true
 	if move.twin != nil {
 		row.Outcome = conv.Ternary(r.options.Apply, OutcomeMovedCollapsedTwin, OutcomeWouldMoveCollapsingTwin)
@@ -406,6 +411,10 @@ func metadataSnapshot(record McpMetadatum, configs []McpEnvironmentConfig) (*typ
 
 // movePluginServer re-keys in place, so platform distributions referencing the member keep it.
 func (r *Runner) movePluginServer(ctx context.Context, tx pgx.Tx, m *dependentMove) (Outcome, string, error) {
+	// Distribute inserts under this lock, so the twin distribution check cannot race it.
+	if err := admission.LockProject(ctx, tx, m.toolset.ProjectID); err != nil {
+		return "", "", fmt.Errorf("lock project distribution admission: %w", err)
+	}
 	q := New(tx)
 	member, err := q.LockToolsetKeyedPluginServer(ctx, LockToolsetKeyedPluginServerParams{ID: m.rowID, ProjectID: m.toolset.ProjectID, ToolsetID: uuid.NullUUID{UUID: m.toolset.ID, Valid: true}})
 	if errors.Is(err, pgx.ErrNoRows) {

@@ -74,7 +74,7 @@ A twin is a server-keyed row for the same wrapper next to the toolset-keyed one 
 - `plugin_servers`: the twin is soft-deleted like a member removal and audited as `plugin:server_remove`. A twin referenced by a platform distribution blocks the row (`blocked_twin`) instead.
 - `assistant_mcp_servers`: the twin is deleted; the toolset-keyed attachment's environment wins.
 
-The report and journal rows carry `collapsed_twin`: the twin's table, id, `deletion` (`deleted` or `soft_deleted`), its full row (`to_jsonb`), and for metadata its env configs.
+The report and journal rows carry `collapsed_twin`: the twin's table, id and `deletion` (`deleted` or `soft_deleted`). On `-apply` they also carry its full row (`to_jsonb`) and, for metadata, its env configs; a dry-run report omits those.
 
 | Outcome                                               | Meaning                                                                                                                                      |
 | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |

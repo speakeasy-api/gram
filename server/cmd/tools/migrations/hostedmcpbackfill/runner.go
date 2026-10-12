@@ -62,7 +62,7 @@ const (
 	OutcomeMoved            Outcome = "moved"
 	OutcomeBlockedTwin      Outcome = "blocked_twin"
 	OutcomeBlockedNoWrapper Outcome = "blocked_no_wrapper"
-	// OutcomeWouldMoveCollapsingTwin and OutcomeMovedCollapsedTwin moved the toolset-keyed row after removing its server-keyed twin.
+	// OutcomeWouldMoveCollapsingTwin predicts removing the server-keyed twin before moving the toolset-keyed row; OutcomeMovedCollapsedTwin reports that completed move.
 	OutcomeWouldMoveCollapsingTwin Outcome = "would_move_collapsing_twin"
 	OutcomeMovedCollapsedTwin      Outcome = "moved_collapsed_twin"
 	// OutcomeCommitUnknown is a move whose commit errored after the server may have committed it.
