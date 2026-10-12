@@ -650,12 +650,18 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 
 	// Determine role and content based on event type
 	var role, content string
-	var model pgtype.Text
+	var model, messageID pgtype.Text
 
 	switch payload.HookEventName {
 	case "UserPromptSubmit":
 		role = "user"
 		content = conv.PtrValOr(payload.Prompt, "")
+		// Claude's prompt id is stored raw: it has no correlation prefix, so
+		// the writer treats the row as a plain insert, and the chat API already
+		// returns message_id as prompt_id.
+		if promptID, ok := payload.AdditionalData["promptId"].(string); ok {
+			messageID = conv.ToPGTextEmpty(strings.TrimSpace(promptID))
+		}
 	case "Stop":
 		role = "assistant"
 		content = conv.PtrValOr(payload.LastAssistantMessage, "")
@@ -696,7 +702,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		ContentRaw:       nil,
 		ContentAssetUrl:  conv.ToPGTextEmpty(""),
 		StorageError:     conv.ToPGTextEmpty(""),
-		MessageID:        conv.ToPGTextEmpty(""),
+		MessageID:        messageID,
 		ToolCallID:       conv.ToPGTextEmpty(""),
 		ExternalUserID:   conv.ToPGTextEmpty(metadata.UserEmail),
 		FinishReason:     conv.ToPGTextEmpty(""),

@@ -476,7 +476,7 @@ func TestClaudeChatSource_CoworkFromVariantOverridesAmbiguousServiceName(t *test
 	require.Equal(t, "cowork", msgs[0].Source.String)
 }
 
-func TestClaudeUserPromptSubmitDoesNotPersistPromptIDAsMessageID(t *testing.T) {
+func TestClaudeUserPromptSubmitPersistsPromptIDAsMessageID(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
@@ -519,47 +519,33 @@ func TestClaudeUserPromptSubmitDoesNotPersistPromptIDAsMessageID(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, msgs, 1)
 	require.Equal(t, "user", msgs[0].Role)
-	require.False(t, msgs[0].MessageID.Valid)
+	require.True(t, msgs[0].MessageID.Valid)
+	require.Equal(t, wantPromptID, msgs[0].MessageID.String, "the raw prompt id is the row's message_id")
 	require.False(t, msgs[0].ExternalMessageID.Valid, "Claude prompt IDs must not be stored as external_message_id")
 }
 
-func TestClaudeStopBackfillsLatestUserPromptID(t *testing.T) {
+func TestIngestClaudePromptSubmittedPersistsPromptIDAsMessageID(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx := hookAuthContext(t, ctx)
 
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	sessionID := uuid.NewString()
+	sessionID := "canonical-prompt-id-" + uuid.NewString()
 	chatID := sessionIDToUUID(sessionID)
-	const stalePromptID = "prompt-stale"
-	const wantPromptID = "prompt-current"
-	const wantUserID = "session-capture-user"
-	const wantUserEmail = "tester@example.com"
-	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, wantUserID, wantUserEmail)
-
-	metadata := &SessionMetadata{
-		SessionID:     sessionID,
-		ServiceName:   "claude-code",
-		UserEmail:     wantUserEmail,
-		UserID:        wantUserID,
-		ExternalOrgID: "",
-		GramOrgID:     authCtx.ActiveOrganizationID,
-		ProjectID:     authCtx.ProjectID.String(),
+	const wantPromptID = "prompt_01JZINGEST"
+	prompt := "hello from a canonical hook"
+	payload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+	payload.Raw = map[string]any{
+		"hook_event_name": "UserPromptSubmit",
+		"session_id":      sessionID,
+		"prompt":          prompt,
+		"prompt_id":       wantPromptID,
 	}
-	prompt := "hello"
-	lastAssistantMessage := "ok"
 
-	require.NoError(t, ti.service.persistConversationEvent(ctx, &gen.ClaudePayload{
-		HookEventName: "UserPromptSubmit",
-		SessionID:     &sessionID,
-		Prompt:        &prompt,
-		AdditionalData: map[string]any{
-			"promptId": stalePromptID,
-		},
-	}, metadata))
+	res, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
 
 	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
 		ChatID:    chatID,
@@ -568,27 +554,9 @@ func TestClaudeStopBackfillsLatestUserPromptID(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, msgs, 1)
 	require.Equal(t, "user", msgs[0].Role)
-	require.False(t, msgs[0].MessageID.Valid, "UserPromptSubmit promptId must not be persisted directly")
-
-	require.NoError(t, ti.service.persistConversationEvent(ctx, &gen.ClaudePayload{
-		HookEventName:        "Stop",
-		SessionID:            &sessionID,
-		LastAssistantMessage: &lastAssistantMessage,
-		AdditionalData: map[string]any{
-			"LastUserPromptID": wantPromptID,
-		},
-	}, metadata))
-
-	msgs, err = chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
-		ChatID:    chatID,
-		ProjectID: *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
-	require.Len(t, msgs, 2)
-	require.Equal(t, "user", msgs[0].Role)
-	require.False(t, msgs[0].MessageID.Valid)
-	require.Equal(t, "assistant", msgs[1].Role)
-	require.False(t, msgs[1].MessageID.Valid)
+	require.True(t, msgs[0].MessageID.Valid)
+	require.Equal(t, wantPromptID, msgs[0].MessageID.String, "the raw prompt id is the row's message_id")
+	require.False(t, msgs[0].ExternalMessageID.Valid, "Claude prompt IDs must not be stored as external_message_id")
 }
 
 func TestClaudeSessionEndDoesNotWakeBeforeTranscriptPersistence(t *testing.T) {

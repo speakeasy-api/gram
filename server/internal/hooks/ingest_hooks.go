@@ -1561,6 +1561,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		if correlationID := agentPromptCorrelationID(payload); correlationID != "" {
 			msg.MessageID = conv.ToPGText(correlationID)
 		} else {
+			msg.MessageID = conv.ToPGTextEmpty(claudePromptID(payload))
 			uncorrelatedPrompt = proxiedTranscriptSource(hookSource) || usesNativeTranscriptFallback(payload.Source.Adapter)
 			nativePrompt = usesNativeTranscriptFallback(payload.Source.Adapter)
 		}
@@ -1747,6 +1748,30 @@ func agentPromptCorrelationID(payload *gen.IngestPayload) string {
 	}
 	digest := sha256.Sum256([]byte(turnID))
 	return agentPromptCorrelationPrefix + hex.EncodeToString(digest[:])
+}
+
+// claudePromptID is the prompt id Claude stamps on its UserPromptSubmit
+// payload, stored raw as the row's message_id: without the agent-prompt
+// correlation prefix the writer treats the row as a plain insert.
+func claudePromptID(payload *gen.IngestPayload) string {
+	if payload == nil || payload.Source == nil || payload.Raw == nil {
+		return ""
+	}
+	adapter := strings.ToLower(strings.TrimSpace(payload.Source.Adapter))
+	if adapter != "cowork" && !strings.HasPrefix(adapter, "claude") {
+		return ""
+	}
+	raw, err := json.Marshal(payload.Raw)
+	if err != nil {
+		return ""
+	}
+	var event struct {
+		PromptID string `json:"prompt_id"`
+	}
+	if json.Unmarshal(raw, &event) != nil {
+		return ""
+	}
+	return strings.TrimSpace(event.PromptID)
 }
 
 func canonicalAgentTurnID(payload *gen.IngestPayload) string {
