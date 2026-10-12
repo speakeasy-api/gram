@@ -1016,16 +1016,16 @@ type DirectoryUserGroupMembership struct {
 }
 
 type EmaVendorIdentityProvider struct {
-	ID                           uuid.UUID
-	OrganizationID               string
-	VendorIssuer                 string
-	IdentityProviderConnectionID uuid.NullUUID
-	InternalSessionIssuerID      uuid.NullUUID
-	Position                     int32
-	CreatedAt                    pgtype.Timestamptz
-	UpdatedAt                    pgtype.Timestamptz
-	DeletedAt                    pgtype.Timestamptz
-	Deleted                      bool
+	ID                      uuid.UUID
+	OrganizationID          string
+	VendorIssuer            string
+	RemoteSessionIssuerID   uuid.NullUUID
+	InternalSessionIssuerID uuid.NullUUID
+	Position                int32
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+	DeletedAt               pgtype.Timestamptz
+	Deleted                 bool
 }
 
 type Environment struct {

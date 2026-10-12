@@ -2170,50 +2170,6 @@ ON internal_session_issuers (organization_id, id);
 CREATE INDEX IF NOT EXISTS internal_session_issuers_key_set_idx
 ON internal_session_issuers (organization_id, json_web_key_set_id);
 
--- Which identity providers may issue ID-JAGs for a downstream vendor, and in
--- what order they are tried. No live rows for a vendor means every available
--- provider, external ones first and Speakeasy last.
-CREATE TABLE IF NOT EXISTS ema_vendor_identity_providers (
-  id uuid NOT NULL DEFAULT generate_uuidv7(),
-  organization_id TEXT NOT NULL,
-  -- RFC 8414 issuer of the vendor's authorization server, normalized in
-  -- application code: lowercase scheme and host, no trailing slash.
-  vendor_issuer TEXT NOT NULL,
-  -- Exactly one of these names the provider: an external identity provider
-  -- connection, or the organization's internal session issuer (Speakeasy).
-  -- Rows whose provider is soft-deleted are skipped at read time.
-  identity_provider_connection_id uuid,
-  internal_session_issuer_id uuid,
-  -- EMA attempt order for this vendor: when acquiring an ID-JAG, providers are
-  -- tried from the lowest position up until one returns a token.
-  position integer NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz,
-  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
-  CONSTRAINT ema_vendor_identity_providers_pkey PRIMARY KEY (id),
-  CONSTRAINT ema_vendor_identity_providers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
-  CONSTRAINT ema_vendor_identity_providers_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES identity_provider_connections (organization_id, id),
-  CONSTRAINT ema_vendor_identity_providers_issuer_tenant_fkey FOREIGN KEY (organization_id, internal_session_issuer_id) REFERENCES internal_session_issuers (organization_id, id),
-  CONSTRAINT ema_vendor_identity_providers_one_provider_check CHECK (num_nonnulls(identity_provider_connection_id, internal_session_issuer_id) = 1)
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS ema_vendor_identity_providers_position_key
-ON ema_vendor_identity_providers (organization_id, vendor_issuer, position)
-WHERE deleted IS FALSE;
-
-CREATE UNIQUE INDEX IF NOT EXISTS ema_vendor_identity_providers_provider_key
-ON ema_vendor_identity_providers (organization_id, vendor_issuer, identity_provider_connection_id, internal_session_issuer_id) NULLS NOT DISTINCT
-WHERE deleted IS FALSE;
-
-CREATE INDEX IF NOT EXISTS ema_vendor_identity_providers_connection_idx
-ON ema_vendor_identity_providers (organization_id, identity_provider_connection_id)
-WHERE identity_provider_connection_id IS NOT NULL;
-
-CREATE INDEX IF NOT EXISTS ema_vendor_identity_providers_issuer_idx
-ON ema_vendor_identity_providers (organization_id, internal_session_issuer_id)
-WHERE internal_session_issuer_id IS NOT NULL;
-
 -- Non-partial index backing json_web_key_sets_external_key_tenant_fkey, which
 -- has no ON DELETE clause (NO ACTION). Postgres does not index the referencing
 -- side automatically, so without this the check on every hard-deleted
@@ -2525,6 +2481,51 @@ WHERE jwks_uri IS NOT NULL AND deleted IS FALSE;
 -- Retain the existing tenant key during the scope-FK rollout.
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_issuers_organization_id_id_key
 ON remote_session_issuers (organization_id, id);
+
+-- Which identity providers may issue ID-JAGs for a downstream vendor, and in
+-- what order they are tried. No live rows for a vendor means every available
+-- provider, external ones first and Speakeasy last.
+CREATE TABLE IF NOT EXISTS ema_vendor_identity_providers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  -- RFC 8414 issuer of the vendor's authorization server, normalized in
+  -- application code: lowercase scheme and host, no trailing slash.
+  vendor_issuer TEXT NOT NULL,
+  -- Exactly one of these names the issuer that supplies ID-JAGs: an external
+  -- issuer Speakeasy calls (for example an Okta authorization server), or the
+  -- organization's internal session issuer (Speakeasy itself). Rows whose
+  -- issuer is soft-deleted are skipped at read time.
+  remote_session_issuer_id uuid,
+  internal_session_issuer_id uuid,
+  -- EMA attempt order for this vendor: when acquiring an ID-JAG, providers are
+  -- tried from the lowest position up until one returns a token.
+  position integer NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT ema_vendor_identity_providers_pkey PRIMARY KEY (id),
+  CONSTRAINT ema_vendor_identity_providers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT ema_vendor_identity_providers_remote_issuer_tenant_fkey FOREIGN KEY (organization_id, remote_session_issuer_id) REFERENCES remote_session_issuers (organization_id, id),
+  CONSTRAINT ema_vendor_identity_providers_internal_issuer_tenant_fkey FOREIGN KEY (organization_id, internal_session_issuer_id) REFERENCES internal_session_issuers (organization_id, id),
+  CONSTRAINT ema_vendor_identity_providers_one_provider_check CHECK (num_nonnulls(remote_session_issuer_id, internal_session_issuer_id) = 1)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ema_vendor_identity_providers_position_key
+ON ema_vendor_identity_providers (organization_id, vendor_issuer, position)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ema_vendor_identity_providers_provider_key
+ON ema_vendor_identity_providers (organization_id, vendor_issuer, remote_session_issuer_id, internal_session_issuer_id) NULLS NOT DISTINCT
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS ema_vendor_identity_providers_remote_issuer_idx
+ON ema_vendor_identity_providers (organization_id, remote_session_issuer_id)
+WHERE remote_session_issuer_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ema_vendor_identity_providers_internal_issuer_idx
+ON ema_vendor_identity_providers (organization_id, internal_session_issuer_id)
+WHERE internal_session_issuer_id IS NOT NULL;
 
 -- Scope-qualified FK target for identity provider connections.
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_issuers_attachment_scope_key
