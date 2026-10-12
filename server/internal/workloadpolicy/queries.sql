@@ -250,3 +250,70 @@ FROM agents
 WHERE organization_id = @organization_id
   AND id = @id
   AND deleted IS FALSE;
+
+-- name: GetDeviceJoinAgent :one
+-- The agent a join token would enroll devices under, with what deciding who may
+-- create one needs: its owner, and whether it can run at all.
+SELECT id, name, owner_user_id, suspended_at, revoked_at, owner_reassignment_required_at
+FROM agents
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND deleted IS FALSE;
+
+-- name: CreateWorkloadDeviceJoinToken :one
+INSERT INTO workload_device_join_tokens (organization_id, token_hash, agent_id, created_by_user_id, expires_at)
+VALUES (@organization_id, @token_hash, @agent_id, @created_by_user_id, @expires_at)
+RETURNING *;
+
+-- name: ConsumeWorkloadDeviceJoinToken :one
+-- Redeems a join token for the device subject it enrolls. Single use and
+-- atomic: the row is claimed on the same statement that reads it, so a replay
+-- or a racing second redemption updates nothing.
+--
+-- Keyed by hash alone because the organization is what this lookup discovers:
+-- the token is the only thing an unauthenticated device presents. The hash is
+-- unique across organizations, which is what makes that safe.
+UPDATE workload_device_join_tokens
+SET consumed_at = clock_timestamp(), consumed_by_subject = @subject, updated_at = clock_timestamp()
+WHERE token_hash = @token_hash
+  AND consumed_at IS NULL
+  AND expires_at > clock_timestamp()
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: FindDeviceIssuer :many
+-- The organization's Speakeasy device issuer, at the organization tier so its
+-- devices are recognised under both organization and project authorization
+-- servers.
+SELECT *
+FROM workload_issuers
+WHERE organization_id = @organization_id
+  AND project_id IS NULL
+  AND key_source = 'device_keys'
+  AND deleted IS FALSE
+ORDER BY created_at, id;
+
+-- name: CreateDeviceIssuer :one
+-- A concurrent enrollment may create it first; the caller then re-reads it.
+-- Wildcards are off: every device subject is minted by Speakeasy and admitted
+-- exactly.
+INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri, allow_wildcard_admission, key_source)
+VALUES (@organization_id, NULL, @name, @issuer, @jwks_uri, false, 'device_keys')
+ON CONFLICT (organization_id, name) WHERE deleted IS FALSE AND project_id IS NULL DO NOTHING
+RETURNING *;
+
+-- name: CreateWorkloadDeviceKey :one
+INSERT INTO workload_device_keys (organization_id, workload_issuer_id, subject, public_jwk, thumbprint, hostname, serial)
+VALUES (@organization_id, @workload_issuer_id, @subject, @public_jwk, @thumbprint, @hostname, @serial)
+RETURNING *;
+
+-- name: SoftDeleteWorkloadDeviceKeysForSubject :many
+-- Withdrawing a device's admission also retires its key, so a re-admission of
+-- the same subject cannot quietly bring an old key back.
+UPDATE workload_device_keys
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND workload_issuer_id = @workload_issuer_id
+  AND subject = @subject
+  AND deleted IS FALSE
+RETURNING *;

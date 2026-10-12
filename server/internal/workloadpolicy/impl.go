@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -74,6 +75,10 @@ type Service struct {
 	// sharedHosts are the hosts the deployment serves shared authorization
 	// servers on, which the token endpoints it lists are derived from.
 	sharedHosts authserver.Hosts
+
+	// registerLimiter bounds device enrollment, which needs no credential but
+	// a join token.
+	registerLimiter *ratelimit.Limiter
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -87,6 +92,7 @@ func NewService(
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	sharedHosts authserver.Hosts,
+	limitStore ratelimit.Store,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("workloadpolicy.api"))
 	return &Service{
@@ -100,6 +106,8 @@ func NewService(
 		catalog: catalog.Embedded(),
 
 		sharedHosts: sharedHosts,
+
+		registerLimiter: ratelimit.New(limitStore, "workload-device-register", registerDeviceRate),
 	}
 }
 
@@ -453,6 +461,12 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 	}
 	if err := requireTrustDomain(payload.Issuer, "issuer"); err != nil {
 		return nil, err
+	}
+	// Device issuers are Speakeasy's own and verify against per-device keys. An
+	// operator row at the same URL would verify against a key set of its
+	// choosing instead, so the prefix is reserved.
+	if strings.HasPrefix(strings.TrimSpace(payload.Issuer), strings.TrimRight(s.sharedHosts.ServerURL, "/")+deviceIssuerPath) {
+		return nil, oops.E(oops.CodeInvalid, nil, "issuer is reserved for Speakeasy device enrollment")
 	}
 	if err := validateJWKSURI(payload.JwksURI); err != nil {
 		return nil, err
@@ -1274,6 +1288,18 @@ func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubj
 			Subject:          existing.Subject,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error clearing the workload's agent assignment").LogError(ctx, s.logger)
+		}
+
+		// A withdrawn device's key goes with it, so re-admitting the subject
+		// cannot quietly bring the old key back into service.
+		if isDeviceIssuer(issuerRow) {
+			if _, err := q.SoftDeleteWorkloadDeviceKeysForSubject(ctx, repo.SoftDeleteWorkloadDeviceKeysForSubjectParams{
+				OrganizationID:   t.organizationID,
+				WorkloadIssuerID: existing.WorkloadIssuerID,
+				Subject:          existing.Subject,
+			}); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "error retiring the device's key").LogError(ctx, s.logger)
+			}
 		}
 	}
 

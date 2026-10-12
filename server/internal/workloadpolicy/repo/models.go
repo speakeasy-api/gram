@@ -32,6 +32,37 @@ type WorkloadAgentAssignment struct {
 	Deleted bool
 }
 
+type WorkloadDeviceJoinToken struct {
+	ID                uuid.UUID
+	OrganizationID    string
+	TokenHash         string
+	AgentID           uuid.UUID
+	HooksProjectID    uuid.UUID
+	CreatedByUserID   string
+	ExpiresAt         pgtype.Timestamptz
+	ConsumedAt        pgtype.Timestamptz
+	ConsumedBySubject pgtype.Text
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	DeletedAt         pgtype.Timestamptz
+	Deleted           bool
+}
+
+type WorkloadDeviceKey struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	PublicJwk        []byte
+	Thumbprint       string
+	Hostname         pgtype.Text
+	Serial           pgtype.Text
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
+}
+
 type WorkloadIdentityAdmission struct {
 	// @access: confidential
 	ID uuid.UUID

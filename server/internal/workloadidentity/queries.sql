@@ -157,3 +157,17 @@ WHERE a.organization_id = @organization_id
   )
 ORDER BY (a.match_kind = 'exact') DESC, length(a.subject) DESC
 LIMIT 1;
+
+-- name: GetWorkloadDeviceKey :one
+-- The one public key registered for a device subject under a Speakeasy device
+-- issuer. An assertion from such an issuer verifies against this key alone, so
+-- a key enrolled for one device can never sign as another.
+--
+-- Scoped by organization and issuer row as well as subject, so a lookup can
+-- only ever answer for the issuer the assertion already resolved to.
+SELECT public_jwk, thumbprint
+FROM workload_device_keys
+WHERE organization_id = @organization_id
+  AND workload_issuer_id = @workload_issuer_id
+  AND subject = @subject
+  AND deleted IS FALSE;

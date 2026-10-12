@@ -12,6 +12,49 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const consumeWorkloadDeviceJoinToken = `-- name: ConsumeWorkloadDeviceJoinToken :one
+UPDATE workload_device_join_tokens
+SET consumed_at = clock_timestamp(), consumed_by_subject = $1, updated_at = clock_timestamp()
+WHERE token_hash = $2
+  AND consumed_at IS NULL
+  AND expires_at > clock_timestamp()
+  AND deleted IS FALSE
+RETURNING id, organization_id, token_hash, agent_id, hooks_project_id, created_by_user_id, expires_at, consumed_at, consumed_by_subject, created_at, updated_at, deleted_at, deleted
+`
+
+type ConsumeWorkloadDeviceJoinTokenParams struct {
+	Subject   pgtype.Text
+	TokenHash string
+}
+
+// Redeems a join token for the device subject it enrolls. Single use and
+// atomic: the row is claimed on the same statement that reads it, so a replay
+// or a racing second redemption updates nothing.
+//
+// Keyed by hash alone because the organization is what this lookup discovers:
+// the token is the only thing an unauthenticated device presents. The hash is
+// unique across organizations, which is what makes that safe.
+func (q *Queries) ConsumeWorkloadDeviceJoinToken(ctx context.Context, arg ConsumeWorkloadDeviceJoinTokenParams) (WorkloadDeviceJoinToken, error) {
+	row := q.db.QueryRow(ctx, consumeWorkloadDeviceJoinToken, arg.Subject, arg.TokenHash)
+	var i WorkloadDeviceJoinToken
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.TokenHash,
+		&i.AgentID,
+		&i.HooksProjectID,
+		&i.CreatedByUserID,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+		&i.ConsumedBySubject,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const countLiveAdmissionsForSubject = `-- name: CountLiveAdmissionsForSubject :one
 SELECT count(*)
 FROM workload_identity_admissions
@@ -44,6 +87,51 @@ func (q *Queries) CountLiveAdmissionsForSubject(ctx context.Context, arg CountLi
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const createDeviceIssuer = `-- name: CreateDeviceIssuer :one
+INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri, allow_wildcard_admission, key_source)
+VALUES ($1, NULL, $2, $3, $4, false, 'device_keys')
+ON CONFLICT (organization_id, name) WHERE deleted IS FALSE AND project_id IS NULL DO NOTHING
+RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateDeviceIssuerParams struct {
+	OrganizationID string
+	Name           string
+	Issuer         string
+	JwksUri        string
+}
+
+// A concurrent enrollment may create it first; the caller then re-reads it.
+// Wildcards are off: every device subject is minted by Speakeasy and admitted
+// exactly.
+func (q *Queries) CreateDeviceIssuer(ctx context.Context, arg CreateDeviceIssuerParams) (WorkloadIssuer, error) {
+	row := q.db.QueryRow(ctx, createDeviceIssuer,
+		arg.OrganizationID,
+		arg.Name,
+		arg.Issuer,
+		arg.JwksUri,
+	)
+	var i WorkloadIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Description,
+		&i.Tags,
+		&i.Issuer,
+		&i.JwksUri,
+		&i.AllowWildcardAdmission,
+		&i.KeySource,
+		&i.Metadata,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const createWorkloadAdmission = `-- name: CreateWorkloadAdmission :one
@@ -84,6 +172,91 @@ func (q *Queries) CreateWorkloadAdmission(ctx context.Context, arg CreateWorkloa
 		&i.Tags,
 		&i.HooksProjectID,
 		&i.HooksProjectOrganizationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const createWorkloadDeviceJoinToken = `-- name: CreateWorkloadDeviceJoinToken :one
+INSERT INTO workload_device_join_tokens (organization_id, token_hash, agent_id, created_by_user_id, expires_at)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, organization_id, token_hash, agent_id, hooks_project_id, created_by_user_id, expires_at, consumed_at, consumed_by_subject, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateWorkloadDeviceJoinTokenParams struct {
+	OrganizationID  string
+	TokenHash       string
+	AgentID         uuid.UUID
+	CreatedByUserID string
+	ExpiresAt       pgtype.Timestamptz
+}
+
+func (q *Queries) CreateWorkloadDeviceJoinToken(ctx context.Context, arg CreateWorkloadDeviceJoinTokenParams) (WorkloadDeviceJoinToken, error) {
+	row := q.db.QueryRow(ctx, createWorkloadDeviceJoinToken,
+		arg.OrganizationID,
+		arg.TokenHash,
+		arg.AgentID,
+		arg.CreatedByUserID,
+		arg.ExpiresAt,
+	)
+	var i WorkloadDeviceJoinToken
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.TokenHash,
+		&i.AgentID,
+		&i.HooksProjectID,
+		&i.CreatedByUserID,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+		&i.ConsumedBySubject,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const createWorkloadDeviceKey = `-- name: CreateWorkloadDeviceKey :one
+INSERT INTO workload_device_keys (organization_id, workload_issuer_id, subject, public_jwk, thumbprint, hostname, serial)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, organization_id, workload_issuer_id, subject, public_jwk, thumbprint, hostname, serial, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateWorkloadDeviceKeyParams struct {
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	PublicJwk        []byte
+	Thumbprint       string
+	Hostname         pgtype.Text
+	Serial           pgtype.Text
+}
+
+func (q *Queries) CreateWorkloadDeviceKey(ctx context.Context, arg CreateWorkloadDeviceKeyParams) (WorkloadDeviceKey, error) {
+	row := q.db.QueryRow(ctx, createWorkloadDeviceKey,
+		arg.OrganizationID,
+		arg.WorkloadIssuerID,
+		arg.Subject,
+		arg.PublicJwk,
+		arg.Thumbprint,
+		arg.Hostname,
+		arg.Serial,
+	)
+	var i WorkloadDeviceKey
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.WorkloadIssuerID,
+		&i.Subject,
+		&i.PublicJwk,
+		&i.Thumbprint,
+		&i.Hostname,
+		&i.Serial,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -139,6 +312,55 @@ func (q *Queries) CreateWorkloadIssuer(ctx context.Context, arg CreateWorkloadIs
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const findDeviceIssuer = `-- name: FindDeviceIssuer :many
+SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
+FROM workload_issuers
+WHERE organization_id = $1
+  AND project_id IS NULL
+  AND key_source = 'device_keys'
+  AND deleted IS FALSE
+ORDER BY created_at, id
+`
+
+// The organization's Speakeasy device issuer, at the organization tier so its
+// devices are recognised under both organization and project authorization
+// servers.
+func (q *Queries) FindDeviceIssuer(ctx context.Context, organizationID string) ([]WorkloadIssuer, error) {
+	rows, err := q.db.Query(ctx, findDeviceIssuer, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WorkloadIssuer
+	for rows.Next() {
+		var i WorkloadIssuer
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Description,
+			&i.Tags,
+			&i.Issuer,
+			&i.JwksUri,
+			&i.AllowWildcardAdmission,
+			&i.KeySource,
+			&i.Metadata,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const findWorkloadIssuersByIssuer = `-- name: FindWorkloadIssuersByIssuer :many
@@ -200,6 +422,44 @@ func (q *Queries) FindWorkloadIssuersByIssuer(ctx context.Context, arg FindWorkl
 		return nil, err
 	}
 	return items, nil
+}
+
+const getDeviceJoinAgent = `-- name: GetDeviceJoinAgent :one
+SELECT id, name, owner_user_id, suspended_at, revoked_at, owner_reassignment_required_at
+FROM agents
+WHERE organization_id = $1
+  AND id = $2
+  AND deleted IS FALSE
+`
+
+type GetDeviceJoinAgentParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+type GetDeviceJoinAgentRow struct {
+	ID                          uuid.UUID
+	Name                        string
+	OwnerUserID                 string
+	SuspendedAt                 pgtype.Timestamptz
+	RevokedAt                   pgtype.Timestamptz
+	OwnerReassignmentRequiredAt pgtype.Timestamptz
+}
+
+// The agent a join token would enroll devices under, with what deciding who may
+// create one needs: its owner, and whether it can run at all.
+func (q *Queries) GetDeviceJoinAgent(ctx context.Context, arg GetDeviceJoinAgentParams) (GetDeviceJoinAgentRow, error) {
+	row := q.db.QueryRow(ctx, getDeviceJoinAgent, arg.OrganizationID, arg.ID)
+	var i GetDeviceJoinAgentRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.OwnerUserID,
+		&i.SuspendedAt,
+		&i.RevokedAt,
+		&i.OwnerReassignmentRequiredAt,
+	)
+	return i, err
 }
 
 const getOrganizationAgent = `-- name: GetOrganizationAgent :one
@@ -738,6 +998,57 @@ func (q *Queries) SoftDeleteWorkloadAgentAssignmentsByIssuer(ctx context.Context
 			&i.Subject,
 			&i.MatchKind,
 			&i.AgentID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const softDeleteWorkloadDeviceKeysForSubject = `-- name: SoftDeleteWorkloadDeviceKeysForSubject :many
+UPDATE workload_device_keys
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND workload_issuer_id = $2
+  AND subject = $3
+  AND deleted IS FALSE
+RETURNING id, organization_id, workload_issuer_id, subject, public_jwk, thumbprint, hostname, serial, created_at, updated_at, deleted_at, deleted
+`
+
+type SoftDeleteWorkloadDeviceKeysForSubjectParams struct {
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+}
+
+// Withdrawing a device's admission also retires its key, so a re-admission of
+// the same subject cannot quietly bring an old key back.
+func (q *Queries) SoftDeleteWorkloadDeviceKeysForSubject(ctx context.Context, arg SoftDeleteWorkloadDeviceKeysForSubjectParams) ([]WorkloadDeviceKey, error) {
+	rows, err := q.db.Query(ctx, softDeleteWorkloadDeviceKeysForSubject, arg.OrganizationID, arg.WorkloadIssuerID, arg.Subject)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WorkloadDeviceKey
+	for rows.Next() {
+		var i WorkloadDeviceKey
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.WorkloadIssuerID,
+			&i.Subject,
+			&i.PublicJwk,
+			&i.Thumbprint,
+			&i.Hostname,
+			&i.Serial,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
