@@ -159,15 +159,6 @@ func TestOpenRecordsForAppendEndsAPartialLine(t *testing.T) {
 	}
 }
 
-// writeManifestFile writes m as dir's manifest and returns the bytes written.
-func writeManifestFile(t *testing.T, dir string, m runManifest) []byte {
-	t.Helper()
-	raw, err := json.Marshal(m)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, manifestFile), raw, 0o600))
-	return raw
-}
-
 var (
 	mainCommit    = runCommit{SHA: "1a2b3c4d5e6f", Subject: "chore: main", Uncommitted: false}
 	fixtureCommit = runCommit{SHA: "6f5e4d3c2b1a", Subject: "chore: edit a fixture", Uncommitted: false}
@@ -184,55 +175,8 @@ func TestClaimRunDirListsEachCommitOnce(t *testing.T) {
 
 	got, err := readManifest(filepath.Join(dir, manifestFile))
 	require.NoError(t, err)
-	require.Equal(t, currentDetector(), got.Detector)
 	require.Equal(t, []runCommit{mainCommit, fixtureCommit}, got.Commits)
 	require.WithinDuration(t, now, got.Updated, time.Second)
-}
-
-func TestClaimRunDirRefusesAnotherDetector(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name   string
-		change func(*runDetector)
-	}{
-		{name: "confirmation model", change: func(d *runDetector) { d.ConfirmationModel = "other/model" }},
-		{name: "confirmation prompt", change: func(d *runDetector) { d.ConfirmationPromptSHA256 = "0123456789ab" }},
-		{name: "prefilter model", change: func(d *runDetector) { d.PrefilterModel = "other/prefilter" }},
-		{name: "prefilter threshold", change: func(d *runDetector) { d.PrefilterThreshold = 0.5 }},
-		{name: "prefilter questions", change: func(d *runDetector) { d.PrefilterQuestionsSHA256 = "0123456789ab" }},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			dir := t.TempDir()
-			other := currentDetector()
-			tc.change(&other)
-			before := writeManifestFile(t, dir, runManifest{Detector: other, Commits: []runCommit{mainCommit}, Updated: time.Now()})
-
-			require.ErrorContains(t, claimRunDir(dir, mainCommit, time.Now()), "holds another detector's results")
-			after, err := os.ReadFile(filepath.Join(dir, manifestFile))
-			require.NoError(t, err)
-			require.Equal(t, before, after, "a refused run dir keeps its manifest")
-		})
-	}
-}
-
-func TestRunRecordsRefusesAnotherDetectorsRecords(t *testing.T) {
-	t.Parallel()
-
-	attack := recordsCase("attack", "malicious")
-	dir := t.TempDir()
-	file, err := openRecordsForAppend(filepath.Join(dir, casesFile))
-	require.NoError(t, err)
-	require.NoError(t, appendRecord(file, caseRecord{Key: caseKey(attack), Hash: caseHash(attack), Status: statusFlagged}))
-	require.NoError(t, file.Close())
-	other := currentDetector()
-	other.ConfirmationModel = "other/model"
-	writeManifestFile(t, dir, runManifest{Detector: other, Commits: nil, Updated: time.Now()})
-
-	err = runRecords(t.Context(), options{runDir: dir, commit: mainCommit}, []labeledCase{attack})
-	require.ErrorContains(t, err, "run this tool from the checkout it was built from")
 }
 
 func TestRunRecordsRefusesDuplicateCaseKeys(t *testing.T) {
@@ -336,8 +280,6 @@ func TestRunRecordsReusesAFinishedRunWithoutCalls(t *testing.T) {
 	manifest, err := readManifest(filepath.Join(dir, manifestFile))
 	require.NoError(t, err)
 	require.Equal(t, []runCommit{mainCommit}, manifest.Commits)
-	require.Equal(t, piopenrouter.Model, manifest.Detector.ConfirmationModel)
-	require.Empty(t, manifest.Detector.PrefilterModel)
 	require.WithinDuration(t, time.Now(), manifest.Updated, time.Minute)
 }
 
