@@ -205,7 +205,7 @@ describe("BuiltInDashboardPage", () => {
         <BuiltInDashboardPage
           slug="mcp-tools"
           actions={<button type="button">Configure settings</button>}
-          onOpen={vi.fn()}
+          onOpen={vi.fn<() => void>()}
         />
       </MemoryRouter>,
     );
