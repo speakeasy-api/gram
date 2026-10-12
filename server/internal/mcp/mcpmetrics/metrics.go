@@ -340,7 +340,8 @@ func (m *Metrics) RecordTunnelPublicRejection(ctx context.Context, mcpSlug strin
 	))
 }
 
-func (m *Metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL string, toolName string) {
+// RecordMCPToolCall omits an empty mcpServerID; each URL fronts one server, so series stay bounded.
+func (m *Metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL string, mcpServerID string, toolName string) {
 	if m == nil || m.mcpToolCallCounter == nil {
 		return
 	}
@@ -349,6 +350,9 @@ func (m *Metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL st
 		attr.McpURL(mcpURL),
 		attr.ToolName(toolName),
 		attr.OrganizationID(orgID),
+	}
+	if mcpServerID != "" {
+		kv = append(kv, attr.McpServerID(mcpServerID))
 	}
 	m.mcpToolCallCounter.Add(ctx, 1, metric.WithAttributes(kv...))
 }
@@ -492,8 +496,8 @@ func (m *Metrics) RecordMCPRequestValidationRejected(ctx context.Context, reason
 // JSON-RPC input, and unclamped it would let a client mint unbounded series
 // against a histogram that already carries a per-server URL dimension. The
 // histogram count by URL and network surface shows public/private traffic per
-// endpoint without another per-server counter.
-func (m *Metrics) RecordMCPRequestDuration(ctx context.Context, mcpMethod string, mcpURL string, duration time.Duration) {
+// endpoint without another per-server counter. Empty mcpServerID is omitted.
+func (m *Metrics) RecordMCPRequestDuration(ctx context.Context, mcpMethod string, mcpURL string, mcpServerID string, duration time.Duration) {
 	if m == nil || m.mcpRequestDuration == nil {
 		return
 	}
@@ -502,6 +506,9 @@ func (m *Metrics) RecordMCPRequestDuration(ctx context.Context, mcpMethod string
 		attr.McpMethod(mcprequests.ClampMethod(mcpMethod)),
 		attr.McpURL(mcpURL),
 		attr.NetworkSurface(NetworkSurfaceFromContext(ctx)),
+	}
+	if mcpServerID != "" {
+		kv = append(kv, attr.McpServerID(mcpServerID))
 	}
 
 	m.mcpRequestDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(kv...))
