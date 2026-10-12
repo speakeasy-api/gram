@@ -444,9 +444,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		// with write access to it, not for the assistant.
 		createProjectToolName,
 		renameProjectToolName,
-		// Widget writes are audited under a user and a widget is owned by its
-		// creator; a managed assistant has no user identity to act as, so the
-		// widget tools serve external users only.
+		// Widget writes are audited under a user; an assistant has no user identity.
 		listWidgetsToolName,
 		getWidgetToolName,
 		saveWidgetToolName,

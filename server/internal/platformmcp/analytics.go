@@ -408,10 +408,9 @@ func (s *AnalyticsService) authorize(ctx context.Context, principal Principal, p
 	return project, nil
 }
 
-// exploreEnabled evaluates the Explore flag, which gates the analytics and
-// widget tools, for one project. Disabled and missing read as off; an
-// indeterminate evaluation or a missing organization slug is unavailable.
-// Either way the tools fail closed.
+// exploreEnabled evaluates the Explore flag for one project. Disabled and
+// missing read as off; indeterminate or a missing slug is unavailable, so the
+// tools fail closed either way.
 func exploreEnabled(ctx context.Context, flags feature.Provider, organizationID, organizationSlug, projectSlug string) (bool, error) {
 	if organizationSlug == "" {
 		return false, fmt.Errorf("%w: organization slug is unavailable", ErrUnavailable)

@@ -21,14 +21,12 @@ const (
 	widgetAccessNote = "Any member of the project can create and duplicate widgets; only a widget's creator, or someone with write access to the project, can update or delete it, and anyone else is refused as owner_or_write_required. Requires Explore to be switched on for the organization. External users only."
 )
 
-// registerWidgetTools registers the five widget tools. Without a live service
-// each keeps its name, schema and metadata and refuses readably, so the
-// catalogue does not change shape as a deployment composes the service.
+// registerWidgetTools registers the widget tools. Without a service each still
+// registers and refuses, so the catalogue keeps its shape.
 func registerWidgetTools(reg *Registrar, service *WidgetService) {
-	// External only: every write is audited under a user, and a managed
-	// assistant has no user identity to act as. Every tool is discovered and
-	// admitted on project read, as the widgets service admits every member:
-	// its own creator-or-write rule decides who may update or delete a widget.
+	// External only: writes are audited under a user, which an assistant lacks.
+	// Admitted on project read; the widgets service's creator-or-write rule
+	// decides who may update or delete.
 	meta := ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryProjectRead}
 
 	list := &mcp.Tool{

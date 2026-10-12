@@ -26,30 +26,22 @@ import (
 )
 
 const (
-	// widgetsFeature names the capability in refusals.
 	widgetsFeature = "widgets"
 
-	// newWidgetVersion is the version a create preview returns and its
-	// confirmation names: a widget that does not exist yet has no updated_at.
+	// newWidgetVersion stands in for a create's version: a new widget has no updated_at.
 	newWidgetVersion = "new"
 
-	// maxWidgetProposalBytes bounds the query and visualization a caller can
-	// send, and with them the preview token's hashing work. A real widget is
-	// a few hundred bytes.
-	maxWidgetProposalBytes = 64 << 10 // 64 KiB
+	// maxWidgetProposalBytes bounds what the preview token hashes; a real widget is a few hundred bytes.
+	maxWidgetProposalBytes = 64 << 10
 
-	// maxListedWidgets bounds list_widgets. A project holds far fewer widgets
-	// than this; past it the result says it was cut short.
+	// maxListedWidgets bounds list_widgets; past it the result is marked truncated.
 	maxListedWidgets = 200
 )
 
-// widgetOwnerOrWriteRequired is the refusal when the widgets service's own
-// rule turns a change away: only a widget's creator, or someone with project
-// write access, may update or delete it.
+// widgetOwnerOrWriteRequired refuses a change by anyone but the widget's creator or a project writer.
 const widgetOwnerOrWriteRequired = "owner_or_write_required"
 
-// widgetOperation is the write a widget tool performs. It also names the
-// operation its receipts are stored under.
+// widgetOperation also names the operation its receipts are stored under.
 type widgetOperation string
 
 const (
@@ -63,14 +55,9 @@ const (
 type widgetSnapshotScope string
 
 const (
-	// widgetSnapshotPreview is a proposal nothing has written yet.
-	widgetSnapshotPreview widgetSnapshotScope = "preview"
-	// widgetSnapshotCurrent is a fresh read taken after the commit.
-	widgetSnapshotCurrent widgetSnapshotScope = "current"
-	// widgetSnapshotDeleted is a fresh read that found the widget gone.
-	widgetSnapshotDeleted widgetSnapshotScope = "deleted"
-	// widgetSnapshotVerificationUnavailable is a committed write whose fresh
-	// read failed.
+	widgetSnapshotPreview                 widgetSnapshotScope = "preview"
+	widgetSnapshotCurrent                 widgetSnapshotScope = "current"
+	widgetSnapshotDeleted                 widgetSnapshotScope = "deleted"
 	widgetSnapshotVerificationUnavailable widgetSnapshotScope = "verification_unavailable"
 )
 
@@ -104,9 +91,8 @@ type widgetManagement interface {
 }
 
 // WidgetService lets an external user read and manage a project's Explore
-// widgets. It checks the exact project and the Explore flag, then calls the
-// widgets service, whose authorization, validation and audit stay the single
-// source of truth. Writes run inside a Platform MCP receipt transaction.
+// widgets through the widgets service, which stays the source of truth for
+// authorization, validation and audit.
 type WidgetService struct {
 	logger        *slog.Logger
 	widgets       widgetManagement
@@ -151,31 +137,25 @@ func (r *PostgresReader) WithWidgets(service *WidgetService) *PostgresReader {
 	return r
 }
 
-// widgetDashboardRef is a dashboard a widget is placed on.
 type widgetDashboardRef struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
 
-// widgetSummary is a widget as list_widgets shows it.
 type widgetSummary struct {
-	ID          string  `json:"id"`
-	Name        string  `json:"name"`
-	Description *string `json:"description,omitempty"`
-	Dataset     string  `json:"dataset"`
-	// ChartType is the visualization's type, when it names one.
-	ChartType string `json:"chart_type,omitempty"`
-	// CreatedByUserID is who saved the widget, when known.
+	ID              string  `json:"id"`
+	Name            string  `json:"name"`
+	Description     *string `json:"description,omitempty"`
+	Dataset         string  `json:"dataset"`
+	ChartType       string  `json:"chart_type,omitempty"`
 	CreatedByUserID *string `json:"created_by_user_id,omitempty"`
 	UpdatedAt       string  `json:"updated_at"`
 	// Version is what a write to this widget names as expected_version.
-	Version string `json:"version"`
-	// InvalidReason is present when the widget no longer works.
+	Version       string               `json:"version"`
 	InvalidReason *string              `json:"invalid_reason,omitempty"`
 	Dashboards    []widgetDashboardRef `json:"dashboards"`
 }
 
-// widgetDefinition is a widget's full definition.
 type widgetDefinition struct {
 	ID              string               `json:"id,omitempty"`
 	Name            string               `json:"name"`
@@ -196,10 +176,9 @@ type listWidgetsInput struct {
 }
 
 type listWidgetsOutput struct {
-	Project AnalyticsProject `json:"project"`
-	Widgets []widgetSummary  `json:"widgets"`
-	// Truncated says the project holds more widgets than were returned.
-	Truncated bool `json:"truncated"`
+	Project   AnalyticsProject `json:"project"`
+	Widgets   []widgetSummary  `json:"widgets"`
+	Truncated bool             `json:"truncated"`
 }
 
 type getWidgetInput struct {
@@ -228,7 +207,6 @@ type saveWidgetInput struct {
 	IdempotencyKey  string         `json:"idempotency_key,omitempty" jsonschema:"required to confirm; reuse it only to retry this exact confirmed request"`
 }
 
-// widgetTargetInput names one existing widget to duplicate or delete.
 type widgetTargetInput struct {
 	ProjectID       string `json:"project_id" jsonschema:"exact project UUID, as list_projects returns it"`
 	WidgetID        string `json:"widget_id" jsonschema:"exact widget UUID from list_widgets"`
@@ -238,20 +216,15 @@ type widgetTargetInput struct {
 	IdempotencyKey  string `json:"idempotency_key,omitempty" jsonschema:"required to confirm; reuse it only to retry this exact confirmed request"`
 }
 
-// widgetWriteOutput is a preview or a committed write.
 type widgetWriteOutput struct {
-	Project AnalyticsProject `json:"project"`
-	// Operation is create_widget, update_widget, duplicate_widget or
-	// delete_widget.
-	Operation widgetOperation `json:"operation"`
-	Preview   bool            `json:"preview"`
+	Project   AnalyticsProject `json:"project"`
+	Operation widgetOperation  `json:"operation"`
+	Preview   bool             `json:"preview"`
 	// Version is what a preview's confirmation names as expected_version, or
 	// the written widget's new version after a commit.
 	Version      string `json:"version,omitempty"`
 	PreviewToken string `json:"preview_token,omitempty"`
-	// Widget is the proposed widget in a save preview, the widget the call
-	// acts on in a duplicate or delete preview, and a fresh read after a
-	// committed save or duplicate.
+	// Widget is the proposal or target in a preview, and a fresh read after a commit.
 	Widget *widgetDefinition `json:"widget,omitempty"`
 	// Current is the widget as it stands, in an update preview.
 	Current *widgetDefinition `json:"current,omitempty"`
@@ -260,9 +233,7 @@ type widgetWriteOutput struct {
 	Dashboards []widgetDashboardRef `json:"dashboards"`
 	ReceiptID  string               `json:"receipt_id,omitempty"`
 	Replayed   bool                 `json:"replayed"`
-	// SnapshotScope is preview, current (a fresh read after the commit),
-	// deleted (a fresh read found the widget gone), or verification_unavailable
-	// (the write committed but the fresh read failed).
+	// SnapshotScope verification_unavailable means the write committed but the fresh read failed.
 	SnapshotScope widgetSnapshotScope `json:"snapshot_scope"`
 }
 
@@ -316,9 +287,8 @@ func (s *WidgetService) Save(ctx context.Context, principal Principal, input sav
 	return output, s.boundaryError(ctx, saveWidgetToolName, err)
 }
 
-// widgetTokenProposal is what a preview token binds besides the actor,
-// project, operation and version: the target widget and, for a save, the
-// whole proposed widget.
+// widgetTokenProposal is what a preview token binds besides actor, project,
+// operation and version.
 type widgetTokenProposal struct {
 	WidgetID string         `json:"widget_id"`
 	Widget   *widgets.Input `json:"widget,omitempty"`
@@ -386,8 +356,7 @@ func (s *WidgetService) Duplicate(ctx context.Context, principal Principal, inpu
 	return output, s.boundaryError(ctx, duplicateWidgetToolName, err)
 }
 
-// Delete previews or commits deleting a widget, which takes it off every
-// dashboard it is on.
+// Delete previews or commits deleting a widget, taking it off every dashboard.
 func (s *WidgetService) Delete(ctx context.Context, principal Principal, input widgetTargetInput) (widgetWriteOutput, error) {
 	output, err := s.target(ctx, principal, operationDeleteWidget, input, func(ctx context.Context, tx pgx.Tx) (widgetReceipt, error) {
 		removed, err := s.widgets.DeleteInTx(ctx, tx, input.WidgetID, input.ExpectedVersion)
@@ -399,8 +368,7 @@ func (s *WidgetService) Delete(ctx context.Context, principal Principal, input w
 	return output, s.boundaryError(ctx, deleteWidgetToolName, err)
 }
 
-// target previews or commits a write to one existing widget: a duplicate or
-// a delete. The preview shows the widget as it stands and its version.
+// target previews or commits a duplicate or delete of one existing widget.
 func (s *WidgetService) target(ctx context.Context, principal Principal, operation widgetOperation, input widgetTargetInput, mutate func(context.Context, pgx.Tx) (widgetReceipt, error)) (widgetWriteOutput, error) {
 	if err := validateWidgetID(input.WidgetID); err != nil {
 		return widgetWriteOutput{}, err
@@ -440,8 +408,7 @@ func (s *WidgetService) target(ctx context.Context, principal Principal, operati
 	return s.finish(ctx, out, receipt)
 }
 
-// finish reports a committed or replayed write from a fresh read of the
-// widget it wrote. A delete reports the dashboards from its receipt and is
+// finish reports a committed or replayed write from a fresh read; a delete is
 // verified by the widget reading as gone.
 func (s *WidgetService) finish(ctx context.Context, out widgetWriteOutput, receipt OperationReceipt) (widgetWriteOutput, error) {
 	stored, err := decodeWidgetReceipt(receipt.ResultPayload)
@@ -471,13 +438,9 @@ func (s *WidgetService) finish(ctx context.Context, out widgetWriteOutput, recei
 	return out, nil
 }
 
-// scope admits a caller to one exact project: project:read, checked before
-// any row is looked up so a denied caller cannot probe what exists; then the
-// Explore flag. Membership is all any widget tool needs here: whether the
-// caller may change a given widget — its creator, or anyone with
-// project:write — is the widgets service's rule, applied when it is read for
-// a preview and again under the row lock. It returns a context whose auth
-// names that project, which is what the widgets service authorizes against.
+// scope admits a caller to one exact project. project:read is checked before
+// any row is looked up, so a denied caller cannot probe what exists; who may
+// change a given widget is left to the widgets service's creator-or-write rule.
 func (s *WidgetService) scope(ctx context.Context, principal Principal, projectID string) (context.Context, ResolvedProject, error) {
 	var project ResolvedProject
 	if !s.valid() {
@@ -506,8 +469,7 @@ func (s *WidgetService) scope(ctx context.Context, principal Principal, projectI
 		return ctx, project, ErrForbidden
 	}
 
-	// The Platform MCP authenticator puts the slug on the auth context; the
-	// lookup covers a context that arrived without one.
+	// The authenticator usually sets the slug; look it up when it did not.
 	organizationSlug := auth.OrganizationSlug
 	if organizationSlug == "" {
 		organizationSlug, err = s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
@@ -529,7 +491,6 @@ func (s *WidgetService) scope(ctx context.Context, principal Principal, projectI
 	return contextvalues.SetAuthContext(ctx, &scoped), project, nil
 }
 
-// confirmation is what a confirmed write carries back from its preview.
 type confirmation struct {
 	Version string
 	Token   string
@@ -622,10 +583,8 @@ func decodeWidgetReceipt(data []byte) (widgetReceipt, error) {
 	return value, nil
 }
 
-// boundaryError is the last step before an error reaches the caller. Named
-// refusals pass through; an error from the widgets service is mapped by its
-// code; anything else is logged with its cause and replaced by the generic
-// unavailable refusal, so no SQL or driver text reaches the caller.
+// boundaryError maps an error to a caller-safe refusal; anything unrecognized is
+// logged and replaced, so no SQL or driver text reaches the caller.
 func (s *WidgetService) boundaryError(ctx context.Context, tool string, err error) error {
 	if err == nil {
 		return nil
@@ -645,8 +604,7 @@ func (s *WidgetService) boundaryError(ctx context.Context, tool string, err erro
 	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
 		switch shareable.Code {
 		case oops.CodeBadRequest, oops.CodeInvalid:
-			// The widgets service's message names what is wrong with the
-			// widget, in the words the dashboard shows.
+			// The service's message names the problem in the dashboard's words.
 			return &widgetToolError{Code: "invalid_request", Field: "", Message: shareable.Error() + ". Correct it from describe_analytics_catalog rather than retrying the same request.", Cause: err}
 		case oops.CodeConflict:
 			if errors.Is(err, widgets.ErrVersionChanged) {
@@ -683,8 +641,7 @@ func validateSaveWidget(input saveWidgetInput) (widgets.Input, error) {
 	if input.Visualization == nil {
 		return widgets.Input{}, widgetInvalid("visualization", "Provide the visualization as an object whose type names the chart.")
 	}
-	// The widgets service validates every field; this only bounds what is
-	// hashed into the preview token before it does.
+	// Only bounds what the preview token hashes; the widgets service validates fields.
 	proposal := widgets.Input{Name: input.Name, Description: input.Description, Dataset: input.Dataset, Query: input.Query, Visualization: input.Visualization}
 	encoded, err := json.Marshal(proposal)
 	if err != nil || len(encoded) > maxWidgetProposalBytes {

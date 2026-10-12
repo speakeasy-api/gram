@@ -67,8 +67,6 @@ func newWidgetToolsFixture(t *testing.T) (context.Context, *widgetToolsFixture) 
 	return widgetCallerContext(t.Context(), principal, project, authz.ScopeProjectRead, authz.ScopeProjectWrite), &widgetToolsFixture{reg: reg, service: service, management: management, db: db, flags: flags, principal: principal, project: project, logs: logs}
 }
 
-// widgetCallerContext is the principal's tool call context, holding the named
-// scopes on the project.
 func widgetCallerContext(ctx context.Context, principal Principal, project ResolvedProject, scopes ...authz.Scope) context.Context {
 	email := principal.UserID + "@example.com"
 	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, Email: &email}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
@@ -87,7 +85,6 @@ func (f *widgetToolsFixture) invoke(t *testing.T, ctx context.Context, tool stri
 	return descriptorByName(t, f.reg, tool).Invoke(ctx, encoded)
 }
 
-// widgetCall invokes a tool that must succeed and returns its typed result.
 func widgetCall[Out any](t *testing.T, f *widgetToolsFixture, ctx context.Context, tool string, arguments any) Out {
 	t.Helper()
 	raw, err := f.invoke(t, ctx, tool, arguments)
@@ -111,8 +108,7 @@ func (f *widgetToolsFixture) scopedContext(t *testing.T, ctx context.Context) co
 	return scoped
 }
 
-// createDirectly saves a widget through the widgets service, as the dashboard
-// would.
+// createDirectly saves a widget as the dashboard would.
 func (f *widgetToolsFixture) createDirectly(t *testing.T, ctx context.Context, name string) widgets.Snapshot {
 	t.Helper()
 	scoped := f.scopedContext(t, ctx)
@@ -152,7 +148,6 @@ func saveArguments(projectID string, name string) map[string]any {
 	return map[string]any{"project_id": projectID, "name": name, "dataset": "sessions", "query": widgetTestQuery(), "visualization": widgetTestChart(), "confirmed": false}
 }
 
-// confirmed turns a preview's arguments into its confirmation.
 func confirmed(arguments map[string]any, preview widgetWriteOutput, key string) map[string]any {
 	out := make(map[string]any, len(arguments)+4)
 	maps.Copy(out, arguments)
@@ -170,8 +165,7 @@ func TestWidgetToolsDeclareTheirContract(t *testing.T) {
 		require.True(t, descriptor.Annotations.ReadOnlyHint, name)
 		require.Equal(t, discoveryProjectRead, descriptor.Meta.DiscoveryScopes, name)
 	}
-	// Writes are discovered on project read too: a member with read access
-	// may create and duplicate widgets, and change the ones they created.
+	// Writes are discovered on project read too; the service decides who may change what.
 	for _, name := range []string{saveWidgetToolName, duplicateWidgetToolName, deleteWidgetToolName} {
 		descriptor := descriptorByName(t, reg, name)
 		require.False(t, descriptor.Annotations.ReadOnlyHint, name)
@@ -392,7 +386,6 @@ func TestSaveWidgetRefusesAStaleVersion(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Renamed in the dashboard", current.Widget.Name)
 
-	// A fresh preview at the current version commits.
 	preview = f.write(t, ctx, saveWidgetToolName, arguments)
 	updated := f.write(t, ctx, saveWidgetToolName, confirmed(arguments, preview, "rename-again"))
 	require.Equal(t, "Renamed by the agent", updated.Widget.Name)
@@ -411,8 +404,7 @@ func TestWidgetWritesRefuseANonCreatorWithoutProjectWrite(t *testing.T) {
 	update["widget_id"] = existing.Widget.ID
 	remove := map[string]any{"project_id": f.project.ID.String(), "widget_id": existing.Widget.ID, "confirmed": false}
 
-	// The previews are refused by the widgets service's creator-or-write rule,
-	// not by project access: the member can read the project.
+	// The member can read the project; the creator-or-write rule refuses the previews.
 	_, err := f.invoke(t, member, listWidgetsToolName, map[string]any{"project_id": f.project.ID.String()})
 	require.NoError(t, err)
 	for tool, arguments := range map[string]map[string]any{saveWidgetToolName: update, deleteWidgetToolName: remove} {
@@ -422,8 +414,7 @@ func TestWidgetWritesRefuseANonCreatorWithoutProjectWrite(t *testing.T) {
 		require.Equal(t, "widget_id", refusal.Field, tool)
 	}
 
-	// A correctly signed confirmation still reaches the service's rule under
-	// the row lock, and is refused there.
+	// A correctly signed confirmation is still refused under the row lock.
 	project := ResolvedProject{ID: f.project.ID, Name: f.project.Name, Slug: f.project.Slug}
 	for tool, request := range map[string]struct {
 		arguments map[string]any
@@ -500,8 +491,7 @@ func TestDeleteWidgetRefusesAStaleVersion(t *testing.T) {
 	require.NoError(t, err, "the widget was not deleted")
 }
 
-// unreadableWidgets writes through the service service but fails every read, as
-// a post-commit verification read can.
+// unreadableWidgets fails every read, as a post-commit verification read can.
 type unreadableWidgets struct{ widgetManagement }
 
 func (unreadableWidgets) Read(context.Context, string) (widgets.Snapshot, error) {
@@ -542,7 +532,6 @@ func TestDuplicateWidgetCopiesIntoTheCaller(t *testing.T) {
 	require.Equal(t, widgetSnapshotCurrent, copied.SnapshotScope)
 }
 
-// failingWidgets fails every read with an internal error.
 type failingWidgets struct{ widgetManagement }
 
 func (failingWidgets) ReadAll(context.Context) ([]widgets.Snapshot, error) {

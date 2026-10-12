@@ -31,19 +31,10 @@ var ErrVersionChanged = errors.New("widget changed since it was read")
 
 // Input is a widget as a caller wants it saved.
 type Input struct {
-	// Name is the display name, 1 to 200 characters.
-	Name string `json:"name"`
-
-	// Description says what the widget is for, at most 2000 characters.
-	Description *string `json:"description"`
-
-	// Dataset is the catalog dataset the widget asks.
-	Dataset string `json:"dataset"`
-
-	// Query is the question, validated against the catalog.
-	Query map[string]any `json:"query"`
-
-	// Visualization is how the question is drawn, checked against the query.
+	Name          string         `json:"name"`
+	Description   *string        `json:"description"`
+	Dataset       string         `json:"dataset"`
+	Query         map[string]any `json:"query"`
 	Visualization map[string]any `json:"visualization"`
 }
 
@@ -91,10 +82,9 @@ func (s *Service) Read(ctx context.Context, id string) (Snapshot, error) {
 	return Snapshot{Widget: s.view(ctx, row, s.now(), dashboards), Version: Version(row)}, nil
 }
 
-// ReadForChange reads a widget the caller is about to update or delete, and
-// refuses, as UpdateInTx and DeleteInTx would, a caller who may not change
-// it: anyone but its creator without project write access. A preview uses
-// it so a change that would be refused is refused before it is shown.
+// ReadForChange reads a widget and refuses, as UpdateInTx and DeleteInTx
+// would, a caller who may not change it, so a preview never shows a change
+// that would be refused.
 func (s *Service) ReadForChange(ctx context.Context, id string) (Snapshot, error) {
 	snapshot, err := s.Read(ctx, id)
 	if err != nil {
@@ -213,7 +203,6 @@ func (s *Service) DuplicateInTx(ctx context.Context, tx pgx.Tx, id string, expec
 	}, &sourceURN)
 }
 
-// insert stores a new widget and audits it in the caller's transaction.
 func (s *Service) insert(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext, params repo.CreateWidgetParams, duplicatedFrom *urn.Widget) (Snapshot, error) {
 	if authCtx.UserID == "" {
 		return Snapshot{}, oops.E(oops.CodeUnauthorized, nil, "saving a widget requires a user identity")
@@ -231,11 +220,9 @@ func (s *Service) insert(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.
 	return Snapshot{Widget: view, Version: Version(row)}, nil
 }
 
-// UpdateInTx replaces a widget's name, description, dataset, query and
-// visualization inside the caller's transaction. Its creator can always
-// update it; updating someone else's needs project write access. A non-empty
-// expectedVersion refuses the update when the widget changed since it was
-// read.
+// UpdateInTx replaces a widget inside the caller's transaction; only its
+// creator or a project writer may. A non-empty expectedVersion refuses the
+// update when the widget changed since it was read.
 func (s *Service) UpdateInTx(ctx context.Context, tx pgx.Tx, id string, input Input, expectedVersion string) (Snapshot, error) {
 	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
 	if err != nil {
@@ -276,7 +263,6 @@ func (s *Service) UpdateInTx(ctx context.Context, tx pgx.Tx, id string, input In
 		return Snapshot{}, oops.E(oops.CodeUnexpected, err, "update widget").LogError(ctx, s.logger)
 	}
 
-	// The edit reaches every dashboard the widget is on; the view says which.
 	dashboards, err := s.usage(ctx, queries, *authCtx.ProjectID, widgetID)
 	if err != nil {
 		return Snapshot{}, err
@@ -288,11 +274,10 @@ func (s *Service) UpdateInTx(ctx context.Context, tx pgx.Tx, id string, input In
 	return Snapshot{Widget: view, Version: Version(row)}, nil
 }
 
-// DeleteInTx soft-deletes a widget inside the caller's transaction and
-// returns the dashboards it was removed from. Its creator can always delete
-// it; deleting someone else's needs project write access. A non-empty
-// expectedVersion refuses the delete when the widget changed since it was
-// read.
+// DeleteInTx soft-deletes a widget inside the caller's transaction and returns
+// the dashboards it was removed from; only its creator or a project writer
+// may. A non-empty expectedVersion refuses the delete when the widget changed
+// since it was read.
 func (s *Service) DeleteInTx(ctx context.Context, tx pgx.Tx, id string, expectedVersion string) ([]*gen.WidgetDashboard, error) {
 	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
 	if err != nil {
@@ -312,9 +297,8 @@ func (s *Service) DeleteInTx(ctx context.Context, tx pgx.Tx, id string, expected
 		return nil, err
 	}
 
-	// The widget comes off every dashboard it was on; the dashboards stay,
-	// and each is touched and audited as a layout change, so its history
-	// says why a card went.
+	// Each affected dashboard is touched and audited as a layout change, so its
+	// history says why a card went.
 	affected, err := queries.ListDashboardsForWidget(ctx, repo.ListDashboardsForWidgetParams{ProjectID: *authCtx.ProjectID, WidgetID: widgetID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list widget's dashboards").LogError(ctx, s.logger)
@@ -370,11 +354,9 @@ func (s *Service) DeleteInTx(ctx context.Context, tx pgx.Tx, id string, expected
 	return dashboardsOf(affected), nil
 }
 
-// checkInput validates a widget about to be saved, its name and description
-// as well as its query and visualization, and returns the query and
-// visualization encoded for storage. The RPC enforces the same name and
-// description limits as it decodes; callers that bring their own input rely
-// on this.
+// checkInput validates a widget and encodes its query and visualization for
+// storage. It repeats the RPC's name and description limits for callers that
+// bring their own input.
 func (s *Service) checkInput(ctx context.Context, input Input) ([]byte, []byte, error) {
 	if length := utf8.RuneCountInString(input.Name); length == 0 || length > maxNameLength {
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "invalid_name: a widget's name must be 1 to %d characters", maxNameLength)
@@ -419,8 +401,6 @@ func (s *Service) sourceWidget(ctx context.Context, queries *repo.Queries, proje
 	return row, nil
 }
 
-// inTx runs a write in its own transaction, committing it when the write
-// succeeds.
 func inTx[T any](ctx context.Context, s *Service, label string, write func(pgx.Tx) (T, error)) (T, error) {
 	var zero T
 	dbtx, err := s.db.Begin(ctx)
