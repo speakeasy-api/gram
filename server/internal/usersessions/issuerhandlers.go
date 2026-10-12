@@ -465,7 +465,7 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 // the Platform MCP admission tools build the same audit snapshots this service
 // writes, rather than a second, drifting projection of the same row.
 func UserSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer {
-	dur := time.Duration(row.SessionDuration.Microseconds) * time.Microsecond
+	dur, _ := conv.PGIntervalToDuration(row.SessionDuration)
 	// The EFFECTIVE mode, never the raw column: an issuer that has never had
 	// one set stores NULL and reports the resolved default. Clients of this
 	// API — including the audit snapshots built from this view — should never
