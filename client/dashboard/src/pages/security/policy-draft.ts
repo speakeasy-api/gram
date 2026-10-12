@@ -12,6 +12,18 @@ export type PolicyDraftMCPScope = {
   matchedNames: string[];
 };
 
+/** Where a draft came from, so the wizard can say so and send the
+ * administrator back to that starting point with their description intact. */
+export type PolicyDraftOrigin =
+  | { source: "preset" }
+  | {
+      source: "describe";
+      description: string;
+      suggestion: SuggestRiskPolicyResult;
+      /** A use case picked over the suggestion on the review screen. */
+      overridePresetId: string | null;
+    };
+
 /** A prefilled starting point for the create wizard, carried in router state
  * from the intent screen. Mirrors the server's suggestion result so a preset
  * and a described draft feed the editors the same way. */
@@ -26,6 +38,9 @@ export type PolicyDraft = {
   prompt: string;
   userMessage: string;
   mcpScope?: PolicyDraftMCPScope;
+  /** The policy detects nothing until approved email domains are set. */
+  requiresApprovedEmailDomains?: boolean;
+  origin?: PolicyDraftOrigin;
 };
 
 const ACTIONS: ReadonlySet<string> = new Set([
@@ -50,6 +65,8 @@ export function draftFromPreset(preset: RiskPreset): PolicyDraft {
     presidioEntities: [...preset.presidioEntities],
     prompt: preset.prompt,
     userMessage: preset.userMessage,
+    requiresApprovedEmailDomains: preset.requiresApprovedEmailDomains,
+    origin: { source: "preset" },
   };
 }
 
@@ -150,8 +167,144 @@ export function readPolicyDraft(state: unknown): PolicyDraft | null {
       : [],
     prompt: typeof draft.prompt === "string" ? draft.prompt : "",
     userMessage: typeof draft.userMessage === "string" ? draft.userMessage : "",
-    ...(readDraftMCPScope(draft.mcpScope) ?? {}),
+    ...readDraftMCPScope(draft.mcpScope),
+    ...(draft.requiresApprovedEmailDomains === true
+      ? { requiresApprovedEmailDomains: true }
+      : {}),
+    ...readDraftOrigin(draft.origin),
   };
+}
+
+function readDraftOrigin(value: unknown): { origin: PolicyDraftOrigin } | null {
+  if (!value || typeof value !== "object") return null;
+  const origin = value as Partial<Record<string, unknown>>;
+  if (origin.source === "preset") return { origin: { source: "preset" } };
+  if (origin.source !== "describe" || typeof origin.description !== "string") {
+    return null;
+  }
+  const suggestion = readSuggestion(origin.suggestion);
+  if (!suggestion) return null;
+  return {
+    origin: {
+      source: "describe",
+      description: origin.description,
+      suggestion,
+      overridePresetId:
+        typeof origin.overridePresetId === "string"
+          ? origin.overridePresetId
+          : null,
+    },
+  };
+}
+
+/** A suggestion carried through router state, checked for the fields the
+ * review screen reads. */
+export function readSuggestion(value: unknown): SuggestRiskPolicyResult | null {
+  if (!value || typeof value !== "object") return null;
+  const s = value as Partial<SuggestRiskPolicyResult>;
+  if (
+    typeof s.presetId !== "string" ||
+    (s.policyType !== "standard" && s.policyType !== "prompt_based") ||
+    typeof s.name !== "string" ||
+    typeof s.action !== "string" ||
+    typeof s.score !== "number" ||
+    typeof s.rationale !== "string" ||
+    typeof s.confidence !== "number" ||
+    !Array.isArray(s.sources) ||
+    !Array.isArray(s.presidioEntities) ||
+    !Array.isArray(s.alternatives)
+  ) {
+    return null;
+  }
+  return {
+    presetId: s.presetId,
+    policyType: s.policyType,
+    name: s.name,
+    action: s.action,
+    score: s.score,
+    sources: s.sources.filter((v): v is string => typeof v === "string"),
+    presidioEntities: s.presidioEntities.filter(
+      (v): v is string => typeof v === "string",
+    ),
+    prompt: typeof s.prompt === "string" ? s.prompt : "",
+    userMessage: typeof s.userMessage === "string" ? s.userMessage : "",
+    rationale: s.rationale,
+    confidence: s.confidence,
+    alternatives: s.alternatives.filter(
+      (alt): alt is SuggestRiskPolicyResult["alternatives"][number] =>
+        !!alt &&
+        typeof alt === "object" &&
+        typeof alt.presetId === "string" &&
+        typeof alt.label === "string" &&
+        typeof alt.confidence === "number",
+    ),
+  };
+}
+
+/** Router state that reopens the intent screen where the administrator left
+ * it: the describe box filled in, and the review screen if they had one. */
+export type PolicyStartRestore = {
+  description: string;
+  review: {
+    suggestion: SuggestRiskPolicyResult;
+    overridePresetId: string | null;
+  } | null;
+};
+
+export function restoreFromDraft(draft: PolicyDraft): PolicyStartRestore {
+  if (draft.origin?.source !== "describe") {
+    return { description: "", review: null };
+  }
+  return {
+    description: draft.origin.description,
+    review: {
+      suggestion: draft.origin.suggestion,
+      overridePresetId: draft.origin.overridePresetId,
+    },
+  };
+}
+
+export function readPolicyStartRestore(
+  state: unknown,
+): PolicyStartRestore | null {
+  if (!state || typeof state !== "object") return null;
+  const restore = (state as { restore?: unknown }).restore;
+  if (!restore || typeof restore !== "object") return null;
+  const r = restore as Partial<Record<string, unknown>>;
+  const description = typeof r.description === "string" ? r.description : "";
+  const review =
+    r.review && typeof r.review === "object"
+      ? (r.review as Partial<Record<string, unknown>>)
+      : null;
+  const suggestion = review ? readSuggestion(review.suggestion) : null;
+  return {
+    description,
+    review: suggestion
+      ? {
+          suggestion,
+          overridePresetId:
+            typeof review?.overridePresetId === "string"
+              ? review.overridePresetId
+              : null,
+        }
+      : null,
+  };
+}
+
+export function actionBadgeVariant(
+  action: string,
+): "neutral" | "warning" | "destructive" {
+  if (action === "flag") return "neutral";
+  if (action === "warn") return "warning";
+  return "destructive";
+}
+
+const HOSTNAME =
+  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
+
+/** Entries of a comma- or space-separated domain list that are not hostnames. */
+export function invalidEmailDomains(domains: readonly string[]): string[] {
+  return domains.filter((domain) => !HOSTNAME.test(domain));
 }
 
 function readDraftMCPScope(

@@ -1,3 +1,4 @@
+import type { SuggestRiskPolicyResult } from "@gram/client/models/components/suggestriskpolicyresult.js";
 import { describe, expect, it } from "vitest";
 import {
   draftFromPreset,
@@ -7,6 +8,10 @@ import {
   matchMCPServers,
   readPolicyDraft,
   sessionOnlyReason,
+  invalidEmailDomains,
+  readPolicyStartRestore,
+  readSuggestion,
+  restoreFromDraft,
 } from "./policy-draft";
 
 const secretsPreset = {
@@ -36,6 +41,8 @@ describe("policy drafts", () => {
       presidioEntities: [],
       prompt: "",
       userMessage: "%{match} looks like a credential.",
+      requiresApprovedEmailDomains: false,
+      origin: { source: "preset" },
     });
     expect(draftKind(draft)).toBe("standard");
   });
@@ -144,5 +151,76 @@ describe("policy draft MCP scope", () => {
     expect(
       readPolicyDraft({ draft: draftFromPreset(secretsPreset) })?.mcpScope,
     ).toBeUndefined();
+  });
+});
+
+const refundSuggestion: SuggestRiskPolicyResult = {
+  presetId: "",
+  policyType: "prompt_based" as const,
+  name: "Refund Promises",
+  action: "flag",
+  score: 5,
+  sources: [],
+  presidioEntities: [],
+  prompt: "Flag promises of refunds.",
+  userMessage: "",
+  rationale: "No preset covers this.",
+  confidence: 0,
+  alternatives: [
+    { presetId: "secrets_and_credentials", label: "Secrets", confidence: 0.5 },
+  ],
+};
+
+describe("draft origin", () => {
+  it("marks a preset draft as started from a use case", () => {
+    expect(draftFromPreset(secretsPreset).origin).toEqual({ source: "preset" });
+  });
+
+  it("carries a described draft's origin through router state", () => {
+    const draft = {
+      ...draftFromSuggestion(refundSuggestion),
+      origin: {
+        source: "describe" as const,
+        description: "never promise refunds",
+        suggestion: refundSuggestion,
+        overridePresetId: null,
+      },
+    };
+    expect(readPolicyDraft({ draft })?.origin).toEqual(draft.origin);
+  });
+
+  it("drops an origin whose suggestion is malformed", () => {
+    const draft = {
+      ...draftFromSuggestion(refundSuggestion),
+      origin: { source: "describe", description: "x", suggestion: {} },
+    };
+    expect(readPolicyDraft({ draft })?.origin).toBeUndefined();
+    expect(readSuggestion({ presetId: "" })).toBeNull();
+  });
+
+  it("restores the review screen only for a described draft", () => {
+    expect(restoreFromDraft(draftFromPreset(secretsPreset))).toEqual({
+      description: "",
+      review: null,
+    });
+    const restore = restoreFromDraft({
+      ...draftFromSuggestion(refundSuggestion),
+      origin: {
+        source: "describe",
+        description: "never promise refunds",
+        suggestion: refundSuggestion,
+        overridePresetId: "secrets_and_credentials",
+      },
+    });
+    expect(readPolicyStartRestore({ restore })).toEqual(restore);
+    expect(readPolicyStartRestore(null)).toBeNull();
+  });
+});
+
+describe("invalidEmailDomains", () => {
+  it("lists entries that are not hostnames", () => {
+    expect(
+      invalidEmailDomains(["acme.com", "corp.acme.co.uk", "acme..com", "acme"]),
+    ).toEqual(["acme..com", "acme"]);
   });
 });

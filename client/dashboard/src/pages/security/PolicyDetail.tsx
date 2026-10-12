@@ -26,8 +26,6 @@ import {
 import { Switch } from "@/components/ui/Switch";
 import { TextArea } from "@/components/ui/Textarea";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
-import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { Text } from "@/components/ui/Text";
 import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
@@ -64,9 +62,7 @@ import {
   Code,
   Info,
   Loader2,
-  MessagesSquare,
   Pencil,
-  Server,
   Shield,
   Sparkles,
   ThumbsDown,
@@ -83,20 +79,17 @@ import {
   useRef,
   useState,
 } from "react";
-import { useLocation, useNavigate, useParams } from "react-router";
+import { useLocation, useParams } from "react-router";
 import { toast } from "sonner";
 import { useQueryState } from "nuqs";
-import { useTelemetry } from "@/contexts/Telemetry";
-import { useRiskPresets } from "@gram/client/react-query/riskPresets.js";
-import { useRiskSuggestPolicyMutation } from "@gram/client/react-query/riskSuggestPolicy.js";
-import type { RiskPreset } from "@gram/client/models/components/riskpreset.js";
 import {
-  draftFromPreset,
-  draftFromSuggestion,
-  draftKind,
+  ApprovedDomainsRequirement,
+  PolicyDraftProvenance,
+  PolicyStartChooser,
+} from "./PolicyStart";
+import {
+  invalidEmailDomains,
   draftMCPScopeValue,
-  matchMCPServers,
-  sessionOnlyReason,
   type PolicyDraft,
   readPolicyDraft,
 } from "./policy-draft";
@@ -250,6 +243,16 @@ const STANDARD_STEPS: PolicyStep[] = [
     description: "Confirm the configuration before creating the policy.",
   },
 ];
+
+// Steps a draft from the intent screen fills in, tagged in the stepper.
+const PROMPT_PREFILLED_STEPS: ReadonlySet<string> = new Set([
+  "guardrail",
+  "action",
+]);
+const STANDARD_PREFILLED_STEPS: ReadonlySet<string> = new Set([
+  "detect",
+  "action",
+]);
 
 const POLICY_ACTION_LABEL: Record<PolicyAction, string> = {
   flag: "Flag",
@@ -411,378 +414,6 @@ function PolicyNewContent(): JSX.Element {
   return <PolicyStartChooser />;
 }
 
-const startCardClass =
-  "hover:bg-muted/40 border p-5 text-left transition-colors disabled:opacity-60";
-
-const PRESET_ACTION_LABEL: Record<string, string> = {
-  flag: "Logs for review",
-  warn: "Warns and confirms",
-  block: "Blocks",
-  quarantine: "Quarantines the session",
-};
-
-// Intent screen shown when the create page is opened without a `?kind=` hint.
-// The administrator starts from what they want to protect against, or
-// describes it; either path lands in the wizard with a draft already filled
-// in. The detector/prompt choice stays reachable for anyone who wants to
-// build from scratch.
-function PolicyStartChooser(): JSX.Element {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const telemetry = useTelemetry();
-  const promptPoliciesEnabled =
-    telemetry.isFeatureEnabled("gram-prompt-policies") ?? false;
-  const [, setKind] = useQueryState("kind");
-  const gramProject = useProjectSlugForRequests();
-  const [description, setDescription] = useState("");
-  const { data, isLoading, isError, refetch } = useRiskPresets();
-  const presets = (data?.presets ?? []).filter(
-    (preset) => promptPoliciesEnabled || preset.policyType !== "prompt_based",
-  );
-
-  // Limiting a policy to MCP servers only makes sense where the scope step
-  // offers it and the project has a server to pick.
-  const mcpScopeFlag = useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies);
-  const serversQuery = useMcpServers({ gramProject }, undefined, {
-    throwOnError: false,
-  });
-  const mcpServers =
-    mcpScopeFlag.status === "enabled"
-      ? (serversQuery.data?.mcpServers ?? [])
-      : [];
-  const canScopeToMcp = mcpServers.length > 0;
-  const [pending, setPending] = useState<PendingDraft | null>(null);
-
-  const openDraft = (draft: PolicyDraft) => {
-    void navigate(
-      { pathname: location.pathname, search: `?kind=${draftKind(draft)}` },
-      { state: { draft } },
-    );
-  };
-
-  // A draft that blocks, or whose description names a server, stops here
-  // first: an unscoped policy is enforced in agent sessions and does not stop
-  // a call at an MCP server, which is not what "Blocks" suggests on its own.
-  const chooseDraft = (draft: PolicyDraft, description = "") => {
-    if (draft.policyType === "prompt_based" && !promptPoliciesEnabled) {
-      toast.error(
-        "Prompt-based policies aren't switched on for this project yet. Start from a built-in preset instead.",
-      );
-      return;
-    }
-    if (!canScopeToMcp || sessionOnlyReason(draft.sources)) {
-      openDraft(draft);
-      return;
-    }
-    const matched = matchMCPServers(description, mcpServers).map((server) => ({
-      id: server.id,
-      name: server.name ?? server.slug ?? server.id,
-    }));
-    if (matched.length === 0 && draft.action !== "block") {
-      openDraft(draft);
-      return;
-    }
-    setPending({
-      draft,
-      matched,
-      where: matched.length > 0 ? "servers" : "sessions",
-    });
-  };
-
-  const continuePending = () => {
-    if (!pending) return;
-    openDraft(
-      pending.where === "servers"
-        ? {
-            ...pending.draft,
-            mcpScope: {
-              serverIds: pending.matched.map((server) => server.id),
-              matchedNames: pending.matched.map((server) => server.name),
-            },
-          }
-        : pending.draft,
-    );
-  };
-
-  const suggest = useRiskSuggestPolicyMutation({
-    onSuccess: (result, variables) =>
-      chooseDraft(
-        draftFromSuggestion(result),
-        variables.request.suggestRiskPolicyRequestBody.prompt,
-      ),
-    onError: () =>
-      toast.error(
-        "Couldn't draft a policy from that description. Try again, or start from a preset.",
-      ),
-  });
-  const trimmed = description.trim();
-  const canDescribe = trimmed.length >= 3 && !suggest.isPending;
-  const submitDescription = () => {
-    if (!canDescribe) return;
-    suggest.mutate({
-      request: { suggestRiskPolicyRequestBody: { prompt: trimmed } },
-    });
-  };
-
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <Stack gap={6} className="mx-auto w-full max-w-3xl">
-          <Stack gap={1}>
-            <Heading variant="h3" className="normal-case">
-              What do you want to protect against?
-            </Heading>
-            <Text small muted>
-              Pick a use case or describe the risk in your own words. Either way
-              you land in the wizard with the detectors, action and severity
-              already filled in.
-            </Text>
-          </Stack>
-
-          <Stack gap={2}>
-            <Label htmlFor="policy-describe">Describe it</Label>
-            <TextArea
-              id="policy-describe"
-              value={description}
-              onChange={setDescription}
-              rows={3}
-              placeholder="e.g. Stop agents deleting anything in production, or flag customer card numbers in tool results."
-            />
-            <div className="flex items-center justify-between gap-3">
-              <Text small muted>
-                {canScopeToMcp
-                  ? "Name an MCP server to limit the policy to it. Nothing is created until you save."
-                  : "The draft is yours to review before anything is created."}
-              </Text>
-              <Button
-                type="button"
-                onClick={submitDescription}
-                disabled={!canDescribe}
-              >
-                {suggest.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="h-4 w-4" />
-                )}
-                Draft policy
-              </Button>
-            </div>
-          </Stack>
-
-          <Stack gap={2}>
-            <Text small muted className="uppercase tracking-wide">
-              Or start from a use case
-            </Text>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {isError ? (
-                <div className="flex flex-wrap items-center gap-3 border p-4 sm:col-span-2">
-                  <Text small muted>
-                    The presets could not be loaded.
-                  </Text>
-                  <Button
-                    type="button"
-                    variant="tertiary"
-                    onClick={() => void refetch()}
-                  >
-                    Retry
-                  </Button>
-                </div>
-              ) : isLoading ? (
-                Array.from({ length: 4 }, (_, index) => (
-                  <div
-                    key={index}
-                    className="bg-muted/30 h-32 animate-pulse border"
-                  />
-                ))
-              ) : (
-                presets.map((preset) => (
-                  <PresetStartCard
-                    key={preset.id}
-                    preset={preset}
-                    showWhere={canScopeToMcp}
-                    selected={pending?.draft.presetId === preset.id}
-                    onSelect={() => chooseDraft(draftFromPreset(preset))}
-                  />
-                ))
-              )}
-            </div>
-          </Stack>
-
-          {pending ? (
-            <PendingDraftScope
-              pending={pending}
-              onChange={setPending}
-              onContinue={continuePending}
-              onCancel={() => setPending(null)}
-            />
-          ) : null}
-
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <Text small muted>
-              Start from scratch:
-            </Text>
-            <Button
-              type="button"
-              variant="tertiary"
-              onClick={() => void setKind("standard")}
-            >
-              <Shield className="h-4 w-4" />
-              Built-in detector
-            </Button>
-            {promptPoliciesEnabled ? (
-              <Button
-                type="button"
-                variant="tertiary"
-                onClick={() => void setKind("prompt")}
-              >
-                <Sparkles className="h-4 w-4" />
-                Prompt-based
-              </Button>
-            ) : null}
-          </div>
-        </Stack>
-      </Page.Body>
-    </Page>
-  );
-}
-
-type PendingDraft = {
-  draft: PolicyDraft;
-  /** Servers the description named; empty when a preset was picked. */
-  matched: { id: string; name: string }[];
-  where: "sessions" | "servers";
-};
-
-// Asked before the editor opens, in the scope step's own words, so the choice
-// is recognizable there.
-function PendingDraftScope({
-  pending,
-  onChange,
-  onContinue,
-  onCancel,
-}: {
-  pending: PendingDraft;
-  onChange: (next: PendingDraft) => void;
-  onContinue: () => void;
-  onCancel: () => void;
-}): JSX.Element {
-  const blocks = pending.draft.action === "block";
-  const names = pending.matched.map((server) => server.name).join(", ");
-  const question = blocks ? "Where should it block?" : "Where should it apply?";
-  return (
-    <Stack gap={3} className="border p-4">
-      <Stack gap={1}>
-        <Label>{question}</Label>
-        <Text small muted>
-          {names
-            ? `${pending.draft.name}. Your description names ${names}.`
-            : pending.draft.name}
-        </Text>
-      </Stack>
-      <RadioCardGroup
-        aria-label={question}
-        size="sm"
-        value={pending.where}
-        onValueChange={(where) =>
-          onChange({ ...pending, where: where as PendingDraft["where"] })
-        }
-      >
-        <RadioCard
-          value="sessions"
-          title="Agent sessions"
-          leading={<MessagesSquare className="size-4" />}
-        >
-          {blocks
-            ? "Blocks in agent sessions this project observes. Clients that call an MCP server without one aren't checked."
-            : "Checks agent sessions in this project."}
-        </RadioCard>
-        <RadioCard
-          value="servers"
-          title="Selected MCP servers"
-          leading={<Server className="size-4" />}
-        >
-          {`${blocks ? "Blocks at the gateway before the tool runs, whoever calls. " : ""}Only checks calls through ${names || "the servers you choose"}.`}
-        </RadioCard>
-      </RadioCardGroup>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" onClick={onContinue}>
-          {pending.where === "servers" && pending.matched.length === 0
-            ? "Choose servers"
-            : "Continue"}
-        </Button>
-        <Button type="button" variant="tertiary" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
-    </Stack>
-  );
-}
-
-function PresetStartCard({
-  preset,
-  showWhere,
-  selected,
-  onSelect,
-}: {
-  preset: RiskPreset;
-  /** Say where the preset applies; only useful when MCP scoping is on offer. */
-  showWhere: boolean;
-  selected: boolean;
-  onSelect: () => void;
-}): JSX.Element {
-  const Icon = preset.policyType === "prompt_based" ? Sparkles : Shield;
-  const sessionOnly = sessionOnlyReason(preset.sources);
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={selected}
-      className={cn(startCardClass, selected && "border-primary")}
-    >
-      <Icon className="text-muted-foreground mb-3 h-5 w-5" />
-      <Text className="font-medium">{preset.label}</Text>
-      <Text small muted className="mt-1">
-        {preset.description}
-      </Text>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Badge variant={preset.action === "flag" ? "neutral" : "destructive"}>
-          {PRESET_ACTION_LABEL[preset.action] ?? preset.action}
-        </Badge>
-        <Badge variant="neutral">
-          {preset.policyType === "prompt_based"
-            ? "Judged by the policy model"
-            : "Built-in detectors"}
-        </Badge>
-      </div>
-      {showWhere ? (
-        <div className="text-muted-foreground mt-3 flex items-start gap-1.5 text-sm">
-          <MessagesSquare className="mt-0.5 size-3.5 shrink-0" />
-          {sessionOnly ? (
-            <>
-              <span>Agent sessions only</span>
-              <SimpleTooltip tooltip={sessionOnly}>
-                <Info
-                  aria-label={sessionOnly}
-                  className="mt-0.5 size-3.5 shrink-0"
-                />
-              </SimpleTooltip>
-            </>
-          ) : (
-            <span>
-              {preset.action === "block"
-                ? "Blocks in observed agent sessions. Choose MCP servers to block at the gateway for every caller."
-                : "Agent sessions, or limit it to chosen MCP servers."}
-            </span>
-          )}
-        </div>
-      ) : null}
-    </button>
-  );
-}
-
 // ── Stepper shell (pinned header + left rail + spacious content column) ───────
 
 // Horizontal stepper across the top: a left rail competes with the app's own
@@ -792,10 +423,12 @@ function HorizontalStepper({
   steps,
   current,
   onStep,
+  prefilledStepIds,
 }: {
   steps: PolicyStep[];
   current: number;
   onStep: (index: number) => void;
+  prefilledStepIds?: ReadonlySet<string>;
 }): JSX.Element {
   return (
     <nav aria-label="Progress" className="flex items-center">
@@ -833,6 +466,11 @@ function HorizontalStepper({
               >
                 {step.title}
               </span>
+              {prefilledStepIds?.has(step.id) ? (
+                <span className="border-border bg-card text-muted-foreground hidden border px-1 py-0.5 font-mono text-[10px] leading-none tracking-[0.1em] uppercase sm:inline">
+                  Prefilled
+                </span>
+              ) : null}
             </button>
             {index < steps.length - 1 && (
               <div className="bg-border mx-2 h-px min-w-6 flex-1" />
@@ -846,15 +484,20 @@ function HorizontalStepper({
 
 function StepperShell({
   header,
+  provenance,
   steps,
   current,
   onStep,
+  prefilledStepIds,
   children,
 }: {
   header: React.ReactNode;
+  /** Where a prefilled draft came from, shown between header and stepper. */
+  provenance?: React.ReactNode;
   steps: PolicyStep[];
   current: number;
   onStep: (index: number) => void;
+  prefilledStepIds?: ReadonlySet<string>;
   children: React.ReactNode;
 }): JSX.Element {
   return (
@@ -862,8 +505,14 @@ function StepperShell({
     // standard page width).
     <Stack gap={6} className="w-full">
       {header}
+      {provenance}
       <div className="bg-muted/20 border px-4 py-3">
-        <HorizontalStepper steps={steps} current={current} onStep={onStep} />
+        <HorizontalStepper
+          steps={steps}
+          current={current}
+          onStep={onStep}
+          prefilledStepIds={prefilledStepIds}
+        />
       </div>
       <Stack gap={6}>{children}</Stack>
     </Stack>
@@ -1344,9 +993,11 @@ function PromptPolicyEditor({
   return (
     <StepperShell
       header={header}
+      provenance={draft ? <PolicyDraftProvenance draft={draft} /> : null}
       steps={PROMPT_STEPS}
       current={step}
       onStep={handleStep}
+      prefilledStepIds={draft?.origin ? PROMPT_PREFILLED_STEPS : undefined}
     >
       {step === 0 && (
         <>
@@ -4058,6 +3709,15 @@ export function StandardPolicyEditor({
             : seed?.categories),
       ),
   );
+  // Categories the draft turned on, tagged on the detect step. Recomputed
+  // with `mode`, which resolves after mount.
+  const draftCategories = useMemo(
+    () =>
+      !policy && draft?.origin
+        ? policyToCategories(draft.sources, draft.presidioEntities, mode)
+        : new Set<RuleCategory>(),
+    [policy, draft, mode],
+  );
   // The flag behind `mode` resolves asynchronously, so the seed above may
   // predate it; fold any legacy personal-data selection into `pii` once the
   // LLM analyzer applies, or the collapsed card would hide it and a save
@@ -4238,8 +3898,21 @@ export function StandardPolicyEditor({
     categoriesQuery.data?.categories,
     mcpScope.mode === "mcp",
   );
+  // A draft from a use case that needs approved domains can't be created
+  // without them while its Non-Corporate Accounts detector is on.
+  const approvedDomainsRequired =
+    !policy &&
+    draft?.requiresApprovedEmailDomains === true &&
+    selectedCategories.has("account_identity");
+  const parsedApprovedDomains = parseApprovedEmailDomains(approvedDomains);
+  const invalidApprovedDomains = invalidEmailDomains(parsedApprovedDomains);
+  const approvedDomainsMissing =
+    approvedDomainsRequired &&
+    (parsedApprovedDomains.length === 0 || invalidApprovedDomains.length > 0);
+
   const saveBlocked =
     !hasEnabledDetector ||
+    approvedDomainsMissing ||
     audienceMissing ||
     shadowMCPInventoryUnavailable ||
     mcpScope.mode === "unset" ||
@@ -4525,9 +4198,23 @@ export function StandardPolicyEditor({
       />
       <StepperShell
         header={header}
+        provenance={
+          draft ? (
+            <PolicyDraftProvenance draft={draft}>
+              {approvedDomainsRequired ? (
+                <ApprovedDomainsRequirement
+                  value={approvedDomains}
+                  onChange={setApprovedDomains}
+                  invalid={invalidApprovedDomains}
+                />
+              ) : null}
+            </PolicyDraftProvenance>
+          ) : null
+        }
         steps={STANDARD_STEPS}
         current={step}
         onStep={setStep}
+        prefilledStepIds={draft?.origin ? STANDARD_PREFILLED_STEPS : undefined}
       >
         {step === 0 && (
           <>
@@ -4560,6 +4247,7 @@ export function StandardPolicyEditor({
                           selectedCategories,
                         )}
                         mode={mode}
+                        fromUseCase={draftCategories.has(cat)}
                         onToggle={(checked) => toggleCategory(cat, checked)}
                         onCustomize={() => customizeCategoryRules(cat)}
                       />
