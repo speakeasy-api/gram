@@ -43,11 +43,14 @@ function attachedRefs(assistant: Assistant): AttachedRef[] {
       slug: t.toolsetSlug,
       environmentSlug: t.environmentSlug,
     })),
-    ...(assistant.mcpServers ?? []).map((m): AttachedRef => ({
-      kind: "mcpServer",
-      slug: m.mcpServerSlug,
-      environmentSlug: m.environmentSlug,
-    })),
+    // Hosted servers are listed under toolsets too, and saved there.
+    ...(assistant.mcpServers ?? [])
+      .filter((m) => m.toolsetSlug === undefined)
+      .map((m): AttachedRef => ({
+        kind: "mcpServer",
+        slug: m.mcpServerSlug,
+        environmentSlug: m.environmentSlug,
+      })),
   ];
 }
 
@@ -359,6 +362,7 @@ function AddServersDialog({
         (server) =>
           !!server.slug &&
           !server.tunneledMcpServerId &&
+          server.toolsetId !== server.id &&
           server.visibility !== "disabled" &&
           serverIdsWithGramEndpoint.has(server.id),
       )

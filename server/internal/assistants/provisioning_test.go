@@ -105,7 +105,7 @@ func TestEnableManagedAssistantAttachesNoToolsets(t *testing.T) {
 	record, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1", true)
 	require.NoError(t, err)
 
-	require.Empty(t, record.Toolsets, "managed assistant must not attach project toolsets by default")
+	require.Empty(t, record.MCPServers, "managed assistant must not attach project toolsets by default")
 
 	// Provisioning must not touch the project's toolsets — MCP stays as it was.
 	reloaded, err := toolsetsQ.GetToolset(ctx, toolsetsrepo.GetToolsetParams{

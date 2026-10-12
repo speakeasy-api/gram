@@ -40,7 +40,7 @@ export type CreateAssistantForm = {
    */
   maxConcurrency?: number | undefined;
   /**
-   * MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+   * MCP servers to attach. When sent, replaces the assistant's servers that are not hosted (toolset-backed); hosted servers listed here are attached and unlisted ones are kept.
    */
   mcpServers?: Array<AssistantMCPServerRef> | undefined;
   /**
@@ -56,7 +56,7 @@ export type CreateAssistantForm = {
    */
   status?: CreateAssistantFormStatus | undefined;
   /**
-   * Toolsets available to the assistant.
+   * Deprecated: use mcp_servers. Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent, replaces the assistant's hosted servers, and hosted servers listed in mcp_servers are ignored.
    */
   toolsets: Array<AssistantToolsetRef>;
   /**

@@ -1,0 +1,344 @@
+package assistants
+
+import (
+	"net/url"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/gen/types"
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+)
+
+type hostedAttachmentFixture struct {
+	core      *ServiceCore
+	db        *pgxpool.Pool
+	projectID uuid.UUID
+	assistant uuid.UUID
+	hosted    toolsetsrepo.Toolset
+	legacy    toolsetsrepo.Toolset
+	remote    mcpserversrepo.McpServer
+}
+
+func newHostedAttachmentFixture(t *testing.T, name string) hostedAttachmentFixture {
+	t.Helper()
+	ctx := t.Context()
+	db, err := assistantsInfra.CloneTestDatabase(t, name)
+	require.NoError(t, err)
+	projectID := newProvisioningProject(t, db, name)
+	core := newProvisioningCore(t, db)
+
+	for _, slug := range []string{"default-env", "staging"} {
+		_, err := environmentsrepo.New(db).CreateEnvironment(ctx, environmentsrepo.CreateEnvironmentParams{
+			OrganizationID: "org-test", ProjectID: projectID, Name: slug, Slug: slug,
+		})
+		require.NoError(t, err)
+	}
+
+	toolsets := toolsetsrepo.New(db)
+	hosted, err := toolsets.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID: "org-test", ProjectID: projectID, Name: "Billing", Slug: "billing",
+		DefaultEnvironmentSlug: pgtype.Text{String: "default-env", Valid: true},
+		McpSlug:                pgtype.Text{String: "org-test-billing-x1", Valid: true}, McpEnabled: true,
+	})
+	require.NoError(t, err)
+	tx := testenv.BeginTx(t, ctx, db)
+	_, err = hostedmcp.Sync(ctx, tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), hosted, nil)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+
+	// No canonical wrapper: the shape of a toolset the backfill has not reached.
+	legacy, err := toolsets.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
+		OrganizationID: "org-test", ProjectID: projectID, Name: "Legacy", Slug: "legacy",
+		DefaultEnvironmentSlug: pgtype.Text{String: "default-env", Valid: true},
+		McpSlug:                pgtype.Text{String: "org-test-legacy-x1", Valid: true}, McpEnabled: true,
+	})
+	require.NoError(t, err)
+
+	backend, err := remotemcprepo.New(db).CreateServer(ctx, remotemcprepo.CreateServerParams{
+		ID: uuid.New(), ProjectID: projectID, Name: pgtype.Text{String: "Remote", Valid: true},
+		Slug: pgtype.Text{String: "remote-src", Valid: true}, TransportType: "streamable-http", Url: "https://mcp.example.com/mcp",
+	})
+	require.NoError(t, err)
+	remote, err := mcpserversrepo.New(db).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: projectID, Name: pgtype.Text{String: "Remote", Valid: true},
+		Slug: pgtype.Text{String: "remote", Valid: true}, RemoteMcpServerID: uuid.NullUUID{UUID: backend.ID, Valid: true}, Visibility: "private",
+	})
+	require.NoError(t, err)
+	_, err = mcpendpointsrepo.New(db).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: projectID, McpServerID: uuid.NullUUID{UUID: remote.ID, Valid: true}, Slug: "team-remote",
+	})
+	require.NoError(t, err)
+
+	record, err := core.CreateAssistant(ctx, "org-test", projectID, "user-1", "Assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, false)
+	require.NoError(t, err)
+
+	return hostedAttachmentFixture{core: core, db: db, projectID: projectID, assistant: record.ID, hosted: hosted, legacy: legacy, remote: remote}
+}
+
+func (f hostedAttachmentFixture) runtime(t *testing.T) []runtimeMCPServer {
+	t.Helper()
+	rows, err := f.core.loadAssistantMcpServers(t.Context(), f.projectID, []uuid.UUID{f.assistant})
+	require.NoError(t, err)
+	serverURL, err := url.Parse("https://gram.test")
+	require.NoError(t, err)
+	return resolveAssistantMCPServers(t.Context(), testenv.NewLogger(t), serverURL, rows[f.assistant], nil)
+}
+
+func (f hostedAttachmentFixture) counts(t *testing.T) testrepo.CountAssistantAttachmentsRow {
+	t.Helper()
+	counts, err := testrepo.New(f.db).CountAssistantAttachments(t.Context(), testrepo.CountAssistantAttachmentsParams{ProjectID: f.projectID, AssistantID: f.assistant})
+	require.NoError(t, err)
+	return counts
+}
+
+func (f hostedAttachmentFixture) environmentID(t *testing.T, slug string) uuid.NullUUID {
+	t.Helper()
+	rows, err := assistantrepo.New(f.db).ResolveEnvironmentsForWrite(t.Context(), assistantrepo.ResolveEnvironmentsForWriteParams{ProjectID: f.projectID, Slugs: []string{slug}})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	return uuid.NullUUID{UUID: rows[0].ID, Valid: true}
+}
+
+func (f hostedAttachmentFixture) addLegacyRow(t *testing.T, toolsetID uuid.UUID, env uuid.NullUUID) {
+	t.Helper()
+	_, err := assistantrepo.New(f.db).AddAssistantToolsets(t.Context(), []assistantrepo.AddAssistantToolsetsParams{{
+		AssistantID: f.assistant, ToolsetID: toolsetID, EnvironmentID: env, ProjectID: f.projectID,
+	}})
+	require.NoError(t, err)
+}
+
+func (f hostedAttachmentFixture) addServerRow(t *testing.T, serverID uuid.UUID, env uuid.NullUUID) {
+	t.Helper()
+	_, err := assistantrepo.New(f.db).AddAssistantMcpServers(t.Context(), []assistantrepo.AddAssistantMcpServersParams{{
+		AssistantID: f.assistant, McpServerID: serverID, EnvironmentID: env, ProjectID: f.projectID,
+	}})
+	require.NoError(t, err)
+}
+
+func (f hostedAttachmentFixture) view(t *testing.T) *types.Assistant {
+	t.Helper()
+	record, err := f.core.GetAssistant(t.Context(), f.projectID, f.assistant)
+	require.NoError(t, err)
+	view, err := toHTTPAssistant(record)
+	require.NoError(t, err)
+	return view
+}
+
+// The dependent move re-keys an assistant_toolsets row onto assistant_mcp_servers
+// (wrapper id = toolset id); the runner must see the same id, URL and environment.
+func TestHostedAttachmentRuntimeConfigSurvivesMove(t *testing.T) {
+	t.Parallel()
+	for _, env := range []string{"", "staging"} {
+		t.Run("env="+env, func(t *testing.T) {
+			t.Parallel()
+			f := newHostedAttachmentFixture(t, "hosted_move_"+env)
+			var envID uuid.NullUUID
+			wantEnv := "default-env"
+			if env != "" {
+				envID = f.environmentID(t, env)
+				wantEnv = env
+			}
+			want := []runtimeMCPServer{{
+				ID:      "billing",
+				URL:     "https://gram.test/mcp/org-test-billing-x1",
+				Headers: map[string]string{"Gram-Environment": wantEnv},
+			}}
+
+			f.addLegacyRow(t, f.hosted.ID, envID)
+			require.Equal(t, want, f.runtime(t), "legacy toolset row")
+
+			f.addServerRow(t, f.hosted.ID, envID)
+			require.Equal(t, want, f.runtime(t), "a twin must not duplicate the server")
+			view := f.view(t)
+			require.Len(t, view.McpServers, 1)
+			require.Len(t, view.Toolsets, 1)
+
+			require.NoError(t, assistantrepo.New(f.db).ClearAssistantToolsets(t.Context(), assistantrepo.ClearAssistantToolsetsParams{AssistantID: f.assistant, ProjectID: f.projectID}))
+			require.Equal(t, want, f.runtime(t), "moved server row")
+		})
+	}
+}
+
+// A toolset with no canonical wrapper keeps its legacy runtime config.
+func TestHostedAttachmentWithoutWrapperKeepsLegacyRuntime(t *testing.T) {
+	t.Parallel()
+	f := newHostedAttachmentFixture(t, "hosted_no_wrapper")
+	f.addLegacyRow(t, f.legacy.ID, uuid.NullUUID{})
+	require.Equal(t, []runtimeMCPServer{{
+		ID:      "legacy",
+		URL:     "https://gram.test/mcp/org-test-legacy-x1",
+		Headers: map[string]string{"Gram-Environment": "default-env"},
+	}}, f.runtime(t))
+
+	view := f.view(t)
+	require.Empty(t, view.McpServers, "no wrapper means nothing to name by server slug")
+	require.Len(t, view.Toolsets, 1)
+	require.Equal(t, "legacy", view.Toolsets[0].ToolsetSlug)
+}
+
+func TestHostedAttachmentReadSurfacesServerOnce(t *testing.T) {
+	t.Parallel()
+	f := newHostedAttachmentFixture(t, "hosted_read_once")
+	f.addLegacyRow(t, f.hosted.ID, uuid.NullUUID{})
+	f.addServerRow(t, f.remote.ID, uuid.NullUUID{})
+
+	view := f.view(t)
+	require.Len(t, view.McpServers, 2)
+	require.Equal(t, "org-test-billing-x1", view.McpServers[0].McpServerSlug)
+	require.NotNil(t, view.McpServers[0].ToolsetSlug)
+	require.Equal(t, "billing", *view.McpServers[0].ToolsetSlug)
+	require.Equal(t, "remote", view.McpServers[1].McpServerSlug)
+	require.Nil(t, view.McpServers[1].ToolsetSlug)
+	require.Len(t, view.Toolsets, 1, "deprecated toolsets array keeps listing hosted servers")
+	require.Equal(t, "billing", view.Toolsets[0].ToolsetSlug)
+}
+
+func TestHostedAttachmentWritesLeaveNoTwins(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	name := "updated"
+
+	t.Run("toolsets write keeps the toolset row shape", func(t *testing.T) {
+		t.Parallel()
+		f := newHostedAttachmentFixture(t, "hosted_write_toolsets")
+		f.addLegacyRow(t, f.hosted.ID, uuid.NullUUID{})
+		f.addServerRow(t, f.hosted.ID, uuid.NullUUID{})
+		f.addServerRow(t, f.remote.ID, uuid.NullUUID{})
+		before := f.runtime(t)
+
+		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil,
+			[]*types.AssistantToolsetRef{{ToolsetSlug: "billing"}}, nil, nil, nil, nil)
+		require.NoError(t, err)
+		counts := f.counts(t)
+		require.EqualValues(t, 1, counts.Toolsets, "older pods read hosted servers from assistant_toolsets")
+		require.EqualValues(t, 1, counts.McpServers, "twin removed; remote server untouched")
+		require.ElementsMatch(t, before, f.runtime(t))
+	})
+
+	t.Run("mcp servers write stores a hosted server as a toolset row", func(t *testing.T) {
+		t.Parallel()
+		f := newHostedAttachmentFixture(t, "hosted_write_servers")
+		f.addServerRow(t, f.hosted.ID, uuid.NullUUID{})
+		f.addLegacyRow(t, f.legacy.ID, uuid.NullUUID{})
+		before := f.runtime(t)
+
+		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil, nil,
+			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil)
+		require.NoError(t, err)
+		counts := f.counts(t)
+		require.EqualValues(t, 2, counts.Toolsets, "hosted server moved to its toolset row; unlisted toolset kept")
+		require.Zero(t, counts.McpServers)
+		require.ElementsMatch(t, before, f.runtime(t))
+	})
+
+	t.Run("echoing a read back is a no-op", func(t *testing.T) {
+		t.Parallel()
+		f := newHostedAttachmentFixture(t, "hosted_write_echo")
+		f.addLegacyRow(t, f.hosted.ID, uuid.NullUUID{})
+		f.addLegacyRow(t, f.legacy.ID, uuid.NullUUID{})
+		f.addServerRow(t, f.remote.ID, uuid.NullUUID{})
+		before := f.runtime(t)
+		view := f.view(t)
+
+		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil, view.Toolsets, view.McpServers, nil, nil, nil)
+		require.NoError(t, err)
+		counts := f.counts(t)
+		require.EqualValues(t, 2, counts.Toolsets)
+		require.EqualValues(t, 1, counts.McpServers)
+		require.ElementsMatch(t, before, f.runtime(t))
+		require.Equal(t, view.McpServers, f.view(t).McpServers)
+	})
+
+	t.Run("toolsets govern hosted servers when both arrays are sent", func(t *testing.T) {
+		t.Parallel()
+		f := newHostedAttachmentFixture(t, "hosted_write_both")
+		f.addLegacyRow(t, f.hosted.ID, uuid.NullUUID{})
+		staging := "staging"
+		// An older dashboard echoes a hosted server in both arrays.
+		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil,
+			[]*types.AssistantToolsetRef{{ToolsetSlug: "billing", EnvironmentSlug: &staging}},
+			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil)
+		require.NoError(t, err)
+		require.Equal(t, "staging", f.runtime(t)[0].Headers["Gram-Environment"])
+
+		_, err = f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil,
+			[]*types.AssistantToolsetRef{},
+			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}, {McpServerSlug: "remote"}}, nil, nil, nil)
+		require.NoError(t, err)
+		require.Equal(t, []string{"remote"}, runtimeIDs(f.runtime(t)), "removing it from toolsets detaches it")
+	})
+
+	t.Run("mcp servers write keeps unlisted hosted servers", func(t *testing.T) {
+		t.Parallel()
+		f := newHostedAttachmentFixture(t, "hosted_write_keep")
+		f.addLegacyRow(t, f.hosted.ID, uuid.NullUUID{})
+		f.addServerRow(t, f.remote.ID, uuid.NullUUID{})
+
+		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil, nil,
+			[]*types.AssistantMCPServerRef{}, nil, nil, nil)
+		require.NoError(t, err)
+		require.Equal(t, []string{"billing"}, runtimeIDs(f.runtime(t)))
+	})
+}
+
+func runtimeIDs(servers []runtimeMCPServer) []string {
+	ids := make([]string, 0, len(servers))
+	for _, server := range servers {
+		ids = append(ids, server.ID)
+	}
+	return ids
+}
+
+// A hosted server sorts first, so it keeps its runtime ID over an older remote server with the same slug.
+func TestHostedAttachmentWinsRuntimeIDCollision(t *testing.T) {
+	t.Parallel()
+	f := newHostedAttachmentFixture(t, "hosted_collision")
+	colliding, err := mcpserversrepo.New(f.db).CreateMCPServer(t.Context(), mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: f.projectID, Name: pgtype.Text{String: "Billing remote", Valid: true},
+		Slug: pgtype.Text{String: "billing", Valid: true}, RemoteMcpServerID: f.remote.RemoteMcpServerID, Visibility: "private",
+	})
+	require.NoError(t, err)
+	_, err = mcpendpointsrepo.New(f.db).CreateMCPEndpoint(t.Context(), mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID: f.projectID, McpServerID: uuid.NullUUID{UUID: colliding.ID, Valid: true}, Slug: "billing-remote",
+	})
+	require.NoError(t, err)
+	f.addServerRow(t, colliding.ID, uuid.NullUUID{})
+	f.addLegacyRow(t, f.hosted.ID, uuid.NullUUID{})
+
+	servers := f.runtime(t)
+	require.Len(t, servers, 1)
+	require.Equal(t, "https://gram.test/mcp/org-test-billing-x1", servers[0].URL)
+}
+
+// A legacy row the dependent move leaves behind (wrapper disabled) stays readable and is skipped at runtime.
+func TestHostedAttachmentLegacyRowOnDisabledWrapper(t *testing.T) {
+	t.Parallel()
+	f := newHostedAttachmentFixture(t, "hosted_disabled_leftover")
+	off, err := toolsetsrepo.New(f.db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{
+		OrganizationID: "org-test", ProjectID: f.projectID, Name: "Off", Slug: "off",
+		McpSlug: pgtype.Text{String: "org-test-off-x1", Valid: true}, McpEnabled: false,
+	})
+	require.NoError(t, err)
+	tx := testenv.BeginTx(t, t.Context(), f.db)
+	_, err = hostedmcp.Sync(t.Context(), tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), off, nil)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(t.Context()))
+	f.addLegacyRow(t, off.ID, uuid.NullUUID{})
+
+	require.Empty(t, f.runtime(t))
+	view := f.view(t)
+	require.Len(t, view.McpServers, 1)
+	require.Len(t, view.Toolsets, 1)
+}

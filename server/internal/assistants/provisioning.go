@@ -337,7 +337,6 @@ func assistantRecordFromManagedRow(row assistantrepo.GetManagedAssistantByProjec
 		Name:            row.Name,
 		Model:           row.Model,
 		Instructions:    row.Instructions,
-		Toolsets:        nil,
 		MCPServers:      nil,
 		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),

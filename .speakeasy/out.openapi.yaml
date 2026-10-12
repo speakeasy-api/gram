@@ -80607,7 +80607,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AssistantMCPServerRef'
-          description: MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+          description: MCP servers attached to the assistant, including hosted (toolset-backed) servers.
         model:
           type: string
           description: The model identifier used by the assistant.
@@ -80633,7 +80633,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AssistantToolsetRef'
-          description: Toolsets available to the assistant.
+          description: 'Deprecated: read mcp_servers, where hosted servers carry toolset_slug. Lists the assistant''s hosted (toolset-backed) MCP servers.'
         updated_at:
           type: string
           description: Last update timestamp.
@@ -80667,7 +80667,10 @@ components:
           description: Optional environment slug used when connecting to the MCP server.
         mcp_server_slug:
           type: string
-          description: The MCP server slug exposed to the assistant. Covers remote- and tunnelled-backed MCP servers, which have no toolset to attach.
+          description: The MCP server slug exposed to the assistant. Covers every backend, including hosted (toolset-backed) servers.
+        toolset_slug:
+          type: string
+          description: The backing toolset's slug when this is a hosted (toolset-backed) MCP server. Populated on reads; ignored on writes.
       required:
         - mcp_server_slug
     AssistantMemory:
@@ -82701,7 +82704,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AssistantMCPServerRef'
-          description: MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+          description: MCP servers to attach. When sent, replaces the assistant's servers that are not hosted (toolset-backed); hosted servers listed here are attached and unlisted ones are kept.
         model:
           type: string
           description: The model identifier used by the assistant.
@@ -82718,7 +82721,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AssistantToolsetRef'
-          description: Toolsets available to the assistant.
+          description: 'Deprecated: use mcp_servers. Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent, replaces the assistant''s hosted servers, and hosted servers listed in mcp_servers are ignored.'
         warm_ttl_seconds:
           type: integer
           description: Optional warm runtime TTL in seconds.
@@ -107502,7 +107505,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AssistantMCPServerRef'
-          description: MCP servers attached directly to the assistant (remote- or tunnelled-backed).
+          description: MCP servers to attach. When sent, replaces the assistant's servers that are not hosted (toolset-backed); hosted servers listed here are attached and unlisted ones are kept.
         model:
           type: string
           description: The model identifier used by the assistant.
@@ -107519,7 +107522,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AssistantToolsetRef'
-          description: Toolsets available to the assistant.
+          description: 'Deprecated: use mcp_servers. Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent, replaces the assistant''s hosted servers, and hosted servers listed in mcp_servers are ignored.'
         warm_ttl_seconds:
           type: integer
           description: Warm runtime TTL in seconds.
