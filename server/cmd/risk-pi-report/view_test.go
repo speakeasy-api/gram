@@ -42,7 +42,7 @@ var (
 func TestBuildViewDataListsEveryRunAndJoinsCases(t *testing.T) {
 	t.Parallel()
 
-	caught, fixed, pending := recordsCase("caught", "malicious", "DAN"), recordsCase("fixed", "benign", ""), recordsCase("pending", "malicious", "")
+	caught, fixed, pending := recordsCase("caught", "malicious"), recordsCase("fixed", "benign"), recordsCase("pending", "malicious")
 	runs := t.TempDir()
 	now := time.Now()
 	writeRun(t, runs, "base-r1", baseCommit, now.Add(-2*time.Hour), viewRecord(caught, statusClear), viewRecord(fixed, statusFlagged), viewRecord(pending, statusFlagged))
@@ -73,7 +73,7 @@ func TestBuildViewDataListsEveryRunAndJoinsCases(t *testing.T) {
 func TestBuildViewDataShowsTheLatestRunOfThisCode(t *testing.T) {
 	t.Parallel()
 
-	attack := recordsCase("attack", "malicious", "")
+	attack := recordsCase("attack", "malicious")
 	runs := t.TempDir()
 	now := time.Now()
 	writeRun(t, runs, "change-r1", changeCommit, now.Add(-time.Hour), viewRecord(attack, statusClear))
@@ -96,7 +96,7 @@ func TestBuildViewDataShowsTheLatestRunOfThisCode(t *testing.T) {
 func TestBuildViewDataWithoutRuns(t *testing.T) {
 	t.Parallel()
 
-	src := viewSource{runsDir: filepath.Join(t.TempDir(), "missing"), corpus: []labeledCase{recordsCase("a", "benign", "")}, change: changeCommit, base: ""}
+	src := viewSource{runsDir: filepath.Join(t.TempDir(), "missing"), corpus: []labeledCase{recordsCase("a", "benign")}, change: changeCommit, base: ""}
 	data, err := buildViewData(src, time.Unix(0, 0))
 	require.NoError(t, err)
 	require.Empty(t, data.Runs)
@@ -122,7 +122,7 @@ func TestPickRunsKeepsTheNewestUpToTheLimit(t *testing.T) {
 func TestSummaryMarkdownListsTheComparedRunsAndFlips(t *testing.T) {
 	t.Parallel()
 
-	attack := recordsCase("attack", "malicious", "DAN")
+	attack := recordsCase("attack", "malicious")
 	runs := t.TempDir()
 	writeRun(t, runs, "base-r1", baseCommit, time.Now(), viewRecord(attack, statusClear))
 	writeRun(t, runs, "change-r1", changeCommit, time.Now(), viewRecord(attack, statusFlagged))
@@ -131,10 +131,11 @@ func TestSummaryMarkdownListsTheComparedRunsAndFlips(t *testing.T) {
 	require.NoError(t, err)
 
 	md := summaryMarkdown(data)
-	require.Contains(t, md, "| base (aaaaaaaaaa chore: main) | 0 | 0 of 1 | 0 of 1 (0.0%)")
-	require.Contains(t, md, "| this change (cccccccccc fix: better detector) | 0 | 1 of 1 | 1 of 1 (100.0%)")
+	require.Contains(t, md, "| base (aaaaaaaaaa chore: main) | 0 | 0 of 1 (0.0%)")
+	require.Contains(t, md, "| this change (cccccccccc fix: better detector) | 0 | 1 of 1 (100.0%)")
 	require.NotContains(t, md, "an older try", "the PR summary shows only the compared runs")
-	require.Contains(t, md, "| Pass | Meets both |")
+	require.Contains(t, md, "| Pass |")
+	require.NotContains(t, md, "Well-known")
 	require.Contains(t, md, "Compared with the base: 1 newly caught · 0 newly missed")
 	require.NoError(t, changeGate(data))
 }
@@ -142,7 +143,7 @@ func TestSummaryMarkdownListsTheComparedRunsAndFlips(t *testing.T) {
 func TestSummaryMarkdownWhenMainSharesTheCode(t *testing.T) {
 	t.Parallel()
 
-	attack := recordsCase("attack", "malicious", "")
+	attack := recordsCase("attack", "malicious")
 	runs := t.TempDir()
 	writeRun(t, runs, "shared-r1", baseCommit, time.Now(), viewRecord(attack, statusFlagged))
 	data, err := buildViewData(viewSource{runsDir: runs, corpus: []labeledCase{attack}, change: baseCommit, base: baseCommit.SHA}, time.Unix(0, 0))
@@ -171,7 +172,7 @@ func TestChangeGate(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			c := recordsCase("case", tc.label, "")
+			c := recordsCase("case", tc.label)
 			runs := t.TempDir()
 			writeRun(t, runs, "change-r1", changeCommit, time.Now(), viewRecord(c, tc.status))
 			data, err := buildViewData(viewSource{runsDir: runs, corpus: []labeledCase{c}, change: changeCommit, base: ""}, time.Unix(0, 0))
@@ -184,28 +185,6 @@ func TestChangeGate(t *testing.T) {
 				return
 			}
 			require.ErrorContains(t, err, tc.wantErr)
-		})
-	}
-}
-
-func TestViewerGoalsWaitForCompleteRuns(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name   string
-		totals sideTotals
-		want   string
-	}{
-		{name: "pending", totals: sideTotals{Pending: 1, WellKnown: 1, WellKnownCaught: 1}, want: "Incomplete"},
-		{name: "out of credit", totals: sideTotals{OutOfCredit: 1, WellKnown: 1, WellKnownCaught: 1}, want: "Incomplete"},
-		{name: "both", totals: sideTotals{WellKnown: 1, WellKnownCaught: 1}, want: "Meets both"},
-		{name: "first only", totals: sideTotals{WellKnown: 1}, want: "Goal 1 only"},
-		{name: "second only", totals: sideTotals{FalsePositives: 1, WellKnown: 1, WellKnownCaught: 1}, want: "Goal 2 only"},
-		{name: "neither", totals: sideTotals{FalsePositives: 1, WellKnown: 1}, want: "Fails both"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			require.Equal(t, tc.want, goalsOutcome(tc.totals))
 		})
 	}
 }

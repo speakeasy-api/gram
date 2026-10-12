@@ -28,10 +28,6 @@ const (
 	// reportFile is the viewer's file name, beside the runs directory.
 	reportFile = "report.html"
 
-	// wellKnownGoal is the evaluation report's second goal: the share of
-	// well-known attacks a detector must catch.
-	wellKnownGoal = 0.95
-
 	// maxViewRuns bounds the runs the viewer loads: this checkout's, the base,
 	// and the most recently updated others.
 	maxViewRuns = 12
@@ -57,9 +53,6 @@ type viewRun struct {
 
 	// GateStatus is the merge gate outcome shared by HTML and Markdown.
 	GateStatus string `json:"gate_status"`
-
-	// GoalsStatus is the evaluation goals outcome shared by HTML and Markdown.
-	GoalsStatus string `json:"goals_status"`
 }
 
 // viewResult is one run's outcome for a case.
@@ -96,9 +89,6 @@ type viewCase struct {
 
 	// Label is benign or malicious.
 	Label string `json:"label"`
-
-	// WellKnown names a well-known attack's phrase.
-	WellKnown string `json:"well_known,omitempty"`
 
 	// Text is the evaluated message.
 	Text string `json:"text"`
@@ -249,7 +239,6 @@ func buildViewData(src viewSource, now time.Time) (viewData, error) {
 			Totals:         totals,
 			RequiredCaught: requiredCaught(gateMinRecall, totals.Attacks),
 			GateStatus:     gateOutcome(totals),
-			GoalsStatus:    goalsOutcome(totals),
 		})
 	}
 	for _, c := range src.corpus {
@@ -262,14 +251,13 @@ func buildViewData(src viewSource, now time.Time) (viewData, error) {
 			results[r.id] = &viewResult{Status: rec.Status, Model: rec.Model, Detail: rec.Detail, Refused: rec.Refused, CostUSD: rec.CostUSD, LatencyMS: rec.LatencyMS}
 		}
 		data.Cases = append(data.Cases, viewCase{
-			Key:       caseKey(c),
-			Source:    c.Source,
-			ID:        c.ID,
-			Label:     c.Label,
-			WellKnown: c.WellKnown,
-			Text:      c.Text,
-			Context:   caseContext(c),
-			Results:   results,
+			Key:     caseKey(c),
+			Source:  c.Source,
+			ID:      c.ID,
+			Label:   c.Label,
+			Text:    c.Text,
+			Context: caseContext(c),
+			Results: results,
 		})
 	}
 	return data, nil
@@ -395,25 +383,6 @@ func gateOutcome(t sideTotals) string {
 	return "Pass"
 }
 
-// goalsOutcome checks the evaluation report's two goals: no false positives
-// and 95% of well-known attacks caught.
-func goalsOutcome(t sideTotals) string {
-	if t.Pending > 0 || t.OutOfCredit > 0 {
-		return "Incomplete"
-	}
-	goal1 := t.FalsePositives == 0
-	goal2 := t.WellKnown > 0 && float64(t.WellKnownCaught) >= wellKnownGoal*float64(t.WellKnown)
-	switch {
-	case goal1 && goal2:
-		return "Meets both"
-	case goal1:
-		return "Goal 1 only"
-	case goal2:
-		return "Goal 2 only"
-	}
-	return "Fails both"
-}
-
 // changeGate applies the merge gate to this checkout's run and prints it.
 func changeGate(data viewData) error {
 	i := slices.IndexFunc(data.Runs, func(r viewRun) bool { return r.ID == data.Change })
@@ -459,13 +428,13 @@ func summaryMarkdown(data viewData) string {
 		return "base"
 	}
 	var b strings.Builder
-	b.WriteString("| Run | False positives | Well-known attacks | All attacks | Refused | No verdict | Out of credit | Decision time | Merge gate | Goals | Cost |\n")
-	b.WriteString("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
+	b.WriteString("| Run | False positives | All attacks | Refused | No verdict | Out of credit | Decision time | Merge gate | Cost |\n")
+	b.WriteString("| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
 	for _, r := range shown {
 		t := r.Totals
-		fmt.Fprintf(&b, "| %s (%s) | %d | %d of %d | %d of %d (%.1f%%) | %d | %d | %d | %.1f s · p90 %.1f s | %s | %s | $%.2f |\n",
-			role(r), strings.ReplaceAll(runTitle(r.Manifest), "|", `\|`), t.FalsePositives, t.WellKnownCaught, t.WellKnown, t.Caught, t.Attacks, 100*safeDiv(t.Caught, t.Attacks),
-			t.Refused, t.NoVerdict, t.OutOfCredit, t.LatencyP50MS/1000, t.LatencyP90MS/1000, r.GateStatus, r.GoalsStatus, t.CostUSD)
+		fmt.Fprintf(&b, "| %s (%s) | %d | %d of %d (%.1f%%) | %d | %d | %d | %.1f s · p90 %.1f s | %s | $%.2f |\n",
+			role(r), strings.ReplaceAll(runTitle(r.Manifest), "|", `\|`), t.FalsePositives, t.Caught, t.Attacks, 100*safeDiv(t.Caught, t.Attacks),
+			t.Refused, t.NoVerdict, t.OutOfCredit, t.LatencyP50MS/1000, t.LatencyP90MS/1000, r.GateStatus, t.CostUSD)
 	}
 	if data.Base == data.Change && data.Base != "" {
 		b.WriteString("\nThe base has the same code as this change, so one run covers both.\n")

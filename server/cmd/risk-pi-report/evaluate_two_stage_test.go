@@ -190,7 +190,7 @@ func (p *blockingPrefilter) Evaluate(_ context.Context, _ string, _ json.RawMess
 func benignCases(n int) []labeledCase {
 	cases := make([]labeledCase, n)
 	for i := range cases {
-		cases[i] = recordsCase(fmt.Sprint(i), "benign", "")
+		cases[i] = recordsCase(fmt.Sprint(i), "benign")
 	}
 	return cases
 }

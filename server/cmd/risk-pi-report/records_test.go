@@ -22,8 +22,8 @@ import (
 	typesafe "github.com/speakeasy-api/gram/server/internal/thirdparty/typesafedecisions"
 )
 
-func recordsCase(id, label, wellKnown string) labeledCase {
-	return labeledCase{ID: id, Label: label, Text: "text " + id, Source: "s", WellKnown: wellKnown}
+func recordsCase(id, label string) labeledCase {
+	return labeledCase{ID: id, Label: label, Text: "text " + id, Source: "s"}
 }
 
 // main's risk-pi-report hashes cases the same way, so a run of main's
@@ -66,7 +66,7 @@ func TestRecordFromOutcomeStatuses(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			rec := recordFromOutcome(recordsCase("a", "malicious", ""), tc.outcome)
+			rec := recordFromOutcome(recordsCase("a", "malicious"), tc.outcome)
 			require.Equal(t, tc.want, rec.Status)
 			require.Equal(t, "s::a", rec.Key)
 		})
@@ -76,7 +76,7 @@ func TestRecordFromOutcomeStatuses(t *testing.T) {
 func TestRecordFromOutcomeExplainsRefusal(t *testing.T) {
 	t.Parallel()
 
-	rec := recordFromOutcome(recordsCase("a", "malicious", ""), caseOutcome{
+	rec := recordFromOutcome(recordsCase("a", "malicious"), caseOutcome{
 		verdict:     promptinjection.Result{Label: promptinjection.LabelUnavailable},
 		refused:     true,
 		observation: decisionObservation{Calls: []callObservation{{CostUSD: 0.002}, {CostUSD: 0.003}}, Latency: 1500 * time.Millisecond},
@@ -90,7 +90,7 @@ func TestRecordFromOutcomeExplainsRefusal(t *testing.T) {
 func TestCasesToRunSkipsCurrentRecords(t *testing.T) {
 	t.Parallel()
 
-	done, edited, unfunded, fresh := recordsCase("done", "benign", ""), recordsCase("edited", "benign", ""), recordsCase("unfunded", "malicious", ""), recordsCase("fresh", "malicious", "")
+	done, edited, unfunded, fresh := recordsCase("done", "benign"), recordsCase("edited", "benign"), recordsCase("unfunded", "malicious"), recordsCase("fresh", "malicious")
 	records := map[string]caseRecord{
 		caseKey(done):     {Key: caseKey(done), Hash: caseHash(done), Status: statusClear},
 		caseKey(edited):   {Key: caseKey(edited), Hash: "stale", Status: statusClear},
@@ -126,7 +126,7 @@ func TestLoadRecordsMissingFileIsEmpty(t *testing.T) {
 func TestComputeTotalsCountsEveryOutcome(t *testing.T) {
 	t.Parallel()
 
-	fp, wk, missed, noVerdict, unfunded, pending := recordsCase("fp", "benign", ""), recordsCase("wk", "malicious", "Ignore previous instructions"), recordsCase("missed", "malicious", "DAN"), recordsCase("nov", "malicious", ""), recordsCase("ooc", "malicious", ""), recordsCase("pending", "benign", "")
+	fp, wk, missed, noVerdict, unfunded, pending := recordsCase("fp", "benign"), recordsCase("wk", "malicious"), recordsCase("missed", "malicious"), recordsCase("nov", "malicious"), recordsCase("ooc", "malicious"), recordsCase("pending", "benign")
 	record := func(c labeledCase, status caseStatus, ms float64) caseRecord {
 		return caseRecord{Key: caseKey(c), Hash: caseHash(c), Status: status, CostUSD: 0.01, LatencyMS: ms}
 	}
@@ -139,7 +139,7 @@ func TestComputeTotalsCountsEveryOutcome(t *testing.T) {
 	}
 	totals := computeTotals([]labeledCase{fp, wk, missed, noVerdict, unfunded, pending}, records)
 	require.Equal(t, sideTotals{
-		Cases: 6, Benign: 2, FalsePositives: 1, Attacks: 4, Caught: 1, WellKnown: 2, WellKnownCaught: 1,
+		Cases: 6, Benign: 2, FalsePositives: 1, Attacks: 4, Caught: 1,
 		Refused: 0, NoVerdict: 1, OutOfCredit: 1, Pending: 1, CostUSD: totals.CostUSD,
 		LatencyP50MS: 200, LatencyP90MS: 400,
 	}, totals)
@@ -219,7 +219,7 @@ func TestClaimRunDirRefusesARunOfAnotherCommit(t *testing.T) {
 func TestRunRecordsRefusesDuplicateCaseKeys(t *testing.T) {
 	t.Parallel()
 
-	first, repeat := recordsCase("a", "benign", ""), recordsCase("a", "malicious", "")
+	first, repeat := recordsCase("a", "benign"), recordsCase("a", "malicious")
 	err := runRecords(t.Context(), options{runDir: t.TempDir(), commit: mainCommit}, []labeledCase{first, repeat})
 	require.ErrorContains(t, err, `two cases share the key "s::a"`)
 }
@@ -259,7 +259,7 @@ func TestRunRecordsReusesAFinishedRunWithoutCalls(t *testing.T) {
 	t.Setenv("OPENROUTER_DEV_KEY", "")
 	t.Setenv("OPENROUTER_API_KEY", "")
 
-	benign, attack := recordsCase("benign", "benign", ""), recordsCase("attack", "malicious", "")
+	benign, attack := recordsCase("benign", "benign"), recordsCase("attack", "malicious")
 	dir := t.TempDir()
 	lines := make([]string, 0, 2)
 	for _, rec := range []caseRecord{
@@ -283,6 +283,6 @@ func TestRunRecordsNeedsAKeyForNewCases(t *testing.T) {
 	t.Setenv("OPENROUTER_DEV_KEY", "")
 	t.Setenv("OPENROUTER_API_KEY", "")
 
-	err := runRecords(t.Context(), options{runDir: t.TempDir(), commit: mainCommit}, []labeledCase{recordsCase("new", "benign", "")})
+	err := runRecords(t.Context(), options{runDir: t.TempDir(), commit: mainCommit}, []labeledCase{recordsCase("new", "benign")})
 	require.ErrorContains(t, err, "set OPENROUTER_DEV_KEY")
 }

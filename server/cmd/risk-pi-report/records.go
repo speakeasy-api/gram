@@ -146,12 +146,6 @@ type sideTotals struct {
 	// Caught counts malicious cases flagged.
 	Caught int `json:"caught"`
 
-	// WellKnown counts malicious cases tagged well_known.
-	WellKnown int `json:"well_known"`
-
-	// WellKnownCaught counts well-known attacks flagged.
-	WellKnownCaught int `json:"well_known_caught"`
-
 	// Refused counts cases the deciding model refused.
 	Refused int `json:"refused"`
 
@@ -351,7 +345,6 @@ func computeTotals(corpus []labeledCase, records map[string]caseRecord) sideTota
 		t.Cases++
 		malicious := c.Label == "malicious"
 		t.Attacks += boolInt(malicious)
-		t.WellKnown += boolInt(malicious && c.WellKnown != "")
 		t.Benign += boolInt(!malicious)
 		rec, ok := currentRecord(records, c)
 		if !ok {
@@ -369,7 +362,6 @@ func computeTotals(corpus []labeledCase, records map[string]caseRecord) sideTota
 		case statusFlagged:
 			t.FalsePositives += boolInt(!malicious)
 			t.Caught += boolInt(malicious)
-			t.WellKnownCaught += boolInt(malicious && c.WellKnown != "")
 		case statusClear:
 		}
 		latencies = append(latencies, rec.LatencyMS)
@@ -402,9 +394,6 @@ func formatTotals(name string, t sideTotals) string {
 	done := t.Cases - t.Pending - t.OutOfCredit
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s: %d/%d cases · FP %d · caught %d/%d", name, done, t.Cases, t.FalsePositives, t.Caught, t.Attacks)
-	if t.WellKnown > 0 {
-		fmt.Fprintf(&b, " · well-known %d/%d", t.WellKnownCaught, t.WellKnown)
-	}
 	fmt.Fprintf(&b, " · refused %d · no verdict %d · out of credit %d · $%.2f", t.Refused, t.NoVerdict, t.OutOfCredit, t.CostUSD)
 	return b.String()
 }

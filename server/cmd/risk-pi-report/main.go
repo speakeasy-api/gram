@@ -74,10 +74,6 @@ type labeledCase struct {
 	PriorUserRequest       string         `json:"prior_user_request,omitempty"`
 	RecentUntrustedContent string         `json:"recent_untrusted_content,omitempty"`
 
-	// WellKnown names the classic phrase of a well-known attack, such as
-	// "Ignore previous instructions"; empty for every other case.
-	WellKnown string `json:"well_known,omitempty"`
-
 	// raw is the fixture line the case was read from. Hashing it identifies
 	// the case the same way across versions of this tool.
 	raw string
