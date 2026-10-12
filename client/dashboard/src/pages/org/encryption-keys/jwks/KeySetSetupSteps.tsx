@@ -371,6 +371,10 @@ export function KeySetSetupSteps({
     keyChoice === NEW &&
     resourceEdit === null &&
     hasBlankResourceField(setupValues);
+  const malformedKeyName =
+    keyChoice === NEW &&
+    resourceEdit !== null &&
+    !isKeyVersionResourceName(resourceEdit);
   const keyReady =
     keyChoice !== NEW ||
     (resourceEdit === null
@@ -722,6 +726,11 @@ export function KeySetSetupSteps({
                   <Text small warning>
                     Fill in the placeholders in the key version name to
                     continue.
+                  </Text>
+                ) : malformedKeyName ? (
+                  <Text small warning>
+                    Enter a key version name like projects/…/cryptoKeyVersions/1
+                    to continue.
                   </Text>
                 ) : null}
                 <Field
