@@ -10,6 +10,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -118,7 +119,10 @@ func (s *Service) auditIdentityChainingDisable(ctx context.Context, tx pgx.Tx, b
 		return err
 	}
 	disabled := before
-	disabled.Generation, disabled.State = after.Generation, after.State
+	disabled.Generation, disabled.State, disabled.RequestedScopes = after.Generation, after.State, after.RequestedScopes
+	if identityChainingActive(after) {
+		disabled.State, disabled.RequestedScopes = conv.ToPGText(PreparationStateUnlinked), []string{}
+	}
 	return s.auditIdentityChaining(ctx, tx, identityChainingAuditDisable, disabled, before.RemoteSessionClientID.UUID, external, nil)
 }
 

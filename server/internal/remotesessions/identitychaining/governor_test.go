@@ -67,7 +67,7 @@ func TestGovernor_HasUsableCredential(t *testing.T) {
 	require.False(t, f.credentials(t)[0].Deleted, "a status read never retires a credential")
 }
 
-func TestGovernor_TrustedRegistrationRotationRetiresUsableCredential(t *testing.T) {
+func TestGovernor_TrustedRegistrationRotationMakesCredentialUnusable(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
 	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
