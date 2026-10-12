@@ -52,13 +52,16 @@ var _ = Service("mcpServers", func() {
 	})
 
 	Method("getMcpServer", func() {
-		Description("Get an MCP server by ID or slug. Exactly one of id or slug must be provided.")
+		Description("Get an MCP server by ID, slug, or backing toolset ID. Exactly one selector must be provided. Toolset lookup prefers enabled servers, then the canonical wrapper, then the oldest server.")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the MCP server. Mutually exclusive with slug.", func() {
 				Format(FormatUUID)
 			})
 			Attribute("slug", String, "The slug of the MCP server. Mutually exclusive with id.")
+			Attribute("toolset_id", String, "Resolve the preferred MCP server for this toolset. Mutually exclusive with id and slug.", func() {
+				Format(FormatUUID)
+			})
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
@@ -70,6 +73,7 @@ var _ = Service("mcpServers", func() {
 			GET("/rpc/mcpServers.get")
 			Param("id")
 			Param("slug")
+			Param("toolset_id")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
@@ -462,6 +466,7 @@ var McpServer = Type("McpServer", func() {
 	})
 	Attribute("name", String, "A human-readable display name for the server")
 	Attribute("slug", String, "A URL-safe, project-unique slug derived server-side from the name and ID")
+	Attribute("platform_endpoint_slug", String, "An addressable platform endpoint slug for this server, populated only when getting by toolset ID. Absent when no platform endpoint exists; never a custom-domain slug.")
 	Attribute("environment_id", String, "The ID of the environment associated with the server", func() {
 		Format(FormatUUID)
 	})

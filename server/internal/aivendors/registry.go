@@ -519,6 +519,47 @@ var registry = []Product{
 		}},
 	},
 
+	// Verified 2026-10-09. The only redirect is a hosted https URL on
+	// linear.app, not a loopback URL, matching Skydive and Conductor. Sibling
+	// paths return 404 (/.well-known/oauth-client-metadata/zzz.json,
+	// /.well-known/oauth-client-metadata/agent.json, etc.), so an exact entry
+	// rather than a pattern is the right rule.
+	{
+		ID:              "linear",
+		VendorKey:       "linear",
+		DisplayName:     "Linear",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Documents: []Document{{
+			URL:         "https://linear.app/.well-known/oauth-client-metadata/mcp.json",
+			DisplayName: "Linear",
+			Enabled:     true,
+		}},
+	},
+
+	// Verified 2026-10-12. Lovable is a hosted connector client with a
+	// same-origin https callback (api.lovable.dev). Sibling paths return 404
+	// (/.well-known/oauth-client/, /.well-known/oauth-client.json, etc.), so
+	// an exact entry rather than a pattern is the right rule. The document
+	// carries an unregistered code_challenge_methods_used field, which the
+	// validator ignores.
+	{
+		ID:              "lovable",
+		VendorKey:       "lovable",
+		DisplayName:     "Lovable",
+		Category:        "",
+		Signatures:      Signatures{BundleIDs: nil, Binaries: nil, ConfigDirs: nil, ProcessNames: nil},
+		VersionPlistKey: "",
+		ClientInfoNames: nil,
+		Documents: []Document{{
+			URL:         "https://api.lovable.dev/.well-known/oauth-client",
+			DisplayName: "Lovable",
+			Enabled:     true,
+		}},
+	},
+
 	// Products below publish no CIMD document. They register dynamically or
 	// do not speak MCP to Speakeasy at all, so an access decision about them is
 	// recorded and enforces nothing — the dashboard says so rather than

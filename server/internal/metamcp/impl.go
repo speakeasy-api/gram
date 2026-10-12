@@ -808,14 +808,6 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid sort_order").LogError(ctx, logger)
 	}
 
-	var rollout admission.RolloutConfig
-	var rolloutErr error
-	if s.distributionAdmission == nil {
-		rolloutErr = admission.ErrUnavailable
-	} else {
-		rollout, rolloutErr = s.distributionAdmission.ResolveProject(ctx, s.db, authCtx.ActiveOrganizationID, authCtx.OrganizationSlug, *authCtx.ProjectID)
-	}
-
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -860,6 +852,10 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 	if server.UnproxiedMcpServerID.Valid {
 		return nil, oops.E(oops.CodeInvalid, nil, "unproxied mcp servers cannot be meta mcp members").LogError(ctx, logger)
 	}
+	// A toolset's own hosted server keeps its identity; members are separate servers.
+	if server.ToolsetID.Valid && server.ID == server.ToolsetID.UUID {
+		return nil, oops.E(oops.CodeInvalid, nil, "a hosted toolset's own mcp server cannot be a meta mcp member; add a separate server for the toolset").LogError(ctx, logger)
+	}
 
 	// The meta lock above serializes concurrent adds, so this sees every
 	// committed member.
@@ -879,12 +875,14 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 		return nil, oops.E(oops.CodeConflict, nil, "another member of this meta mcp server already fronts the same backend").LogError(ctx, logger)
 	}
 
-	if err := s.distributionAdmission.CheckGatewayMemberAddition(ctx, dbtx, rollout, rolloutErr, authCtx.ActiveOrganizationID, *authCtx.ProjectID, metaID, mcpServerID); err != nil {
+	admissionCtx, err := admission.AdministratorWriteContext(ctx, s.authz, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnavailable, err, "gateway member distribution approval could not be verified safely").LogError(ctx, logger)
+	}
+	if err := s.distributionAdmission.CheckGatewayMemberAddition(admissionCtx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, metaID, mcpServerID); err != nil {
 		switch {
 		case errors.Is(err, admission.ErrApprovalRequired):
 			return nil, oops.E(oops.CodeConflict, err, "gateway member requires Shadow MCP approval").LogError(ctx, logger)
-		case errors.Is(err, admission.ErrDistributionDisabled):
-			return nil, oops.E(oops.CodeConflict, err, "direct-remote distribution is temporarily disabled").LogError(ctx, logger)
 		default:
 			return nil, oops.E(oops.CodeUnavailable, err, "gateway member distribution approval could not be verified safely").LogError(ctx, logger)
 		}

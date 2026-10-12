@@ -62,7 +62,7 @@ func TestShadowInventoryProjectionSuppressesIdentityAndReferencesRoundTrip(t *te
 	require.NoError(t, err)
 	versions, err := newShadowDecisionVersionCodec("shadow-test-key")
 	require.NoError(t, err)
-	admissionResult := DistributionAdmission{State: DistributionAdmissionRepairRequired, Mode: string(admission.ModeEnforce), MissingAudienceCounts: admission.MissingAudienceCounts{Roles: 1}, CheckedAt: "2026-09-06T12:00:00Z", Complete: true}
+	admissionResult := DistributionAdmission{State: DistributionAdmissionRepairRequired, MissingAudienceCounts: admission.MissingAudienceCounts{Roles: 1}, CheckedAt: "2026-09-06T12:00:00Z", Complete: true}
 	targetAdmissionCalls := 0
 	notApplicableAdmissionCalls := 0
 	service := &ShadowInventoryService{

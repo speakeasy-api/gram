@@ -1,4 +1,3 @@
-import { AssetImage } from "@/components/asset-image";
 import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Dialog } from "@/components/ui/Dialog";
@@ -33,7 +32,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Heading } from "@/components/ui/Heading";
-import { Icon } from "@/components/ui/Icon";
+import { IssuerLogo } from "@/lib/remote-identity";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { MoreHorizontal, Plus } from "lucide-react";
@@ -383,18 +382,11 @@ function IssuerTable({
           <DotRow
             key={item.issuer.id}
             icon={
-              item.issuer.logoAssetId ? (
-                <AssetImage
-                  assetId={item.issuer.logoAssetId}
-                  alt=""
-                  className="h-5 w-5 shrink-0 object-contain"
-                />
-              ) : (
-                <Icon
-                  name="fingerprint"
-                  className="text-muted-foreground h-5 w-5"
-                />
-              )
+              <IssuerLogo
+                logoAssetId={item.issuer.logoAssetId}
+                name={issuerDisplayName(item.issuer)}
+                size="sm"
+              />
             }
             href={issuerHref(item.issuer)}
             ariaLabel={`View remote identity provider ${issuerDisplayName(item.issuer)}`}

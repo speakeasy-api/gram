@@ -398,16 +398,26 @@ func (s *AnalyticsService) authorize(ctx context.Context, principal Principal, p
 	if err != nil {
 		return zero, fmt.Errorf("%w: resolve organization slug for analytics: %w", ErrUnavailable, err)
 	}
-	if organizationSlug == "" {
-		return zero, fmt.Errorf("%w: organization slug is unavailable", ErrUnavailable)
-	}
-	// Disabled, missing and indeterminate all fail closed.
-	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagExplore, principal.OrganizationID, feature.OrgProjectGroups(organizationSlug, project.Slug))
+	enabled, err := exploreEnabled(ctx, s.flags, principal.OrganizationID, organizationSlug, project.Slug)
 	if err != nil {
-		return zero, fmt.Errorf("%w: evaluate analytics capability: %w", ErrUnavailable, err)
+		return zero, err
 	}
-	if evaluation != feature.EvaluationEnabled {
+	if !enabled {
 		return zero, ErrAnalyticsNotEnabled
 	}
 	return project, nil
+}
+
+// exploreEnabled evaluates the Explore flag for one project. Disabled, missing
+// and indeterminate read as off; an evaluation error or a missing slug is
+// unavailable, so the tools fail closed either way.
+func exploreEnabled(ctx context.Context, flags feature.Provider, organizationID, organizationSlug, projectSlug string) (bool, error) {
+	if organizationSlug == "" {
+		return false, fmt.Errorf("%w: organization slug is unavailable", ErrUnavailable)
+	}
+	evaluation, err := feature.EvaluateFlag(ctx, flags, feature.FlagExplore, organizationID, feature.OrgProjectGroups(organizationSlug, projectSlug))
+	if err != nil {
+		return false, fmt.Errorf("%w: evaluate explore flag: %w", ErrUnavailable, err)
+	}
+	return evaluation == feature.EvaluationEnabled, nil
 }

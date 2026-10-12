@@ -1,6 +1,6 @@
 import { sessionAccountLabel } from "./session-account-identity";
 import { useEffect, useRef, useState } from "react";
-import { useInternalMcpUrl } from "@/hooks/useToolsetUrl";
+import { useToolsetMcpTarget } from "@/hooks/useToolsetUrl";
 import { firstPartyConnectUrl } from "@/lib/utils";
 import type { Toolset } from "@/lib/toolTypes";
 import { useQueries, useQuery } from "@tanstack/react-query";
@@ -322,11 +322,11 @@ export function ToolsetAttachedUserSessions({
 }: {
   toolset: Toolset;
 }): JSX.Element | null {
-  const url = useInternalMcpUrl(toolset);
-  return toolset.userSessionIssuerId ? (
+  const target = useToolsetMcpTarget(toolset);
+  return target.userSessionIssuerId ? (
     <AttachedUserSessions
-      issuerId={toolset.userSessionIssuerId}
-      connectUrl={firstPartyConnectUrl(url, { runtimePath: "mcp" })}
+      issuerId={target.userSessionIssuerId}
+      connectUrl={firstPartyConnectUrl(target.url, { runtimePath: "mcp" })}
     />
   ) : null;
 }

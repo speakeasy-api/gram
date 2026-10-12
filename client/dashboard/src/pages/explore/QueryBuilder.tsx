@@ -34,6 +34,7 @@ import {
   fieldsForOp,
   findDataset,
   hasChartShape,
+  isStacked,
   isRowsMode,
   MAX_DIMENSIONS,
   MAX_LIMIT,
@@ -92,6 +93,8 @@ const CHART_ICONS: Record<ChartType, IconName> = {
   line: "chart-line",
   area: "chart-area",
   bar: "chart-column",
+  stacked_bar: "chart-column-stacked",
+  stacked_area: "layers",
   ranked: "list-ordered",
   table: "table",
   number: "hash",
@@ -206,6 +209,10 @@ function Sentence({
   patch: (next: Partial<ExploreSpec>) => void;
 }): JSX.Element {
   const grouped = spec.chartType !== "number";
+  // A stack with nothing to stack by is drawn as the plain chart it is; the
+  // Group by says so.
+  const needsBreakdown =
+    isStacked(spec.chartType) && spec.dimensions.length === 0;
   const timeseries = hasChartShape(spec);
   const free = dimensionFields(dataset).filter(
     (field) => !spec.dimensions.includes(field.name),
@@ -281,7 +288,9 @@ function Sentence({
             (Everything)
           </Cell>
         ) : spec.dimensions.length === 0 ? (
-          <Cell tone="group">(Everything)</Cell>
+          <Cell tone="group">
+            {needsBreakdown ? "pick a field to stack by" : "(Everything)"}
+          </Cell>
         ) : null}
         {grouped
           ? spec.dimensions.map((dimension) => (
@@ -695,6 +704,7 @@ export function ResultsToolbar({
   changed: boolean;
 }): JSX.Element {
   const patch = (next: Partial<ExploreSpec>) => onChange({ ...spec, ...next });
+  const noBreakdown = spec.dimensions.length === 0;
   return (
     <>
       <SegmentedControl<ChartType>
@@ -703,7 +713,11 @@ export function ResultsToolbar({
         className="h-8"
         options={CHART_TYPE_OPTIONS.map((option) => ({
           value: option.value,
-          tooltip: option.label,
+          // A stack with nothing to stack by is drawn as the plain chart.
+          tooltip:
+            isStacked(option.value) && noBreakdown
+              ? `${option.label} · needs a Group by`
+              : option.label,
           label: (
             <>
               <Icon

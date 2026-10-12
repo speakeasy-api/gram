@@ -427,3 +427,27 @@ func TestAttachmentRequiresManualSetupWithoutAutomaticRegistration(t *testing.T)
 	require.ErrorIs(t, identityProviderRegistrationError(reg), ErrIdentityProviderAttachmentUnsupported)
 	require.Empty(t, attachmentTestClients(t, conn, principal, project, usi))
 }
+
+// The attached provider keeps its discovered grant profiles and is stamped as
+// discovered, as a dashboard create from a discovered draft is.
+func TestAttachmentRecordsDiscoveredGrantProfiles(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_attachment_profiles")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := attachmentTestCIMDService(t, conn)
+	metadata := attachmentTestCIMDMetadata("https://auth.example.com")
+	metadata.Metadata = []byte(`{"issuer":"https://auth.example.com"}`)
+	usi := attachmentTestUserSessionIssuer(t, conn, project.ID)
+
+	reg := attachmentTestRegister(t, service, principal, project, usi, metadata, attachmentTestResource("https://mcp.example.com/mcp", "Example", ""))
+	require.True(t, reg.Ready())
+
+	issuer, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
+	require.NoError(t, err)
+	require.True(t, reuse)
+	require.Equal(t, []string{"urn:ietf:params:oauth:grant-profile:id-jag"}, issuer.AuthorizationGrantProfilesSupported)
+	require.True(t, issuer.MetadataFetchedAt.Valid, "attached provider is stamped as discovered")
+	require.JSONEq(t, `{"issuer":"https://auth.example.com"}`, string(issuer.Metadata))
+}

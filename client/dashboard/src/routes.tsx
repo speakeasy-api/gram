@@ -59,6 +59,7 @@ import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
 import Costs from "./pages/costs/Costs";
 import {
+  BuiltInDashboardRoute,
   DashboardRoute,
   DashboardsIndex,
   DashboardsRoot,
@@ -716,7 +717,12 @@ const ROUTE_STRUCTURE = {
           overview: { title: "Overview", url: "overview" },
           mcpServers: { title: "MCP Servers", url: "mcp-servers" },
           sessions: { title: "Sessions", url: "sessions" },
-          settings: { title: "Settings", url: "settings" },
+          // Merged into Overview; RemoteSessionClientDetail redirects it there.
+          settings: {
+            title: "Settings",
+            url: "settings",
+            legacyRedirect: true,
+          },
         },
       },
     },
@@ -847,6 +853,11 @@ const ROUTE_STRUCTURE = {
     indexComponent: DashboardsIndex,
     stage: "preview",
     subPages: {
+      builtIn: {
+        title: "Dashboard",
+        url: "builtin/:slug",
+        component: BuiltInDashboardRoute,
+      },
       detail: {
         title: "Dashboard",
         url: ":dashboardId",
