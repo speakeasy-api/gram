@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -132,8 +133,8 @@ type Containment struct {
 // Contain revokes every live issuer key (active, pending and retired) in one
 // transaction, so the issuer publishes nothing and cannot sign until a
 // replacement is activated. activeKid names the active key the caller saw:
-// if a different key is active now, an earlier compromise call already
-// replaced it and this one changes nothing. A keyless issuer needs no kid.
+// if that key is already revoked, an earlier compromise call contained it
+// and this one changes nothing. A keyless issuer needs no kid.
 func (l *Lifecycle) Contain(ctx context.Context, organizationID string, activeKid *string) (Containment, error) {
 	none := Containment{Revoked: nil, Coalesced: false}
 	tx, err := l.db.Begin(ctx)
@@ -160,14 +161,19 @@ func (l *Lifecycle) Contain(ctx context.Context, organizationID string, activeKi
 	case active != nil && (activeKid == nil || *activeKid == ""):
 		return none, ErrActiveKidRequired
 	case active != nil && *activeKid != active.Kid:
-		known, err := q.JsonWebKeyKidExistsInSet(ctx, repo.JsonWebKeyKidExistsInSetParams{JsonWebKeySetID: set.ID, OrganizationID: organizationID, Kid: *activeKid})
+		all, err := q.ListJsonWebKeys(ctx, repo.ListJsonWebKeysParams{JsonWebKeySetID: set.ID, OrganizationID: organizationID, IncludeRevoked: true})
 		if err != nil {
-			return none, fmt.Errorf("check compromised kid: %w", err)
+			return none, fmt.Errorf("load issuer key history: %w", err)
 		}
-		if !known {
+		i := slices.IndexFunc(all, func(k repo.JsonWebKey) bool { return k.Kid == *activeKid })
+		if i < 0 {
 			return none, ErrUnknownKid
 		}
-		return Containment{Revoked: nil, Coalesced: true}, nil
+		// Only a key that is already revoked was contained by an earlier
+		// call. A retired or pending key is still published, so contain.
+		if all[i].State == "revoked" {
+			return Containment{Revoked: nil, Coalesced: true}, nil
+		}
 	}
 	revoked := make([]repo.JsonWebKey, 0, len(keys))
 	for _, key := range keys {
