@@ -1802,14 +1802,14 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
   });
 
-  it("keeps Signing key visible but unselectable without KMS", () => {
+  it("keeps Signing Client visible but unselectable without KMS", () => {
     renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
 
     expect(screen.getByText("Requires KMS")).toBeDefined();
     const signingKey = within(
       screen.getByRole("radiogroup", { name: "OAuth credential" }),
-    ).getByRole("radio", { name: /^Signing key/ }) as HTMLButtonElement;
+    ).getByRole("radio", { name: /^Signing Client/ }) as HTMLButtonElement;
     expect(signingKey.disabled).toBe(true);
     // Still on Bearer: the option advertises KMS signing, it does not switch.
     expect(screen.getByLabelText("Token")).toBeDefined();

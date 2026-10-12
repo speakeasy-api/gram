@@ -124,7 +124,7 @@ export function ServiceAccountPanel({
               },
               {
                 value: "signing-key",
-                title: "Signing key",
+                title: "Signing Client",
                 description:
                   "Speakeasy signs its token requests with a key in your KMS.",
                 unavailable: customerManagedKeys ? undefined : "Requires KMS",
