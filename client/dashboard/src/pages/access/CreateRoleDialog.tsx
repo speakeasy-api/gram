@@ -12,7 +12,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
@@ -49,27 +48,18 @@ import {
   membersWithRole,
 } from "./changeRoleState";
 import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
-import { indexServers, MCP_CONNECT_SCOPE } from "./mcpAccessModel";
-import { McpAccessPanel } from "./McpAccessPanel";
-import { useMcpAccessCount } from "./useMcpAccessCount";
+import { RoleAccessMatrix } from "./RoleAccessMatrix";
 import { useOrgMcpServers } from "./useOrgMcpServers";
-import {
-  BlockedScopeControl,
-  PermissionScopeControl,
-} from "./PermissionScopeControl";
-import { RolePermissionsSection } from "./RolePermissionsSection";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { Selector } from "@gram/client/models/components/selector.js";
 import type { ActivePanel, ResourceType, RoleGrant, ScopeRule } from "./types";
 import {
   isProjectFilteredResourceType,
   isProjectSelectableResourceType,
-  isUnrestrictedResourceType,
 } from "./types";
 import {
   isSaveDisabled,
   grantKeysString as grantKeysStringFn,
-  computeRuleLabel,
 } from "./roleDialogState";
 import {
   applyRemoveRule,
@@ -243,106 +233,12 @@ export function CreateRoleDialog({
     [scopeDefinitions],
   );
 
-  const mcpAccessCount = useMcpAccessCount(grants, open);
   const mcpInventory = useOrgMcpServers(open);
-  const mcpServerIndex = useMemo(
-    () => indexServers(mcpInventory.groups),
-    [mcpInventory.groups],
-  );
-  // Names the servers a block covers, so the row says which one it is; falls
-  // back to the count-style label for anything else.
-  const blockedResourceLabel = (
-    selectors: Selector[] | null,
-    resourceType: ResourceType,
-  ): string => {
-    const names = (selectors ?? []).map((s) =>
-      s.tool || s.projectId || s.disposition
-        ? undefined
-        : mcpServerIndex.get(s.resourceId)?.server.name,
-    );
-    if (
-      resourceType === "mcp" &&
-      names.length > 0 &&
-      names.every((n) => n !== undefined)
-    ) {
-      return names.join(", ");
-    }
-    return computeRuleLabel(selectors, resourceType, projectList);
-  };
-  // Permissions the role only takes away: every rule is an exception.
-  const blockOnlyScopes = new Set(
-    Object.values(grants)
-      .filter(
-        (g) => g.rules.length > 0 && g.rules.every((r) => r.effect === "deny"),
-      )
-      .map((g) => g.scope),
-  );
 
   const projectList = useMemo(
     () => organization.projects.map((p) => ({ id: p.id, name: p.name })),
     [organization.projects],
   );
-
-  const scopeGroups = useMemo(() => {
-    const groupOrder: {
-      label: string;
-      resourceType: ResourceType;
-      description: string;
-    }[] = [
-      {
-        label: "Organization",
-        resourceType: "org",
-        description: "Organization metadata, members, and access settings.",
-      },
-      {
-        label: "Build & Deploy",
-        resourceType: "project",
-        description: "Projects and their related resources.",
-      },
-      {
-        label: "Environments",
-        resourceType: "environment",
-        description: "Environments and their entries within projects.",
-      },
-      {
-        label: "Skills",
-        resourceType: "skill",
-        description: "Skills available within projects.",
-      },
-      {
-        label: "Assistants",
-        resourceType: "assistant",
-        description: "Assistants available within projects.",
-      },
-      {
-        label: "MCP Servers",
-        resourceType: "mcp",
-        description: "MCP server configuration and connections.",
-      },
-      {
-        label: "Agent Sessions",
-        resourceType: "chat",
-        description: "Access to members' agent session transcripts.",
-      },
-      {
-        label: "Agents",
-        resourceType: "agent",
-        description: "Agents available within the organization.",
-      },
-      {
-        label: "Workload Identities",
-        resourceType: "workload",
-        description:
-          "The trust policy deciding which machines the organization recognises.",
-      },
-    ];
-    return groupOrder.map((g) => ({
-      ...g,
-      scopes: userVisibleScopeDefinitions.filter(
-        (s) => s.resourceType === g.resourceType,
-      ),
-    }));
-  }, [userVisibleScopeDefinitions]);
 
   // ─── Initialize when editing ──────────────────────────────────
   if (editingRole && !initialized && scopesData && membersData) {
@@ -444,43 +340,6 @@ export function CreateRoleDialog({
     setGrants(update);
   };
 
-  const toggleScope = (scope: Scope) => {
-    updateGrants((prev) => {
-      const next = { ...prev };
-      const existing = next[scope];
-      if (existing && existing.rules.every((r) => r.effect === "deny")) {
-        // Granting a permission the role only blocks keeps the block, which
-        // then reads as the grant's exception.
-        next[scope] = {
-          ...existing,
-          rules: [
-            { id: crypto.randomUUID(), effect: "allow", selectors: null },
-            ...existing.rules,
-          ],
-        };
-      } else if (existing) {
-        delete next[scope];
-      } else {
-        next[scope] = {
-          scope,
-          rules: [
-            { id: crypto.randomUUID(), effect: "allow", selectors: null },
-          ],
-        };
-      }
-      return next;
-    });
-  };
-
-  const setConnectGrant = (grant: RoleGrant | undefined) => {
-    updateGrants((prev) => {
-      const next = { ...prev };
-      if (grant) next[MCP_CONNECT_SCOPE] = grant;
-      else delete next[MCP_CONNECT_SCOPE];
-      return next;
-    });
-  };
-
   const openRuleEditor = (scopeSlug: Scope, ruleIndex: number) => {
     setEditingScopeSlug(scopeSlug);
     setEditingRuleIndex(ruleIndex);
@@ -569,24 +428,6 @@ export function CreateRoleDialog({
       setEditingRuleIndex(-1);
       setDraftRule(null);
     }, 300);
-  };
-
-  // "All servers" is the unrestricted rule, which the model stores as null
-  // selectors rather than as a list naming everything.
-  const resetRuleToAll = (scopeSlug: string) => {
-    updateGrants((prev) => {
-      const grant = prev[scopeSlug];
-      if (!grant) return prev;
-      return {
-        ...prev,
-        [scopeSlug]: {
-          ...grant,
-          rules: grant.rules.map((rule) =>
-            rule.effect === "allow" ? { ...rule, selectors: null } : rule,
-          ),
-        },
-      };
-    });
   };
 
   const removeRule = (scopeSlug: string, ruleIndex: number) => {
@@ -732,9 +573,7 @@ export function CreateRoleDialog({
   // ─── Derived for slide panel ──────────────────────────────────
 
   const editingScopeDef = editingScopeSlug
-    ? scopeGroups
-        .flatMap((g) => g.scopes)
-        .find((s) => s.slug === editingScopeSlug)
+    ? userVisibleScopeDefinitions.find((s) => s.slug === editingScopeSlug)
     : null;
 
   // Exception constraints: an exception must be narrower than the broadest allow.
@@ -855,114 +694,19 @@ export function CreateRoleDialog({
                 Permissions
               </Text>
             </div>
-            <RolePermissionsSection
-              groups={scopeGroups}
-              selectedScopes={new Set(Object.keys(grants))}
-              blockOnlyScopes={blockOnlyScopes}
-              disabled={false}
+            <RoleAccessMatrix
+              grants={grants}
+              onChange={updateGrants}
+              scopes={userVisibleScopeDefinitions}
+              projects={projectList}
+              inventory={mcpInventory}
+              // An existing role's grants replace the form once they load, so
+              // the grid waits for them rather than take edits that would be
+              // overwritten.
+              loading={isEditing && !initialized}
               markAgentIneligible={selectedAgents.size > 0}
-              onToggleScope={toggleScope}
-              // No number until an existing role's grants are in: an empty
-              // form would count as zero servers.
-              mcpAccessCount={isEditing && !initialized ? null : mcpAccessCount}
-              renderMcpAccess={({ showPlatformAccess }) =>
-                // An existing role's grants replace the form once they load,
-                // so the panel waits for them rather than take edits that
-                // would be overwritten.
-                isEditing && !initialized ? (
-                  <Skeleton className="m-4">
-                    <div className="h-24 w-full" />
-                    <div className="h-40 w-full" />
-                  </Skeleton>
-                ) : (
-                  <McpAccessPanel
-                    grants={grants}
-                    onChangeConnectGrant={setConnectGrant}
-                    onShowPlatformAccess={showPlatformAccess}
-                  />
-                )
-              }
-              renderScopeRule={(scopeDef) => {
-                const grant = grants[scopeDef.slug];
-                if (!grant) return null;
-                // Scopes with nothing to narrow — an organization is not a
-                // list you pick from — carry no control at all: an "All" chip
-                // that cannot be changed is noise.
-                if (isUnrestrictedResourceType(scopeDef.resourceType)) {
-                  return null;
-                }
-                // A permission can hold more than one allow rule — selectors
-                // at different levels do not merge — so each one gets its own
-                // sentence rather than the first one standing for all of them.
-                const allowRules = grant.rules
-                  .map((rule, index) => ({ rule, index }))
-                  .filter(({ rule }) => rule.effect === "allow");
-                const denyRules = grant.rules
-                  .map((rule, index) => ({ rule, index }))
-                  .filter(({ rule }) => rule.effect === "deny");
-                if (allowRules.length === 0) {
-                  return (
-                    <BlockedScopeControl
-                      denyRules={denyRules}
-                      denyLabel={(rule) =>
-                        blockedResourceLabel(
-                          rule.selectors,
-                          scopeDef.resourceType,
-                        )
-                      }
-                      onEditException={(index) =>
-                        openRuleEditor(scopeDef.slug, index)
-                      }
-                      onRemoveException={(index) =>
-                        removeRule(scopeDef.slug, index)
-                      }
-                    />
-                  );
-                }
-                return allowRules.map(
-                  ({ rule: allowRule, index: allowIndex }, position) => (
-                    <PermissionScopeControl
-                      key={allowRule.id}
-                      allowRule={allowRule}
-                      // Exceptions belong to the permission, not to one of its
-                      // allow rules, so they are stated once.
-                      denyRules={position === 0 ? denyRules : []}
-                      resourceType={scopeDef.resourceType}
-                      allowLabel={computeRuleLabel(
-                        allowRule?.selectors ?? null,
-                        scopeDef.resourceType,
-                        projectList,
-                      )}
-                      denyLabel={(rule) =>
-                        blockedResourceLabel(
-                          rule.selectors,
-                          scopeDef.resourceType,
-                        )
-                      }
-                      canAddException={
-                        position === 0 &&
-                        denyRules.length === 0 &&
-                        getDenyPanels(
-                          getAllowLevel(grant.rules),
-                          scopeDef.resourceType,
-                        ).length > 0
-                      }
-                      disabled={false}
-                      onChooseSpecific={() =>
-                        openRuleEditor(scopeDef.slug, allowIndex)
-                      }
-                      onResetToAll={() => resetRuleToAll(scopeDef.slug)}
-                      onAddException={() => openRuleEditor(scopeDef.slug, -1)}
-                      onEditException={(index) =>
-                        openRuleEditor(scopeDef.slug, index)
-                      }
-                      onRemoveException={(index) =>
-                        removeRule(scopeDef.slug, index)
-                      }
-                    />
-                  ),
-                );
-              }}
+              onEditRule={openRuleEditor}
+              onRemoveRule={removeRule}
             />
 
             {/* ─── Assign Members (read-only when directory sync manages assignment) ─── */}

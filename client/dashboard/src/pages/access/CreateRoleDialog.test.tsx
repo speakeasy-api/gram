@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 
+import { TooltipProvider } from "@/components/ui/Tooltip";
+
 import { CreateRoleDialog } from "./CreateRoleDialog";
 import type { Role } from "@gram/client/models/components/role.js";
 
@@ -50,12 +52,18 @@ vi.mock("@gram/client/react-query/listScopes.js", () => ({
           label: "Read organization",
         },
         {
-          slug: "mcp:connect",
+          slug: "project:read",
+          resourceType: "project",
+          visibility: "user_visible",
+          description: "Read projects",
+          exclusionScope: "project:blocked_read",
+        },
+        ...(["connect", "read", "write"] as const).map((action) => ({
+          slug: `mcp:${action}`,
           resourceType: "mcp",
           visibility: "user_visible",
-          label: "Connect to MCP servers",
-          exclusionScope: "mcp:blocked_connect",
-        },
+          exclusionScope: `mcp:blocked_${action}`,
+        })),
       ],
     },
   }),
@@ -66,9 +74,6 @@ vi.mock("@gram/client/react-query/createRole.js", () => ({
 vi.mock("@gram/client/react-query/updateRole.js", () => ({
   useUpdateRoleMutation: () => ({ mutate: mocks.update, isPending: false }),
 }));
-// The MCP access tab reads the organization's servers; the section that
-// would show it is mocked below.
-vi.mock("./useMcpAccessCount", () => ({ useMcpAccessCount: () => 0 }));
 vi.mock("./useOrgMcpServers", () => ({
   useOrgMcpServers: () => ({
     groups: [
@@ -85,46 +90,6 @@ vi.mock("./useOrgMcpServers", () => ({
     isError: false,
     refetch: vi.fn(),
   }),
-}));
-vi.mock("./RolePermissionsSection", () => ({
-  RolePermissionsSection: ({
-    onToggleScope,
-    renderScopeRule,
-  }: {
-    onToggleScope: (scope: "org:read" | "mcp:connect") => void;
-    renderScopeRule: (scope: {
-      slug: "mcp:connect";
-      resourceType: "mcp";
-    }) => React.ReactNode;
-  }) => (
-    <>
-      <button onClick={() => onToggleScope("org:read")}>
-        Read organization
-      </button>
-      <button onClick={() => onToggleScope("mcp:connect")}>
-        Connect to MCP servers
-      </button>
-      {renderScopeRule({ slug: "mcp:connect", resourceType: "mcp" })}
-    </>
-  ),
-}));
-vi.mock("./PermissionScopeControl", async (importActual) => ({
-  // The block-only row is what these tests read, so it renders for real.
-  BlockedScopeControl: (
-    await importActual<typeof import("./PermissionScopeControl")>()
-  ).BlockedScopeControl,
-  PermissionScopeControl: ({
-    onChooseSpecific,
-    onResetToAll,
-  }: {
-    onChooseSpecific: () => void;
-    onResetToAll: () => void;
-  }) => (
-    <>
-      <button onClick={onChooseSpecific}>Choose specific servers</button>
-      <button onClick={onResetToAll}>Reset to all servers</button>
-    </>
-  ),
 }));
 vi.mock("./GrantRuleDrawerContent", () => ({
   GrantRuleDrawerContent: ({
@@ -161,13 +126,15 @@ function renderEditor(editingRole?: Role, confirmAssignmentFor?: string) {
   return render(
     <MemoryRouter>
       <QueryClientProvider client={new QueryClient()}>
-        <CreateRoleDialog
-          open
-          onOpenChange={vi.fn<(open: boolean) => void>()}
-          editingRole={editingRole}
-          confirmAssignmentFor={confirmAssignmentFor}
-          presentation="page"
-        />
+        <TooltipProvider>
+          <CreateRoleDialog
+            open
+            onOpenChange={vi.fn<(open: boolean) => void>()}
+            editingRole={editingRole}
+            confirmAssignmentFor={confirmAssignmentFor}
+            presentation="page"
+          />
+        </TooltipProvider>
       </QueryClientProvider>
     </MemoryRouter>,
   );
@@ -195,15 +162,15 @@ describe("role assignment confirmation", () => {
     return confirmation;
   }
 
-  it("clears an acknowledgement when a scope is toggled", () => {
+  it("clears an acknowledgement when a cell is toggled", () => {
     renderEditor(undefined, "Denied User");
     fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
       target: { value: "Reader" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Read organization" }));
+    fireEvent.click(screen.getByRole("button", { name: "View organization" }));
 
     const confirmation = confirmAssignment();
-    fireEvent.click(screen.getByRole("button", { name: "Read organization" }));
+    fireEvent.click(screen.getByRole("button", { name: "View organization" }));
 
     expect(confirmation.getAttribute("data-state")).toBe("unchecked");
   });
@@ -213,33 +180,14 @@ describe("role assignment confirmation", () => {
     fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
       target: { value: "Reader" },
     });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Connect to MCP servers" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "View projects" }));
 
     const confirmation = confirmAssignment();
     fireEvent.click(
-      screen.getByRole("button", { name: "Choose specific servers" }),
+      screen.getByRole("button", { name: "Change where View applies" }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Select server A" }));
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
-
-    expect(confirmation.getAttribute("data-state")).toBe("unchecked");
-  });
-
-  it("clears an acknowledgement when a rule is reset to all resources", () => {
-    renderEditor(undefined, "Denied User");
-    fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
-      target: { value: "Reader" },
-    });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Connect to MCP servers" }),
-    );
-
-    const confirmation = confirmAssignment();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Reset to all servers" }),
-    );
 
     expect(confirmation.getAttribute("data-state")).toBe("unchecked");
   });
@@ -288,7 +236,7 @@ describe("agent management rollout", () => {
     fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
       target: { value: "Test role" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Read organization" }));
+    fireEvent.click(screen.getByRole("button", { name: "View organization" }));
     fireEvent.click(screen.getByRole("button", { name: "Create Role" }));
     expect(mocks.create).toHaveBeenCalledOnce();
     expect(
@@ -331,57 +279,103 @@ describe("member assignment under directory sync", () => {
   });
 });
 
-describe("a permission the role only blocks", () => {
-  const blockingRole: Role = {
-    ...role,
-    grants: [
-      {
-        scope: "mcp:blocked_connect",
-        selectors: [{ resourceKind: "mcp", resourceId: "server-b" }],
-      },
-    ],
-  };
+describe("the access grid", () => {
+  /** Projects start collapsed; open the one the servers sit in. */
+  function show(editingRole: Parameters<typeof renderEditor>[0]) {
+    renderEditor(editingRole);
+    fireEvent.click(screen.getByRole("button", { name: /^Default/ }));
+  }
 
-  it("names the blocked server instead of reading as a grant", () => {
-    renderEditor(blockingRole);
-    expect(screen.getByRole("button", { name: "Linear" })).toBeTruthy();
-    expect(
-      screen.getByText(/Applies even when another role grants it/),
-    ).toBeTruthy();
-  });
-
-  it("keeps the block when the permission is granted beside it", () => {
-    renderEditor(blockingRole);
-    fireEvent.click(
-      screen.getByRole("button", { name: "Connect to MCP servers" }),
-    );
+  function savedForm() {
     fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
     expect(mocks.update).toHaveBeenCalledOnce();
-    const form = mocks.update.mock.calls[0]![0].request.updateRoleForm;
-    expect(form.addGrants).toEqual([
-      expect.objectContaining({ scope: "mcp:connect" }),
-    ]);
-    expect(form.removeGrants ?? []).toEqual([]);
-  });
+    return mocks.update.mock.calls[0]![0].request.updateRoleForm;
+  }
 
-  it("edits which server a block covers without granting anything", () => {
-    renderEditor(blockingRole);
-    fireEvent.click(screen.getByRole("button", { name: "Linear" }));
-    fireEvent.click(screen.getByRole("button", { name: "Select server A" }));
-    fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
-    const form = mocks.update.mock.calls[0]![0].request.updateRoleForm;
-    expect(form.addGrants).toEqual([
+  it("grants one level on one server", () => {
+    show(role);
+    fireEvent.click(screen.getByRole("button", { name: "Manage GitHub" }));
+    // Manage includes the levels below it, which the role does not store.
+    expect(
+      screen
+        .getByRole("button", { name: "Use GitHub" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+    expect(savedForm().addGrants).toEqual([
       {
-        scope: "mcp:blocked_connect",
+        scope: "mcp:write",
         selectors: [{ resourceKind: "mcp", resourceId: "server-a" }],
       },
     ]);
+  });
+
+  it("shows a block the role stores without a grant beside it", () => {
+    show({
+      ...role,
+      grants: [
+        {
+          scope: "mcp:blocked_connect",
+          selectors: [{ resourceKind: "mcp", resourceId: "server-b" }],
+        },
+      ],
+    });
+    expect(
+      screen.getByRole("button", { name: "Use Linear, blocked" }),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "View Linear" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+  });
+
+  it("blocks every level on a server from the Blocked column", () => {
+    show({
+      ...role,
+      grants: [
+        {
+          scope: "mcp:connect",
+          selectors: [
+            { resourceKind: "mcp", resourceId: "server-a" },
+            { resourceKind: "mcp", resourceId: "server-b" },
+          ],
+        },
+      ],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Block Linear" }));
+    const form = savedForm();
+    const linear = [{ resourceKind: "mcp", resourceId: "server-b" }];
+    expect(form.addGrants).toEqual(
+      expect.arrayContaining([
+        { scope: "mcp:blocked_connect", selectors: linear },
+        { scope: "mcp:blocked_read", selectors: linear },
+        { scope: "mcp:blocked_write", selectors: linear },
+      ]),
+    );
     expect(form.removeGrants).toEqual([
-      {
-        scope: "mcp:blocked_connect",
-        selectors: [{ resourceKind: "mcp", resourceId: "server-b" }],
-      },
+      { scope: "mcp:connect", selectors: linear },
     ]);
+  });
+
+  it("marks what a project row passes down to its servers", () => {
+    show({
+      ...role,
+      grants: [
+        {
+          scope: "mcp:read",
+          selectors: [
+            { resourceKind: "mcp", resourceId: "*", projectId: "project-a" },
+          ],
+        },
+      ],
+    });
+    const use = screen.getByRole("button", { name: "Use GitHub" });
+    expect(use.getAttribute("aria-pressed")).toBe("false");
+    expect(use.getAttribute("aria-disabled")).toBe("true");
+    expect(
+      screen
+        .getByRole("button", { name: "View Default" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
   });
 });
