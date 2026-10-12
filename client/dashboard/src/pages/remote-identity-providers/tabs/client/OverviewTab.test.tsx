@@ -455,7 +455,7 @@ describe("client overview settings", () => {
     expect(lastSaved().audience).toBe("api://example");
   });
 
-  it("clears the audience when the field is emptied", () => {
+  it("omits an emptied audience, which the API rejects", () => {
     renderTab({ client: client(undefined, { audience: "old-aud" }) });
 
     fireEvent.change(screen.getByLabelText("Audience"), {
@@ -463,7 +463,14 @@ describe("client overview settings", () => {
     });
     save();
 
-    expect(lastSaved().audience).toBe("");
+    expect(lastSaved().audience).toBeUndefined();
+  });
+
+  it("omits an unset audience on an unrelated save", () => {
+    renderTab();
+    save();
+
+    expect(lastSaved().audience).toBeUndefined();
   });
 
   it("hides secret rotation when private_key_jwt is selected", () => {
