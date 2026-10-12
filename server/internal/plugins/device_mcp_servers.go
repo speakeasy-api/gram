@@ -136,6 +136,10 @@ func deviceMCPServerName(slug, displayName string) string {
 	if name == "" {
 		name = "mcp-server"
 	}
+	// A slug that already carries the prefix keeps a single copy of it.
+	if rest, ok := strings.CutPrefix(name, deviceMCPServerNamePrefix); ok && rest != "" {
+		name = rest
+	}
 	return deviceMCPServerNamePrefix + name
 }
 

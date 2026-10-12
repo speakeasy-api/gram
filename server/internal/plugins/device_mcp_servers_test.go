@@ -29,6 +29,10 @@ func TestDeviceMCPServerName(t *testing.T) {
 		{name: "display name when the slug reduces to nothing", slug: "___", displayName: "Slack", want: "speakeasy-slack"},
 		{name: "non-ASCII letters are separators", displayName: "Café Notes", want: "speakeasy-caf-notes"},
 		{name: "fallback when nothing survives", displayName: "!!!", want: "speakeasy-mcp-server"},
+		{name: "a prefixed slug is not prefixed twice", slug: "speakeasy-partner", want: "speakeasy-partner"},
+		{name: "a prefixed display name is not prefixed twice", displayName: "Speakeasy Partner", want: "speakeasy-partner"},
+		{name: "the bare prefix word is still prefixed", slug: "speakeasy", want: "speakeasy-speakeasy"},
+		{name: "a prefix with nothing after it is still prefixed", slug: "speakeasy-", want: "speakeasy-speakeasy"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
