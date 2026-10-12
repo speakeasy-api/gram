@@ -41,11 +41,25 @@ type preparationDCRResponse struct {
 // Every failure after submission that does not prove rejection is indeterminate.
 // No response body, client secret or management token becomes a diagnostic;
 // only a rejection's RFC 7591 error and error_description are logged.
-func (s *Service) submitPreparationDCR(ctx context.Context, in PreparationInput, endpoint, method string) (preparationDCRResponse, string) {
-	return s.submitPreparationDCRWithTunnel(ctx, in, endpoint, method, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+func (s *Service) submitPreparationDCR(ctx context.Context, in PreparationInput, endpoint, method string, grantsSupported []string) (preparationDCRResponse, string) {
+	return s.submitPreparationDCRWithTunnel(ctx, in, endpoint, method, grantsSupported, nil, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 }
 
-func (s *Service) submitPreparationDCRWithTunnel(ctx context.Context, in PreparationInput, endpoint, method string, tunnelID uuid.NullUUID) (preparationDCRResponse, string) {
+// preparationDCRGrants always requests JWT bearer and adds the interactive
+// grants only when the issuer advertises them.
+func preparationDCRGrants(grantsSupported, responseTypesSupported []string) ([]string, bool) {
+	interactive := slices.Contains(grantsSupported, oauthwire.GrantTypeAuthorizationCode) && (len(responseTypesSupported) == 0 || slices.Contains(responseTypesSupported, oauthwire.ResponseTypeCode))
+	if !interactive {
+		return []string{oauthwire.GrantTypeJWTBearer}, false
+	}
+	grants := []string{oauthwire.GrantTypeAuthorizationCode}
+	if slices.Contains(grantsSupported, oauthwire.GrantTypeRefreshToken) {
+		grants = append(grants, oauthwire.GrantTypeRefreshToken)
+	}
+	return append(grants, oauthwire.GrantTypeJWTBearer), true
+}
+
+func (s *Service) submitPreparationDCRWithTunnel(ctx context.Context, in PreparationInput, endpoint, method string, grantsSupported, responseTypesSupported []string, tunnelID uuid.NullUUID) (preparationDCRResponse, string) {
 	var result preparationDCRResponse
 	if (method != oauthwire.AuthMethodClientSecretBasic && method != oauthwire.AuthMethodClientSecretPost) || !urls.IsAbsoluteHTTPSOrLoopback(endpoint) {
 		return result, PreparationStateManualSetupRequired
@@ -54,20 +68,20 @@ func (s *Service) submitPreparationDCRWithTunnel(ctx context.Context, in Prepara
 	if s.policy == nil || origin == nil {
 		return result, PreparationStateIndeterminate
 	}
+	grants, interactive := preparationDCRGrants(grantsSupported, responseTypesSupported)
+	var redirectURIs, responseTypes []string
 	// Some providers require redirect_uris and a one-time owner sign-in approval.
+	if interactive {
+		redirectURIs, responseTypes = []string{RemoteLoginCallbackURL(origin)}, []string{oauthwire.ResponseTypeCode}
+	}
 	body, _ := json.Marshal(struct {
-		RedirectURIs  []string `json:"redirect_uris"`
-		ResponseTypes []string `json:"response_types"`
+		RedirectURIs  []string `json:"redirect_uris,omitempty"`
+		ResponseTypes []string `json:"response_types,omitempty"`
 		GrantTypes    []string `json:"grant_types"`
 		AuthMethod    string   `json:"token_endpoint_auth_method"`
 		Scope         string   `json:"scope,omitempty"`
 		ClientName    string   `json:"client_name"`
-	}{
-		[]string{RemoteLoginCallbackURL(origin)},
-		[]string{oauthwire.ResponseTypeCode},
-		[]string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer},
-		method, strings.Join(in.Scopes, " "), "Speakeasy identity chaining",
-	})
+	}{redirectURIs, responseTypes, grants, method, strings.Join(in.Scopes, " "), "Speakeasy identity chaining"})
 	requestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, endpoint, bytes.NewReader(body))
@@ -171,7 +185,7 @@ func validatePreparationDCR(result preparationDCRResponse, requested []string, m
 func (s *Service) finishPreparationDCR(ctx context.Context, conn *pgxpool.Conn, in PreparationInput, claim repo.RemoteSessionEmaBinding, issuer repo.RemoteSessionIssuer, method string) (result *PreparationResult, returnErr error) {
 	var emptyClient repo.RemoteSessionClient
 	// The caller holds the connection-scoped binding lock, not a transaction.
-	response, state := s.submitPreparationDCRWithTunnel(ctx, in, issuer.RegistrationEndpoint.String, method, issuer.TunneledMcpServerID)
+	response, state := s.submitPreparationDCRWithTunnel(ctx, in, issuer.RegistrationEndpoint.String, method, issuer.GrantTypesSupported, issuer.ResponseTypesSupported, issuer.TunneledMcpServerID)
 	// Run after completion rollback, with a fresh timeout even if saveCtx expired.
 	// Only this exact pending claim may change: a successful but ambiguously
 	// acknowledged commit or a replacement binding must never be overwritten.

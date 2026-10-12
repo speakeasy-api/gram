@@ -2,26 +2,39 @@ import type { ReactNode } from "react";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IdentityChainingField } from "./IdentityChainingField";
 
 const pending = vi.hoisted(() => ({ prepare: false, unlink: false }));
+const unlinked = { state: "unlinked", scopes: [] };
+const read = vi.hoisted(() => ({ data: {} as Record<string, unknown> }));
+const scopeChecks = vi.hoisted(() => [] as unknown[]);
 vi.mock("@tanstack/react-query", () => ({
-  useQuery: () => ({
-    isFetching: false,
-    data: { state: "unlinked", scopes: [] },
-  }),
+  useQuery: () => ({ isFetching: false, data: read.data }),
   useQueryClient: () => ({}),
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "project",
 }));
-vi.mock("@/contexts/Auth", () => ({ useOrganization: () => ({ id: "org" }) }));
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "org" }),
+  useProject: () => ({ id: "project-id" }),
+}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true }),
 }));
 vi.mock("@/components/require-scope", () => ({
-  RequireScope: ({ children }: { children: ReactNode }) => children,
+  RequireScope: ({
+    children,
+    ...props
+  }: {
+    children: ReactNode;
+    scope: string;
+    resourceId: string;
+  }) => {
+    scopeChecks.push(props);
+    return children;
+  },
 }));
 vi.mock("@/components/vendor-ema-trust-notice", () => ({
   VendorEmaTrustNotice: () => null,
@@ -52,7 +65,7 @@ vi.mock("@gram/client/react-query/remoteSessionClientsUnlinkEMA.js", () => ({
 const clients = ["first", "second"].map((id) => ({
   id,
   clientId: id,
-  remoteSessionIssuerId: `${id}-issuer`,
+  remoteSessionIssuerId: "issuer",
   grantTypes: ["urn:ietf:params:oauth:grant-type:jwt-bearer"],
 })) as RemoteSessionClient[];
 
@@ -62,10 +75,23 @@ function field() {
       userSessionIssuer={{ id: "session-issuer" } as UserSessionIssuer}
       linkedClients={clients}
       resource="https://example.com/mcp"
-      permissionResourceId="server"
     />
   );
 }
+
+const bound = (clientId: string) => ({
+  state: "ready",
+  bindingId: "binding",
+  clientId,
+  externalClientId: clientId,
+  generation: 1,
+  scopes: [],
+});
+
+beforeEach(() => {
+  read.data = unlinked;
+  scopeChecks.length = 0;
+});
 
 afterEach(() => {
   cleanup();
@@ -93,4 +119,30 @@ describe("identity chaining client selection", () => {
       );
     },
   );
+});
+
+describe("identity chaining bound client", () => {
+  it("selects the client the binding uses", () => {
+    read.data = bound("second");
+    render(field());
+    expect(screen.getByRole("combobox").textContent).toBe("second");
+    expect(screen.queryByText("Use this client instead")).toBeNull();
+  });
+
+  it("makes replacing the bound client explicit", () => {
+    read.data = bound("elsewhere");
+    render(field());
+    expect(screen.getByText("Use this client instead")).toBeTruthy();
+    expect(screen.queryByText("Update scopes")).toBeNull();
+  });
+
+  it("requires the scope the API enforces", () => {
+    render(field());
+    expect(scopeChecks).toContainEqual(
+      expect.objectContaining({
+        scope: "project:write",
+        resourceId: "project-id",
+      }),
+    );
+  });
 });

@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
 import { VendorEmaTrustNotice } from "@/components/vendor-ema-trust-notice";
-import { useOrganization } from "@/contexts/Auth";
+import { useOrganization, useProject } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useProtectedResourceMetadata } from "@/lib/remote-identity/queries/useProtectedResourceMetadata";
@@ -116,14 +116,12 @@ export function IdentityChainingField({
   userSessionIssuer,
   linkedClients,
   resource,
-  permissionResourceId,
   remoteMcpServerId,
 }: {
   userSessionIssuer: UserSessionIssuer;
   linkedClients: RemoteSessionClient[];
   /** The remote MCP server URL; the executor matches it exactly. */
   resource: string;
-  permissionResourceId: string;
   /** Reuses the server's protected resource metadata probe for advertised scopes. */
   remoteMcpServerId?: string;
 }): JSX.Element {
@@ -142,12 +140,12 @@ export function IdentityChainingField({
     setPrepareOutcome(null);
     setGrantsConfirmed(false);
   };
-  const selected =
+  const picked =
     candidates.find((client) => client.id === selectedId) ?? candidates[0];
 
-  const target = selected && {
+  const target = picked && {
     userSessionIssuerId: userSessionIssuer.id,
-    remoteSessionIssuerId: selected.remoteSessionIssuerId,
+    remoteSessionIssuerId: picked.remoteSessionIssuerId,
     resource,
   };
 
@@ -174,7 +172,18 @@ export function IdentityChainingField({
     clientId: string;
     scopes: string[];
   } | null>(null);
-  const bound = chainingBound(read.data);
+  // The binding is keyed by issuer and resource, so it may name another client.
+  const boundClient = chainingBound(read.data)
+    ? candidates.find(
+        (client) =>
+          client.id === read.data?.clientId &&
+          client.remoteSessionIssuerId === picked?.remoteSessionIssuerId,
+      )
+    : undefined;
+  const selected = selectedId === null ? (boundClient ?? picked) : picked;
+  const switchingClient =
+    chainingBound(read.data) && read.data?.clientId !== selected?.id;
+  const bound = chainingBound(read.data) && !switchingClient;
   const storedScopes = bound && read.data ? read.data.scopes : [];
   const activeScopes = bound
     ? sanitizeChainingScopes(storedScopes)
@@ -204,6 +213,7 @@ export function IdentityChainingField({
 
   const { hasScope } = useRBAC();
   const organization = useOrganization();
+  const project = useProject();
   const cimd = !!selected && isCimdClient(selected);
   const publicClient = !!selected && isPublicClient(selected);
   const grantDeclaration = selected
@@ -344,8 +354,8 @@ export function IdentityChainingField({
                 </Text>
               )}
               <RequireScope
-                scope="mcp:write"
-                resourceId={permissionResourceId}
+                scope="project:write"
+                resourceId={project.id}
                 level="component"
               >
                 {ready ? (
@@ -364,7 +374,9 @@ export function IdentityChainingField({
                     disabled={pending || !read.data || enableBlocked}
                     onClick={enable}
                   >
-                    Enable identity chaining
+                    {switchingClient
+                      ? "Use this client instead"
+                      : "Enable identity chaining"}
                   </Button>
                 )}
                 {canUnlink && (
@@ -379,6 +391,13 @@ export function IdentityChainingField({
                 )}
               </RequireScope>
             </div>
+            {switchingClient && (
+              <Text muted small className="block">
+                Identity chaining uses client{" "}
+                {boundClient?.clientId ?? read.data?.externalClientId}. Using
+                this client instead replaces it.
+              </Text>
+            )}
             {publicClient && selected && (
               <Text muted small className="block">
                 Client {selected.clientId} is a public client. Identity chaining
@@ -391,8 +410,8 @@ export function IdentityChainingField({
               grantDeclaration &&
               selected && (
                 <RequireScope
-                  scope="mcp:write"
-                  resourceId={permissionResourceId}
+                  scope="project:write"
+                  resourceId={project.id}
                   level="component"
                 >
                   {grantsBlocked ? (

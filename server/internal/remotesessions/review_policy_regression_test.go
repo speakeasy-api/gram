@@ -67,7 +67,7 @@ func TestReviewPreparationDCRScopePresence(t *testing.T) {
 				_, _ = fmt.Fprintf(w, `{"client_id":"test-client","client_secret":"test-secret","grant_types":["%s"]%s}`, oauthwire.GrantTypeJWTBearer, tc.field)
 			}))
 			t.Cleanup(server.Close)
-			response, state := service.submitPreparationDCR(t.Context(), PreparationInput{Scopes: []string{"read", "write"}}, server.URL, oauthwire.AuthMethodClientSecretBasic)
+			response, state := service.submitPreparationDCR(t.Context(), PreparationInput{Scopes: []string{"read", "write"}}, server.URL, oauthwire.AuthMethodClientSecretBasic, preparationDCRInteractiveGrants)
 			require.Equal(t, tc.want, state)
 			if tc.name == "omitted" {
 				require.Nil(t, response.Scope)

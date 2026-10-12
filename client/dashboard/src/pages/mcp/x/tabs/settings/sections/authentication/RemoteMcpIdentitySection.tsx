@@ -698,7 +698,6 @@ export function RemoteMcpIdentitySectionBody({
               userSessionIssuer={chainingIssuer}
               linkedClients={clients}
               resource={sourceQuery.data.url}
-              permissionResourceId={target.permissionResourceId}
               remoteMcpServerId={remoteMcpServerId}
             />
           ) : null}

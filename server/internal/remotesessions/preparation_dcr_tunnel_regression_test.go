@@ -71,7 +71,7 @@ func TestPreparationDCRTunneledSubmission(t *testing.T) {
 			s := newPreparationDCRTestService(t, policy)
 			s.tunnels = tunnelrouting.NewHTTPClient(routes, "forward-token", policy, nil)
 			// An unresolvable issuer hostname ensures direct egress cannot pass.
-			response, state := s.submitPreparationDCRWithTunnel(t.Context(), PreparationInput{Scopes: []string{"read"}}, "https://issuer.invalid/register", "client_secret_basic", tunnelID)
+			response, state := s.submitPreparationDCRWithTunnel(t.Context(), PreparationInput{Scopes: []string{"read"}}, "https://issuer.invalid/register", "client_secret_basic", preparationDCRInteractiveGrants, nil, tunnelID)
 			require.Equal(t, tc.state, state)
 			if state == "ready" {
 				require.Equal(t, "tunnel-client", response.ClientID)
@@ -95,7 +95,7 @@ func TestPreparationDCRTunneledSubmissionFailsClosed(t *testing.T) {
 	for _, tunnels := range []*tunnelrouting.HTTPClient{nil, tunnelrouting.NewHTTPClient(route.NewRouteTable(), "forward-token", policy, nil)} {
 		s := newPreparationDCRTestService(t, policy)
 		s.tunnels = tunnels
-		_, state := s.submitPreparationDCRWithTunnel(t.Context(), PreparationInput{}, endpoint.URL, "client_secret_basic", uuid.NullUUID{UUID: uuid.New(), Valid: true})
+		_, state := s.submitPreparationDCRWithTunnel(t.Context(), PreparationInput{}, endpoint.URL, "client_secret_basic", preparationDCRInteractiveGrants, nil, uuid.NullUUID{UUID: uuid.New(), Valid: true})
 		require.Equal(t, "indeterminate", state)
 	}
 	require.Zero(t, direct.Load(), "missing tunnel transport or route must never fall back to direct egress")
