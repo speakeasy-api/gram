@@ -390,3 +390,39 @@ func TestHeaderDisplayNames_PreferToolsetKeyedTwin(t *testing.T) {
 	require.Equal(t, toolset.ID, last.ToolsetID)
 	require.JSONEq(t, `{"API_KEY":"X-Toolset"}`, string(last.HeaderDisplayNames))
 }
+
+func TestSetMcpMetadata_ToolsetTakeoverKeepsHeaderAliases(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPMetadataService(t)
+	toolset := createHostedToolset(t, ctx, ti, "hosted-takeover-aliases")
+	createCanonicalWrapper(t, ctx, ti, toolset)
+	original := setBySlug(t, ctx, ti, toolset, &gen.SetMcpMetadataPayload{Instructions: new("before")})
+
+	rows, err := testrepo.New(ti.conn).SetMcpMetadataHeaderDisplayNamesFixture(ctx, testrepo.SetMcpMetadataHeaderDisplayNamesFixtureParams{
+		HeaderDisplayNames: []byte(`{"API_KEY":"Alias-Key"}`),
+		ID:                 uuid.MustParse(original.ID),
+		ProjectID:          toolset.ProjectID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+	rekeyToServer(t, ctx, ti, toolset)
+
+	queries := repo.New(ti.conn)
+	before, err := queries.GetHeaderDisplayNames(ctx, repo.GetHeaderDisplayNamesParams{ProjectID: toolset.ProjectID, BackendID: toolset.ID})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"API_KEY":"Alias-Key"}`, string(before))
+
+	viaSlug := setBySlug(t, ctx, ti, toolset, &gen.SetMcpMetadataPayload{Instructions: new("after")})
+	require.NotEqual(t, original.ID, viaSlug.ID)
+	require.Equal(t, toolset.ID.String(), *viaSlug.ToolsetID)
+
+	after, err := queries.GetHeaderDisplayNames(ctx, repo.GetHeaderDisplayNamesParams{ProjectID: toolset.ProjectID, BackendID: toolset.ID})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"API_KEY":"Alias-Key"}`, string(after))
+
+	names, err := queries.GetHeaderDisplayNamesByToolsetIDs(ctx, repo.GetHeaderDisplayNamesByToolsetIDsParams{ProjectID: toolset.ProjectID, ToolsetIds: []uuid.UUID{toolset.ID}})
+	require.NoError(t, err)
+	require.NotEmpty(t, names)
+	require.JSONEq(t, `{"API_KEY":"Alias-Key"}`, string(names[len(names)-1].HeaderDisplayNames))
+}

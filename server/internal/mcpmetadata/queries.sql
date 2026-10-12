@@ -115,6 +115,25 @@ RETURNING id,
           created_at,
           updated_at;
 
+-- name: SetHeaderDisplayNames :one
+UPDATE mcp_metadata
+SET header_display_names = @header_display_names
+WHERE id = @id
+  AND project_id = @project_id
+RETURNING id,
+          toolset_id,
+          mcp_server_id,
+          project_id,
+          external_documentation_url,
+          external_documentation_text,
+          logo_id,
+          instructions,
+          header_display_names,
+          default_environment_id,
+          installation_override_url,
+          created_at,
+          updated_at;
+
 -- name: GetHeaderDisplayNames :one
 SELECT header_display_names
 FROM mcp_metadata

@@ -258,6 +258,53 @@ func (q *Queries) SetDefaultLogoIfUnset(ctx context.Context, arg SetDefaultLogoI
 	return i, err
 }
 
+const setHeaderDisplayNames = `-- name: SetHeaderDisplayNames :one
+UPDATE mcp_metadata
+SET header_display_names = $1
+WHERE id = $2
+  AND project_id = $3
+RETURNING id,
+          toolset_id,
+          mcp_server_id,
+          project_id,
+          external_documentation_url,
+          external_documentation_text,
+          logo_id,
+          instructions,
+          header_display_names,
+          default_environment_id,
+          installation_override_url,
+          created_at,
+          updated_at
+`
+
+type SetHeaderDisplayNamesParams struct {
+	HeaderDisplayNames []byte
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+}
+
+func (q *Queries) SetHeaderDisplayNames(ctx context.Context, arg SetHeaderDisplayNamesParams) (McpMetadatum, error) {
+	row := q.db.QueryRow(ctx, setHeaderDisplayNames, arg.HeaderDisplayNames, arg.ID, arg.ProjectID)
+	var i McpMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.ToolsetID,
+		&i.McpServerID,
+		&i.ProjectID,
+		&i.ExternalDocumentationUrl,
+		&i.ExternalDocumentationText,
+		&i.LogoID,
+		&i.Instructions,
+		&i.HeaderDisplayNames,
+		&i.DefaultEnvironmentID,
+		&i.InstallationOverrideUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const upsertEnvironmentConfig = `-- name: UpsertEnvironmentConfig :one
 INSERT INTO mcp_environment_configs (
     project_id,

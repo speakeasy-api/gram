@@ -479,15 +479,20 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 
 	toolsetKey, serverKey := backend.writeKey(existingRow)
 
-	// A toolset-keyed row created beside a server-keyed one wins every read, so it takes over the env configs.
+	// A toolset-keyed row created beside a server-keyed one wins every read, so it takes over the env configs and header aliases.
+	takeOver := existingRow != nil && toolsetKey.Valid && !existingRow.ToolsetID.Valid
 	environmentConfigs := payload.EnvironmentConfigs
-	if environmentConfigs == nil && existing != nil && existingRow != nil && toolsetKey.Valid && !existingRow.ToolsetID.Valid {
-		environmentConfigs = make([]*types.McpEnvironmentConfigInput, 0, len(existing.EnvironmentConfigs))
-		for _, config := range existing.EnvironmentConfigs {
+	if environmentConfigs == nil && takeOver {
+		entries, err := mcpr.ListEnvironmentConfigs(ctx, existingRow.ID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list existing environment configs").LogError(ctx, logger)
+		}
+		environmentConfigs = make([]*types.McpEnvironmentConfigInput, 0, len(entries))
+		for _, entry := range entries {
 			environmentConfigs = append(environmentConfigs, &types.McpEnvironmentConfigInput{
-				VariableName:      config.VariableName,
-				HeaderDisplayName: config.HeaderDisplayName,
-				ProvidedBy:        config.ProvidedBy,
+				VariableName:      entry.VariableName,
+				HeaderDisplayName: conv.FromPGText[string](entry.HeaderDisplayName),
+				ProvidedBy:        entry.ProvidedBy,
 			})
 		}
 	}
@@ -519,6 +524,17 @@ func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadat
 	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "upsert MCP server metadata").LogError(ctx, logger)
+	}
+
+	if takeOver {
+		result, err = mcpr.SetHeaderDisplayNames(ctx, repo.SetHeaderDisplayNamesParams{
+			HeaderDisplayNames: existingRow.HeaderDisplayNames,
+			ID:                 result.ID,
+			ProjectID:          *authCtx.ProjectID,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "copy MCP server header display names").LogError(ctx, logger)
+		}
 	}
 
 	// Update environment entries
