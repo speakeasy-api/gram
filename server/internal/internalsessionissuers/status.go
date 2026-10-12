@@ -136,13 +136,15 @@ func Keyless(ctx context.Context, db repo.DBTX, organizationID string, setID uui
 	return false, nil
 }
 
-// signingPaused fails closed: a flag lookup error pauses signing.
+// signingPaused fails closed: signing runs only when the kill switch is
+// authoritatively off. A missing flag, an unavailable provider or a lookup
+// error all pause signing.
 func (g *Gate) signingPaused(ctx context.Context, organizationID string, groups map[string]string) bool {
 	if g.paused {
 		return true
 	}
-	paused, err := g.flagEnabled(ctx, feature.FlagInternalSessionIssuerSigningPaused, organizationID, groups)
-	return err != nil || paused
+	evaluation, err := feature.EvaluateFlag(ctx, g.flags, feature.FlagInternalSessionIssuerSigningPaused, organizationID, groups)
+	return err != nil || evaluation != feature.EvaluationDisabled
 }
 
 func (g *Gate) flagEnabled(ctx context.Context, flag feature.Flag, organizationID string, groups map[string]string) (bool, error) {

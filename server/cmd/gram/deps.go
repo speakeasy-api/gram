@@ -519,6 +519,8 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 	// Local dev has no Presidio HTTP analyzer, so realtime scans must take the
 	// Pub/Sub lanes to pystreams. A CSV row can still turn this off.
 	inmem.SetFlag(feature.FlagRiskEnforcementPubsub, feature.AnyDistinctID, true)
+	// The issuer kill switch fails closed when unset, so local dev sets it off.
+	inmem.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, feature.AnyDistinctID, false)
 
 	if csvPath == "" {
 		logger.DebugContext(ctx, "newLocalFeatureFlags: no csv path provided, using empty in-memory feature flag provider")
