@@ -11,7 +11,6 @@ import (
 	"log/slog"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -38,11 +37,6 @@ const (
 	// newWidgetVersion is the version a create preview returns and its
 	// confirmation names: a widget that does not exist yet has no updated_at.
 	newWidgetVersion = "new"
-
-	// maxWidgetNameLength and maxWidgetDescriptionLength are the dashboard's
-	// limits on the same fields, in characters.
-	maxWidgetNameLength        = 200
-	maxWidgetDescriptionLength = 2000
 
 	// maxWidgetProposalBytes bounds the query and visualization a caller can
 	// send, and with them the preview token's hashing work. A real widget is
@@ -300,6 +294,14 @@ func (s *WidgetService) Save(ctx context.Context, principal Principal, input Sav
 	return output, s.boundaryError(ctx, operation, err)
 }
 
+// widgetTokenProposal is what a preview token binds besides the actor,
+// project, operation and version: the target widget and, for a save, the
+// whole proposed widget.
+type widgetTokenProposal struct {
+	WidgetID string         `json:"widget_id"`
+	Widget   *widgets.Input `json:"widget,omitempty"`
+}
+
 func (s *WidgetService) save(ctx context.Context, principal Principal, operation string, input SaveWidgetInput) (WidgetWriteOutput, error) {
 	proposal, err := validateSaveWidget(input)
 	if err != nil {
@@ -310,21 +312,14 @@ func (s *WidgetService) save(ctx context.Context, principal Principal, operation
 		return WidgetWriteOutput{}, err
 	}
 	out := newWidgetWriteOutput(project, operation)
-	tokenProposal := struct {
-		WidgetID      string         `json:"widget_id"`
-		Name          string         `json:"name"`
-		Description   *string        `json:"description"`
-		Dataset       string         `json:"dataset"`
-		Query         map[string]any `json:"query"`
-		Visualization map[string]any `json:"visualization"`
-	}{WidgetID: input.WidgetID, Name: proposal.Name, Description: proposal.Description, Dataset: proposal.Dataset, Query: proposal.Query, Visualization: proposal.Visualization}
+	token := widgetTokenProposal{WidgetID: input.WidgetID, Widget: &proposal}
 
 	if !input.Confirmed {
 		if err := s.widgets.Check(ctx, proposal); err != nil {
 			return out, fmt.Errorf("check widget: %w", err)
 		}
-		out.Version = newWidgetVersion
 		proposed := WidgetDefinition{ID: input.WidgetID, Name: proposal.Name, Description: proposal.Description, Dataset: proposal.Dataset, Query: proposal.Query, Visualization: proposal.Visualization, CreatedByUserID: nil, CreatedAt: "", UpdatedAt: "", Version: "", InvalidReason: nil, Dashboards: []WidgetDashboardRef{}}
+		out.Version = newWidgetVersion
 		if operation == operationUpdateWidget {
 			current, err := s.widgets.Read(ctx, input.WidgetID)
 			if err != nil {
@@ -335,10 +330,10 @@ func (s *WidgetService) save(ctx context.Context, principal Principal, operation
 			proposed.Dashboards = definition.Dashboards
 		}
 		out.Widget = &proposed
-		return s.preview(principal, project, operation, out, tokenProposal)
+		return s.preview(principal, project, out, token)
 	}
 
-	receipt, err := s.confirm(ctx, principal, project, operation, confirmation{Version: input.ExpectedVersion, Token: input.PreviewToken, Key: input.IdempotencyKey}, tokenProposal, func(ctx context.Context, tx pgx.Tx) (widgetReceipt, error) {
+	receipt, err := s.confirm(ctx, principal, project, operation, confirmation{Version: input.ExpectedVersion, Token: input.PreviewToken, Key: input.IdempotencyKey}, token, func(ctx context.Context, tx pgx.Tx) (widgetReceipt, error) {
 		var snapshot widgets.Snapshot
 		var err error
 		if operation == operationCreateWidget {
@@ -354,62 +349,37 @@ func (s *WidgetService) save(ctx context.Context, principal Principal, operation
 	if err != nil {
 		return out, err
 	}
-	return s.verifyWritten(ctx, out, receipt)
+	return s.finish(ctx, out, receipt)
 }
 
 // Duplicate previews or commits a copy of a widget the caller then owns.
 func (s *WidgetService) Duplicate(ctx context.Context, principal Principal, input WidgetTargetInput) (WidgetWriteOutput, error) {
-	output, err := s.duplicate(ctx, principal, input)
-	return output, s.boundaryError(ctx, operationDuplicateWidget, err)
-}
-
-func (s *WidgetService) duplicate(ctx context.Context, principal Principal, input WidgetTargetInput) (WidgetWriteOutput, error) {
-	if err := validateWidgetID(input.WidgetID); err != nil {
-		return WidgetWriteOutput{}, err
-	}
-	ctx, project, err := s.scope(ctx, principal, input.ProjectID, true)
-	if err != nil {
-		return WidgetWriteOutput{}, err
-	}
-	out := newWidgetWriteOutput(project, operationDuplicateWidget)
-	tokenProposal := struct {
-		WidgetID string `json:"widget_id"`
-	}{WidgetID: input.WidgetID}
-
-	if !input.Confirmed {
-		source, err := s.widgets.Read(ctx, input.WidgetID)
-		if err != nil {
-			return out, fmt.Errorf("read widget to duplicate: %w", err)
-		}
-		if source.Widget.InvalidReason != nil {
-			return out, &WidgetToolError{Code: "invalid_request", Field: "widget_id", Message: "This widget cannot be duplicated until it is fixed: " + *source.Widget.InvalidReason + ". Save a corrected version with save_widget first.", Cause: nil}
-		}
-		definition := widgetDefinition(source)
-		out.Widget, out.Version = &definition, source.Version
-		return s.preview(principal, project, operationDuplicateWidget, out, tokenProposal)
-	}
-
-	receipt, err := s.confirm(ctx, principal, project, operationDuplicateWidget, confirmation{Version: input.ExpectedVersion, Token: input.PreviewToken, Key: input.IdempotencyKey}, tokenProposal, func(ctx context.Context, tx pgx.Tx) (widgetReceipt, error) {
+	output, err := s.target(ctx, principal, operationDuplicateWidget, input, func(ctx context.Context, tx pgx.Tx) (widgetReceipt, error) {
 		snapshot, err := s.widgets.DuplicateInTx(ctx, tx, input.WidgetID, input.ExpectedVersion)
 		if err != nil {
 			return widgetReceipt{}, fmt.Errorf("duplicate widget: %w", err)
 		}
 		return widgetReceipt{WidgetID: snapshot.Widget.ID, RemovedFrom: nil}, nil
 	})
-	if err != nil {
-		return out, err
-	}
-	return s.verifyWritten(ctx, out, receipt)
+	return output, s.boundaryError(ctx, operationDuplicateWidget, err)
 }
 
 // Delete previews or commits deleting a widget, which takes it off every
 // dashboard it is on.
 func (s *WidgetService) Delete(ctx context.Context, principal Principal, input WidgetTargetInput) (WidgetWriteOutput, error) {
-	output, err := s.delete(ctx, principal, input)
+	output, err := s.target(ctx, principal, operationDeleteWidget, input, func(ctx context.Context, tx pgx.Tx) (widgetReceipt, error) {
+		removed, err := s.widgets.DeleteInTx(ctx, tx, input.WidgetID, input.ExpectedVersion)
+		if err != nil {
+			return widgetReceipt{}, fmt.Errorf("delete widget: %w", err)
+		}
+		return widgetReceipt{WidgetID: input.WidgetID, RemovedFrom: dashboardRefs(removed)}, nil
+	})
 	return output, s.boundaryError(ctx, operationDeleteWidget, err)
 }
 
-func (s *WidgetService) delete(ctx context.Context, principal Principal, input WidgetTargetInput) (WidgetWriteOutput, error) {
+// target previews or commits a write to one existing widget: a duplicate or
+// a delete. The preview shows the widget as it stands and its version.
+func (s *WidgetService) target(ctx context.Context, principal Principal, operation string, input WidgetTargetInput, mutate func(context.Context, pgx.Tx) (widgetReceipt, error)) (WidgetWriteOutput, error) {
 	if err := validateWidgetID(input.WidgetID); err != nil {
 		return WidgetWriteOutput{}, err
 	}
@@ -417,43 +387,59 @@ func (s *WidgetService) delete(ctx context.Context, principal Principal, input W
 	if err != nil {
 		return WidgetWriteOutput{}, err
 	}
-	out := newWidgetWriteOutput(project, operationDeleteWidget)
-	tokenProposal := struct {
-		WidgetID string `json:"widget_id"`
-	}{WidgetID: input.WidgetID}
+	out := newWidgetWriteOutput(project, operation)
+	token := widgetTokenProposal{WidgetID: input.WidgetID, Widget: nil}
 
 	if !input.Confirmed {
 		current, err := s.widgets.Read(ctx, input.WidgetID)
 		if err != nil {
-			return out, fmt.Errorf("read widget to delete: %w", err)
+			return out, fmt.Errorf("read widget: %w", err)
+		}
+		if operation == operationDuplicateWidget && current.Widget.InvalidReason != nil {
+			return out, &WidgetToolError{Code: "invalid_request", Field: "widget_id", Message: "This widget cannot be duplicated until it is fixed: " + *current.Widget.InvalidReason + ". Save a corrected version with save_widget first.", Cause: nil}
 		}
 		definition := widgetDefinition(current)
-		out.Widget, out.Version, out.Dashboards = &definition, current.Version, definition.Dashboards
-		return s.preview(principal, project, operationDeleteWidget, out, tokenProposal)
+		out.Widget, out.Version = &definition, current.Version
+		if operation == operationDeleteWidget {
+			out.Dashboards = definition.Dashboards
+		}
+		return s.preview(principal, project, out, token)
 	}
 
-	receipt, err := s.confirm(ctx, principal, project, operationDeleteWidget, confirmation{Version: input.ExpectedVersion, Token: input.PreviewToken, Key: input.IdempotencyKey}, tokenProposal, func(ctx context.Context, tx pgx.Tx) (widgetReceipt, error) {
-		removed, err := s.widgets.DeleteInTx(ctx, tx, input.WidgetID, input.ExpectedVersion)
-		if err != nil {
-			return widgetReceipt{}, fmt.Errorf("delete widget: %w", err)
-		}
-		return widgetReceipt{WidgetID: input.WidgetID, RemovedFrom: dashboardRefs(removed)}, nil
-	})
+	receipt, err := s.confirm(ctx, principal, project, operation, confirmation{Version: input.ExpectedVersion, Token: input.PreviewToken, Key: input.IdempotencyKey}, token, mutate)
 	if err != nil {
 		return out, err
 	}
+	return s.finish(ctx, out, receipt)
+}
 
+// finish reports a committed or replayed write from a fresh read of the
+// widget it wrote. A delete reports the dashboards from its receipt and is
+// verified by the widget reading as gone.
+func (s *WidgetService) finish(ctx context.Context, out WidgetWriteOutput, receipt OperationReceipt) (WidgetWriteOutput, error) {
 	stored, err := decodeWidgetReceipt(receipt.ResultPayload)
 	if err != nil {
 		return out, err
 	}
 	out.ReceiptID, out.Replayed = receipt.ID.String(), receipt.Replayed
-	out.Dashboards = append(out.Dashboards, stored.RemovedFrom...)
-	out.SnapshotScope = widgetSnapshotVerificationUnavailable
-	if _, err := s.widgets.Read(ctx, input.WidgetID); err != nil {
-		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeNotFound {
-			out.SnapshotScope = widgetSnapshotDeleted
+	deleted := out.Operation == operationDeleteWidget
+	if deleted {
+		out.Dashboards = append([]WidgetDashboardRef{}, stored.RemovedFrom...)
+	}
+
+	snapshot, err := s.widgets.Read(ctx, stored.WidgetID)
+	shareable, isShareable := errors.AsType[*oops.ShareableError](err)
+	switch {
+	case err == nil:
+		definition := widgetDefinition(snapshot)
+		out.Widget, out.Version, out.SnapshotScope = &definition, snapshot.Version, widgetSnapshotCurrent
+		if !deleted {
+			out.Dashboards = definition.Dashboards
 		}
+	case deleted && isShareable && shareable.Code == oops.CodeNotFound:
+		out.SnapshotScope = widgetSnapshotDeleted
+	default:
+		out.SnapshotScope = widgetSnapshotVerificationUnavailable
 	}
 	return out, nil
 }
@@ -495,19 +481,20 @@ func (s *WidgetService) scope(ctx context.Context, principal Principal, projectI
 		return ctx, project, ErrForbidden
 	}
 
-	organizationSlug, err := s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
-	if err != nil {
-		return ctx, project, fmt.Errorf("%w: resolve organization slug for widgets: %w", ErrUnavailable, err)
-	}
+	// The Platform MCP authenticator puts the slug on the auth context; the
+	// lookup covers a context that arrived without one.
+	organizationSlug := auth.OrganizationSlug
 	if organizationSlug == "" {
-		return ctx, project, fmt.Errorf("%w: organization slug is unavailable", ErrUnavailable)
+		organizationSlug, err = s.organizations.OrganizationSlug(ctx, principal.OrganizationID)
+		if err != nil {
+			return ctx, project, fmt.Errorf("%w: resolve organization slug for widgets: %w", ErrUnavailable, err)
+		}
 	}
-	// Disabled, missing and indeterminate all fail closed.
-	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagExplore, principal.OrganizationID, feature.OrgProjectGroups(organizationSlug, project.Slug))
+	enabled, err := exploreEnabled(ctx, s.flags, principal.OrganizationID, organizationSlug, project.Slug)
 	if err != nil {
-		return ctx, project, fmt.Errorf("%w: evaluate widgets capability: %w", ErrUnavailable, err)
+		return ctx, project, err
 	}
-	if evaluation != feature.EvaluationEnabled {
+	if !enabled {
 		return ctx, project, ErrWidgetsNotEnabled
 	}
 
@@ -526,8 +513,8 @@ type confirmation struct {
 
 // preview signs a preview so its confirmation can only commit exactly what
 // was shown, at exactly the version that was read.
-func (s *WidgetService) preview(principal Principal, project ResolvedProject, operation string, out WidgetWriteOutput, proposal any) (WidgetWriteOutput, error) {
-	token, err := s.previewToken(principal, project, operation, out.Version, proposal)
+func (s *WidgetService) preview(principal Principal, project ResolvedProject, out WidgetWriteOutput, proposal widgetTokenProposal) (WidgetWriteOutput, error) {
+	token, err := s.previewToken(principal, project, out.Operation, out.Version, proposal)
 	if err != nil {
 		return WidgetWriteOutput{}, err
 	}
@@ -535,14 +522,14 @@ func (s *WidgetService) preview(principal Principal, project ResolvedProject, op
 	return out, nil
 }
 
-func (s *WidgetService) previewToken(principal Principal, project ResolvedProject, operation, version string, proposal any) (string, error) {
+func (s *WidgetService) previewToken(principal Principal, project ResolvedProject, operation, version string, proposal widgetTokenProposal) (string, error) {
 	data, err := json.Marshal(struct {
-		Organization string `json:"organization"`
-		User         string `json:"user"`
-		Project      string `json:"project"`
-		Operation    string `json:"operation"`
-		Version      string `json:"version"`
-		Proposal     any    `json:"proposal"`
+		Organization string              `json:"organization"`
+		User         string              `json:"user"`
+		Project      string              `json:"project"`
+		Operation    string              `json:"operation"`
+		Version      string              `json:"version"`
+		Proposal     widgetTokenProposal `json:"proposal"`
 	}{Organization: principal.OrganizationID, User: principal.UserID, Project: project.ID.String(), Operation: operation, Version: version, Proposal: proposal})
 	if err != nil {
 		return "", fmt.Errorf("encode widget proposal: %w", err)
@@ -556,7 +543,7 @@ func (s *WidgetService) previewToken(principal Principal, project ResolvedProjec
 // confirm checks a confirmation against its preview and runs the write in
 // the receipt's transaction, so a retry with the same key replays the stored
 // result instead of writing twice.
-func (s *WidgetService) confirm(ctx context.Context, principal Principal, project ResolvedProject, operation string, confirmed confirmation, proposal any, mutate func(context.Context, pgx.Tx) (widgetReceipt, error)) (OperationReceipt, error) {
+func (s *WidgetService) confirm(ctx context.Context, principal Principal, project ResolvedProject, operation string, confirmed confirmation, proposal widgetTokenProposal, mutate func(context.Context, pgx.Tx) (widgetReceipt, error)) (OperationReceipt, error) {
 	key := strings.TrimSpace(confirmed.Key)
 	if key == "" || len(key) > maxIdempotencyKeyLength {
 		return OperationReceipt{}, widgetInvalid("idempotency_key", "Provide a stable idempotency_key of at most 128 characters to confirm, and reuse it only to retry this exact request.")
@@ -597,24 +584,6 @@ func (s *WidgetService) confirm(ctx context.Context, principal Principal, projec
 		},
 		Mutate: mutate,
 	})
-}
-
-// verifyWritten reports a committed save or duplicate from a fresh read of
-// the widget it wrote.
-func (s *WidgetService) verifyWritten(ctx context.Context, out WidgetWriteOutput, receipt OperationReceipt) (WidgetWriteOutput, error) {
-	stored, err := decodeWidgetReceipt(receipt.ResultPayload)
-	if err != nil {
-		return out, err
-	}
-	out.ReceiptID, out.Replayed = receipt.ID.String(), receipt.Replayed
-	snapshot, err := s.widgets.Read(ctx, stored.WidgetID)
-	if err != nil {
-		out.SnapshotScope = widgetSnapshotVerificationUnavailable
-		return out, nil
-	}
-	definition := widgetDefinition(snapshot)
-	out.Widget, out.Version, out.Dashboards, out.SnapshotScope = &definition, snapshot.Version, definition.Dashboards, widgetSnapshotCurrent
-	return out, nil
 }
 
 func decodeWidgetReceipt(data []byte) (widgetReceipt, error) {
@@ -681,26 +650,20 @@ func validateSaveWidget(input SaveWidgetInput) (widgets.Input, error) {
 			return widgets.Input{}, err
 		}
 	}
-	if length := utf8.RuneCountInString(input.Name); strings.TrimSpace(input.Name) == "" || length > maxWidgetNameLength {
-		return widgets.Input{}, widgetInvalid("name", "Give the widget a name of 1 to 200 characters.")
-	}
-	if input.Description != nil && utf8.RuneCountInString(*input.Description) > maxWidgetDescriptionLength {
-		return widgets.Input{}, widgetInvalid("description", "Keep the description to at most 2000 characters.")
-	}
-	if strings.TrimSpace(input.Dataset) == "" {
-		return widgets.Input{}, widgetInvalid("dataset", "Name the dataset the widget asks, from describe_analytics_catalog.")
-	}
 	if input.Query == nil {
 		return widgets.Input{}, widgetInvalid("query", "Provide the question as an object in run_analytics_query's vocabulary.")
 	}
 	if input.Visualization == nil {
 		return widgets.Input{}, widgetInvalid("visualization", "Provide the visualization as an object whose type names the chart.")
 	}
-	encoded, err := json.Marshal([]map[string]any{input.Query, input.Visualization})
+	// The widgets service validates every field; this only bounds what is
+	// hashed into the preview token before it does.
+	proposal := widgets.Input{Name: input.Name, Description: input.Description, Dataset: input.Dataset, Query: input.Query, Visualization: input.Visualization}
+	encoded, err := json.Marshal(proposal)
 	if err != nil || len(encoded) > maxWidgetProposalBytes {
-		return widgets.Input{}, widgetInvalid("query", "The query and visualization together must be JSON of at most 64 KiB.")
+		return widgets.Input{}, widgetInvalid("query", "The widget, query and visualization included, must be JSON of at most 64 KiB.")
 	}
-	return widgets.Input{Name: input.Name, Description: input.Description, Dataset: input.Dataset, Query: input.Query, Visualization: input.Visualization}, nil
+	return proposal, nil
 }
 
 func validateWidgetID(id string) error {

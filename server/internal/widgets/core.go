@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -21,17 +22,20 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/widgets/repo"
 )
 
+// maxDescriptionLength matches the widgets RPC's limit on a description.
+const maxDescriptionLength = 2000
+
 // ErrVersionChanged marks a write that named the version it expected and
 // found the widget changed since. It is wrapped in a conflict error.
 var ErrVersionChanged = errors.New("widget changed since it was read")
 
 // Input is a widget as a caller wants it saved.
 type Input struct {
-	Name          string
-	Description   *string
-	Dataset       string
-	Query         map[string]any
-	Visualization map[string]any
+	Name          string         `json:"name"`
+	Description   *string        `json:"description"`
+	Dataset       string         `json:"dataset"`
+	Query         map[string]any `json:"query"`
+	Visualization map[string]any `json:"visualization"`
 }
 
 // Snapshot is a widget as read or written, with the version a later write
@@ -114,7 +118,7 @@ func (s *Service) Check(ctx context.Context, input Input) error {
 	if _, err := s.authorize(ctx, authz.ScopeProjectRead); err != nil {
 		return err
 	}
-	_, _, err := s.checkWidget(ctx, input.Dataset, input.Query, input.Visualization)
+	_, _, err := s.checkInput(ctx, input)
 	return err
 }
 
@@ -126,7 +130,7 @@ func (s *Service) CreateInTx(ctx context.Context, tx pgx.Tx, input Input) (Snaps
 		return Snapshot{}, err
 	}
 
-	query, visualization, err := s.checkWidget(ctx, input.Dataset, input.Query, input.Visualization)
+	query, visualization, err := s.checkInput(ctx, input)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -215,7 +219,7 @@ func (s *Service) UpdateInTx(ctx context.Context, tx pgx.Tx, id string, input In
 		return Snapshot{}, err
 	}
 
-	query, visualization, err := s.checkWidget(ctx, input.Dataset, input.Query, input.Visualization)
+	query, visualization, err := s.checkInput(ctx, input)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -337,6 +341,21 @@ func (s *Service) DeleteInTx(ctx context.Context, tx pgx.Tx, id string, expected
 		return nil, oops.E(oops.CodeUnexpected, err, "audit widget deletion").LogError(ctx, s.logger)
 	}
 	return dashboardsOf(affected), nil
+}
+
+// checkInput validates a widget about to be saved, its name and description
+// as well as its query and visualization, and returns the query and
+// visualization encoded for storage. The RPC enforces the same name and
+// description limits as it decodes; callers that bring their own input rely
+// on this.
+func (s *Service) checkInput(ctx context.Context, input Input) ([]byte, []byte, error) {
+	if length := utf8.RuneCountInString(input.Name); length == 0 || length > maxNameLength {
+		return nil, nil, oops.E(oops.CodeBadRequest, nil, "invalid_name: a widget's name must be 1 to %d characters", maxNameLength)
+	}
+	if input.Description != nil && utf8.RuneCountInString(*input.Description) > maxDescriptionLength {
+		return nil, nil, oops.E(oops.CodeBadRequest, nil, "invalid_description: a widget's description must be at most %d characters", maxDescriptionLength)
+	}
+	return s.checkWidget(ctx, input.Dataset, input.Query, input.Visualization)
 }
 
 // lockWidget loads a widget for update, holding its row lock for the rest of

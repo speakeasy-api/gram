@@ -1,6 +1,7 @@
 package widgets_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -32,6 +33,24 @@ func TestReadReportsTheVersionAtFullPrecision(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, all, 1)
 	require.Equal(t, snapshot.Version, all[0].Version)
+}
+
+func TestCheckEnforcesNameAndDescriptionLimits(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	long := strings.Repeat("x", 2001)
+	for name, input := range map[string]widgets.Input{
+		"empty name":       {Name: "", Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart()},
+		"long name":        {Name: long[:201], Description: nil, Dataset: "sessions", Query: validQuery(), Visualization: barChart()},
+		"long description": {Name: "ok", Description: &long, Dataset: "sessions", Query: validQuery(), Visualization: barChart()},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			requireOopsCode(t, ti.service.Check(ctx, input), oops.CodeBadRequest)
+		})
+	}
+	require.NoError(t, ti.service.Check(ctx, widgets.Input{Name: long[:200], Description: new(long[:2000]), Dataset: "sessions", Query: validQuery(), Visualization: barChart()}))
 }
 
 func TestUpdateInTxRefusesAStaleVersion(t *testing.T) {

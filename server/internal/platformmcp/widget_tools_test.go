@@ -351,7 +351,7 @@ func TestSaveWidgetSurfacesTheValidationReason(t *testing.T) {
 	_, err = f.invoke(t, ctx, saveWidgetToolName, arguments)
 	refusal = requireWidgetRefusal(t, err)
 	require.Equal(t, "invalid_request", refusal.Code)
-	require.Equal(t, "name", refusal.Field)
+	require.Contains(t, refusal.Message, "invalid_name", "the widgets service's own limit applies")
 }
 
 func TestSaveWidgetRefusesAStaleVersion(t *testing.T) {
