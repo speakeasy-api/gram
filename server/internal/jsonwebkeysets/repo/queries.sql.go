@@ -541,6 +541,21 @@ func (q *Queries) GetOrganizationInternalSessionIssuer(ctx context.Context, orga
 	return i, err
 }
 
+const getOrganizationInternalSessionIssuerURL = `-- name: GetOrganizationInternalSessionIssuerURL :one
+SELECT isi.issuer
+FROM internal_session_issuers AS isi
+JOIN organization_metadata AS o ON o.id = isi.organization_id AND o.disabled_at IS NULL
+WHERE isi.organization_id = $1
+  AND isi.deleted IS FALSE
+`
+
+func (q *Queries) GetOrganizationInternalSessionIssuerURL(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, getOrganizationInternalSessionIssuerURL, organizationID)
+	var issuer string
+	err := row.Scan(&issuer)
+	return issuer, err
+}
+
 const hasExpiredEMAIssuerKeys = `-- name: HasExpiredEMAIssuerKeys :one
 SELECT EXISTS (
   SELECT 1
@@ -713,29 +728,30 @@ func (q *Queries) ListJsonWebKeys(ctx context.Context, arg ListJsonWebKeysParams
 	return items, nil
 }
 
-const listOrganizationsWithExpiredEMAIssuerKeys = `-- name: ListOrganizationsWithExpiredEMAIssuerKeys :many
+const listOrganizationsWithPendingEMAIssuerWork = `-- name: ListOrganizationsWithPendingEMAIssuerWork :many
 SELECT DISTINCT isi.organization_id
 FROM internal_session_issuers AS isi
 JOIN json_web_keys AS k
   ON k.organization_id = isi.organization_id
  AND k.json_web_key_set_id = isi.json_web_key_set_id
-WHERE isi.deleted IS FALSE
-  AND k.state = 'retired'
-  AND k.deleted IS FALSE
-  AND k.retired_at <= clock_timestamp() - make_interval(secs => $1::integer)
+WHERE (k.state = 'retired'
+    AND k.deleted IS FALSE
+    AND k.retired_at <= clock_timestamp() - make_interval(secs => $1::integer))
+   OR (k.state = 'revoked' AND k.kms_disabled_at IS NULL)
 ORDER BY isi.organization_id
 LIMIT $2
 `
 
-type ListOrganizationsWithExpiredEMAIssuerKeysParams struct {
+type ListOrganizationsWithPendingEMAIssuerWorkParams struct {
 	OverlapSeconds   int32
 	MaxOrganizations int32
 }
 
-// System sweep: organizations whose issuer has retired keys past the overlap.
-// Returns only organization ids; each is then swept org-qualified.
-func (q *Queries) ListOrganizationsWithExpiredEMAIssuerKeys(ctx context.Context, arg ListOrganizationsWithExpiredEMAIssuerKeysParams) ([]string, error) {
-	rows, err := q.db.Query(ctx, listOrganizationsWithExpiredEMAIssuerKeys, arg.OverlapSeconds, arg.MaxOrganizations)
+// System sweep: organizations whose issuer has retired keys past the overlap,
+// or revoked keys whose KMS cleanup is still pending. Returns only
+// organization ids; each is then swept org-qualified.
+func (q *Queries) ListOrganizationsWithPendingEMAIssuerWork(ctx context.Context, arg ListOrganizationsWithPendingEMAIssuerWorkParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listOrganizationsWithPendingEMAIssuerWork, arg.OverlapSeconds, arg.MaxOrganizations)
 	if err != nil {
 		return nil, err
 	}
@@ -747,6 +763,58 @@ func (q *Queries) ListOrganizationsWithExpiredEMAIssuerKeys(ctx context.Context,
 			return nil, err
 		}
 		items = append(items, organization_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingEMAIssuerKMSCleanup = `-- name: ListPendingEMAIssuerKMSCleanup :many
+SELECT k.id, k.organization_id, k.project_id, k.json_web_key_set_id, k.external_key_id, k.external_key_version, k.state, k.kid, k.public_jwk, k.activated_at, k.retired_at, k.revoked_at, k.kms_disabled_at, k.created_at, k.updated_at, k.deleted_at, k.deleted
+FROM internal_session_issuers AS isi
+JOIN json_web_keys AS k
+  ON k.organization_id = isi.organization_id
+ AND k.json_web_key_set_id = isi.json_web_key_set_id
+WHERE isi.organization_id = $1
+  AND k.state = 'revoked'
+  AND k.kms_disabled_at IS NULL
+ORDER BY k.id
+`
+
+// Revoked issuer keys whose KMS version is not yet confirmed disabled, from
+// any issuer row the organization ever had.
+func (q *Queries) ListPendingEMAIssuerKMSCleanup(ctx context.Context, organizationID string) ([]JsonWebKey, error) {
+	rows, err := q.db.Query(ctx, listPendingEMAIssuerKMSCleanup, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []JsonWebKey
+	for rows.Next() {
+		var i JsonWebKey
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.JsonWebKeySetID,
+			&i.ExternalKeyID,
+			&i.ExternalKeyVersion,
+			&i.State,
+			&i.Kid,
+			&i.PublicJwk,
+			&i.ActivatedAt,
+			&i.RetiredAt,
+			&i.RevokedAt,
+			&i.KmsDisabledAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -895,6 +963,28 @@ func (q *Queries) LockOrganizationForEMAIssuer(ctx context.Context, organization
 	return id, err
 }
 
+const markJsonWebKeyKMSDisabled = `-- name: MarkJsonWebKeyKMSDisabled :exec
+UPDATE json_web_keys
+SET kms_disabled_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND state = 'revoked'
+  AND kms_disabled_at IS NULL
+`
+
+type MarkJsonWebKeyKMSDisabledParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Records that a revoked issuer key's KMS version is disabled and its signer
+// grant removed.
+func (q *Queries) MarkJsonWebKeyKMSDisabled(ctx context.Context, arg MarkJsonWebKeyKMSDisabledParams) error {
+	_, err := q.db.Exec(ctx, markJsonWebKeyKMSDisabled, arg.ID, arg.OrganizationID)
+	return err
+}
+
 const retireActiveJsonWebKey = `-- name: RetireActiveJsonWebKey :one
 UPDATE json_web_keys
 SET state = 'retired',
@@ -998,7 +1088,7 @@ WHERE json_web_key_set_id = $1
   AND state = 'retired'
   AND deleted IS FALSE
   AND retired_at <= clock_timestamp() - make_interval(secs => $3::integer)
-RETURNING id, organization_id, project_id, json_web_key_set_id, external_key_id, external_key_version, state, kid, public_jwk, activated_at, retired_at, revoked_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, json_web_key_set_id, external_key_id, external_key_version, state, kid, public_jwk, activated_at, retired_at, revoked_at, kms_disabled_at, created_at, updated_at, deleted_at, deleted
 `
 
 type RevokeExpiredEMAIssuerKeysParams struct {
@@ -1031,6 +1121,7 @@ func (q *Queries) RevokeExpiredEMAIssuerKeys(ctx context.Context, arg RevokeExpi
 			&i.ActivatedAt,
 			&i.RetiredAt,
 			&i.RevokedAt,
+			&i.KmsDisabledAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,

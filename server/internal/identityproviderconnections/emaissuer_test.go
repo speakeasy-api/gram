@@ -32,22 +32,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpkms"
 )
 
-type countingPurger struct {
-	mu   sync.Mutex
-	orgs []string
-}
+// pauseFlagFails is a flag provider whose kill-switch lookup errors.
+type pauseFlagFails struct{ *feature.InMemory }
 
-func (p *countingPurger) PurgeEMAIssuerTokens(_ context.Context, organizationID string) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.orgs = append(p.orgs, organizationID)
-	return nil
-}
-
-func (p *countingPurger) Purged() []string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return append([]string(nil), p.orgs...)
+func (p pauseFlagFails) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (feature.Evaluation, error) {
+	if flag == feature.FlagInternalSessionIssuerSigningPaused {
+		return feature.EvaluationIndeterminate, errors.New("flag provider unavailable")
+	}
+	return p.InMemory.EvaluateFlag(ctx, flag, distinctID, groups) //nolint:wrapcheck // Test double.
 }
 
 // entitlements grants or withholds the SSO entitlement for every organization.
@@ -69,6 +61,7 @@ func newIssuerFixture(t *testing.T) (context.Context, issuerFixture) {
 	ctx, ti := newTestDB(t)
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagInternalSessionIssuer, ti.orgID, true)
+	flags.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, ti.orgID, false)
 	return ctx, issuerFixture{ti: ti, credentialID: provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn), flags: flags, entitled: &entitlements{sso: true}}
 }
 
@@ -80,13 +73,22 @@ func (f issuerFixture) provisioner(t *testing.T) (*identityproviderconnections.P
 	return provisiontest.NewProvisioner(t, f.ti.conn, kms.Factory, testServerURL, f.credentialID, ""), kms
 }
 
+func (f issuerFixture) lifecycle() *internalsessionissuers.Lifecycle {
+	return internalsessionissuers.NewLifecycle(f.ti.conn, audit.NewLogger())
+}
+
 // signer signs through the same in-process key as kms.
 func (f issuerFixture) signer(t *testing.T, kms *hookedKMSClients, paused bool) *internalsessionissuers.Signer {
+	t.Helper()
+	return f.signerWithFlags(t, kms, paused, f.flags)
+}
+
+func (f issuerFixture) signerWithFlags(t *testing.T, kms *hookedKMSClients, paused bool, flags feature.Provider) *internalsessionissuers.Signer {
 	t.Helper()
 	factory := func(ctx context.Context, ts oauth2.TokenSource) (gcpkms.SigningClient, error) {
 		return kms.inner.Factory(ctx, ts)
 	}
-	gate := internalsessionissuers.NewGate(f.ti.conn, f.entitled, f.flags, internalsessionissuers.GateConfig{Provisioning: true, SigningPaused: paused})
+	gate := internalsessionissuers.NewGate(f.ti.conn, f.entitled, flags, internalsessionissuers.GateConfig{Provisioning: true, SigningPaused: paused})
 	return internalsessionissuers.NewSigner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), f.ti.conn, gate, gcpauth.NewIdentity(gcpauth.NewStubResolver()), factory, "")
 }
 
@@ -258,17 +260,20 @@ func TestEMAIssuer_SweepRetiresKeysWithoutAnotherRotation(t *testing.T) {
 	require.NoError(t, rotator.RotateEMAIssuer(ctx, f.ti.orgID, before))
 	after := activeIssuerKid(t, ctx, f, f.ti.orgID)
 
-	require.NoError(t, rotator.SweepEMAIssuerKeys(ctx, f.ti.orgID), "nothing is due during the overlap")
+	pendingCleanup, err := rotator.SweepEMAIssuerKeys(ctx, f.ti.orgID)
+	require.NoError(t, err, "nothing is due during the overlap")
+	require.Zero(t, pendingCleanup)
 	require.Empty(t, rotatingKMS.Disabled())
 
 	require.NoError(t, q.BackdateRetiredJsonWebKeys(ctx, repo.BackdateRetiredJsonWebKeysParams{JsonWebKeySetID: setID, OrganizationID: f.ti.orgID, AgeSeconds: int32(internalsessionissuers.RetiredKeyOverlap/time.Second) + 1}))
 	require.Equal(t, []string{after}, publishedIssuerKids(t, ctx, f, f.ti.orgID), "the retired key leaves the document after the overlap")
-	swept, err := rotator.SweepAllEMAIssuerKeys(ctx)
+	swept, pendingCleanup, err := rotator.SweepAllEMAIssuerKeys(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, swept)
+	require.Zero(t, pendingCleanup)
 	require.Equal(t, kms.Created()[:1], rotatingKMS.Disabled(), "the retired KMS version is disabled")
 	require.Equal(t, int64(1), auditCount(t, ctx, f, audit.ActionJsonWebKeyRevoke))
-	swept, err = rotator.SweepAllEMAIssuerKeys(ctx)
+	swept, _, err = rotator.SweepAllEMAIssuerKeys(ctx)
 	require.NoError(t, err)
 	require.Zero(t, swept, "a swept organization is not swept again")
 }
@@ -307,21 +312,41 @@ func TestEMAIssuer_CompromisedRotationRevokesEveryKey(t *testing.T) {
 	require.ErrorAs(t, rotator.RotateEMAIssuer(ctx, f.ti.orgID, compromised), &pending, "a rotation is in flight")
 	require.Len(t, publishedIssuerKids(t, ctx, f, f.ti.orgID), 2)
 
-	replacer, replacingKMS := f.provisioner(t)
-	purger := &countingPurger{}
-	replacer.SetEMAIssuerTokenPurger(purger)
-	require.NoError(t, replacer.RotateEMAIssuerCompromised(ctx, f.ti.orgID))
-
-	replacement := activeIssuerKid(t, ctx, f, f.ti.orgID)
-	require.NotEqual(t, compromised, replacement)
-	require.Equal(t, []string{replacement}, publishedIssuerKids(t, ctx, f, f.ti.orgID), "the active and pending keys are withdrawn at once")
-	require.ElementsMatch(t, append(kms.Created(), rotatingKMS.Created()...), slices.Compact(slices.Sorted(slices.Values(replacingKMS.Disabled()))), "every compromised version is disabled in KMS")
-	require.Equal(t, []string{f.ti.orgID}, purger.Purged())
+	_, err = f.lifecycle().Contain(ctx, f.ti.orgID, nil)
+	require.ErrorIs(t, err, internalsessionissuers.ErrActiveKidRequired)
+	containment, err := f.lifecycle().Contain(ctx, f.ti.orgID, &compromised)
+	require.NoError(t, err)
+	require.Len(t, containment.Revoked, 2)
+	require.Empty(t, publishedIssuerKids(t, ctx, f, f.ti.orgID), "the active and pending keys are withdrawn at once")
+	_, err = f.signer(t, kms, false).Sign(ctx, f.ti.orgID, claims())
+	requireRefused(t, err, internalsessionissuers.StateKeyless)
 	require.Equal(t, int64(2), auditCount(t, ctx, f, audit.ActionJsonWebKeyRevoke))
 
+	replacer, replacingKMS := f.provisioner(t)
+	cleaned, pendingCleanup, err := replacer.CleanupEMAIssuerKMS(ctx, f.ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, 2, cleaned)
+	require.Zero(t, pendingCleanup)
+	require.ElementsMatch(t, append(kms.Created(), rotatingKMS.Created()...), slices.Compact(slices.Sorted(slices.Values(replacingKMS.Disabled()))), "every compromised version is disabled in KMS")
+
+	require.NoError(t, replacer.ProvisionEMAIssuerKey(ctx, f.ti.orgID))
+	replacement := activeIssuerKid(t, ctx, f, f.ti.orgID)
+	require.NotEqual(t, compromised, replacement)
+	require.Equal(t, []string{replacement}, publishedIssuerKids(t, ctx, f, f.ti.orgID))
 	assertion, err := f.signer(t, replacingKMS, false).Sign(ctx, f.ti.orgID, claims())
 	require.NoError(t, err)
 	require.Equal(t, issuerURL(t, f.ti.orgID), verifyAssertion(t, ctx, f, f.ti.orgID, assertion)["iss"])
+
+	// Repeats naming the replaced key coalesce: nothing is revoked or minted.
+	containment, err = f.lifecycle().Contain(ctx, f.ti.orgID, &compromised)
+	require.NoError(t, err)
+	require.True(t, containment.Coalesced)
+	require.NoError(t, replacer.ProvisionEMAIssuerKey(ctx, f.ti.orgID))
+	require.Len(t, replacingKMS.Created(), 1, "a live issuer gets no further key")
+	require.Equal(t, replacement, activeIssuerKid(t, ctx, f, f.ti.orgID))
+	unknown := "never-published"
+	_, err = f.lifecycle().Contain(ctx, f.ti.orgID, &unknown)
+	require.ErrorIs(t, err, internalsessionissuers.ErrUnknownKid)
 
 	// A later routine rotation can't resurrect the withdrawn pending key.
 	next, nextKMS := f.provisioner(t)
@@ -333,20 +358,17 @@ func TestEMAIssuer_DisableStopsSigningAndReenableResumes(t *testing.T) {
 	t.Parallel()
 	ctx, f := newIssuerFixture(t)
 	provisioner, kms := f.provisioner(t)
-	purger := &countingPurger{}
-	provisioner.SetEMAIssuerTokenPurger(purger)
 	first, err := provisioner.EnsureEMAIssuer(ctx, f.ti.orgID)
 	require.NoError(t, err)
 	kid := activeIssuerKid(t, ctx, f, f.ti.orgID)
 	signer := f.signer(t, kms, false)
 
-	require.NoError(t, provisioner.DisableEMAIssuer(ctx, f.ti.orgID))
+	require.NoError(t, f.lifecycle().SetDisabled(ctx, f.ti.orgID, true))
 	require.Equal(t, []string{kid}, publishedIssuerKids(t, ctx, f, f.ti.orgID), "discovery keeps serving while disabled")
 	_, err = signer.Sign(ctx, f.ti.orgID, claims())
 	requireRefused(t, err, internalsessionissuers.StateDisabled)
 	require.Empty(t, kms.Disabled(), "disabling keeps the key")
-	require.Equal(t, []string{f.ti.orgID}, purger.Purged())
-	require.NoError(t, provisioner.DisableEMAIssuer(ctx, f.ti.orgID), "disabling twice is a no-op")
+	require.NoError(t, f.lifecycle().SetDisabled(ctx, f.ti.orgID, true), "disabling twice is a no-op")
 	require.Equal(t, int64(1), auditCount(t, ctx, f, audit.ActionInternalSessionIssuerDisable))
 
 	// A deployment whose origin moved re-enables the same pinned issuer.
@@ -376,9 +398,13 @@ func TestEMAIssuer_CrossOrgIsolation(t *testing.T) {
 	_, err = f.signer(t, kms, false).Sign(ctx, other, claims())
 	requireRefused(t, err, internalsessionissuers.StateSetupRequired)
 	require.ErrorIs(t, provisioner.RotateEMAIssuer(ctx, other, kid), internalsessionissuers.ErrNotFound)
-	require.ErrorIs(t, provisioner.RotateEMAIssuerCompromised(ctx, other), internalsessionissuers.ErrNotFound)
-	require.ErrorIs(t, provisioner.DisableEMAIssuer(ctx, other), internalsessionissuers.ErrNotFound)
-	require.NoError(t, provisioner.SweepEMAIssuerKeys(ctx, other))
+	_, err = f.lifecycle().Contain(ctx, other, &kid)
+	require.ErrorIs(t, err, internalsessionissuers.ErrNotFound)
+	require.ErrorIs(t, f.lifecycle().SetDisabled(ctx, other, true), internalsessionissuers.ErrNotFound)
+	require.ErrorIs(t, provisioner.ProvisionEMAIssuerKey(ctx, other), internalsessionissuers.ErrNotFound)
+	pendingCleanup, err := provisioner.SweepEMAIssuerKeys(ctx, other)
+	require.NoError(t, err)
+	require.Zero(t, pendingCleanup)
 	require.Equal(t, []string{kid}, publishedIssuerKids(t, ctx, f, f.ti.orgID), "org A's issuer is untouched")
 }
 
@@ -396,6 +422,15 @@ func TestEMAIssuer_SigningGates(t *testing.T) {
 	_, err = f.signer(t, kms, false).Sign(ctx, f.ti.orgID, claims())
 	requireRefused(t, err, internalsessionissuers.StateSigningPaused)
 	f.flags.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, f.ti.orgID, false)
+
+	missing := &feature.InMemory{}
+	missing.SetFlag(feature.FlagInternalSessionIssuer, f.ti.orgID, true)
+	_, err = f.signerWithFlags(t, kms, false, missing).Sign(ctx, f.ti.orgID, claims())
+	requireRefused(t, err, internalsessionissuers.StateSigningPaused)
+	_, err = f.signerWithFlags(t, kms, false, pauseFlagFails{InMemory: f.flags}).Sign(ctx, f.ti.orgID, claims())
+	requireRefused(t, err, internalsessionissuers.StateSigningPaused)
+	_, err = f.signer(t, kms, false).Sign(ctx, f.ti.orgID, claims())
+	require.NoError(t, err, "only an authoritative off lets signing run")
 
 	f.entitled.sso = false
 	_, err = f.signer(t, kms, false).Sign(ctx, f.ti.orgID, claims())
@@ -499,17 +534,63 @@ func TestEMAIssuer_UncertainCommitReconcilesWithoutAConnection(t *testing.T) {
 	require.True(t, absent, "a key the lost commit never published is disabled")
 }
 
-func TestEMAIssuer_CompromisedRotationFailsIfKMSCannotDisable(t *testing.T) {
+func TestEMAIssuer_CompromisedRotationContainsEvenIfKMSCannotDisable(t *testing.T) {
 	t.Parallel()
 	ctx, f := newIssuerFixture(t)
-	provisioner, _ := f.provisioner(t)
+	provisioner, kms := f.provisioner(t)
 	_, err := provisioner.EnsureEMAIssuer(ctx, f.ti.orgID)
 	require.NoError(t, err)
 	compromised := activeIssuerKid(t, ctx, f, f.ti.orgID)
 
+	_, err = f.lifecycle().Contain(ctx, f.ti.orgID, &compromised)
+	require.NoError(t, err)
 	replacer, replacingKMS := f.provisioner(t)
-	replacingKMS.disableErr = errors.New("kms unavailable")
-	require.Error(t, replacer.RotateEMAIssuerCompromised(ctx, f.ti.orgID), "success must mean the compromised versions are disabled")
-	require.Equal(t, compromised, activeIssuerKid(t, ctx, f, f.ti.orgID), "nothing is replaced until KMS confirms")
-	require.Equal(t, []string{compromised}, publishedIssuerKids(t, ctx, f, f.ti.orgID))
+	replacingKMS.failDisable(errors.New("kms unavailable"))
+	cleaned, pendingCleanup, err := replacer.CleanupEMAIssuerKMS(ctx, f.ti.orgID)
+	require.Error(t, err)
+	require.Zero(t, cleaned)
+	require.Equal(t, 1, pendingCleanup, "the cleanup stays recorded as pending")
+	require.Empty(t, publishedIssuerKids(t, ctx, f, f.ti.orgID), "a KMS failure never republishes the compromised key")
+	_, err = f.signer(t, kms, false).Sign(ctx, f.ti.orgID, claims())
+	requireRefused(t, err, internalsessionissuers.StateKeyless)
+
+	require.NoError(t, replacer.ProvisionEMAIssuerKey(ctx, f.ti.orgID), "replacement does not wait for KMS cleanup")
+	replacement := activeIssuerKid(t, ctx, f, f.ti.orgID)
+	require.Equal(t, []string{replacement}, publishedIssuerKids(t, ctx, f, f.ti.orgID))
+
+	replacingKMS.failDisable(nil)
+	swept, pendingCleanup, err := replacer.SweepAllEMAIssuerKeys(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, swept, "the sweep retries the pending cleanup")
+	require.Zero(t, pendingCleanup)
+	require.Equal(t, kms.Created(), replacingKMS.Disabled())
+	swept, _, err = replacer.SweepAllEMAIssuerKeys(ctx)
+	require.NoError(t, err)
+	require.Zero(t, swept, "completed cleanup is not retried")
+}
+
+func TestEMAIssuer_CompromisedReplacementFailureLeavesIssuerKeyless(t *testing.T) {
+	t.Parallel()
+	ctx, f := newIssuerFixture(t)
+	provisioner, kms := f.provisioner(t)
+	_, err := provisioner.EnsureEMAIssuer(ctx, f.ti.orgID)
+	require.NoError(t, err)
+	compromised := activeIssuerKid(t, ctx, f, f.ti.orgID)
+
+	_, err = f.lifecycle().Contain(ctx, f.ti.orgID, &compromised)
+	require.NoError(t, err)
+	replacer, replacingKMS := f.provisioner(t)
+	replacingKMS.failCreate(errors.New("kms unavailable"))
+	require.Error(t, replacer.ProvisionEMAIssuerKey(ctx, f.ti.orgID))
+	require.Empty(t, publishedIssuerKids(t, ctx, f, f.ti.orgID), "the compromised key stays withdrawn")
+	_, err = f.signer(t, kms, false).Sign(ctx, f.ti.orgID, claims())
+	requireRefused(t, err, internalsessionissuers.StateKeyless)
+
+	// A keyless issuer needs no kid to retry.
+	containment, err := f.lifecycle().Contain(ctx, f.ti.orgID, nil)
+	require.NoError(t, err)
+	require.Empty(t, containment.Revoked)
+	replacingKMS.failCreate(nil)
+	require.NoError(t, replacer.ProvisionEMAIssuerKey(ctx, f.ti.orgID))
+	require.NotEqual(t, compromised, activeIssuerKid(t, ctx, f, f.ti.orgID))
 }

@@ -22,8 +22,8 @@ type SetEnabledRequestBody struct {
 // RotateRequestBody is the type of the "internalSessionIssuers" service
 // "rotate" endpoint HTTP request body.
 type RotateRequestBody struct {
-	// The key ID currently active, as last read. Required unless compromised is
-	// set.
+	// The key ID currently active, as last read. Required unless the issuer has no
+	// active key.
 	ActiveKid *string `form:"active_kid,omitempty" json:"active_kid,omitempty" xml:"active_kid,omitempty"`
 	// Revoke every current key immediately instead of rotating gradually.
 	Compromised *bool `form:"compromised,omitempty" json:"compromised,omitempty" xml:"compromised,omitempty"`
@@ -35,7 +35,8 @@ type GetResponseBody struct {
 	// unavailable: not offered to this organization yet. entitlement_required:
 	// needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy
 	// signs with it. disabled: an admin turned signing off. signing_paused:
-	// enabled, but Speakeasy has paused all signing.
+	// enabled, but Speakeasy has paused all signing. keyless: every key was
+	// revoked after a compromise and no replacement is active yet.
 	State string `form:"state" json:"state" xml:"state"`
 	// Issuer URI to register with supported services. It never changes.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
@@ -45,6 +46,9 @@ type GetResponseBody struct {
 	Keys []*InternalSessionIssuerKeyResponseBody `form:"keys" json:"keys" xml:"keys"`
 	// When a pending rotation can be activated.
 	RotationReadyAt *string `form:"rotation_ready_at,omitempty" json:"rotation_ready_at,omitempty" xml:"rotation_ready_at,omitempty"`
+	// Revoked keys whose signing material is not yet disabled. Speakeasy retries
+	// until it is.
+	KmsCleanupPending int `form:"kms_cleanup_pending" json:"kms_cleanup_pending" xml:"kms_cleanup_pending"`
 }
 
 // SetEnabledResponseBody is the type of the "internalSessionIssuers" service
@@ -53,7 +57,8 @@ type SetEnabledResponseBody struct {
 	// unavailable: not offered to this organization yet. entitlement_required:
 	// needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy
 	// signs with it. disabled: an admin turned signing off. signing_paused:
-	// enabled, but Speakeasy has paused all signing.
+	// enabled, but Speakeasy has paused all signing. keyless: every key was
+	// revoked after a compromise and no replacement is active yet.
 	State string `form:"state" json:"state" xml:"state"`
 	// Issuer URI to register with supported services. It never changes.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
@@ -63,6 +68,9 @@ type SetEnabledResponseBody struct {
 	Keys []*InternalSessionIssuerKeyResponseBody `form:"keys" json:"keys" xml:"keys"`
 	// When a pending rotation can be activated.
 	RotationReadyAt *string `form:"rotation_ready_at,omitempty" json:"rotation_ready_at,omitempty" xml:"rotation_ready_at,omitempty"`
+	// Revoked keys whose signing material is not yet disabled. Speakeasy retries
+	// until it is.
+	KmsCleanupPending int `form:"kms_cleanup_pending" json:"kms_cleanup_pending" xml:"kms_cleanup_pending"`
 }
 
 // RotateResponseBody is the type of the "internalSessionIssuers" service
@@ -71,7 +79,8 @@ type RotateResponseBody struct {
 	// unavailable: not offered to this organization yet. entitlement_required:
 	// needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy
 	// signs with it. disabled: an admin turned signing off. signing_paused:
-	// enabled, but Speakeasy has paused all signing.
+	// enabled, but Speakeasy has paused all signing. keyless: every key was
+	// revoked after a compromise and no replacement is active yet.
 	State string `form:"state" json:"state" xml:"state"`
 	// Issuer URI to register with supported services. It never changes.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
@@ -81,6 +90,9 @@ type RotateResponseBody struct {
 	Keys []*InternalSessionIssuerKeyResponseBody `form:"keys" json:"keys" xml:"keys"`
 	// When a pending rotation can be activated.
 	RotationReadyAt *string `form:"rotation_ready_at,omitempty" json:"rotation_ready_at,omitempty" xml:"rotation_ready_at,omitempty"`
+	// Revoked keys whose signing material is not yet disabled. Speakeasy retries
+	// until it is.
+	KmsCleanupPending int `form:"kms_cleanup_pending" json:"kms_cleanup_pending" xml:"kms_cleanup_pending"`
 }
 
 // GetUnauthorizedResponseBody is the type of the "internalSessionIssuers"
@@ -643,10 +655,11 @@ type InternalSessionIssuerKeyResponseBody struct {
 // "get" endpoint of the "internalSessionIssuers" service.
 func NewGetResponseBody(res *internalsessionissuers.InternalSessionIssuer) *GetResponseBody {
 	body := &GetResponseBody{
-		State:           res.State,
-		Issuer:          res.Issuer,
-		JwksURI:         res.JwksURI,
-		RotationReadyAt: res.RotationReadyAt,
+		State:             res.State,
+		Issuer:            res.Issuer,
+		JwksURI:           res.JwksURI,
+		RotationReadyAt:   res.RotationReadyAt,
+		KmsCleanupPending: res.KmsCleanupPending,
 	}
 	if res.Keys != nil {
 		body.Keys = make([]*InternalSessionIssuerKeyResponseBody, len(res.Keys))
@@ -667,10 +680,11 @@ func NewGetResponseBody(res *internalsessionissuers.InternalSessionIssuer) *GetR
 // the "setEnabled" endpoint of the "internalSessionIssuers" service.
 func NewSetEnabledResponseBody(res *internalsessionissuers.InternalSessionIssuer) *SetEnabledResponseBody {
 	body := &SetEnabledResponseBody{
-		State:           res.State,
-		Issuer:          res.Issuer,
-		JwksURI:         res.JwksURI,
-		RotationReadyAt: res.RotationReadyAt,
+		State:             res.State,
+		Issuer:            res.Issuer,
+		JwksURI:           res.JwksURI,
+		RotationReadyAt:   res.RotationReadyAt,
+		KmsCleanupPending: res.KmsCleanupPending,
 	}
 	if res.Keys != nil {
 		body.Keys = make([]*InternalSessionIssuerKeyResponseBody, len(res.Keys))
@@ -691,10 +705,11 @@ func NewSetEnabledResponseBody(res *internalsessionissuers.InternalSessionIssuer
 // "rotate" endpoint of the "internalSessionIssuers" service.
 func NewRotateResponseBody(res *internalsessionissuers.InternalSessionIssuer) *RotateResponseBody {
 	body := &RotateResponseBody{
-		State:           res.State,
-		Issuer:          res.Issuer,
-		JwksURI:         res.JwksURI,
-		RotationReadyAt: res.RotationReadyAt,
+		State:             res.State,
+		Issuer:            res.Issuer,
+		JwksURI:           res.JwksURI,
+		RotationReadyAt:   res.RotationReadyAt,
+		KmsCleanupPending: res.KmsCleanupPending,
 	}
 	if res.Keys != nil {
 		body.Keys = make([]*InternalSessionIssuerKeyResponseBody, len(res.Keys))

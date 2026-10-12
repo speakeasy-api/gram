@@ -428,17 +428,49 @@ SELECT EXISTS (
     AND k.retired_at <= clock_timestamp() - make_interval(secs => @overlap_seconds::integer)
 );
 
--- System sweep: organizations whose issuer has retired keys past the overlap.
--- Returns only organization ids; each is then swept org-qualified.
--- name: ListOrganizationsWithExpiredEMAIssuerKeys :many
+-- System sweep: organizations whose issuer has retired keys past the overlap,
+-- or revoked keys whose KMS cleanup is still pending. Returns only
+-- organization ids; each is then swept org-qualified.
+-- name: ListOrganizationsWithPendingEMAIssuerWork :many
 SELECT DISTINCT isi.organization_id
 FROM internal_session_issuers AS isi
 JOIN json_web_keys AS k
   ON k.organization_id = isi.organization_id
  AND k.json_web_key_set_id = isi.json_web_key_set_id
-WHERE isi.deleted IS FALSE
-  AND k.state = 'retired'
-  AND k.deleted IS FALSE
-  AND k.retired_at <= clock_timestamp() - make_interval(secs => @overlap_seconds::integer)
+WHERE (k.state = 'retired'
+    AND k.deleted IS FALSE
+    AND k.retired_at <= clock_timestamp() - make_interval(secs => @overlap_seconds::integer))
+   OR (k.state = 'revoked' AND k.kms_disabled_at IS NULL)
 ORDER BY isi.organization_id
 LIMIT @max_organizations;
+
+-- Revoked issuer keys whose KMS version is not yet confirmed disabled, from
+-- any issuer row the organization ever had.
+-- name: ListPendingEMAIssuerKMSCleanup :many
+SELECT k.*
+FROM internal_session_issuers AS isi
+JOIN json_web_keys AS k
+  ON k.organization_id = isi.organization_id
+ AND k.json_web_key_set_id = isi.json_web_key_set_id
+WHERE isi.organization_id = @organization_id
+  AND k.state = 'revoked'
+  AND k.kms_disabled_at IS NULL
+ORDER BY k.id;
+
+-- Records that a revoked issuer key's KMS version is disabled and its signer
+-- grant removed.
+-- name: MarkJsonWebKeyKMSDisabled :exec
+UPDATE json_web_keys
+SET kms_disabled_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND state = 'revoked'
+  AND kms_disabled_at IS NULL;
+
+-- name: GetOrganizationInternalSessionIssuerURL :one
+SELECT isi.issuer
+FROM internal_session_issuers AS isi
+JOIN organization_metadata AS o ON o.id = isi.organization_id AND o.disabled_at IS NULL
+WHERE isi.organization_id = @organization_id
+  AND isi.deleted IS FALSE;

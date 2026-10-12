@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"go.opentelemetry.io/otel/metric"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -17,8 +18,9 @@ import (
 )
 
 // The sweep is a backstop: rotation and management reads already retire
-// expired issuer keys. It revokes retired keys past the overlap and disables
-// their KMS versions. Payloads carry no organization data.
+// expired issuer keys. It revokes retired keys past the overlap and retries
+// KMS cleanup of every revoked key until it succeeds. Payloads carry no
+// organization data.
 const (
 	internalSessionIssuerKeySweepWorkflowID   = "v1:internal-session-issuer-key-sweep" //nolint:gosec // A workflow ID, not a credential.
 	internalSessionIssuerKeySweepInterval     = time.Hour
@@ -27,9 +29,11 @@ const (
 	InternalSessionIssuerKeySweepActivityName = "SweepInternalSessionIssuerKeys"
 )
 
-// InternalSessionIssuerKeySweeper retires expired issuer keys across organizations.
+// InternalSessionIssuerKeySweeper retires expired issuer keys and finishes
+// pending KMS cleanup across organizations. pending counts revoked keys whose
+// KMS version is still enabled after the sweep.
 type InternalSessionIssuerKeySweeper interface {
-	SweepAllEMAIssuerKeys(ctx context.Context) (int, error)
+	SweepAllEMAIssuerKeys(ctx context.Context) (swept, pending int, err error)
 }
 
 func internalSessionIssuerKeySweepScheduleID(queue string) string {
@@ -58,22 +62,37 @@ func InternalSessionIssuerKeySweepWorkflow(ctx workflow.Context) error {
 type InternalSessionIssuerKeySweepActivities struct {
 	logger  *slog.Logger
 	sweeper InternalSessionIssuerKeySweeper
+	pending metric.Int64Gauge
 }
 
-func NewInternalSessionIssuerKeySweepActivities(logger *slog.Logger, sweeper InternalSessionIssuerKeySweeper) *InternalSessionIssuerKeySweepActivities {
-	return &InternalSessionIssuerKeySweepActivities{logger: logger, sweeper: sweeper}
+func NewInternalSessionIssuerKeySweepActivities(logger *slog.Logger, meterProvider metric.MeterProvider, sweeper InternalSessionIssuerKeySweeper) *InternalSessionIssuerKeySweepActivities {
+	pending, err := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/background").Int64Gauge(
+		"gram.internal_session_issuer.kms_cleanup.pending",
+		metric.WithDescription("Revoked issuer keys whose KMS version is not yet disabled after a sweep"),
+		metric.WithUnit("{key}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create issuer kms cleanup gauge", attr.SlogError(err))
+	}
+	return &InternalSessionIssuerKeySweepActivities{logger: logger, sweeper: sweeper, pending: pending}
 }
 
 func (a *InternalSessionIssuerKeySweepActivities) Sweep(ctx context.Context) (int, error) {
 	if a.sweeper == nil {
 		return 0, nil
 	}
-	swept, err := a.sweeper.SweepAllEMAIssuerKeys(ctx)
+	swept, pending, err := a.sweeper.SweepAllEMAIssuerKeys(ctx)
+	if a.pending != nil {
+		a.pending.Record(ctx, int64(pending))
+	}
+	if pending > 0 {
+		a.logger.ErrorContext(ctx, "revoked internal session issuer keys still await kms cleanup", attr.SlogValueInt(pending))
+	}
 	if err != nil {
 		return swept, fmt.Errorf("sweep issuer keys: %w", err)
 	}
 	if swept > 0 {
-		a.logger.InfoContext(ctx, "swept expired internal session issuer keys", attr.SlogValueInt(swept))
+		a.logger.InfoContext(ctx, "swept internal session issuer keys", attr.SlogValueInt(swept))
 	}
 	return swept, nil
 }

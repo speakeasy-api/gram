@@ -100,6 +100,20 @@ type hookedKMSClients struct {
 	afterCreate func(created *gcpkms.CreatedSigningKey)
 	// disableErr, when set, fails every DisableKeyVersion.
 	disableErr error
+	// createErr, when set, fails every CreateSigningKey.
+	createErr error
+}
+
+func (c *hookedKMSClients) failDisable(err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.disableErr = err
+}
+
+func (c *hookedKMSClients) failCreate(err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.createErr = err
 }
 
 func (c *hookedKMSClients) Factory(ctx context.Context, tokenSource oauth2.TokenSource) (gcpkms.ProvisioningClient, error) {
@@ -148,6 +162,12 @@ type hookedProvisioningClient struct {
 }
 
 func (c *hookedProvisioningClient) CreateSigningKey(ctx context.Context, params gcpkms.CreateSigningKeyParams) (*gcpkms.CreatedSigningKey, error) {
+	c.hooks.mu.Lock()
+	failure := c.hooks.createErr
+	c.hooks.mu.Unlock()
+	if failure != nil {
+		return nil, failure
+	}
 	created, err := c.ProvisioningClient.CreateSigningKey(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("create hooked signing key: %w", err)

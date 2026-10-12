@@ -8,6 +8,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
@@ -38,6 +39,7 @@ func TestInternalSessionIssuerToolStates(t *testing.T) {
 	require.NoError(t, err)
 	features := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), pool, redis)
 	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, principal.OrganizationID, false)
 	gate := func(provisioning bool) *internalsessionissuers.Gate {
 		return internalsessionissuers.NewGate(pool, features, flags, internalsessionissuers.GateConfig{Provisioning: provisioning, SigningPaused: false})
 	}
@@ -86,7 +88,7 @@ func TestInternalSessionIssuerToolStates(t *testing.T) {
 	require.Equal(t, internalsessionissuers.StateSigningPaused, read().State)
 	flags.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, principal.OrganizationID, false)
 
-	require.NoError(t, provisioner.DisableEMAIssuer(ctx, principal.OrganizationID))
+	require.NoError(t, internalsessionissuers.NewLifecycle(pool, audit.NewLogger()).SetDisabled(ctx, principal.OrganizationID, true))
 	status = read()
 	require.Equal(t, internalsessionissuers.StateDisabled, status.State)
 	require.Equal(t, issuer, status.Issuer)

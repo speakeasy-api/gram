@@ -19,7 +19,7 @@ func (r *PostgresReader) WithInternalSessionIssuer(gate *internalsessionissuers.
 // InternalSessionIssuerStatus is public setup information, never signing material.
 type InternalSessionIssuerStatus struct {
 	OrganizationID string                       `json:"organization_id"`
-	State          internalsessionissuers.State `json:"state" jsonschema:"one of unavailable, entitlement_required, setup_required, enabled, disabled, signing_paused"`
+	State          internalsessionissuers.State `json:"state" jsonschema:"one of unavailable, entitlement_required, setup_required, enabled, disabled, signing_paused, keyless"`
 	Issuer         string                       `json:"issuer,omitempty" jsonschema:"issuer URI to register with a supported service; it never changes"`
 	NextStep       string                       `json:"next_step"`
 }
@@ -31,6 +31,7 @@ var internalSessionIssuerNextSteps = map[internalsessionissuers.State]string{
 	internalsessionissuers.StateEnabled:             "Register this URI in each supported service's enterprise-managed authorization settings. Configuration alone does not verify access.",
 	internalsessionissuers.StateDisabled:            "Signing is disabled. An administrator can re-enable it with the internalSessionIssuers.setEnabled management API.",
 	internalsessionissuers.StateSigningPaused:       "Speakeasy has paused issuer signing. Connections use other identity providers until it resumes.",
+	internalsessionissuers.StateKeyless:             "Every key was revoked after a compromise and a replacement is not active yet. An administrator can retry with internalSessionIssuers.rotate and compromised set.",
 }
 
 func registerInternalSessionIssuerTool(reg *Registrar, reader Reader) {

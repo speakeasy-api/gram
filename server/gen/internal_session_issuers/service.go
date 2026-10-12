@@ -32,10 +32,14 @@ type Service interface {
 	// Rotate the issuer's signing key without changing its URI. A routine rotation
 	// takes two calls with the same active_kid: the first publishes a new key and
 	// returns rotation_ready_at, the second activates it after that time. With
-	// compromised set, every current key is revoked at once and a fresh key
-	// activated immediately. Requires org:admin; a routine rotation also needs an
-	// enabled issuer, while a compromised rotation only needs an existing issuer
-	// and is never rate limited.
+	// compromised set, every current key is revoked and withdrawn from the key set
+	// first, leaving the issuer keyless; a fresh key is then activated and the
+	// revoked keys' signing material disabled. If either later step fails the
+	// issuer stays keyless or reports kms_cleanup_pending, and repeating the call
+	// retries it. Repeats naming a key that was already replaced change nothing.
+	// Requires org:admin; a routine rotation also needs an enabled issuer, while a
+	// compromised rotation only needs an existing issuer and its revocation is
+	// never rate limited.
 	Rotate(context.Context, *RotatePayload) (res *InternalSessionIssuer, err error)
 }
 
@@ -73,7 +77,8 @@ type InternalSessionIssuer struct {
 	// unavailable: not offered to this organization yet. entitlement_required:
 	// needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy
 	// signs with it. disabled: an admin turned signing off. signing_paused:
-	// enabled, but Speakeasy has paused all signing.
+	// enabled, but Speakeasy has paused all signing. keyless: every key was
+	// revoked after a compromise and no replacement is active yet.
 	State string
 	// Issuer URI to register with supported services. It never changes.
 	Issuer *string
@@ -83,6 +88,9 @@ type InternalSessionIssuer struct {
 	Keys []*InternalSessionIssuerKey
 	// When a pending rotation can be activated.
 	RotationReadyAt *string
+	// Revoked keys whose signing material is not yet disabled. Speakeasy retries
+	// until it is.
+	KmsCleanupPending int
 }
 
 type InternalSessionIssuerKey struct {
@@ -95,8 +103,8 @@ type InternalSessionIssuerKey struct {
 // RotatePayload is the payload type of the internalSessionIssuers service
 // rotate method.
 type RotatePayload struct {
-	// The key ID currently active, as last read. Required unless compromised is
-	// set.
+	// The key ID currently active, as last read. Required unless the issuer has no
+	// active key.
 	ActiveKid *string
 	// Revoke every current key immediately instead of rotating gradually.
 	Compromised  bool

@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * rotate internalSessionIssuers
  *
  * @remarks
- * Rotate the issuer's signing key without changing its URI. A routine rotation takes two calls with the same active_kid: the first publishes a new key and returns rotation_ready_at, the second activates it after that time. With compromised set, every current key is revoked at once and a fresh key activated immediately. Requires org:admin; a routine rotation also needs an enabled issuer, while a compromised rotation only needs an existing issuer and is never rate limited.
+ * Rotate the issuer's signing key without changing its URI. A routine rotation takes two calls with the same active_kid: the first publishes a new key and returns rotation_ready_at, the second activates it after that time. With compromised set, every current key is revoked and withdrawn from the key set first, leaving the issuer keyless; a fresh key is then activated and the revoked keys' signing material disabled. If either later step fails the issuer stays keyless or reports kms_cleanup_pending, and repeating the call retries it. Repeats naming a key that was already replaced change nothing. Requires org:admin; a routine rotation also needs an enabled issuer, while a compromised rotation only needs an existing issuer and its revocation is never rate limited.
  */
 export function internalSessionIssuersRotate(
   client: GramCore,

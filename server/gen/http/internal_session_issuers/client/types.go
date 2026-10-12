@@ -22,8 +22,8 @@ type SetEnabledRequestBody struct {
 // RotateRequestBody is the type of the "internalSessionIssuers" service
 // "rotate" endpoint HTTP request body.
 type RotateRequestBody struct {
-	// The key ID currently active, as last read. Required unless compromised is
-	// set.
+	// The key ID currently active, as last read. Required unless the issuer has no
+	// active key.
 	ActiveKid *string `form:"active_kid,omitempty" json:"active_kid,omitempty" xml:"active_kid,omitempty"`
 	// Revoke every current key immediately instead of rotating gradually.
 	Compromised bool `form:"compromised" json:"compromised" xml:"compromised"`
@@ -35,7 +35,8 @@ type GetResponseBody struct {
 	// unavailable: not offered to this organization yet. entitlement_required:
 	// needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy
 	// signs with it. disabled: an admin turned signing off. signing_paused:
-	// enabled, but Speakeasy has paused all signing.
+	// enabled, but Speakeasy has paused all signing. keyless: every key was
+	// revoked after a compromise and no replacement is active yet.
 	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
 	// Issuer URI to register with supported services. It never changes.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
@@ -45,6 +46,9 @@ type GetResponseBody struct {
 	Keys []*InternalSessionIssuerKeyResponseBody `form:"keys,omitempty" json:"keys,omitempty" xml:"keys,omitempty"`
 	// When a pending rotation can be activated.
 	RotationReadyAt *string `form:"rotation_ready_at,omitempty" json:"rotation_ready_at,omitempty" xml:"rotation_ready_at,omitempty"`
+	// Revoked keys whose signing material is not yet disabled. Speakeasy retries
+	// until it is.
+	KmsCleanupPending *int `form:"kms_cleanup_pending,omitempty" json:"kms_cleanup_pending,omitempty" xml:"kms_cleanup_pending,omitempty"`
 }
 
 // SetEnabledResponseBody is the type of the "internalSessionIssuers" service
@@ -53,7 +57,8 @@ type SetEnabledResponseBody struct {
 	// unavailable: not offered to this organization yet. entitlement_required:
 	// needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy
 	// signs with it. disabled: an admin turned signing off. signing_paused:
-	// enabled, but Speakeasy has paused all signing.
+	// enabled, but Speakeasy has paused all signing. keyless: every key was
+	// revoked after a compromise and no replacement is active yet.
 	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
 	// Issuer URI to register with supported services. It never changes.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
@@ -63,6 +68,9 @@ type SetEnabledResponseBody struct {
 	Keys []*InternalSessionIssuerKeyResponseBody `form:"keys,omitempty" json:"keys,omitempty" xml:"keys,omitempty"`
 	// When a pending rotation can be activated.
 	RotationReadyAt *string `form:"rotation_ready_at,omitempty" json:"rotation_ready_at,omitempty" xml:"rotation_ready_at,omitempty"`
+	// Revoked keys whose signing material is not yet disabled. Speakeasy retries
+	// until it is.
+	KmsCleanupPending *int `form:"kms_cleanup_pending,omitempty" json:"kms_cleanup_pending,omitempty" xml:"kms_cleanup_pending,omitempty"`
 }
 
 // RotateResponseBody is the type of the "internalSessionIssuers" service
@@ -71,7 +79,8 @@ type RotateResponseBody struct {
 	// unavailable: not offered to this organization yet. entitlement_required:
 	// needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy
 	// signs with it. disabled: an admin turned signing off. signing_paused:
-	// enabled, but Speakeasy has paused all signing.
+	// enabled, but Speakeasy has paused all signing. keyless: every key was
+	// revoked after a compromise and no replacement is active yet.
 	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
 	// Issuer URI to register with supported services. It never changes.
 	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
@@ -81,6 +90,9 @@ type RotateResponseBody struct {
 	Keys []*InternalSessionIssuerKeyResponseBody `form:"keys,omitempty" json:"keys,omitempty" xml:"keys,omitempty"`
 	// When a pending rotation can be activated.
 	RotationReadyAt *string `form:"rotation_ready_at,omitempty" json:"rotation_ready_at,omitempty" xml:"rotation_ready_at,omitempty"`
+	// Revoked keys whose signing material is not yet disabled. Speakeasy retries
+	// until it is.
+	KmsCleanupPending *int `form:"kms_cleanup_pending,omitempty" json:"kms_cleanup_pending,omitempty" xml:"kms_cleanup_pending,omitempty"`
 }
 
 // GetUnauthorizedResponseBody is the type of the "internalSessionIssuers"
@@ -668,10 +680,11 @@ func NewRotateRequestBody(p *internalsessionissuers.RotatePayload) *RotateReques
 // "get" endpoint result from a HTTP "OK" response.
 func NewGetInternalSessionIssuerOK(body *GetResponseBody) *internalsessionissuers.InternalSessionIssuer {
 	v := &internalsessionissuers.InternalSessionIssuer{
-		State:           *body.State,
-		Issuer:          body.Issuer,
-		JwksURI:         body.JwksURI,
-		RotationReadyAt: body.RotationReadyAt,
+		State:             *body.State,
+		Issuer:            body.Issuer,
+		JwksURI:           body.JwksURI,
+		RotationReadyAt:   body.RotationReadyAt,
+		KmsCleanupPending: *body.KmsCleanupPending,
 	}
 	v.Keys = make([]*internalsessionissuers.InternalSessionIssuerKey, len(body.Keys))
 	for i, val := range body.Keys {
@@ -839,10 +852,11 @@ func NewGetGatewayError(body *GetGatewayErrorResponseBody) *goa.ServiceError {
 // service "setEnabled" endpoint result from a HTTP "OK" response.
 func NewSetEnabledInternalSessionIssuerOK(body *SetEnabledResponseBody) *internalsessionissuers.InternalSessionIssuer {
 	v := &internalsessionissuers.InternalSessionIssuer{
-		State:           *body.State,
-		Issuer:          body.Issuer,
-		JwksURI:         body.JwksURI,
-		RotationReadyAt: body.RotationReadyAt,
+		State:             *body.State,
+		Issuer:            body.Issuer,
+		JwksURI:           body.JwksURI,
+		RotationReadyAt:   body.RotationReadyAt,
+		KmsCleanupPending: *body.KmsCleanupPending,
 	}
 	v.Keys = make([]*internalsessionissuers.InternalSessionIssuerKey, len(body.Keys))
 	for i, val := range body.Keys {
@@ -1010,10 +1024,11 @@ func NewSetEnabledGatewayError(body *SetEnabledGatewayErrorResponseBody) *goa.Se
 // "rotate" endpoint result from a HTTP "OK" response.
 func NewRotateInternalSessionIssuerOK(body *RotateResponseBody) *internalsessionissuers.InternalSessionIssuer {
 	v := &internalsessionissuers.InternalSessionIssuer{
-		State:           *body.State,
-		Issuer:          body.Issuer,
-		JwksURI:         body.JwksURI,
-		RotationReadyAt: body.RotationReadyAt,
+		State:             *body.State,
+		Issuer:            body.Issuer,
+		JwksURI:           body.JwksURI,
+		RotationReadyAt:   body.RotationReadyAt,
+		KmsCleanupPending: *body.KmsCleanupPending,
 	}
 	v.Keys = make([]*internalsessionissuers.InternalSessionIssuerKey, len(body.Keys))
 	for i, val := range body.Keys {
@@ -1185,9 +1200,12 @@ func ValidateGetResponseBody(body *GetResponseBody) (err error) {
 	if body.Keys == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("keys", "body"))
 	}
+	if body.KmsCleanupPending == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kms_cleanup_pending", "body"))
+	}
 	if body.State != nil {
-		if !(*body.State == "unavailable" || *body.State == "entitlement_required" || *body.State == "setup_required" || *body.State == "enabled" || *body.State == "disabled" || *body.State == "signing_paused") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"unavailable", "entitlement_required", "setup_required", "enabled", "disabled", "signing_paused"}))
+		if !(*body.State == "unavailable" || *body.State == "entitlement_required" || *body.State == "setup_required" || *body.State == "enabled" || *body.State == "disabled" || *body.State == "signing_paused" || *body.State == "keyless") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"unavailable", "entitlement_required", "setup_required", "enabled", "disabled", "signing_paused", "keyless"}))
 		}
 	}
 	for _, e := range body.Keys {
@@ -1212,9 +1230,12 @@ func ValidateSetEnabledResponseBody(body *SetEnabledResponseBody) (err error) {
 	if body.Keys == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("keys", "body"))
 	}
+	if body.KmsCleanupPending == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kms_cleanup_pending", "body"))
+	}
 	if body.State != nil {
-		if !(*body.State == "unavailable" || *body.State == "entitlement_required" || *body.State == "setup_required" || *body.State == "enabled" || *body.State == "disabled" || *body.State == "signing_paused") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"unavailable", "entitlement_required", "setup_required", "enabled", "disabled", "signing_paused"}))
+		if !(*body.State == "unavailable" || *body.State == "entitlement_required" || *body.State == "setup_required" || *body.State == "enabled" || *body.State == "disabled" || *body.State == "signing_paused" || *body.State == "keyless") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"unavailable", "entitlement_required", "setup_required", "enabled", "disabled", "signing_paused", "keyless"}))
 		}
 	}
 	for _, e := range body.Keys {
@@ -1238,9 +1259,12 @@ func ValidateRotateResponseBody(body *RotateResponseBody) (err error) {
 	if body.Keys == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("keys", "body"))
 	}
+	if body.KmsCleanupPending == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kms_cleanup_pending", "body"))
+	}
 	if body.State != nil {
-		if !(*body.State == "unavailable" || *body.State == "entitlement_required" || *body.State == "setup_required" || *body.State == "enabled" || *body.State == "disabled" || *body.State == "signing_paused") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"unavailable", "entitlement_required", "setup_required", "enabled", "disabled", "signing_paused"}))
+		if !(*body.State == "unavailable" || *body.State == "entitlement_required" || *body.State == "setup_required" || *body.State == "enabled" || *body.State == "disabled" || *body.State == "signing_paused" || *body.State == "keyless") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"unavailable", "entitlement_required", "setup_required", "enabled", "disabled", "signing_paused", "keyless"}))
 		}
 	}
 	for _, e := range body.Keys {

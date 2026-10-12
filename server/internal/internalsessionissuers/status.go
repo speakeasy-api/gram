@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -24,6 +25,9 @@ const (
 	StateEnabled             State = "enabled"
 	StateDisabled            State = "disabled"
 	StateSigningPaused       State = "signing_paused"
+	// StateKeyless is an enabled issuer whose keys were all revoked after a
+	// compromise and whose replacement is not active yet. It cannot sign.
+	StateKeyless State = "keyless"
 )
 
 // FeatureChecker reports product entitlements, read live so a lapsed
@@ -69,7 +73,8 @@ type Status struct {
 }
 
 // Status reads an organization's state. A flag or entitlement lookup failure
-// is an error, never a silent state.
+// is an error, never a silent state. A keyless issuer is checked before the
+// pause switch: it cannot sign either way.
 func (g *Gate) Status(ctx context.Context, organizationID string) (Status, error) {
 	status := Status{State: StateUnavailable, Issuer: nil, RolledOut: false, Entitled: false}
 	row, err := repo.New(g.db).GetOrganizationInternalSessionIssuer(ctx, organizationID)
@@ -104,28 +109,40 @@ func (g *Gate) Status(ctx context.Context, organizationID string) (Status, error
 	case status.Issuer == nil:
 		status.State = StateSetupRequired
 	default:
-		paused, err := g.signingPaused(ctx, organizationID, groups)
+		keyless, err := Keyless(ctx, g.db, organizationID, status.Issuer.JsonWebKeySetID)
 		if err != nil {
 			return status, err
 		}
 		status.State = StateEnabled
-		if paused {
+		switch {
+		case keyless:
+			status.State = StateKeyless
+		case g.signingPaused(ctx, organizationID, groups):
 			status.State = StateSigningPaused
 		}
 	}
 	return status, nil
 }
 
-// signingPaused fails closed: a flag lookup error pauses signing.
-func (g *Gate) signingPaused(ctx context.Context, organizationID string, groups map[string]string) (bool, error) {
-	if g.paused {
+// Keyless reports whether the issuer's set has no active key.
+func Keyless(ctx context.Context, db repo.DBTX, organizationID string, setID uuid.UUID) (bool, error) {
+	_, err := repo.New(db).GetActiveJsonWebKey(ctx, repo.GetActiveJsonWebKeyParams{JsonWebKeySetID: setID, OrganizationID: organizationID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
 		return true, nil
+	case err != nil:
+		return false, fmt.Errorf("read active issuer key: %w", err)
+	}
+	return false, nil
+}
+
+// signingPaused fails closed: a flag lookup error pauses signing.
+func (g *Gate) signingPaused(ctx context.Context, organizationID string, groups map[string]string) bool {
+	if g.paused {
+		return true
 	}
 	paused, err := g.flagEnabled(ctx, feature.FlagInternalSessionIssuerSigningPaused, organizationID, groups)
-	if err != nil {
-		return true, nil //nolint:nilerr // A kill switch that can't be read pauses signing.
-	}
-	return paused, nil
+	return err != nil || paused
 }
 
 func (g *Gate) flagEnabled(ctx context.Context, flag feature.Flag, organizationID string, groups map[string]string) (bool, error) {

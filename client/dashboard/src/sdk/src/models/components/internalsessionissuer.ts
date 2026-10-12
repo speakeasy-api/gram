@@ -14,7 +14,7 @@ import {
 } from "./internalsessionissuerkey.js";
 
 /**
- * unavailable: not offered to this organization yet. entitlement_required: needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy signs with it. disabled: an admin turned signing off. signing_paused: enabled, but Speakeasy has paused all signing.
+ * unavailable: not offered to this organization yet. entitlement_required: needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy signs with it. disabled: an admin turned signing off. signing_paused: enabled, but Speakeasy has paused all signing. keyless: every key was revoked after a compromise and no replacement is active yet.
  */
 export const InternalSessionIssuerState = {
   Unavailable: "unavailable",
@@ -23,9 +23,10 @@ export const InternalSessionIssuerState = {
   Enabled: "enabled",
   Disabled: "disabled",
   SigningPaused: "signing_paused",
+  Keyless: "keyless",
 } as const;
 /**
- * unavailable: not offered to this organization yet. entitlement_required: needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy signs with it. disabled: an admin turned signing off. signing_paused: enabled, but Speakeasy has paused all signing.
+ * unavailable: not offered to this organization yet. entitlement_required: needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy signs with it. disabled: an admin turned signing off. signing_paused: enabled, but Speakeasy has paused all signing. keyless: every key was revoked after a compromise and no replacement is active yet.
  */
 export type InternalSessionIssuerState = ClosedEnum<
   typeof InternalSessionIssuerState
@@ -45,11 +46,15 @@ export type InternalSessionIssuer = {
    */
   keys: Array<InternalSessionIssuerKey>;
   /**
+   * Revoked keys whose signing material is not yet disabled. Speakeasy retries until it is.
+   */
+  kmsCleanupPending: number;
+  /**
    * When a pending rotation can be activated.
    */
   rotationReadyAt?: Date | undefined;
   /**
-   * unavailable: not offered to this organization yet. entitlement_required: needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy signs with it. disabled: an admin turned signing off. signing_paused: enabled, but Speakeasy has paused all signing.
+   * unavailable: not offered to this organization yet. entitlement_required: needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy signs with it. disabled: an admin turned signing off. signing_paused: enabled, but Speakeasy has paused all signing. keyless: every key was revoked after a compromise and no replacement is active yet.
    */
   state: InternalSessionIssuerState;
 };
@@ -68,6 +73,7 @@ export const InternalSessionIssuer$inboundSchema: z.ZodMiniType<
     issuer: z.optional(z.string()),
     jwks_uri: z.optional(z.string()),
     keys: z.array(InternalSessionIssuerKey$inboundSchema),
+    kms_cleanup_pending: z.int(),
     rotation_ready_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
@@ -76,6 +82,7 @@ export const InternalSessionIssuer$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "jwks_uri": "jwksUri",
+      "kms_cleanup_pending": "kmsCleanupPending",
       "rotation_ready_at": "rotationReadyAt",
     });
   }),

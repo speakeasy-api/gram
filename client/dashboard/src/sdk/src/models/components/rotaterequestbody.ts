@@ -7,7 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type RotateRequestBody = {
   /**
-   * The key ID currently active, as last read. Required unless compromised is set.
+   * The key ID currently active, as last read. Required unless the issuer has no active key.
    */
   activeKid?: string | undefined;
   /**

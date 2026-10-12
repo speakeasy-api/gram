@@ -1681,7 +1681,7 @@ func newStartCommand() *cli.Command {
 			}
 			jsonwebkeysets.Attach(mux, jsonwebkeysets.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, gcpIdentity, kmsSigningClients, productFeatures, ratelimit.NewRedisStore(redisClient)))
 			issuerGate := newInternalSessionIssuerGate(c, db, productFeatures, featureFlags, identityProviderProvisioner != nil)
-			internalsessionissuers.Attach(mux, internalsessionissuers.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, issuerGate, internalSessionIssuerManager(identityProviderProvisioner), ratelimit.NewRedisStore(redisClient)))
+			internalsessionissuers.Attach(mux, internalsessionissuers.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, issuerGate, internalSessionIssuerManager(identityProviderProvisioner), ratelimit.NewRedisStore(redisClient)))
 			internalsessionissuers.AttachDiscovery(mux, db, logger)
 			identityproviderconnections.Attach(mux, identityproviderconnections.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, auditLogger, featureFlags, identityProviderProvisioner, okta.NewClientFactory(logger, guardianPolicy, clientAssertionSigner, encryptionClient), encryptionClient, identityproviderconnections.NewDiscoverer(guardianPolicy), ratelimit.NewRedisStore(redisClient), &background.OktaApplicationSyncTrigger{TemporalEnv: temporalEnv, Logger: logger}))
 			oktaresourceconnections.Attach(mux, oktaresourceconnections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, featureFlags))

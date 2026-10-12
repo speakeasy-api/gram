@@ -547,7 +547,7 @@ func NewTemporalWorker(
 	adminReconciliationActivities := NewOpenRouterAdminReconciliationActivities(logger, adminReconciler)
 	temporalWorker.RegisterActivityWithOptions(adminReconciliationActivities.CaptureCursor, activity.RegisterOptions{Name: OpenRouterAdminCaptureCursorActivityName})
 	temporalWorker.RegisterActivityWithOptions(adminReconciliationActivities.Reconcile, activity.RegisterOptions{Name: OpenRouterAdminReconcileActivityName})
-	issuerKeySweep := NewInternalSessionIssuerKeySweepActivities(logger, opts.IssuerKeySweeper)
+	issuerKeySweep := NewInternalSessionIssuerKeySweepActivities(logger, meterProvider, opts.IssuerKeySweeper)
 	temporalWorker.RegisterActivityWithOptions(issuerKeySweep.Sweep, activity.RegisterOptions{Name: InternalSessionIssuerKeySweepActivityName})
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomainV2)

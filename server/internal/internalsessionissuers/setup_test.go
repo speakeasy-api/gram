@@ -2,9 +2,11 @@ package internalsessionissuers_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
+	"sync/atomic"
 	"testing"
 
 	jose "github.com/go-jose/go-jose/v4"
@@ -14,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -56,6 +59,45 @@ type testInstance struct {
 	features *productfeatures.Client
 	flags    *feature.InMemory
 	orgID    string
+	// providersFail makes every flag and entitlement lookup error.
+	providersFail *atomic.Bool
+}
+
+type failingFlags struct {
+	*feature.InMemory
+	fail *atomic.Bool
+}
+
+var errProviderDown = errors.New("provider unavailable")
+
+func (f failingFlags) IsFlagEnabled(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (bool, error) {
+	if f.fail.Load() {
+		return false, errProviderDown
+	}
+	return f.InMemory.IsFlagEnabled(ctx, flag, distinctID, groups) //nolint:wrapcheck // Test double.
+}
+
+func (f failingFlags) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (feature.Evaluation, error) {
+	if f.fail.Load() {
+		return feature.EvaluationIndeterminate, errProviderDown
+	}
+	return f.InMemory.EvaluateFlag(ctx, flag, distinctID, groups) //nolint:wrapcheck // Test double.
+}
+
+type failingFeatures struct {
+	*productfeatures.Client
+	fail *atomic.Bool
+}
+
+func (f failingFeatures) IsFeatureEnabledUncached(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error) {
+	if f.fail.Load() {
+		return false, errProviderDown
+	}
+	enabled, err := f.Client.IsFeatureEnabledUncached(ctx, organizationID, feature)
+	if err != nil {
+		return false, fmt.Errorf("read entitlement: %w", err)
+	}
+	return enabled, nil
 }
 
 // newTestService builds the service for a fresh organization with the
@@ -87,16 +129,27 @@ func newTestService(t *testing.T, provisioning bool) (context.Context, *testInst
 	productfeaturestest.Enable(t, ctx, conn, features, orgID, productfeatures.FeatureSSO)
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagInternalSessionIssuer, orgID, true)
+	flags.SetFlag(feature.FlagInternalSessionIssuerSigningPaused, orgID, false)
+	providersFail := &atomic.Bool{}
 
 	var manager internalsessionissuers.Manager
 	if provisioning {
 		credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, conn)
 		manager = provisiontest.NewProvisioner(t, conn, freshKeys, issuerOrigin, credentialID, "")
 	}
-	gate := internalsessionissuers.NewGate(conn, features, flags, internalsessionissuers.GateConfig{Provisioning: provisioning, SigningPaused: false})
+	gate := internalsessionissuers.NewGate(conn, failingFeatures{Client: features, fail: providersFail}, failingFlags{InMemory: flags, fail: providersFail}, internalsessionissuers.GateConfig{Provisioning: provisioning, SigningPaused: false})
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	service := internalsessionissuers.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, gate, manager, ratelimit.NewRedisStore(redisClient))
-	return ctx, &testInstance{service: service, conn: conn, features: features, flags: flags, orgID: orgID}
+	service := internalsessionissuers.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, audit.NewLogger(), gate, manager, ratelimit.NewRedisStore(redisClient))
+	return ctx, &testInstance{service: service, conn: conn, features: features, flags: flags, orgID: orgID, providersFail: providersFail}
+}
+
+// provisionIssuer creates the organization's issuer outside the service, for
+// deployments whose service has no manager.
+func provisionIssuer(t *testing.T, ctx context.Context, ti *testInstance) {
+	t.Helper()
+	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
+	_, err := provisiontest.NewProvisioner(t, ti.conn, freshKeys, issuerOrigin, credentialID, "").EnsureEMAIssuer(ctx, ti.orgID)
+	require.NoError(t, err)
 }
 
 // freshKeys mints a new in-process key per client, as each KMS key version is.

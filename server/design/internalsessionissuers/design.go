@@ -48,9 +48,9 @@ var _ = Service("internalSessionIssuers", func() {
 	})
 
 	Method("rotate", func() {
-		Description("Rotate the issuer's signing key without changing its URI. A routine rotation takes two calls with the same active_kid: the first publishes a new key and returns rotation_ready_at, the second activates it after that time. With compromised set, every current key is revoked at once and a fresh key activated immediately. Requires org:admin; a routine rotation also needs an enabled issuer, while a compromised rotation only needs an existing issuer and is never rate limited.")
+		Description("Rotate the issuer's signing key without changing its URI. A routine rotation takes two calls with the same active_kid: the first publishes a new key and returns rotation_ready_at, the second activates it after that time. With compromised set, every current key is revoked and withdrawn from the key set first, leaving the issuer keyless; a fresh key is then activated and the revoked keys' signing material disabled. If either later step fails the issuer stays keyless or reports kms_cleanup_pending, and repeating the call retries it. Repeats naming a key that was already replaced change nothing. Requires org:admin; a routine rotation also needs an enabled issuer, while a compromised rotation only needs an existing issuer and its revocation is never rate limited.")
 		Payload(func() {
-			Attribute("active_kid", String, "The key ID currently active, as last read. Required unless compromised is set.")
+			Attribute("active_kid", String, "The key ID currently active, as last read. Required unless the issuer has no active key.")
 			Attribute("compromised", Boolean, "Revoke every current key immediately instead of rotating gradually.", func() {
 				Default(false)
 			})
@@ -70,8 +70,8 @@ var _ = Service("internalSessionIssuers", func() {
 
 // InternalSessionIssuer is an organization's public trust anchor, never a signing capability.
 var InternalSessionIssuer = Type("InternalSessionIssuer", func() {
-	Attribute("state", String, "unavailable: not offered to this organization yet. entitlement_required: needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy signs with it. disabled: an admin turned signing off. signing_paused: enabled, but Speakeasy has paused all signing.", func() {
-		Enum("unavailable", "entitlement_required", "setup_required", "enabled", "disabled", "signing_paused")
+	Attribute("state", String, "unavailable: not offered to this organization yet. entitlement_required: needs single sign-on. setup_required: not enabled yet. enabled: Speakeasy signs with it. disabled: an admin turned signing off. signing_paused: enabled, but Speakeasy has paused all signing. keyless: every key was revoked after a compromise and no replacement is active yet.", func() {
+		Enum("unavailable", "entitlement_required", "setup_required", "enabled", "disabled", "signing_paused", "keyless")
 	})
 	Attribute("issuer", String, "Issuer URI to register with supported services. It never changes.")
 	Attribute("jwks_uri", String, "Public verification keys.")
@@ -79,7 +79,8 @@ var InternalSessionIssuer = Type("InternalSessionIssuer", func() {
 	Attribute("rotation_ready_at", String, "When a pending rotation can be activated.", func() {
 		Format(FormatDateTime)
 	})
-	Required("state", "keys")
+	Attribute("kms_cleanup_pending", Int, "Revoked keys whose signing material is not yet disabled. Speakeasy retries until it is.")
+	Required("state", "keys", "kms_cleanup_pending")
 })
 
 // InternalSessionIssuerKey is one published issuer key.
