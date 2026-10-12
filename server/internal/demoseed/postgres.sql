@@ -3663,7 +3663,7 @@ Channel context stays in the Raw view.
     AND principal_urn IN (
       'agent:' || demo.det_uuid('gram-demo-managed-agent-1')::text,
       'agent:' || demo.det_uuid('gram-demo-managed-agent-4')::text)
-    AND scope = 'mcp:connect' AND effect IS NULL
+    AND scope = 'mcp:connect'
     AND selectors = jsonb_build_object(
       'resource_kind', 'mcp',
       'resource_id', demo.det_uuid('gram-demo-mcpserver-linear')::text,
