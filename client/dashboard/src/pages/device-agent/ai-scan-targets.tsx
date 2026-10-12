@@ -1,3 +1,4 @@
+import { CollapsibleSectionHeader } from "@/components/collapsible-section-header";
 import { AIToolIcon } from "@/components/ai-tools/AIToolIcon";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -18,9 +19,7 @@ import {
 } from "@gram/client/react-query/aiScanTargets.js";
 import { useUpsertAiScanTargetMutation } from "@gram/client/react-query/upsertAiScanTarget.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
-import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   AiScanTargetEditorSheet,
@@ -64,46 +63,6 @@ function isDefault(target: AiScanTarget): boolean {
 }
 
 type EditorState = { mode: EditorMode; draft: Draft } | null;
-
-/** Collapsible row per kind, matching Detection Rules' chevron-and-count. */
-function CategoryHeader({
-  label,
-  description,
-  count,
-  expanded,
-  onToggle,
-}: {
-  label: string;
-  description: string;
-  count: number;
-  expanded: boolean;
-  onToggle: () => void;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={expanded}
-      className="hover:bg-muted/40 flex w-full items-center gap-3 px-4 py-3 text-left transition-colors"
-    >
-      <ChevronRight
-        className={cn(
-          "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
-          expanded && "rotate-90",
-        )}
-      />
-      <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium">{label}</div>
-        <div className="text-muted-foreground line-clamp-1 text-xs">
-          {description}
-        </div>
-      </div>
-      <Badge variant="neutral" className="shrink-0">
-        <Badge.Text>{String(count)}</Badge.Text>
-      </Badge>
-    </button>
-  );
-}
 
 /**
  * One half of the library — the organization's targets or Speakeasy's — with a
@@ -167,7 +126,7 @@ function OriginSection({
             const isExpanded = expanded[key] ?? (searching || defaultExpanded);
             return (
               <div key={category.value}>
-                <CategoryHeader
+                <CollapsibleSectionHeader
                   label={category.plural}
                   description={category.description}
                   count={rows.length}

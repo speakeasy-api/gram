@@ -35,7 +35,10 @@ import { useRoutes } from "@/routes";
 import { useProject } from "@/contexts/Auth";
 import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
 import { useRiskCategories } from "@gram/client/react-query/riskCategories.js";
-import { invalidateAllRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
+import {
+  invalidateAllRiskListPolicies,
+  useRiskListPolicies,
+} from "@gram/client/react-query/riskListPolicies.js";
 import { useRiskPoliciesUpdateMutation } from "@gram/client/react-query/riskPoliciesUpdate.js";
 import { invalidateAllShadowMCPInventory } from "@gram/client/react-query/shadowMCPInventory.js";
 import {
@@ -61,7 +64,8 @@ import {
   Code,
   Info,
   Loader2,
-  Pencil,
+  type LucideIcon,
+  MonitorCheck,
   Shield,
   Sparkles,
   ThumbsDown,
@@ -70,7 +74,6 @@ import {
   X,
 } from "lucide-react";
 import {
-  Fragment,
   type ReactNode,
   useDeferredValue,
   useEffect,
@@ -78,7 +81,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useLocation, useParams } from "react-router";
+import { Link, useLocation, useParams } from "react-router";
 import { toast } from "sonner";
 import { useQueryState } from "nuqs";
 import {
@@ -121,19 +124,20 @@ import {
   type PolicyAction,
   type RuleCategory,
 } from "./policy-data";
-import {
-  ActionPicker,
-  CustomizeRulesSheet,
-  PolicyAudiencePicker,
-  RuleSelectList,
-} from "./PolicyCenter";
+import { CustomizeRulesSheet, RuleSelectList } from "./PolicyCenter";
 import { DetectorCard } from "./DetectorCard";
-import { builtInRuleDisabledReason } from "./policy-built-in-rule-exclusivity";
-import { policyStatusLabel } from "./policy-enabled";
+import { ShadowAIPolicyEditor } from "./ShadowAIPolicyEditor";
+import { findBlockingShadowMCPPolicy, isShadowAIPolicy } from "./policy-type";
 import {
-  togglePolicyEnabledVariables,
-  useTogglePolicyEnabled,
-} from "./use-toggle-policy-enabled";
+  ActionStep,
+  PolicyHeader,
+  SectionHeader,
+  StepNav,
+  StepperShell,
+  SummaryRow,
+} from "./policy-editor-shell";
+import { type PolicyStep, useStepParam } from "./use-step-param";
+import { builtInRuleDisabledReason } from "./policy-built-in-rule-exclusivity";
 import {
   FLAG_ONLY_CATEGORIES,
   SCOPE_EXEMPT_CEL_EXAMPLES,
@@ -242,52 +246,6 @@ const POLICY_ACTION_LABEL: Record<PolicyAction, string> = {
   quarantine: "Quarantine",
 };
 
-const POLICY_ACTION_MESSAGE: Record<
-  Exclude<PolicyAction, "flag">,
-  { label: string; description: string; placeholder: string }
-> = {
-  warn: {
-    label: "Warning message",
-    description:
-      "Shown to the user when this policy warns on a tool call or prompt. Supports %{match}, %{entity}, %{policy}, and %{rule} placeholders, substituted at warn time. Leave blank to use the default message.",
-    placeholder: "e.g. %{match} looks sensitive. Acknowledge to proceed.",
-  },
-  block: {
-    label: "Block message",
-    description:
-      "Shown to the user when this policy blocks a tool call or prompt. Leave blank to use the default message.",
-    placeholder:
-      "e.g. This action was blocked by your organization's security policy. Contact your admin for help.",
-  },
-  quarantine: {
-    label: "Quarantine message",
-    description:
-      "Shown to the user when this policy quarantines their session. Leave blank to use the default message.",
-    placeholder:
-      "e.g. This session was quarantined by your organization's security policy. Contact your admin for help.",
-  },
-};
-
-interface PolicyStep {
-  id: string;
-  title: string;
-  description: string;
-  badge?: string;
-}
-
-// Back the active step with a `?step=<id>` URL param so browser back/forward
-// (and refresh, and shareable links) traverse the steps. history: "push" makes
-// each step change its own history entry.
-function useStepParam(steps: PolicyStep[]): [number, (index: number) => void] {
-  const [raw, setRaw] = useQueryState("step", { history: "push" });
-  const found = steps.findIndex((s) => s.id === raw);
-  const index = found >= 0 ? found : 0;
-  const setIndex = (i: number) => {
-    void setRaw(steps[i]?.id ?? null);
-  };
-  return [index, setIndex];
-}
-
 // Mock title summarization from the guardrail prompt (a real impl would use the
 // LLM). Matches a known template name, else derives a short title.
 function summarizeTitle(prompt: string): string {
@@ -306,6 +264,21 @@ export default function PolicyDetail(): JSX.Element {
       <PolicyDetailContent policyId={policyId!} />
     </RequireScope>
   );
+}
+
+/** The editor a stored policy opens in. Shadow AI is a presentation of the
+ *  blocking Shadow MCP policy, so it only applies while that presentation is
+ *  rolled out; otherwise the policy keeps the standard editor. */
+function PolicyEditorFor({ policy }: { policy: RiskPolicy }): JSX.Element {
+  const shadowAIFoldEnabled =
+    useFeatureFlag(FEATURE_FLAGS.shadowAiGuardrails).status === "enabled";
+  if (policy.policyType === "prompt_based") {
+    return <PromptPolicyEditor policy={policy} />;
+  }
+  if (shadowAIFoldEnabled && isShadowAIPolicy(policy)) {
+    return <ShadowAIPolicyEditor policy={policy} />;
+  }
+  return <StandardPolicyEditor policy={policy} />;
 }
 
 function PolicyDetailContent({ policyId }: { policyId: string }): JSX.Element {
@@ -330,10 +303,8 @@ function PolicyDetailContent({ policyId }: { policyId: string }): JSX.Element {
           <div className="flex items-center justify-center py-24">
             <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
           </div>
-        ) : policy.policyType === "prompt_based" ? (
-          <PromptPolicyEditor policy={policy} />
         ) : (
-          <StandardPolicyEditor policy={policy} />
+          <PolicyEditorFor policy={policy} />
         )}
       </Page.Body>
     </Page>
@@ -350,9 +321,22 @@ export function PolicyNew(): JSX.Element {
   );
 }
 
+function NewPolicyFrame({ children }: { children: ReactNode }): JSX.Element {
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>{children}</Page.Body>
+    </Page>
+  );
+}
+
 function PolicyNewContent(): JSX.Element {
   const [kind] = useQueryState("kind");
   const [category] = useQueryState("category");
+  const shadowAIFoldEnabled =
+    useFeatureFlag(FEATURE_FLAGS.shadowAiGuardrails).status === "enabled";
   // Read once: the editor seeds its state on mount and owns it from there.
   const [prefill] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -361,398 +345,148 @@ function PolicyNewContent(): JSX.Element {
   });
   if (kind === "standard") {
     return (
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <StandardPolicyEditor policy={null} prefill={prefill} />
-        </Page.Body>
-      </Page>
+      <NewPolicyFrame>
+        <StandardPolicyEditor policy={null} prefill={prefill} />
+      </NewPolicyFrame>
     );
   }
   if (kind === "prompt") {
     return (
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <PromptPolicyEditor policy={null} />
-        </Page.Body>
-      </Page>
+      <NewPolicyFrame>
+        <PromptPolicyEditor policy={null} />
+      </NewPolicyFrame>
+    );
+  }
+  if (kind === "shadow-ai" && shadowAIFoldEnabled) {
+    return (
+      <NewPolicyFrame>
+        <ShadowAIPolicyEditor policy={null} />
+      </NewPolicyFrame>
     );
   }
   return <PolicyKindChooser />;
 }
 
 // Kind chooser shown when the create page is opened without a `?kind=` hint
-// (e.g. a direct navigation). Mirrors PolicyCenter's modal chooser.
+// (e.g. a direct navigation).
+function PolicyKindCard({
+  icon: Icon,
+  title,
+  description,
+  onPick,
+  disabledNote,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  onPick: () => void;
+  /** When set, the card cannot be picked and says why instead. */
+  disabledNote?: ReactNode;
+}): JSX.Element {
+  const body = (
+    <>
+      <Icon className="text-muted-foreground mb-3 h-5 w-5" />
+      <Text className="font-medium">{title}</Text>
+      <Text small muted className="mt-1">
+        {description}
+      </Text>
+    </>
+  );
+  if (disabledNote) {
+    // A plain block, not a disabled control: aria-disabled on the wrapper
+    // would mark the note's link as disabled too, and the link is the one
+    // thing here a reader should still be able to follow.
+    return (
+      <div className="border-border/60 border border-dashed p-5 text-left">
+        {body}
+        <div className="mt-3">{disabledNote}</div>
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      className="hover:bg-muted/40 border p-5 text-left transition-colors"
+    >
+      {body}
+    </button>
+  );
+}
+
 function PolicyKindChooser(): JSX.Element {
   const [, setKind] = useQueryState("kind");
+  const routes = useRoutes();
+  const shadowAIFoldEnabled =
+    useFeatureFlag(FEATURE_FLAGS.shadowAiGuardrails).status === "enabled";
+  // The server allows one enabled blocking Shadow MCP policy per project, so
+  // the Shadow AI card offers to open that one instead of a doomed create.
+  const policiesQuery = useRiskListPolicies();
+  const existingShadowAI = findBlockingShadowMCPPolicy(
+    policiesQuery.data?.policies ?? [],
+  );
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Stack gap={4} className="mx-auto w-full max-w-2xl">
+        <Stack gap={4} className="mx-auto w-full max-w-3xl">
           <Stack gap={1}>
             <Heading variant="h3" className="normal-case">
               Choose policy type
             </Heading>
             <Text small muted>
-              Start with a built-in detector policy or define criteria in plain
-              language.
+              {shadowAIFoldEnabled
+                ? "Start with a built-in detector, define criteria in plain language, or decide which AI tools may connect."
+                : "Start with a built-in detector policy or define criteria in plain language."}
             </Text>
           </Stack>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => void setKind("standard")}
-              className="hover:bg-muted/40 border p-5 text-left transition-colors"
-            >
-              <Shield className="text-muted-foreground mb-3 h-5 w-5" />
-              <Text className="font-medium">Built-in detector</Text>
-              <Text small muted className="mt-1">
-                Scan for secrets, PII, and risky tool calls with built-in and
-                custom detection rules.
-              </Text>
-            </button>
-            <button
-              type="button"
-              onClick={() => void setKind("prompt")}
-              className="hover:bg-muted/40 border p-5 text-left transition-colors"
-            >
-              <Sparkles className="text-muted-foreground mb-3 h-5 w-5" />
-              <Text className="font-medium">Prompt-based</Text>
-              <Text small muted className="mt-1">
-                Describe the behavior to catch in plain language; an LLM judge
-                evaluates each in-scope message.
-              </Text>
-            </button>
+          <div
+            className={cn(
+              "grid grid-cols-1 gap-4",
+              shadowAIFoldEnabled ? "sm:grid-cols-3" : "sm:grid-cols-2",
+            )}
+          >
+            <PolicyKindCard
+              icon={Shield}
+              title="Built-in detector"
+              description="Scan for secrets, PII, and risky tool calls with built-in and custom detection rules."
+              onPick={() => void setKind("standard")}
+            />
+            <PolicyKindCard
+              icon={Sparkles}
+              title="Prompt-based"
+              description="Describe the behavior to catch in plain language; an LLM judge evaluates each in-scope message."
+              onPick={() => void setKind("prompt")}
+            />
+            {shadowAIFoldEnabled ? (
+              <PolicyKindCard
+                icon={MonitorCheck}
+                title="Shadow AI"
+                description="Allow or disallow the harnesses, assistants and MCP servers found on devices and in gateway traffic."
+                onPick={() => void setKind("shadow-ai")}
+                disabledNote={
+                  existingShadowAI ? (
+                    <Text small muted>
+                      This project already has one.{" "}
+                      <Link
+                        to={routes.policyCenter.detail.href(
+                          existingShadowAI.id,
+                        )}
+                        className="underline underline-offset-2"
+                      >
+                        Open {existingShadowAI.name}
+                      </Link>
+                    </Text>
+                  ) : undefined
+                }
+              />
+            ) : null}
           </div>
         </Stack>
       </Page.Body>
     </Page>
-  );
-}
-
-// ── Stepper shell (pinned header + left rail + spacious content column) ───────
-
-// Horizontal stepper across the top: a left rail competes with the app's own
-// sidebar, so the step nav runs horizontally and the step content gets the full
-// width below it. Free navigation — any step is clickable.
-function HorizontalStepper({
-  steps,
-  current,
-  onStep,
-}: {
-  steps: PolicyStep[];
-  current: number;
-  onStep: (index: number) => void;
-}): JSX.Element {
-  return (
-    <nav aria-label="Progress" className="flex items-center">
-      {steps.map((step, index) => {
-        const isDone = index < current;
-        const isCurrent = index === current;
-        return (
-          <Fragment key={step.id}>
-            <button
-              type="button"
-              onClick={() => onStep(index)}
-              className="group flex shrink-0 items-center gap-2 py-1 pr-1 text-left"
-            >
-              <span
-                className={cn(
-                  "flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold transition-colors",
-                  isCurrent
-                    ? "bg-foreground text-background"
-                    : isDone
-                      ? "bg-foreground/90 text-background group-hover:bg-foreground"
-                      : "border-border text-muted-foreground border group-hover:border-foreground/40",
-                )}
-              >
-                {isDone ? (
-                  <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
-                ) : (
-                  index + 1
-                )}
-              </span>
-              <span
-                className={cn(
-                  "hidden text-sm font-medium sm:inline",
-                  isCurrent ? "text-foreground" : "text-muted-foreground",
-                )}
-              >
-                {step.title}
-              </span>
-            </button>
-            {index < steps.length - 1 && (
-              <div className="bg-border mx-2 h-px min-w-6 flex-1" />
-            )}
-          </Fragment>
-        );
-      })}
-    </nav>
-  );
-}
-
-function StepperShell({
-  header,
-  steps,
-  current,
-  onStep,
-  children,
-}: {
-  header: React.ReactNode;
-  steps: PolicyStep[];
-  current: number;
-  onStep: (index: number) => void;
-  children: React.ReactNode;
-}): JSX.Element {
-  return (
-    // Full width — Page.Body already centers content at max-w-7xl (the app's
-    // standard page width).
-    <Stack gap={6} className="w-full">
-      {header}
-      <div className="bg-muted/20 border px-4 py-3">
-        <HorizontalStepper steps={steps} current={current} onStep={onStep} />
-      </div>
-      <Stack gap={6}>{children}</Stack>
-    </Stack>
-  );
-}
-
-// Back / Continue footer for stepping through sections; the left rail also
-// allows free navigation.
-function StepNav({
-  step,
-  count,
-  onStep,
-  continueDisabled = false,
-}: {
-  step: number;
-  count: number;
-  onStep: (index: number) => void;
-  continueDisabled?: boolean;
-}): JSX.Element {
-  return (
-    <Stack direction="horizontal" justify="space-between" gap={3}>
-      {step > 0 ? (
-        <Button variant="secondary" onClick={() => onStep(step - 1)}>
-          <Button.Text>Back</Button.Text>
-        </Button>
-      ) : (
-        <span />
-      )}
-      {step < count - 1 ? (
-        <Button
-          variant="secondary"
-          disabled={continueDisabled}
-          onClick={() => onStep(step + 1)}
-        >
-          <Button.Text>Continue</Button.Text>
-        </Button>
-      ) : (
-        <span />
-      )}
-    </Stack>
-  );
-}
-
-// ── Shared header (pinned, both kinds) ───────────────────────────────────────
-
-function PolicyHeader({
-  kind,
-  policy,
-  name,
-  onNameChange,
-  dirty,
-  saving,
-  actionDisabled,
-  onSubmit,
-  onCreate,
-  nameGenerating,
-}: {
-  kind: "prompt" | "standard";
-  policy: RiskPolicy | null;
-  name: string;
-  onNameChange: (v: string) => void;
-  dirty: boolean;
-  saving: boolean;
-  actionDisabled: boolean;
-  onSubmit: () => void;
-  onCreate?: () => void;
-  // Shimmer the title while it's being auto-generated from the guardrail.
-  nameGenerating?: boolean;
-}): JSX.Element {
-  const KindIcon = kind === "prompt" ? Sparkles : Shield;
-  const kindLabel =
-    kind === "prompt" ? "Prompt-based (LLM judge)" : "Built-in detector";
-  const placeholder =
-    kind === "prompt" ? "Untitled prompt policy" : "Untitled standard policy";
-  const isCreate = policy === null;
-  const routes = useRoutes();
-  const [editingName, setEditingName] = useState(false);
-  const toggleEnabledMutation = useTogglePolicyEnabled();
-
-  return (
-    <Stack
-      direction="horizontal"
-      align="center"
-      justify="space-between"
-      gap={4}
-    >
-      <Stack gap={1} className="min-w-0 flex-1">
-        <Stack direction="horizontal" gap={2} align="center">
-          <KindIcon className="text-muted-foreground h-4 w-4 shrink-0" />
-          {editingName ? (
-            <Input
-              value={name}
-              onChange={onNameChange}
-              placeholder={placeholder}
-              autoFocus
-              onBlur={() => setEditingName(false)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === "Escape") {
-                  setEditingName(false);
-                }
-              }}
-              className="h-9 w-[24rem] max-w-full text-lg font-semibold"
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => setEditingName(true)}
-              className="group flex min-w-0 items-center gap-2"
-              title="Rename policy"
-            >
-              <Heading
-                variant="h3"
-                className={cn(
-                  "truncate normal-case",
-                  !name && "text-muted-foreground",
-                  nameGenerating && "animate-pulse",
-                )}
-              >
-                {name || placeholder}
-              </Heading>
-              <Pencil className="text-muted-foreground h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
-            </button>
-          )}
-          {policy ? (
-            <>
-              <StatusBadge enabled={policy.enabled} />
-              <Switch
-                checked={policy.enabled}
-                disabled={saving || toggleEnabledMutation.isPending}
-                onCheckedChange={(checked) =>
-                  toggleEnabledMutation.mutate(
-                    togglePolicyEnabledVariables(
-                      policy.id,
-                      policy.name,
-                      checked,
-                    ),
-                  )
-                }
-                aria-label={policy.enabled ? "Disable policy" : "Enable policy"}
-              />
-            </>
-          ) : null}
-        </Stack>
-        {policy ? (
-          <Text small muted>
-            Version {policy.version} · {kindLabel}
-            {policy.enabled
-              ? null
-              : " · Inactive — new messages are not scanned"}
-          </Text>
-        ) : (
-          <Text small muted>
-            {kind === "prompt"
-              ? "Describe the behavior to catch. The name is generated for you."
-              : "Leave the name blank to auto-generate one from the detectors."}
-          </Text>
-        )}
-      </Stack>
-      <Stack direction="horizontal" gap={2} align="center" className="shrink-0">
-        <Button variant="tertiary" onClick={() => routes.policyCenter.goTo()}>
-          <Button.Text>{isCreate ? "Cancel" : "Close"}</Button.Text>
-        </Button>
-        {isCreate ? (
-          <CreateButton
-            disabled={actionDisabled || saving}
-            saving={saving}
-            onCreate={() => onCreate?.()}
-          />
-        ) : (
-          dirty && (
-            <Button
-              variant="secondary"
-              disabled={actionDisabled || saving}
-              onClick={onSubmit}
-            >
-              <Button.Text>{saving ? "Saving…" : "Save changes"}</Button.Text>
-            </Button>
-          )
-        )}
-      </Stack>
-    </Stack>
-  );
-}
-
-function CreateButton({
-  disabled,
-  saving,
-  onCreate,
-}: {
-  disabled: boolean;
-  saving: boolean;
-  onCreate: () => void;
-}): JSX.Element {
-  return (
-    <Button disabled={disabled} onClick={onCreate}>
-      <Button.Text>{saving ? "Creating…" : "Create policy"}</Button.Text>
-    </Button>
-  );
-}
-
-function StatusBadge({ enabled }: { enabled: boolean }): JSX.Element {
-  return (
-    <Badge variant={enabled ? "success" : "neutral"}>
-      {policyStatusLabel(enabled)}
-    </Badge>
-  );
-}
-
-// Vertical section header — title stacked over subtext with breathing room.
-// (Card.Header lays title + description side-by-side, which reads cramped.)
-// Title is optional: the step name already shows in the stepper, so primary
-// step sections pass description only (avoids repeating "Guardrail"/"Scope"/…
-// in both the progress rail and the card). Sub-sections (e.g. Judge) keep a
-// title since they aren't named by the stepper.
-function SectionHeader({
-  title,
-  description,
-}: {
-  title?: string;
-  description?: string;
-}): JSX.Element {
-  return (
-    <div className="space-y-1.5">
-      {title ? (
-        <Heading variant="h4" className="leading-none normal-case">
-          {title}
-        </Heading>
-      ) : null}
-      {description ? (
-        <Text small muted>
-          {description}
-        </Text>
-      ) : null}
-    </div>
   );
 }
 
@@ -1938,55 +1672,6 @@ function detectionScopesPayload(
     }));
 }
 
-// ── Action section (flag vs block) ───────────────────────────────────────────
-
-// Shared Action step — identical for prompt and standard: flag/block picker,
-// audience, and the block-time custom message.
-// Severity assigns a CVSS-style score (0.1–10, default 5) to the policy.
-// Findings inherit it at read time to render a severity badge. Pure metadata —
-// changing it never re-scans or regenerates findings.
-const SEVERITY_MIN = 0.1;
-const SEVERITY_MAX = 10;
-
-function SeveritySection({
-  score,
-  setScore,
-}: {
-  score: number;
-  setScore: React.Dispatch<React.SetStateAction<number>>;
-}): JSX.Element {
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <Label className="text-sm font-medium">Severity</Label>
-        <Stack direction="horizontal" gap={2} align="center">
-          <Text small mono>
-            {score.toFixed(1)}
-          </Text>
-          <SeverityBadge score={score} />
-        </Stack>
-      </div>
-      <Text small muted>
-        Rate how severe this policy's findings are, from {SEVERITY_MIN} to{" "}
-        {SEVERITY_MAX}. Findings surface this as a severity badge; it does not
-        change what the policy detects.
-      </Text>
-      <div className="pt-3">
-        <Slider
-          value={score}
-          onChange={(v) =>
-            setScore(Math.max(SEVERITY_MIN, Math.min(SEVERITY_MAX, v)))
-          }
-          min={SEVERITY_MIN}
-          max={SEVERITY_MAX}
-          step={0.1}
-          ticks={[SEVERITY_MIN, 4, 7, 9, SEVERITY_MAX]}
-        />
-      </div>
-    </div>
-  );
-}
-
 // ── Sensitivity section (Presidio match-confidence threshold) ────────────────
 // The minimum confidence a Presidio PII match must clear to be flagged. Applies
 // to every Presidio-backed detector in a standard policy and is only persisted
@@ -2056,83 +1741,6 @@ function SensitivitySection({
         </div>
       </div>
     </Card>
-  );
-}
-
-export function ActionStep({
-  action,
-  setAction,
-  audienceType,
-  setAudienceType,
-  audiencePrincipalUrns,
-  setAudiencePrincipalUrns,
-  userMessage,
-  setUserMessage,
-  score,
-  setScore,
-  flagOnlySelected = false,
-  mcpScoped = false,
-  pinnedAction,
-  shadowMCPAllowedServers,
-}: {
-  action: PolicyAction;
-  setAction: React.Dispatch<React.SetStateAction<PolicyAction>>;
-  audienceType: "everyone" | "targeted";
-  setAudienceType: React.Dispatch<
-    React.SetStateAction<"everyone" | "targeted">
-  >;
-  audiencePrincipalUrns: Set<string>;
-  setAudiencePrincipalUrns: React.Dispatch<React.SetStateAction<Set<string>>>;
-  userMessage: string;
-  setUserMessage: React.Dispatch<React.SetStateAction<string>>;
-  score: number;
-  setScore: React.Dispatch<React.SetStateAction<number>>;
-  flagOnlySelected?: boolean;
-  mcpScoped?: boolean;
-  pinnedAction?: { value: PolicyAction; reason: string };
-  shadowMCPAllowedServers?: ReactNode;
-}): JSX.Element {
-  return (
-    <div className="space-y-4">
-      <Card>
-        <SeveritySection score={score} setScore={setScore} />
-      </Card>
-      <Card>
-        <SectionHeader description="Choose how the policy responds when it fires, and who it applies to." />
-        <Stack gap={5}>
-          <ActionPicker
-            formAction={action}
-            setFormAction={setAction}
-            flagOnlySelected={flagOnlySelected}
-            mcpScoped={mcpScoped}
-            pinnedAction={pinnedAction}
-          />
-          {shadowMCPAllowedServers}
-          <PolicyAudiencePicker
-            formAudienceType={audienceType}
-            setFormAudienceType={setAudienceType}
-            selectedAudiencePrincipalUrns={audiencePrincipalUrns}
-            setSelectedAudiencePrincipalUrns={setAudiencePrincipalUrns}
-          />
-          {action !== "flag" && (
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">
-                {POLICY_ACTION_MESSAGE[action].label}
-              </Label>
-              <p className="text-muted-foreground text-xs">
-                {POLICY_ACTION_MESSAGE[action].description}
-              </p>
-              <TextArea
-                value={userMessage}
-                onChange={setUserMessage}
-                placeholder={POLICY_ACTION_MESSAGE[action].placeholder}
-                rows={3}
-              />
-            </div>
-          )}
-        </Stack>
-      </Card>
-    </div>
   );
 }
 
@@ -4414,29 +4022,6 @@ function StandardReview({
         </SummaryRow>
       </Stack>
     </Card>
-  );
-}
-
-function SummaryRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}): JSX.Element {
-  return (
-    <Stack
-      direction="horizontal"
-      justify="space-between"
-      align="center"
-      gap={4}
-      className="border-border/60 border-b pb-3 last:border-b-0 last:pb-0"
-    >
-      <Text small muted className="shrink-0">
-        {label}
-      </Text>
-      <div className="min-w-0">{children}</div>
-    </Stack>
   );
 }
 
