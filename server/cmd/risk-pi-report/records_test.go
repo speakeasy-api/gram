@@ -188,8 +188,8 @@ func TestOpenRecordsForAppendEndsAPartialLine(t *testing.T) {
 }
 
 var (
-	mainCommit    = runCommit{SHA: "1a2b3c4d5e6f", Subject: "chore: main", Uncommitted: false}
-	fixtureCommit = runCommit{SHA: "6f5e4d3c2b1a", Subject: "chore: edit a fixture", Uncommitted: false}
+	mainCommit    = runCommit{SHA: "1a2b3c4d5e6f", Subject: "chore: main"}
+	fixtureCommit = runCommit{SHA: "6f5e4d3c2b1a", Subject: "chore: edit a fixture"}
 )
 
 func TestClaimRunDirKeepsItsStartTime(t *testing.T) {
@@ -214,9 +214,6 @@ func TestClaimRunDirRefusesARunOfAnotherCommit(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, claimRunDir(dir, mainCommit, time.Now()))
 	require.ErrorContains(t, claimRunDir(dir, fixtureCommit, time.Now()), "measured 1a2b3c4d5e, not this checkout's 6f5e4d3c2b")
-
-	edited := runCommit{SHA: mainCommit.SHA, Subject: mainCommit.Subject, Uncommitted: true}
-	require.NoError(t, claimRunDir(dir, edited, time.Now()), "uncommitted changes may resume a run of their commit")
 }
 
 func TestRunRecordsRefusesDuplicateCaseKeys(t *testing.T) {

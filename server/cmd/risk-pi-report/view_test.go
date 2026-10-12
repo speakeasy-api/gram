@@ -34,9 +34,9 @@ func viewRecord(c labeledCase, status caseStatus) caseRecord {
 }
 
 var (
-	baseCommit   = runCommit{SHA: "aaaaaaaaaaaa1111", Subject: "chore: main", Uncommitted: false}
-	changeCommit = runCommit{SHA: "cccccccccccc2222", Subject: "fix: better detector", Uncommitted: false}
-	olderCommit  = runCommit{SHA: "eeeeeeeeeeee3333", Subject: "chore: an older try", Uncommitted: false}
+	baseCommit   = runCommit{SHA: "aaaaaaaaaaaa1111", Subject: "chore: main"}
+	changeCommit = runCommit{SHA: "cccccccccccc2222", Subject: "fix: better detector"}
+	olderCommit  = runCommit{SHA: "eeeeeeeeeeee3333", Subject: "chore: an older try"}
 )
 
 func TestBuildViewDataListsEveryRunAndJoinsCases(t *testing.T) {

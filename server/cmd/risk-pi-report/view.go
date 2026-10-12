@@ -313,11 +313,10 @@ func latestRun(runs []loadedRun, match func(loadedRun) bool) string {
 	return id
 }
 
-// measuredCommit reports whether run r measured commit's committed code.
-// commit may be a full or abbreviated hash; empty matches nothing.
+// measuredCommit reports whether run r measured commit. commit may be a full
+// or abbreviated hash; empty matches nothing.
 func measuredCommit(r loadedRun, commit string) bool {
-	c := r.manifest.Commit
-	return commit != "" && !c.Uncommitted && strings.HasPrefix(c.SHA, commit)
+	return commit != "" && strings.HasPrefix(r.manifest.Commit.SHA, commit)
 }
 
 // pickRuns orders the runs the viewer shows: the change, the base, then the

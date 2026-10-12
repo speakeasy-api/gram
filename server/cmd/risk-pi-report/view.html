@@ -102,7 +102,7 @@ const when = (r) => (r && r.manifest.started ? new Date(r.manifest.started).toLo
 // differ only in the time.
 function shortName(id) {
   const r = runOf(id), c = commitOf(r);
-  const sha = c ? c.sha.slice(0, 10) + (c.uncommitted ? "+" : "") : id.slice(0, 10);
+  const sha = c ? c.sha.slice(0, 10) : id.slice(0, 10);
   const name = [sha, when(r)].filter(Boolean).join(" · ");
   return role(id) ? `${role(id)} (${name})` : name;
 }

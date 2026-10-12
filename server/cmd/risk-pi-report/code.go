@@ -13,8 +13,7 @@ import (
 )
 
 const (
-	// fixturesPath holds the fixtures. Editing them does not mark a checkout
-	// as uncommitted.
+	// fixturesPath holds the fixtures.
 	fixturesPath = "server/internal/scanners/promptinjection/testdata"
 
 	// runIDLayout starts a run's directory name with its start time, to the
@@ -29,23 +28,11 @@ type runCommit struct {
 
 	// Subject is the commit's subject line.
 	Subject string `json:"subject"`
-
-	// Uncommitted reports that the checkout had changes outside the fixtures
-	// that the commit lacks. It only labels the run; resuming ignores it.
-	Uncommitted bool `json:"uncommitted,omitempty"`
 }
 
-// name is how progress lines refer to the run: the commit's short hash,
-// marked when the code had uncommitted changes.
+// name is how progress lines refer to the run: the commit's short hash.
 func (c runCommit) name() string {
-	name := c.SHA
-	if len(name) > 10 {
-		name = name[:10]
-	}
-	if c.Uncommitted {
-		name += " + uncommitted"
-	}
-	return name
+	return c.SHA[:min(len(c.SHA), 10)]
 }
 
 // checkoutCommit reads the git checkout that holds dir, or the working
@@ -62,12 +49,7 @@ func checkoutCommit(ctx context.Context, dir string) (runCommit, error) {
 	if err != nil {
 		return commit, err
 	}
-	status, err := git(ctx, root, "status", "--porcelain", "--", ".", ":(exclude)"+fixturesPath)
-	if err != nil {
-		return commit, err
-	}
 	commit.SHA, commit.Subject, _ = strings.Cut(strings.TrimSpace(head), "\x00")
-	commit.Uncommitted = strings.TrimSpace(status) != ""
 	return commit, nil
 }
 
