@@ -1,10 +1,11 @@
 import { useSdkClient } from "@/contexts/Sdk";
+import { isExpectedAPIError } from "@/lib/errors";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   keySetChoiceReady,
   oauthFormatOf,
@@ -109,6 +110,13 @@ export function useServiceAccountClientDraft({
   const [created, setCreated] = useState<RemoteSessionClient | null>(null);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
+  // A client secret client whose commit ended without an answer, so it may be
+  // bound already. A retry with the same fields commits it again rather than
+  // making another; it is never deleted, since it may be in use.
+  const unsettled = useRef<{
+    client: RemoteSessionClient;
+    fields: string;
+  } | null>(null);
   // The operator chose to replace the bound client rather than keep it.
   const [replacing, setReplacing] = useState(false);
 
@@ -138,13 +146,38 @@ export function useServiceAccountClientDraft({
     setCreated(null);
   }, []);
 
-  const reset = useCallback(() => {
+  // Best effort and in the background: a leftover client is clutter, not a
+  // failure the operator has to act on.
+  const deleteClient = (id: string) =>
+    client.remoteSessionClients
+      .delete({ id })
+      .then(() => invalidateAllRemoteSessionClients(queryClient))
+      .catch((error: unknown) =>
+        console.error(
+          "Couldn't delete an unbound service account client",
+          error,
+        ),
+      );
+
+  // A signing key client made by "Create client" exists before Save binds it,
+  // so dropping it from the draft deletes it too.
+  const discardCreated = () => {
+    if (created) void deleteClient(created.id);
+  };
+
+  const clearDraft = useCallback(() => {
     setIssuerPick(null);
     clearRegistration();
     setReplacing(false);
   }, [clearRegistration]);
 
+  const reset = () => {
+    discardCreated();
+    clearDraft();
+  };
+
   const pickIssuer = (id: string) => {
+    discardCreated();
     setIssuerPick(id);
     clearRegistration();
   };
@@ -214,42 +247,60 @@ export function useServiceAccountClientDraft({
   const save = async (format: ServiceAccountOAuthFormat): Promise<boolean> => {
     if (!canSave(format) || !issuer) return false;
     setSaving(true);
-    // A client secret client is made by this Save, so a failed commit deletes
-    // it rather than leaving a copy behind for every retry.
-    let madeHere: RemoteSessionClient | null = null;
+    const fields = JSON.stringify([
+      issuer.id,
+      clientId.trim(),
+      clientSecret.trim(),
+      secretMethod,
+      scopes,
+      audience.trim(),
+    ]);
     try {
-      if (format === "client-secret") {
-        madeHere = await createSelfClient({
-          tokenEndpointAuthMethod: secretMethod,
-          clientSecret: clientSecret.trim(),
-        });
-      }
-      const target = madeHere ?? created!;
-      const result =
-        await client.remoteSessions.commitServerIdentityConfiguration({
+      // A client secret client is made by this Save, so a refused commit
+      // deletes it rather than leaving a copy behind for every retry. Only a
+      // refusal: a lost response or a server fault may have bound it already.
+      const madeHere =
+        format !== "client-secret"
+          ? null
+          : unsettled.current?.fields === fields
+            ? unsettled.current.client
+            : await createSelfClient({
+                tokenEndpointAuthMethod: secretMethod,
+                clientSecret: clientSecret.trim(),
+              });
+      unsettled.current = null;
+      const discardMadeHere = () => {
+        if (madeHere) void deleteClient(madeHere.id);
+      };
+      let result;
+      try {
+        result = await client.remoteSessions.commitServerIdentityConfiguration({
           commitServerIdentityConfigurationForm: {
             mcpServerId,
             providerId: issuer.id,
             clientMode: "existing",
-            existingClientId: target.id,
+            existingClientId: (madeHere ?? created!).id,
           },
         });
+      } catch (error) {
+        if (isExpectedAPIError(error)) discardMadeHere();
+        else if (madeHere) unsettled.current = { client: madeHere, fields };
+        throw error;
+      }
       if (result.failure) {
+        discardMadeHere();
         throw new Error(
           result.failure.providerMessage ??
             `Couldn't connect this server to ${issuer.name}.`,
         );
       }
-      madeHere = null;
       await invalidateAllRemoteSessionClients(queryClient);
-      reset();
+      // A signing key client made earlier is unbound once a client secret
+      // one takes its place; the bound one is cleared without being deleted.
+      if (madeHere) discardCreated();
+      clearDraft();
       return true;
     } finally {
-      if (madeHere) {
-        await client.remoteSessionClients
-          .delete({ id: madeHere.id })
-          .catch(() => undefined);
-      }
       setSaving(false);
     }
   };

@@ -17,6 +17,34 @@ function text(instructions: ReturnType<typeof keyRingInstructions>): string {
 }
 
 describe("keyRingInstructions", () => {
+  it("grants a known service account email instead of the derived one", () => {
+    const known = {
+      ...values,
+      serviceAccountEmail: "signer@other-project.iam.gserviceaccount.com",
+    };
+    for (const method of ["gcloud", "terraform", "console"] as const) {
+      const out = text(keyRingInstructions(method, known, "ES256"));
+      expect(out).toContain("signer@other-project.iam.gserviceaccount.com");
+      expect(out).not.toContain("speakeasy-signer@acme-prod");
+      // The key ring still lives in the typed project.
+      expect(out).toContain("acme-prod");
+    }
+  });
+
+  it("derives the email when none is known", () => {
+    expect(
+      text(
+        keyRingInstructions(
+          "gcloud",
+          { ...values, serviceAccountEmail: " " },
+          "ES256",
+        ),
+      ),
+    ).toContain(
+      "serviceAccount:speakeasy-signer@acme-prod.iam.gserviceaccount.com",
+    );
+  });
+
   it("creates an EC key for ES256", () => {
     expect(text(keyRingInstructions("gcloud", values, "ES256"))).toContain(
       "--default-algorithm=ec-sign-p256-sha256",

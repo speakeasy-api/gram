@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import type { JSONWebKeySet } from "@gram/client/models/components/jsonwebkeyset.js";
 import type { VerifyKmsKeyResult } from "@gram/client/models/components/verifykmskeyresult.js";
 import { useGcpSetupInfo } from "@gram/client/react-query/gcpSetupInfo";
+import { useGetGcpIamCredential } from "@gram/client/react-query/getGcpIamCredential";
 import { invalidateAllListExternalCredentials } from "@gram/client/react-query/listExternalCredentials";
 import { invalidateAllListExternalKeys } from "@gram/client/react-query/listExternalKeys";
 import {
@@ -146,6 +147,20 @@ export function KeySetSetupSteps({
     }
   };
 
+  const [credentialChoice, setCredentialChoice] = useState<string | null>(null);
+  const usingExisting = !!credentialChoice && credentialChoice !== NEW;
+  // A reused service account is granted by its own email, which may not match
+  // the default name in the typed project. Until it loads, the derived one
+  // stands in.
+  const chosenCredential = useGetGcpIamCredential(
+    { id: credentialChoice ?? "" },
+    SECURITY,
+    { enabled: usingExisting, throwOnError: false },
+  );
+
+  // A corrected email for a new service account, typed in step 3.
+  const [emailEdit, setEmailEdit] = useState<string | null>(null);
+
   const [values, setValues] = useState<Omit<SetupValues, "speakeasyPrincipal">>(
     {
       projectId: "",
@@ -158,13 +173,15 @@ export function KeySetSetupSteps({
   const setupValues: SetupValues = {
     ...values,
     speakeasyPrincipal: setupInfo.data?.serviceAccountEmail ?? "",
+    serviceAccountEmail: usingExisting
+      ? chosenCredential.data?.impersonateServiceAccount
+      : (emailEdit ?? undefined),
   };
   const set = (field: keyof typeof values) => (value: string) =>
     setValues((current) => ({ ...current, [field]: value }));
 
   // Step 3: the connected service account.
-  const [credentialChoice, setCredentialChoice] = useState<string | null>(null);
-  const [emailEdit, setEmailEdit] = useState<string | null>(null);
+  // The typed value as is, so clearing the field leaves it empty.
   const email = emailEdit ?? serviceAccountEmail(setupValues);
   const [connectedId, setConnectedId] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
@@ -173,7 +190,6 @@ export function KeySetSetupSteps({
     credentialChoice && credentialChoice !== NEW
       ? credentialChoice
       : connectedId;
-  const usingExisting = !!credentialChoice && credentialChoice !== NEW;
   const choosingCredential =
     credentials.length > 0 && credentialChoice === null && !connectedId;
 

@@ -5,6 +5,12 @@ export type SetupValues = {
   projectId: string;
   /** The short name of the service account Speakeasy impersonates. */
   accountId: string;
+  /**
+   * The full email of the service account, when it is already known (a
+   * connected one may live in another project or have another name).
+   * Overrides the one derived from the project and account name.
+   */
+  serviceAccountEmail?: string;
   /** The principal Speakeasy itself runs as, granted the right to impersonate. */
   speakeasyPrincipal: string;
   location: string;
@@ -47,6 +53,8 @@ function or(value: string, placeholder: string): string {
 }
 
 export function serviceAccountEmail(values: SetupValues): string {
+  const known = values.serviceAccountEmail?.trim();
+  if (known) return known;
   return `${or(values.accountId, "SERVICE_ACCOUNT")}@${or(values.projectId, "PROJECT_ID")}.iam.gserviceaccount.com`;
 }
 

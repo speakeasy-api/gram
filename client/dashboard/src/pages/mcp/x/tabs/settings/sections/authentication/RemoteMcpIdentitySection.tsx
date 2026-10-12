@@ -302,6 +302,14 @@ export function RemoteMcpIdentitySectionBody({
   // leaving User means unbinding the client and leaving Agent means deleting
   // the credential; both are what Save has to do, not the card click.
   const leavingUser = actualMode === "user" && selectedMode !== "user";
+  // An OAuth client takes a static credential's place rather than sitting
+  // beside it, so the confirmation says replace, not remove. Only a client
+  // Save binds, or one already bound, does: an unfinished form replaces
+  // nothing.
+  const replacingCredential =
+    !!oauthFormat &&
+    !!authorizationHeader &&
+    (clientDraft.canSave(oauthFormat) || clientDraft.showingBound(oauthFormat));
   // A server can carry a bound client and a leftover static credential at
   // once, and the client wins the derived mode. No Identity has to clear both
   // or the credential alone would make the server read as Agent again — and
@@ -309,9 +317,7 @@ export function RemoteMcpIdentitySectionBody({
   const leavingAgent =
     (actualMode === "agent" && !selfClient && selectedMode !== "agent") ||
     (selectedMode === "none" && !!authorizationHeader) ||
-    // An OAuth client replaces a static credential rather than sitting
-    // beside it.
-    (oauthSelected && !!authorizationHeader);
+    replacingCredential;
   // Moving off the service account client to a static credential or to no
   // identity unbinds it. Another OAuth client, or User Identity, replaces it
   // in the same commit that binds the new one.
@@ -406,9 +412,24 @@ export function RemoteMcpIdentitySectionBody({
     actualMode === "user" &&
     userDraft.pendingChange &&
     !userDraft.canSave;
+  // Leaving the service account client for a static credential unbinds it
+  // only once a credential is written. With none typed and none on the
+  // server, Save would skip the identity half and commit the rest.
+  const staticSwitchBlocked =
+    !!selfClient &&
+    selectedMode === "agent" &&
+    !oauthSelected &&
+    !agentDraft.canSave &&
+    !authorizationHeader;
 
   const performSave = async () => {
-    if (!canWrite || rbacLoading || userSwitchBlocked || userEditIncomplete)
+    if (
+      !canWrite ||
+      rbacLoading ||
+      userSwitchBlocked ||
+      userEditIncomplete ||
+      staticSwitchBlocked
+    )
       return;
     setConfirmOpen(false);
     try {
@@ -428,12 +449,7 @@ export function RemoteMcpIdentitySectionBody({
         // edit still goes through.
         const binding = clientDraft.canSave(oauthFormat);
         if (binding && !(await clientDraft.save(oauthFormat))) return;
-        if (
-          leavingAgent &&
-          (binding || clientDraft.showingBound(oauthFormat))
-        ) {
-          await deleteStaticCredential();
-        }
+        if (replacingCredential) await deleteStaticCredential();
         if (binding) setFormatPick(null);
       } else if (selectedMode === "user" && leavingAgent) {
         // Bind the client before dropping the credential, so a failed commit
@@ -463,6 +479,9 @@ export function RemoteMcpIdentitySectionBody({
           await userDraft.save();
         }
       }
+      // A signing key client made for the Service Account choice and left
+      // behind by a save that chose otherwise is never bound, so it goes.
+      if (!oauthFormat && clientDraft.created) clientDraft.reset();
     } catch (error) {
       toast.error(errorMessage(error, "Failed to save identity"));
       return;
@@ -538,6 +557,7 @@ export function RemoteMcpIdentitySectionBody({
     !headersBlocked &&
     !userSwitchBlocked &&
     !userEditIncomplete &&
+    !staticSwitchBlocked &&
     (identityCanSave || headerDrafts.isDirty || scopePinDirty);
   const savePending =
     detachIssuer.isPending ||
@@ -830,6 +850,11 @@ export function RemoteMcpIdentitySectionBody({
                 Finish the User Identity change, or cancel it, to save.
               </Text>
             ) : null}
+            {staticSwitchBlocked ? (
+              <Text small warning>
+                Enter the credential, or cancel, to save.
+              </Text>
+            ) : null}
             <SettingsSection.FooterActions>
               {selectedMode === "agent" && clientDraft.replacing ? (
                 // Backs out of replacing the saved service account client.
@@ -878,6 +903,7 @@ export function RemoteMcpIdentitySectionBody({
                 replacingSelf: leavingSelf || oauthReplacing,
                 leavingUser,
                 replacingClient,
+                replacingCredential,
                 upstreamName,
               })}
             </Dialog.Title>
@@ -888,6 +914,7 @@ export function RemoteMcpIdentitySectionBody({
                 leavingUser,
                 leavingAgent,
                 replacingClient,
+                replacingCredential,
               })}
             </Dialog.Description>
           </Dialog.Header>
@@ -934,6 +961,8 @@ const REPLACE_SELF_CLIENT_CONSEQUENCE =
   "Saving stops this server using its current service account client. Callers get the new credential on their next request. The old client stays available to other servers.";
 const REMOVE_CREDENTIAL_CONSEQUENCE =
   "Saving removes the static Authorization credential from the Remote MCP source. Requests will no longer authenticate upstream.";
+const REPLACE_CREDENTIAL_CONSEQUENCE =
+  "Saving replaces the static Authorization credential with the service account client. Callers get the client's token on their next request.";
 
 /**
  * What the confirmation discloses. A server can carry a bound client and a
@@ -946,25 +975,34 @@ function removalConsequences({
   leavingUser,
   leavingAgent,
   replacingClient,
+  replacingCredential,
 }: {
   removingSelf: boolean;
   replacingSelf: boolean;
   leavingUser: boolean;
   leavingAgent: boolean;
   replacingClient: boolean;
+  replacingCredential: boolean;
 }): string {
+  const credentialConsequence = replacingCredential
+    ? REPLACE_CREDENTIAL_CONSEQUENCE
+    : REMOVE_CREDENTIAL_CONSEQUENCE;
   if (removingSelf) {
     return leavingAgent
       ? `${REMOVE_SELF_CLIENT_CONSEQUENCE} ${REMOVE_CREDENTIAL_CONSEQUENCE}`
       : REMOVE_SELF_CLIENT_CONSEQUENCE;
   }
-  if (replacingSelf) return REPLACE_SELF_CLIENT_CONSEQUENCE;
+  if (replacingSelf) {
+    return replacingCredential
+      ? `${REPLACE_SELF_CLIENT_CONSEQUENCE} ${REPLACE_CREDENTIAL_CONSEQUENCE}`
+      : REPLACE_SELF_CLIENT_CONSEQUENCE;
+  }
   if (replacingClient) return REPLACE_CLIENT_CONSEQUENCE;
   if (leavingUser && leavingAgent) {
-    return `${UNLINK_PROVIDER_CONSEQUENCE} ${REMOVE_CREDENTIAL_CONSEQUENCE}`;
+    return `${UNLINK_PROVIDER_CONSEQUENCE} ${credentialConsequence}`;
   }
   if (leavingUser) return UNLINK_PROVIDER_CONSEQUENCE;
-  return REMOVE_CREDENTIAL_CONSEQUENCE;
+  return credentialConsequence;
 }
 
 function confirmTitle({
@@ -972,17 +1010,21 @@ function confirmTitle({
   replacingSelf,
   leavingUser,
   replacingClient,
+  replacingCredential,
   upstreamName,
 }: {
   removingSelf: boolean;
   replacingSelf: boolean;
   leavingUser: boolean;
   replacingClient: boolean;
+  replacingCredential: boolean;
   upstreamName: string;
 }): string {
   if (removingSelf) return "Remove the service account client?";
   if (replacingSelf) return "Replace the service account client?";
   if (replacingClient) return "Replace the connected client?";
   if (leavingUser) return `Stop signing users in through ${upstreamName}?`;
-  return "Remove the shared credential?";
+  return replacingCredential
+    ? "Replace the shared credential?"
+    : "Remove the shared credential?";
 }

@@ -7,8 +7,9 @@ import { Copy } from "lucide-react";
 import { toast } from "sonner";
 
 /**
- * How the provider learns the client's public key: the key set URL to paste
- * into the app, or the key itself for providers that only take a pasted key.
+ * How the provider learns the client's public keys: the key set URL to paste
+ * into the app, or the keys themselves for providers that only take a pasted
+ * key set.
  */
 export function ClientKeyRegistration({
   clientRowId,
@@ -20,27 +21,25 @@ export function ClientKeyRegistration({
   const client = useSdkClient();
   const url = clientKeySetUrl(clientRowId);
 
-  // Providers that take a pasted key want one JWK, not a set: the key that
-  // signs now, else the one about to. Retired and revoked keys must not be
-  // registered again.
+  // Every key a verifier should trust, as a set even when there is one:
+  // the key that signs now and the one about to, which is what the key set
+  // URL serves. Retired and revoked keys must not be registered again.
   const copyPublicKey = async () => {
     try {
       const result = await client.jsonWebKeySets.listKeys(
         { setId: keySetId },
         { sessionHeaderGramSession: "" },
       );
-      const newest = (state: "active" | "pending") =>
-        result.keys
-          .filter((key) => key.keyState === state)
-          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
-      const key = newest("active") ?? newest("pending");
-      if (!key) {
+      const keys = result.keys
+        .filter(
+          (key) => key.keyState === "active" || key.keyState === "pending",
+        )
+        .map((key) => key.publicJwk);
+      if (keys.length === 0) {
         toast.error("This key set has no published key yet.");
         return;
       }
-      await navigator.clipboard.writeText(
-        JSON.stringify(key.publicJwk, null, 2),
-      );
+      await navigator.clipboard.writeText(JSON.stringify({ keys }, null, 2));
       toast.success("Public key copied");
     } catch (error) {
       toast.error(
@@ -50,8 +49,8 @@ export function ClientKeyRegistration({
   };
 
   // Two ways to register the same key, laid out as matching rows so neither
-  // reads as an afterthought: the URL for providers that fetch keys, the key
-  // itself for providers that only take a pasted one.
+  // reads as an afterthought: the URL for providers that fetch keys, the keys
+  // themselves for providers that only take a pasted set.
   return (
     <div className="bg-card flex min-w-0 flex-col divide-y border">
       <div className="flex min-w-0 items-center gap-3 px-3 py-2.5">
@@ -78,7 +77,7 @@ export function ClientKeyRegistration({
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="text-eyebrow">Public key</span>
           <Text muted small>
-            For providers that take a pasted key
+            For providers that take a pasted key set
           </Text>
         </div>
         <Button

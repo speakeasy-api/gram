@@ -2115,6 +2115,86 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(mocks.detach).not.toHaveBeenCalled();
   });
 
+  it("holds Save when a static credential replacing the service account client is blank", () => {
+    boundSelfClient();
+
+    renderIdentity();
+    // The saved client hides the format choice until it is cleared.
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    fireEvent.click(staticFormat("Bearer"));
+    addCustomHeader("X-Team", "platform");
+
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      screen.getByText("Enter the credential, or cancel, to save."),
+    ).toBeDefined();
+
+    fireEvent.change(screen.getByLabelText("Token"), {
+      target: { value: "bearer-secret-value" },
+    });
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+  });
+
+  it("keeps a static credential an unfinished OAuth client would not replace", async () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+
+    renderIdentity();
+    fireEvent.click(
+      within(
+        screen.getByRole("radiogroup", { name: "OAuth credential" }),
+      ).getByRole("radio", { name: /^Client secret/ }),
+    );
+    addCustomHeader("X-Team", "platform");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(mocks.create).toHaveBeenCalled());
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+
+  it("confirms the service account client replacing a static credential", async () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+    boundSelfClient();
+
+    renderIdentity();
+    addCustomHeader("X-Team", "platform");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText("Replace the shared credential?"),
+    ).toBeDefined();
+    expect(dialog.textContent).toContain(
+      "replaces the static Authorization credential with the service account client",
+    );
+    expect(dialog.textContent).not.toContain("no longer authenticate");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(mocks.remove).toHaveBeenCalledWith({
+        request: { id: "header-1" },
+      }),
+    );
+  });
+
   it("lets Custom Headers own a credential row it already removed", async () => {
     mocks.headers.mockReturnValue({
       data: { headers: [configuredHeader()] },
