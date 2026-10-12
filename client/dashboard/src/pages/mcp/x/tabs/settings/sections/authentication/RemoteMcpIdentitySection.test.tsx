@@ -2154,7 +2154,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(
       within(
         screen.getByRole("radiogroup", { name: "OAuth credential" }),
-      ).getByRole("radio", { name: /^Client secret/ }),
+      ).getByRole("radio", { name: /^Client Secret/ }),
     );
     addCustomHeader("X-Team", "platform");
     fireEvent.click(screen.getByRole("button", { name: "Save" }));

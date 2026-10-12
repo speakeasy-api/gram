@@ -118,7 +118,7 @@ export function ServiceAccountPanel({
             options={[
               {
                 value: "client-secret",
-                title: "Client secret",
+                title: "Client Secret",
                 description:
                   "Paste a client ID and secret from the identity provider.",
               },
