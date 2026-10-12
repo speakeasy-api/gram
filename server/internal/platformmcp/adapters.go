@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -352,74 +353,80 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 }
 
 type PostgresReader struct {
-	xaaReadiness              *xaaReadinessService
-	logger                    *slog.Logger
-	db                        *pgxpool.Pool
-	reader                    *readmodel.Reader
-	inventory                 *platformrepo.Queries
-	inventoryCursor           *inventoryCursorCodec
-	metadataVersionKey        []byte
-	riskReads                 *RiskReadService
-	riskAnalysisStatus        *RiskAnalysisStatusService
-	riskFindings              riskFindingsLister
-	riskFindingList           riskFindingListLister
-	chatMetadata              *ChatMetadataService
-	dataExports               *DataExportReadService
-	dataExportMutations       *dataExportMutationService
-	dataExportRouteToggle     *DataExportRouteToggleService
-	recentToolCalls           *RecentToolCallReadService
-	networkTraffic            MCPNetworkTrafficReader
-	networkTrafficLogsEnabled FeatureChecker
-	eventFeed                 *EventFeedReadService
-	networkIngress            *NetworkIngressStatusService
-	authz                     *authz.Engine
-	shadowInventory           *ShadowInventoryService
-	shadowDecisions           *ShadowDecisionService
-	shadowAI                  *ShadowAIService
-	reviewRequests            MCPReviewRequestService
-	reviewRequestBudget       OperationBudget
-	reviewLinks               ShadowMCPReviewLinker
-	toolExposure              *MCPToolExposureService
-	projectLifecycle          *ProjectLifecycleService
-	analytics                 *AnalyticsService
-	widgets                   *WidgetService
-	dashboards                *DashboardsService
+	xaaReadiness                 *xaaReadinessService
+	enterpriseIssuerOrigin       *url.URL
+	enterpriseIssuerFeatures     *productfeatures.Client
+	enterpriseIssuerProvisioning bool
+	logger                       *slog.Logger
+	db                           *pgxpool.Pool
+	reader                       *readmodel.Reader
+	inventory                    *platformrepo.Queries
+	inventoryCursor              *inventoryCursorCodec
+	metadataVersionKey           []byte
+	riskReads                    *RiskReadService
+	riskAnalysisStatus           *RiskAnalysisStatusService
+	riskFindings                 riskFindingsLister
+	riskFindingList              riskFindingListLister
+	chatMetadata                 *ChatMetadataService
+	dataExports                  *DataExportReadService
+	dataExportMutations          *dataExportMutationService
+	dataExportRouteToggle        *DataExportRouteToggleService
+	recentToolCalls              *RecentToolCallReadService
+	networkTraffic               MCPNetworkTrafficReader
+	networkTrafficLogsEnabled    FeatureChecker
+	eventFeed                    *EventFeedReadService
+	networkIngress               *NetworkIngressStatusService
+	authz                        *authz.Engine
+	shadowInventory              *ShadowInventoryService
+	shadowDecisions              *ShadowDecisionService
+	shadowAI                     *ShadowAIService
+	reviewRequests               MCPReviewRequestService
+	reviewRequestBudget          OperationBudget
+	reviewLinks                  ShadowMCPReviewLinker
+	toolExposure                 *MCPToolExposureService
+	projectLifecycle             *ProjectLifecycleService
+	analytics                    *AnalyticsService
+	widgets                      *WidgetService
+	dashboards                   *DashboardsService
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 	return &PostgresReader{
-		logger:                    logger.With(attr.SlogComponent("platformmcp")),
-		db:                        db,
-		reader:                    readmodel.New(db),
-		inventory:                 platformrepo.New(db),
-		inventoryCursor:           nil,
-		metadataVersionKey:        nil,
-		riskReads:                 nil,
-		riskAnalysisStatus:        nil,
-		riskFindings:              nil,
-		riskFindingList:           nil,
-		chatMetadata:              nil,
-		dataExports:               nil,
-		dataExportMutations:       nil,
-		dataExportRouteToggle:     nil,
-		recentToolCalls:           nil,
-		networkTraffic:            nil,
-		networkTrafficLogsEnabled: nil,
-		eventFeed:                 nil,
-		networkIngress:            nil,
-		xaaReadiness:              nil,
-		authz:                     nil,
-		shadowInventory:           nil,
-		shadowDecisions:           nil,
-		shadowAI:                  nil,
-		reviewRequests:            nil,
-		reviewRequestBudget:       OperationBudget{Connection: nil, Organization: nil},
-		reviewLinks:               nil,
-		toolExposure:              nil,
-		projectLifecycle:          nil,
-		analytics:                 nil,
-		widgets:                   nil,
-		dashboards:                nil,
+		logger:                       logger.With(attr.SlogComponent("platformmcp")),
+		db:                           db,
+		reader:                       readmodel.New(db),
+		inventory:                    platformrepo.New(db),
+		inventoryCursor:              nil,
+		metadataVersionKey:           nil,
+		riskReads:                    nil,
+		riskAnalysisStatus:           nil,
+		riskFindings:                 nil,
+		riskFindingList:              nil,
+		chatMetadata:                 nil,
+		dataExports:                  nil,
+		dataExportMutations:          nil,
+		dataExportRouteToggle:        nil,
+		recentToolCalls:              nil,
+		networkTraffic:               nil,
+		networkTrafficLogsEnabled:    nil,
+		eventFeed:                    nil,
+		networkIngress:               nil,
+		xaaReadiness:                 nil,
+		enterpriseIssuerOrigin:       nil,
+		enterpriseIssuerFeatures:     nil,
+		enterpriseIssuerProvisioning: false,
+		authz:                        nil,
+		shadowInventory:              nil,
+		shadowDecisions:              nil,
+		shadowAI:                     nil,
+		reviewRequests:               nil,
+		reviewRequestBudget:          OperationBudget{Connection: nil, Organization: nil},
+		reviewLinks:                  nil,
+		toolExposure:                 nil,
+		projectLifecycle:             nil,
+		analytics:                    nil,
+		widgets:                      nil,
+		dashboards:                   nil,
 	}
 }
 

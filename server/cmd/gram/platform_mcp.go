@@ -65,38 +65,40 @@ import (
 )
 
 type platformMCPConfig struct {
-	AssistantIdentity      platformmcp.AssistantIdentityManagement
-	SignalAuthoring        *sigint.Service
-	Logger                 *slog.Logger
-	MeterProvider          metric.MeterProvider
-	TracerProvider         trace.TracerProvider
-	Mux                    goahttp.Muxer
-	DB                     *pgxpool.Pool
-	Redis                  *redis.Client
-	ServerURL              *url.URL
-	DashboardURL           *url.URL
-	Environment            string
-	JWTSigningKey          string
-	ProductFeatures        *productfeatures.Client
-	FeatureFlags           feature.Provider
-	DistributionAdmission  *admission.Guard
-	Authz                  *authz.Engine
-	Encryption             *encryption.Client
-	Identity               *identity.Resolver
-	Sessions               *sessions.Manager
-	Registry               *externalmcp.RegistryClient
-	Catalog                *externalmcp.CatalogService
-	GuardianPolicy         *guardian.Policy
-	RemoteChallengeManager *remotesessions.ChallengeManager
-	IdentityCommitter      *remotesessions.IdentityCommitter
-	AuditLogger            *audit.Logger
-	AccessRoles            access.RoleProvider
-	PluginPublisher        *plugins.Service
-	PluginManagement       *plugins.Service
-	PluginPublishSignaler  plugins.PluginPublishSignaler
-	NetworkAccessAdmission networkaccess.EligibilityChecker
-	PublicationRequests    plugins.PublicationRequests
-	TemporalEnv            *tenv.Environment
+	AssistantIdentity platformmcp.AssistantIdentityManagement
+	SignalAuthoring   *sigint.Service
+	Logger            *slog.Logger
+	MeterProvider     metric.MeterProvider
+	TracerProvider    trace.TracerProvider
+	Mux               goahttp.Muxer
+	DB                *pgxpool.Pool
+	Redis             *redis.Client
+	ServerURL         *url.URL
+	DashboardURL      *url.URL
+	Environment       string
+	JWTSigningKey     string
+	ProductFeatures   *productfeatures.Client
+	// EnterpriseIssuerAvailable reports whether this deployment can provision issuers.
+	EnterpriseIssuerAvailable bool
+	FeatureFlags              feature.Provider
+	DistributionAdmission     *admission.Guard
+	Authz                     *authz.Engine
+	Encryption                *encryption.Client
+	Identity                  *identity.Resolver
+	Sessions                  *sessions.Manager
+	Registry                  *externalmcp.RegistryClient
+	Catalog                   *externalmcp.CatalogService
+	GuardianPolicy            *guardian.Policy
+	RemoteChallengeManager    *remotesessions.ChallengeManager
+	IdentityCommitter         *remotesessions.IdentityCommitter
+	AuditLogger               *audit.Logger
+	AccessRoles               access.RoleProvider
+	PluginPublisher           *plugins.Service
+	PluginManagement          *plugins.Service
+	PluginPublishSignaler     plugins.PluginPublishSignaler
+	NetworkAccessAdmission    networkaccess.EligibilityChecker
+	PublicationRequests       plugins.PublicationRequests
+	TemporalEnv               *tenv.Environment
 	// ProjectCore is the projects management API's create and rename path,
 	// shared so create_project and rename_project make exactly the projects
 	// the dashboard makes. Nil keeps both tools visible as unavailable.
@@ -480,6 +482,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills).
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
+		WithEnterpriseIssuer(config.OutboundCallbackOrigin, config.ProductFeatures, config.EnterpriseIssuerAvailable).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).
 		WithAuthorization(config.Authz).
@@ -1077,6 +1080,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills).
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
+		WithEnterpriseIssuer(config.OutboundCallbackOrigin, config.ProductFeatures, config.EnterpriseIssuerAvailable).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).
 		WithAuthorization(config.Authz).

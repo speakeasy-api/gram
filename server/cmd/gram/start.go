@@ -1829,6 +1829,7 @@ func newStartCommand() *cli.Command {
 				ServerURL:                 serverURL,
 				CallbackOrigin:            callbackOrigins.ForNewClient(true),
 				OutboundCallbackOrigin:    callbackOrigins.Outbound,
+				EnterpriseIssuerAvailable: identityProviderProvisioner != nil,
 				DashboardURL:              siteURL,
 				Environment:               c.String("environment"),
 				JWTSigningKey:             c.String(usersessions.JWTSigningKeyFlag),
