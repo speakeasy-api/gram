@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const (
@@ -182,6 +183,62 @@ func git(ctx context.Context, dir string, args ...string) (string, error) {
 		return "", fmt.Errorf("git %s: %w", args[0], err)
 	}
 	return string(out), nil
+}
+
+// runIDLayout starts a run's directory name with its start time, to the
+// nanosecond and fixed width, so a code key's runs sort oldest first.
+const runIDLayout = "20060102T150405.000000000Z"
+
+// pickRunDir returns the run directory to write under codeDir, which holds
+// one code key's runs: a new run, or with resume the latest one. Resuming
+// with no earlier run starts a new one.
+func pickRunDir(codeDir string, resume bool, now time.Time) (string, error) {
+	if !resume {
+		return newRunDir(codeDir, now)
+	}
+	latest, err := latestRunDir(codeDir)
+	if err != nil {
+		return "", err
+	}
+	if latest != "" {
+		return latest, nil
+	}
+	fmt.Fprintln(os.Stderr, "no earlier run of this code to resume; starting a new run")
+	return newRunDir(codeDir, now)
+}
+
+// newRunDir makes the directory of a run that starts at now.
+func newRunDir(codeDir string, now time.Time) (string, error) {
+	if err := os.MkdirAll(codeDir, 0o750); err != nil {
+		return "", fmt.Errorf("create code dir: %w", err)
+	}
+	dir, err := os.MkdirTemp(codeDir, now.UTC().Format(runIDLayout)+"-")
+	if err != nil {
+		return "", fmt.Errorf("create run dir: %w", err)
+	}
+	return dir, nil
+}
+
+// latestRunDir returns the most recently started run under codeDir, or empty
+// when there is none.
+func latestRunDir(codeDir string) (string, error) {
+	entries, err := os.ReadDir(codeDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("list runs: %w", err)
+	}
+	latest := ""
+	for _, entry := range entries {
+		if entry.IsDir() && entry.Name() > latest {
+			latest = entry.Name()
+		}
+	}
+	if latest == "" {
+		return "", nil
+	}
+	return filepath.Join(codeDir, latest), nil
 }
 
 // runsDir holds every run, one directory per code key.

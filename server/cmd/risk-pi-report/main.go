@@ -1,8 +1,9 @@
 // Command risk-pi-report scores the prompt-injection detector this checkout
-// ships on the labelled fixtures. It writes one record per case under
-// ~/.cache/gram-pi-eval/runs/<code key>, where the code key hashes the
-// checkout's code outside the fixtures. A rerun resumes: it runs only new or
-// edited cases and cases a previous run could not fund.
+// ships on the labelled fixtures. Each call starts a new run and writes one
+// record per case under ~/.cache/gram-pi-eval/runs/<code key>/<run>, where the
+// code key hashes the checkout's code outside the fixtures. With -resume it
+// continues the latest run of the same code instead: it runs only missing, new
+// or edited cases and cases the run could not fund.
 //
 // Run it from the checkout it was built from, such as with
 // `go run ./server/cmd/risk-pi-report` at the repository root.
@@ -111,6 +112,7 @@ func (c labeledCase) judgeMessage() judgemessage.Message {
 
 func main() {
 	corpusDir := flag.String("corpus-dir", defaultCorpusDir, "directory of prompt-injection JSONL fixtures to score; defaults to this checkout's")
+	resume := flag.Bool("resume", false, "continue the latest run of this checkout's code instead of starting a new one")
 	flag.Parse()
 	// A command this version does not know must not start a paid run.
 	if flag.NArg() > 0 {
@@ -118,13 +120,13 @@ func main() {
 		flag.Usage()
 		os.Exit(2)
 	}
-	if err := run(context.Background(), *corpusDir); err != nil {
+	if err := run(context.Background(), *corpusDir, *resume); err != nil {
 		fmt.Fprintf(os.Stderr, "risk-pi-report: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, corpusDir string) error {
+func run(ctx context.Context, corpusDir string, resume bool) error {
 	corpus, err := loadCorpus(corpusDir)
 	if err != nil {
 		return err
@@ -137,7 +139,11 @@ func run(ctx context.Context, corpusDir string) error {
 	if err != nil {
 		return err
 	}
-	return runRecords(ctx, options{runDir: filepath.Join(runs, code.key), commit: code.commit}, corpus)
+	runDir, err := pickRunDir(filepath.Join(runs, code.key), resume, time.Now())
+	if err != nil {
+		return err
+	}
+	return runRecords(ctx, options{runDir: runDir, commit: code.commit}, corpus)
 }
 
 // corpusOrder lists the fixture files that load first, in this order, so

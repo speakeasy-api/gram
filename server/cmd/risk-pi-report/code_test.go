@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -127,6 +128,39 @@ func TestMeasuredCodeHashesAnUntrackedSymlinkByItsTarget(t *testing.T) {
 	retargeted, err := measuredCode(t.Context(), dir)
 	require.NoError(t, err)
 	require.NotEqual(t, linked.key, retargeted.key, "a new target path changes the key")
+}
+
+func TestPickRunDirStartsANewRunUnlessResuming(t *testing.T) {
+	t.Parallel()
+
+	codeDir := filepath.Join(t.TempDir(), "codekey")
+	start := time.Date(2026, 10, 12, 15, 30, 0, 0, time.UTC)
+
+	nothingToResume, err := pickRunDir(codeDir, true, start)
+	require.NoError(t, err)
+	require.DirExists(t, nothingToResume, "resuming with no earlier run starts one")
+
+	first, err := pickRunDir(codeDir, false, start.Add(time.Minute))
+	require.NoError(t, err)
+	second, err := pickRunDir(codeDir, false, start.Add(time.Minute))
+	require.NoError(t, err)
+	require.NotEqual(t, first, second, "every run gets its own directory, even at the same instant")
+	require.True(t, strings.HasPrefix(filepath.Base(first), "20261012T153100.000000000Z-"))
+
+	sooner, err := pickRunDir(codeDir, false, start.Add(time.Hour))
+	require.NoError(t, err)
+	later, err := pickRunDir(codeDir, false, start.Add(time.Hour+time.Millisecond))
+	require.NoError(t, err)
+	resumedLater, err := pickRunDir(codeDir, true, start.Add(time.Hour+time.Second))
+	require.NoError(t, err)
+	require.NotEqual(t, sooner, resumedLater)
+	require.Equal(t, later, resumedLater, "runs within one second still resume the latest")
+
+	latest, err := pickRunDir(codeDir, false, start.Add(2*time.Hour))
+	require.NoError(t, err)
+	resumed, err := pickRunDir(codeDir, true, start.Add(3*time.Hour))
+	require.NoError(t, err)
+	require.Equal(t, latest, resumed, "resuming continues the latest run")
 }
 
 func TestRunCommitName(t *testing.T) {

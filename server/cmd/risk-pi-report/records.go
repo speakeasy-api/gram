@@ -93,14 +93,18 @@ type caseRecord struct {
 	LatencyMS float64 `json:"latency_ms"`
 }
 
-// runManifest describes a run directory: the commits whose code it measured.
+// runManifest describes a run directory: when it started and the commits
+// whose code it measured.
 type runManifest struct {
-	// Commits lists the commits whose code produced the run, in the order a
-	// run first measured each. Commits that differ only in fixtures share a
-	// run.
+	// Commits lists the commits whose code produced the run, in the order the
+	// run first measured each. Resuming at a commit that differs only in
+	// fixtures adds that commit.
 	Commits []runCommit `json:"commits"`
 
-	// Updated is when a run last wrote the manifest.
+	// Started is when the run began.
+	Started time.Time `json:"started"`
+
+	// Updated is when the run last wrote the manifest.
 	Updated time.Time `json:"updated"`
 }
 
@@ -416,10 +420,9 @@ func appendRecord(w io.Writer, rec caseRecord) error {
 	return nil
 }
 
-// lockRunDir holds dir for one run until the returned func releases it.
-// Commits that share code share a run directory, so two runs at once, such as
-// main and a fixture-only change, would judge the same cases twice. The second
-// run waits, then reuses the first run's records.
+// lockRunDir holds dir for one run until the returned func releases it. Two
+// resumes of the same run at once would judge the same cases twice, so the
+// second waits, then reuses the first's records.
 func lockRunDir(dir string) (func(), error) {
 	file, err := os.OpenFile(filepath.Join(dir, lockFile), os.O_CREATE|os.O_RDWR, 0o600) // #nosec G304 -- the run directory is under the user's cache.
 	if err != nil {
@@ -447,6 +450,9 @@ func claimRunDir(dir string, commit runCommit, now time.Time) error {
 	}
 	if !slices.Contains(manifest.Commits, commit) {
 		manifest.Commits = append(manifest.Commits, commit)
+	}
+	if manifest.Started.IsZero() {
+		manifest.Started = now.UTC()
 	}
 	manifest.Updated = now.UTC()
 	body, err := json.MarshalIndent(manifest, "", "  ")
