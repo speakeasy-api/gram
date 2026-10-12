@@ -47,6 +47,7 @@ func TestHandleIDPCallback_RecordsSSOSignInOnChallenge(t *testing.T) {
 		hasAccessOK:  true,
 	}
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
+	ssosignins.EnableForTests(ti.features)
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	mock.exchangeResult.OrganizationID = workOSOrganizationID(t, ctx, ti, toolset.OrganizationID)
 
@@ -57,6 +58,34 @@ func TestHandleIDPCallback_RecordsSSOSignInOnChallenge(t *testing.T) {
 	require.True(t, signIn.Valid, "the callback records the sign-in in the endpoint's organization")
 	require.NotNil(t, rotated.SSOSignInID)
 	require.Equal(t, signIn.UUID, *rotated.SSOSignInID)
+}
+
+func TestHandleIDPCallback_EnforcementOffRecordsButLeavesTheGrantUnlinked(t *testing.T) {
+	t.Parallel()
+
+	gramUserID := "user-" + uuid.New().String()[:8]
+	workosSessionID := "session_" + uuid.NewString()
+	mock := &mockIdentityResolver{
+		exchangeResult: &identity.IDPUserInfo{
+			Sub:                  "workos-user-flag-off",
+			Email:                "test@example.com",
+			Name:                 "Test User",
+			WorkOSSessionID:      workosSessionID,
+			AuthenticationMethod: ssosignins.MethodSSO,
+		},
+		upsertResult: gramUserID,
+		hasAccessOK:  true,
+	}
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	mock.exchangeResult.OrganizationID = workOSOrganizationID(t, ctx, ti, toolset.OrganizationID)
+
+	rotated := runSSOLinkIDPCallback(t, ctx, ti, toolset)
+
+	signIn, err := ssosignins.LiveSignInForSession(ctx, ti.conn, toolset.OrganizationID, gramUserID, workosSessionID)
+	require.NoError(t, err)
+	require.True(t, signIn.Valid, "recording stays on")
+	require.Nil(t, rotated.SSOSignInID, "issuance is unchanged while enforcement is off")
 }
 
 func TestHandleIDPCallback_NoWorkOSSessionLeavesChallengeUnlinked(t *testing.T) {
@@ -408,6 +437,27 @@ func TestHandleToken_RefusesCodeFromSignInRevokedAfterConsent(t *testing.T) {
 
 	w := redeemLinkedCode(t, ti, toolset, client, code, verifier)
 	require.Equal(t, http.StatusBadRequest, w.Code, "a code consented before an admin revocation is never redeemed")
+	require.Contains(t, w.Body.String(), "invalid_grant")
+}
+
+func TestHandleToken_RefusesCodeAfterSignOutThenBroadRevocation(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	userID := "upgrade-user-" + uuid.NewString()
+	workosSessionID := "session_" + uuid.NewString()
+	signIn, err := ssosignins.Record(ctx, ti.conn, ssosignins.RecordParams{OrganizationID: toolset.OrganizationID, UserID: userID, WorkOSSessionID: workosSessionID, AuthenticationMethod: ssosignins.MethodSSO, AuthenticatedAt: time.Now()})
+	require.NoError(t, err)
+	code, verifier := storeLinkedGrant(t, ctx, ti, toolset, client, userID, &signIn.ID.UUID)
+
+	_, err = ssosignins.RevokeSession(ctx, ti.conn, []string{toolset.OrganizationID}, userID, workosSessionID)
+	require.NoError(t, err)
+	_, err = ssosignins.RevokeUser(ctx, ti.conn, []string{toolset.OrganizationID}, userID, ssosignins.RevokeReasonSignOutEverywhere)
+	require.NoError(t, err)
+
+	w := redeemLinkedCode(t, ti, toolset, client, code, verifier)
+	require.Equal(t, http.StatusBadRequest, w.Code, "a broad revocation also covers a sign-in already signed out")
 	require.Contains(t, w.Body.String(), "invalid_grant")
 }
 

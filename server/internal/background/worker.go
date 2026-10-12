@@ -755,6 +755,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(PublishOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(PublishOutboxGCWorkflow)
 	temporalWorker.RegisterWorkflow(PlatformMCPReceiptGCWorkflow)
+	temporalWorker.RegisterWorkflow(SSOSignInRevocationSweepWorkflow)
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
 	temporalWorker.RegisterWorkflow(PluginPublishWorkflow)
 	temporalWorker.RegisterWorkflow(PluginPublishWorkflowDebounced)
@@ -928,6 +929,10 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddPlatformMCPReceiptGCSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add platform mcp receipt gc schedule", attr.SlogError(err))
+	}
+
+	if err := AddSSOSignInRevocationSweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add sso sign-in revocation sweep schedule", attr.SlogError(err))
 	}
 
 	if err := AddStagedTelemetrySweepSchedule(ctx, env); err != nil {

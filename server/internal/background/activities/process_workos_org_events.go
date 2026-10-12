@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -74,6 +75,7 @@ type ProcessWorkOSOrganizationEvents struct {
 	userInfoCache cache.TypedCacheObject[sessions.CachedUserInfo]
 	// revokedTokens is the access-token revocation cache.
 	revokedTokens ssosignins.TokenRevoker
+	deliverer     *ssosignins.Deliverer
 
 	// newOrganizationDefaultHost is recorded as the default host of
 	// organizations created from WorkOS events.
@@ -81,13 +83,15 @@ type ProcessWorkOSOrganizationEvents struct {
 }
 
 func NewProcessWorkOSOrganizationEvents(logger *slog.Logger, db *pgxpool.Pool, workosClient WorkOSClient, cacheAdapter cache.Cache, identityMap IdentityMapRefreshSignaler) *ProcessWorkOSOrganizationEvents {
+	revokedTokens := revokedTokenCache{cache: cache.NewTypedObjectCache[chatsessions.RevokedToken](logger.With(attr.SlogCacheNamespace("chat_session_revoked")), cacheAdapter, cache.SuffixNone)}
 	return &ProcessWorkOSOrganizationEvents{
 		db:            db,
 		logger:        logger,
 		workosClient:  workosClient,
 		identityMap:   identityMap,
 		userInfoCache: cache.NewTypedObjectCache[sessions.CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cacheAdapter, cache.SuffixNone),
-		revokedTokens: revokedTokenCache{cache: cache.NewTypedObjectCache[chatsessions.RevokedToken](logger.With(attr.SlogCacheNamespace("chat_session_revoked")), cacheAdapter, cache.SuffixNone)},
+		revokedTokens: revokedTokens,
+		deliverer:     ssosignins.NewDeliverer(logger, db, revokedTokens, workosClient),
 
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 	}
@@ -200,17 +204,20 @@ type postCommitEffects struct {
 	// deactivated). Safe to lose: the sync schedule delivers the same
 	// refresh at its next tick.
 	refreshIdentityMap bool
-	// revokeTokenJTIs are access tokens of grants deprovisioning revoked, to
-	// push into the revocation cache; revokeWorkOSSessionIDs are the WorkOS
-	// sessions of the revoked sign-ins.
-	revokeTokenJTIs        []string
-	revokeWorkOSSessionIDs []string
-	revokedSignIns         int
+	// revocationDeliveries are the durable JTI and WorkOS session deliveries
+	// deprovisioning enqueued; the sweep retries whatever this push misses.
+	revocationOrganizationID string
+	revocationDeliveries     []uuid.UUID
+	revokedGrants            []ssosignins.RevokedSession
+	revokedSignIns           int
 }
 
 func (p *ProcessWorkOSOrganizationEvents) runPostCommitEffects(ctx context.Context, logger *slog.Logger, effects postCommitEffects) {
-	if len(effects.revokeTokenJTIs) > 0 || len(effects.revokeWorkOSSessionIDs) > 0 {
-		ssosignins.FinishRevocation(ctx, logger, p.revokedTokens, p.workosClient, effects.revokeTokenJTIs, effects.revokeWorkOSSessionIDs)
+	if len(effects.revocationDeliveries) > 0 {
+		p.deliverer.DeliverNow(ctx, []string{effects.revocationOrganizationID}, effects.revocationDeliveries)
+	}
+	if len(effects.revokedGrants) > 0 {
+		ssosignins.AuditRevokedGrants(ctx, logger, p.db, audit.NewLogger(), deprovisionActor, effects.revokedGrants)
 	}
 	ssosignins.RecordRevoked(ctx, ssosignins.RevokeReasonDeprovisioned, effects.revokedSignIns)
 
@@ -976,4 +983,14 @@ func (c revokedTokenCache) RevokeToken(ctx context.Context, jti string) error {
 		return fmt.Errorf("store revoked token: %w", err)
 	}
 	return nil
+}
+
+// SweepSSOSignInRevocations retries one batch of pending SSO sign-in
+// revocation deliveries and returns how many it claimed.
+func (p *ProcessWorkOSOrganizationEvents) SweepSSOSignInRevocations(ctx context.Context) (int, error) {
+	n, err := p.deliverer.Sweep(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("sweep sso sign-in revocation deliveries: %w", err)
+	}
+	return n, nil
 }

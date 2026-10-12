@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -123,6 +125,23 @@ type MockUserInfo struct {
 	AuthenticationMethod string
 	Admin                bool
 	Organizations        []MockOrganizationEntry
+	// IDPSessions, when set, backs the WorkOS session list and revoke
+	// endpoints.
+	IDPSessions *MockIDPSessions
+}
+
+// MockIDPSessions is a user's WorkOS sessions. The list endpoint pages two at
+// a time so callers must follow pagination.
+type MockIDPSessions struct {
+	mu      sync.Mutex
+	Listed  []string
+	revoked []string
+}
+
+func (m *MockIDPSessions) Revoked() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]string(nil), m.revoked...)
 }
 
 type MockOrganizationEntry struct {
@@ -177,6 +196,48 @@ func createMockWorkOSServer(userInfo *MockUserInfo) *httptest.Server {
 			}
 		}
 		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	mux.HandleFunc("GET /user_management/users/{id}/sessions", func(w http.ResponseWriter, r *http.Request) {
+		const pageSize = 2
+		var listed []string
+		if userInfo.IDPSessions != nil && r.PathValue("id") == userInfo.UserID {
+			userInfo.IDPSessions.mu.Lock()
+			listed = append(listed, userInfo.IDPSessions.Listed...)
+			userInfo.IDPSessions.mu.Unlock()
+		}
+		start := 0
+		if after := r.URL.Query().Get("after"); after != "" {
+			start = slices.Index(listed, after) + 1
+		}
+		end := min(start+pageSize, len(listed))
+		data := make([]map[string]string, 0, pageSize)
+		for _, id := range listed[start:end] {
+			data = append(data, map[string]string{"object": "session", "id": id, "user_id": userInfo.UserID})
+		}
+		next := ""
+		if end < len(listed) {
+			next = listed[end-1]
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": data, "list_metadata": map[string]string{"before": "", "after": next}})
+	})
+
+	mux.HandleFunc("POST /user_management/sessions/revoke", func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			SessionID string `json:"session_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		if userInfo.IDPSessions != nil {
+			userInfo.IDPSessions.mu.Lock()
+			userInfo.IDPSessions.revoked = append(userInfo.IDPSessions.revoked, request.SessionID)
+			userInfo.IDPSessions.mu.Unlock()
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("{}"))
 	})
 
 	return httptest.NewServer(mux)

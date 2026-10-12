@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/ssosignins"
@@ -43,6 +44,9 @@ func TestService_RevokeMemberSignIns_RevokesOnlyTheActiveOrganization(t *testing
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
+	flags := &feature.InMemory{}
+	ssosignins.EnableForTests(flags)
+	ti.sessionManager.SetFlags(flags)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	here := "session_" + uuid.NewString()

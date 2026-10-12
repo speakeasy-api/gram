@@ -317,6 +317,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 		// Hold only in this stack frame until organization authorization below.
 	} else {
 		// Preserve WorkOS bootstrap and membership synchronization unchanged.
+		authenticatedAt := time.Now()
 		idpUser, err := s.identityResolver.ExchangeCodeForTokens(ctx, code)
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
@@ -337,6 +338,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 			WorkOSSessionID:        idpUser.WorkOSSessionID,
 			AuthenticationMethod:   idpUser.AuthenticationMethod,
 			Impersonated:           impersonated,
+			AuthenticatedAt:        authenticatedAt,
 		}
 	}
 
@@ -444,7 +446,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	challengeState.Subject = &subject
 	challengeState.AuthorizerUserID = gramUserID
 	challengeState.SSOSignInID = nil
-	if ssoSignInID.Valid {
+	if ssoSignInID.Valid && ssosignins.Enforced(ctx, s.features) {
 		challengeState.SSOSignInID = &ssoSignInID.UUID
 	}
 	if federation := challengeState.Federation; federation != nil {

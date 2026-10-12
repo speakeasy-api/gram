@@ -175,6 +175,9 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		SsoSignInID:     ssoSignInID,
 		SsoSignInUserID: conv.ToPGText(authCtx.UserID),
 	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) && ssoSignInID.Valid {
+			return nil, oops.E(oops.CodeUnauthorized, err, "sign-in was revoked, sign in again").LogError(ctx, s.logger)
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "user_session_issuer not found").LogError(ctx, s.logger)
 		}
@@ -415,10 +418,12 @@ func (s *Service) resolveMetaServerMintTarget(ctx context.Context, metaServerIDS
 	}, nil
 }
 
-// dashboardSSOSignIn is the caller's live SSO sign-in in its active organization; failures leave the mint unlinked.
+// dashboardSSOSignIn is the caller's SSO sign-in in its active organization,
+// revoked or not, so the guarded insert refuses a revoked one; lookup failures
+// leave the mint unlinked.
 func (s *Service) dashboardSSOSignIn(ctx context.Context, authCtx *contextvalues.AuthContext) uuid.NullUUID {
 	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if s.sessions == nil || authCtx.SessionID == nil || *authCtx.SessionID == "" {
+	if s.sessions == nil || authCtx.SessionID == nil || *authCtx.SessionID == "" || !s.sessions.SSOSignInEnforced(ctx) {
 		return none
 	}
 	session, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
@@ -429,7 +434,7 @@ func (s *Service) dashboardSSOSignIn(ctx context.Context, authCtx *contextvalues
 	if session.UserID != authCtx.UserID || session.ImpersonatorEmail != "" || session.SupportOrganizationID != "" {
 		return none
 	}
-	id, err := ssosignins.LiveSignInForSession(ctx, s.db, authCtx.ActiveOrganizationID, authCtx.UserID, session.WorkOSSessionID)
+	id, err := ssosignins.SignInForSession(ctx, s.db, authCtx.ActiveOrganizationID, authCtx.UserID, session.WorkOSSessionID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "look up sso sign-in for dashboard mint", attr.SlogError(err))
 		return none

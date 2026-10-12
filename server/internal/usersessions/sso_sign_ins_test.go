@@ -2,6 +2,8 @@ package usersessions_test
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,8 +19,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/ssosignins"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -293,7 +298,7 @@ func TestRevokeSession_StopsVouchingButKeepsTheGrant(t *testing.T) {
 
 	orgs, err := ssosignins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, params.WorkOSSessionID)
 	require.NoError(t, err)
-	require.Equal(t, []string{f.orgID}, orgs)
+	require.Equal(t, []string{f.orgID}, orgs.Organizations)
 
 	require.Equal(t, ssosignins.ReasonSignInRevoked, f.check(t, ctx, f.orgID, session.ID).Reason)
 	require.True(t, f.check(t, ctx, f.orgID, other.ID).Eligible(), "only the signed-out WorkOS session is revoked")
@@ -357,23 +362,125 @@ func TestCheckSignInIdentity_MaxAgeOverride(t *testing.T) {
 	require.Equal(t, ssosignins.ReasonExpired, result.Reason)
 }
 
-func TestRevokeUser_RepushesRecentlyRevokedJTIs(t *testing.T) {
+type recordingRevoker struct {
+	mu      sync.Mutex
+	calls   []string
+	fail    bool
+	ctxErrs []error
+}
+
+func (r *recordingRevoker) revoke(ctx context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls = append(r.calls, id)
+	r.ctxErrs = append(r.ctxErrs, ctx.Err())
+	if r.fail {
+		return errors.New("unavailable")
+	}
+	return nil
+}
+
+func (r *recordingRevoker) RevokeToken(ctx context.Context, jti string) error {
+	return r.revoke(ctx, jti)
+}
+
+func (r *recordingRevoker) RevokeSession(ctx context.Context, id string) error {
+	return r.revoke(ctx, id)
+}
+
+func pendingDeliveries(t *testing.T, ctx context.Context, f ssoFixture) int {
+	t.Helper()
+	n, err := testrepo.New(f.ti.conn).CountPendingSSOSignInRevocationDeliveries(ctx, f.orgID)
+	require.NoError(t, err)
+	return int(n)
+}
+
+func TestRevokeUser_DeliveriesSurviveAFailedPushAndTheSweepRetriesThem(t *testing.T) {
 	t.Parallel()
 
 	ctx, f := newSSOFixture(t)
 	session := f.linkedSession(t, ctx, ssosignins.MethodSSO, time.Now())
 
-	first, err := ssosignins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, ssosignins.RevokeReasonAdmin)
+	revoked, err := ssosignins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, ssosignins.RevokeReasonAdmin)
 	require.NoError(t, err)
-	require.Len(t, first.Sessions, 1)
+	require.Len(t, revoked.DeliveryIDs, 2, "one JTI and one WorkOS session delivery")
 	requireSessionGone(t, ctx, f, session.ID)
 
-	retry, err := ssosignins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, ssosignins.RevokeReasonAdmin)
+	down := &recordingRevoker{mu: sync.Mutex{}, calls: nil, fail: true, ctxErrs: nil}
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	ssosignins.NewDeliverer(testenv.NewLogger(t), f.ti.conn, down, down).DeliverNow(cancelled, []string{f.orgID}, revoked.DeliveryIDs)
+	require.ElementsMatch(t, []string{session.Jti, revoked.WorkOSSessionIDs[0]}, down.calls)
+	for _, err := range down.ctxErrs {
+		require.NoError(t, err, "a cancelled request never cancels the pushes")
+	}
+	require.Equal(t, 2, pendingDeliveries(t, ctx, f), "failed pushes stay pending")
+
+	up := &recordingRevoker{mu: sync.Mutex{}, calls: nil, fail: false, ctxErrs: nil}
+	deliverer := ssosignins.NewDeliverer(testenv.NewLogger(t), f.ti.conn, up, up)
+	for pendingDeliveries(t, ctx, f) > 0 {
+		claimed, err := deliverer.Sweep(ctx)
+		require.NoError(t, err)
+		require.Positive(t, claimed, "the sweep reaches this organization's deliveries")
+	}
+	require.Subset(t, up.calls, []string{session.Jti, revoked.WorkOSSessionIDs[0]})
+}
+
+func TestRevokeUser_UpgradesASignedOutSignIn(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newSSOFixture(t)
+	sessionID := "session_" + uuid.NewString()
+	signIn, err := ssosignins.Record(ctx, f.ti.conn, ssosignins.RecordParams{OrganizationID: f.orgID, UserID: f.userID, WorkOSSessionID: sessionID, AuthenticationMethod: ssosignins.MethodSSO, AuthenticatedAt: time.Now()})
 	require.NoError(t, err)
-	require.Empty(t, retry.Sessions, "nothing left to revoke")
-	jtis, err := ssosignins.JTIsToPush(ctx, f.ti.conn, []string{f.orgID}, f.userID, retry, time.Now())
+	_, err = ssosignins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, sessionID)
 	require.NoError(t, err)
-	require.Contains(t, jtis, session.Jti, "a retry re-pushes the earlier revocation's JTIs")
+	_, err = createLinkedSession(ctx, f, urn.NewUserSubject(f.userID), signIn.ID.UUID)
+	require.NoError(t, err, "a signed-out sign-in still links")
+
+	revoked, err := ssosignins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, ssosignins.RevokeReasonAdmin)
+	require.NoError(t, err)
+	require.Equal(t, 1, revoked.SignIns(), "a broad revocation upgrades a signed-out sign-in")
+	require.Len(t, revoked.Sessions, 1)
+
+	_, err = createLinkedSession(ctx, f, urn.NewUserSubject(f.userID), signIn.ID.UUID)
+	require.ErrorIs(t, err, pgx.ErrNoRows, "outstanding codes and refreshes from it can no longer mint")
+}
+
+func TestRecord_AnExchangeStartedBeforeABroadRevocationIsFencedOut(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newSSOFixture(t)
+	startedBefore := time.Now()
+	_, err := ssosignins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, ssosignins.RevokeReasonSignOutEverywhere)
+	require.NoError(t, err)
+
+	late, err := ssosignins.Record(ctx, f.ti.conn, ssosignins.RecordParams{OrganizationID: f.orgID, UserID: f.userID, WorkOSSessionID: "session_" + uuid.NewString(), AuthenticationMethod: ssosignins.MethodSSO, AuthenticatedAt: startedBefore})
+	require.NoError(t, err)
+	require.True(t, late.Revoked, "a sign-in in flight during the revocation is recorded revoked")
+	_, err = createLinkedSession(ctx, f, urn.NewUserSubject(f.userID), late.ID.UUID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	fresh, err := ssosignins.Record(ctx, f.ti.conn, ssosignins.RecordParams{OrganizationID: f.orgID, UserID: f.userID, WorkOSSessionID: "session_" + uuid.NewString(), AuthenticationMethod: ssosignins.MethodSSO, AuthenticatedAt: time.Now()})
+	require.NoError(t, err)
+	require.False(t, fresh.Revoked, "a later sign-in works")
+	_, err = createLinkedSession(ctx, f, urn.NewUserSubject(f.userID), fresh.ID.UUID)
+	require.NoError(t, err)
+}
+
+func TestRevokeSession_EnqueuesEndingTheWorkOSSession(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newSSOFixture(t)
+	sessionID := "session_" + uuid.NewString()
+	_, err := ssosignins.Record(ctx, f.ti.conn, ssosignins.RecordParams{OrganizationID: f.orgID, UserID: f.userID, WorkOSSessionID: sessionID, AuthenticationMethod: ssosignins.MethodSSO, AuthenticatedAt: time.Now()})
+	require.NoError(t, err)
+
+	out, err := ssosignins.RevokeSession(ctx, f.ti.conn, []string{f.orgID}, f.userID, sessionID)
+	require.NoError(t, err)
+	require.Equal(t, []string{f.orgID}, out.Organizations)
+	require.Len(t, out.DeliveryIDs, 1)
+	require.Equal(t, 1, pendingDeliveries(t, ctx, f))
 }
 
 func TestCreateUserSession_RefusesAGrantFromARevokedSignIn(t *testing.T) {
@@ -444,16 +551,27 @@ func TestMintUserSession_LinksTheDashboardSignIn(t *testing.T) {
 
 	for _, tc := range []struct {
 		name         string
+		enforced     bool
 		impersonated bool
+		revoke       ssosignins.RevokeReason
 		wantLinked   bool
+		wantRefused  bool
 	}{
-		{name: "own sign-in", impersonated: false, wantLinked: true},
-		{name: "impersonated session", impersonated: true, wantLinked: false},
+		{name: "own sign-in", enforced: true, impersonated: false, revoke: "", wantLinked: true, wantRefused: false},
+		{name: "impersonated session", enforced: true, impersonated: true, revoke: "", wantLinked: false, wantRefused: false},
+		{name: "enforcement off", enforced: false, impersonated: false, revoke: "", wantLinked: false, wantRefused: false},
+		{name: "signed-out sign-in", enforced: true, impersonated: false, revoke: ssosignins.RevokeReasonSignOut, wantLinked: true, wantRefused: false},
+		{name: "revoked sign-in", enforced: true, impersonated: false, revoke: ssosignins.RevokeReasonAdmin, wantLinked: false, wantRefused: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			ctx, ti := newTestService(t)
+			if tc.enforced {
+				flags := &feature.InMemory{}
+				ssosignins.EnableForTests(flags)
+				ti.sessionManager.SetFlags(flags)
+			}
 			authCtx, ok := contextvalues.GetAuthContext(ctx)
 			require.True(t, ok)
 			workosSessionID := "session_" + uuid.NewString()
@@ -467,11 +585,26 @@ func TestMintUserSession_LinksTheDashboardSignIn(t *testing.T) {
 			require.NoError(t, ti.sessionManager.UpdateSession(ctx, current, replacement))
 			signIn, err := ssosignins.Record(ctx, ti.conn, ssosignins.RecordParams{OrganizationID: authCtx.ActiveOrganizationID, UserID: authCtx.UserID, WorkOSSessionID: workosSessionID, AuthenticationMethod: ssosignins.MethodSSO, AuthenticatedAt: time.Now()})
 			require.NoError(t, err)
+			switch tc.revoke {
+			case ssosignins.RevokeReasonSignOut:
+				_, err = ssosignins.RevokeSession(ctx, ti.conn, []string{authCtx.ActiveOrganizationID}, authCtx.UserID, workosSessionID)
+				require.NoError(t, err)
+			case "":
+			default:
+				_, err = ssosignins.RevokeUser(ctx, ti.conn, []string{authCtx.ActiveOrganizationID}, authCtx.UserID, tc.revoke)
+				require.NoError(t, err)
+			}
 
 			toolset := createIssuerGatedMintToolset(t, ctx, ti, "mint-sso-"+uuid.NewString()[:6])
 			mintCtx := withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPConnect, toolset.ID.String()))
 			toolsetID := toolset.ID.String()
 			minted, err := ti.service.MintUserSession(mintCtx, &sessionsgen.MintUserSessionPayload{ToolsetID: &toolsetID, McpServerID: nil, SessionToken: nil, ProjectSlugInput: nil})
+			if tc.wantRefused {
+				var oopsErr *oops.ShareableError
+				require.ErrorAs(t, err, &oopsErr)
+				require.Equal(t, oops.CodeUnauthorized, oopsErr.Code, "a revoked sign-in never mints an unlinked grant")
+				return
+			}
 			require.NoError(t, err)
 			claims, err := usersessions.NewSigner("test-jwt-secret").Validate(minted.AccessToken, urn.NewToolset(toolset.ID).String())
 			require.NoError(t, err)

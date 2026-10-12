@@ -37,6 +37,9 @@ type ExchangeParams struct {
 	WorkOSSessionID        string
 	AuthenticationMethod   string
 	Impersonated           bool
+	// AuthenticatedAt is when the exchange started, so a revocation that
+	// lands while it is in flight fences it out.
+	AuthenticatedAt time.Time
 }
 
 // RecordExchange records the sign-in for a WorkOS code exchange. It records
@@ -84,7 +87,7 @@ func RecordExchange(ctx context.Context, logger *slog.Logger, db repo.DBTX, p Ex
 		UserID:               p.UserID,
 		WorkOSSessionID:      p.WorkOSSessionID,
 		AuthenticationMethod: p.AuthenticationMethod,
-		AuthenticatedAt:      time.Now(),
+		AuthenticatedAt:      authenticatedAt(p.AuthenticatedAt),
 	})
 	switch {
 	case errors.Is(err, errSignInOwnedByAnotherUser):
@@ -99,6 +102,13 @@ func RecordExchange(ctx context.Context, logger *slog.Logger, db repo.DBTX, p Ex
 		recordOutcome(ctx, p.Flow, OutcomeRecorded)
 	}
 	return recorded
+}
+
+func authenticatedAt(t time.Time) time.Time {
+	if t.IsZero() {
+		return time.Now()
+	}
+	return t
 }
 
 func sessionFingerprint(sessionID string) string {

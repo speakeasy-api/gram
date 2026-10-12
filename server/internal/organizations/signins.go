@@ -2,7 +2,6 @@ package organizations
 
 import (
 	"context"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -18,7 +17,9 @@ import (
 
 // SetTokenRevoker wires the access-token revocation cache used when revoking
 // a member's sign-ins.
-func (s *Service) SetTokenRevoker(tokens ssosignins.TokenRevoker) { s.tokens = tokens }
+func (s *Service) SetTokenRevoker(tokens ssosignins.TokenRevoker) {
+	s.deliverer = ssosignins.NewDeliverer(s.logger, s.db, tokens, s.sessions)
+}
 
 // RevokeMemberSignIns revokes a member's SSO sign-ins in the active
 // organization, ends their identity provider sessions and revokes every MCP
@@ -33,6 +34,9 @@ func (s *Service) RevokeMemberSignIns(ctx context.Context, payload *gen.RevokeMe
 	}
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
+	}
+	if !s.sessions.SSOSignInEnforced(ctx) {
+		return nil, oops.E(oops.CodeForbidden, nil, "sign-in revocation is not available")
 	}
 	if payload.UserID == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "user_id is required").LogError(ctx, s.logger)
@@ -59,15 +63,12 @@ func (s *Service) RevokeMemberSignIns(ctx context.Context, payload *gen.RevokeMe
 	if err := ssosignins.AuditRevocation(ctx, dbtx, s.audit, actor, payload.UserID, memberEmail, ssosignins.RevokeReasonAdmin, organizationIDs, revoked); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "audit sign-in revocation").LogError(ctx, logger)
 	}
-	jtis, err := ssosignins.JTIsToPush(ctx, dbtx, organizationIDs, payload.UserID, revoked, time.Now())
-	if err != nil {
-		logger.WarnContext(ctx, "list recently revoked grants", attr.SlogError(err))
-	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 	ssosignins.RecordRevoked(ctx, ssosignins.RevokeReasonAdmin, revoked.SignIns())
-	ssosignins.FinishRevocation(ctx, logger, s.tokens, s.sessions, jtis, revoked.WorkOSSessionIDs)
+	s.deliverer.DeliverNow(ctx, organizationIDs, revoked.DeliveryIDs)
+	ssosignins.AuditRevokedGrants(ctx, logger, s.db, s.audit, actor, revoked.Sessions)
 
 	logger.InfoContext(ctx, "revoked member sso sign-ins", attr.SlogValueInt(revoked.SignIns()))
 	return &types.RevokeSignInsResult{RevokedSignIns: revoked.SignIns(), RevokedSessions: len(revoked.Sessions)}, nil

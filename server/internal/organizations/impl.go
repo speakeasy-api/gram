@@ -134,7 +134,7 @@ type Service struct {
 	orgHosts          *orghost.Resolver // resolves the host of links sent by email
 	audit             *audit.Logger
 	svix              *svix.Svix
-	tokens            ssosignins.TokenRevoker
+	deliverer         *ssosignins.Deliverer
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -167,7 +167,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		orgHosts:          orgHosts,
 		audit:             auditLogger,
 		svix:              svix,
-		tokens:            nil,
+		deliverer:         ssosignins.NewDeliverer(logger, db, nil, sessionMgr),
 	}
 }
 
@@ -1785,7 +1785,6 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		ImpersonatorEmail:     "",
 		SupportOrganizationID: "",
 		SupportExpiresAt:      time.Time{},
-		IssuedAt:              time.Time{},
 	}
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
 		s.logger.ErrorContext(ctx, "invite callback: failed to store session", attr.SlogError(err))

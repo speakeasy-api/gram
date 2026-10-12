@@ -17,6 +17,8 @@ import (
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
+var deprovisionActor = ssosignins.Actor{Principal: urn.NewSystemPrincipal("workos-deprovision"), DisplayName: nil}
+
 // deprovisionOrganizationAccessParams identifies whose organization access to
 // revoke and the WorkOS event driving the change. Callers own the
 // ShouldProcessEvent guard; this routine only applies the teardown.
@@ -104,17 +106,13 @@ func deprovisionOrganizationAccess(ctx context.Context, dbtx pgx.Tx, p deprovisi
 		if err != nil {
 			return effects, fmt.Errorf("revoke sso sign-ins for user %q: %w", p.gramUserID, err)
 		}
-		actor := ssosignins.Actor{Principal: urn.NewSystemPrincipal("workos-deprovision"), DisplayName: nil}
-		if err := ssosignins.AuditRevocation(ctx, dbtx, audit.NewLogger(), actor, p.gramUserID, "", ssosignins.RevokeReasonDeprovisioned, organizationIDs, revoked); err != nil {
+		if err := ssosignins.AuditRevocation(ctx, dbtx, audit.NewLogger(), deprovisionActor, p.gramUserID, "", ssosignins.RevokeReasonDeprovisioned, organizationIDs, revoked); err != nil {
 			return effects, fmt.Errorf("audit sso sign-in revocation for user %q: %w", p.gramUserID, err)
 		}
-		jtis, err := ssosignins.JTIsToPush(ctx, dbtx, organizationIDs, p.gramUserID, revoked, time.Now())
-		if err != nil {
-			return effects, fmt.Errorf("list revoked grants for user %q: %w", p.gramUserID, err)
-		}
 		effects.revokedSignIns = revoked.SignIns()
-		effects.revokeTokenJTIs = jtis
-		effects.revokeWorkOSSessionIDs = revoked.WorkOSSessionIDs
+		effects.revocationOrganizationID = p.organizationID
+		effects.revocationDeliveries = revoked.DeliveryIDs
+		effects.revokedGrants = revoked.Sessions
 	}
 
 	effects.invalidateUserInfoCacheUserID = p.gramUserID

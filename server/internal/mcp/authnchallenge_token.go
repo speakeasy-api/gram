@@ -1123,7 +1123,7 @@ func (s *Service) rotateRefreshToken(
 			return true, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "the sign-in changed during rotation; retry")
 		case err != nil && !errors.Is(err, pgx.ErrNoRows):
 			return true, oops.E(oops.CodeUnexpected, err, "lock sso sign-in for refresh token rotation").LogError(ctx, logger)
-		case err == nil && signIn.RevokedAt.Valid && signIn.RevokeReason.String != string(ssosignins.RevokeReasonSignOut):
+		case err == nil && (signIn.Fenced || (signIn.RevokedAt.Valid && signIn.RevokeReason.String != string(ssosignins.RevokeReasonSignOut))):
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "sign_in_revoked")
 			return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "the sign-in that authorized this grant was revoked; sign in again")
 		}
@@ -2029,5 +2029,5 @@ func signInRevokedForGrant(ctx context.Context, queries *usersessions_repo.Queri
 	if err != nil {
 		return false, fmt.Errorf("read sso sign-in: %w", err)
 	}
-	return row.RevokedAt.Valid && row.RevokeReason.String != string(ssosignins.RevokeReasonSignOut), nil
+	return row.Fenced || (row.RevokedAt.Valid && row.RevokeReason.String != string(ssosignins.RevokeReasonSignOut)), nil
 }

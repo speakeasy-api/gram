@@ -4,11 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -29,8 +33,8 @@ type Actor struct {
 }
 
 // AuditRevocation writes one summary entry per organization that lost
-// sign-ins or grants, then one entry per soft-deleted grant, inside the
-// caller's transaction.
+// sign-ins or grants, inside the caller's transaction. Per-grant entries are
+// written after commit by AuditRevokedGrants.
 func AuditRevocation(ctx context.Context, dbtx auditrepo.DBTX, logger *audit.Logger, actor Actor, userID, userEmail string, reason RevokeReason, organizationIDs []string, revoked Revoked) error {
 	for _, organizationID := range organizationIDs {
 		signIns := revoked.SignInsByOrganization[organizationID]
@@ -51,8 +55,33 @@ func AuditRevocation(ctx context.Context, dbtx auditrepo.DBTX, logger *audit.Log
 			return fmt.Errorf("log sign-in revocation: %w", err)
 		}
 	}
-	for _, session := range revoked.Sessions {
-		if err := logger.LogUserSessionRevoke(ctx, dbtx, audit.LogUserSessionRevokeEvent{
+	return nil
+}
+
+// auditBatchSize bounds the per-grant audit entries written per transaction.
+const auditBatchSize = 100
+
+// AuditRevokedGrants writes one entry per soft-deleted grant after the
+// revocation committed, in bounded transactions so no lock is held across
+// them. Failures are logged; the summary entry already records the counts.
+func AuditRevokedGrants(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, actor Actor, sessions []RevokedSession) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), postCommitTimeout)
+	defer cancel()
+	for batch := range slices.Chunk(sessions, auditBatchSize) {
+		if err := auditGrantBatch(ctx, db, auditLogger, actor, batch); err != nil {
+			logger.ErrorContext(ctx, "audit revoked grants", attr.SlogValueInt(len(batch)), attr.SlogError(err))
+		}
+	}
+}
+
+func auditGrantBatch(ctx context.Context, db *pgxpool.Pool, auditLogger *audit.Logger, actor Actor, batch []RevokedSession) error {
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	for _, session := range batch {
+		if err := auditLogger.LogUserSessionRevoke(ctx, tx, audit.LogUserSessionRevokeEvent{
 			OrganizationID:   session.OrganizationID,
 			ProjectID:        session.ProjectID,
 			Actor:            actor.Principal,
@@ -65,52 +94,12 @@ func AuditRevocation(ctx context.Context, dbtx auditrepo.DBTX, logger *audit.Log
 			return fmt.Errorf("log user session revocation: %w", err)
 		}
 	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
 	return nil
 }
 
-// postCommitTimeout bounds the post-commit pushes, detached from the caller's
-// cancellation so a dropped request cannot leave revoked tokens live.
+// postCommitTimeout bounds post-commit work, detached from the caller's
+// cancellation so a dropped request cannot strand it.
 const postCommitTimeout = 15 * time.Second
-
-// FinishRevocation runs after commit: it pushes JTIs into the revocation
-// cache and ends WorkOS sessions. Failures are logged with counts, never
-// returned: the database already holds the revocation, and a retried call
-// re-pushes recent JTIs.
-func FinishRevocation(ctx context.Context, logger *slog.Logger, tokens TokenRevoker, idp IDPSessionRevoker, jtis []string, workosSessionIDs []string) {
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), postCommitTimeout)
-	defer cancel()
-
-	if tokens != nil {
-		failed := 0
-		var firstErr error
-		for _, jti := range jtis {
-			if err := tokens.RevokeToken(ctx, jti); err != nil {
-				failed++
-				if firstErr == nil {
-					firstErr = err
-				}
-			}
-		}
-		if failed > 0 {
-			logger.ErrorContext(ctx, "push revoked jtis into revocation cache", attr.SlogValueInt(failed), attr.SlogError(firstErr))
-		}
-	}
-	if idp != nil {
-		failed := 0
-		var firstErr error
-		for _, id := range workosSessionIDs {
-			if id == "" {
-				continue
-			}
-			if err := idp.RevokeSession(ctx, id); err != nil {
-				failed++
-				if firstErr == nil {
-					firstErr = err
-				}
-			}
-		}
-		if failed > 0 {
-			logger.ErrorContext(ctx, "revoke workos sessions", attr.SlogValueInt(failed), attr.SlogError(firstErr))
-		}
-	}
-}

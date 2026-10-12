@@ -100,17 +100,7 @@ func Record(ctx context.Context, db repo.DBTX, p RecordParams) (Recorded, error)
 	if p.OrganizationID == "" || p.UserID == "" || p.WorkOSSessionID == "" {
 		return none, nil
 	}
-	q := repo.New(db)
-	// A WorkOS session's first sign-in time carries across the user's organizations.
-	organizationIDs, err := q.ListUserOrganizationIDs(ctx, conv.ToPGText(p.UserID))
-	if err != nil {
-		return none, fmt.Errorf("list user organizations: %w", err)
-	}
-	if !slices.Contains(organizationIDs, p.OrganizationID) {
-		organizationIDs = append(organizationIDs, p.OrganizationID)
-	}
-	row, err := q.UpsertSSOSignIn(ctx, repo.UpsertSSOSignInParams{
-		OrganizationIds:      organizationIDs,
+	row, err := repo.New(db).UpsertSSOSignIn(ctx, repo.UpsertSSOSignInParams{
 		OrganizationID:       p.OrganizationID,
 		UserID:               p.UserID,
 		WorkosSessionID:      p.WorkOSSessionID,
@@ -134,6 +124,27 @@ func LiveSignInForSession(ctx context.Context, db repo.DBTX, organizationID, use
 		return none, nil
 	}
 	id, err := repo.New(db).GetLiveSSOSignInBySession(ctx, repo.GetLiveSSOSignInBySessionParams{
+		OrganizationID:  organizationID,
+		UserID:          userID,
+		WorkosSessionID: workosSessionID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return none, nil
+	case err != nil:
+		return none, fmt.Errorf("get sso sign-in for session: %w", err)
+	}
+	return uuid.NullUUID{UUID: id, Valid: true}, nil
+}
+
+// SignInForSession returns the sign-in recorded for a WorkOS session in an
+// organization, revoked or not, or an invalid id when there is none.
+func SignInForSession(ctx context.Context, db repo.DBTX, organizationID, userID, workosSessionID string) (uuid.NullUUID, error) {
+	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if organizationID == "" || userID == "" || workosSessionID == "" {
+		return none, nil
+	}
+	id, err := repo.New(db).GetSSOSignInBySession(ctx, repo.GetSSOSignInBySessionParams{
 		OrganizationID:  organizationID,
 		UserID:          userID,
 		WorkosSessionID: workosSessionID,
@@ -210,29 +221,50 @@ func emailOnDomain(email string, verified []string) bool {
 	return slices.ContainsFunc(verified, func(d string) bool { return workos.NormalizeDomain(d) == domain })
 }
 
+// SignedOut is what RevokeSession revoked.
+type SignedOut struct {
+	// Organizations hold a sign-in this sign-out revoked.
+	Organizations []string
+	// DeliveryIDs are the durable deliveries it enqueued.
+	DeliveryIDs []uuid.UUID
+}
+
 // RevokeSession revokes the sign-ins recorded for one signed-out WorkOS
-// session. Grants made from them keep working for other paths but stop
-// qualifying for vouching. It returns the organizations of the revoked rows.
-func RevokeSession(ctx context.Context, db repo.DBTX, organizationIDs []string, userID, workosSessionID string) ([]string, error) {
+// session and enqueues ending that WorkOS session. Grants made from them keep
+// working but stop qualifying for vouching. Locks are taken in id order, like
+// every other revocation.
+func RevokeSession(ctx context.Context, db repo.DBTX, organizationIDs []string, userID, workosSessionID string) (SignedOut, error) {
+	var out SignedOut
 	if len(organizationIDs) == 0 || userID == "" || workosSessionID == "" {
-		return nil, nil
+		return out, nil
 	}
-	rows, err := repo.New(db).RevokeSSOSignInsBySession(ctx, repo.RevokeSSOSignInsBySessionParams{
+	q := repo.New(db)
+	if _, err := q.LockSSOSignInsBySession(ctx, repo.LockSSOSignInsBySessionParams{OrganizationIds: organizationIDs, UserID: userID, WorkosSessionID: workosSessionID}); err != nil {
+		return out, fmt.Errorf("lock sso sign-ins for session: %w", err)
+	}
+	rows, err := q.RevokeSSOSignInsBySession(ctx, repo.RevokeSSOSignInsBySessionParams{
 		RevokeReason:    conv.ToPGText(string(RevokeReasonSignOut)),
 		OrganizationIds: organizationIDs,
 		UserID:          userID,
 		WorkosSessionID: workosSessionID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("revoke sso sign-ins for session: %w", err)
+		return out, fmt.Errorf("revoke sso sign-ins for session: %w", err)
 	}
-	orgs := make([]string, 0, len(rows))
+	seen := make(map[string]struct{}, len(rows))
 	for _, r := range rows {
-		if !slices.Contains(orgs, r.OrganizationID) {
-			orgs = append(orgs, r.OrganizationID)
+		if _, ok := seen[r.OrganizationID]; ok {
+			continue
 		}
+		seen[r.OrganizationID] = struct{}{}
+		out.Organizations = append(out.Organizations, r.OrganizationID)
+		ids, err := enqueue(ctx, q, r.OrganizationID, DeliveryWorkOSSession, []string{workosSessionID})
+		if err != nil {
+			return out, err
+		}
+		out.DeliveryIDs = append(out.DeliveryIDs, ids...)
 	}
-	return orgs, nil
+	return out, nil
 }
 
 // SignInOrganizations returns every organization the user has a recorded
@@ -250,12 +282,16 @@ func SignInOrganizations(ctx context.Context, db repo.DBTX, userID string) ([]st
 
 // Revoked is what RevokeUser revoked.
 type Revoked struct {
-	// SignInsByOrganization counts newly revoked sign-ins per organization.
+	// SignInsByOrganization counts newly revoked or upgraded sign-ins per
+	// organization.
 	SignInsByOrganization map[string]int
-	// WorkOSSessionIDs are the WorkOS sessions of the newly revoked sign-ins.
+	// WorkOSSessionIDs are the WorkOS sessions of those sign-ins.
 	WorkOSSessionIDs []string
 	// Sessions are the soft-deleted grants.
 	Sessions []RevokedSession
+	// DeliveryIDs are the durable deliveries enqueued for the JTIs and WorkOS
+	// sessions.
+	DeliveryIDs []uuid.UUID
 }
 
 // SignIns is the total number of newly revoked sign-ins.
@@ -287,17 +323,22 @@ type RevokedSession struct {
 	JTI            string
 }
 
-// RevokeUser revokes all of a user's sign-ins in the given organizations and
-// soft-deletes every grant made from any of them. It locks the sign-ins first,
-// in id order, matching grant issuance.
+// RevokeUser revokes all of a user's sign-ins in the given organizations,
+// including ones a single sign-out already revoked, fences out sign-ins still
+// being recorded, soft-deletes every grant made from them and enqueues the
+// JTI and WorkOS session deliveries. It locks the sign-ins first, in id order,
+// matching grant issuance.
 func RevokeUser(ctx context.Context, db repo.DBTX, organizationIDs []string, userID string, reason RevokeReason) (Revoked, error) {
-	out := Revoked{SignInsByOrganization: map[string]int{}, WorkOSSessionIDs: nil, Sessions: nil}
+	out := Revoked{SignInsByOrganization: map[string]int{}, WorkOSSessionIDs: nil, Sessions: nil, DeliveryIDs: nil}
 	if len(organizationIDs) == 0 || userID == "" {
 		return out, nil
 	}
 	q := repo.New(db)
 	if _, err := q.LockUserSSOSignIns(ctx, repo.LockUserSSOSignInsParams{OrganizationIds: organizationIDs, UserID: userID}); err != nil {
 		return out, fmt.Errorf("lock user sso sign-ins: %w", err)
+	}
+	if err := q.RaiseRevocationCutoffs(ctx, repo.RaiseRevocationCutoffsParams{UserID: userID, OrganizationIds: organizationIDs}); err != nil {
+		return out, fmt.Errorf("raise sso sign-in revocation cutoffs: %w", err)
 	}
 	signIns, err := q.RevokeUserSSOSignIns(ctx, repo.RevokeUserSSOSignInsParams{
 		RevokeReason:    conv.ToPGText(string(reason)),
@@ -307,9 +348,13 @@ func RevokeUser(ctx context.Context, db repo.DBTX, organizationIDs []string, use
 	if err != nil {
 		return out, fmt.Errorf("revoke user sso sign-ins: %w", err)
 	}
+	workosByOrg := map[string][]string{}
+	seenSession := map[string]struct{}{}
 	for _, s := range signIns {
 		out.SignInsByOrganization[s.OrganizationID]++
-		if !slices.Contains(out.WorkOSSessionIDs, s.WorkosSessionID) {
+		workosByOrg[s.OrganizationID] = append(workosByOrg[s.OrganizationID], s.WorkosSessionID)
+		if _, ok := seenSession[s.WorkosSessionID]; !ok {
+			seenSession[s.WorkosSessionID] = struct{}{}
 			out.WorkOSSessionIDs = append(out.WorkOSSessionIDs, s.WorkosSessionID)
 		}
 	}
@@ -320,6 +365,7 @@ func RevokeUser(ctx context.Context, db repo.DBTX, organizationIDs []string, use
 	if err != nil {
 		return out, fmt.Errorf("revoke grants for user sso sign-ins: %w", err)
 	}
+	jtisByOrg := map[string][]string{}
 	for _, s := range sessions {
 		out.Sessions = append(out.Sessions, RevokedSession{
 			ID:             s.ID,
@@ -328,38 +374,46 @@ func RevokeUser(ctx context.Context, db repo.DBTX, organizationIDs []string, use
 			Subject:        s.SubjectUrn,
 			JTI:            s.Jti,
 		})
+		if s.Jti != "" {
+			jtisByOrg[s.OrganizationID.String] = append(jtisByOrg[s.OrganizationID.String], s.Jti)
+		}
+	}
+	for organizationID, jtis := range jtisByOrg {
+		ids, err := enqueue(ctx, q, organizationID, DeliveryJTI, jtis)
+		if err != nil {
+			return out, err
+		}
+		out.DeliveryIDs = append(out.DeliveryIDs, ids...)
+	}
+	for organizationID, workosSessions := range workosByOrg {
+		ids, err := enqueue(ctx, q, organizationID, DeliveryWorkOSSession, workosSessions)
+		if err != nil {
+			return out, err
+		}
+		out.DeliveryIDs = append(out.DeliveryIDs, ids...)
 	}
 	return out, nil
 }
 
-// repushWindow is how far back a revocation re-pushes JTIs of grants an
-// earlier attempt soft-deleted, so a retried call repairs a failed push.
-const repushWindow = 10 * time.Minute
+// EnqueueWorkOSSessionRevocations durably enqueues ending WorkOS sessions not
+// tied to a recorded sign-in, such as ones listed from WorkOS.
+func EnqueueWorkOSSessionRevocations(ctx context.Context, db repo.DBTX, organizationID string, workosSessionIDs []string) ([]uuid.UUID, error) {
+	return enqueue(ctx, repo.New(db), organizationID, DeliveryWorkOSSession, workosSessionIDs)
+}
 
-// JTIsToPush returns the revoked grants' JTIs plus those of grants of the
-// user's sign-ins soft-deleted within the repush window.
-func JTIsToPush(ctx context.Context, db repo.DBTX, organizationIDs []string, userID string, revoked Revoked, now time.Time) ([]string, error) {
-	jtis := make([]string, 0, len(revoked.Sessions))
-	for _, s := range revoked.Sessions {
-		if s.JTI != "" && !slices.Contains(jtis, s.JTI) {
-			jtis = append(jtis, s.JTI)
-		}
+func enqueue(ctx context.Context, q *repo.Queries, organizationID string, kind DeliveryKind, targets []string) ([]uuid.UUID, error) {
+	targets = slices.Compact(slices.Sorted(slices.Values(targets)))
+	targets = slices.DeleteFunc(targets, func(t string) bool { return t == "" })
+	if organizationID == "" || len(targets) == 0 {
+		return nil, nil
 	}
-	if len(organizationIDs) == 0 || userID == "" {
-		return jtis, nil
-	}
-	recent, err := repo.New(db).ListRecentlyRevokedSessionJTIs(ctx, repo.ListRecentlyRevokedSessionJTIsParams{
-		OrganizationIds: organizationIDs,
-		UserID:          userID,
-		Since:           pgtype.Timestamptz{Time: now.Add(-repushWindow), InfinityModifier: pgtype.Finite, Valid: true},
+	ids, err := q.EnqueueRevocationDeliveries(ctx, repo.EnqueueRevocationDeliveriesParams{
+		OrganizationID: organizationID,
+		Kind:           string(kind),
+		Targets:        targets,
 	})
 	if err != nil {
-		return jtis, fmt.Errorf("list recently revoked session jtis: %w", err)
+		return nil, fmt.Errorf("enqueue %s revocation deliveries: %w", kind, err)
 	}
-	for _, jti := range recent {
-		if jti != "" && !slices.Contains(jtis, jti) {
-			jtis = append(jtis, jti)
-		}
-	}
-	return jtis, nil
+	return ids, nil
 }

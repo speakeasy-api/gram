@@ -28,6 +28,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -1541,6 +1543,12 @@ func TestE2E_LoginRecordsSSOSignInAndLogoutRevokesIt(t *testing.T) {
 	require.Equal(t, int64(1), audited, "the sign-out revocation is audited")
 }
 
+func enableSSOSignInEnforcement(inst *e2eInstance) {
+	flags := &feature.InMemory{}
+	ssosignins.EnableForTests(flags)
+	inst.sessionManager.SetFlags(flags)
+}
+
 func TestE2E_LogoutEverywhereEndsEveryDashboardSession(t *testing.T) {
 	t.Parallel()
 
@@ -1559,6 +1567,8 @@ func TestE2E_LogoutEverywhereEndsEveryDashboardSession(t *testing.T) {
 			workosOrgID: {ID: workosOrgID, Name: "Everywhere Corp"},
 		},
 	}
+	// A second browser holds WorkOS sessions with no recorded sign-in.
+	idpSessions := &MockIDPSessions{Listed: []string{workosSessionID, "session_02OTHERBROWSER", "session_03OTHERBROWSER"}}
 	userInfo := &MockUserInfo{
 		UserID:               workosUserID,
 		Email:                "everywhere@example.com",
@@ -1566,8 +1576,10 @@ func TestE2E_LogoutEverywhereEndsEveryDashboardSession(t *testing.T) {
 		WorkOSSessionID:      workosSessionID,
 		AuthenticationMethod: ssosignins.MethodSSO,
 		Organizations:        []MockOrganizationEntry{},
+		IDPSessions:          idpSessions,
 	}
 	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+	enableSSOSignInEnforcement(inst)
 
 	first, err := inst.callbackWithNonce(ctx, t)
 	require.NoError(t, err)
@@ -1587,6 +1599,7 @@ func TestE2E_LogoutEverywhereEndsEveryDashboardSession(t *testing.T) {
 		_, err := inst.sessionManager.Authenticate(t.Context(), token)
 		require.Error(t, err, "every dashboard session issued before signing out everywhere is rejected")
 	}
+	require.ElementsMatch(t, idpSessions.Listed, idpSessions.Revoked(), "every listed WorkOS session is ended, across pages")
 	live, err := ssosignins.LiveSignInForSession(ctx, inst.conn, authCtx.ActiveOrganizationID, authCtx.UserID, workosSessionID)
 	require.NoError(t, err)
 	require.False(t, live.Valid)
@@ -1598,6 +1611,46 @@ func TestE2E_LogoutEverywhereEndsEveryDashboardSession(t *testing.T) {
 	require.NoError(t, err)
 	_, err = inst.sessionManager.Authenticate(t.Context(), fresh.SessionToken)
 	require.NoError(t, err, "a later sign-in works")
+}
+
+func TestE2E_LogoutEverywhereIsUnavailableWhileEnforcementIsOff(t *testing.T) {
+	t.Parallel()
+
+	const (
+		workosUserID = "user_01EVERYWHEREOFF"
+		workosOrgID  = "org_01EVERYWHEREOFF"
+	)
+	fetcher := &mockWorkOSFetcher{
+		members: map[string][]workos.Member{
+			workosUserID: {
+				{ID: "om_EVERYWHEREOFF", UserID: workosUserID, OrganizationID: workosOrgID, Organization: "Everywhere Off Corp", RoleSlugs: []string{"admin"}},
+			},
+		},
+		orgs: map[string]*workos.Organization{
+			workosOrgID: {ID: workosOrgID, Name: "Everywhere Off Corp"},
+		},
+	}
+	userInfo := &MockUserInfo{
+		UserID:               workosUserID,
+		Email:                "everywhere-off@example.com",
+		OrganizationID:       workosOrgID,
+		WorkOSSessionID:      "session_01EVERYWHEREOFF",
+		AuthenticationMethod: ssosignins.MethodSSO,
+		Organizations:        []MockOrganizationEntry{},
+	}
+	ctx, inst := newE2EAuthService(t, userInfo, fetcher)
+
+	first, err := inst.callbackWithNonce(ctx, t)
+	require.NoError(t, err)
+	ctx, err = inst.sessionManager.Authenticate(ctx, first.SessionToken)
+	require.NoError(t, err)
+
+	_, err = inst.service.LogoutEverywhere(ctx, &gen.LogoutEverywherePayload{SessionToken: nil})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	_, err = inst.sessionManager.Authenticate(t.Context(), first.SessionToken)
+	require.NoError(t, err, "nothing changes while enforcement is off")
 }
 
 // TestE2E_Register_ZeroOrgUserCreatesOrg exercises the full onboarding flow:
