@@ -382,6 +382,7 @@ type PostgresReader struct {
 	toolExposure              *MCPToolExposureService
 	projectLifecycle          *ProjectLifecycleService
 	analytics                 *AnalyticsService
+	widgets                   *WidgetService
 }
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
@@ -416,6 +417,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		toolExposure:              nil,
 		projectLifecycle:          nil,
 		analytics:                 nil,
+		widgets:                   nil,
 	}
 }
 

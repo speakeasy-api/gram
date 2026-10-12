@@ -243,6 +243,9 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 		"list_my_sessions", "continue_session",
 		// The analytics reads hold the caller to project:read in the handler.
 		describeAnalyticsCatalogToolName, listAnalyticsDimensionValuesToolName, runAnalyticsQueryToolName,
+		// The widget tools hold the caller to project:read, and project:write
+		// for writes, in the handler, before the widgets service's own checks.
+		listWidgetsToolName, getWidgetToolName, saveWidgetToolName, duplicateWidgetToolName, deleteWidgetToolName,
 	} {
 		require.Equal(t, ExternalAuthorizationMember, byName[name], name)
 	}
@@ -441,6 +444,14 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		// with write access to it, not for the assistant.
 		createProjectToolName,
 		renameProjectToolName,
+		// Widget writes are audited under a user and a widget is owned by its
+		// creator; a managed assistant has no user identity to act as, so the
+		// widget tools serve external users only.
+		listWidgetsToolName,
+		getWidgetToolName,
+		saveWidgetToolName,
+		duplicateWidgetToolName,
+		deleteWidgetToolName,
 	} {
 		require.False(t, admitted[name], "tool %q must not be admitted to the assistant", name)
 	}

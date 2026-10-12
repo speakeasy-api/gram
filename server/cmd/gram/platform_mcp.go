@@ -58,6 +58,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sigint"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
+	"github.com/speakeasy-api/gram/server/internal/widgets"
 )
 
 type platformMCPConfig struct {
@@ -158,6 +159,9 @@ type platformMCPConfig struct {
 	// Analytics is the engine behind the three analytics tools, shared with
 	// the analytics RPC. Nil keeps them visible as unavailable.
 	Analytics platformmcp.AnalyticsEngine
+	// Widgets is the widgets service behind the five widget tools, shared
+	// with the widgets RPC. Nil keeps them visible as unavailable.
+	Widgets *widgets.Service
 
 	// WorkflowRun delivers shipped-workflow run reports to Speakeasy's own
 	// analytics. Nil registers record_workflow_run as a stub, so the tool
@@ -489,6 +493,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
 	// Metered on the diagnostics allowance, like the other aggregate reads.
 	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics))
+	platformReader.WithWidgets(platformmcp.NewWidgetService(config.Logger, config.Widgets, platformReader, config.Authz, config.FeatureFlags, config.JWTSigningKey))
 	attachShadowInventory(platformReader, config, budgets.SensitiveDiagnostics)
 	attachShadowAI(platformReader, config, authorizer, budgets.SensitiveDiagnostics)
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
@@ -1063,6 +1068,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
 	// Metered on the diagnostics allowance, like the other aggregate reads.
 	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics))
+	platformReader.WithWidgets(platformmcp.NewWidgetService(config.Logger, config.Widgets, platformReader, config.Authz, config.FeatureFlags, config.JWTSigningKey))
 	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)
 	if shadowErr != nil {
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(shadowErr))

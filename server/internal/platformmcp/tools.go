@@ -233,6 +233,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			"Dismissing Watchdog findings as false positives, or restoring them, is a mutation: name the exact project and the exact findings, wait for explicit confirmation, then report which findings changed, which were already in that state, and which were not found in the project. A dismissal suppresses only the findings named; a risk exclusion is the tool for a whole class of findings.",
 			"Project-wide chat listings are metadata only: when a conversation was active, how long it ran, which app produced it, whether risk analysis found anything, and a masked participant. Never present a listed chat's title or what was said as known, and send the administrator to the dashboard to read a transcript. Personal session recall is separate: it may present the caller's own sessions by title and their own redacted handoff digest.",
 			"Explore's analytics catalog answers questions about a project's agent sessions and tool calls through three tools, used in order. describe_analytics_catalog says which datasets exist, what one row of each is, which fields can group, filter and aggregate, the time grains, and the limits. list_analytics_dimension_values says what a dimension actually holds inside a window, so a filter names a value that exists. run_analytics_query then asks the question in exactly those names. Every call names the exact project. Never invent a dataset, field or value; when a query is refused as invalid, correct the field the refusal names from the catalog rather than retrying the same request. Report a window as dates and a count as what it counts (sessions, tool calls, people), never as a plan or table name. When these tools say analytics is not switched on for the organization, say so and stop.",
+			"A widget is one of those questions saved with the chart that draws it, which dashboards then show. Before changing widgets, call list_widgets and get_widget to see what exists, including which dashboards show each one. To save one, build its query with describe_analytics_catalog and try it with run_analytics_query, then call save_widget, duplicate_widget or delete_widget with confirmed:false, show the user the preview — for an update or delete, name the dashboards it reaches — and only after they confirm resend the identical request with the version from the last read as expected_version, the preview token and a stable idempotency key. When a widget is refused as invalid, fix the field the refusal names rather than retrying the same request; when it is refused because it changed, read it again and preview again. A teammate's widget is changed by duplicating it, not by editing theirs.",
 		}, "\n\n"),
 		PageSize: 32,
 		// Declared rather than inferred. Left unset, the SDK advertises
@@ -317,6 +318,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerShadowDecisionTool(reg, postgresReader.shadowDecisions)
 		registerShadowAITools(reg, postgresReader.shadowAI)
 		registerAnalyticsTools(reg, postgresReader.analytics)
+		registerWidgetTools(reg, postgresReader.widgets)
 	} else {
 		registerUnavailableMCPConnectionSettingsTool(reg)
 		registerMCPConnectionMutationTools(reg, nil)
@@ -339,6 +341,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerShadowDecisionTool(reg, nil)
 		registerUnavailableShadowAITools(reg)
 		registerAnalyticsTools(reg, nil)
+		registerWidgetTools(reg, nil)
 	}
 	registerSetupResources(reg, setupResources, time.Now)
 	if registrations == nil || !registrations.budgets.Docs.valid() {
