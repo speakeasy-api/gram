@@ -1,5 +1,34 @@
 -- atlas:txmode none
 
+-- Create "sso_sign_in_revocation_cutoffs" table
+CREATE TABLE "sso_sign_in_revocation_cutoffs" (
+  "organization_id" text NOT NULL,
+  "user_id" text NOT NULL,
+  "cutoff_at" timestamptz NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY ("organization_id", "user_id"),
+  CONSTRAINT "sso_sign_in_revocation_cutoffs_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
+);
+-- Create "sso_sign_in_revocation_deliveries" table
+CREATE TABLE "sso_sign_in_revocation_deliveries" (
+  "id" uuid NOT NULL DEFAULT generate_uuidv7(),
+  "organization_id" text NOT NULL,
+  "kind" text NOT NULL,
+  "target" text NOT NULL,
+  "effective_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  "attempts" integer NOT NULL DEFAULT 0,
+  "last_error" text NULL,
+  "delivered_at" timestamptz NULL,
+  "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY ("id"),
+  CONSTRAINT "sso_sign_in_revocation_deliveries_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE
+);
+-- Create index "sso_sign_in_revocation_deliveries_pending_idx" to table: "sso_sign_in_revocation_deliveries"
+CREATE INDEX "sso_sign_in_revocation_deliveries_pending_idx" ON "sso_sign_in_revocation_deliveries" ("created_at") WHERE (delivered_at IS NULL);
+-- Create index "sso_sign_in_revocation_deliveries_pending_key" to table: "sso_sign_in_revocation_deliveries"
+CREATE UNIQUE INDEX "sso_sign_in_revocation_deliveries_pending_key" ON "sso_sign_in_revocation_deliveries" ("organization_id", "kind", "target") WHERE (delivered_at IS NULL);
 -- Create "sso_sign_ins" table
 CREATE TABLE "sso_sign_ins" (
   "id" uuid NOT NULL DEFAULT generate_uuidv7(),

@@ -3439,6 +3439,27 @@ type SsoSignIn struct {
 	UpdatedAt            pgtype.Timestamptz
 }
 
+type SsoSignInRevocationCutoff struct {
+	OrganizationID string
+	UserID         string
+	CutoffAt       pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type SsoSignInRevocationDelivery struct {
+	ID             uuid.UUID
+	OrganizationID string
+	Kind           string
+	Target         string
+	EffectiveAt    pgtype.Timestamptz
+	Attempts       int32
+	LastError      pgtype.Text
+	DeliveredAt    pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 type StripeInvoice struct {
 	StripeInvoiceID      string
 	OrganizationID       pgtype.Text

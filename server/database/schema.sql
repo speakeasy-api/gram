@@ -3097,6 +3097,53 @@ ON sso_sign_ins (user_id, workos_session_id);
 CREATE UNIQUE INDEX IF NOT EXISTS sso_sign_ins_organization_id_id_key
 ON sso_sign_ins (organization_id, id);
 
+-- A revocation fence per user and organization: a sign-in authenticated at or
+-- before cutoff_at is recorded revoked and never authorizes a grant, so a
+-- WorkOS exchange that began before a revocation cannot outlive it.
+CREATE TABLE IF NOT EXISTS sso_sign_in_revocation_cutoffs (
+  organization_id TEXT NOT NULL,
+  -- Speakeasy users.id.
+  user_id TEXT NOT NULL,
+  cutoff_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT sso_sign_in_revocation_cutoffs_pkey PRIMARY KEY (organization_id, user_id),
+  CONSTRAINT sso_sign_in_revocation_cutoffs_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+-- Side effects of a sign-in revocation outside Postgres, written in the
+-- revoking transaction and delivered with idempotent retries until
+-- delivered_at is set.
+CREATE TABLE IF NOT EXISTS sso_sign_in_revocation_deliveries (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  -- jti (revoke an access token), workos_session (end a WorkOS session) or
+  -- user_epoch (invalidate a user's earlier dashboard sessions); validated in
+  -- application code.
+  kind TEXT NOT NULL,
+  -- The JTI, WorkOS session id or Speakeasy users.id the kind acts on.
+  target TEXT NOT NULL,
+  -- For user_epoch: dashboard sessions issued at or before this are invalid.
+  effective_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  attempts integer NOT NULL DEFAULT 0,
+  last_error TEXT,
+  delivered_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT sso_sign_in_revocation_deliveries_pkey PRIMARY KEY (id),
+  CONSTRAINT sso_sign_in_revocation_deliveries_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
+);
+
+-- One pending delivery per target.
+CREATE UNIQUE INDEX IF NOT EXISTS sso_sign_in_revocation_deliveries_pending_key
+ON sso_sign_in_revocation_deliveries (organization_id, kind, target)
+WHERE delivered_at IS NULL;
+
+-- The retry sweep reads pending deliveries oldest first.
+CREATE INDEX IF NOT EXISTS sso_sign_in_revocation_deliveries_pending_idx
+ON sso_sign_in_revocation_deliveries (created_at)
+WHERE delivered_at IS NULL;
+
 -- User Sessions are records representing active Gram sessions for a given Subject
 -- They contain token grant information to allow for validating and exchanging tokens
 CREATE TABLE IF NOT EXISTS user_sessions (
