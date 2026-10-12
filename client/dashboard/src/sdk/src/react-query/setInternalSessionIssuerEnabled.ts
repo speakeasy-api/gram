@@ -54,7 +54,7 @@ export type SetInternalSessionIssuerEnabledMutationError =
  * setEnabled internalSessionIssuers
  *
  * @remarks
- * Enable or disable signing with the organization's internal session issuer. Enabling provisions the issuer with a dedicated Speakeasy-managed signing key the first time; it does not configure trust at any service. Disabling keeps the issuer URI and its published keys. Requires org:admin.
+ * Enable or disable signing with the organization's internal session issuer. Enabling provisions the issuer with a dedicated Speakeasy-managed signing key the first time; it does not configure trust at any service. Disabling keeps the issuer URI and its published keys. Requires org:admin; enabling also needs the organization's single sign-on entitlement and the issuer rollout, while disabling never does.
  */
 export function useSetInternalSessionIssuerEnabledMutation(
   options?: MutationHookOptions<

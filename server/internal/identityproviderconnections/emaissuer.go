@@ -13,11 +13,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpkms"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -582,6 +584,12 @@ func (p *Provisioner) RotateEMAIssuerCompromised(ctx context.Context, organizati
 	if err != nil {
 		return err
 	}
+	// Stop the compromised versions signing before anything else; success
+	// means they are disabled.
+	if err := p.disableEMAIssuerVersions(ctx, kms, organizationID); err != nil {
+		p.abandonKey(ctx, logger, kms, uuid.Nil, created.key, signer, err)
+		return err
+	}
 	revoked, err := p.replaceEMAIssuerKeyRows(ctx, organizationID, signer, created)
 	if err != nil {
 		p.abandonKey(ctx, logger, kms, uuid.Nil, created.key, signer, err)
@@ -654,4 +662,28 @@ func (p *Provisioner) emaPublicationAbsent(ctx context.Context, organizationID, 
 		return false, fmt.Errorf("lookup published key resource: %w", err)
 	}
 	return !referenced, nil
+}
+
+// disableEMAIssuerVersions disables the KMS version behind every live issuer
+// key. Retirement after commit also removes the signer grants.
+func (p *Provisioner) disableEMAIssuerVersions(ctx context.Context, kms gcpkms.ProvisioningClient, organizationID string) error {
+	issuer, err := jwksrepo.New(p.db).GetOrganizationInternalSessionIssuer(ctx, organizationID)
+	if err != nil {
+		return fmt.Errorf("read issuer: %w", err)
+	}
+	keys, err := jwksrepo.New(p.db).ListJsonWebKeys(ctx, jwksrepo.ListJsonWebKeysParams{JsonWebKeySetID: issuer.JsonWebKeySetID, OrganizationID: organizationID, IncludeRevoked: false})
+	if err != nil {
+		return fmt.Errorf("load issuer keys: %w", err)
+	}
+	q := repo.New(p.db)
+	for _, key := range keys {
+		row, err := q.GetManagedKeyResource(ctx, repo.GetManagedKeyResourceParams{ID: key.ExternalKeyID, OrganizationID: conv.ToPGText(organizationID)})
+		if err != nil {
+			return fmt.Errorf("load compromised key resource: %w", err)
+		}
+		if err := kms.DisableKeyVersion(ctx, row.ResourceName); err != nil {
+			return fmt.Errorf("disable compromised kms key version: %w", err)
+		}
+	}
+	return nil
 }

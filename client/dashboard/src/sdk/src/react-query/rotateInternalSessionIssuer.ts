@@ -54,7 +54,7 @@ export type RotateInternalSessionIssuerMutationError =
  * rotate internalSessionIssuers
  *
  * @remarks
- * Rotate the issuer's signing key without changing its URI. A routine rotation takes two calls with the same active_kid: the first publishes a new key and returns rotation_ready_at, the second activates it after that time. With compromised set, every current key is revoked at once and a fresh key activated immediately. Requires org:admin.
+ * Rotate the issuer's signing key without changing its URI. A routine rotation takes two calls with the same active_kid: the first publishes a new key and returns rotation_ready_at, the second activates it after that time. With compromised set, every current key is revoked at once and a fresh key activated immediately. Requires org:admin; a routine rotation also needs an enabled issuer, while a compromised rotation only needs an existing issuer and is never rate limited.
  */
 export function useRotateInternalSessionIssuerMutation(
   options?: MutationHookOptions<

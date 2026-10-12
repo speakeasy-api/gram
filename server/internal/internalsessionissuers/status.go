@@ -26,9 +26,10 @@ const (
 	StateSigningPaused       State = "signing_paused"
 )
 
-// FeatureChecker reports product entitlements.
+// FeatureChecker reports product entitlements, read live so a lapsed
+// entitlement stops signing at once.
 type FeatureChecker interface {
-	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
+	IsFeatureEnabledUncached(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
 }
 
 // Gate combines the rollout flag, the SSO entitlement, deployment readiness,
@@ -87,7 +88,7 @@ func (g *Gate) Status(ctx context.Context, organizationID string) (Status, error
 	if err != nil {
 		return status, fmt.Errorf("read issuer rollout: %w", err)
 	}
-	status.Entitled, err = g.features.IsFeatureEnabled(ctx, organizationID, productfeatures.FeatureSSO)
+	status.Entitled, err = g.features.IsFeatureEnabledUncached(ctx, organizationID, productfeatures.FeatureSSO)
 	if err != nil {
 		return status, fmt.Errorf("read sso entitlement: %w", err)
 	}

@@ -45,7 +45,7 @@ export class InternalSessionIssuers extends ClientSDK {
    * rotate internalSessionIssuers
    *
    * @remarks
-   * Rotate the issuer's signing key without changing its URI. A routine rotation takes two calls with the same active_kid: the first publishes a new key and returns rotation_ready_at, the second activates it after that time. With compromised set, every current key is revoked at once and a fresh key activated immediately. Requires org:admin.
+   * Rotate the issuer's signing key without changing its URI. A routine rotation takes two calls with the same active_kid: the first publishes a new key and returns rotation_ready_at, the second activates it after that time. With compromised set, every current key is revoked at once and a fresh key activated immediately. Requires org:admin; a routine rotation also needs an enabled issuer, while a compromised rotation only needs an existing issuer and is never rate limited.
    */
   async rotate(
     request: RotateInternalSessionIssuerRequest,
@@ -64,7 +64,7 @@ export class InternalSessionIssuers extends ClientSDK {
    * setEnabled internalSessionIssuers
    *
    * @remarks
-   * Enable or disable signing with the organization's internal session issuer. Enabling provisions the issuer with a dedicated Speakeasy-managed signing key the first time; it does not configure trust at any service. Disabling keeps the issuer URI and its published keys. Requires org:admin.
+   * Enable or disable signing with the organization's internal session issuer. Enabling provisions the issuer with a dedicated Speakeasy-managed signing key the first time; it does not configure trust at any service. Disabling keeps the issuer URI and its published keys. Requires org:admin; enabling also needs the organization's single sign-on entitlement and the issuer rollout, while disabling never does.
    */
   async setEnabled(
     request: SetInternalSessionIssuerEnabledRequest,

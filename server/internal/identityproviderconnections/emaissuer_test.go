@@ -3,6 +3,7 @@ package identityproviderconnections_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -52,7 +53,7 @@ func (p *countingPurger) Purged() []string {
 // entitlements grants or withholds the SSO entitlement for every organization.
 type entitlements struct{ sso bool }
 
-func (e *entitlements) IsFeatureEnabled(context.Context, string, productfeatures.Feature) (bool, error) {
+func (e *entitlements) IsFeatureEnabledUncached(context.Context, string, productfeatures.Feature) (bool, error) {
 	return e.sso, nil
 }
 
@@ -314,7 +315,7 @@ func TestEMAIssuer_CompromisedRotationRevokesEveryKey(t *testing.T) {
 	replacement := activeIssuerKid(t, ctx, f, f.ti.orgID)
 	require.NotEqual(t, compromised, replacement)
 	require.Equal(t, []string{replacement}, publishedIssuerKids(t, ctx, f, f.ti.orgID), "the active and pending keys are withdrawn at once")
-	require.ElementsMatch(t, append(kms.Created(), rotatingKMS.Created()...), replacingKMS.Disabled(), "every compromised version is disabled in KMS")
+	require.ElementsMatch(t, append(kms.Created(), rotatingKMS.Created()...), slices.Compact(slices.Sorted(slices.Values(replacingKMS.Disabled()))), "every compromised version is disabled in KMS")
 	require.Equal(t, []string{f.ti.orgID}, purger.Purged())
 	require.Equal(t, int64(2), auditCount(t, ctx, f, audit.ActionJsonWebKeyRevoke))
 
@@ -496,4 +497,19 @@ func TestEMAIssuer_UncertainCommitReconcilesWithoutAConnection(t *testing.T) {
 	absent, err = provisioner.PublicationAbsent(ctx, f.ti.orgID, uuid.Nil, published+"-lost")
 	require.NoError(t, err)
 	require.True(t, absent, "a key the lost commit never published is disabled")
+}
+
+func TestEMAIssuer_CompromisedRotationFailsIfKMSCannotDisable(t *testing.T) {
+	t.Parallel()
+	ctx, f := newIssuerFixture(t)
+	provisioner, _ := f.provisioner(t)
+	_, err := provisioner.EnsureEMAIssuer(ctx, f.ti.orgID)
+	require.NoError(t, err)
+	compromised := activeIssuerKid(t, ctx, f, f.ti.orgID)
+
+	replacer, replacingKMS := f.provisioner(t)
+	replacingKMS.disableErr = errors.New("kms unavailable")
+	require.Error(t, replacer.RotateEMAIssuerCompromised(ctx, f.ti.orgID), "success must mean the compromised versions are disabled")
+	require.Equal(t, compromised, activeIssuerKid(t, ctx, f, f.ti.orgID), "nothing is replaced until KMS confirms")
+	require.Equal(t, []string{compromised}, publishedIssuerKids(t, ctx, f, f.ti.orgID))
 }
