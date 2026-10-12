@@ -336,3 +336,9 @@ and verified discount/price terms, not seeded signup attribution. The enterprise
 demo intentionally shows no box; component and Stripe transport fixtures cover
 verified gateway terms, safe monetary/percentage fallback, expiration, and absence.
 No Stripe subscription, promotion, or local billing settings are seeded for it.
+
+### Gateway discovery
+
+Browser verification: [~] — follow check 30 in `seed/demo/verify.md`.
+
+The seeded gateway uses Progressive discovery. Settings shows this default and Inspect can reconnect in Direct mode to show qualified member tools. Choosing a mode in Inspect leaves the gateway default unchanged.

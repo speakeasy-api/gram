@@ -163,7 +163,7 @@ func BuildUpdateMetaMcpServerPayload(metaMcpUpdateMetaMcpServerBody string, meta
 	{
 		err = json.Unmarshal([]byte(metaMcpUpdateMetaMcpServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"instructions\": \"abc123\",\n      \"name\": \"aa\",\n      \"network_access_mode\": \"dual\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"discovery_mode\": \"direct\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"instructions\": \"abc123\",\n      \"name\": \"aa\",\n      \"network_access_mode\": \"dual\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if utf8.RuneCountInString(body.Name) < 1 {
@@ -183,6 +183,11 @@ func BuildUpdateMetaMcpServerPayload(metaMcpUpdateMetaMcpServerBody string, meta
 		if body.NetworkAccessMode != nil {
 			if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
+			}
+		}
+		if body.DiscoveryMode != nil {
+			if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct"}))
 			}
 		}
 		if err != nil {
@@ -212,6 +217,7 @@ func BuildUpdateMetaMcpServerPayload(metaMcpUpdateMetaMcpServerBody string, meta
 		Name:                body.Name,
 		UserSessionIssuerID: body.UserSessionIssuerID,
 		Instructions:        body.Instructions,
+		DiscoveryMode:       body.DiscoveryMode,
 	}
 	if body.Visibility != nil {
 		visibility := types.MetaMcpServerVisibility(*body.Visibility)
