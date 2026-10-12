@@ -53,6 +53,7 @@ type JsonWebKeySet struct {
 	ExternalKeyID                uuid.UUID
 	Name                         string
 	IdentityProviderConnectionID uuid.NullUUID
+	ManagedEmaIssuer             pgtype.Bool
 	CreatedAt                    pgtype.Timestamptz
 	UpdatedAt                    pgtype.Timestamptz
 	DeletedAt                    pgtype.Timestamptz

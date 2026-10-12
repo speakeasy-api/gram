@@ -1015,6 +1015,19 @@ type DirectoryUserGroupMembership struct {
 	WorkosCreatedAt        pgtype.Timestamptz
 }
 
+type EmaVendorIdentityProvider struct {
+	ID                           uuid.UUID
+	OrganizationID               string
+	VendorIssuer                 string
+	ProviderKind                 string
+	IdentityProviderConnectionID uuid.NullUUID
+	Position                     int32
+	CreatedAt                    pgtype.Timestamptz
+	UpdatedAt                    pgtype.Timestamptz
+	DeletedAt                    pgtype.Timestamptz
+	Deleted                      bool
+}
+
 type Environment struct {
 	ID             uuid.UUID
 	OrganizationID string
@@ -1358,6 +1371,7 @@ type JsonWebKeySet struct {
 	ExternalKeyID                uuid.UUID
 	Name                         string
 	IdentityProviderConnectionID uuid.NullUUID
+	ManagedEmaIssuer             pgtype.Bool
 	CreatedAt                    pgtype.Timestamptz
 	UpdatedAt                    pgtype.Timestamptz
 	DeletedAt                    pgtype.Timestamptz

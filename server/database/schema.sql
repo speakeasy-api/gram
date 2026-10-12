@@ -2011,6 +2011,43 @@ WHERE deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS identity_provider_connections_organization_id_id_key
 ON identity_provider_connections (organization_id, id);
 
+-- Which identity providers may issue ID-JAGs for a downstream vendor, and in
+-- what order they are tried. No live rows for a vendor means every available
+-- provider, external ones first and Speakeasy last.
+CREATE TABLE IF NOT EXISTS ema_vendor_identity_providers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  -- RFC 8414 issuer of the vendor's authorization server, normalized in
+  -- application code: lowercase scheme and host, no trailing slash.
+  vendor_issuer TEXT NOT NULL,
+  -- 'external' or 'speakeasy'; validated in application code.
+  provider_kind TEXT NOT NULL,
+  -- Set only for 'external'. Connections are soft-deleted; a row whose
+  -- connection is gone is skipped at read time.
+  identity_provider_connection_id uuid,
+  -- Lower is tried first.
+  position integer NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT ema_vendor_identity_providers_pkey PRIMARY KEY (id),
+  CONSTRAINT ema_vendor_identity_providers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT ema_vendor_identity_providers_connection_tenant_fkey FOREIGN KEY (organization_id, identity_provider_connection_id) REFERENCES identity_provider_connections (organization_id, id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ema_vendor_identity_providers_position_key
+ON ema_vendor_identity_providers (organization_id, vendor_issuer, position)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS ema_vendor_identity_providers_provider_key
+ON ema_vendor_identity_providers (organization_id, vendor_issuer, provider_kind, identity_provider_connection_id) NULLS NOT DISTINCT
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS ema_vendor_identity_providers_connection_idx
+ON ema_vendor_identity_providers (organization_id, identity_provider_connection_id)
+WHERE identity_provider_connection_id IS NOT NULL;
+
 -- Sharable records for referencing an externally-managed key, such as KMS key
 -- for signing. This is implemented using the Class Table Inheritance pattern
 -- with `provider` acting as the discriminator. Each row in
@@ -2113,6 +2150,9 @@ CREATE TABLE IF NOT EXISTS json_web_key_sets (
   -- Managed-by marker: set when an identity provider connection provisioned
   -- this set; its mutation guards refuse edits to marked rows.
   identity_provider_connection_id uuid,
+  -- Set on the key set backing the organization's Speakeasy EMA issuer. The
+  -- issuer URL derives from the organization id; keys rotate within the set.
+  managed_ema_issuer boolean,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -2128,6 +2168,11 @@ CREATE TABLE IF NOT EXISTS json_web_key_sets (
 CREATE INDEX IF NOT EXISTS json_web_key_sets_identity_provider_connection_idx
 ON json_web_key_sets (organization_id, identity_provider_connection_id)
 WHERE identity_provider_connection_id IS NOT NULL;
+
+-- One live Speakeasy EMA issuer per organization.
+CREATE UNIQUE INDEX IF NOT EXISTS json_web_key_sets_managed_ema_issuer_key
+ON json_web_key_sets (organization_id)
+WHERE managed_ema_issuer IS TRUE AND deleted IS FALSE;
 
 -- Composite unique key so json_web_keys can composite-FK to (organization_id, id)
 -- and pin the reference to one org. A unique index for parity with external_keys.

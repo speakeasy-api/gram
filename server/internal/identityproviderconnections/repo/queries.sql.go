@@ -861,7 +861,7 @@ func (q *Queries) ListOktaSignInIssuerTrusts(ctx context.Context, arg ListOktaSi
 }
 
 const listParkedConnectionKeySets = `-- name: ListParkedConnectionKeySets :many
-SELECT s.id, s.organization_id, s.project_id, s.external_key_id, s.name, s.identity_provider_connection_id, s.created_at, s.updated_at, s.deleted_at, s.deleted
+SELECT s.id, s.organization_id, s.project_id, s.external_key_id, s.name, s.identity_provider_connection_id, s.managed_ema_issuer, s.created_at, s.updated_at, s.deleted_at, s.deleted
 FROM json_web_key_sets AS s
 WHERE s.organization_id = $1
   AND s.project_id IS NULL
@@ -901,6 +901,7 @@ func (q *Queries) ListParkedConnectionKeySets(ctx context.Context, arg ListParke
 			&i.ExternalKeyID,
 			&i.Name,
 			&i.IdentityProviderConnectionID,
+			&i.ManagedEmaIssuer,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
