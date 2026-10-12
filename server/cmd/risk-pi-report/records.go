@@ -321,7 +321,7 @@ func runRecords(ctx context.Context, opts options, corpus []labeledCase) error {
 	tally := tallyRun(corpus, records)
 	fmt.Fprintln(os.Stderr, tally.line(opts.commit.name()))
 	if stopped || tally.outOfCredit > 0 {
-		return fmt.Errorf("%s: out of OpenRouter credit with %d cases left; add credit at https://openrouter.ai/settings/credits and rerun to continue", opts.commit.name(), tally.cases-tally.done)
+		return fmt.Errorf("%s: out of OpenRouter credit with %d cases left; add credit at https://openrouter.ai/settings/credits and rerun with -resume to continue", opts.commit.name(), tally.cases-tally.done)
 	}
 	return nil
 }
