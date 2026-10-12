@@ -16,6 +16,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/identity_provider_connections"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	idpc "github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
+	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -326,4 +327,25 @@ func TestSignInScopesMatchTheDashboard(t *testing.T) {
 		dashboard = append(dashboard, string(scope[1]))
 	}
 	require.Equal(t, idpc.SignInScopes, dashboard)
+}
+
+func TestSignInReader_RetiredKeyIsNotReady(t *testing.T) {
+	t.Parallel()
+	ctx, f := newSignInFixture(t)
+	clientID := createSignInClientSpec(t, ctx, f.si, f.managed.IssuerID, f.readyClient())
+	createSignInUserSessionIssuer(t, ctx, f.si, "okta-sign-in", uuid.NullUUID{UUID: f.managed.IssuerID, Valid: true}, uuid.NullUUID{UUID: clientID, Valid: true})
+
+	_, err := jwksrepo.New(f.si.conn.conn).RetireActiveJsonWebKey(ctx, jwksrepo.RetireActiveJsonWebKeyParams{
+		JsonWebKeySetID: f.managed.JSONWebKeySetID.UUID,
+		OrganizationID:  f.si.orgID,
+		ExcludeID:       uuid.Nil,
+	})
+	require.NoError(t, err)
+
+	setup, err := f.reader.Read(ctx, f.si.orgID)
+	require.NoError(t, err)
+	require.False(t, setup.ClientReady)
+	require.Empty(t, setup.ActiveKeyID)
+	require.Nil(t, setup.PublicJWK)
+	require.Equal(t, idpc.SignInStepSetUpSignIn, setup.NextStep)
 }
