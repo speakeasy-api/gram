@@ -637,32 +637,6 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
--- name: CountTotalMessages :one
-SELECT COUNT(*)::BIGINT
-FROM chat_messages cm
-WHERE cm.project_id = @project_id;
-
--- name: CountAnalyzedMessages :one
-SELECT COUNT(DISTINCT rr.chat_message_id)::BIGINT
-FROM risk_results rr
-WHERE rr.project_id = @project_id
-  AND rr.risk_policy_id = @risk_policy_id
-  AND rr.risk_policy_version = @risk_policy_version;
-
--- name: CountFindingsByPolicy :one
--- Reported next to CountAnalyzedMessages, so it stays message-scoped: a
--- skill-anchored finding has no message behind it and would inflate the
--- numerator over a denominator that never counted it. (cubic)
-SELECT COUNT(*)::BIGINT
-FROM risk_results
-WHERE project_id = @project_id
-  AND risk_policy_id = @risk_policy_id
-  AND risk_policy_version = @risk_policy_version
-  AND found IS TRUE
-  AND excluded_at IS NULL
-  AND false_positive_at IS NULL
-  AND skill_version_id IS NULL;
-
 -- name: CountAllFindings :one
 -- Project-wide total_count reported with the chat-scoped ListRiskResults
 -- page. Skill-anchored rows have no chat, so that listing never returns them.

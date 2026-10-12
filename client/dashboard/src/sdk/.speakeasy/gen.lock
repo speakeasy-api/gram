@@ -594,7 +594,6 @@ trackedFiles:
   src/funcs/riskPoliciesList.ts: {}
   src/funcs/riskPoliciesListForMcpServer.ts: {}
   src/funcs/riskPoliciesListMcpPlatformToolsets.ts: {}
-  src/funcs/riskPoliciesStatus.ts: {}
   src/funcs/riskPoliciesTrigger.ts: {}
   src/funcs/riskPoliciesUpdate.ts: {}
   src/funcs/riskPolicyBypassRequestsApprove.ts: {}
@@ -1640,7 +1639,6 @@ trackedFiles:
   src/models/components/riskpolicybypassrequest.ts: {}
   src/models/components/riskpolicyevalreview.ts: {}
   src/models/components/riskpolicymodelconfig.ts: {}
-  src/models/components/riskpolicystatus.ts: {}
   src/models/components/riskpreset.ts: {}
   src/models/components/riskpresetmatch.ts: {}
   src/models/components/riskpresetsresult.ts: {}
@@ -2318,7 +2316,6 @@ trackedFiles:
   src/models/operations/getriskoverview.ts: {}
   src/models/operations/getriskpolicy.ts: {}
   src/models/operations/getriskpolicychallenge.ts: {}
-  src/models/operations/getriskpolicystatus.ts: {}
   src/models/operations/getriskrulebreakdown.ts: {}
   src/models/operations/getrisksignals.ts: {}
   src/models/operations/getriskuserbreakdown.ts: {}
@@ -3626,8 +3623,6 @@ trackedFiles:
   src/react-query/riskPoliciesDelete.ts: {}
   src/react-query/riskPoliciesGet.core.ts: {}
   src/react-query/riskPoliciesGet.ts: {}
-  src/react-query/riskPoliciesStatus.core.ts: {}
-  src/react-query/riskPoliciesStatus.ts: {}
   src/react-query/riskPoliciesTrigger.ts: {}
   src/react-query/riskPoliciesUpdate.ts: {}
   src/react-query/riskPresets.core.ts: {}
@@ -9748,7 +9743,7 @@ examples:
     speakeasy-default-list-risk-policies:
       responses:
         "200":
-          application/json: {"policies": [{"action": "flag", "audience_principal_urns": ["<value 1>", "<value 2>", "<value 3>"], "audience_type": "everyone", "auto_name": false, "created_at": "2026-08-06T06:28:44.327Z", "enabled": false, "id": "7b0becde-53bf-4685-a74f-3cb84422ca25", "name": "<value>", "pending_messages": 203949, "policy_type": "standard", "project_id": "198766cc-028d-4e70-8fc4-d9ef15fb1a6a", "score": 5, "sources": ["<value 1>", "<value 2>"], "total_messages": 276564, "updated_at": "2025-08-21T17:12:52.240Z", "version": 358057}]}
+          application/json: {"policies": [{"action": "flag", "audience_principal_urns": ["<value 1>", "<value 2>", "<value 3>"], "audience_type": "everyone", "auto_name": false, "created_at": "2026-08-06T06:28:44.327Z", "enabled": false, "id": "7b0becde-53bf-4685-a74f-3cb84422ca25", "name": "<value>", "policy_type": "standard", "project_id": "198766cc-028d-4e70-8fc4-d9ef15fb1a6a", "score": 5, "sources": ["<value 1>", "<value 2>"], "updated_at": "2025-08-21T17:12:52.240Z", "version": 358057}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

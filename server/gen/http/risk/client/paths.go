@@ -147,11 +147,6 @@ func GetRiskAnalysisStatusRiskPath() string {
 	return "/rpc/risk.getAnalysisStatus"
 }
 
-// GetRiskPolicyStatusRiskPath returns the URL path to the risk service getRiskPolicyStatus HTTP endpoint.
-func GetRiskPolicyStatusRiskPath() string {
-	return "/rpc/risk.getPolicyStatus"
-}
-
 // CreateRiskPolicyBypassRequestRiskPath returns the URL path to the risk service createRiskPolicyBypassRequest HTTP endpoint.
 func CreateRiskPolicyBypassRequestRiskPath() string {
 	return "/rpc/risk.createPolicyBypassRequest"
