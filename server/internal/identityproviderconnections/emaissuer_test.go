@@ -68,7 +68,7 @@ func (f issuerFixture) signer(t *testing.T, kms *hookedKMSClients, cfg emaissuer
 	factory := func(ctx context.Context, ts oauth2.TokenSource) (gcpkms.SigningClient, error) {
 		return kms.inner.Factory(ctx, ts)
 	}
-	return emaissuer.NewSigner(testenv.NewLogger(t), f.ti.conn, mustURL(t, testServerURL), gcpauth.NewIdentity(gcpauth.NewStubResolver()), factory, cfg)
+	return emaissuer.NewSigner(testenv.NewLogger(t), f.ti.conn, gcpauth.NewIdentity(gcpauth.NewStubResolver()), factory, cfg)
 }
 
 func issuerURL(t *testing.T, orgID string) string {
@@ -239,7 +239,9 @@ func TestEMAIssuer_DisableStopsSigningAndReenableResumes(t *testing.T) {
 	require.Equal(t, []string{f.ti.orgID}, purger.Purged())
 	require.NoError(t, provisioner.DisableEMAIssuer(ctx, f.ti.orgID), "disabling twice is a no-op")
 
-	second, err := provisioner.EnsureEMAIssuer(ctx, f.ti.orgID)
+	// A deployment whose origin moved re-enables the same pinned issuer.
+	moved := provisiontest.NewProvisioner(t, f.ti.conn, kms.Factory, "https://moved.example.com", f.credentialID, "")
+	second, err := moved.EnsureEMAIssuer(ctx, f.ti.orgID)
 	require.NoError(t, err)
 	require.Equal(t, first, second, "re-enabling keeps the issuer")
 	require.Len(t, kms.Created(), 1, "re-enabling creates no key")

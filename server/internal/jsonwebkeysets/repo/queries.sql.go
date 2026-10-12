@@ -143,22 +143,25 @@ func (q *Queries) CountRemoteSessionClientsForJsonWebKeySet(ctx context.Context,
 }
 
 const createInternalSessionIssuer = `-- name: CreateInternalSessionIssuer :one
-INSERT INTO internal_session_issuers (organization_id, json_web_key_set_id)
-VALUES ($1, $2)
-RETURNING id, organization_id, json_web_key_set_id, disabled_at, created_at, updated_at, deleted_at, deleted
+INSERT INTO internal_session_issuers (organization_id, json_web_key_set_id, issuer)
+VALUES ($1, $2, $3)
+RETURNING id, organization_id, issuer, json_web_key_set_id, disabled_at, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateInternalSessionIssuerParams struct {
 	OrganizationID  string
 	JsonWebKeySetID uuid.UUID
+	Issuer          string
 }
 
+// The issuer URL is pinned here and never recomputed from configuration.
 func (q *Queries) CreateInternalSessionIssuer(ctx context.Context, arg CreateInternalSessionIssuerParams) (InternalSessionIssuer, error) {
-	row := q.db.QueryRow(ctx, createInternalSessionIssuer, arg.OrganizationID, arg.JsonWebKeySetID)
+	row := q.db.QueryRow(ctx, createInternalSessionIssuer, arg.OrganizationID, arg.JsonWebKeySetID, arg.Issuer)
 	var i InternalSessionIssuer
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
+		&i.Issuer,
 		&i.JsonWebKeySetID,
 		&i.DisabledAt,
 		&i.CreatedAt,
@@ -522,7 +525,7 @@ func (q *Queries) GetOrganizationEMAIssuerKeys(ctx context.Context, arg GetOrgan
 }
 
 const getOrganizationInternalSessionIssuer = `-- name: GetOrganizationInternalSessionIssuer :one
-SELECT isi.id, isi.organization_id, isi.json_web_key_set_id, isi.disabled_at, isi.created_at, isi.updated_at, isi.deleted_at, isi.deleted
+SELECT isi.id, isi.organization_id, isi.issuer, isi.json_web_key_set_id, isi.disabled_at, isi.created_at, isi.updated_at, isi.deleted_at, isi.deleted
 FROM internal_session_issuers AS isi
 JOIN organization_metadata AS o ON o.id = isi.organization_id AND o.disabled_at IS NULL
 WHERE isi.organization_id = $1
@@ -537,6 +540,7 @@ func (q *Queries) GetOrganizationInternalSessionIssuer(ctx context.Context, orga
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
+		&i.Issuer,
 		&i.JsonWebKeySetID,
 		&i.DisabledAt,
 		&i.CreatedAt,
@@ -1040,7 +1044,7 @@ SET disabled_at = CASE WHEN $1::boolean THEN COALESCE(disabled_at, clock_timesta
     updated_at = clock_timestamp()
 WHERE organization_id = $2
   AND deleted IS FALSE
-RETURNING id, organization_id, json_web_key_set_id, disabled_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, issuer, json_web_key_set_id, disabled_at, created_at, updated_at, deleted_at, deleted
 `
 
 type SetInternalSessionIssuerDisabledParams struct {
@@ -1055,6 +1059,7 @@ func (q *Queries) SetInternalSessionIssuerDisabled(ctx context.Context, arg SetI
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
+		&i.Issuer,
 		&i.JsonWebKeySetID,
 		&i.DisabledAt,
 		&i.CreatedAt,

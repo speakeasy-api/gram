@@ -132,7 +132,11 @@ func (p *Provisioner) createEMAIssuerRows(ctx context.Context, organizationID st
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("create issuer key set: %w", err)
 	}
-	issuer, err := jq.CreateInternalSessionIssuer(ctx, jwksrepo.CreateInternalSessionIssuerParams{OrganizationID: organizationID, JsonWebKeySetID: set.ID})
+	issuerURL, err := emaissuer.URL(p.cfg.ServerURL, organizationID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	issuer, err := jq.CreateInternalSessionIssuer(ctx, jwksrepo.CreateInternalSessionIssuerParams{OrganizationID: organizationID, JsonWebKeySetID: set.ID, Issuer: issuerURL.String()})
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("create organization issuer: %w", err)
 	}

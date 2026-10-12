@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
@@ -57,7 +56,6 @@ type Service struct {
 	// Enterprise authorization issuer; unset where the deployment can't provision.
 	issuerManager EnterpriseIssuerManager
 	issuerSigner  *emaissuer.Signer
-	issuerOrigin  *url.URL
 }
 
 var (
@@ -95,7 +93,6 @@ func NewService(
 			ratelimit.WithMetrics(meterProvider)),
 		issuerManager: nil,
 		issuerSigner:  nil,
-		issuerOrigin:  nil,
 	}
 }
 

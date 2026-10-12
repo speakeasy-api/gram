@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
-	"net/url"
 	"strings"
 
 	jose "github.com/go-jose/go-jose/v4"
@@ -33,7 +32,6 @@ var ErrSigningDisabled = errors.New("emaissuer: signing is disabled")
 type Signer struct {
 	logger      *slog.Logger
 	db          *pgxpool.Pool
-	origin      *url.URL
 	gcpIdentity *gcpauth.Identity
 	kmsClients  gcpkms.SigningClientFactory
 	// disabled is the platform-wide kill switch. Discovery keeps serving.
@@ -51,11 +49,10 @@ type SignerConfig struct {
 	ManagedSigner string
 }
 
-func NewSigner(logger *slog.Logger, db *pgxpool.Pool, origin *url.URL, gcpIdentity *gcpauth.Identity, kmsClients gcpkms.SigningClientFactory, cfg SignerConfig) *Signer {
+func NewSigner(logger *slog.Logger, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, kmsClients gcpkms.SigningClientFactory, cfg SignerConfig) *Signer {
 	return &Signer{
 		logger:        logger.With(attr.SlogComponent("emaissuer")),
 		db:            db,
-		origin:        origin,
 		gcpIdentity:   gcpIdentity,
 		kmsClients:    kmsClients,
 		disabled:      cfg.Disabled,
@@ -69,15 +66,11 @@ func (s *Signer) Enabled() bool {
 }
 
 // Sign serializes claims as an ID-JAG signed by the organization's active
-// issuer key, setting iss to the organization's issuer URL. Callers own every
+// issuer key, setting iss to the issuer URL pinned when it was enabled. Callers own every
 // other claim and its validation.
 func (s *Signer) Sign(ctx context.Context, organizationID string, claims map[string]any) (string, error) {
 	if !s.Enabled() {
 		return "", ErrSigningDisabled
-	}
-	issuer, err := URL(s.origin, organizationID)
-	if err != nil {
-		return "", err
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(organizationID))
 	q := repo.New(s.db)
@@ -129,7 +122,7 @@ func (s *Signer) Sign(ctx context.Context, organizationID string, claims map[str
 		return "", fmt.Errorf("build issuer KMS client: %w", err)
 	}
 	defer o11y.LogDefer(ctx, logger, "failed to close issuer KMS client", func() error { return kmsClient.Close() })
-	return sign(ctx, kmsClient, backing.ResourceName.String, key.Kid, key.PublicJwk, issuer.String(), claims)
+	return sign(ctx, kmsClient, backing.ResourceName.String, key.Kid, key.PublicJwk, row.Issuer, claims)
 }
 
 func sign(ctx context.Context, client gcpkms.SigningClient, resourceName, kid string, publicJWKDocument []byte, issuer string, claims map[string]any) (string, error) {

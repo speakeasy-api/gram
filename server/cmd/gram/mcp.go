@@ -421,7 +421,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err != nil {
 		return err
 	}
-	emaissuer.Attach(mux, db, logger, callbackOrigins.Outbound)
+	emaissuer.Attach(mux, db, logger)
 	mcp.Attach(mux, runtime.MCP, runtime.Metadata)
 	xmcp.Attach(mux, runtime.XMCP, runtime.Metadata)
 	mcp.AttachAuthenticationHost(authenticationHost, runtime.MCP)

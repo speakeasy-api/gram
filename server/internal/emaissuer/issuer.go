@@ -76,8 +76,8 @@ type discoveryDocument struct {
 }
 
 // Attach mounts the public discovery and JWKS documents.
-func Attach(mux goahttp.Muxer, db *pgxpool.Pool, logger *slog.Logger, origin *url.URL) {
-	h := &handler{db: db, logger: logger, origin: origin}
+func Attach(mux goahttp.Muxer, db *pgxpool.Pool, logger *slog.Logger) {
+	h := &handler{db: db, logger: logger}
 	const path = "/oauth/idp/org/{organizationID}"
 	for _, route := range []string{
 		path,
@@ -97,7 +97,6 @@ func Attach(mux goahttp.Muxer, db *pgxpool.Pool, logger *slog.Logger, origin *ur
 type handler struct {
 	db     *pgxpool.Pool
 	logger *slog.Logger
-	origin *url.URL
 }
 
 func (h *handler) serve(w http.ResponseWriter, r *http.Request, keys bool) error {
@@ -114,11 +113,15 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request, keys bool) error
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "load issuer keys").LogError(ctx, h.logger)
 	}
-	issuer, err := URL(h.origin, organizationID)
+	row, err := repo.New(h.db).GetOrganizationInternalSessionIssuer(ctx, organizationID)
 	if err != nil {
-		return oops.E(oops.CodeUnavailable, err, "issuer origin is unavailable").LogError(ctx, h.logger)
+		return oops.E(oops.CodeNotFound, err, "issuer not found")
 	}
-	var document any = discoveryDocument{Issuer: issuer.String(), JWKSURI: issuer.JoinPath("jwks").String()}
+	issuer, err := url.Parse(row.Issuer)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "stored issuer is not a URL").LogError(ctx, h.logger)
+	}
+	var document any = discoveryDocument{Issuer: row.Issuer, JWKSURI: issuer.JoinPath("jwks").String()}
 	contentType := "application/json"
 	if keys {
 		document = set

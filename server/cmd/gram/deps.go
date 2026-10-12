@@ -1777,8 +1777,8 @@ func newGrowthSignalsEmitter(logger *slog.Logger, posthogClient *posthog.Posthog
 
 // newEMAIssuerSigner signs as organizations' enterprise authorization issuers,
 // pinned to the provisioning service account and honoring the kill switch.
-func newEMAIssuerSigner(logger *slog.Logger, c *cli.Context, db *pgxpool.Pool, origin *url.URL, gcpIdentity *gcpauth.Identity, kmsSigningClients gcpkms.SigningClientFactory) *emaissuer.Signer {
-	return emaissuer.NewSigner(logger, db, origin, gcpIdentity, kmsSigningClients, emaissuer.SignerConfig{
+func newEMAIssuerSigner(logger *slog.Logger, c *cli.Context, db *pgxpool.Pool, gcpIdentity *gcpauth.Identity, kmsSigningClients gcpkms.SigningClientFactory) *emaissuer.Signer {
+	return emaissuer.NewSigner(logger, db, gcpIdentity, kmsSigningClients, emaissuer.SignerConfig{
 		Disabled:      c.Bool(emaIssuerSigningDisabledFlag),
 		ManagedSigner: c.String(identityProviderSigningServiceAccount),
 	})

@@ -363,9 +363,10 @@ WHERE id = @organization_id
   AND disabled_at IS NULL
 FOR UPDATE;
 
+-- The issuer URL is pinned here and never recomputed from configuration.
 -- name: CreateInternalSessionIssuer :one
-INSERT INTO internal_session_issuers (organization_id, json_web_key_set_id)
-VALUES (@organization_id, @json_web_key_set_id)
+INSERT INTO internal_session_issuers (organization_id, json_web_key_set_id, issuer)
+VALUES (@organization_id, @json_web_key_set_id, @issuer)
 RETURNING *;
 
 -- Enables or disables signing; discovery keeps serving either way.

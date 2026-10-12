@@ -482,7 +482,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills).
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
-		WithEnterpriseIssuer(config.OutboundCallbackOrigin, config.ProductFeatures, config.EnterpriseIssuerAvailable).
+		WithEnterpriseIssuer(config.ProductFeatures, config.EnterpriseIssuerAvailable).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).
 		WithAuthorization(config.Authz).
@@ -1080,7 +1080,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills).
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
-		WithEnterpriseIssuer(config.OutboundCallbackOrigin, config.ProductFeatures, config.EnterpriseIssuerAvailable).
+		WithEnterpriseIssuer(config.ProductFeatures, config.EnterpriseIssuerAvailable).
 		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).
 		WithAuthorization(config.Authz).

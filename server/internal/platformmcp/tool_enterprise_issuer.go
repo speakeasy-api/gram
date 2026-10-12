@@ -5,20 +5,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/speakeasy-api/gram/server/internal/emaissuer"
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
-// WithEnterpriseIssuer supplies the pinned issuer origin and the same setup
-// prerequisites the dashboard checks.
-func (r *PostgresReader) WithEnterpriseIssuer(origin *url.URL, features *productfeatures.Client, provisioningAvailable bool) *PostgresReader {
-	r.enterpriseIssuerOrigin = origin
+// WithEnterpriseIssuer supplies the setup prerequisites the dashboard checks.
+func (r *PostgresReader) WithEnterpriseIssuer(features *productfeatures.Client, provisioningAvailable bool) *PostgresReader {
 	r.enterpriseIssuerFeatures = features
 	r.enterpriseIssuerProvisioning = provisioningAvailable
 	return r
@@ -57,7 +53,7 @@ func registerEnterpriseIssuerTool(reg *Registrar, reader Reader) {
 		}
 		status.OrganizationID = principal.OrganizationID
 		postgres, ok := reader.(*PostgresReader)
-		if !ok || postgres.db == nil || postgres.enterpriseIssuerOrigin == nil || postgres.enterpriseIssuerFeatures == nil {
+		if !ok || postgres.db == nil || postgres.enterpriseIssuerFeatures == nil {
 			return nil, status, ErrUnavailable
 		}
 		entitled, err := postgres.enterpriseIssuerFeatures.IsFeatureEnabled(ctx, principal.OrganizationID, productfeatures.FeatureSSO)
@@ -79,11 +75,7 @@ func registerEnterpriseIssuerTool(reg *Registrar, reader Reader) {
 		if err != nil {
 			return nil, status, fmt.Errorf("read enterprise issuer: %w", err)
 		}
-		issuer, err := emaissuer.URL(postgres.enterpriseIssuerOrigin, principal.OrganizationID)
-		if err != nil {
-			return nil, status, fmt.Errorf("build enterprise issuer URL: %w", err)
-		}
-		status.Issuer = issuer.String()
+		status.Issuer = row.Issuer
 		if row.DisabledAt.Valid {
 			status.State = EnterpriseIssuerDisabled
 			status.NextStep = "Signing is disabled. Re-enable enterprise authorization from the dashboard to resume."

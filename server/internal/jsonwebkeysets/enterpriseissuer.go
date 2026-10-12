@@ -30,11 +30,9 @@ type EnterpriseIssuerManager interface {
 }
 
 // SetEnterpriseIssuer installs issuer management before serving requests.
-// origin must be the same pinned origin discovery and signing use.
-func (s *Service) SetEnterpriseIssuer(manager EnterpriseIssuerManager, signer *emaissuer.Signer, origin *url.URL) {
+func (s *Service) SetEnterpriseIssuer(manager EnterpriseIssuerManager, signer *emaissuer.Signer) {
 	s.issuerManager = manager
 	s.issuerSigner = signer
-	s.issuerOrigin = origin
 }
 
 // issuerAccess checks RBAC and the SSO entitlement; the issuer does not need
@@ -52,7 +50,7 @@ func (s *Service) issuerAccess(ctx context.Context, scope authz.Scope) (*context
 	if err != nil {
 		return nil, logger, false, oops.E(oops.CodeUnexpected, err, "error checking enterprise authorization availability").LogError(ctx, logger)
 	}
-	return authCtx, logger, entitled && s.issuerManager != nil && s.issuerOrigin != nil, nil
+	return authCtx, logger, entitled && s.issuerManager != nil, nil
 }
 
 func (s *Service) requireIssuerAdmin(ctx context.Context) (*contextvalues.AuthContext, *slog.Logger, error) {
@@ -164,9 +162,9 @@ func (s *Service) issuerView(ctx context.Context, logger *slog.Logger, organizat
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading enterprise authorization issuer").LogError(ctx, logger)
 	}
-	issuer, err := emaissuer.URL(s.issuerOrigin, organizationID)
+	issuer, err := url.Parse(row.Issuer)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnavailable, err, "enterprise authorization issuer origin is unavailable").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "stored enterprise authorization issuer is not a URL").LogError(ctx, logger)
 	}
 	keys, err := q.ListJsonWebKeys(ctx, repo.ListJsonWebKeysParams{JsonWebKeySetID: row.JsonWebKeySetID, OrganizationID: organizationID, IncludeRevoked: false})
 	if err != nil {
@@ -188,7 +186,7 @@ func (s *Service) issuerView(ctx context.Context, logger *slog.Logger, organizat
 	}
 	view.Enabled = !row.DisabledAt.Valid
 	view.SigningEnabled = view.Enabled && s.issuerSigner.Enabled()
-	view.Issuer = new(issuer.String())
+	view.Issuer = new(row.Issuer)
 	view.JwksURI = new(issuer.JoinPath("jwks").String())
 	if readyAt != nil {
 		view.RotationReadyAt = new(readyAt.UTC().Format(time.RFC3339))

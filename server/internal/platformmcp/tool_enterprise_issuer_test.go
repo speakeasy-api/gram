@@ -35,8 +35,7 @@ func TestEnterpriseIssuerToolSetupStates(t *testing.T) {
 	redis, err := platformMCPInfra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 	features := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), pool, redis)
-	origin := mustParseURL(t, "https://issuer.example.com")
-	reader := NewPostgresReader(testenv.NewLogger(t), pool).WithEnterpriseIssuer(origin, features, true)
+	reader := NewPostgresReader(testenv.NewLogger(t), pool).WithEnterpriseIssuer(features, true)
 	server := newTestMCPServer()
 	server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
@@ -63,9 +62,9 @@ func TestEnterpriseIssuerToolSetupStates(t *testing.T) {
 	require.Equal(t, EnterpriseIssuerEntitlementRequired, status.State)
 	require.Empty(t, status.Issuer)
 	require.NoError(t, features.SetFeatureEnabled(ctx, principal.OrganizationID, productfeatures.FeatureSSO, true))
-	reader.WithEnterpriseIssuer(origin, features, false)
+	reader.WithEnterpriseIssuer(features, false)
 	require.Equal(t, EnterpriseIssuerProvisioningUnavailable, read().State)
-	reader.WithEnterpriseIssuer(origin, features, true)
+	reader.WithEnterpriseIssuer(features, true)
 	require.Equal(t, EnterpriseIssuerSetupRequired, read().State)
 
 	credential := provisiontest.CreatePlatformSigningCredential(t, ctx, pool)
@@ -82,7 +81,7 @@ func TestEnterpriseIssuerToolSetupStates(t *testing.T) {
 	require.Equal(t, "https://issuer.example.com/oauth/idp/org/"+principal.OrganizationID, status.Issuer)
 
 	// A stored issuer must not bypass missing deployment configuration.
-	reader.WithEnterpriseIssuer(origin, nil, true)
+	reader.WithEnterpriseIssuer(nil, true)
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "get_enterprise_issuer", Arguments: map[string]any{}})
 	require.NoError(t, err)
 	require.True(t, result.IsError)

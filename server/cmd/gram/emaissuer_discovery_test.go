@@ -48,7 +48,7 @@ func TestMCPMuxServesEMAIssuerDiscoveryAndKeys(t *testing.T) {
 	require.NoError(t, err)
 	mux, err := newMCPServerMux(cli.NewContext(nil, flags, nil), testenv.NewLogger(t), pool, origin, host, nil, nil, &background.Publishers{})
 	require.NoError(t, err)
-	emaissuer.Attach(mux, pool, testenv.NewLogger(t), origin)
+	emaissuer.Attach(mux, pool, testenv.NewLogger(t))
 
 	issuer := "https://app.example.com/oauth/idp/org/" + organizationID
 	for _, route := range []string{

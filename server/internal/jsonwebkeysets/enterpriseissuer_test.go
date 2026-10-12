@@ -2,7 +2,6 @@ package jsonwebkeysets_test
 
 import (
 	"context"
-	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -28,12 +27,10 @@ func withIssuer(t *testing.T, ctx context.Context, ti *testInstance) {
 	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
 	kms := provisiontest.NewKMSClients(t)
 	provisioner := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, issuerOrigin, credentialID, "")
-	origin, err := url.Parse(issuerOrigin)
-	require.NoError(t, err)
-	signer := emaissuer.NewSigner(testenv.NewLogger(t), ti.conn, origin, gcpauth.NewIdentity(gcpauth.NewStubResolver()), func(ctx context.Context, ts oauth2.TokenSource) (gcpkms.SigningClient, error) {
+	signer := emaissuer.NewSigner(testenv.NewLogger(t), ti.conn, gcpauth.NewIdentity(gcpauth.NewStubResolver()), func(ctx context.Context, ts oauth2.TokenSource) (gcpkms.SigningClient, error) {
 		return kms.Factory(ctx, ts)
 	}, emaissuer.SignerConfig{})
-	ti.service.SetEnterpriseIssuer(provisioner, signer, origin)
+	ti.service.SetEnterpriseIssuer(provisioner, signer)
 	productfeaturestest.Enable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureSSO)
 }
 
