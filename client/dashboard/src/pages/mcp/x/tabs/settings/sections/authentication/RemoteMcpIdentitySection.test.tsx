@@ -49,6 +49,9 @@ const mocks = vi.hoisted(() => ({
   toastError: vi.fn(),
 }));
 
+vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
+  useCustomerManagedKeys: () => ({ entitled: false, isLoading: false }),
+}));
 vi.mock("sonner", () => ({
   toast: {
     success: mocks.toastSuccess,
@@ -144,9 +147,10 @@ vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
     });
     return { data: { result: { items } }, isLoading: false };
   },
-  // Stands in for the server's tier and search filters over the listing.
+  // Stands in for the server's tier and search filters over the listing; no
+  // tier lists every one.
   useRemoteSessionIssuersInfinite: (request: {
-    tier: "project" | "organization" | "platform";
+    tier?: "project" | "organization" | "platform";
     search?: string;
   }) => {
     mocks.tierSearch(request.tier, request.search);
@@ -166,7 +170,7 @@ vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
           : "platform";
       const q = request.search?.toLowerCase();
       return (
-        tier === request.tier &&
+        (!request.tier || tier === request.tier) &&
         (!q ||
           [issuer.name ?? "", issuer.slug, issuer.issuer].some((field) =>
             field.toLowerCase().includes(q),
@@ -384,6 +388,26 @@ function connectClient(): void {
   });
 }
 
+// A service account client (credential_owner self) bound to this server.
+function boundSelfClient(): void {
+  mocks.clients.mockReturnValue({
+    items: [
+      {
+        id: "self-client-1",
+        clientId: "service-client",
+        credentialOwner: "self",
+        tokenEndpointAuthMethod: "client_secret_basic",
+        remoteSessionIssuerId: "provider-1",
+        userSessionIssuerIds: ["user-session-issuer-1"],
+        scope: [],
+      },
+    ],
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
+}
+
 function autoConfigurableProvider(): void {
   mocks.issuers.mockReturnValue({
     data: {
@@ -572,6 +596,14 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
 });
+
+// A static credential format, picked from the Service Account panel's Static
+// group so it can't be confused with the Manual identity mode.
+function staticFormat(name: string): HTMLElement {
+  return within(
+    screen.getByRole("radiogroup", { name: "Static credential" }),
+  ).getByRole("radio", { name: new RegExp(`^${name}`) });
+}
 
 describe("RemoteMcpIdentitySectionBody", () => {
   it("names the three identity modes after the upstream service", () => {
@@ -1870,7 +1902,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
   it("labels Basic and Manual credential inputs without exposing their values", () => {
     const { container } = renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Basic" }));
+    fireEvent.click(staticFormat("Basic"));
 
     fireEvent.change(screen.getByLabelText("Username"), {
       target: { value: "operator" },
@@ -1884,7 +1916,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(container.textContent).not.toContain("basic-secret");
     expect(container.textContent).not.toContain("b3BlcmF0b3I6YmFzaWMtc2VjcmV0");
 
-    fireEvent.click(screen.getByRole("button", { name: "Manual" }));
+    fireEvent.click(staticFormat("Manual"));
     fireEvent.change(screen.getByLabelText("Header value"), {
       target: { value: "Custom manual-secret" },
     });
@@ -1931,7 +1963,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
   it("keeps password managers out of the credential fields", () => {
     renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Basic" }));
+    fireEvent.click(staticFormat("Basic"));
 
     // A username next to a password is exactly the shape a manager treats as a
     // login form, but these are credentials for the upstream service.
@@ -1951,13 +1983,16 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
   });
 
-  it("keeps Client Credentials visible but unselectable", () => {
+  it("keeps Signing Client visible but unselectable without KMS", () => {
     renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
 
-    expect(screen.getByText("Coming soon")).toBeDefined();
-    fireEvent.click(screen.getByRole("button", { name: /Client credentials/ }));
-    // Still on Bearer: the segment advertises the roadmap, it does not switch.
+    expect(screen.getByText("Requires KMS")).toBeDefined();
+    const signingKey = within(
+      screen.getByRole("radiogroup", { name: "OAuth credential" }),
+    ).getByRole("radio", { name: /^Signing Client/ }) as HTMLButtonElement;
+    expect(signingKey.disabled).toBe(true);
+    // Still on Bearer: the option advertises KMS signing, it does not switch.
     expect(screen.getByLabelText("Token")).toBeDefined();
   });
 
@@ -2204,6 +2239,204 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(dialog.textContent).toContain("unlinks the identity provider");
     expect(dialog.textContent).toContain(
       "removes the static Authorization credential",
+    );
+  });
+
+  it("asks to remove the service account client when No Identity is saved", async () => {
+    boundSelfClient();
+
+    renderIdentity();
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /static headers/,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText("Remove the service account client?"),
+    ).toBeDefined();
+    expect(dialog.textContent).toContain(
+      "requests will be rejected until you save a new identity",
+    );
+    expect(dialog.textContent).not.toContain("new credential");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(mocks.detach).toHaveBeenCalledWith({
+        request: {
+          attachUserSessionIssuerForm: {
+            id: "self-client-1",
+            userSessionIssuerId: "user-session-issuer-1",
+          },
+        },
+      }),
+    );
+  });
+
+  it("confirms replacing the service account client with User Identity", async () => {
+    boundSelfClient();
+    autoConfigurableProvider();
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText("Replace the service account client?"),
+    ).toBeDefined();
+    expect(dialog.textContent).toContain(
+      "stops this server using its current service account client",
+    );
+    expect(dialog.textContent).not.toContain("sign in again");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    // The commit replaces the bound client, so it is not detached first.
+    expect(mocks.detach).not.toHaveBeenCalled();
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+
+  it("removes a leftover credential after binding User Identity over the service account client", async () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+    boundSelfClient();
+    autoConfigurableProvider();
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText("Replace the service account client?"),
+    ).toBeDefined();
+    expect(dialog.textContent).toContain(
+      "removes the static Authorization credential",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(mocks.remove).toHaveBeenCalledWith({
+        request: { id: "header-1" },
+      }),
+    );
+    expect(mocks.commit.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.remove.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("holds Save when User Identity is left for an unfinished OAuth client", async () => {
+    connectClient();
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
+    fireEvent.click(
+      within(
+        screen.getByRole("radiogroup", { name: "OAuth credential" }),
+      ).getByRole("radio", { name: /^Client Secret/ }),
+    );
+    addCustomHeader("X-Team", "platform");
+
+    const save = screen.getByRole("button", { name: "Save" });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      screen.getByText(
+        "Finish the service account client, or cancel, to save.",
+      ),
+    ).toBeDefined();
+    fireEvent.click(save);
+    await Promise.resolve();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
+    expect(mocks.detach).not.toHaveBeenCalled();
+  });
+
+  it("holds Save when a static credential replacing the service account client is blank", () => {
+    boundSelfClient();
+
+    renderIdentity();
+    // The saved client hides the format choice until it is cleared.
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    fireEvent.click(staticFormat("Bearer"));
+    addCustomHeader("X-Team", "platform");
+
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      screen.getByText("Enter the credential, or cancel, to save."),
+    ).toBeDefined();
+
+    fireEvent.change(screen.getByLabelText("Token"), {
+      target: { value: "bearer-secret-value" },
+    });
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+  });
+
+  it("keeps a static credential an unfinished OAuth client would not replace", async () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+
+    renderIdentity();
+    fireEvent.click(
+      within(
+        screen.getByRole("radiogroup", { name: "OAuth credential" }),
+      ).getByRole("radio", { name: /^Client Secret/ }),
+    );
+    addCustomHeader("X-Team", "platform");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(mocks.create).toHaveBeenCalled());
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+
+  it("confirms the service account client replacing a static credential", async () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+    boundSelfClient();
+
+    renderIdentity();
+    addCustomHeader("X-Team", "platform");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText("Replace the shared credential?"),
+    ).toBeDefined();
+    expect(dialog.textContent).toContain(
+      "replaces the static Authorization credential with the service account client",
+    );
+    expect(dialog.textContent).not.toContain("no longer authenticate");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(mocks.remove).toHaveBeenCalledWith({
+        request: { id: "header-1" },
+      }),
     );
   });
 
