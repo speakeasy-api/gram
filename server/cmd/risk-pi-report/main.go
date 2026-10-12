@@ -4,6 +4,9 @@
 // continues the most recent run of the same commit instead: it runs only
 // missing, new or edited cases and cases the run could not fund.
 //
+// `risk-pi-report view` shows every cached run and applies the merge gate to
+// this checkout's run.
+//
 // Run it from the checkout it was built from, such as with
 // `go run ./server/cmd/risk-pi-report` at the repository root.
 package main
@@ -19,19 +22,13 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
-	or "github.com/OpenRouterTeam/go-sdk/models/components"
-	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
-	"github.com/google/uuid"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
-	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
-	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -49,14 +46,10 @@ const (
 	// dev-key provisioner ignores the org, projectID must parse as a UUID).
 	benchOrgID     = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
 	benchProjectID = "00000000-0000-0000-0000-000000000001"
-)
 
-var emptyTypedVerdict = piopenrouter.Verdict{
-	DirectiveKind: "",
-	Target:        "",
-	Operational:   false,
-	Rationale:     "",
-}
+	// viewCommand names the command that shows the cached runs.
+	viewCommand = "view"
+)
 
 type toolCallCase struct {
 	Name string `json:"name"`
@@ -64,10 +57,15 @@ type toolCallCase struct {
 }
 
 type labeledCase struct {
-	ID     string `json:"id"`
-	Label  string `json:"label"`
-	Text   string `json:"text"`
-	Source string `json:"source"`
+	// Window optionally supplies five-message evidence for contextual evaluation.
+	Window *judgemessage.Window `json:"window,omitempty"`
+
+	ID            string `json:"id"`
+	Label         string `json:"label"`
+	Text          string `json:"text"`
+	Source        string `json:"source"`
+	OriginalLabel string `json:"original_label,omitempty"`
+	RelabelReason string `json:"relabel_reason,omitempty"`
 	// Optional agent-runtime framing: plain rows omit these (judged as end-user
 	// content); typed rows carry the message type + tool the judge uses.
 	Type                   string         `json:"type,omitempty"`       // message.Type; default user_message
@@ -110,23 +108,34 @@ func (c labeledCase) judgeMessage() judgemessage.Message {
 }
 
 func main() {
-	corpusDir := flag.String("corpus-dir", defaultCorpusDir, "directory of prompt-injection JSONL fixtures to score; defaults to this checkout's")
-	resume := flag.Bool("resume", false, "continue the latest run of this checkout's code instead of starting a new one")
-	flag.Parse()
-	// A command this version does not know must not start a paid run.
-	if flag.NArg() > 0 {
-		fmt.Fprintf(os.Stderr, "risk-pi-report: unexpected argument %q\n", flag.Arg(0))
-		flag.Usage()
-		os.Exit(2)
-	}
-	if err := run(context.Background(), *corpusDir, *resume); err != nil {
+	if err := dispatch(context.Background(), os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "risk-pi-report: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, corpusDir string, resume bool) error {
-	corpus, err := loadCorpus(corpusDir)
+// dispatch runs the view command, or measures this checkout's detector.
+func dispatch(ctx context.Context, args []string) error {
+	if len(args) > 0 && args[0] == viewCommand {
+		return runView(ctx, args[1:])
+	}
+	return runMeasure(ctx, args)
+}
+
+// runMeasure scores this checkout's detector. Every commit's build of this
+// tool is run this way, so the call takes no required flag.
+func runMeasure(ctx context.Context, args []string) error {
+	flags := flag.NewFlagSet("risk-pi-report", flag.ExitOnError)
+	corpusDir := flags.String("corpus-dir", defaultCorpusDir, "directory of prompt-injection JSONL fixtures to score; defaults to this checkout's")
+	resume := flags.Bool("resume", false, "continue the latest run of this checkout's code instead of starting a new one")
+	_ = flags.Parse(args) // ExitOnError exits on a bad flag.
+	// A command this version does not know must not start a paid run.
+	if flags.NArg() > 0 {
+		fmt.Fprintf(os.Stderr, "risk-pi-report: unexpected argument %q\n", flags.Arg(0))
+		flags.Usage()
+		os.Exit(2)
+	}
+	corpus, err := loadCorpus(*corpusDir)
 	if err != nil {
 		return err
 	}
@@ -138,7 +147,7 @@ func run(ctx context.Context, corpusDir string, resume bool) error {
 	if err != nil {
 		return err
 	}
-	runDir, err := pickRunDir(runs, commit, resume, time.Now())
+	runDir, err := pickRunDir(runs, commit, *resume, time.Now())
 	if err != nil {
 		return err
 	}
@@ -167,8 +176,8 @@ var corpusOrder = []string{
 }
 
 // repeatedTextFiles hold cases that share text on purpose: paired trajectory
-// rows and AgentDojo's clean twins carry different context. Their cases are
-// never deduped.
+// rows and AgentDojo's task occurrences carry different context. Their cases
+// are never deduped.
 var repeatedTextFiles = []string{"trajectory_twins.jsonl", "agentdojo.jsonl"}
 
 // corpusFiles lists dir's fixture files in load order.
@@ -256,109 +265,6 @@ func loadCorpus(dir string) ([]labeledCase, error) {
 		return nil, fmt.Errorf("no cases in %s", dir)
 	}
 	return out, nil
-}
-
-// scanJudge judges every case, at most judgeConcurrency at a time, and hands
-// each finished case to onCase, from several goroutines at once. Cancelling
-// ctx starts no more cases.
-func scanJudge(ctx context.Context, client openrouter.CompletionClient, corpus []labeledCase, onCase func(int, caseOutcome)) {
-	sem := make(chan struct{}, judgeConcurrency)
-	var wg sync.WaitGroup
-	for i := range corpus {
-		// A cancel that lands while waiting for a slot starts no more cases.
-		// A slot taken just as ctx ends is left held; nothing waits on it.
-		select {
-		case sem <- struct{}{}:
-		case <-ctx.Done():
-		}
-		if ctx.Err() != nil {
-			break
-		}
-		wg.Go(func() {
-			defer func() { <-sem }()
-			onCase(i, judgeOne(ctx, client, corpus[i]))
-		})
-	}
-	wg.Wait()
-}
-
-// judgeOne judges a case as production does: one call with the production
-// prompt, schema, model and reasoning effort, under the production deadline.
-// It calls the completion client directly, without the engine's per-org rate
-// limiter and fail-open, so every case gets a verdict or a recorded failure.
-func judgeOne(ctx context.Context, client openrouter.CompletionClient, c labeledCase) caseOutcome {
-	callCtx, cancel := context.WithTimeout(ctx, piopenrouter.JudgeTimeout)
-	defer cancel()
-	start := time.Now()
-	verdict, costUSD, err := judgeCall(callCtx, client, c.judgeMessage(), c.trajectory())
-	return caseOutcome{verdict: verdict, costUSD: costUSD, latency: time.Since(start), err: err}
-}
-
-// judgeCall makes the judge's completion call and parses its verdict. It
-// returns the provider-reported cost even when the call yields no verdict.
-func judgeCall(ctx context.Context, client openrouter.CompletionClient, msg judgemessage.Message, trajectory judgemessage.Trajectory) (piopenrouter.Verdict, float64, error) {
-	var trajectoryPayload *judgemessage.TrajectoryPayload
-	if trajectory.HasContent() {
-		rendered := judgemessage.RenderTrajectory(trajectory)
-		trajectoryPayload = &rendered
-	}
-	payload, err := json.Marshal(struct {
-		Message    judgemessage.Payload            `json:"message"`
-		Trajectory *judgemessage.TrajectoryPayload `json:"trajectory,omitempty"`
-	}{Message: judgemessage.RenderPayload(msg), Trajectory: trajectoryPayload})
-	if err != nil {
-		return emptyTypedVerdict, 0, fmt.Errorf("marshal judge payload: %w", err)
-	}
-
-	strict := true
-	schema := or.ChatJSONSchemaConfig{
-		Name:        "prompt_attack_verdict",
-		Schema:      piopenrouter.VerdictSchema(),
-		Description: nil,
-		Strict:      optionalnullable.From(&strict),
-	}
-	temp := 0.0
-	messages := []or.ChatMessages{
-		piopenrouter.SystemMessage(),
-		or.CreateChatMessagesUser(or.ChatUserMessage{Role: or.ChatUserMessageRoleUser, Content: or.CreateChatUserMessageContentStr(string(payload)), Name: nil}),
-	}
-
-	resp, err := client.GetCompletion(ctx, openrouter.CompletionRequest{
-		MaxTokens: new(piopenrouter.MaxVerdictTokens),
-		OrgID:     benchOrgID, ProjectID: benchProjectID, Model: piopenrouter.Model, Messages: messages,
-		Temperature: &temp, UsageSource: billing.ModelUsageSourceGram, KeyType: openrouter.KeyTypeInternal,
-		KeySlot: "", ChatID: uuid.Nil, UserID: "", ExternalUserID: "", UserEmail: "",
-		HTTPMetadata: nil, APIKeyID: "", Tools: nil, ToolChoice: nil, Stream: false, JSONSchema: &schema,
-		Reasoning:    &openrouter.Reasoning{Effort: piopenrouter.ReasoningEffort, MaxTokens: nil, Exclude: nil, Enabled: nil},
-		CacheControl: nil, NormalizeOutboundMessages: false, WebSearch: nil, DisableResponseHealing: false,
-	})
-	if err != nil {
-		return emptyTypedVerdict, 0, fmt.Errorf("openrouter completion: %w", err)
-	}
-	if resp == nil || resp.Message == nil {
-		return emptyTypedVerdict, 0, fmt.Errorf("empty completion response")
-	}
-	costUSD := 0.0
-	if resp.Usage.Cost != nil {
-		costUSD = *resp.Usage.Cost
-	}
-	// Match the production judge: a truncated completion is an errored call,
-	// not a verdict, so the run never scores partial output.
-	if resp.FinishReason != nil && *resp.FinishReason == openrouter.FinishReasonLength {
-		return emptyTypedVerdict, costUSD, fmt.Errorf("completion hit the %d-token cap", piopenrouter.MaxVerdictTokens)
-	}
-	raw := strings.TrimSpace(openrouter.GetText(*resp.Message))
-	if raw == "" {
-		return emptyTypedVerdict, costUSD, fmt.Errorf("empty completion content")
-	}
-	var verdict piopenrouter.Verdict
-	if err := json.Unmarshal([]byte(raw), &verdict); err != nil {
-		return emptyTypedVerdict, costUSD, fmt.Errorf("parse judge response: %w", err)
-	}
-	if !piopenrouter.ValidVerdict(verdict) {
-		return emptyTypedVerdict, costUSD, fmt.Errorf("parse judge response: typed verdict contract is invalid")
-	}
-	return verdict, costUSD, nil
 }
 
 // newOpenRouterClient builds the real production OpenRouter client with the

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -12,67 +11,80 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
-	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	typesafe "github.com/speakeasy-api/gram/server/internal/thirdparty/typesafedecisions"
 )
 
 func recordsCase(id, label string) labeledCase {
 	return labeledCase{ID: id, Label: label, Text: "text " + id, Source: "s"}
 }
 
+// main's risk-pi-report hashes cases the same way, so a run of main's
+// detector and a run of this change key the same case alike.
 func TestCaseHashUsesTheFixtureLine(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	line := `{"id": "gram_benigns.api.001", "label": "benign", "text": "List my deployments", "source": "gram_benigns", "field_this_version_ignores": true}`
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "gram_benigns.jsonl"), []byte(line+"\n"), 0o600))
-	corpus, err := loadCorpus(dir)
+	corpus := loadReportCorpus(t)
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", defaultCorpusDir, "gram_benigns.jsonl"))
 	require.NoError(t, err)
-	var loaded labeledCase
+	line := strings.TrimSpace(strings.SplitN(string(raw), "\n", 2)[0])
+	var first labeledCase
+	require.NoError(t, json.Unmarshal([]byte(line), &first))
 	for _, c := range corpus {
-		if c.ID == "gram_benigns.api.001" {
-			loaded = c
+		if caseKey(c) == caseKey(first) {
+			sum := sha256.Sum256([]byte(line))
+			require.Equal(t, fmt.Sprintf("%x", sum)[:caseHashHexLen], caseHash(c))
+			return
 		}
 	}
-	sum := sha256.Sum256([]byte(line))
-	require.Equal(t, fmt.Sprintf("%x", sum)[:caseHashHexLen], caseHash(loaded), "a field this version ignores still counts, so every version hashes the line alike")
+	t.Fatalf("%s is not in the corpus", caseKey(first))
 }
 
 func TestRecordFromOutcomeStatuses(t *testing.T) {
 	t.Parallel()
 
-	attack := piopenrouter.Verdict{DirectiveKind: piopenrouter.DirectiveInstructionOverride, Target: piopenrouter.TargetGuardedAgent, Operational: true, Rationale: "overrides the system prompt"}
-	benign := piopenrouter.Verdict{DirectiveKind: piopenrouter.DirectiveNone, Target: piopenrouter.TargetNone, Operational: false, Rationale: "asks to list deployments"}
-	unfunded := &openrouter.HTTPError{StatusCode: http.StatusPaymentRequired, Err: openrouter.ErrInsufficientCredits}
+	finding := []scanners.Finding{{RuleID: "pi"}}
+	unavailable := promptinjection.Result{Label: promptinjection.LabelUnavailable}
 	tests := []struct {
-		name       string
-		outcome    caseOutcome
-		want       caseStatus
-		wantDetail string
+		name    string
+		outcome caseOutcome
+		want    caseStatus
 	}{
-		{name: "flagged", outcome: caseOutcome{verdict: attack, costUSD: 0.002, latency: 900 * time.Millisecond}, want: statusFlagged, wantDetail: "overrides the system prompt"},
-		{name: "clear", outcome: caseOutcome{verdict: benign, costUSD: 0.002, latency: 900 * time.Millisecond}, want: statusClear, wantDetail: "asks to list deployments"},
-		{name: "no verdict", outcome: caseOutcome{verdict: emptyTypedVerdict, costUSD: 0.002, latency: 900 * time.Millisecond, err: errors.New("parse judge response")}, want: statusNoVerdict, wantDetail: "parse judge response"},
-		{name: "out of credit", outcome: caseOutcome{verdict: emptyTypedVerdict, costUSD: 0.002, latency: 900 * time.Millisecond, err: unfunded}, want: statusOutOfCredit, wantDetail: "OpenRouter returned 402: out of credit"},
+		{name: "flagged", outcome: caseOutcome{findings: finding, verdict: promptinjection.Result{Label: promptinjection.LabelInjection}}, want: statusFlagged},
+		{name: "clear", outcome: caseOutcome{verdict: promptinjection.Result{Label: promptinjection.LabelSafe}}, want: statusClear},
+		{name: "no verdict", outcome: caseOutcome{verdict: unavailable, observation: decisionObservation{Calls: []callObservation{{Err: errors.New("bad gateway")}}}}, want: statusNoVerdict},
+		{name: "openrouter out of credit", outcome: caseOutcome{verdict: unavailable, observation: decisionObservation{Calls: []callObservation{{Err: &openrouter.HTTPError{StatusCode: http.StatusPaymentRequired, Err: openrouter.ErrInsufficientCredits}}}}}, want: statusOutOfCredit},
+		{name: "jev out of credit", outcome: caseOutcome{verdict: unavailable, observation: decisionObservation{Calls: []callObservation{{Err: &typesafe.StatusError{StatusCode: http.StatusPaymentRequired}}}}}, want: statusOutOfCredit},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			rec := recordFromOutcome(recordsCase("a", "malicious"), tc.outcome)
 			require.Equal(t, tc.want, rec.Status)
-			require.Equal(t, tc.wantDetail, rec.Detail)
 			require.Equal(t, "s::a", rec.Key)
-			require.Equal(t, piopenrouter.Model, rec.Model)
-			require.InDelta(t, 0.002, rec.CostUSD, 1e-9)
-			require.InDelta(t, 900.0, rec.LatencyMS, 1e-9)
 		})
 	}
+}
+
+func TestRecordFromOutcomeExplainsRefusal(t *testing.T) {
+	t.Parallel()
+
+	rec := recordFromOutcome(recordsCase("a", "malicious"), caseOutcome{
+		verdict:     promptinjection.Result{Label: promptinjection.LabelUnavailable},
+		refused:     true,
+		observation: decisionObservation{Calls: []callObservation{{CostUSD: 0.002}, {CostUSD: 0.003}}, Latency: 1500 * time.Millisecond},
+	})
+	require.Equal(t, statusNoVerdict, rec.Status)
+	require.Contains(t, rec.Detail, "refused")
+	require.InDelta(t, 0.005, rec.CostUSD, 1e-9)
+	require.InDelta(t, 1500, rec.LatencyMS, 1e-9)
 }
 
 func TestCasesToRunSkipsCurrentRecords(t *testing.T) {
@@ -85,21 +97,6 @@ func TestCasesToRunSkipsCurrentRecords(t *testing.T) {
 		caseKey(unfunded): {Key: caseKey(unfunded), Hash: caseHash(unfunded), Status: statusOutOfCredit},
 	}
 	require.Equal(t, []labeledCase{edited, unfunded, fresh}, casesToRun([]labeledCase{done, edited, unfunded, fresh}, records))
-}
-
-func TestTallyRunCountsEveryFinishedCase(t *testing.T) {
-	t.Parallel()
-
-	caught, falsePositive, missed, failed, unfunded, fresh := recordsCase("caught", "malicious"), recordsCase("fp", "benign"), recordsCase("missed", "malicious"), recordsCase("failed", "malicious"), recordsCase("unfunded", "benign"), recordsCase("fresh", "benign")
-	records := map[string]caseRecord{
-		caseKey(caught):        {Key: caseKey(caught), Hash: caseHash(caught), Status: statusFlagged, CostUSD: 0.5},
-		caseKey(falsePositive): {Key: caseKey(falsePositive), Hash: caseHash(falsePositive), Status: statusFlagged, CostUSD: 0.25},
-		caseKey(missed):        {Key: caseKey(missed), Hash: caseHash(missed), Status: statusClear},
-		caseKey(failed):        {Key: caseKey(failed), Hash: caseHash(failed), Status: statusNoVerdict},
-		caseKey(unfunded):      {Key: caseKey(unfunded), Hash: caseHash(unfunded), Status: statusOutOfCredit},
-	}
-	got := tallyRun([]labeledCase{caught, falsePositive, missed, failed, unfunded, fresh}, records)
-	require.Equal(t, runTally{cases: 6, done: 4, falsePositives: 1, attacks: 3, caught: 1, noVerdict: 1, outOfCredit: 1, costUSD: 0.75}, got)
 }
 
 func TestLoadRecordsKeepsLastLineAndSkipsPartialLine(t *testing.T) {
@@ -116,6 +113,37 @@ func TestLoadRecordsKeepsLastLineAndSkipsPartialLine(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, records, 1)
 	require.Equal(t, statusFlagged, records["s::a"].Status)
+}
+
+func TestLoadRecordsMissingFileIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	records, err := loadRecords(filepath.Join(t.TempDir(), casesFile))
+	require.NoError(t, err)
+	require.Empty(t, records)
+}
+
+func TestComputeTotalsCountsEveryOutcome(t *testing.T) {
+	t.Parallel()
+
+	fp, wk, missed, noVerdict, unfunded, pending := recordsCase("fp", "benign"), recordsCase("wk", "malicious"), recordsCase("missed", "malicious"), recordsCase("nov", "malicious"), recordsCase("ooc", "malicious"), recordsCase("pending", "benign")
+	record := func(c labeledCase, status caseStatus, ms float64) caseRecord {
+		return caseRecord{Key: caseKey(c), Hash: caseHash(c), Status: status, CostUSD: 0.01, LatencyMS: ms}
+	}
+	records := map[string]caseRecord{
+		caseKey(fp):        record(fp, statusFlagged, 100),
+		caseKey(wk):        record(wk, statusFlagged, 200),
+		caseKey(missed):    record(missed, statusClear, 300),
+		caseKey(noVerdict): record(noVerdict, statusNoVerdict, 400),
+		caseKey(unfunded):  record(unfunded, statusOutOfCredit, 0),
+	}
+	totals := computeTotals([]labeledCase{fp, wk, missed, noVerdict, unfunded, pending}, records)
+	require.Equal(t, sideTotals{
+		Cases: 6, Benign: 2, FalsePositives: 1, Attacks: 4, Caught: 1,
+		Refused: 0, NoVerdict: 1, OutOfCredit: 1, Pending: 1, CostUSD: totals.CostUSD,
+		LatencyP50MS: 200, LatencyP90MS: 400,
+	}, totals)
+	require.InDelta(t, 0.05, totals.CostUSD, 1e-9)
 }
 
 func TestOpenRecordsForAppendEndsAPartialLine(t *testing.T) {
@@ -227,48 +255,6 @@ func TestLockRunDirMakesASecondRunWait(t *testing.T) {
 	}
 }
 
-// blockingClient holds each completion until release closes, counting calls.
-type blockingClient struct {
-	openrouter.CompletionClient
-	calls   atomic.Int32
-	started chan struct{}
-	release chan struct{}
-}
-
-func (c *blockingClient) GetCompletion(context.Context, openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
-	c.calls.Add(1)
-	c.started <- struct{}{}
-	<-c.release
-	return nil, errors.New("blocking client released")
-}
-
-func TestScanJudgeStartsNoCaseAfterACancelWhileWaitingForASlot(t *testing.T) {
-	t.Parallel()
-
-	corpus := make([]labeledCase, judgeConcurrency+1)
-	for i := range corpus {
-		corpus[i] = recordsCase(fmt.Sprint(i), "malicious")
-	}
-	client := &blockingClient{started: make(chan struct{}, len(corpus)), release: make(chan struct{})}
-	ctx, cancel := context.WithCancel(t.Context())
-	finished := make(chan int32, 1)
-	go func() {
-		var cases atomic.Int32
-		scanJudge(ctx, client, corpus, func(int, caseOutcome) { cases.Add(1) })
-		finished <- cases.Load()
-	}()
-
-	// The first cases hold every slot, so the loop waits for one when the run
-	// is cancelled.
-	for range judgeConcurrency {
-		<-client.started
-	}
-	cancel()
-	close(client.release)
-	require.Equal(t, int32(judgeConcurrency), <-finished)
-	require.Equal(t, int32(judgeConcurrency), client.calls.Load())
-}
-
 func TestRunRecordsReusesAFinishedRunWithoutCalls(t *testing.T) {
 	t.Setenv("OPENROUTER_DEV_KEY", "")
 	t.Setenv("OPENROUTER_API_KEY", "")
@@ -285,6 +271,7 @@ func TestRunRecordsReusesAFinishedRunWithoutCalls(t *testing.T) {
 		lines = append(lines, string(raw))
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(dir, casesFile), []byte(strings.Join(lines, "\n")), 0o600))
+
 	require.NoError(t, runRecords(t.Context(), options{runDir: dir, commit: mainCommit}, []labeledCase{benign, attack}))
 	manifest, err := readManifest(filepath.Join(dir, manifestFile))
 	require.NoError(t, err)
@@ -298,10 +285,4 @@ func TestRunRecordsNeedsAKeyForNewCases(t *testing.T) {
 
 	err := runRecords(t.Context(), options{runDir: t.TempDir(), commit: mainCommit}, []labeledCase{recordsCase("new", "benign")})
 	require.ErrorContains(t, err, "set OPENROUTER_DEV_KEY")
-}
-
-func TestFirstEnvSkipsTheMisePlaceholder(t *testing.T) {
-	t.Setenv("OPENROUTER_DEV_KEY", unsetEnvPlaceholder)
-	t.Setenv("OPENROUTER_API_KEY", "sk-test")
-	require.Equal(t, "sk-test", firstEnv("OPENROUTER_DEV_KEY", "OPENROUTER_API_KEY"))
 }

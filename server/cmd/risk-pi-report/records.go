@@ -8,15 +8,24 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
+	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
+
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	typesafe "github.com/speakeasy-api/gram/server/internal/thirdparty/typesafedecisions"
 )
 
 // caseStatus is a case's outcome in a run record.
@@ -29,13 +38,13 @@ const (
 	// statusClear means the detector reached a verdict of no prompt injection.
 	statusClear caseStatus = "clear"
 
-	// statusNoVerdict means the detector reached no verdict, such as after a
-	// refusal, a malformed response or a provider failure. It scores as a miss
-	// for an attack.
+	// statusNoVerdict means the detector reached no verdict: a model refused,
+	// the verdict was malformed, the evidence was too large, or a provider
+	// failed. It scores as a miss for an attack.
 	statusNoVerdict caseStatus = "no_verdict"
 
-	// statusOutOfCredit means OpenRouter rejected a call for lack of credit.
-	// The next run redoes the case.
+	// statusOutOfCredit means a provider rejected a call for lack of credit.
+	// The next run redoes the case once the balance covers it.
 	statusOutOfCredit caseStatus = "out_of_credit"
 )
 
@@ -58,6 +67,19 @@ const (
 
 	// progressEvery is how many finished cases pass between progress lines.
 	progressEvery = 50
+
+	// costPerCaseUSD estimates one case's OpenRouter cost for the credit
+	// check: a full run of 2,046 cases costs about $2.30, and the margin
+	// covers the credit OpenRouter reserves for calls in flight.
+	costPerCaseUSD = 0.0015
+
+	// creditHeadroomUSD is balance kept beyond a run's expected cost.
+	// OpenRouter holds each in-flight call's maximum cost against the balance,
+	// so calls fail with 402 below about $1 even when the expected cost fits.
+	creditHeadroomUSD = 1.0
+
+	// creditCheckTimeout bounds each OpenRouter credit request.
+	creditCheckTimeout = 10 * time.Second
 )
 
 // caseRecord is one case's result in a run, written to cases.jsonl as soon as
@@ -74,7 +96,8 @@ type caseRecord struct {
 	// Status is the case outcome.
 	Status caseStatus `json:"status"`
 
-	// Model is the model whose verdict decided the case.
+	// Model is the model whose verdict decided the case: for the cascade, Jev
+	// when it cleared the case, otherwise the confirmer.
 	Model string `json:"model,omitempty"`
 
 	// Detail is the deciding model's rationale, or why no verdict was reached.
@@ -88,7 +111,7 @@ type caseRecord struct {
 	// CostUSD is the provider-reported cost of the case's calls.
 	CostUSD float64 `json:"cost_usd"`
 
-	// LatencyMS is the case's total time in milliseconds.
+	// LatencyMS is the case's total time in milliseconds, retries included.
 	LatencyMS float64 `json:"latency_ms"`
 }
 
@@ -105,25 +128,44 @@ type runManifest struct {
 	Updated time.Time `json:"updated"`
 }
 
-// caseOutcome is what the judge produced for one case.
-type caseOutcome struct {
-	// verdict is the judge's verdict; it is empty when err is set.
-	verdict piopenrouter.Verdict
+// sideTotals summarizes a run over a corpus. Pending cases have no record for
+// their current content yet.
+type sideTotals struct {
+	// Cases counts the corpus cases.
+	Cases int `json:"cases"`
 
-	// costUSD is the provider-reported cost of the call.
-	costUSD float64
+	// Benign counts benign cases; FalsePositives counts those flagged.
+	Benign int `json:"benign"`
 
-	// latency is the case's total time.
-	latency time.Duration
+	// FalsePositives counts benign cases flagged.
+	FalsePositives int `json:"false_positives"`
 
-	// err is why the call reached no verdict.
-	err error
-}
+	// Attacks counts malicious cases; Caught counts those flagged.
+	Attacks int `json:"attacks"`
 
-// options is one run: where its records go and the commit it measures.
-type options struct {
-	runDir string
-	commit runCommit
+	// Caught counts malicious cases flagged.
+	Caught int `json:"caught"`
+
+	// Refused counts cases the deciding model refused.
+	Refused int `json:"refused"`
+
+	// NoVerdict counts cases with no verdict.
+	NoVerdict int `json:"no_verdict"`
+
+	// OutOfCredit counts cases a provider rejected for lack of credit.
+	OutOfCredit int `json:"out_of_credit"`
+
+	// Pending counts cases with no record yet.
+	Pending int `json:"pending"`
+
+	// CostUSD sums the recorded cases' cost.
+	CostUSD float64 `json:"cost_usd"`
+
+	// LatencyP50MS and LatencyP90MS summarize decision time over recorded cases.
+	LatencyP50MS float64 `json:"latency_p50_ms"`
+
+	// LatencyP90MS is the 90th percentile decision time.
+	LatencyP90MS float64 `json:"latency_p90_ms"`
 }
 
 // caseKey identifies a case across runs.
@@ -147,29 +189,77 @@ func caseHash(c labeledCase) string {
 	return fmt.Sprintf("%x", sum)[:caseHashHexLen]
 }
 
+// isOutOfCredit reports whether a call failed because a provider balance
+// cannot fund it.
+func isOutOfCredit(err error) bool {
+	if openrouter.IsInsufficientCredits(err) {
+		return true
+	}
+	status, ok := errors.AsType[*typesafe.StatusError](err)
+	return ok && status.StatusCode == http.StatusPaymentRequired
+}
+
+// caseOutcome is what the cascade produced for one case.
+type caseOutcome struct {
+	findings    []scanners.Finding
+	verdict     promptinjection.Result
+	err         error
+	observation decisionObservation
+	refused     bool
+}
+
+// options is one run: where its records go and the commit it measures.
+type options struct {
+	runDir string
+	commit runCommit
+}
+
 // recordFromOutcome turns a finished case into its run record.
 func recordFromOutcome(c labeledCase, o caseOutcome) caseRecord {
 	rec := caseRecord{
 		Key:       caseKey(c),
 		Hash:      caseHash(c),
 		Status:    statusClear,
-		Model:     piopenrouter.Model,
+		Model:     o.verdict.Model,
 		Detail:    truncateRunes(o.verdict.Rationale, maxDetailRunes),
-		Refused:   false,
-		CostUSD:   o.costUSD,
-		LatencyMS: float64(o.latency) / float64(time.Millisecond),
+		Refused:   o.refused,
+		CostUSD:   0,
+		LatencyMS: float64(o.observation.Latency) / float64(time.Millisecond),
+	}
+	outOfCredit := isOutOfCredit(o.err)
+	var lastErr error
+	for _, call := range o.observation.Calls {
+		rec.CostUSD += call.CostUSD
+		if call.Err != nil {
+			lastErr = call.Err
+			outOfCredit = outOfCredit || isOutOfCredit(call.Err)
+		}
 	}
 	switch {
-	case openrouter.IsInsufficientCredits(o.err):
+	case outOfCredit:
 		rec.Status = statusOutOfCredit
-		rec.Detail = "OpenRouter returned 402: out of credit"
-	case o.err != nil:
+		rec.Detail = "provider returned 402: out of credit"
+	case o.err != nil || o.verdict.Label == promptinjection.LabelUnavailable:
 		rec.Status = statusNoVerdict
-		rec.Detail = truncateRunes(o.err.Error(), maxDetailRunes)
-	case piopenrouter.IsInjection(o.verdict):
+		rec.Detail = noVerdictDetail(o.refused, lastErr, o.err)
+	case len(o.findings) > 0:
 		rec.Status = statusFlagged
 	}
 	return rec
+}
+
+// noVerdictDetail says why a case reached no verdict.
+func noVerdictDetail(refused bool, lastCallErr, caseErr error) string {
+	if refused {
+		return "refused by the confirmation model"
+	}
+	if lastCallErr != nil && !errors.Is(lastCallErr, promptinjection.ErrNoVerdict) {
+		return truncateRunes(lastCallErr.Error(), maxDetailRunes)
+	}
+	if caseErr != nil {
+		return truncateRunes(caseErr.Error(), maxDetailRunes)
+	}
+	return "no verdict"
 }
 
 func truncateRunes(s string, n int) string {
@@ -223,60 +313,89 @@ func checkUniqueKeys(corpus []labeledCase) error {
 	return nil
 }
 
+// currentRecord returns the case's record when it matches the case's current
+// content.
+func currentRecord(records map[string]caseRecord, c labeledCase) (caseRecord, bool) {
+	rec, ok := records[caseKey(c)]
+	if !ok || rec.Hash != caseHash(c) {
+		var none caseRecord
+		return none, false
+	}
+	return rec, true
+}
+
 // casesToRun lists the cases without a usable record: new or edited cases,
 // and cases a previous run could not fund.
 func casesToRun(corpus []labeledCase, records map[string]caseRecord) []labeledCase {
 	var todo []labeledCase
 	for _, c := range corpus {
-		rec, ok := records[caseKey(c)]
-		if !ok || rec.Hash != caseHash(c) || rec.Status == statusOutOfCredit {
+		rec, ok := currentRecord(records, c)
+		if !ok || rec.Status == statusOutOfCredit {
 			todo = append(todo, c)
 		}
 	}
 	return todo
 }
 
-// runTally counts a run's outcomes over the corpus for the summary line.
-type runTally struct {
-	cases, done, falsePositives, attacks, caught, noVerdict, outOfCredit int
-	costUSD                                                              float64
-}
-
-func tallyRun(corpus []labeledCase, records map[string]caseRecord) runTally {
-	var t runTally
+// computeTotals summarizes a run over the corpus.
+func computeTotals(corpus []labeledCase, records map[string]caseRecord) sideTotals {
+	var t sideTotals
+	var latencies []float64
 	for _, c := range corpus {
-		t.cases++
+		t.Cases++
 		malicious := c.Label == "malicious"
-		if malicious {
-			t.attacks++
-		}
-		rec, ok := records[caseKey(c)]
-		if !ok || rec.Hash != caseHash(c) {
+		t.Attacks += boolInt(malicious)
+		t.Benign += boolInt(!malicious)
+		rec, ok := currentRecord(records, c)
+		if !ok {
+			t.Pending++
 			continue
 		}
-		t.costUSD += rec.CostUSD
+		t.CostUSD += rec.CostUSD
+		t.Refused += boolInt(rec.Refused)
 		switch rec.Status {
 		case statusOutOfCredit:
-			t.outOfCredit++
+			t.OutOfCredit++
 			continue
 		case statusNoVerdict:
-			t.noVerdict++
+			t.NoVerdict++
 		case statusFlagged:
-			if malicious {
-				t.caught++
-				break
-			}
-			t.falsePositives++
+			t.FalsePositives += boolInt(!malicious)
+			t.Caught += boolInt(malicious)
 		case statusClear:
 		}
-		t.done++
+		latencies = append(latencies, rec.LatencyMS)
 	}
+	t.LatencyP50MS = percentile(latencies, 0.5)
+	t.LatencyP90MS = percentile(latencies, 0.9)
 	return t
 }
 
-func (t runTally) line(label string) string {
-	return fmt.Sprintf("%s: %d/%d cases · FP %d · caught %d/%d · no verdict %d · out of credit %d · $%.2f",
-		label, t.done, t.cases, t.falsePositives, t.caught, t.attacks, t.noVerdict, t.outOfCredit, t.costUSD)
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// percentile returns the nearest-rank percentile of values, or 0 for none.
+func percentile(values []float64, p float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	sorted := slices.Clone(values)
+	slices.Sort(sorted)
+	rank := int(math.Ceil(p*float64(len(sorted)))) - 1
+	return sorted[max(rank, 0)]
+}
+
+// formatTotals renders a run's totals as one progress or summary line.
+func formatTotals(name string, t sideTotals) string {
+	done := t.Cases - t.Pending - t.OutOfCredit
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s: %d/%d cases · FP %d · caught %d/%d", name, done, t.Cases, t.FalsePositives, t.Caught, t.Attacks)
+	fmt.Fprintf(&b, " · refused %d · no verdict %d · out of credit %d · $%.2f", t.Refused, t.NoVerdict, t.OutOfCredit, t.CostUSD)
+	return b.String()
 }
 
 // runRecords evaluates the production detector on the cases a run directory
@@ -310,21 +429,25 @@ func runRecords(ctx context.Context, opts options, corpus []labeledCase) error {
 		if key == "" {
 			return fmt.Errorf("set OPENROUTER_DEV_KEY or OPENROUTER_API_KEY")
 		}
+		client := guardian.NewDefaultPolicy(tracenoop.NewTracerProvider()).PooledClient()
+		if err := checkCredit(ctx, client, openrouter.OpenRouterBaseURL, key, len(todo)); err != nil {
+			return err
+		}
 		stopped, err = evaluateIntoRun(ctx, opts, key, corpus, todo, records, casesPath)
 		if err != nil {
 			return err
 		}
 	}
-	tally := tallyRun(corpus, records)
-	fmt.Fprintln(os.Stderr, tally.line(opts.commit.name()))
-	if stopped || tally.outOfCredit > 0 {
-		return fmt.Errorf("%s: out of OpenRouter credit with %d cases left; add credit at https://openrouter.ai/settings/credits and rerun with -resume to continue", opts.commit.name(), tally.cases-tally.done)
+	totals := computeTotals(corpus, records)
+	fmt.Fprintln(os.Stderr, formatTotals(opts.commit.name(), totals))
+	if stopped || totals.OutOfCredit > 0 {
+		return fmt.Errorf("%s: out of credit with %d cases left; add account credit at https://openrouter.ai/settings/credits or raise the key spending limit as appropriate, then rerun with -resume to continue", opts.commit.name(), totals.Pending+totals.OutOfCredit)
 	}
 	return nil
 }
 
-// evaluateIntoRun judges todo, appending each finished case to the run. It
-// reports whether the run stopped for lack of credit.
+// evaluateIntoRun runs the detector on todo, appending each finished case to
+// the run. It reports whether the run stopped for lack of credit.
 func evaluateIntoRun(ctx context.Context, opts options, key string, corpus, todo []labeledCase, records map[string]caseRecord, casesPath string) (bool, error) {
 	file, err := openRecordsForAppend(casesPath)
 	if err != nil {
@@ -349,7 +472,7 @@ func evaluateIntoRun(ctx context.Context, opts options, key string, corpus, todo
 		}
 		// After a stop, calls cut short by the cancellation leave the case for
 		// the next run rather than recording a failure it did not have.
-		if stopped && rec.Status == statusNoVerdict {
+		if runCtx.Err() != nil && rec.Status == statusNoVerdict {
 			return
 		}
 		if rec.Status == statusOutOfCredit && !stopped {
@@ -365,11 +488,19 @@ func evaluateIntoRun(ctx context.Context, opts options, key string, corpus, todo
 		records[rec.Key] = rec
 		done++
 		if done%progressEvery == 0 {
-			fmt.Fprintln(os.Stderr, tallyRun(corpus, records).line(opts.commit.name()))
+			fmt.Fprintln(os.Stderr, formatTotals(opts.commit.name(), computeTotals(corpus, records)))
 		}
 	}
-	scanJudge(runCtx, newOpenRouterClient(key), todo, onCase)
-	return stopped, addErr
+	err = scanCascade(runCtx, key, todo, onCase)
+	if addErr != nil {
+		return stopped, addErr
+	}
+	// A run this tool cancelled for lack of credit stops cleanly; any other
+	// cancellation or failure is an error.
+	if err != nil && (!stopped || ctx.Err() != nil || !errors.Is(err, context.Canceled)) {
+		return stopped, err
+	}
+	return stopped, nil
 }
 
 // openRecordsForAppend opens a run's records for appending. A crash can cut

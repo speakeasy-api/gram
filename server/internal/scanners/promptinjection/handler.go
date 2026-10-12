@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
@@ -127,6 +128,20 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 }
 
 func promptInjectionJudgeMessage(m *riskv1.PromptInjectionAnalysis) judgemessage.Message {
+	msg := promptInjectionJudgeContent(m)
+	anchor := m.GetChatMessageId()
+	if anchor == "" {
+		anchor = m.GetParentChatMessageId()
+	}
+	msg.AnchorID, _ = uuid.Parse(anchor)
+	// A persisted part without its parent has no trustworthy position.
+	if m.GetContentPartId() == "" || msg.AnchorID != uuid.Nil {
+		msg.ChatID, _ = uuid.Parse(m.GetChatId())
+	}
+	return msg
+}
+
+func promptInjectionJudgeContent(m *riskv1.PromptInjectionAnalysis) judgemessage.Message {
 	if len(m.GetToolCalls()) == 0 {
 		return judgemessage.New(m.GetMessageType(), m.GetToolName(), m.GetBody())
 	}
