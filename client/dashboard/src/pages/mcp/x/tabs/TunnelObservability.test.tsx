@@ -90,7 +90,6 @@ describe("tunnel status evidence", () => {
       </MemoryRouter>,
     );
     expect(screen.getByText("Live status is unavailable")).toBeTruthy();
-    expect(screen.getByText("Unknown")).toBeTruthy();
     expect(screen.queryByText("Network reachable")).toBeNull();
     expect(screen.queryByText("No connected agents")).toBeNull();
   });
@@ -139,9 +138,7 @@ it("does not color unavailable history green using cached successful responses",
       />
     </MemoryRouter>,
   );
-  const card = screen.getByRole("group", { name: "MCP responses" });
-  expect(within(card).getByText("—")).toBeTruthy();
-  expect(card.getAttribute("data-tone")).not.toBe("success");
+  expect(screen.queryByRole("group", { name: "MCP responses" })).toBeNull();
   expect(screen.getByText("Activity history is unavailable")).toBeTruthy();
 });
 
@@ -269,7 +266,7 @@ it.each([
     </MemoryRouter>,
   );
   expect(
-    within(screen.getByRole("group", { name: "Transport status" })).getByText(
+    within(screen.getByRole("group", { name: "Tunnel status" })).getByText(
       summary,
     ),
   ).toBeTruthy();
@@ -335,7 +332,7 @@ it("keeps live diagnostics visible when the history range is too large", () => {
   expect(
     screen.getByText("This time range contains too much activity"),
   ).toBeTruthy();
-  expect(screen.getByText("Agents & target checks")).toBeTruthy();
+  expect(screen.getByRole("group", { name: "Tunnel status" })).toBeTruthy();
 });
 
 it("does not claim disconnection when collection is unavailable", () => {
@@ -437,7 +434,7 @@ it("distinguishes agents that disagree about target reachability", () => {
     </MemoryRouter>,
   );
   expect(
-    within(screen.getByRole("group", { name: "Transport status" })).getByText(
+    within(screen.getByRole("group", { name: "Tunnel status" })).getByText(
       "Partially reachable",
     ),
   ).toBeTruthy();
@@ -478,7 +475,7 @@ it.each([
         />
       </MemoryRouter>,
     );
-    const status = screen.getByRole("group", { name: "Transport status" });
+    const status = screen.getByRole("group", { name: "Tunnel status" });
     expect(within(status).getByText("Some checks failed")).toBeTruthy();
     expect(
       within(status).queryByText("Unreachable", { exact: true }),
@@ -512,9 +509,10 @@ it("shows activity from other MCP methods", () => {
     </MemoryRouter>,
   );
   expect(screen.getByRole("img", { name: "MCP requests" })).toBeTruthy();
-  expect(screen.getByText(/7 other requests/)).toBeTruthy();
   expect(screen.getByText("Other requests")).toBeTruthy();
-  expect(screen.getByText("7", { exact: true })).toBeTruthy();
+  expect(
+    within(screen.getByRole("group", { name: "Requests" })).getByText("7"),
+  ).toBeTruthy();
   expect(
     within(screen.getByRole("group", { name: "MCP responses" })).getByText("0"),
   ).toBeTruthy();

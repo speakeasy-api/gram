@@ -1,23 +1,29 @@
 import { ChartCard } from "@/components/chart/ChartCard";
-import { ACCENT_RED, AXIS, TOOLTIP } from "@/components/chart/palette";
+import {
+  chartColors,
+  EXPANDED_LEGEND,
+  SHARED_TOOLTIP,
+} from "@/components/chart/chartTheme";
+import { ACCENT_RED } from "@/components/chart/palette";
+import { RankedBarList } from "@/components/chart/RankedBarList";
 import {
   useIsDarkTheme,
   useSeriesColors,
 } from "@/components/chart/useSeriesColors";
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { StatRow } from "@/components/stat-row";
-import { Link } from "react-router";
-import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import { Table } from "@/components/ui/Table";
 import { Skeleton } from "@/components/ui/Skeleton";
-import type { TunneledMcpServerConnections } from "@gram/client/models/components/tunneledmcpserverconnections.js";
-import type { TunneledMcpConnection } from "@gram/client/models/components/tunneledmcpconnection.js";
-import type { TunnelMetrics } from "@gram/client/models/components/tunnelmetrics.js";
-import type { TunnelDiagnosticStep } from "@gram/client/models/components/tunneldiagnosticstep.js";
+import { Table } from "@/components/ui/Table";
+import { cn } from "@/lib/utils";
 import type { TunnelDiagnostics } from "@gram/client/models/components/tunneldiagnostics.js";
+import type { TunnelDiagnosticStep } from "@gram/client/models/components/tunneldiagnosticstep.js";
+import type { TunneledMcpConnection } from "@gram/client/models/components/tunneledmcpconnection.js";
+import type { TunneledMcpServerConnections } from "@gram/client/models/components/tunneledmcpserverconnections.js";
 import type { TunnelMetricPoint } from "@gram/client/models/components/tunnelmetricpoint.js";
+import type { TunnelMetrics } from "@gram/client/models/components/tunnelmetrics.js";
 import { useGetTunneledMcpServerMetrics } from "@gram/client/react-query/getTunneledMcpServerMetrics.js";
 import {
   CategoryScale,
@@ -29,9 +35,11 @@ import {
   Tooltip,
   type ChartOptions,
 } from "chart.js";
-import { Line } from "react-chartjs-2";
-import { useState } from "react";
 import { formatDistanceToNow } from "date-fns";
+import { ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { Line } from "react-chartjs-2";
+import { Link } from "react-router";
 
 ChartJS.register(
   CategoryScale,
@@ -41,12 +49,25 @@ ChartJS.register(
   Tooltip,
   Legend,
 );
+
 const windows = [
   { value: "hour", label: "1 hour" },
   { value: "day", label: "24 hours" },
   { value: "week", label: "7 days" },
 ] as const;
 type Window = (typeof windows)[number]["value"];
+
+const windowPhrase: Record<Window, string> = {
+  hour: "in the last hour",
+  day: "in the last 24 hours",
+  week: "in the last 7 days",
+};
+
+// The agent reports its slowest latency bin as a negative number; the chart
+// pins it just above the 60-second bound so the line stays on the axis.
+const OVER_SIXTY_SECONDS = 60_001;
+
+type Tone = "success" | "warning" | "destructive" | "neutral";
 
 export function TunnelObservability({
   id,
@@ -72,375 +93,280 @@ export function TunnelObservability({
   });
   const live = connections?.connections ?? [];
   const unavailable = error || connections?.collectionState === "unavailable";
-  const fresh = live.filter(
-    (c) =>
-      c.diagnostics?.state === "available" &&
-      (c.diagnostics.targetState === "reachable" ||
-        c.diagnostics.targetState === "unreachable"),
-  );
-  const failing = fresh.filter(
-    (c) => c.diagnostics?.targetState === "unreachable",
-  );
-  const reachable = fresh.filter(
-    (c) => c.diagnostics?.targetState === "reachable",
-  );
-  let target = "Unknown";
-  if (!unavailable && live.length > 0) {
-    target = "Not checked";
-    if (fresh.length) target = "Checks incomplete";
-    if (reachable.length === live.length) target = "Reachable";
-    if (failing.length) {
-      target = "Some checks failed";
-      if (reachable.length) target = "Partially reachable";
-      if (failing.length === live.length) target = "Unreachable";
-    }
-  }
-  let targetTone: "warning" | "success" | "destructive" = "warning";
-  if (reachable.length > 0 && reachable.length === live.length)
-    targetTone = "success";
-  if (failing.length) targetTone = "destructive";
-  if (unavailable) targetTone = "warning";
-  let connectionTone: "warning" | "success" | "neutral" = live.length
-    ? "success"
-    : "neutral";
-  if (unavailable) connectionTone = "warning";
-  const points = history.data?.points ?? [];
-  const sum = (key: "toolCalls" | "toolsList" | "successes" | "errors") =>
-    points.reduce((n, p) => n + Number(p[key] ?? 0), 0);
-  const success = sum("successes");
-  const historyReady = !history.isError && history.data?.state === "available";
-  const hasActivity = points.some(
-    (p) =>
-      p.toolCalls != null ||
-      p.toolsList != null ||
-      p.otherRequests != null ||
-      p.successes != null ||
-      p.errors != null,
-  );
   return (
-    <section className="mb-8 space-y-6" aria-label="Tunnel health and activity">
-      <StatRow
-        className="grid grid-cols-1 divide-x-0 divide-y md:grid-cols-3 md:divide-x md:divide-y-0"
-        isLoading={loading}
-        metrics={[
-          {
-            label: "Tunnel connections",
-            value: unavailable ? "Unavailable" : live.length,
-            size: unavailable ? "sm" : "md",
-            tone: connectionTone,
-            description: unavailable
-              ? "Live status could not be loaded"
-              : "Connected agents",
-          },
-          {
-            label: "Transport status",
-            value: target,
-            size: "sm",
-            tone: targetTone,
-            description: (
-              <span className="flex flex-col gap-1">
-                Network reachability from each agent
-                {!unavailable && failing.length > 0 && (
-                  <Link to={logsHref} className="underline underline-offset-4">
-                    View tool logs
-                  </Link>
-                )}
-              </span>
-            ),
-          },
-          {
-            label: "MCP responses",
-            value: historyReady && hasActivity ? success.toLocaleString() : "—",
-            tone:
-              historyReady && hasActivity && success > 0
-                ? "success"
-                : "neutral",
-            description: "Successful completions in selected range",
-          },
-        ]}
+    <section
+      className="mb-8 space-y-10"
+      aria-label="Tunnel health and activity"
+    >
+      <TunnelStatus
+        live={live}
+        loading={loading}
+        unavailable={unavailable}
+        logsHref={logsHref}
+        agentSetupHref={agentSetupHref}
       />
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-display-xs">Activity</h2>
-          <p className="text-muted-foreground text-sm">
-            Activity across all MCP servers using this tunnel.
-          </p>
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-display-xs">Activity</h2>
+            <p className="text-muted-foreground text-sm">
+              Every MCP server on this tunnel, {windowPhrase[window]}
+              {history.data?.lastSampleAt
+                ? ` · updated ${formatDistanceToNow(new Date(history.data.lastSampleAt), { addSuffix: true })}`
+                : ""}
+            </p>
+          </div>
+          <SegmentedControl
+            value={window}
+            onChange={setWindow}
+            options={[...windows]}
+          />
         </div>
-        <SegmentedControl
-          value={window}
-          onChange={setWindow}
-          options={[...windows]}
-        />
-      </div>
-      <ActivityHistory
-        history={history.data}
-        pending={history.isPending}
-        error={history.isError}
-      />
-      <div className="space-y-3">
-        <h2 className="text-display-xs">Agents & target checks</h2>
-        <p className="text-muted-foreground text-sm">
-          Network checks refresh about every 30 seconds. MCP activity comes from
-          normal traffic.
-        </p>
-        <AgentList
-          live={live}
-          loading={loading}
-          unavailable={unavailable}
-          agentSetupHref={agentSetupHref}
+        <ActivityHistory
+          history={history.data}
+          pending={history.isPending}
+          error={history.isError}
+          window={window}
         />
       </div>
     </section>
   );
 }
 
-function ActivityHistory({
-  history,
-  pending,
-  error,
-}: {
-  history?: TunnelMetrics;
-  pending: boolean;
-  error: boolean;
-}) {
-  if (pending) return <Skeleton className="h-64 w-full" />;
-  if (error || history?.state !== "available") {
-    const presentation = activityUnavailable(history?.state);
-    return <InlineEmptyState icon="chart-no-axes-combined" {...presentation} />;
-  }
-  return <ActivityCharts history={history} />;
-}
+type Status = {
+  tone: Tone;
+  title: string;
+  detail: string;
+  action?: { label: string; href: string };
+};
 
-function activityUnavailable(state?: string) {
-  switch (state) {
-    case "too_large":
-      return {
-        heading: "This time range contains too much activity",
-        description:
-          "Choose a shorter time range above. Live connection and target checks remain available.",
-      };
-    case undefined:
-    default:
-      return {
-        heading: "Activity history is unavailable",
-        description:
-          "History refreshes automatically. Live tunnel status is shown below.",
-      };
+// One sentence answers "is the tunnel working?"; the agent rows below explain
+// it. Only the reachability checks agents reported recently count, so a
+// legacy agent without diagnostics never reads as healthy or broken.
+function tunnelStatus(
+  live: TunneledMcpConnection[],
+  unavailable: boolean,
+  links: { logsHref: string; agentSetupHref: string },
+): Status {
+  if (unavailable) {
+    return {
+      tone: "warning",
+      title: "Live status is unavailable",
+      detail:
+        "The latest connection status could not be loaded. Retrying automatically.",
+    };
   }
-}
-
-function ActivityCharts({ history }: { history: TunnelMetrics }) {
-  const points = history.points;
-  const sum = (key: "toolCalls" | "toolsList" | "otherRequests" | "errors") =>
-    points.reduce((n, p) => n + Number(p[key] ?? 0), 0);
-  return (
-    <>
-      <div className="grid gap-6 lg:grid-cols-2">
-        <MetricChart
-          title="MCP requests"
-          points={points}
-          series={[
-            { key: "toolCalls", label: "Tool calls" },
-            { key: "toolsList", label: "Tools/list" },
-            { key: "otherRequests", label: "Other requests" },
-            { key: "errors", label: "Errors", error: true },
-          ]}
-        />
-        <MetricChart
-          title="Tunnel connections"
-          points={points}
-          series={[
-            { key: "connections", label: "Agents" },
-            { key: "consumerSessions", label: "Consumer sessions" },
-            { key: "activeRequests", label: "Active requests" },
-          ]}
-        />
-      </div>
-      <MetricChart
-        title="Completion latency · histogram upper bounds"
-        points={points}
-        series={[
-          { key: "p50Ms", label: "p50 (ms)" },
-          { key: "p95Ms", label: "p95 (ms)" },
-        ]}
-      />
-      <p className="text-muted-foreground text-xs">
-        The final latency bin means more than 60 seconds.
-      </p>
-      <div className="flex flex-wrap justify-between gap-3 text-sm">
-        <p className="text-muted-foreground">
-          {sum("toolCalls").toLocaleString()} tool calls ·{" "}
-          {sum("toolsList").toLocaleString()} tools/list ·{" "}
-          {sum("otherRequests").toLocaleString()} other requests ·{" "}
-          {sum("errors").toLocaleString()} errors ·{" "}
-          {points
-            .reduce((n, p) => n + (p.connectionsOpened ?? 0), 0)
-            .toLocaleString()}{" "}
-          connections opened
-        </p>
-        <p className="text-muted-foreground">
-          {history?.lastSampleAt
-            ? `Latest sample ${formatDistanceToNow(new Date(history.lastSampleAt), { addSuffix: true })}`
-            : "No samples received yet"}
-        </p>
-      </div>
-      <p className="text-muted-foreground text-xs">
-        Metrics are best-effort. Only reporting servers contribute to these
-        counts.
-        {points.some((p) => p.collectionPartial) &&
-          " Some aggregates were lost; counts are incomplete."}
-      </p>
-      <details className="border p-4">
-        <summary className="cursor-pointer text-sm font-medium">
-          View activity data
-        </summary>
-        <div className="mt-4 max-h-80 overflow-auto">
-          <Table
-            data={points}
-            rowKey={(p) => p.time.toISOString()}
-            columns={[
-              {
-                key: "time",
-                header: "Time",
-                render: (p) => p.time.toLocaleString(),
-              },
-              {
-                key: "toolCalls",
-                header: "Tool calls",
-                render: (p) => p.toolCalls ?? "—",
-              },
-              {
-                key: "toolsList",
-                header: "Tools/list",
-                render: (p) => p.toolsList ?? "—",
-              },
-              {
-                key: "otherRequests",
-                header: "Other requests",
-                render: (p) => p.otherRequests ?? "—",
-              },
-              {
-                key: "errors",
-                header: "Errors",
-                render: (p) => p.errors ?? "—",
-              },
-              {
-                key: "connections",
-                header: "Connections",
-                render: (p) => p.connections?.toFixed(1) ?? "—",
-              },
-              {
-                key: "p95Ms",
-                header: "p95",
-                render: (p) => latencyLabel(p.p95Ms),
-              },
-            ]}
-          />
-        </div>
-      </details>
-      <p className="text-muted-foreground text-sm">
-        Missing samples show as gaps. Zero connections are recorded for up to
-        five minutes after a disconnect. Requests count attempts; errors count
-        completions, which may fall in a later interval.
-      </p>
-      {history?.clients.length ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-eyebrow">Client families</span>
-          {history.clients.map((c) => (
-            <Badge key={c.family} variant="neutral">
-              <Badge.Text>
-                {c.family} · {Number(c.requests).toLocaleString()}
-              </Badge.Text>
-            </Badge>
-          ))}
-        </div>
-      ) : null}
-    </>
+  if (!live.length) {
+    return {
+      tone: "neutral",
+      title: "No connected agents",
+      detail:
+        "Requests to this server fail until a tunnel agent connects from the network that hosts it.",
+      action: { label: "View agent setup", href: links.agentSetupHref },
+    };
+  }
+  const agents = `${live.length} ${live.length === 1 ? "agent" : "agents"}`;
+  const checked = live.filter(
+    (c) =>
+      c.diagnostics?.state === "available" &&
+      (c.diagnostics.targetState === "reachable" ||
+        c.diagnostics.targetState === "unreachable"),
   );
+  const failing = checked.filter(
+    (c) => c.diagnostics?.targetState === "unreachable",
+  ).length;
+  const logs = { label: "View tool logs", href: links.logsHref };
+  if (failing && failing === live.length) {
+    return {
+      tone: "destructive",
+      title: "Unreachable",
+      detail: `${agents} connected, but none can reach the MCP server.`,
+      action: logs,
+    };
+  }
+  if (failing && failing < checked.length) {
+    return {
+      tone: "warning",
+      title: "Partially reachable",
+      detail: `${failing} of ${agents} cannot reach the MCP server.`,
+      action: logs,
+    };
+  }
+  if (failing) {
+    return {
+      tone: "warning",
+      title: "Some checks failed",
+      detail: `${failing} of ${agents} cannot reach the MCP server; the rest have not reported a check.`,
+      action: logs,
+    };
+  }
+  if (checked.length === live.length) {
+    return {
+      tone: "success",
+      title: "Reachable",
+      detail: `${agents} connected and able to reach the MCP server.`,
+    };
+  }
+  return {
+    tone: "neutral",
+    title: checked.length ? "Checks incomplete" : "Not checked",
+    detail: `${agents} connected. Reachability is reported once each agent runs its network checks.`,
+  };
 }
 
-function AgentList({
+const dotClass: Record<Tone, string> = {
+  success: "bg-success-default",
+  warning: "bg-warning-default",
+  destructive: "bg-destructive-default",
+  neutral: "bg-muted-foreground",
+};
+
+const titleClass: Record<Tone, string> = {
+  success: "text-default-success",
+  warning: "text-default-warning",
+  destructive: "text-default-destructive",
+  neutral: "text-foreground",
+};
+
+function TunnelStatus({
   live,
   loading,
   unavailable,
+  logsHref,
   agentSetupHref,
 }: {
   live: TunneledMcpConnection[];
   loading: boolean;
   unavailable: boolean;
+  logsHref: string;
   agentSetupHref: string;
 }) {
-  if (loading) return <Skeleton className="h-40 w-full" />;
-  if (unavailable)
-    return (
-      <InlineEmptyState
-        icon="wifi-off"
-        heading="Live status is unavailable"
-        description="The latest connection status could not be loaded. Retrying automatically."
-      />
-    );
-  if (!live.length)
-    return (
-      <InlineEmptyState
-        icon="unplug"
-        heading="No connected agents"
-        description="Start your tunnel agent and check its connection to the gateway."
-        action={
-          <Link to={agentSetupHref}>
-            <Button variant="secondary" size="sm">
-              <Button.Text>View agent setup</Button.Text>
+  if (loading) return <Skeleton className="h-36 w-full" />;
+  const status = tunnelStatus(live, unavailable, { logsHref, agentSetupHref });
+  const sessions = live.reduce((n, c) => n + c.activeConsumerSessions, 0);
+  const inFlight = live.reduce((n, c) => n + c.activeSubstreams, 0);
+  return (
+    <div className="bg-card border">
+      <div
+        className="flex flex-wrap items-start justify-between gap-4 p-6"
+        role="group"
+        aria-label="Tunnel status"
+      >
+        <div className="min-w-0 space-y-2">
+          <p className="text-eyebrow">Tunnel status</p>
+          <div className="flex items-center gap-3">
+            <span
+              aria-hidden
+              className={cn(
+                "size-2 shrink-0 rounded-full",
+                dotClass[status.tone],
+              )}
+            />
+            <p
+              className={cn(
+                "font-display text-[2rem] leading-none font-thin",
+                titleClass[status.tone],
+              )}
+            >
+              {status.title}
+            </p>
+          </div>
+          <p className="text-muted-foreground max-w-prose text-sm">
+            {status.detail}
+          </p>
+        </div>
+        {status.action && (
+          <Link to={status.action.href}>
+            <Button
+              variant={status.tone === "neutral" ? "primary" : "secondary"}
+              size="sm"
+            >
+              <Button.Text>{status.action.label}</Button.Text>
             </Button>
           </Link>
-        }
-      />
-    );
-  return (
-    <>
-      {live.map((c) => (
-        <AgentDiagnostics key={c.gatewaySessionId} connection={c} />
-      ))}
-    </>
+        )}
+      </div>
+      {live.length > 0 && !unavailable && (
+        <>
+          <dl className="flex flex-wrap gap-x-8 gap-y-2 border-t px-6 py-3 text-sm">
+            <Fact label="Agents" value={live.length} />
+            <Fact label="Client sessions" value={sessions} />
+            <Fact label="Requests in flight" value={inFlight} />
+          </dl>
+          <ul className="divide-y border-t">
+            {[...live].sort(bySeverity).map((c) => (
+              <AgentRow key={c.gatewaySessionId} connection={c} />
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
   );
 }
 
-function AgentDiagnostics({
-  connection: c,
-}: {
-  connection: TunneledMcpConnection;
-}) {
+// Agents that cannot reach the target come first: they are why the status
+// above is not green.
+const severity = { destructive: 0, warning: 1, success: 2 } as const;
+function bySeverity(a: TunneledMcpConnection, b: TunneledMcpConnection) {
   return (
-    <article className="bg-card space-y-4 border p-5">
+    severity[diagnosticTone(a.diagnostics)] -
+    severity[diagnosticTone(b.diagnostics)]
+  );
+}
+
+function Fact({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-baseline gap-2">
+      <dt className="text-eyebrow">{label}</dt>
+      <dd className="tabular-nums">{value.toLocaleString()}</dd>
+    </div>
+  );
+}
+
+function AgentRow({ connection: c }: { connection: TunneledMcpConnection }) {
+  const d = c.diagnostics;
+  const supported = d && d.state !== "unsupported";
+  return (
+    <li className="space-y-3 px-6 py-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="font-medium">{c.serviceVersion}</h3>
-          <p className="text-muted-foreground break-all font-mono text-xs">
-            Agent {c.agentVersion ?? "unknown"} ·{" "}
-            {c.gatewaySessionId.slice(0, 8)}
+        <div className="min-w-0 space-y-1">
+          <p className="text-sm font-medium">
+            {c.serviceVersion}
+            <span className="text-muted-foreground font-normal">
+              {" "}
+              · agent {c.agentVersion ?? "unknown"}
+            </span>
           </p>
+          {c.targetDisplay ? (
+            <p
+              className="text-muted-foreground truncate font-mono text-xs"
+              title={c.targetDisplay}
+            >
+              {c.targetDisplay}
+            </p>
+          ) : null}
         </div>
-        <Badge variant={diagnosticTone(c.diagnostics)}>
-          <Badge.Text>{diagnosticLabel(c.diagnostics)}</Badge.Text>
-        </Badge>
+        <div className="flex items-center gap-3">
+          <span className="text-muted-foreground text-xs">
+            Reported{" "}
+            {formatDistanceToNow(new Date(c.lastHeartbeatAt), {
+              addSuffix: true,
+            })}
+          </span>
+          <Badge variant={diagnosticTone(d)}>
+            <Badge.Text>{diagnosticLabel(d)}</Badge.Text>
+          </Badge>
+        </div>
       </div>
-      {c.targetDisplay ? (
-        <p className="break-all font-mono text-sm">{c.targetDisplay}</p>
-      ) : null}
-      {!c.diagnostics || c.diagnostics.state === "unsupported" ? (
-        <p className="text-muted-foreground text-sm">
-          Target checks are unavailable for this connection. Update the agent
-          and gateway to enable diagnostics; forwarding remains supported.
-        </p>
+      {supported ? (
+        <DiagnosticDetails value={d} />
       ) : (
-        <DiagnosticDetails value={c.diagnostics} />
+        <p className="text-muted-foreground text-sm">
+          This agent does not report network checks. Update the agent and
+          gateway to see them; forwarding still works.
+        </p>
       )}
-      <p className="text-muted-foreground text-xs">
-        {c.activeConsumerSessions} consumer sessions · {c.activeSubstreams}{" "}
-        active requests · Connection snapshot{" "}
-        {formatDistanceToNow(new Date(c.lastHeartbeatAt), {
-          addSuffix: true,
-        })}
-      </p>
-    </article>
+    </li>
   );
 }
 
@@ -451,28 +377,6 @@ function diagnosticTone(
   if (d.targetState === "unreachable") return "destructive";
   if (d.targetState === "reachable") return "success";
   return "warning";
-}
-
-function latencyLabel(value?: number | null) {
-  if (value == null) return "—";
-  if (value < 0) return ">60 s";
-  return `${value} ms`;
-}
-
-function stepLabel(step?: TunnelDiagnosticStep) {
-  switch (step?.state) {
-    case "not_tested":
-    case undefined:
-      return "Not checked";
-    case "pass":
-      return `Passed · ${step.durationMs} ms`;
-    case "fail":
-      return "Failed";
-    case "not_applicable":
-      return "Not applicable";
-    default:
-      return "Not checked";
-  }
 }
 
 function diagnosticLabel(d?: TunnelDiagnostics) {
@@ -500,6 +404,7 @@ function diagnosticLabel(d?: TunnelDiagnostics) {
     )[d.targetState ?? "unknown"] ?? "Unknown"
   );
 }
+
 const failures: Record<string, string> = {
   dns_not_found: "Hostname was not found. Check DNS and the target hostname.",
   dns_timeout: "DNS lookup timed out. Check DNS on the agent host.",
@@ -515,17 +420,41 @@ const failures: Record<string, string> = {
     "A proxy is configured. Direct network probes are skipped; HTTP reachability is observed from normal traffic.",
   unknown: "The transport failed. Check the local agent logs.",
 };
+
+const summaryClass =
+  "text-muted-foreground hover:text-foreground flex w-fit cursor-pointer list-none items-center gap-1 text-sm [&::-webkit-details-marker]:hidden";
+
+const stepNames = ["DNS", "TCP", "TLS"] as const;
+
+function stepLabel(step?: TunnelDiagnosticStep) {
+  switch (step?.state) {
+    case "pass":
+      return `Passed · ${step.durationMs} ms`;
+    case "fail":
+      return "Failed";
+    case "not_applicable":
+      return "Not applicable";
+    case "not_tested":
+    case undefined:
+    default:
+      return "Not checked";
+  }
+}
+
+function stepTone(step?: TunnelDiagnosticStep, blocked?: boolean): Tone {
+  if (blocked) return "neutral";
+  if (step?.state === "pass") return "success";
+  if (step?.state === "fail") return "destructive";
+  return "neutral";
+}
+
 function DiagnosticDetails({ value: d }: { value: TunnelDiagnostics }) {
-  const steps = [
-    ["DNS", d.dns],
-    ["TCP", d.tcp],
-    ["TLS", d.tls],
-  ] as const;
-  const failure = steps.find(([, s]) => s?.failure)?.[1]?.failure;
+  const steps = [d.dns, d.tcp, d.tls];
+  const failure = steps.find((s) => s?.failure)?.failure;
   return (
-    <>
+    <div className="space-y-3">
       {failure && d.state === "available" && (
-        <p className="text-sm">
+        <p className="text-default-destructive text-sm">
           {failures[failure] ?? "Transport check unavailable."}
         </p>
       )}
@@ -536,27 +465,39 @@ function DiagnosticDetails({ value: d }: { value: TunnelDiagnostics }) {
           These results may no longer reflect the target.
         </p>
       )}
-      <details>
-        <summary className="cursor-pointer text-sm font-medium">
+      <details className="group">
+        <summary className={summaryClass}>
+          <ChevronRight className="size-4 transition-transform group-open:rotate-90" />
           Connection details
         </summary>
-        <div className="mt-4 space-y-4">
-          <dl className="space-y-2">
-            {steps.map(([label, step], index) => {
-              const blockedBy = steps
-                .slice(0, index)
-                .find(([, previous]) => previous?.state === "fail");
+        <div className="mt-3 space-y-4 pl-5">
+          <dl className="grid max-w-md grid-cols-[3rem_1fr] gap-x-4 gap-y-1.5 text-sm">
+            {stepNames.map((label, index) => {
+              const step = steps[index];
+              const blockedBy = stepNames.find(
+                (_, i) => i < index && steps[i]?.state === "fail",
+              );
               const blocked =
-                blockedBy && (!step || step.state === "not_tested");
+                !!blockedBy && (!step || step.state === "not_tested");
               return (
-                <div
-                  key={label}
-                  className="flex flex-wrap gap-x-4 gap-y-1 text-sm"
-                >
-                  <dt className="w-8 font-mono">{label}</dt>
-                  <dd>
+                <div key={label} className="contents">
+                  <dt className="text-eyebrow self-center">{label}</dt>
+                  <dd
+                    className={cn(
+                      "flex items-center gap-2",
+                      stepTone(step, blocked) === "neutral" &&
+                        "text-muted-foreground",
+                    )}
+                  >
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "size-1.5 shrink-0 rounded-full",
+                        dotClass[stepTone(step, blocked)],
+                      )}
+                    />
                     {blocked
-                      ? `Not checked (${blockedBy[0]} failed)`
+                      ? `Not checked (${blockedBy} failed)`
                       : stepLabel(step)}
                   </dd>
                 </div>
@@ -575,42 +516,27 @@ function DiagnosticDetails({ value: d }: { value: TunnelDiagnostics }) {
           )}
         </div>
       </details>
-    </>
+    </div>
   );
 }
 
 function HttpProgress({ value: d }: { value: TunnelDiagnostics }) {
+  let note: string | null = null;
   if (d.state === "disabled") {
-    return (
-      <p className="text-muted-foreground text-sm">
-        HTTP progress is unavailable because diagnostics are disabled.
-      </p>
-    );
+    note = "HTTP progress is unavailable because diagnostics are disabled.";
+  } else if (d.state !== "available") {
+    note = "HTTP progress unavailable. Waiting for a fresh report.";
+  } else if (!d.httpProgress) {
+    note = "HTTP progress unavailable for this agent.";
+  } else if (!Number(d.requestsTotal)) {
+    note = "HTTP / MCP: Not observed. No traffic has reached this agent.";
   }
-  if (d.state !== "available") {
-    return (
-      <p className="text-muted-foreground text-sm">
-        HTTP progress unavailable. Waiting for a fresh report.
-      </p>
-    );
-  }
-  if (!d.httpProgress) {
-    return (
-      <p className="text-muted-foreground text-sm">
-        HTTP progress unavailable for this agent.
-      </p>
-    );
-  }
-  if (!Number(d.requestsTotal)) {
-    return (
-      <p className="text-muted-foreground text-sm">
-        HTTP / MCP: Not observed. No traffic has reached this agent.
-      </p>
-    );
+  if (note || !d.httpProgress) {
+    return <p className="text-muted-foreground text-sm">{note}</p>;
   }
   return (
     <div className="space-y-2">
-      <dl className="grid grid-cols-2 gap-4">
+      <dl className="grid max-w-md grid-cols-2 gap-4">
         <div>
           <dt className="text-eyebrow">Waiting for response headers</dt>
           <dd className="mt-1 text-sm tabular-nums">
@@ -624,13 +550,318 @@ function HttpProgress({ value: d }: { value: TunnelDiagnostics }) {
           </dd>
         </div>
       </dl>
-      <p className="text-muted-foreground text-sm">
+      <p className="text-muted-foreground max-w-prose text-sm">
         Counts are from the latest report. Open streams may be expected. HTTP
         responses alone do not confirm MCP success; activity charts show
         observed MCP outcomes.
       </p>
     </div>
   );
+}
+
+function ActivityHistory({
+  history,
+  pending,
+  error,
+  window,
+}: {
+  history?: TunnelMetrics;
+  pending: boolean;
+  error: boolean;
+  window: Window;
+}) {
+  if (pending) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-[7.5rem] w-full" />
+        <Skeleton className="h-80 w-full" />
+      </div>
+    );
+  }
+  if (error || history?.state !== "available") {
+    const presentation = activityUnavailable(history?.state);
+    return <InlineEmptyState icon="chart-no-axes-combined" {...presentation} />;
+  }
+  return <ActivityCharts history={history} window={window} />;
+}
+
+function activityUnavailable(state?: string) {
+  switch (state) {
+    case "too_large":
+      return {
+        heading: "This time range contains too much activity",
+        description:
+          "Choose a shorter time range above. Live connection and target checks remain available.",
+      };
+    case undefined:
+    default:
+      return {
+        heading: "Activity history is unavailable",
+        description:
+          "History refreshes automatically. Live tunnel status is shown above.",
+      };
+  }
+}
+
+type CountKey =
+  | "toolCalls"
+  | "toolsList"
+  | "otherRequests"
+  | "successes"
+  | "errors"
+  | "connectionsOpened";
+
+function total(points: TunnelMetricPoint[], key: CountKey) {
+  return points.reduce((n, p) => n + Number(p[key] ?? 0), 0);
+}
+
+function percentile(points: TunnelMetricPoint[]) {
+  const values = points
+    .map((p) => p.p95Ms)
+    .filter((v): v is number => v != null);
+  if (!values.length) return null;
+  if (values.some((v) => v < 0)) return -1;
+  return Math.max(...values);
+}
+
+function ActivityCharts({
+  history,
+  window,
+}: {
+  history: TunnelMetrics;
+  window: Window;
+}) {
+  const points = history.points;
+  const hasRequests = points.some(
+    (p) =>
+      p.toolCalls != null ||
+      p.toolsList != null ||
+      p.otherRequests != null ||
+      p.successes != null ||
+      p.errors != null,
+  );
+  const requests =
+    total(points, "toolCalls") +
+    total(points, "toolsList") +
+    total(points, "otherRequests");
+  const successes = total(points, "successes");
+  const errors = total(points, "errors");
+  const completions = successes + errors;
+  const errorRate = completions ? errors / completions : 0;
+  const p95 = percentile(points);
+  const partial = points.some((p) => p.collectionPartial);
+  const clients = [...history.clients].sort((a, b) => b.requests - a.requests);
+  return (
+    <div className="space-y-6">
+      <StatRow
+        className="grid grid-cols-2 divide-x-0 divide-y md:grid-cols-4 md:divide-x md:divide-y-0"
+        metrics={[
+          {
+            label: "Requests",
+            value: hasRequests ? requests.toLocaleString() : "—",
+            size: "sm",
+            tone: "neutral",
+            description: hasRequests
+              ? `${total(points, "toolCalls").toLocaleString()} tool calls`
+              : "No requests recorded",
+          },
+          {
+            label: "MCP responses",
+            value: hasRequests ? successes.toLocaleString() : "—",
+            size: "sm",
+            tone: hasRequests && successes > 0 ? "success" : "neutral",
+            description: "Completed successfully",
+          },
+          {
+            label: "Errors",
+            value: hasRequests ? errors.toLocaleString() : "—",
+            size: "sm",
+            tone: errors > 0 ? "destructive" : "neutral",
+            description: completions
+              ? `${(errorRate * 100).toFixed(errorRate < 0.1 ? 1 : 0)}% of completed requests`
+              : "No completed requests",
+          },
+          {
+            label: "Slowest p95",
+            value: latencyLabel(p95),
+            size: "sm",
+            tone: "neutral",
+            description: "Response time, worst interval",
+          },
+        ]}
+      />
+      <div className="grid gap-6 xl:grid-cols-3">
+        <div className="xl:col-span-2">
+          <MetricChart
+            title="MCP requests"
+            points={points}
+            window={window}
+            series={[
+              { key: "toolCalls", label: "Tool calls" },
+              { key: "toolsList", label: "Tool listings" },
+              { key: "otherRequests", label: "Other requests" },
+              { key: "errors", label: "Errors", error: true },
+            ]}
+          />
+        </div>
+        <ChartCard
+          title="Requests by client"
+          chartId="tunnel-clients"
+          expandable={false}
+          hasData={clients.length > 0}
+          expandedChart={null}
+          onExpand={() => {}}
+        >
+          <div className="overflow-y-auto pt-1 xl:h-60">
+            {clients.length ? (
+              <RankedBarList
+                items={clients.map((c) => ({
+                  key: c.family,
+                  label: clientLabel(c.family),
+                  value: c.requests,
+                  valueLabel: c.requests.toLocaleString(),
+                }))}
+              />
+            ) : (
+              <p className="text-muted-foreground text-sm">
+                No client has sent a request {windowPhrase[window]}.
+              </p>
+            )}
+          </div>
+        </ChartCard>
+      </div>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <MetricChart
+          title="Response time"
+          points={points}
+          window={window}
+          latency
+          series={[
+            { key: "p50Ms", label: "p50" },
+            { key: "p95Ms", label: "p95" },
+          ]}
+        />
+        <MetricChart
+          title="Tunnel connections"
+          points={points}
+          window={window}
+          series={[
+            { key: "connections", label: "Agents" },
+            { key: "consumerSessions", label: "Client sessions" },
+            { key: "activeRequests", label: "Requests in flight" },
+          ]}
+        />
+      </div>
+      {partial && (
+        <p className="text-default-warning text-sm">
+          Some aggregates were lost in this range, so counts are incomplete.
+        </p>
+      )}
+      <AboutTheseNumbers points={points} />
+    </div>
+  );
+}
+
+function clientLabel(family: string) {
+  const known: Record<string, string> = {
+    claude: "Claude",
+    cursor: "Cursor",
+    vscode: "VS Code",
+    chatgpt: "ChatGPT",
+    other: "Other clients",
+  };
+  return known[family] ?? family.charAt(0).toUpperCase() + family.slice(1);
+}
+
+function AboutTheseNumbers({ points }: { points: TunnelMetricPoint[] }) {
+  return (
+    <details className="group border-t pt-4">
+      <summary className={summaryClass}>
+        <ChevronRight className="size-4 transition-transform group-open:rotate-90" />
+        About these numbers
+      </summary>
+      <div className="mt-4 space-y-4">
+        <ul className="text-muted-foreground max-w-prose list-disc space-y-1 pl-5 text-sm">
+          <li>
+            Metrics are best-effort. Only reporting servers contribute to these
+            counts, and missing samples show as gaps.
+          </li>
+          <li>
+            Requests count attempts; responses and errors count completions,
+            which may fall in a later interval.
+          </li>
+          <li>
+            Zero connections are recorded for up to five minutes after a
+            disconnect. {total(points, "connectionsOpened").toLocaleString()}{" "}
+            connections opened in this range.
+          </li>
+          <li>
+            Response times are histogram bounds; the slowest bin means more than
+            60 seconds.
+          </li>
+        </ul>
+        <div className="max-h-80 overflow-auto border">
+          <Table
+            data={points}
+            rowKey={(p) => p.time.toISOString()}
+            columns={[
+              {
+                key: "time",
+                header: "Time",
+                render: (p) => p.time.toLocaleString(),
+              },
+              {
+                key: "toolCalls",
+                header: "Tool calls",
+                render: (p) => p.toolCalls ?? "—",
+              },
+              {
+                key: "toolsList",
+                header: "Tool listings",
+                render: (p) => p.toolsList ?? "—",
+              },
+              {
+                key: "otherRequests",
+                header: "Other requests",
+                render: (p) => p.otherRequests ?? "—",
+              },
+              {
+                key: "errors",
+                header: "Errors",
+                render: (p) => p.errors ?? "—",
+              },
+              {
+                key: "connections",
+                header: "Agents",
+                render: (p) => p.connections?.toFixed(1) ?? "—",
+              },
+              {
+                key: "p95Ms",
+                header: "p95",
+                render: (p) => latencyLabel(p.p95Ms),
+              },
+            ]}
+          />
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function latencyLabel(value?: number | null) {
+  if (value == null) return "—";
+  if (value < 0) return ">60 s";
+  if (value >= 1000) return `${(value / 1000).toFixed(1)} s`;
+  return `${value} ms`;
+}
+
+function axisLabel(time: Date, window: Window) {
+  return window === "week"
+    ? time.toLocaleString(undefined, { month: "short", day: "numeric" })
+    : time.toLocaleTimeString(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+      });
 }
 
 type SeriesKey =
@@ -643,17 +874,22 @@ type SeriesKey =
   | "activeRequests"
   | "p50Ms"
   | "p95Ms";
+
 function MetricChart({
   title,
   points,
   series,
+  window,
+  latency = false,
 }: {
   title: string;
   points: TunnelMetricPoint[];
   series: { key: SeriesKey; label: string; error?: boolean }[];
+  window: Window;
+  latency?: boolean;
 }) {
   const colors = useSeriesColors();
-  const dark = useIsDarkTheme();
+  const axis = chartColors(useIsDarkTheme());
   const hasData = points.some((p) => series.some((s) => p[s.key] != null));
   const options: ChartOptions<"line"> = {
     responsive: true,
@@ -662,24 +898,58 @@ function MetricChart({
     spanGaps: false,
     interaction: { mode: "index", intersect: false },
     plugins: {
-      legend: { position: "bottom" },
+      legend: EXPANDED_LEGEND,
       tooltip: {
-        ...TOOLTIP,
+        ...SHARED_TOOLTIP,
         callbacks: {
-          label: (context) =>
-            `${context.dataset.label}: ${context.raw === 60001 && title.toLowerCase().includes("latency") ? ">60 s" : context.formattedValue}`,
+          title: (items) => {
+            const point = points[items[0]?.dataIndex ?? 0];
+            return point
+              ? point.time.toLocaleString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })
+              : "";
+          },
+          label: (context) => {
+            const raw = Number(context.raw);
+            const value = latency
+              ? raw === OVER_SIXTY_SECONDS
+                ? ">60 s"
+                : latencyLabel(raw)
+              : context.formattedValue;
+            return ` ${context.dataset.label}: ${value}`;
+          },
         },
       },
     },
     scales: {
       x: {
-        ticks: { maxTicksLimit: 6, color: AXIS.label },
+        ticks: {
+          maxTicksLimit: 6,
+          maxRotation: 0,
+          autoSkip: true,
+          color: axis.label,
+          font: { size: 11 },
+        },
         grid: { display: false },
+        border: { display: false },
       },
       y: {
         beginAtZero: true,
-        ticks: { precision: 0, color: AXIS.label },
-        grid: { color: dark ? AXIS.gridDark : AXIS.grid },
+        border: { display: false },
+        ticks: {
+          precision: 0,
+          maxTicksLimit: 5,
+          color: axis.label,
+          font: { size: 11 },
+          callback: latency
+            ? (value) => latencyLabel(Number(value))
+            : undefined,
+        },
+        grid: { color: axis.gridLine },
       },
     },
   };
@@ -699,27 +969,20 @@ function MetricChart({
             role="img"
             options={options}
             data={{
-              labels: points.map((p) =>
-                new Date(p.time).toLocaleString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                }),
-              ),
+              labels: points.map((p) => axisLabel(new Date(p.time), window)),
               datasets: series.map((s, i) => ({
                 label: s.label,
-                data: points.map((p) =>
-                  p[s.key] == null
-                    ? null
-                    : Number(p[s.key]) < 0
-                      ? 60001
-                      : Number(p[s.key]),
-                ),
+                data: points.map((p) => {
+                  const value = p[s.key];
+                  if (value == null) return null;
+                  return Number(value) < 0 ? OVER_SIXTY_SECONDS : Number(value);
+                }),
                 borderColor: s.error ? ACCENT_RED : colors[i],
                 backgroundColor: s.error ? ACCENT_RED : colors[i],
-                borderWidth: 2,
-                pointRadius: 1,
+                borderWidth: 1.5,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                pointHitRadius: 8,
                 tension: 0,
               })),
             }}
