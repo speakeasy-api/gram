@@ -136,12 +136,7 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 }
 
 func newGuardianPolicy(c *cli.Context, logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, redisClient redis.UniversalClient) (policy *guardian.Policy, err error) {
-	catalogCIDR := c.String("remote-mcp-catalog-ilb-cidr")
-	if catalogCIDR != "" && c.String("environment") != "dev" {
-		logger.WarnContext(c.Context, "ignoring remote MCP catalog CIDR allowance outside the dev environment")
-		catalogCIDR = ""
-	}
-	catalogOption, err := guardian.WithHostedMCPFrontEndCIDR(catalogCIDR)
+	catalogOption, err := guardian.WithHostedMCPFrontEndCIDR(c.String("remote-mcp-catalog-ilb-cidr"))
 	if err != nil {
 		return nil, fmt.Errorf("configure remote MCP catalog: %w", err)
 	}

@@ -696,14 +696,14 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		// resolver and must never become a private fallback.
 		return nil, oops.E(oops.CodeNotFound, mcpendpoints.ErrPolicyDenied, "not found")
 	}
-	toolset, err := s.loadToolset(ctx, ref.McpSlug, ref.CustomDomainID, true)
+	toolset, wrapperID, err := s.loadToolset(ctx, ref.McpSlug, ref.CustomDomainID, true)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
 	}
-	s.metrics.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackChallengeResume)
+	s.recordToolsetSlugFallback(ctx, s.logger, mcpmetrics.LegacyFallbackChallengeResume, ref.McpSlug, toolset, wrapperID)
 	if !toolset.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}
@@ -732,14 +732,14 @@ func (s *Service) loadResolvedMcpEndpointByToolsetSlug(ctx context.Context, mcpS
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
 	}
-	toolset, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
+	toolset, wrapperID, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
-	s.metrics.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackOAuth)
+	s.recordToolsetSlugFallback(ctx, s.logger, mcpmetrics.LegacyFallbackOAuth, mcpSlug, toolset, wrapperID)
 	if !toolset.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeNotFound, nil, "not found")
 	}

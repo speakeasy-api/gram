@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -95,6 +96,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+	"github.com/speakeasy-api/gram/server/internal/wide"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
@@ -341,10 +343,14 @@ type mcpInputs struct {
 	// The meta surface sets it: those tools are hidden from its describe
 	// catalog, so execute must not reach them through the hosted path either.
 	skipProxyTools bool
-	// mcpServerID is the fronting mcp_servers row id when the request arrived
-	// via an mcp_endpoint. Nil on the legacy toolset-by-slug path and for
-	// internal (agent-workflow) callers, which have no fronting server.
+	// mcpServerID is the fronting mcp_servers row id: the mcp_endpoint's
+	// server, or on the legacy toolset-by-slug path the canonical wrapper when
+	// one exists. Nil otherwise and for internal (agent-workflow) callers.
 	mcpServerID *uuid.UUID
+	// mcpEndpointID: nil off the endpoint path and for gateway member dispatch.
+	mcpEndpointID *uuid.UUID
+	// attributionServerID keeps legacy attribution separate from route authorization.
+	attributionServerID *uuid.UUID
 	// wrapperRBACResourceID overrides the resource id for per-tool mcp:connect
 	// checks: the fronting mcp_servers id when the request is wrapper-governed
 	// (AIS-633). Empty falls back to the described toolset's own id, which is
@@ -389,6 +395,33 @@ type mcpInputs struct {
 	// session row by the issuer gate. Nil means all tools; non-nil is always
 	// restrictive and intersects with the live toolset, ?tags=, and RBAC.
 	toolSelection *toolfilter.SessionSelection
+}
+
+// recordServingAnalytics adds the known serving ids to product event properties.
+func (p *mcpInputs) recordServingAnalytics(props map[string]any) {
+	if id := optionalUUIDString(p.servingServerID()); id != nil {
+		props["mcp_server_id"] = *id
+	}
+	if id := optionalUUIDString(p.mcpEndpointID); id != nil {
+		props["mcp_endpoint_id"] = *id
+	}
+}
+
+// recordServingLogAttrs adds the known serving ids to a telemetry row.
+func recordServingLogAttrs(logAttrs tm.HTTPLogAttributes, serverID, endpointID *uuid.UUID) {
+	if id := optionalUUIDString(serverID); id != nil {
+		logAttrs[attr.McpServerIDKey] = *id
+	}
+	if id := optionalUUIDString(endpointID); id != nil {
+		logAttrs[attr.McpEndpointIDKey] = *id
+	}
+}
+
+func optionalUUIDString(id *uuid.UUID) *string {
+	if id == nil || *id == uuid.Nil {
+		return nil
+	}
+	return new(id.String())
 }
 
 func NewService(
@@ -587,10 +620,10 @@ func (s *Service) outboundOrigin() *url.URL {
 // federatedCallbackOrigin is the origin of the federated IdP callback for a
 // trusted client: its recorded callback_base_url, so it shares a host with
 // the client's remote_login_callback, or outboundOrigin when none is recorded.
-func (s *Service) federatedCallbackOrigin(provider *remotesessions.FederatedProvider) *url.URL {
+func (s *Service) federatedCallbackOrigin(callbackBase pgtype.Text) *url.URL {
 	origins := s.callbackOrigins
 	origins.Outbound = s.outboundOrigin()
-	return origins.ForClient(provider.CallbackBaseURL())
+	return origins.ForClient(callbackBase)
 }
 
 func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverName string) string {
@@ -693,6 +726,7 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.MCPErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
+	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback/{clientID}", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
 	// Both stops of the remote login browser hop: the bind stop on a remote
 	// client's callback host, and the confirm stop on the IdP callback host.
@@ -934,8 +968,8 @@ func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Reques
 		if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 			customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
 		}
-		if _, terr := s.loadToolset(ctx, mcpSlug, customDomainID, false); terr == nil {
-			s.metrics.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackProxyGetDelete)
+		if toolset, wrapperID, terr := s.loadToolset(ctx, mcpSlug, customDomainID, false); terr == nil {
+			s.recordToolsetSlugFallback(ctx, logger, mcpmetrics.LegacyFallbackProxyGetDelete, mcpSlug, toolset, wrapperID)
 		}
 		return false, nil
 	default:
@@ -1050,7 +1084,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		customDomainID = uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true}
 	}
-	toolset, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
+	toolset, wrapperID, err := s.loadToolset(ctx, mcpSlug, customDomainID, false)
 	switch {
 	case errors.Is(err, errToolsetNotFound):
 		return oops.E(oops.CodeNotFound, err, "mcp server not found")
@@ -1058,15 +1092,16 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeUnexpected, err, "failed to load MCP server").LogError(ctx, s.logger)
 	}
 	metering.AttributeMCPBandwidthServer(ctx, metering.MCPServerTypeDirectToolset, toolset.ID.String(), mcpSlug)
-	s.metrics.RecordToolsetSlugFallback(ctx, mcpmetrics.LegacyFallbackServePublic)
+	s.recordToolsetSlugFallback(ctx, logger, mcpmetrics.LegacyFallbackServePublic, mcpSlug, toolset, wrapperID)
 
 	if err := s.enforceCustomDomainLockdown(ctx, logger, toolset.ProjectID); err != nil {
 		return err
 	}
 
-	// Legacy toolset-by-slug path has no mcp_server: hosting configuration
-	// comes entirely from the toolset columns.
-	return s.serveToolsetResolved(w, r, toolset, mcpSlug, "mcp", hostedServingFromToolset(toolset), nil, nil, nil, nil)
+	// Legacy toolset-by-slug path: hosting configuration comes from the
+	// toolset columns; the canonical wrapper, when present, keys kill switches
+	// and attribution.
+	return s.serveToolsetResolved(w, r, toolset, mcpSlug, "mcp", hostedServingFromToolset(toolset, wrapperID), nil, nil, nil, nil)
 }
 
 // hostedServing is the hosting configuration one toolset-backed MCP request
@@ -1095,21 +1130,30 @@ type hostedServing struct {
 	// column, then the project default.
 	toolVariationsGroupID *uuid.UUID
 
-	// mcpServerID for telemetry and the hosted kill switch; nil on the legacy
-	// path.
+	// mcpServerID for telemetry and the hosted kill switch; on the legacy
+	// path, the canonical wrapper when one exists, else nil.
 	mcpServerID *uuid.UUID
+
+	// mcpEndpointID for telemetry; nil on the legacy path.
+	mcpEndpointID *uuid.UUID
 }
 
 // hostedServingFromToolset derives the hosting configuration for the legacy
 // toolsets.mcp_slug path, where the toolset columns govern serving.
-func hostedServingFromToolset(toolset *toolsets_repo.Toolset) *hostedServing {
+// wrapperID is the toolset's canonical mcp_servers row, when it has one.
+func hostedServingFromToolset(toolset *toolsets_repo.Toolset, wrapperID uuid.NullUUID) *hostedServing {
+	var mcpServerID *uuid.UUID
+	if wrapperID.Valid {
+		mcpServerID = &wrapperID.UUID
+	}
 	return &hostedServing{
 		isPublic:              toolset.McpIsPublic,
 		runInToolsetGate:      toolset.UserSessionIssuerID.Valid,
 		callerGated:           false,
 		rbacResourceID:        toolset.ID,
 		toolVariationsGroupID: nil,
-		mcpServerID:           nil,
+		mcpServerID:           mcpServerID,
+		mcpEndpointID:         nil,
 	}
 }
 
@@ -1377,8 +1421,8 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 
 	// Wrapper-governed requests carry the wrapper's RBAC id and visibility
 	// into the RPC handlers so per-tool checks key on the mcp_servers row;
-	// legacy requests leave both unset and the handlers derive them from the
-	// described toolset, unchanged.
+	// requests without a fronting server leave both unset and the handlers
+	// derive them from the described toolset, unchanged.
 	var wrapperRBACResourceID string
 	var wrapperIsPublic *bool
 	if cfg.mcpServerID != nil {
@@ -1403,6 +1447,8 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		apiKeyID:                 apiKeyID,
 		toolVariationsGroupID:    toolVariationsGroupID,
 		mcpServerID:              cfg.mcpServerID,
+		mcpEndpointID:            cfg.mcpEndpointID,
+		attributionServerID:      nil,
 		wrapperRBACResourceID:    wrapperRBACResourceID,
 		wrapperIsPublic:          wrapperIsPublic,
 		metaMcpServerID:          "",
@@ -1414,6 +1460,14 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		protocolVersion:          protocolVersion,
 		identityCoverageRecorded: hostedCoverageRecorded,
 		toolSelection:            callerToolSelection,
+	}
+
+	// Call handlers resolve attribution after loading their toolset. Other
+	// methods still need a serving identity for request metrics and analytics.
+	if req.Method != "tools/call" && req.Method != "resources/read" {
+		if err := mcpInputs.resolveServingAttribution(ctx, s.logger, s.db, toolset.ID); err != nil {
+			s.logger.WarnContext(ctx, "failed to resolve serving attribution", attr.SlogError(err))
+		}
 	}
 
 	// Record the resolved variation group, requested tag filter, and the
@@ -1429,6 +1483,15 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		if cfg.mcpServerID != nil {
 			span.SetAttributes(attr.McpServerID(cfg.mcpServerID.String()))
 		}
+		if cfg.mcpEndpointID != nil {
+			span.SetAttributes(attr.McpEndpointID(cfg.mcpEndpointID.String()))
+		}
+	}
+	if cfg.mcpServerID != nil {
+		wide.Push(ctx, attr.SlogMcpServerID(cfg.mcpServerID.String()))
+	}
+	if cfg.mcpEndpointID != nil {
+		wide.Push(ctx, attr.SlogMcpEndpointID(cfg.mcpEndpointID.String()))
 	}
 
 	// Check security schemes before dispatching any RPC — including initialize.
@@ -1624,7 +1687,7 @@ func (s *Service) checkToolsetSecurity(ctx context.Context, toolset *toolsets_re
 // every legacy-routed surface (serving, well-known metadata, OAuth
 // challenges) treats them as nonexistent — mirroring how the
 // mcp_endpoints → mcp_servers path handles visibility 'disabled'.
-func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainID uuid.NullUUID, strictPlatform bool) (*toolsets_repo.Toolset, error) {
+func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainID uuid.NullUUID, strictPlatform bool) (*toolsets_repo.Toolset, uuid.NullUUID, error) {
 	var toolset toolsets_repo.Toolset
 	var err error
 	switch {
@@ -1638,30 +1701,44 @@ func (s *Service) loadToolset(ctx context.Context, mcpSlug string, customDomainI
 	default:
 		toolset, err = s.toolsetsRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
 	}
+	noWrapper := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, errToolsetNotFound
+		return nil, noWrapper, errToolsetNotFound
 	case err != nil:
-		return nil, fmt.Errorf("lookup toolset: %w", err)
+		return nil, noWrapper, fmt.Errorf("lookup toolset: %w", err)
 	}
 	if !toolset.McpEnabled {
-		return nil, errToolsetNotFound
+		return nil, noWrapper, errToolsetNotFound
 	}
 	wrapper, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return &toolset, nil
+		return &toolset, noWrapper, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("lookup hosted MCP network policy: %w", err)
+		return nil, noWrapper, fmt.Errorf("lookup hosted MCP network policy: %w", err)
 	}
 	mode, err := networkaccess.Effective(wrapper.NetworkAccessMode)
 	if err != nil {
-		return nil, fmt.Errorf("invalid hosted MCP network policy: %w", err)
+		return nil, noWrapper, fmt.Errorf("invalid hosted MCP network policy: %w", err)
 	}
-	if !wrapper.ToolsetID.Valid || wrapper.ToolsetID.UUID != toolset.ID || wrapper.Visibility == "disabled" || !mode.Allows(networkaccess.SurfacePublic) || wrapper.UserSessionIssuerID != toolset.UserSessionIssuerID || (wrapper.Visibility == "public") != toolset.McpIsPublic {
-		return nil, errToolsetNotFound
+	if !mode.Allows(networkaccess.SurfacePublic) || !mcpmetadata.CanonicalWrapperMatchesToolset(&wrapper, &toolset) {
+		return nil, noWrapper, errToolsetNotFound
 	}
-	return &toolset, nil
+	return &toolset, uuid.NullUUID{UUID: wrapper.ID, Valid: true}, nil
+}
+
+// recordToolsetSlugFallback logs and counts one legacy toolsets.mcp_slug fallback hit.
+func (s *Service) recordToolsetSlugFallback(ctx context.Context, logger *slog.Logger, entryPoint mcpmetrics.LegacyFallbackEntryPoint, mcpSlug string, toolset *toolsets_repo.Toolset, wrapperID uuid.NullUUID) {
+	s.metrics.RecordToolsetSlugFallback(ctx, logger, mcpmetrics.ToolsetSlugFallback{
+		EntryPoint:          entryPoint,
+		Slug:                mcpSlug,
+		ToolsetID:           toolset.ID,
+		ProjectID:           toolset.ProjectID,
+		CustomDomainHost:    customdomains.FromContext(ctx) != nil,
+		CanonicalWrapper:    wrapperID.Valid,
+		ToolsetCustomDomain: mcpmetadata.ToolsetCustomDomainState(ctx, customdomains_repo.New(s.db), toolset),
+	})
 }
 
 // loadHeaderDisplayNames loads the header display names mapping from MCP metadata.
@@ -1762,7 +1839,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		start := time.Now()
 		defer func() {
-			s.metrics.RecordMCPRequestDuration(ctx, req.Method, requestContext.Host+requestContext.ReqURL, time.Since(start))
+			s.metrics.RecordMCPRequestDuration(ctx, req.Method, requestContext.Host+requestContext.ReqURL, conv.PtrValOr(optionalUUIDString(payload.servingServerID()), ""), time.Since(start))
 		}()
 	}
 

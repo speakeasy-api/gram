@@ -56,6 +56,7 @@ func TestIsOTelPublicEndpointPublicRoutesArePublic(t *testing.T) {
 		"/mcp",
 		"/mcp/some-slug",
 		"/mcp/idp_callback",
+		"/mcp/idp_callback/0190a6f8-5b2c-7d3e-8f41-2a6b9c0d1e2f",
 		"/oauth/some-slug/token",
 		"/oauth-external/callback",
 		"/x/mcp/some-slug",

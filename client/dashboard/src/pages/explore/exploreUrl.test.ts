@@ -43,6 +43,8 @@ const spec: ExploreSpec = {
 describe("encodeSpec and decodeSpec", () => {
   it("round-trip a query, filter values included", () => {
     expect(decodeSpec(encodeSpec(spec), [sessions])).toEqual(spec);
+    const stacked: ExploreSpec = { ...spec, chartType: "stacked_area" };
+    expect(decodeSpec(encodeSpec(stacked), [sessions])).toEqual(stacked);
   });
 
   it("round-trip a query still being composed", () => {

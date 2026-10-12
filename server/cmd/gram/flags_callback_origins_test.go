@@ -23,6 +23,7 @@ func TestParseCallbackOrigin(t *testing.T) {
 	}{
 		{name: "server host", raw: "https://ai.example.com", environment: "prod", want: "https://ai.example.com"},
 		{name: "platform host with trailing slash", raw: "https://app.example.com/", environment: "prod", want: "https://app.example.com"},
+		{name: "platform host with non-default port", raw: "https://app.example.com:8443", environment: "prod", want: "https://app.example.com:8443"},
 		{name: "local HTTP", raw: "http://ai.example.com", environment: "local", want: "http://ai.example.com"},
 		{name: "path", raw: "https://app.example.com/base", environment: "prod", wantErr: "without a path"},
 		{name: "non-local HTTP", raw: "http://app.example.com", environment: "prod", wantErr: "HTTPS is required"},

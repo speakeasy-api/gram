@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeJSON, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  RiskPolicyStatus,
-  RiskPolicyStatus$inboundSchema,
-} from "../models/components/riskpolicystatus.js";
+  Dashboard,
+  Dashboard$inboundSchema,
+} from "../models/components/dashboard.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  GetRiskPolicyStatusRequest,
-  GetRiskPolicyStatusRequest$outboundSchema,
-  GetRiskPolicyStatusSecurity,
-} from "../models/operations/getriskpolicystatus.js";
+  DuplicateBuiltInDashboardRequest,
+  DuplicateBuiltInDashboardRequest$outboundSchema,
+  DuplicateBuiltInDashboardSecurity,
+} from "../models/operations/duplicatebuiltindashboard.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getRiskPolicyStatus risk
+ * duplicateBuiltInDashboard dashboards
  *
  * @remarks
- * Get the analysis status of a risk policy including progress and workflow state.
+ * Copy a Speakeasy-built dashboard into a new one the caller owns, named "<name> (copy)", with a new saved widget per card, named the same way. The copy is a project dashboard like any other and can be changed; the built-in stays as it is.
  */
-export function riskPoliciesStatus(
+export function dashboardsDuplicateBuiltIn(
   client: GramCore,
-  request: GetRiskPolicyStatusRequest,
-  security?: GetRiskPolicyStatusSecurity | undefined,
+  request: DuplicateBuiltInDashboardRequest,
+  security?: DuplicateBuiltInDashboardSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    RiskPolicyStatus,
+    Dashboard,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function riskPoliciesStatus(
 
 async function $do(
   client: GramCore,
-  request: GetRiskPolicyStatusRequest,
-  security?: GetRiskPolicyStatusSecurity | undefined,
+  request: DuplicateBuiltInDashboardRequest,
+  security?: DuplicateBuiltInDashboardSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      RiskPolicyStatus,
+      Dashboard,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -95,27 +95,24 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(GetRiskPolicyStatusRequest$outboundSchema, value),
+    (value) => z.parse(DuplicateBuiltInDashboardRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = encodeJSON(
+    "body",
+    payload.DuplicateBuiltInDashboardRequestBody,
+    { explode: true },
+  );
 
-  const path = pathToFunc("/rpc/risk.getPolicyStatus")();
-
-  const query = encodeFormQuery({
-    "id": payload.id,
-  });
+  const path = pathToFunc("/rpc/dashboards.duplicateBuiltIn")();
 
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
-      explode: false,
-      charEncoding: "none",
-    }),
     "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
       explode: false,
       charEncoding: "none",
@@ -129,26 +126,14 @@ async function $do(
   const requestSecurity = resolveSecurity(
     [
       {
-        fieldName: "Gram-Key",
-        type: "apiKey:header",
-        value: security?.option1?.apikeyHeaderGramKey,
-      },
-      {
         fieldName: "Gram-Project",
         type: "apiKey:header",
-        value: security?.option1?.projectSlugHeaderGramProject,
-      },
-    ],
-    [
-      {
-        fieldName: "Gram-Project",
-        type: "apiKey:header",
-        value: security?.option2?.projectSlugHeaderGramProject,
+        value: security?.projectSlugHeaderGramProject,
       },
       {
         fieldName: "Gram-Session",
         type: "apiKey:header",
-        value: security?.option2?.sessionHeaderGramSession,
+        value: security?.sessionHeaderGramSession,
       },
     ],
   );
@@ -156,7 +141,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getRiskPolicyStatus",
+    operationID: "duplicateBuiltInDashboard",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -170,11 +155,10 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "GET",
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -201,7 +185,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    RiskPolicyStatus,
+    Dashboard,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -212,7 +196,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, RiskPolicyStatus$inboundSchema),
+    M.json(200, Dashboard$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

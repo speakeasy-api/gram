@@ -1,7 +1,6 @@
 package gram
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -25,16 +24,13 @@ func TestInternalCatalogStartupConfiguration(t *testing.T) {
 		{"dev", "10.0.0.0/8", false},
 		{"dev", "bad", false},
 		{"prod", "", true},
-		{"local", "", true},
-		{"", "", true},
 		{"prod", "10.23.45.67/32", true},
-		{"prod", "bad", true},
-		{"production", "10.23.45.67/32", true},
+		{"prod", "10.0.0.0/8", false},
+		{"prod", "bad", false},
+		{"local", "", true},
 		{"local", "10.23.45.67/32", true},
 		{"staging", "10.23.45.67/32", true},
-		{"preview", "10.23.45.67/32", true},
-		{"development", "10.23.45.67/32", true},
-		{"DEV", "10.23.45.67/32", true},
+		{"", "", true},
 		{"", "10.23.45.67/32", true},
 	} {
 		t.Run(fmt.Sprintf("%s/%s", tc.environment, tc.cidr), func(t *testing.T) {
@@ -44,28 +40,26 @@ func TestInternalCatalogStartupConfiguration(t *testing.T) {
 			require.NoError(t, internalCatalogFlag().Apply(flags))
 			require.NoError(t, flags.Set("remote-mcp-catalog-ilb-cidr", tc.cidr))
 			ctx := cli.NewContext(cli.NewApp(), flags, nil)
-			var logs bytes.Buffer
-			logger := slog.New(slog.NewTextHandler(&logs, nil))
+			logger := slog.New(slog.DiscardHandler)
 			policy, err := newGuardianPolicy(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil)
-			if tc.environment != "dev" && tc.cidr != "" {
-				require.Contains(t, logs.String(), "level=WARN")
-				require.Contains(t, logs.String(), "ignoring remote MCP catalog CIDR allowance")
-			} else {
-				require.NotContains(t, logs.String(), "ignoring remote MCP catalog CIDR allowance")
-			}
-			if tc.valid {
-				require.NoError(t, err)
-				if tc.environment != "local" {
-					err = policy.ValidateHost(t.Context(), "10.23.45.67", guardian.WithInternalCatalog())
-					if tc.environment == "dev" && tc.cidr != "" {
-						require.NoError(t, err)
-					} else {
-						require.ErrorIs(t, err, guardian.ErrBlockedIP)
-					}
-				}
-			} else {
+			if !tc.valid {
 				require.ErrorContains(t, err, "configure remote MCP catalog")
+				return
 			}
+			require.NoError(t, err)
+			if tc.environment == "local" {
+				// Local development allows all destinations regardless of the catalog setting.
+				return
+			}
+
+			err = policy.ValidateHost(t.Context(), "10.23.45.67", guardian.WithInternalCatalog())
+			if tc.cidr != "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, guardian.ErrBlockedIP)
+			}
+			require.ErrorIs(t, policy.ValidateHost(t.Context(), "10.23.45.67"), guardian.ErrBlockedIP, "clients without the catalog opt-in stay blocked")
+			require.ErrorIs(t, policy.ValidateHost(t.Context(), "10.23.45.68", guardian.WithInternalCatalog()), guardian.ErrBlockedIP, "other private addresses stay blocked")
 		})
 	}
 }

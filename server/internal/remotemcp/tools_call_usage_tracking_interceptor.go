@@ -26,8 +26,9 @@ import (
 // treated as a no-op and logged so operators can spot misconfiguration
 // without taking down tool invocation.
 type ToolsCallUsageTrackingInterceptor struct {
-	tracker billing.Tracker
-	logger  *slog.Logger
+	mcpServerID string
+	tracker     billing.Tracker
+	logger      *slog.Logger
 	// metaMCPServerID is set only on per-target copies for gateway member proxies.
 	metaMCPServerID string
 }
@@ -38,6 +39,7 @@ var _ proxy.ToolsCallResponseInterceptor = (*ToolsCallUsageTrackingInterceptor)(
 // given billing tracker. The same instance can be reused across requests.
 func NewToolsCallUsageTrackingInterceptor(tracker billing.Tracker, logger *slog.Logger) *ToolsCallUsageTrackingInterceptor {
 	return &ToolsCallUsageTrackingInterceptor{
+		mcpServerID:     "",
 		tracker:         tracker,
 		logger:          logger,
 		metaMCPServerID: "",
@@ -48,6 +50,13 @@ func NewToolsCallUsageTrackingInterceptor(tracker billing.Tracker, logger *slog.
 func (i *ToolsCallUsageTrackingInterceptor) WithMetaMCPServerID(metaMCPServerID string) *ToolsCallUsageTrackingInterceptor {
 	clone := *i
 	clone.metaMCPServerID = metaMCPServerID
+	return &clone
+}
+
+// WithMCPServerID returns a per-target copy, preserving isolation between proxies.
+func (i *ToolsCallUsageTrackingInterceptor) WithMCPServerID(serverID string) *ToolsCallUsageTrackingInterceptor {
+	clone := *i
+	clone.mcpServerID = serverID
 	return &clone
 }
 
@@ -105,6 +114,8 @@ func (i *ToolsCallUsageTrackingInterceptor) InterceptToolsCallResponse(ctx conte
 		ResponseStatusCode:    statusCode,
 		ToolsetID:             nil,
 		MCPSessionID:          sessionID,
+		MCPServerID:           conv.PtrEmpty(i.mcpServerID),
+		MCPEndpointID:         nil,
 		MetaMCPServerID:       conv.PtrEmpty(i.metaMCPServerID),
 		FunctionCPUUsage:      nil,
 		FunctionMemUsage:      nil,

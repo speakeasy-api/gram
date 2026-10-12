@@ -122,6 +122,9 @@ var Connection = Type("OktaIdentityProviderConnection", func() {
 	Attribute("jwks_url", String, "Public JWKS URL the Okta app is configured to trust for private_key_jwt. Omitted for connections installed from the Okta Integration Network, which authenticate with a client secret.")
 	Attribute("client_id", String, "Okta application client ID. Omitted until submitted.")
 	Attribute("client_id_submitted", Boolean, "Whether the real Okta client ID has replaced the provisioning placeholder.")
+	Attribute("remote_session_issuer_id", String, "Organization remote session issuer that backs this connection. Omitted until the managed client is provisioned.", func() {
+		Format(FormatUUID)
+	})
 	Attribute("dpop_required", Boolean, "Whether Okta issued a DPoP-bound token at the last verification.")
 	Attribute("required_scopes", ArrayOf(String), "Okta API scopes the integration needs.")
 	Attribute("granted_scopes", ArrayOf(String), "Scopes Okta granted at the last verification.")

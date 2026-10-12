@@ -243,6 +243,13 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 		"list_my_sessions", "continue_session",
 		// The analytics reads hold the caller to project:read in the handler.
 		describeAnalyticsCatalogToolName, listAnalyticsDimensionValuesToolName, runAnalyticsQueryToolName,
+		// The widget tools hold the caller to project:read in the handler; the
+		// widgets service's creator-or-write rule decides updates and deletes.
+		listWidgetsToolName, getWidgetToolName, saveWidgetToolName, duplicateWidgetToolName, deleteWidgetToolName,
+		// The dashboard tools hold the caller to project:read; the
+		// dashboards service decides creator or project:write for a change.
+		listDashboardsToolName, getDashboardToolName, saveDashboardToolName, duplicateDashboardToolName,
+		deleteDashboardToolName, editDashboardLayoutToolName, saveDashboardFiltersToolName,
 	} {
 		require.Equal(t, ExternalAuthorizationMember, byName[name], name)
 	}
@@ -441,6 +448,21 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		// with write access to it, not for the assistant.
 		createProjectToolName,
 		renameProjectToolName,
+		// Widget writes are audited under a user; an assistant has no user identity.
+		listWidgetsToolName,
+		getWidgetToolName,
+		saveWidgetToolName,
+		duplicateWidgetToolName,
+		deleteWidgetToolName,
+		// Every dashboard write is audited under a user's email, and the
+		// assistant has no user identity; the reads stay with the writes.
+		listDashboardsToolName,
+		getDashboardToolName,
+		saveDashboardToolName,
+		duplicateDashboardToolName,
+		deleteDashboardToolName,
+		editDashboardLayoutToolName,
+		saveDashboardFiltersToolName,
 	} {
 		require.False(t, admitted[name], "tool %q must not be admitted to the assistant", name)
 	}

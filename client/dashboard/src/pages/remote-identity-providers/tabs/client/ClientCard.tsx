@@ -118,10 +118,12 @@ export function ClientCard({
   };
 
   const update = useUpdateOrganizationRemoteSessionClientMutation({
-    onSuccess: async () => {
+    onSuccess: async (saved) => {
       await invalidateAllOrganizationRemoteSessionClient(queryClient, {
         refetchType: "all",
       });
+      // An emptied audience is omitted, so show what was actually kept.
+      setAudience(saved.audience ?? "");
       setClientSecret("");
       setLegacyCallbackMode(undefined);
       toast.success("Client updated");
@@ -143,14 +145,7 @@ export function ClientCard({
             ? authAudienceFormat
             : undefined,
           scope,
-          // Only sent when it changed: the API refuses an empty audience, so
-          // an untouched blank field must not fail every save. Emptying a
-          // saved one sends "", which the API refuses; it has no way to
-          // clear an audience yet.
-          audience:
-            audience.trim() !== (client.audience ?? "")
-              ? audience.trim()
-              : undefined,
+          audience: audience.trim() || undefined,
           clientSecret: clientSecretUpdateValue(authMethod, clientSecret),
           legacyCallbackUrl:
             isPlatformAdmin &&
