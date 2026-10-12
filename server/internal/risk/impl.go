@@ -1000,7 +1000,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	// block_all policy's list is only a set of exceptions to a default deny,
 	// so it can retire the posture and give the exceptions up.
 	if retiresBlockingPosture && currentDisposition == ShadowMCPDispositionAllowAll {
-		return nil, oops.E(oops.CodeInvalid, nil, "%s", shadowMCPRetiredAllowAllMessage(current.Sources, current.Action, sources, action))
+		return nil, oops.E(oops.CodeInvalid, nil, "%s", ShadowMCPRetiredAllowAllMessage(current.Sources, current.Action, sources, action))
 	}
 
 	if payload.ShadowMcpDisposition != nil {

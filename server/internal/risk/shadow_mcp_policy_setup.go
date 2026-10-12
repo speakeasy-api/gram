@@ -52,10 +52,10 @@ func shadowMCPPolicyShape(sources []string, action string) string {
 	return fmt.Sprintf("detecting %s with the %q action", detection, action)
 }
 
-// shadowMCPRetiredAllowAllMessage explains why an allow_all policy cannot stop
+// ShadowMCPRetiredAllowAllMessage explains why an allow_all policy cannot stop
 // being a blocking shadow MCP policy, naming the specific edit that would do
 // it and the way out.
-func shadowMCPRetiredAllowAllMessage(currentSources []string, currentAction string, sources []string, action string) string {
+func ShadowMCPRetiredAllowAllMessage(currentSources []string, currentAction string, sources []string, action string) string {
 	var edits []string
 	if slices.Contains(currentSources, shadowmcp.SourceShadowMCP) && !slices.Contains(sources, shadowmcp.SourceShadowMCP) {
 		edits = append(edits, "turning off shadow_mcp detection")
