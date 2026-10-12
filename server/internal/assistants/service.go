@@ -3219,7 +3219,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	// assistant can tell the user which integration is broken.
 	mcpServers := resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.Toolsets, assistant.MCPServers, platformSlugs)
 
-	instructions, err := composeInstructions(assistant.Instructions, thread, baselineSkills.Skills)
+	instructions, err := composeInstructions(currentAssistantInstructions(assistant.Instructions), thread, baselineSkills.Skills)
 	if err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "compose assistant instructions").LogError(ctx, s.logger, logAttrs...)
 	}
