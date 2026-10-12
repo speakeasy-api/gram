@@ -62,6 +62,10 @@ func (s *Service) Read(ctx context.Context, id string) (Snapshot, error) {
 	if err != nil {
 		return Snapshot{}, err
 	}
+	return s.read(ctx, authCtx, id)
+}
+
+func (s *Service) read(ctx context.Context, authCtx *contextvalues.AuthContext, id string) (Snapshot, error) {
 	widgetID, err := parseID(id)
 	if err != nil {
 		return Snapshot{}, err
@@ -86,11 +90,11 @@ func (s *Service) Read(ctx context.Context, id string) (Snapshot, error) {
 // would, a caller who may not change it, so a preview never shows a change
 // that would be refused.
 func (s *Service) ReadForChange(ctx context.Context, id string) (Snapshot, error) {
-	snapshot, err := s.Read(ctx, id)
+	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	snapshot, err := s.read(ctx, authCtx, id)
 	if err != nil {
 		return Snapshot{}, err
 	}
