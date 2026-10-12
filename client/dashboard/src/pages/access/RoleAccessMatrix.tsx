@@ -214,7 +214,7 @@ function Legend(): JSX.Element {
   return (
     <div className="flex flex-wrap gap-x-6 gap-y-2">
       {item("on", "Allowed here")}
-      {item("inherited", "Comes from the row or level above")}
+      {item("inherited", "Inherited")}
       {item("blocked", "Blocked, even if another role allows it")}
     </div>
   );
