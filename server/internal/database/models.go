@@ -1332,6 +1332,18 @@ type IdentityProviderConnection struct {
 	Deleted        bool
 }
 
+type InternalSessionIssuer struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	Issuer          string
+	JsonWebKeySetID uuid.UUID
+	DisabledAt      pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+}
+
 type JsonWebKey struct {
 	ID                 uuid.UUID
 	OrganizationID     string
@@ -1345,6 +1357,7 @@ type JsonWebKey struct {
 	ActivatedAt        pgtype.Timestamptz
 	RetiredAt          pgtype.Timestamptz
 	RevokedAt          pgtype.Timestamptz
+	KmsDisabledAt      pgtype.Timestamptz
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
@@ -2799,6 +2812,19 @@ type RemoteSessionEmaCredential struct {
 	UpdatedAt                      pgtype.Timestamptz
 	DeletedAt                      pgtype.Timestamptz
 	Deleted                        bool
+}
+
+type RemoteSessionEmaProvider struct {
+	ID                      uuid.UUID
+	OrganizationID          string
+	VendorIssuer            string
+	RemoteSessionIssuerID   uuid.NullUUID
+	InternalSessionIssuerID uuid.NullUUID
+	Position                int32
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+	DeletedAt               pgtype.Timestamptz
+	Deleted                 bool
 }
 
 type RemoteSessionIssuer struct {

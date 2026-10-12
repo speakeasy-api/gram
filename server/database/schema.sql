@@ -1345,7 +1345,6 @@ CREATE TABLE IF NOT EXISTS ai_scan_targets (
   CONSTRAINT ai_scan_targets_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE
 );
 
-
 CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   deployment_id uuid NOT NULL,
@@ -2134,6 +2133,50 @@ WHERE identity_provider_connection_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS json_web_key_sets_organization_id_id_key
 ON json_web_key_sets (organization_id, id);
 
+-- Internal Session Issuers are issuers Speakeasy itself operates to vouch for
+-- its own signed-in users to other services. Today each one is an
+-- organization's Enterprise-Managed Authorization (EMA) issuer: Speakeasy signs
+-- ID-JAGs (identity assertion JWT authorization grants) for the organization's
+-- members, and vendors whose admins trust the issuer URL redeem them for access
+-- tokens. Signing keys rotate inside the referenced key set.
+-- Contrast: remote_session_issuers are external servers Speakeasy calls as a
+-- client; user_session_issuers are Speakeasy acting as an authorization server
+-- for MCP clients.
+CREATE TABLE IF NOT EXISTS internal_session_issuers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  -- Exact issuer URL vendors trust, pinned at creation so a later change to
+  -- Speakeasy's public origin can't silently change it.
+  issuer TEXT NOT NULL,
+  json_web_key_set_id uuid NOT NULL,
+  -- Set while the issuer is turned off: discovery still resolves, signing refuses.
+  disabled_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT internal_session_issuers_pkey PRIMARY KEY (id),
+  CONSTRAINT internal_session_issuers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT internal_session_issuers_key_set_tenant_fkey FOREIGN KEY (organization_id, json_web_key_set_id) REFERENCES json_web_key_sets (organization_id, id)
+);
+
+-- One live internal session issuer per organization.
+CREATE UNIQUE INDEX IF NOT EXISTS internal_session_issuers_organization_id_key
+ON internal_session_issuers (organization_id)
+WHERE deleted IS FALSE;
+
+-- An issuer URL identifies exactly one live issuer.
+CREATE UNIQUE INDEX IF NOT EXISTS internal_session_issuers_issuer_key
+ON internal_session_issuers (issuer)
+WHERE deleted IS FALSE;
+
+-- Composite FK target so vendor policy rows pin the issuer to one org.
+CREATE UNIQUE INDEX IF NOT EXISTS internal_session_issuers_organization_id_id_key
+ON internal_session_issuers (organization_id, id);
+
+CREATE INDEX IF NOT EXISTS internal_session_issuers_key_set_idx
+ON internal_session_issuers (organization_id, json_web_key_set_id);
+
 -- Non-partial index backing json_web_key_sets_external_key_tenant_fkey, which
 -- has no ON DELETE clause (NO ACTION). Postgres does not index the referencing
 -- side automatically, so without this the check on every hard-deleted
@@ -2162,6 +2205,10 @@ CREATE TABLE IF NOT EXISTS json_web_keys (
   activated_at timestamptz,
   retired_at timestamptz,
   revoked_at timestamptz,
+  -- Set once a revoked Speakeasy-managed key's KMS version is disabled and its
+  -- signer grant removed. NULL on a revoked internal session issuer key means
+  -- that cleanup is still pending and the sweep retries it.
+  kms_disabled_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -2196,6 +2243,41 @@ ON json_web_keys (organization_id, json_web_key_set_id);
 -- rows.
 CREATE INDEX IF NOT EXISTS json_web_keys_external_key_tenant_idx
 ON json_web_keys (organization_id, external_key_id);
+
+-- Whether a key set backs an internal session issuer. Any issuer row counts,
+-- live or tombstoned, so customer key APIs never expose an issuer's keys.
+CREATE OR REPLACE FUNCTION is_internal_session_issuer_key_set(org_id TEXT, set_id uuid)
+RETURNS boolean
+LANGUAGE sql STABLE PARALLEL SAFE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM internal_session_issuers AS isi
+    WHERE isi.organization_id = org_id
+      AND isi.json_web_key_set_id = set_id
+  );
+$$;
+
+-- Whether an external key backs, or ever backed, an internal session issuer's
+-- key set: as the set's backing key or as one of its published keys.
+CREATE OR REPLACE FUNCTION is_internal_session_issuer_external_key(org_id TEXT, key_id uuid)
+RETURNS boolean
+LANGUAGE sql STABLE PARALLEL SAFE
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM internal_session_issuers AS isi
+    JOIN json_web_key_sets AS s
+      ON s.organization_id = isi.organization_id
+     AND s.id = isi.json_web_key_set_id
+    WHERE isi.organization_id = org_id
+      AND (s.external_key_id = key_id OR EXISTS (
+        SELECT 1 FROM json_web_keys AS k
+        WHERE k.organization_id = s.organization_id
+          AND k.json_web_key_set_id = s.id
+          AND k.external_key_id = key_id
+      ))
+  );
+$$;
 
 -- Customer-hosted MCP servers connected through outbound tunnels. Gram stores
 -- the durable management/source record; live connection routing is cached in
@@ -2446,6 +2528,54 @@ WHERE jwks_uri IS NOT NULL AND deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_issuers_organization_id_id_key
 ON remote_session_issuers (organization_id, id);
 
+-- Which issuers may supply ID-JAGs for a downstream vendor, and in what order
+-- they are tried, for every remote_session_ema_bindings row that redeems at
+-- that vendor. No live rows for a vendor keeps today's behaviour: the
+-- endpoint's trusted external issuer (user_session_issuers
+-- trusted_remote_session_issuer_id), then the organization's internal session
+-- issuer if it has one.
+CREATE TABLE IF NOT EXISTS remote_session_ema_providers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  -- RFC 8414 issuer of the vendor's authorization server, normalized in
+  -- application code: lowercase scheme and host, no trailing slash.
+  vendor_issuer TEXT NOT NULL,
+  -- Exactly one of these names the issuer that supplies ID-JAGs: an external
+  -- issuer Speakeasy calls (for example an Okta authorization server), or the
+  -- organization's internal session issuer (Speakeasy itself). Rows whose
+  -- issuer is soft-deleted are skipped at read time.
+  remote_session_issuer_id uuid,
+  internal_session_issuer_id uuid,
+  -- EMA attempt order for this vendor: when acquiring an ID-JAG, providers are
+  -- tried from the lowest position up until one returns a token.
+  position integer NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT remote_session_ema_providers_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_session_ema_providers_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT remote_session_ema_providers_remote_issuer_tenant_fkey FOREIGN KEY (organization_id, remote_session_issuer_id) REFERENCES remote_session_issuers (organization_id, id),
+  CONSTRAINT remote_session_ema_providers_internal_issuer_tenant_fkey FOREIGN KEY (organization_id, internal_session_issuer_id) REFERENCES internal_session_issuers (organization_id, id),
+  CONSTRAINT remote_session_ema_providers_one_provider_check CHECK (num_nonnulls(remote_session_issuer_id, internal_session_issuer_id) = 1)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_providers_position_key
+ON remote_session_ema_providers (organization_id, vendor_issuer, position)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_providers_provider_key
+ON remote_session_ema_providers (organization_id, vendor_issuer, remote_session_issuer_id, internal_session_issuer_id) NULLS NOT DISTINCT
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS remote_session_ema_providers_remote_issuer_idx
+ON remote_session_ema_providers (organization_id, remote_session_issuer_id)
+WHERE remote_session_issuer_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS remote_session_ema_providers_internal_issuer_idx
+ON remote_session_ema_providers (organization_id, internal_session_issuer_id)
+WHERE internal_session_issuer_id IS NOT NULL;
+
 -- Scope-qualified FK target for identity provider connections.
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_issuers_attachment_scope_key
 ON remote_session_issuers (id, issuer, attachment_scope);
@@ -2627,7 +2757,6 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
     )
   )
 );
-
 
 CREATE UNIQUE INDEX IF NOT EXISTS remote_session_clients_attachment_scope_key
 ON remote_session_clients (id, attachment_scope);
@@ -2865,7 +2994,6 @@ CREATE TABLE IF NOT EXISTS user_session_issuers (
     FOREIGN KEY (trusted_remote_session_client_id) REFERENCES remote_session_clients (id) ON DELETE SET NULL
 );
 
-
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_attachment_scope_key
 ON user_session_issuers (id, attachment_scope);
 CREATE INDEX IF NOT EXISTS user_session_issuers_organization_id_idx
@@ -2886,7 +3014,6 @@ WHERE deleted IS FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_id_id_key
 ON user_session_issuers (project_id, id);
-
 
 -- At most one auto-provisioned project-default issuer per project.
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_default_key
@@ -3871,7 +3998,6 @@ CREATE TABLE IF NOT EXISTS openrouter_api_keys (
 
   CONSTRAINT openrouter_api_keys_pkey PRIMARY KEY (organization_id, key_type)
 );
-
 
 -- Create the chats table to track individual chat conversations
 CREATE TABLE IF NOT EXISTS chats (
@@ -5538,7 +5664,6 @@ ON workload_agent_assignments (organization_id, agent_id);
 CREATE INDEX IF NOT EXISTS workload_agent_assignments_workload_issuer_idx
 ON workload_agent_assignments (organization_id, workload_issuer_id);
 
-
 -- Binding history is retained even when live resources are hard-deleted. Original
 -- association keys and tenant keys are immutable in the service; nullable refs are
 -- only liveness signals. Missing refs must never select legacy authorization.
@@ -6188,7 +6313,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS user_oauth_tokens_user_org_issuer_key
 ON user_oauth_tokens (user_id, organization_id, toolset_id)
 WHERE deleted IS FALSE;
 
-
 -- Server display name overrides for hooks dashboard
 CREATE TABLE IF NOT EXISTS hooks_server_name_overrides (
   id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
@@ -6587,7 +6711,6 @@ WHERE deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS remote_protected_resources_project_id_id_key
 ON remote_protected_resources (project_id, id);
 
-
 -- Headers sent to a remote MCP server when proxying requests. Either value
 -- (a static/system-defined value) or value_from_request_header (pass-through
 -- from the incoming client request) is set, never both.
@@ -6741,7 +6864,6 @@ WHERE deleted IS FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_servers_project_id_id_key
 ON mcp_servers (project_id, id);
-
 
 -- Drives the resync that recomputes remote_session_issuer_id from a set of user
 -- session issuers. That statement runs inside every client create, attach,
@@ -6962,7 +7084,6 @@ WHERE deleted IS FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_endpoints_project_id_id_key
 ON mcp_endpoints (project_id, id);
-
 
 CREATE INDEX IF NOT EXISTS mcp_endpoints_custom_domain_id_idx
 ON mcp_endpoints (custom_domain_id)
