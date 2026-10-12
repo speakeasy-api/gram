@@ -296,13 +296,11 @@ trackedFiles:
   src/funcs/hooksUploadSkillContent.ts: {}
   src/funcs/identityProviderConnectionsCreate.ts: {}
   src/funcs/identityProviderConnectionsGet.ts: {}
-  src/funcs/identityProviderConnectionsGetVendorIdentityProviders.ts: {}
   src/funcs/identityProviderConnectionsListApplications.ts: {}
   src/funcs/identityProviderConnectionsRecordAgent.ts: {}
   src/funcs/identityProviderConnectionsReplaceClientSecret.ts: {}
   src/funcs/identityProviderConnectionsRevoke.ts: {}
   src/funcs/identityProviderConnectionsSetSetupMethod.ts: {}
-  src/funcs/identityProviderConnectionsSetVendorIdentityProviders.ts: {}
   src/funcs/identityProviderConnectionsSubmitClientId.ts: {}
   src/funcs/identityProviderConnectionsSyncApplications.ts: {}
   src/funcs/identityProviderConnectionsVerify.ts: {}
@@ -426,6 +424,7 @@ trackedFiles:
   src/funcs/organizationRemoteSessionIssuersMigrate.ts: {}
   src/funcs/organizationRemoteSessionIssuersMove.ts: {}
   src/funcs/organizationRemoteSessionIssuersRefreshMetadata.ts: {}
+  src/funcs/organizationRemoteSessionIssuersSetEMAProviders.ts: {}
   src/funcs/organizationRemoteSessionIssuersUpdate.ts: {}
   src/funcs/organizationRemoteSessionsList.ts: {}
   src/funcs/organizationRemoteSessionsRefresh.ts: {}
@@ -1078,6 +1077,9 @@ trackedFiles:
   src/models/components/duplicatebuiltindashboardrequestbody.ts: {}
   src/models/components/duplicatedashboardrequestbody.ts: {}
   src/models/components/duplicatewidgetrequestbody.ts: {}
+  src/models/components/emaprovider.ts: {}
+  src/models/components/emaproviderinput.ts: {}
+  src/models/components/emaproviderorder.ts: {}
   src/models/components/employeedataflowedge.ts: {}
   src/models/components/employeedataflownode.ts: {}
   src/models/components/enableopenrouterkeyrequestbody.ts: {}
@@ -1704,6 +1706,7 @@ trackedFiles:
   src/models/components/setaitooldecisionresult.ts: {}
   src/models/components/setbillingmetadatarequestbody.ts: {}
   src/models/components/setdirectoryrolemappingform.ts: {}
+  src/models/components/setemaprovidersrequestbody.ts: {}
   src/models/components/setidentityproviderconnectionsetupmethodrequestbody.ts: {}
   src/models/components/setkeyenabledrequestbody.ts: {}
   src/models/components/setmcpmetadatarequestbody.ts: {}
@@ -1731,7 +1734,6 @@ trackedFiles:
   src/models/components/setuptaskassignee.ts: {}
   src/models/components/setuptaskassigneeinput.ts: {}
   src/models/components/setusersessionissuerrequestbody.ts: {}
-  src/models/components/setvendoridentityprovidersrequestbody.ts: {}
   src/models/components/shadowmcpaccesssummary.ts: {}
   src/models/components/shadowmcpinventoryapprovalrequest.ts: {}
   src/models/components/shadowmcpinventoryrequestsummary.ts: {}
@@ -1978,9 +1980,6 @@ trackedFiles:
   src/models/components/validatekeyorganization.ts: {}
   src/models/components/validatekeyproject.ts: {}
   src/models/components/validatekeyresult.ts: {}
-  src/models/components/vendoridentityprovider.ts: {}
-  src/models/components/vendoridentityproviderinput.ts: {}
-  src/models/components/vendoridentityprovidersresult.ts: {}
   src/models/components/verifycimdurlresult.ts: {}
   src/models/components/verifycredentialresult.ts: {}
   src/models/components/verifyidentityproviderconnectionrequestbody.ts: {}
@@ -2361,7 +2360,6 @@ trackedFiles:
   src/models/operations/getusersessionclient.ts: {}
   src/models/operations/getusersessionissuer.ts: {}
   src/models/operations/getusersessionissuercimdclient.ts: {}
-  src/models/operations/getvendoridentityproviders.ts: {}
   src/models/operations/getwidget.ts: {}
   src/models/operations/getworkloadcustomflows.ts: {}
   src/models/operations/getworkunitstrend.ts: {}
@@ -2670,6 +2668,7 @@ trackedFiles:
   src/models/operations/setmcpservertoolmetadata.ts: {}
   src/models/operations/setmcpservertoolmetadatabatch.ts: {}
   src/models/operations/setmodelproviderkeyenabled.ts: {}
+  src/models/operations/setorganizationremotesessionissueremaproviders.ts: {}
   src/models/operations/setorganizationwhitelist.ts: {}
   src/models/operations/setpluginassignments.ts: {}
   src/models/operations/setproductfeature.ts: {}
@@ -2684,7 +2683,6 @@ trackedFiles:
   src/models/operations/settoolsetenvironmentlink.ts: {}
   src/models/operations/settoolsettoolvariationsgroup.ts: {}
   src/models/operations/settoolsetusersessionissuer.ts: {}
-  src/models/operations/setvendoridentityproviders.ts: {}
   src/models/operations/shareskill.ts: {}
   src/models/operations/skillfeedback.ts: {}
   src/models/operations/startmcpresearch.ts: {}
@@ -3693,6 +3691,7 @@ trackedFiles:
   src/react-query/setMcpServerToolMetadata.ts: {}
   src/react-query/setMcpServerToolMetadataBatch.ts: {}
   src/react-query/setModelProviderKeyEnabled.ts: {}
+  src/react-query/setOrganizationRemoteSessionIssuerEMAProviders.ts: {}
   src/react-query/setPluginAssignments.ts: {}
   src/react-query/setProjectLogo.ts: {}
   src/react-query/setRemoteMcpServerScopePin.ts: {}
@@ -3705,7 +3704,6 @@ trackedFiles:
   src/react-query/setToolsetEnvironmentLink.ts: {}
   src/react-query/setToolsetToolVariationsGroup.ts: {}
   src/react-query/setToolsetUserSessionIssuer.ts: {}
-  src/react-query/setVendorIdentityProviders.ts: {}
   src/react-query/shadowMCPInventory.core.ts: {}
   src/react-query/shadowMCPInventory.ts: {}
   src/react-query/shadowMCPInventoryServer.core.ts: {}
@@ -3899,8 +3897,6 @@ trackedFiles:
   src/react-query/userSessions.ts: {}
   src/react-query/validateAPIKey.core.ts: {}
   src/react-query/validateAPIKey.ts: {}
-  src/react-query/vendorIdentityProviders.core.ts: {}
-  src/react-query/vendorIdentityProviders.ts: {}
   src/react-query/verifyGcpIamCredential.ts: {}
   src/react-query/verifyGcpIamPlatformCredential.ts: {}
   src/react-query/verifyGcpKmsKey.ts: {}
@@ -11916,6 +11912,17 @@ examples:
       responses:
         "200":
           application/json: {"created_at": "2024-07-11T15:53:42.054Z", "enabled": false, "id": "be367248-2e7d-45f1-a8a3-d1f30a4c3064", "project_id": "7dfb608e-ab2c-45fc-a559-5f6ecd7aac44", "provider": "<value>", "slot": "<value>", "updated_at": "2024-03-26T13:11:05.637Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  setOrganizationRemoteSessionIssuerEMAProviders:
+    speakeasy-default-set-organization-remote-session-issuer-EMA-providers:
+      requestBody:
+        application/json: {"providers": [], "remote_session_issuer_id": "7125df3e-8dbd-4ce6-837b-1157557aa551"}
+      responses:
+        "200":
+          application/json: {"is_default": false, "providers": [{"kind": "speakeasy"}], "vendor_issuer": "<value>"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

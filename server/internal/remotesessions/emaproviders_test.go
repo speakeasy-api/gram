@@ -17,8 +17,9 @@ func TestNormalizeVendorIssuer(t *testing.T) {
 		{in: "https://mcp.linear.app", want: "https://mcp.linear.app"},
 		{in: "https://mcp.linear.app/", want: "https://mcp.linear.app"},
 		{in: "HTTPS://MCP.Linear.App/", want: "https://mcp.linear.app"},
+		{in: "https://mcp.linear.app:443/", want: "https://mcp.linear.app"},
 		{in: "https://auth.example.com/Tenant/", want: "https://auth.example.com/Tenant"},
-		{in: "  https://auth.example.com:8443/a  ", want: "https://auth.example.com:8443/a"},
+		{in: "https://auth.example.com:8443/a", want: "https://auth.example.com:8443/a"},
 	} {
 		got, err := remotesessions.NormalizeVendorIssuer(tc.in)
 		require.NoError(t, err, tc.in)
@@ -28,15 +29,4 @@ func TestNormalizeVendorIssuer(t *testing.T) {
 		_, err := remotesessions.NormalizeVendorIssuer(bad)
 		require.ErrorIs(t, err, remotesessions.ErrInvalidVendorIssuer, bad)
 	}
-}
-
-func TestParseEMAProviderKind(t *testing.T) {
-	t.Parallel()
-	for _, kind := range []remotesessions.EMAProviderKind{remotesessions.EMAProviderExternal, remotesessions.EMAProviderSpeakeasy} {
-		got, ok := remotesessions.ParseEMAProviderKind(string(kind))
-		require.True(t, ok)
-		require.Equal(t, kind, got)
-	}
-	_, ok := remotesessions.ParseEMAProviderKind("okta")
-	require.False(t, ok)
 }

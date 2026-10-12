@@ -53,14 +53,6 @@ type Client struct {
 	// listApplications endpoint.
 	ListApplicationsDoer goahttp.Doer
 
-	// GetVendorIdentityProviders Doer is the HTTP client used to make requests to
-	// the getVendorIdentityProviders endpoint.
-	GetVendorIdentityProvidersDoer goahttp.Doer
-
-	// SetVendorIdentityProviders Doer is the HTTP client used to make requests to
-	// the setVendorIdentityProviders endpoint.
-	SetVendorIdentityProvidersDoer goahttp.Doer
-
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -82,23 +74,21 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateDoer:                     doer,
-		SubmitClientIDDoer:             doer,
-		ReplaceClientSecretDoer:        doer,
-		SetSetupMethodDoer:             doer,
-		VerifyDoer:                     doer,
-		GetDoer:                        doer,
-		RecordAgentDoer:                doer,
-		RevokeDoer:                     doer,
-		SyncApplicationsDoer:           doer,
-		ListApplicationsDoer:           doer,
-		GetVendorIdentityProvidersDoer: doer,
-		SetVendorIdentityProvidersDoer: doer,
-		RestoreResponseBody:            restoreBody,
-		scheme:                         scheme,
-		host:                           host,
-		decoder:                        dec,
-		encoder:                        enc,
+		CreateDoer:              doer,
+		SubmitClientIDDoer:      doer,
+		ReplaceClientSecretDoer: doer,
+		SetSetupMethodDoer:      doer,
+		VerifyDoer:              doer,
+		GetDoer:                 doer,
+		RecordAgentDoer:         doer,
+		RevokeDoer:              doer,
+		SyncApplicationsDoer:    doer,
+		ListApplicationsDoer:    doer,
+		RestoreResponseBody:     restoreBody,
+		scheme:                  scheme,
+		host:                    host,
+		decoder:                 dec,
+		encoder:                 enc,
 	}
 }
 
@@ -337,54 +327,6 @@ func (c *Client) ListApplications() goa.Endpoint {
 		resp, err := c.ListApplicationsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("identityProviderConnections", "listApplications", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// GetVendorIdentityProviders returns an endpoint that makes HTTP requests to
-// the identityProviderConnections service getVendorIdentityProviders server.
-func (c *Client) GetVendorIdentityProviders() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeGetVendorIdentityProvidersRequest(c.encoder)
-		decodeResponse = DecodeGetVendorIdentityProvidersResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetVendorIdentityProvidersRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.GetVendorIdentityProvidersDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("identityProviderConnections", "getVendorIdentityProviders", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// SetVendorIdentityProviders returns an endpoint that makes HTTP requests to
-// the identityProviderConnections service setVendorIdentityProviders server.
-func (c *Client) SetVendorIdentityProviders() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeSetVendorIdentityProvidersRequest(c.encoder)
-		decodeResponse = DecodeSetVendorIdentityProvidersResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildSetVendorIdentityProvidersRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.SetVendorIdentityProvidersDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("identityProviderConnections", "setVendorIdentityProviders", err)
 		}
 		return decodeResponse(resp)
 	}

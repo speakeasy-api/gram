@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  VendorIdentityProvidersResult,
-  VendorIdentityProvidersResult$inboundSchema,
-} from "../models/components/vendoridentityprovidersresult.js";
+  EMAProviderOrder,
+  EMAProviderOrder$inboundSchema,
+} from "../models/components/emaproviderorder.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  SetVendorIdentityProvidersRequest,
-  SetVendorIdentityProvidersRequest$outboundSchema,
-  SetVendorIdentityProvidersSecurity,
-} from "../models/operations/setvendoridentityproviders.js";
+  SetOrganizationRemoteSessionIssuerEMAProvidersRequest,
+  SetOrganizationRemoteSessionIssuerEMAProvidersRequest$outboundSchema,
+  SetOrganizationRemoteSessionIssuerEMAProvidersSecurity,
+} from "../models/operations/setorganizationremotesessionissueremaproviders.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * setVendorIdentityProviders identityProviderConnections
+ * setEMAProviders organizationRemoteSessionIssuers
  *
  * @remarks
- * Replace the order in which identity providers issue ID-JAGs for one vendor authorization server. Identity chaining tries them in order and falls through to the next on any failure. An empty list restores the default: every available provider, external connections first, then Speakeasy. Requires org:admin.
+ * Replace the order in which EMA providers issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries them in order and falls through to the next on any failure. An empty list restores the default: every available provider, external first, then Speakeasy. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout.
  */
-export function identityProviderConnectionsSetVendorIdentityProviders(
+export function organizationRemoteSessionIssuersSetEMAProviders(
   client: GramCore,
-  request: SetVendorIdentityProvidersRequest,
-  security?: SetVendorIdentityProvidersSecurity | undefined,
+  request: SetOrganizationRemoteSessionIssuerEMAProvidersRequest,
+  security?: SetOrganizationRemoteSessionIssuerEMAProvidersSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    VendorIdentityProvidersResult,
+    EMAProviderOrder,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function identityProviderConnectionsSetVendorIdentityProviders(
 
 async function $do(
   client: GramCore,
-  request: SetVendorIdentityProvidersRequest,
-  security?: SetVendorIdentityProvidersSecurity | undefined,
+  request: SetOrganizationRemoteSessionIssuerEMAProvidersRequest,
+  security?: SetOrganizationRemoteSessionIssuerEMAProvidersSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      VendorIdentityProvidersResult,
+      EMAProviderOrder,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -95,21 +95,23 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(SetVendorIdentityProvidersRequest$outboundSchema, value),
+    (value) =>
+      z.parse(
+        SetOrganizationRemoteSessionIssuerEMAProvidersRequest$outboundSchema,
+        value,
+      ),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON(
-    "body",
-    payload.SetVendorIdentityProvidersRequestBody,
-    { explode: true },
-  );
+  const body = encodeJSON("body", payload.SetEMAProvidersRequestBody, {
+    explode: true,
+  });
 
   const path = pathToFunc(
-    "/rpc/identityProviderConnections.setVendorIdentityProviders",
+    "/rpc/organizationRemoteSessionIssuers.setEMAProviders",
   )();
 
   const headers = new Headers(compactMap({
@@ -134,7 +136,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "setVendorIdentityProviders",
+    operationID: "setOrganizationRemoteSessionIssuerEMAProviders",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -178,7 +180,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    VendorIdentityProvidersResult,
+    EMAProviderOrder,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -189,9 +191,9 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, VendorIdentityProvidersResult$inboundSchema),
+    M.json(200, EMAProviderOrder$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
-    M.jsonErr([500, 502, 503], ServiceError$inboundSchema),
+    M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),
     M.fail("5XX"),
   )(response, req, { extraFields: responseFields });

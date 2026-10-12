@@ -25604,102 +25604,6 @@ paths:
       x-speakeasy-name-override: get
       x-speakeasy-react-hook:
         name: IdentityProviderConnection
-  /rpc/identityProviderConnections.getVendorIdentityProviders:
-    get:
-      description: Get the order in which identity providers issue ID-JAGs for one vendor authorization server. Requires org:read.
-      operationId: getVendorIdentityProviders
-      parameters:
-        - allowEmptyValue: true
-          description: The vendor authorization server issuer (RFC 8414).
-          in: query
-          name: vendor_issuer
-          required: true
-          schema:
-            description: The vendor authorization server issuer (RFC 8414).
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VendorIdentityProvidersResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-        "503":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unavailable: service temporarily unavailable'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: getVendorIdentityProviders identityProviderConnections
-      tags:
-        - identityProviderConnections
-      x-speakeasy-name-override: getVendorIdentityProviders
-      x-speakeasy-react-hook:
-        name: VendorIdentityProviders
   /rpc/identityProviderConnections.listApplications:
     get:
       description: List the applications snapshot for the connection with live assignment counts and the last reconcile run. The connection must be verified. Requires org:admin.
@@ -26211,100 +26115,6 @@ paths:
       x-speakeasy-name-override: setSetupMethod
       x-speakeasy-react-hook:
         name: SetIdentityProviderConnectionSetupMethod
-  /rpc/identityProviderConnections.setVendorIdentityProviders:
-    post:
-      description: 'Replace the order in which identity providers issue ID-JAGs for one vendor authorization server. Identity chaining tries them in order and falls through to the next on any failure. An empty list restores the default: every available provider, external connections first, then Speakeasy. Requires org:admin.'
-      operationId: setVendorIdentityProviders
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SetVendorIdentityProvidersRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VendorIdentityProvidersResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-        "503":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unavailable: service temporarily unavailable'
-      security:
-        - session_header_Gram-Session: []
-        - {}
-      summary: setVendorIdentityProviders identityProviderConnections
-      tags:
-        - identityProviderConnections
-      x-speakeasy-name-override: setVendorIdentityProviders
-      x-speakeasy-react-hook:
-        name: SetVendorIdentityProviders
   /rpc/identityProviderConnections.submitClientId:
     post:
       description: Record the client ID of the Okta API Services application and verify it. Connections installed from the Okta Integration Network also take the client secret. Allowed once, while the connection is pending; revoke and recreate to change it. Requires org:admin.
@@ -38562,6 +38372,94 @@ paths:
       x-speakeasy-name-override: refreshMetadata
       x-speakeasy-react-hook:
         name: RefreshOrganizationRemoteSessionIssuerMetadata
+  /rpc/organizationRemoteSessionIssuers.setEMAProviders:
+    post:
+      description: 'Replace the order in which EMA providers issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries them in order and falls through to the next on any failure. An empty list restores the default: every available provider, external first, then Speakeasy. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout.'
+      operationId: setOrganizationRemoteSessionIssuerEMAProviders
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetEMAProvidersRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EMAProviderOrder'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: setEMAProviders organizationRemoteSessionIssuers
+      tags:
+        - organizationRemoteSessionIssuers
+      x-speakeasy-name-override: setEMAProviders
+      x-speakeasy-react-hook:
+        name: SetOrganizationRemoteSessionIssuerEMAProviders
   /rpc/organizationRemoteSessionIssuers.update:
     post:
       description: Update any remote_session_issuer (organizational or project-specific) in the caller's organization. Requires org:admin.
@@ -86250,6 +86148,69 @@ components:
           format: uuid
       required:
         - id
+    EMAProvider:
+      type: object
+      properties:
+        internal_session_issuer_id:
+          type: string
+          description: The organization's internal session issuer, for speakeasy.
+          format: uuid
+        kind:
+          type: string
+          description: external or speakeasy.
+          enum:
+            - external
+            - speakeasy
+        remote_session_issuer_id:
+          type: string
+          description: The external provider's remote session issuer. Omitted for speakeasy, and for the endpoint's trusted issuer in a default order with none.
+          format: uuid
+        unavailable_reason:
+          type: string
+          description: Why the provider cannot serve now; omitted when it can. Unavailable providers are skipped.
+          enum:
+            - deleted
+            - disabled
+            - not_trusted_by_endpoint
+            - signing_unavailable
+      description: One EMA provider in a vendor's order.
+      required:
+        - kind
+    EMAProviderInput:
+      type: object
+      properties:
+        kind:
+          type: string
+          description: external is an organization-level remote session issuer that exchanges the user's identity for an ID-JAG, such as an Okta authorization server; speakeasy is the organization's internal session issuer.
+          enum:
+            - external
+            - speakeasy
+        remote_session_issuer_id:
+          type: string
+          description: 'Required for external, omitted for speakeasy: an organization-level issuer that an organization user session issuer trusts.'
+          format: uuid
+      description: One EMA provider allowed to issue ID-JAGs for a vendor.
+      required:
+        - kind
+    EMAProviderOrder:
+      type: object
+      properties:
+        is_default:
+          type: boolean
+          description: 'No order is saved, so every available provider applies: external first, then Speakeasy.'
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/EMAProvider'
+          description: Providers in the order they are tried.
+        vendor_issuer:
+          type: string
+          description: The vendor authorization server issuer, canonicalized.
+      description: The EMA providers identity chaining tries, in order, for one vendor authorization server; each failure falls through to the next.
+      required:
+        - vendor_issuer
+        - is_default
+        - providers
     EmployeeDataFlowEdge:
       type: object
       properties:
@@ -89654,6 +89615,8 @@ components:
         client_id:
           type: string
           description: Exact selected remote_session_client row ID, when available.
+        ema_providers:
+          $ref: '#/components/schemas/EMAProviderOrder'
         external_client_id:
           type: string
           description: Public OAuth client identifier, never a secret.
@@ -98462,6 +98425,8 @@ components:
         created_at:
           type: string
           format: date-time
+        ema_providers:
+          $ref: '#/components/schemas/EMAProviderOrder'
         grant_types_supported:
           type: array
           items:
@@ -102289,6 +102254,22 @@ components:
       required:
         - source_kind
         - role_urn
+    SetEMAProvidersRequestBody:
+      type: object
+      properties:
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/EMAProviderInput'
+          description: Providers in the order they are tried; each at most once.
+          maxItems: 10
+        remote_session_issuer_id:
+          type: string
+          description: Any remote_session_issuer in the caller's organization that names the vendor authorization server.
+          format: uuid
+      required:
+        - remote_session_issuer_id
+        - providers
     SetIdentityProviderConnectionSetupMethodRequestBody:
       type: object
       properties:
@@ -102729,21 +102710,6 @@ components:
           type: string
           description: The user_session_issuer id to link, or null to unlink.
           format: uuid
-    SetVendorIdentityProvidersRequestBody:
-      type: object
-      properties:
-        providers:
-          type: array
-          items:
-            $ref: '#/components/schemas/VendorIdentityProviderInput'
-          description: Providers in the order they are tried. Each provider at most once.
-          maxItems: 10
-        vendor_issuer:
-          type: string
-          description: The vendor authorization server issuer (RFC 8414).
-      required:
-        - vendor_issuer
-        - providers
     SetupTask:
       type: object
       properties:
@@ -110454,65 +110420,6 @@ components:
         - organization
         - projects
         - scopes
-    VendorIdentityProvider:
-      type: object
-      properties:
-        internal_session_issuer_id:
-          type: string
-          description: The organization's Speakeasy issuer for the speakeasy supplier.
-          format: uuid
-        kind:
-          type: string
-          description: external is an organization-level remote session issuer; speakeasy is the organization's Speakeasy issuer.
-          enum:
-            - external
-            - speakeasy
-        remote_session_issuer_id:
-          type: string
-          description: Remote session issuer ID for external suppliers.
-          format: uuid
-        unavailable:
-          type: boolean
-          description: The supplier was deleted or turned off, so this entry is skipped until the order is saved again.
-      description: One supplier in a vendor's order.
-      required:
-        - kind
-        - unavailable
-    VendorIdentityProviderInput:
-      type: object
-      properties:
-        kind:
-          type: string
-          description: external is an organization-level remote session issuer that exchanges the user's identity for an ID-JAG, such as an Okta authorization server; speakeasy is the organization's Speakeasy issuer, which must exist.
-          enum:
-            - external
-            - speakeasy
-        remote_session_issuer_id:
-          type: string
-          description: Remote session issuer ID. Required for external; omitted for speakeasy. Must be an organization-level issuer that an organization user session issuer trusts.
-          format: uuid
-      description: One supplier allowed to issue ID-JAGs for a vendor.
-      required:
-        - kind
-    VendorIdentityProvidersResult:
-      type: object
-      properties:
-        is_default:
-          type: boolean
-          description: 'No order is saved, so every available supplier applies: external issuers first, then the Speakeasy issuer when it is on.'
-        providers:
-          type: array
-          items:
-            $ref: '#/components/schemas/VendorIdentityProvider'
-          description: Providers in the order they are tried. When is_default, the default order.
-        vendor_issuer:
-          type: string
-          description: 'The vendor authorization server issuer, normalized: lowercase scheme and host, no trailing slash.'
-      description: The identity providers identity chaining tries, in order, for one vendor authorization server.
-      required:
-        - vendor_issuer
-        - is_default
-        - providers
     VerifyCimdURLResult:
       type: object
       properties:

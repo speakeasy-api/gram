@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -35,6 +36,7 @@ func confirmedUpstream(t *testing.T, ctx context.Context, si *instance, name str
 	row := rowFor(t, list(t, ctx, si, true), f.serverID)
 	return f, identitychaining.Observation{
 		OrganizationID:  si.orgID,
+		Provider:        remotesessions.EMAProviderExternal,
 		TrustedIssuerID: si.oktaIssuerID,
 		RemoteIssuerID:  f.issuerID,
 		RemoteIssuer:    audience,
@@ -115,7 +117,10 @@ func TestObserveAttempt_OnlyRecordsOnTheOrganizationsConfirmedOktaUpstream(t *te
 	otherUpstream.RemoteIssuerID = unconfirmed.issuerID
 	beforeConfirmation := obs
 	beforeConfirmation.StartedAt = time.Now().Add(-time.Hour)
+	speakeasyServed := obs
+	speakeasyServed.Provider = remotesessions.EMAProviderSpeakeasy
 	for name, o := range map[string]identitychaining.Observation{
+		"another ema provider":                   speakeasyServed,
 		"another identity provider":              otherIdP,
 		"another organization":                   otherOrg,
 		"an unconfirmed upstream":                otherUpstream,
@@ -240,6 +245,7 @@ func TestObserveAttempt_MismatchedAudienceDoesNotRecordMissingConnection(t *test
 	require.NoError(t, err)
 	obs := identitychaining.Observation{
 		OrganizationID:  si.orgID,
+		Provider:        remotesessions.EMAProviderExternal,
 		TrustedIssuerID: si.oktaIssuerID,
 		RemoteIssuerID:  f.issuerID,
 		RemoteIssuer:    audience,

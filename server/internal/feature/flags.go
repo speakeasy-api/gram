@@ -189,6 +189,10 @@ const (
 	// FlagOktaConnections gates the Okta integration while it is dogfooded:
 	// creating connections, resource connections and server suggestions.
 	FlagOktaConnections Flag = "okta-connections"
+
+	// FlagEMAProviders gates changing a vendor's EMA provider order while the
+	// Speakeasy issuer is dogfooded. Targeted by PostHog organization group.
+	FlagEMAProviders Flag = "ema-providers"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an

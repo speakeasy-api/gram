@@ -1985,6 +1985,28 @@ func (q *Queries) CreateTestTrustedIssuerOrganization(ctx context.Context, arg C
 	return err
 }
 
+const deleteEMAProviders = `-- name: DeleteEMAProviders :execrows
+UPDATE remote_session_ema_providers
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND vendor_issuer = $2
+  AND deleted IS FALSE
+`
+
+type DeleteEMAProvidersParams struct {
+	OrganizationID string
+	VendorIssuer   string
+}
+
+// Retires the organization's EMA provider order for one vendor issuer.
+func (q *Queries) DeleteEMAProviders(ctx context.Context, arg DeleteEMAProvidersParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteEMAProviders, arg.OrganizationID, arg.VendorIssuer)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteGlobalRemoteSessionClient = `-- name: DeleteGlobalRemoteSessionClient :one
 UPDATE remote_session_clients
 SET deleted_at = clock_timestamp()
@@ -3486,6 +3508,25 @@ func (q *Queries) GetEMACredentialForUse(ctx context.Context, arg GetEMACredenti
 		&i.GrantedScopes,
 		&i.Usable,
 	)
+	return i, err
+}
+
+const getEMAInternalSessionIssuer = `-- name: GetEMAInternalSessionIssuer :one
+SELECT id, (disabled_at IS NOT NULL)::boolean AS disabled
+FROM internal_session_issuers
+WHERE organization_id = $1 AND deleted IS FALSE
+`
+
+type GetEMAInternalSessionIssuerRow struct {
+	ID       uuid.UUID
+	Disabled bool
+}
+
+// The organization's live internal session issuer, and whether it is off.
+func (q *Queries) GetEMAInternalSessionIssuer(ctx context.Context, organizationID string) (GetEMAInternalSessionIssuerRow, error) {
+	row := q.db.QueryRow(ctx, getEMAInternalSessionIssuer, organizationID)
+	var i GetEMAInternalSessionIssuerRow
+	err := row.Scan(&i.ID, &i.Disabled)
 	return i, err
 }
 
@@ -6139,6 +6180,33 @@ func (q *Queries) HasLivePrincipalRemoteSessionBindingsForClientBinding(ctx cont
 	return exists, err
 }
 
+const insertEMAProvider = `-- name: InsertEMAProvider :exec
+INSERT INTO remote_session_ema_providers (
+  organization_id, vendor_issuer, remote_session_issuer_id, internal_session_issuer_id, position
+) VALUES (
+  $1, $2, $3, $4, $5
+)
+`
+
+type InsertEMAProviderParams struct {
+	OrganizationID          string
+	VendorIssuer            string
+	RemoteSessionIssuerID   uuid.NullUUID
+	InternalSessionIssuerID uuid.NullUUID
+	Position                int32
+}
+
+func (q *Queries) InsertEMAProvider(ctx context.Context, arg InsertEMAProviderParams) error {
+	_, err := q.db.Exec(ctx, insertEMAProvider,
+		arg.OrganizationID,
+		arg.VendorIssuer,
+		arg.RemoteSessionIssuerID,
+		arg.InternalSessionIssuerID,
+		arg.Position,
+	)
+	return err
+}
+
 const insertTrustedDelegationObservationFixture = `-- name: InsertTrustedDelegationObservationFixture :exec
 INSERT INTO trusted_issuer_sessions (
     organization_id, remote_session_client_id, subject_urn, credential_config_hash,
@@ -6415,12 +6483,55 @@ func (q *Queries) ListEMACredentialsFixture(ctx context.Context, projectID uuid.
 	return items, nil
 }
 
-const listEMAVendorIdentityProviders = `-- name: ListEMAVendorIdentityProviders :many
-SELECT p.remote_session_issuer_id, p.internal_session_issuer_id, p.position,
+const listEMAExternalProviderCandidates = `-- name: ListEMAExternalProviderCandidates :many
+SELECT DISTINCT r.id, r.created_at
+FROM remote_session_issuers AS r
+JOIN user_session_issuers AS u
+  ON u.organization_id = r.organization_id
+ AND u.trusted_remote_session_issuer_id = r.id
+ AND u.project_id IS NULL
+ AND u.deleted IS FALSE
+WHERE r.organization_id = $1
+  AND r.project_id IS NULL
+  AND r.deleted IS FALSE
+ORDER BY r.created_at, r.id
+`
+
+type ListEMAExternalProviderCandidatesRow struct {
+	ID        uuid.UUID
+	CreatedAt pgtype.Timestamptz
+}
+
+// External EMA providers the organization can name: live organization-level
+// remote session issuers that a live organization user session issuer trusts,
+// since identity chaining exchanges at the endpoint's trusted issuer.
+func (q *Queries) ListEMAExternalProviderCandidates(ctx context.Context, organizationID pgtype.Text) ([]ListEMAExternalProviderCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listEMAExternalProviderCandidates, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEMAExternalProviderCandidatesRow
+	for rows.Next() {
+		var i ListEMAExternalProviderCandidatesRow
+		if err := rows.Scan(&i.ID, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEMAProviders = `-- name: ListEMAProviders :many
+SELECT p.id, p.remote_session_issuer_id, p.internal_session_issuer_id, p.position,
   (
     (p.remote_session_issuer_id IS NOT NULL AND (r.id IS NULL OR r.deleted IS TRUE))
-    OR (p.internal_session_issuer_id IS NOT NULL AND (i.id IS NULL OR i.deleted IS TRUE OR i.disabled_at IS NOT NULL))
-  )::boolean AS provider_unavailable
+    OR (p.internal_session_issuer_id IS NOT NULL AND (i.id IS NULL OR i.deleted IS TRUE))
+  )::boolean AS provider_deleted,
+  (p.internal_session_issuer_id IS NOT NULL AND i.disabled_at IS NOT NULL)::boolean AS provider_disabled
 FROM remote_session_ema_providers AS p
 LEFT JOIN remote_session_issuers AS r
   ON r.organization_id = p.organization_id
@@ -6434,37 +6545,39 @@ WHERE p.organization_id = $1
 ORDER BY p.position
 `
 
-type ListEMAVendorIdentityProvidersParams struct {
+type ListEMAProvidersParams struct {
 	OrganizationID string
 	VendorIssuer   string
 }
 
-type ListEMAVendorIdentityProvidersRow struct {
+type ListEMAProvidersRow struct {
+	ID                      uuid.UUID
 	RemoteSessionIssuerID   uuid.NullUUID
 	InternalSessionIssuerID uuid.NullUUID
 	Position                int32
-	ProviderUnavailable     bool
+	ProviderDeleted         bool
+	ProviderDisabled        bool
 }
 
-// The organization's ordered ID-JAG suppliers for one vendor authorization
-// server issuer. Each row names an external remote session issuer, which does
-// the token exchange, or the organization's internal session issuer. Rows
-// whose supplier was deleted or disabled are flagged, not dropped, so a policy
-// left with only those never reads as no policy.
-func (q *Queries) ListEMAVendorIdentityProviders(ctx context.Context, arg ListEMAVendorIdentityProvidersParams) ([]ListEMAVendorIdentityProvidersRow, error) {
-	rows, err := q.db.Query(ctx, listEMAVendorIdentityProviders, arg.OrganizationID, arg.VendorIssuer)
+// The organization's EMA provider order for one vendor issuer. A row whose
+// provider was deleted or disabled is flagged, not dropped, so a policy left
+// with only those never reads as no policy.
+func (q *Queries) ListEMAProviders(ctx context.Context, arg ListEMAProvidersParams) ([]ListEMAProvidersRow, error) {
+	rows, err := q.db.Query(ctx, listEMAProviders, arg.OrganizationID, arg.VendorIssuer)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListEMAVendorIdentityProvidersRow
+	var items []ListEMAProvidersRow
 	for rows.Next() {
-		var i ListEMAVendorIdentityProvidersRow
+		var i ListEMAProvidersRow
 		if err := rows.Scan(
+			&i.ID,
 			&i.RemoteSessionIssuerID,
 			&i.InternalSessionIssuerID,
 			&i.Position,
-			&i.ProviderUnavailable,
+			&i.ProviderDeleted,
+			&i.ProviderDisabled,
 		); err != nil {
 			return nil, err
 		}
@@ -9588,6 +9701,16 @@ func (q *Queries) LockEMAProject(ctx context.Context, arg LockEMAProjectParams) 
 	return id, err
 }
 
+const lockEMAProviders = `-- name: LockEMAProviders :exec
+SELECT pg_advisory_xact_lock(hashtextextended('remote_session_ema_providers:' || $1::text, 0))
+`
+
+// Serializes EMA provider order replaces for one organization.
+func (q *Queries) LockEMAProviders(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockEMAProviders, organizationID)
+	return err
+}
+
 const lockEMAUserIssuer = `-- name: LockEMAUserIssuer :one
 SELECT user_session_issuers.id FROM user_session_issuers WHERE user_session_issuers.id = $1 AND user_session_issuers.deleted IS FALSE
 AND ((user_session_issuers.project_id = $2 AND EXISTS (
@@ -11513,6 +11636,16 @@ func (q *Queries) SetEMAClientGrants(ctx context.Context, arg SetEMAClientGrants
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const setEMAProvidersLockTimeout = `-- name: SetEMAProvidersLockTimeout :exec
+SET LOCAL lock_timeout = '5s'
+`
+
+// Bounds how long a replace waits on another in the same organization.
+func (q *Queries) SetEMAProvidersLockTimeout(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, setEMAProvidersLockTimeout)
+	return err
 }
 
 const setOrganizationRemoteSessionClientCallbackBaseURLFixture = `-- name: SetOrganizationRemoteSessionClientCallbackBaseURLFixture :exec

@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/noop"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -37,9 +39,13 @@ const (
 	// allowance.
 	maxAccessLifetime = time.Hour
 
-	// attemptTimeout bounds one acquisition end to end: a delegation refresh,
-	// the token exchange and the redemption.
+	// attemptTimeout bounds one provider's attempt end to end: a delegation
+	// refresh, the token exchange and the redemption.
 	attemptTimeout = 25 * time.Second
+
+	// acquireTimeout bounds Acquire across every provider in the order, so
+	// falling through never multiplies a request's worst case.
+	acquireTimeout = 30 * time.Second
 
 	// legTimeout bounds each token endpoint request.
 	legTimeout = 10 * time.Second
@@ -76,6 +82,9 @@ const (
 	maxClockSkew = time.Minute
 )
 
+// meterAttempts counts identity chaining attempts per EMA provider.
+const meterAttempts = "identity_chaining.attempt"
+
 // Chainer obtains resource-bound downstream access tokens for a human by
 // identity chaining. It is safe for concurrent use.
 type Chainer struct {
@@ -85,24 +94,42 @@ type Chainer struct {
 	locks      cache.Cache
 	observerMu sync.RWMutex
 	observer   Observer
-
-	// sourceOverrides replaces a provider kind's token source; tests only.
-	sourceOverrides map[remotesessions.EMAProviderKind]tokenSource
+	attempts   metric.Int64Counter
 }
 
 // New builds a chainer over the challenge manager's egress, tunnel and
 // client-assertion configuration. keys verifies identity provider assertions;
 // locks serializes acquisition across processes and shares failures.
 func New(logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, challenges *remotesessions.ChallengeManager, delegation *remotesessions.DelegationService, keys *jwks.KeyResolver, locks cache.Cache) *Chainer {
-	return &Chainer{
-		Governor:        *NewGovernor(logger, db, enc, delegation),
-		challenges:      challenges,
-		keys:            keys,
-		locks:           locks,
-		observerMu:      sync.RWMutex{},
-		observer:        nil,
-		sourceOverrides: nil,
+	c := &Chainer{
+		Governor:   *NewGovernor(logger, db, enc, delegation),
+		challenges: challenges,
+		keys:       keys,
+		locks:      locks,
+		observerMu: sync.RWMutex{},
+		observer:   nil,
+		attempts:   nil,
 	}
+	c.sources[remotesessions.EMAProviderExternal] = func(p remotesessions.EMAProvider) tokenSource {
+		return externalSource{c: c, issuer: p.RemoteSessionIssuerID}
+	}
+	c.SetMeterProvider(noop.NewMeterProvider())
+	return c
+}
+
+// SetMeterProvider records attempts on meterProvider. Call it during wiring,
+// before the chainer serves requests.
+func (c *Chainer) SetMeterProvider(meterProvider metric.MeterProvider) {
+	counter, err := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining").Int64Counter(
+		meterAttempts,
+		metric.WithDescription("Identity chaining attempts by EMA provider, reason and whether an earlier provider failed."),
+		metric.WithUnit("{attempt}"),
+	)
+	if err != nil {
+		c.logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterAttempts), attr.SlogError(err))
+		counter, _ = noop.NewMeterProvider().Meter("").Int64Counter(meterAttempts)
+	}
+	c.attempts = counter
 }
 
 // Acquire returns a usable downstream token for the request's upstream, from
@@ -130,26 +157,28 @@ func (c *Chainer) Acquire(ctx context.Context, req Request) (Token, Outcome) {
 		attr.SlogRemoteSessionClientID(sel.clientID.String()),
 		attr.SlogOAuthResource(sel.resource),
 	)
-	kinds, outcome := c.providerOrder(ctx, logger, req, sel)
+	providers, outcome := c.servingProviders(ctx, logger, req, sel)
 	if !outcome.Succeeded() {
 		return none, outcome
 	}
-	// Every allowed provider is tried in order; any failure falls through to
-	// the next. The first real failure is reported, since an unavailable
-	// source says nothing about the request.
+	// Every available provider is tried in order within one deadline; any
+	// failure falls through to the next. The first failure is reported.
+	ctx, cancel := context.WithTimeout(ctx, acquireTimeout)
+	defer cancel()
 	var first Outcome
-	for _, kind := range kinds {
-		token, attempt := c.acquireFrom(ctx, logger.With(attr.SlogProvider(string(kind))), req, sel, c.source(kind))
-		attempt.Provider = kind
+	for i, p := range providers {
+		token, attempt := c.acquireFrom(ctx, logger.With(attr.SlogIdentityChainingProvider(string(p.Kind))), req, sel, c.source(p))
+		attempt.Provider = p.Kind
+		c.attempts.Add(ctx, 1, metric.WithAttributes(attr.IdentityChainingProvider(string(p.Kind)), attr.Outcome(attempt.Reason), attr.IdentityChainingFallback(i > 0)))
 		if attempt.Succeeded() {
+			if i > 0 {
+				logger.InfoContext(ctx, "identity chaining served by a fallback ema provider", attr.SlogIdentityChainingProvider(string(p.Kind)), attr.SlogIdentityChainingFallback(true))
+			}
 			return token, attempt
 		}
-		if attempt.Reason != ReasonProviderUnavailable && first.Reason == "" {
+		if first.Reason == "" {
 			first = attempt
 		}
-	}
-	if first.Reason == "" {
-		return none, providerUnavailable
 	}
 	return none, first
 }

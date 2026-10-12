@@ -60,15 +60,6 @@ type Service interface {
 	// counts and the last reconcile run. The connection must be verified. Requires
 	// org:admin.
 	ListApplications(context.Context, *ListApplicationsPayload) (res *ListIdentityProviderConnectionApplicationsResult, err error)
-	// Get the order in which identity providers issue ID-JAGs for one vendor
-	// authorization server. Requires org:read.
-	GetVendorIdentityProviders(context.Context, *GetVendorIdentityProvidersPayload) (res *VendorIdentityProvidersResult, err error)
-	// Replace the order in which identity providers issue ID-JAGs for one vendor
-	// authorization server. Identity chaining tries them in order and falls
-	// through to the next on any failure. An empty list restores the default:
-	// every available provider, external connections first, then Speakeasy.
-	// Requires org:admin.
-	SetVendorIdentityProviders(context.Context, *SetVendorIdentityProvidersPayload) (res *VendorIdentityProvidersResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -91,7 +82,7 @@ const ServiceName = "identityProviderConnections"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"create", "submitClientId", "replaceClientSecret", "setSetupMethod", "verify", "get", "recordAgent", "revoke", "syncApplications", "listApplications", "getVendorIdentityProviders", "setVendorIdentityProviders"}
+var MethodNames = [10]string{"create", "submitClientId", "replaceClientSecret", "setSetupMethod", "verify", "get", "recordAgent", "revoke", "syncApplications", "listApplications"}
 
 // CreatePayload is the payload type of the identityProviderConnections service
 // create method.
@@ -118,14 +109,6 @@ type GetPayload struct {
 	SessionToken *string
 	// Connection ID. Omit to fetch the organization's live connection.
 	ID *string
-}
-
-// GetVendorIdentityProvidersPayload is the payload type of the
-// identityProviderConnections service getVendorIdentityProviders method.
-type GetVendorIdentityProvidersPayload struct {
-	SessionToken *string
-	// The vendor authorization server issuer (RFC 8414).
-	VendorIssuer string
 }
 
 // The published signing key the identity provider currently trusts. Omitted
@@ -345,16 +328,6 @@ type SetSetupMethodPayload struct {
 	ListingMode string
 }
 
-// SetVendorIdentityProvidersPayload is the payload type of the
-// identityProviderConnections service setVendorIdentityProviders method.
-type SetVendorIdentityProvidersPayload struct {
-	SessionToken *string
-	// The vendor authorization server issuer (RFC 8414).
-	VendorIssuer string
-	// Providers in the order they are tried. Each provider at most once.
-	Providers []*VendorIdentityProviderInput
-}
-
 // SubmitClientIDPayload is the payload type of the identityProviderConnections
 // service submitClientId method.
 type SubmitClientIDPayload struct {
@@ -375,45 +348,6 @@ type SyncApplicationsPayload struct {
 	SessionToken *string
 	// Connection ID.
 	ID string
-}
-
-// One supplier in a vendor's order.
-type VendorIdentityProvider struct {
-	// external is an organization-level remote session issuer; speakeasy is the
-	// organization's Speakeasy issuer.
-	Kind string
-	// Remote session issuer ID for external suppliers.
-	RemoteSessionIssuerID *string
-	// The organization's Speakeasy issuer for the speakeasy supplier.
-	InternalSessionIssuerID *string
-	// The supplier was deleted or turned off, so this entry is skipped until the
-	// order is saved again.
-	Unavailable bool
-}
-
-// One supplier allowed to issue ID-JAGs for a vendor.
-type VendorIdentityProviderInput struct {
-	// external is an organization-level remote session issuer that exchanges the
-	// user's identity for an ID-JAG, such as an Okta authorization server;
-	// speakeasy is the organization's Speakeasy issuer, which must exist.
-	Kind string
-	// Remote session issuer ID. Required for external; omitted for speakeasy. Must
-	// be an organization-level issuer that an organization user session issuer
-	// trusts.
-	RemoteSessionIssuerID *string
-}
-
-// VendorIdentityProvidersResult is the result type of the
-// identityProviderConnections service getVendorIdentityProviders method.
-type VendorIdentityProvidersResult struct {
-	// The vendor authorization server issuer, normalized: lowercase scheme and
-	// host, no trailing slash.
-	VendorIssuer string
-	// No order is saved, so every available supplier applies: external issuers
-	// first, then the Speakeasy issuer when it is on.
-	IsDefault bool
-	// Providers in the order they are tried. When is_default, the default order.
-	Providers []*VendorIdentityProvider
 }
 
 // VerifyPayload is the payload type of the identityProviderConnections service

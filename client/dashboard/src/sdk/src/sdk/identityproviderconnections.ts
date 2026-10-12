@@ -4,13 +4,11 @@
 
 import { identityProviderConnectionsCreate } from "../funcs/identityProviderConnectionsCreate.js";
 import { identityProviderConnectionsGet } from "../funcs/identityProviderConnectionsGet.js";
-import { identityProviderConnectionsGetVendorIdentityProviders } from "../funcs/identityProviderConnectionsGetVendorIdentityProviders.js";
 import { identityProviderConnectionsListApplications } from "../funcs/identityProviderConnectionsListApplications.js";
 import { identityProviderConnectionsRecordAgent } from "../funcs/identityProviderConnectionsRecordAgent.js";
 import { identityProviderConnectionsReplaceClientSecret } from "../funcs/identityProviderConnectionsReplaceClientSecret.js";
 import { identityProviderConnectionsRevoke } from "../funcs/identityProviderConnectionsRevoke.js";
 import { identityProviderConnectionsSetSetupMethod } from "../funcs/identityProviderConnectionsSetSetupMethod.js";
-import { identityProviderConnectionsSetVendorIdentityProviders } from "../funcs/identityProviderConnectionsSetVendorIdentityProviders.js";
 import { identityProviderConnectionsSubmitClientId } from "../funcs/identityProviderConnectionsSubmitClientId.js";
 import { identityProviderConnectionsSyncApplications } from "../funcs/identityProviderConnectionsSyncApplications.js";
 import { identityProviderConnectionsVerify } from "../funcs/identityProviderConnectionsVerify.js";
@@ -18,7 +16,6 @@ import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { GetIdentityProviderConnectionResult } from "../models/components/getidentityproviderconnectionresult.js";
 import { ListIdentityProviderConnectionApplicationsResult } from "../models/components/listidentityproviderconnectionapplicationsresult.js";
 import { OktaIdentityProviderConnection } from "../models/components/oktaidentityproviderconnection.js";
-import { VendorIdentityProvidersResult } from "../models/components/vendoridentityprovidersresult.js";
 import {
   CreateIdentityProviderConnectionRequest,
   CreateIdentityProviderConnectionSecurity,
@@ -27,10 +24,6 @@ import {
   GetIdentityProviderConnectionRequest,
   GetIdentityProviderConnectionSecurity,
 } from "../models/operations/getidentityproviderconnection.js";
-import {
-  GetVendorIdentityProvidersRequest,
-  GetVendorIdentityProvidersSecurity,
-} from "../models/operations/getvendoridentityproviders.js";
 import {
   ListIdentityProviderConnectionApplicationsRequest,
   ListIdentityProviderConnectionApplicationsSecurity,
@@ -51,10 +44,6 @@ import {
   SetIdentityProviderConnectionSetupMethodRequest,
   SetIdentityProviderConnectionSetupMethodSecurity,
 } from "../models/operations/setidentityproviderconnectionsetupmethod.js";
-import {
-  SetVendorIdentityProvidersRequest,
-  SetVendorIdentityProvidersSecurity,
-} from "../models/operations/setvendoridentityproviders.js";
 import {
   SubmitIdentityProviderConnectionClientIdRequest,
   SubmitIdentityProviderConnectionClientIdSecurity,
@@ -101,25 +90,6 @@ export class IdentityProviderConnections extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GetIdentityProviderConnectionResult> {
     return unwrapAsync(identityProviderConnectionsGet(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * getVendorIdentityProviders identityProviderConnections
-   *
-   * @remarks
-   * Get the order in which identity providers issue ID-JAGs for one vendor authorization server. Requires org:read.
-   */
-  async getVendorIdentityProviders(
-    request: GetVendorIdentityProvidersRequest,
-    security?: GetVendorIdentityProvidersSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<VendorIdentityProvidersResult> {
-    return unwrapAsync(identityProviderConnectionsGetVendorIdentityProviders(
       this,
       request,
       security,
@@ -217,25 +187,6 @@ export class IdentityProviderConnections extends ClientSDK {
     options?: RequestOptions,
   ): Promise<OktaIdentityProviderConnection> {
     return unwrapAsync(identityProviderConnectionsSetSetupMethod(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * setVendorIdentityProviders identityProviderConnections
-   *
-   * @remarks
-   * Replace the order in which identity providers issue ID-JAGs for one vendor authorization server. Identity chaining tries them in order and falls through to the next on any failure. An empty list restores the default: every available provider, external connections first, then Speakeasy. Requires org:admin.
-   */
-  async setVendorIdentityProviders(
-    request: SetVendorIdentityProvidersRequest,
-    security?: SetVendorIdentityProvidersSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<VendorIdentityProvidersResult> {
-    return unwrapAsync(identityProviderConnectionsSetVendorIdentityProviders(
       this,
       request,
       security,

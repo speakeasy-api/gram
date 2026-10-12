@@ -2,16 +2,12 @@ package identitychaining
 
 import (
 	"context"
-	"errors"
 	"log/slog"
-	"slices"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -24,10 +20,14 @@ type issuedGrant struct {
 	trustedObtainedAt time.Time
 }
 
-// tokenSource is one identity provider that can issue an ID-JAG for a
-// selection. Sources are tried in the organization's order for the vendor.
+// tokenSource is one EMA provider that can issue an ID-JAG for a selection.
+// Sources are tried in the organization's order for the vendor.
 type tokenSource interface {
 	kind() remotesessions.EMAProviderKind
+
+	// available reports whether the source can serve at all on this
+	// deployment; an unavailable source is never presented as serving.
+	available() bool
 
 	// authorize rechecks the source's authority for req and records its
 	// registration on sel before any credential is released or minted.
@@ -42,84 +42,91 @@ type tokenSource interface {
 	issue(ctx context.Context, logger *slog.Logger, req Request, sel selection, ready func() Outcome) (issuedGrant, Outcome)
 }
 
-// providerUnavailable marks a source that cannot serve the request at all, so
-// the next source is tried and the outcome never masks a real failure.
+// sourceFactory builds the token source for one provider in an order.
+type sourceFactory func(remotesessions.EMAProvider) tokenSource
+
+// providerUnavailable marks a request no provider in the order can serve, so
+// the interactive path applies unchanged.
 var providerUnavailable = newOutcome(StageAuthorization, ReasonProviderUnavailable, ConfidenceVerified, false)
 
-// providerOrder lists the provider kinds allowed for sel's vendor, in the
-// order they are tried. With no policy rows the default is the endpoint's
-// external identity provider, then Speakeasy. A row naming a deleted or
-// disabled supplier, or an external issuer other than the one the endpoint
-// trusts, cannot serve it and is skipped; a policy left with nothing serves
-// nobody.
-func (g *Governor) providerOrder(ctx context.Context, logger *slog.Logger, req Request, sel selection) ([]remotesessions.EMAProviderKind, Outcome) {
-	defaults := []remotesessions.EMAProviderKind{remotesessions.EMAProviderExternal, remotesessions.EMAProviderSpeakeasy}
+// providerOrder resolves sel's vendor order for the endpoint. Providers that
+// cannot serve stay in the order, flagged, so views and logs can say why.
+func (g *Governor) providerOrder(ctx context.Context, logger *slog.Logger, req Request, sel selection) (remotesessions.EMAProviderOrder, Outcome) {
 	vendor, err := remotesessions.NormalizeVendorIssuer(sel.issuer)
 	if err != nil {
-		// A policy is keyed by a normalizable issuer, so none can name this one.
-		return defaults, success
+		// No saved order can name an issuer that does not normalize.
+		vendor = sel.issuer
 	}
-	q := repo.New(g.db)
-	rows, err := q.ListEMAVendorIdentityProviders(ctx, repo.ListEMAVendorIdentityProvidersParams{OrganizationID: req.OrganizationID, VendorIssuer: vendor})
+	order, err := remotesessions.EndpointEMAProviders(ctx, repo.New(g.db), req.OrganizationID, req.UserSessionIssuerID, vendor, g.sourceAvailable(remotesessions.EMAProviderSpeakeasy))
 	if err != nil {
-		logger.ErrorContext(ctx, "list identity chaining provider policy", attr.SlogError(err))
-		return nil, newOutcome(StageSelection, ReasonTransientFailure, ConfidenceVerified, true)
+		logger.ErrorContext(ctx, "resolve ema provider order", attr.SlogError(err))
+		return order, newOutcome(StageSelection, ReasonTransientFailure, ConfidenceVerified, true)
 	}
-	if len(rows) == 0 {
-		return defaults, success
-	}
-	trusted, outcome := g.endpointTrustedIssuer(ctx, logger, req)
+	return order, success
+}
+
+// servingProviders lists the providers that can serve sel, logging when a
+// saved order leaves none.
+func (g *Governor) servingProviders(ctx context.Context, logger *slog.Logger, req Request, sel selection) ([]remotesessions.EMAProvider, Outcome) {
+	order, outcome := g.providerOrder(ctx, logger, req, sel)
 	if !outcome.Succeeded() {
 		return nil, outcome
 	}
-	var kinds []remotesessions.EMAProviderKind
-	for _, row := range rows {
-		kind := remotesessions.EMAProviderSpeakeasy
-		if row.RemoteSessionIssuerID.Valid {
-			kind = remotesessions.EMAProviderExternal
-		}
-		switch {
-		case row.ProviderUnavailable:
-			continue
-		case kind == remotesessions.EMAProviderExternal && row.RemoteSessionIssuerID != trusted:
-			continue
-		}
-		if !slices.Contains(kinds, kind) {
-			kinds = append(kinds, kind)
+	for _, p := range order.Providers {
+		if !p.Available() {
+			logger.DebugContext(ctx, "skipping ema provider that cannot serve", attr.SlogIdentityChainingProvider(string(p.Kind)), attr.SlogReason(string(p.Unavailable)))
 		}
 	}
-	if len(kinds) == 0 {
+	available := order.Available()
+	if len(available) == 0 {
+		logger.InfoContext(ctx, "ema provider order leaves no provider that can serve",
+			attr.SlogOAuthIssuer(order.VendorIssuer),
+			attr.SlogIdentityChainingSkippedProviders(len(order.Providers)),
+		)
 		return nil, providerUnavailable
 	}
-	return kinds, success
+	return available, success
 }
 
-// endpointTrustedIssuer is the remote session issuer the endpoint's user
-// session issuer trusts, which external chaining exchanges at; invalid when
-// there is none.
-func (g *Governor) endpointTrustedIssuer(ctx context.Context, logger *slog.Logger, req Request) (uuid.NullUUID, Outcome) {
-	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	issuer, err := repo.New(g.db).GetEMAChainingUserIssuer(ctx, repo.GetEMAChainingUserIssuerParams{ID: req.UserSessionIssuerID, OrganizationID: conv.ToPGText(req.OrganizationID)})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return none, success
-	case err != nil:
-		logger.ErrorContext(ctx, "read identity chaining user session issuer", attr.SlogError(err))
-		return none, newOutcome(StageSelection, ReasonTransientFailure, ConfidenceVerified, true)
+// source builds the token source for p.
+func (g *Governor) source(p remotesessions.EMAProvider) tokenSource {
+	if build, ok := g.sources[p.Kind]; ok {
+		return build(p)
 	}
-	return issuer.TrustedRemoteSessionIssuerID, success
+	return speakeasySource{}
 }
 
-// externalSource exchanges the human's retained identity provider ID token for
-// an ID-JAG at the endpoint's trusted identity provider (RFC 8693).
-type externalSource struct{ c *Chainer }
+// sourceAvailable reports whether kind's source can serve on this deployment.
+func (g *Governor) sourceAvailable(kind remotesessions.EMAProviderKind) bool {
+	return g.source(remotesessions.EMAProvider{Kind: kind, RemoteSessionIssuerID: uuid.Nil, InternalSessionIssuerID: uuid.Nil, Unavailable: ""}).available()
+}
+
+// externalSource exchanges the human's retained ID token for an ID-JAG at
+// one external issuer (RFC 8693). Identity chaining holds a subject token only
+// for the endpoint's trusted issuer, so issuer must still be that one.
+type externalSource struct {
+	c *Chainer
+	// issuer is the provider's remote session issuer; Nil means the
+	// endpoint's trusted issuer, whichever it is.
+	issuer uuid.UUID
+}
 
 func (externalSource) kind() remotesessions.EMAProviderKind {
 	return remotesessions.EMAProviderExternal
 }
 
+func (externalSource) available() bool { return true }
+
 func (s externalSource) authorize(ctx context.Context, logger *slog.Logger, req Request, sel *selection) Outcome {
-	return s.c.authorize(ctx, logger, req, sel)
+	if s.c == nil {
+		return providerUnavailable
+	}
+	outcome := s.c.authorize(ctx, logger, req, sel)
+	if outcome.Succeeded() && s.issuer != uuid.Nil && sel.trustedIssuerID != s.issuer {
+		// The endpoint's trust moved after the order was resolved.
+		return newOutcome(StageAuthorization, ReasonStaleConfiguration, ConfidenceVerified, true)
+	}
+	return outcome
 }
 
 func (s externalSource) checkReuse(ctx context.Context, req Request, sel selection) Outcome {
@@ -130,13 +137,15 @@ func (s externalSource) issue(ctx context.Context, logger *slog.Logger, req Requ
 	return s.c.exchangeGrant(ctx, logger, req, sel, ready)
 }
 
-// speakeasySource will sign ID-JAGs with the organization's Speakeasy issuer
-// (AIM-523). Until then it never serves, so the next source is tried.
+// speakeasySource will sign ID-JAGs with the organization's internal session
+// issuer (AIM-523). Until then it is unavailable and never presented as serving.
 type speakeasySource struct{}
 
 func (speakeasySource) kind() remotesessions.EMAProviderKind {
 	return remotesessions.EMAProviderSpeakeasy
 }
+
+func (speakeasySource) available() bool { return remotesessions.SpeakeasyEMASigning }
 
 func (speakeasySource) authorize(context.Context, *slog.Logger, Request, *selection) Outcome {
 	return providerUnavailable
@@ -148,15 +157,4 @@ func (speakeasySource) checkReuse(context.Context, Request, selection) Outcome {
 
 func (speakeasySource) issue(context.Context, *slog.Logger, Request, selection, func() Outcome) (issuedGrant, Outcome) {
 	return issuedGrant{value: "", trustedSessionID: uuid.Nil, trustedObtainedAt: time.Time{}}, providerUnavailable
-}
-
-// source returns the token source for kind.
-func (c *Chainer) source(kind remotesessions.EMAProviderKind) tokenSource {
-	if src, ok := c.sourceOverrides[kind]; ok {
-		return src
-	}
-	if kind == remotesessions.EMAProviderExternal {
-		return externalSource{c: c}
-	}
-	return speakeasySource{}
 }

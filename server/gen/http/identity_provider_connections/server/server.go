@@ -18,19 +18,17 @@ import (
 
 // Server lists the identityProviderConnections service endpoint HTTP handlers.
 type Server struct {
-	Mounts                     []*MountPoint
-	Create                     http.Handler
-	SubmitClientID             http.Handler
-	ReplaceClientSecret        http.Handler
-	SetSetupMethod             http.Handler
-	Verify                     http.Handler
-	Get                        http.Handler
-	RecordAgent                http.Handler
-	Revoke                     http.Handler
-	SyncApplications           http.Handler
-	ListApplications           http.Handler
-	GetVendorIdentityProviders http.Handler
-	SetVendorIdentityProviders http.Handler
+	Mounts              []*MountPoint
+	Create              http.Handler
+	SubmitClientID      http.Handler
+	ReplaceClientSecret http.Handler
+	SetSetupMethod      http.Handler
+	Verify              http.Handler
+	Get                 http.Handler
+	RecordAgent         http.Handler
+	Revoke              http.Handler
+	SyncApplications    http.Handler
+	ListApplications    http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -70,21 +68,17 @@ func New(
 			{"Revoke", "POST", "/rpc/identityProviderConnections.revoke"},
 			{"SyncApplications", "POST", "/rpc/identityProviderConnections.syncApplications"},
 			{"ListApplications", "GET", "/rpc/identityProviderConnections.listApplications"},
-			{"GetVendorIdentityProviders", "GET", "/rpc/identityProviderConnections.getVendorIdentityProviders"},
-			{"SetVendorIdentityProviders", "POST", "/rpc/identityProviderConnections.setVendorIdentityProviders"},
 		},
-		Create:                     NewCreateHandler(e.Create, mux, decoder, encoder, errhandler, formatter),
-		SubmitClientID:             NewSubmitClientIDHandler(e.SubmitClientID, mux, decoder, encoder, errhandler, formatter),
-		ReplaceClientSecret:        NewReplaceClientSecretHandler(e.ReplaceClientSecret, mux, decoder, encoder, errhandler, formatter),
-		SetSetupMethod:             NewSetSetupMethodHandler(e.SetSetupMethod, mux, decoder, encoder, errhandler, formatter),
-		Verify:                     NewVerifyHandler(e.Verify, mux, decoder, encoder, errhandler, formatter),
-		Get:                        NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
-		RecordAgent:                NewRecordAgentHandler(e.RecordAgent, mux, decoder, encoder, errhandler, formatter),
-		Revoke:                     NewRevokeHandler(e.Revoke, mux, decoder, encoder, errhandler, formatter),
-		SyncApplications:           NewSyncApplicationsHandler(e.SyncApplications, mux, decoder, encoder, errhandler, formatter),
-		ListApplications:           NewListApplicationsHandler(e.ListApplications, mux, decoder, encoder, errhandler, formatter),
-		GetVendorIdentityProviders: NewGetVendorIdentityProvidersHandler(e.GetVendorIdentityProviders, mux, decoder, encoder, errhandler, formatter),
-		SetVendorIdentityProviders: NewSetVendorIdentityProvidersHandler(e.SetVendorIdentityProviders, mux, decoder, encoder, errhandler, formatter),
+		Create:              NewCreateHandler(e.Create, mux, decoder, encoder, errhandler, formatter),
+		SubmitClientID:      NewSubmitClientIDHandler(e.SubmitClientID, mux, decoder, encoder, errhandler, formatter),
+		ReplaceClientSecret: NewReplaceClientSecretHandler(e.ReplaceClientSecret, mux, decoder, encoder, errhandler, formatter),
+		SetSetupMethod:      NewSetSetupMethodHandler(e.SetSetupMethod, mux, decoder, encoder, errhandler, formatter),
+		Verify:              NewVerifyHandler(e.Verify, mux, decoder, encoder, errhandler, formatter),
+		Get:                 NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
+		RecordAgent:         NewRecordAgentHandler(e.RecordAgent, mux, decoder, encoder, errhandler, formatter),
+		Revoke:              NewRevokeHandler(e.Revoke, mux, decoder, encoder, errhandler, formatter),
+		SyncApplications:    NewSyncApplicationsHandler(e.SyncApplications, mux, decoder, encoder, errhandler, formatter),
+		ListApplications:    NewListApplicationsHandler(e.ListApplications, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -103,8 +97,6 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Revoke = m(s.Revoke)
 	s.SyncApplications = m(s.SyncApplications)
 	s.ListApplications = m(s.ListApplications)
-	s.GetVendorIdentityProviders = m(s.GetVendorIdentityProviders)
-	s.SetVendorIdentityProviders = m(s.SetVendorIdentityProviders)
 }
 
 // MethodNames returns the methods served.
@@ -122,8 +114,6 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountRevokeHandler(mux, h.Revoke)
 	MountSyncApplicationsHandler(mux, h.SyncApplications)
 	MountListApplicationsHandler(mux, h.ListApplications)
-	MountGetVendorIdentityProvidersHandler(mux, h.GetVendorIdentityProviders)
-	MountSetVendorIdentityProvidersHandler(mux, h.SetVendorIdentityProviders)
 }
 
 // Mount configures the mux to serve the identityProviderConnections endpoints.
@@ -643,114 +633,6 @@ func NewListApplicationsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listApplications")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "identityProviderConnections")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountGetVendorIdentityProvidersHandler configures the mux to serve the
-// "identityProviderConnections" service "getVendorIdentityProviders" endpoint.
-func MountGetVendorIdentityProvidersHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("GET", "/rpc/identityProviderConnections.getVendorIdentityProviders", f)
-}
-
-// NewGetVendorIdentityProvidersHandler creates a HTTP handler which loads the
-// HTTP request and calls the "identityProviderConnections" service
-// "getVendorIdentityProviders" endpoint.
-func NewGetVendorIdentityProvidersHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeGetVendorIdentityProvidersRequest(mux, decoder)
-		encodeResponse = EncodeGetVendorIdentityProvidersResponse(encoder)
-		encodeError    = EncodeGetVendorIdentityProvidersError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "getVendorIdentityProviders")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "identityProviderConnections")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountSetVendorIdentityProvidersHandler configures the mux to serve the
-// "identityProviderConnections" service "setVendorIdentityProviders" endpoint.
-func MountSetVendorIdentityProvidersHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/identityProviderConnections.setVendorIdentityProviders", f)
-}
-
-// NewSetVendorIdentityProvidersHandler creates a HTTP handler which loads the
-// HTTP request and calls the "identityProviderConnections" service
-// "setVendorIdentityProviders" endpoint.
-func NewSetVendorIdentityProvidersHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeSetVendorIdentityProvidersRequest(mux, decoder)
-		encodeResponse = EncodeSetVendorIdentityProvidersResponse(encoder)
-		encodeError    = EncodeSetVendorIdentityProvidersError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "setVendorIdentityProviders")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "identityProviderConnections")
 		payload, err := decodeRequest(r)
 		if err != nil {

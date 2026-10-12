@@ -147,7 +147,7 @@ func UsageCommands() []string {
 		"hooks-server-names (list|upsert|delete)",
 		"hooks (claude|cursor|codex|ingest|upload-skill-content|skill-feedback|logs|metrics|get-status)",
 		"identity resolve",
-		"identity-provider-connections (create|submit-client-id|replace-client-secret|set-setup-method|verify|get|record-agent|revoke|sync-applications|list-applications|get-vendor-identity-providers|set-vendor-identity-providers)",
+		"identity-provider-connections (create|submit-client-id|replace-client-secret|set-setup-method|verify|get|record-agent|revoke|sync-applications|list-applications)",
 		"instances get-instance",
 		"integrations (get|list)",
 		"json-web-key-sets (create-set|update-set|list-sets|get-set|get-set-delete-preflight|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
@@ -179,7 +179,7 @@ func UsageCommands() []string {
 		"remote-mcp (create-server|create-server-and-mcp-server|list-servers|get-server|update-server|discover-protected-resource-metadata|get-server-scopes|set-server-scope-pin|probe-url|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
 		"organization-remote-session-clients (list-clients|get-client|get-client-delegation-status|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|attach-client-key-set|detach-client-key-set|rotate-client|delete-client|remove-client-from-mcp-server)",
 		"remote-session-clients (prepare-ema|read-ema|unlink-ema|create-remote-session-client|create-cimd|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|attach-key-set|detach-key-set|list-remote-session-clients|get-new-client-callback-url|get-remote-session-client|delete-remote-session-client)",
-		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|get-issuer-duplicate-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|fetch-issuer-metadata|refresh-issuer-metadata)",
+		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|get-issuer-duplicate-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|set-ema-providers|fetch-issuer-metadata|refresh-issuer-metadata)",
 		"remote-session-issuers (fetch-remote-session-issuer-metadata|refresh-remote-session-issuer-metadata|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|get-remote-session-issuer-duplicate-preflight|delete-remote-session-issuer)",
 		"admin-remote-sessions (create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer)",
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
@@ -1586,14 +1586,6 @@ func ParseEndpoint(
 		identityProviderConnectionsListApplicationsIncludeRemovedFlag = identityProviderConnectionsListApplicationsFlags.String("include-removed", "", "")
 		identityProviderConnectionsListApplicationsSessionTokenFlag   = identityProviderConnectionsListApplicationsFlags.String("session-token", "", "")
 
-		identityProviderConnectionsGetVendorIdentityProvidersFlags            = flag.NewFlagSet("get-vendor-identity-providers", flag.ExitOnError)
-		identityProviderConnectionsGetVendorIdentityProvidersVendorIssuerFlag = identityProviderConnectionsGetVendorIdentityProvidersFlags.String("vendor-issuer", "REQUIRED", "")
-		identityProviderConnectionsGetVendorIdentityProvidersSessionTokenFlag = identityProviderConnectionsGetVendorIdentityProvidersFlags.String("session-token", "", "")
-
-		identityProviderConnectionsSetVendorIdentityProvidersFlags            = flag.NewFlagSet("set-vendor-identity-providers", flag.ExitOnError)
-		identityProviderConnectionsSetVendorIdentityProvidersBodyFlag         = identityProviderConnectionsSetVendorIdentityProvidersFlags.String("body", "REQUIRED", "")
-		identityProviderConnectionsSetVendorIdentityProvidersSessionTokenFlag = identityProviderConnectionsSetVendorIdentityProvidersFlags.String("session-token", "", "")
-
 		instancesFlags = flag.NewFlagSet("instances", flag.ContinueOnError)
 
 		instancesGetInstanceFlags                 = flag.NewFlagSet("get-instance", flag.ExitOnError)
@@ -2813,6 +2805,10 @@ func ParseEndpoint(
 		organizationRemoteSessionIssuersMigrateIssuerBodyFlag         = organizationRemoteSessionIssuersMigrateIssuerFlags.String("body", "REQUIRED", "")
 		organizationRemoteSessionIssuersMigrateIssuerSessionTokenFlag = organizationRemoteSessionIssuersMigrateIssuerFlags.String("session-token", "", "")
 		organizationRemoteSessionIssuersMigrateIssuerApikeyTokenFlag  = organizationRemoteSessionIssuersMigrateIssuerFlags.String("apikey-token", "", "")
+
+		organizationRemoteSessionIssuersSetEMAProvidersFlags            = flag.NewFlagSet("set-ema-providers", flag.ExitOnError)
+		organizationRemoteSessionIssuersSetEMAProvidersBodyFlag         = organizationRemoteSessionIssuersSetEMAProvidersFlags.String("body", "REQUIRED", "")
+		organizationRemoteSessionIssuersSetEMAProvidersSessionTokenFlag = organizationRemoteSessionIssuersSetEMAProvidersFlags.String("session-token", "", "")
 
 		organizationRemoteSessionIssuersFetchIssuerMetadataFlags            = flag.NewFlagSet("fetch-issuer-metadata", flag.ExitOnError)
 		organizationRemoteSessionIssuersFetchIssuerMetadataBodyFlag         = organizationRemoteSessionIssuersFetchIssuerMetadataFlags.String("body", "REQUIRED", "")
@@ -5299,8 +5295,6 @@ func ParseEndpoint(
 	identityProviderConnectionsRevokeFlags.Usage = identityProviderConnectionsRevokeUsage
 	identityProviderConnectionsSyncApplicationsFlags.Usage = identityProviderConnectionsSyncApplicationsUsage
 	identityProviderConnectionsListApplicationsFlags.Usage = identityProviderConnectionsListApplicationsUsage
-	identityProviderConnectionsGetVendorIdentityProvidersFlags.Usage = identityProviderConnectionsGetVendorIdentityProvidersUsage
-	identityProviderConnectionsSetVendorIdentityProvidersFlags.Usage = identityProviderConnectionsSetVendorIdentityProvidersUsage
 
 	instancesFlags.Usage = instancesUsage
 	instancesGetInstanceFlags.Usage = instancesGetInstanceUsage
@@ -5594,6 +5588,7 @@ func ParseEndpoint(
 	organizationRemoteSessionIssuersMoveIssuerFlags.Usage = organizationRemoteSessionIssuersMoveIssuerUsage
 	organizationRemoteSessionIssuersGetIssuerMigratePreflightFlags.Usage = organizationRemoteSessionIssuersGetIssuerMigratePreflightUsage
 	organizationRemoteSessionIssuersMigrateIssuerFlags.Usage = organizationRemoteSessionIssuersMigrateIssuerUsage
+	organizationRemoteSessionIssuersSetEMAProvidersFlags.Usage = organizationRemoteSessionIssuersSetEMAProvidersUsage
 	organizationRemoteSessionIssuersFetchIssuerMetadataFlags.Usage = organizationRemoteSessionIssuersFetchIssuerMetadataUsage
 	organizationRemoteSessionIssuersRefreshIssuerMetadataFlags.Usage = organizationRemoteSessionIssuersRefreshIssuerMetadataUsage
 
@@ -7145,12 +7140,6 @@ func ParseEndpoint(
 			case "list-applications":
 				epf = identityProviderConnectionsListApplicationsFlags
 
-			case "get-vendor-identity-providers":
-				epf = identityProviderConnectionsGetVendorIdentityProvidersFlags
-
-			case "set-vendor-identity-providers":
-				epf = identityProviderConnectionsSetVendorIdentityProvidersFlags
-
 			}
 
 		case "instances":
@@ -7965,6 +7954,9 @@ func ParseEndpoint(
 
 			case "migrate-issuer":
 				epf = organizationRemoteSessionIssuersMigrateIssuerFlags
+
+			case "set-ema-providers":
+				epf = organizationRemoteSessionIssuersSetEMAProvidersFlags
 
 			case "fetch-issuer-metadata":
 				epf = organizationRemoteSessionIssuersFetchIssuerMetadataFlags
@@ -10166,12 +10158,6 @@ func ParseEndpoint(
 			case "list-applications":
 				endpoint = c.ListApplications()
 				data, err = identityproviderconnectionsc.BuildListApplicationsPayload(*identityProviderConnectionsListApplicationsIDFlag, *identityProviderConnectionsListApplicationsIncludeRemovedFlag, *identityProviderConnectionsListApplicationsSessionTokenFlag)
-			case "get-vendor-identity-providers":
-				endpoint = c.GetVendorIdentityProviders()
-				data, err = identityproviderconnectionsc.BuildGetVendorIdentityProvidersPayload(*identityProviderConnectionsGetVendorIdentityProvidersVendorIssuerFlag, *identityProviderConnectionsGetVendorIdentityProvidersSessionTokenFlag)
-			case "set-vendor-identity-providers":
-				endpoint = c.SetVendorIdentityProviders()
-				data, err = identityproviderconnectionsc.BuildSetVendorIdentityProvidersPayload(*identityProviderConnectionsSetVendorIdentityProvidersBodyFlag, *identityProviderConnectionsSetVendorIdentityProvidersSessionTokenFlag)
 			}
 		case "instances":
 			c := instancesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -10999,6 +10985,9 @@ func ParseEndpoint(
 			case "migrate-issuer":
 				endpoint = c.MigrateIssuer()
 				data, err = organizationremotesessionissuersc.BuildMigrateIssuerPayload(*organizationRemoteSessionIssuersMigrateIssuerBodyFlag, *organizationRemoteSessionIssuersMigrateIssuerSessionTokenFlag, *organizationRemoteSessionIssuersMigrateIssuerApikeyTokenFlag)
+			case "set-ema-providers":
+				endpoint = c.SetEMAProviders()
+				data, err = organizationremotesessionissuersc.BuildSetEMAProvidersPayload(*organizationRemoteSessionIssuersSetEMAProvidersBodyFlag, *organizationRemoteSessionIssuersSetEMAProvidersSessionTokenFlag)
 			case "fetch-issuer-metadata":
 				endpoint = c.FetchIssuerMetadata()
 				data, err = organizationremotesessionissuersc.BuildFetchIssuerMetadataPayload(*organizationRemoteSessionIssuersFetchIssuerMetadataBodyFlag, *organizationRemoteSessionIssuersFetchIssuerMetadataSessionTokenFlag, *organizationRemoteSessionIssuersFetchIssuerMetadataApikeyTokenFlag)
@@ -18265,8 +18254,6 @@ func identityProviderConnectionsUsage() {
 	fmt.Fprintln(os.Stderr, `    revoke: Revoke the connection: withdraw every signing key from the JWKS, disable the key material, and tombstone the connection so a new one can be created. Idempotent. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    sync-applications: Run the applications snapshot on the next coordinator pass, within minutes, instead of at the next scheduled interval. The connection must be verified. Rate limited per organization. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    list-applications: List the applications snapshot for the connection with live assignment counts and the last reconcile run. The connection must be verified. Requires org:admin.`)
-	fmt.Fprintln(os.Stderr, `    get-vendor-identity-providers: Get the order in which identity providers issue ID-JAGs for one vendor authorization server. Requires org:read.`)
-	fmt.Fprintln(os.Stderr, `    set-vendor-identity-providers: Replace the order in which identity providers issue ID-JAGs for one vendor authorization server. Identity chaining tries them in order and falls through to the next on any failure. An empty list restores the default: every available provider, external connections first, then Speakeasy. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s identity-provider-connections COMMAND --help\n", os.Args[0])
@@ -18471,46 +18458,6 @@ func identityProviderConnectionsListApplicationsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections list-applications --id \"550e8400-e29b-41d4-a716-446655440000\" --include-removed false --session-token \"abc123\"")
-}
-
-func identityProviderConnectionsGetVendorIdentityProvidersUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] identity-provider-connections get-vendor-identity-providers", os.Args[0])
-	fmt.Fprint(os.Stderr, " -vendor-issuer STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Get the order in which identity providers issue ID-JAGs for one vendor authorization server. Requires org:read.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -vendor-issuer STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections get-vendor-identity-providers --vendor-issuer \"abc123\" --session-token \"abc123\"")
-}
-
-func identityProviderConnectionsSetVendorIdentityProvidersUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] identity-provider-connections set-vendor-identity-providers", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Replace the order in which identity providers issue ID-JAGs for one vendor authorization server. Identity chaining tries them in order and falls through to the next on any failure. An empty list restores the default: every available provider, external connections first, then Speakeasy. Requires org:admin.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "identity-provider-connections set-vendor-identity-providers --body '{\n      \"providers\": [\n         {\n            \"kind\": \"speakeasy\",\n            \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"kind\": \"speakeasy\",\n            \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"kind\": \"speakeasy\",\n            \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ],\n      \"vendor_issuer\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 // instancesUsage displays the usage of the instances command and its
@@ -23891,6 +23838,7 @@ func organizationRemoteSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    move-issuer: Re-scope a remote_session_issuer in the caller's organization: provide a project_id (which must belong to the organization) to make it project-specific, or omit it to make it organization-level (project_id NULL, inherited by every project). Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    get-issuer-migrate-preflight: Authoritative impact summary for migrating a remote_session_issuer's clients onto another issuer: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    migrate-issuer: Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The issuer identifier is compared canonically, so two spellings differing only by a trailing slash or an explicit default port count as the same upstream; the two endpoints are compared literally. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    set-ema-providers: Replace the order in which EMA providers issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries them in order and falls through to the next on any failure. An empty list restores the default: every available provider, external first, then Speakeasy. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout.`)
 	fmt.Fprintln(os.Stderr, `    fetch-issuer-metadata: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for organizationRemoteSessionIssuers.create. Keyed by issuer URL; no record need exist and nothing is persisted. The organization-scoped counterpart of remoteSessionIssuers.fetchMetadata, so creating an organization-level issuer no longer has to borrow an unrelated project's scope. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    refresh-issuer-metadata: Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id; serves both organizational and project-specific issuers in the caller's organization. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Speakeasy behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr)
@@ -24125,6 +24073,26 @@ func organizationRemoteSessionIssuersMigrateIssuerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers migrate-issuer --body '{\n      \"source_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"target_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
+}
+
+func organizationRemoteSessionIssuersSetEMAProvidersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organization-remote-session-issuers set-ema-providers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace the order in which EMA providers issue ID-JAGs for the vendor authorization server this issuer names. Identity chaining tries them in order and falls through to the next on any failure. An empty list restores the default: every available provider, external first, then Speakeasy. The order applies organization-wide to every issuer with the same canonical issuer URL. Requires org:admin and the ema-providers rollout.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organization-remote-session-issuers set-ema-providers --body '{\n      \"providers\": [\n         {\n            \"kind\": \"speakeasy\",\n            \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"kind\": \"speakeasy\",\n            \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"kind\": \"speakeasy\",\n            \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ],\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 func organizationRemoteSessionIssuersFetchIssuerMetadataUsage() {

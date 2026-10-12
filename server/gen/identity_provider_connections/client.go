@@ -15,36 +15,32 @@ import (
 
 // Client is the "identityProviderConnections" service client.
 type Client struct {
-	CreateEndpoint                     goa.Endpoint
-	SubmitClientIDEndpoint             goa.Endpoint
-	ReplaceClientSecretEndpoint        goa.Endpoint
-	SetSetupMethodEndpoint             goa.Endpoint
-	VerifyEndpoint                     goa.Endpoint
-	GetEndpoint                        goa.Endpoint
-	RecordAgentEndpoint                goa.Endpoint
-	RevokeEndpoint                     goa.Endpoint
-	SyncApplicationsEndpoint           goa.Endpoint
-	ListApplicationsEndpoint           goa.Endpoint
-	GetVendorIdentityProvidersEndpoint goa.Endpoint
-	SetVendorIdentityProvidersEndpoint goa.Endpoint
+	CreateEndpoint              goa.Endpoint
+	SubmitClientIDEndpoint      goa.Endpoint
+	ReplaceClientSecretEndpoint goa.Endpoint
+	SetSetupMethodEndpoint      goa.Endpoint
+	VerifyEndpoint              goa.Endpoint
+	GetEndpoint                 goa.Endpoint
+	RecordAgentEndpoint         goa.Endpoint
+	RevokeEndpoint              goa.Endpoint
+	SyncApplicationsEndpoint    goa.Endpoint
+	ListApplicationsEndpoint    goa.Endpoint
 }
 
 // NewClient initializes a "identityProviderConnections" service client given
 // the endpoints.
-func NewClient(create, submitClientID, replaceClientSecret, setSetupMethod, verify, get, recordAgent, revoke, syncApplications, listApplications, getVendorIdentityProviders, setVendorIdentityProviders goa.Endpoint) *Client {
+func NewClient(create, submitClientID, replaceClientSecret, setSetupMethod, verify, get, recordAgent, revoke, syncApplications, listApplications goa.Endpoint) *Client {
 	return &Client{
-		CreateEndpoint:                     create,
-		SubmitClientIDEndpoint:             submitClientID,
-		ReplaceClientSecretEndpoint:        replaceClientSecret,
-		SetSetupMethodEndpoint:             setSetupMethod,
-		VerifyEndpoint:                     verify,
-		GetEndpoint:                        get,
-		RecordAgentEndpoint:                recordAgent,
-		RevokeEndpoint:                     revoke,
-		SyncApplicationsEndpoint:           syncApplications,
-		ListApplicationsEndpoint:           listApplications,
-		GetVendorIdentityProvidersEndpoint: getVendorIdentityProviders,
-		SetVendorIdentityProvidersEndpoint: setVendorIdentityProviders,
+		CreateEndpoint:              create,
+		SubmitClientIDEndpoint:      submitClientID,
+		ReplaceClientSecretEndpoint: replaceClientSecret,
+		SetSetupMethodEndpoint:      setSetupMethod,
+		VerifyEndpoint:              verify,
+		GetEndpoint:                 get,
+		RecordAgentEndpoint:         recordAgent,
+		RevokeEndpoint:              revoke,
+		SyncApplicationsEndpoint:    syncApplications,
+		ListApplicationsEndpoint:    listApplications,
 	}
 }
 
@@ -298,52 +294,4 @@ func (c *Client) ListApplications(ctx context.Context, p *ListApplicationsPayloa
 		return
 	}
 	return ires.(*ListIdentityProviderConnectionApplicationsResult), nil
-}
-
-// GetVendorIdentityProviders calls the "getVendorIdentityProviders" endpoint
-// of the "identityProviderConnections" service.
-// GetVendorIdentityProviders may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
-//   - error: internal error
-func (c *Client) GetVendorIdentityProviders(ctx context.Context, p *GetVendorIdentityProvidersPayload) (res *VendorIdentityProvidersResult, err error) {
-	var ires any
-	ires, err = c.GetVendorIdentityProvidersEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*VendorIdentityProvidersResult), nil
-}
-
-// SetVendorIdentityProviders calls the "setVendorIdentityProviders" endpoint
-// of the "identityProviderConnections" service.
-// SetVendorIdentityProviders may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
-//   - error: internal error
-func (c *Client) SetVendorIdentityProviders(ctx context.Context, p *SetVendorIdentityProvidersPayload) (res *VendorIdentityProvidersResult, err error) {
-	var ires any
-	ires, err = c.SetVendorIdentityProvidersEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(*VendorIdentityProvidersResult), nil
 }

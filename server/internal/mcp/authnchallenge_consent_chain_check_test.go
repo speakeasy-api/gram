@@ -120,6 +120,7 @@ func TestConsentChainCheck_TransientAndAmbiguousAreUnknown(t *testing.T) {
 		{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonUnknownRejection, Confidence: identitychaining.ConfidenceUnknown, Retryable: false, Cached: false, Provider: ""},
 		{Stage: identitychaining.StageRedemption, Reason: identitychaining.ReasonStaleConfiguration, Confidence: identitychaining.ConfidenceVerified, Retryable: true, Cached: false, Provider: ""},
 		{Stage: identitychaining.StageSelection, Reason: identitychaining.ReasonNotApplicable, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""},
+		{Stage: identitychaining.StageAuthorization, Reason: identitychaining.ReasonProviderUnavailable, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""},
 	} {
 		g.acquire = func(context.Context, identitychaining.Request) identitychaining.Outcome { return outcome }
 		w, err := postChainCheck(t, fx, nil)

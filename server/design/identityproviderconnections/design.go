@@ -158,40 +158,6 @@ var GetResult = Type("GetIdentityProviderConnectionResult", func() {
 	Attribute("connection", Connection, "Omitted when the organization has no live connection.")
 })
 
-var VendorIdentityProviderInput = Type("VendorIdentityProviderInput", func() {
-	Description("One supplier allowed to issue ID-JAGs for a vendor.")
-	Required("kind")
-	Attribute("kind", String, "external is an organization-level remote session issuer that exchanges the user's identity for an ID-JAG, such as an Okta authorization server; speakeasy is the organization's Speakeasy issuer, which must exist.", func() {
-		Enum("external", "speakeasy")
-	})
-	Attribute("remote_session_issuer_id", String, "Remote session issuer ID. Required for external; omitted for speakeasy. Must be an organization-level issuer that an organization user session issuer trusts.", func() {
-		Format(FormatUUID)
-	})
-})
-
-var VendorIdentityProvider = Type("VendorIdentityProvider", func() {
-	Description("One supplier in a vendor's order.")
-	Required("kind", "unavailable")
-	Attribute("kind", String, "external is an organization-level remote session issuer; speakeasy is the organization's Speakeasy issuer.", func() {
-		Enum("external", "speakeasy")
-	})
-	Attribute("remote_session_issuer_id", String, "Remote session issuer ID for external suppliers.", func() {
-		Format(FormatUUID)
-	})
-	Attribute("internal_session_issuer_id", String, "The organization's Speakeasy issuer for the speakeasy supplier.", func() {
-		Format(FormatUUID)
-	})
-	Attribute("unavailable", Boolean, "The supplier was deleted or turned off, so this entry is skipped until the order is saved again.")
-})
-
-var VendorIdentityProvidersResult = Type("VendorIdentityProvidersResult", func() {
-	Description("The identity providers identity chaining tries, in order, for one vendor authorization server.")
-	Required("vendor_issuer", "is_default", "providers")
-	Attribute("vendor_issuer", String, "The vendor authorization server issuer, normalized: lowercase scheme and host, no trailing slash.")
-	Attribute("is_default", Boolean, "No order is saved, so every available supplier applies: external issuers first, then the Speakeasy issuer when it is on.")
-	Attribute("providers", ArrayOf(VendorIdentityProvider), "Providers in the order they are tried. When is_default, the default order.")
-})
-
 var _ = Service("identityProviderConnections", func() {
 	Description("Manage the organization's Okta connection: provision the private_key_jwt credential, submit the Okta client ID, verify granted scopes, and revoke.")
 
@@ -539,58 +505,5 @@ var _ = Service("identityProviderConnections", func() {
 		Meta("openapi:operationId", "listIdentityProviderConnectionApplications")
 		Meta("openapi:extension:x-speakeasy-name-override", "listApplications")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "IdentityProviderConnectionApplications"}`)
-	})
-
-	Method("getVendorIdentityProviders", func() {
-		Description("Get the order in which identity providers issue ID-JAGs for one vendor authorization server. Requires org:read.")
-
-		Security(security.Session)
-
-		Payload(func() {
-			security.SessionPayload()
-			Attribute("vendor_issuer", String, "The vendor authorization server issuer (RFC 8414).")
-			Required("vendor_issuer")
-		})
-
-		Result(VendorIdentityProvidersResult)
-
-		HTTP(func() {
-			GET("/rpc/identityProviderConnections.getVendorIdentityProviders")
-			security.SessionHeader()
-			Param("vendor_issuer")
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "getVendorIdentityProviders")
-		Meta("openapi:extension:x-speakeasy-name-override", "getVendorIdentityProviders")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "VendorIdentityProviders"}`)
-	})
-
-	Method("setVendorIdentityProviders", func() {
-		Description("Replace the order in which identity providers issue ID-JAGs for one vendor authorization server. Identity chaining tries them in order and falls through to the next on any failure. An empty list restores the default: every available provider, external connections first, then Speakeasy. Requires org:admin.")
-
-		Security(security.Session)
-
-		Payload(func() {
-			security.SessionPayload()
-			Meta("openapi:typename", "SetVendorIdentityProvidersRequestBody")
-			Attribute("vendor_issuer", String, "The vendor authorization server issuer (RFC 8414).")
-			Attribute("providers", ArrayOf(VendorIdentityProviderInput), "Providers in the order they are tried. Each provider at most once.", func() {
-				MaxLength(10)
-			})
-			Required("vendor_issuer", "providers")
-		})
-
-		Result(VendorIdentityProvidersResult)
-
-		HTTP(func() {
-			POST("/rpc/identityProviderConnections.setVendorIdentityProviders")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "setVendorIdentityProviders")
-		Meta("openapi:extension:x-speakeasy-name-override", "setVendorIdentityProviders")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetVendorIdentityProviders"}`)
 	})
 })
