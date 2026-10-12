@@ -1644,6 +1644,11 @@ WHERE id = @organization_id::text;
 UPDATE internal_session_issuers SET deleted_at = clock_timestamp()
 WHERE organization_id = @organization_id::text;
 
+-- name: SoftDeleteExternalCredentialFixture :exec
+-- Test-only soft delete of an external credential.
+UPDATE external_credentials SET deleted_at = clock_timestamp()
+WHERE id = @id;
+
 -- name: RevokeDelegationUserIssuersFixture :exec
 -- Test-only revocation of organization-scoped delegation authority.
 UPDATE user_session_issuers SET deleted_at = clock_timestamp()

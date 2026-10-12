@@ -5995,6 +5995,17 @@ func (q *Queries) SoftDeleteAttachmentSourceFixture(ctx context.Context, id uuid
 	return result.RowsAffected(), nil
 }
 
+const softDeleteExternalCredentialFixture = `-- name: SoftDeleteExternalCredentialFixture :exec
+UPDATE external_credentials SET deleted_at = clock_timestamp()
+WHERE id = $1
+`
+
+// Test-only soft delete of an external credential.
+func (q *Queries) SoftDeleteExternalCredentialFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteExternalCredentialFixture, id)
+	return err
+}
+
 const softDeleteNetworkIngressFixture = `-- name: SoftDeleteNetworkIngressFixture :exec
 UPDATE network_ingresses
 SET deleted_at = clock_timestamp()

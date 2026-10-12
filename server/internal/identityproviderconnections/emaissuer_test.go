@@ -702,3 +702,30 @@ func TestEMAIssuer_SweepPagesThroughEveryOrganization(t *testing.T) {
 	require.Zero(t, pending)
 	require.Len(t, kms.Disabled(), len(organizations))
 }
+
+func TestEMAIssuer_CleanupWithoutTheKeyCredentialRevokesTheConfiguredSignerOrStaysPending(t *testing.T) {
+	t.Parallel()
+	ctx, f := newIssuerFixture(t)
+	provisioner, _ := f.provisioner(t)
+	_, err := provisioner.EnsureEMAIssuer(ctx, f.ti.orgID)
+	require.NoError(t, err)
+	kid := activeIssuerKid(t, ctx, f, f.ti.orgID)
+	_, err = f.lifecycle().Contain(ctx, f.ti.orgID, &kid)
+	require.NoError(t, err)
+	require.NoError(t, testrepo.New(f.ti.conn).SoftDeleteExternalCredentialFixture(ctx, f.credentialID))
+
+	unconfigured, _ := f.provisioner(t)
+	cleaned, pending, err := unconfigured.CleanupEMAIssuerKMS(ctx, f.ti.orgID)
+	require.Error(t, err, "a grant with no known account is never reported removed")
+	require.Zero(t, cleaned)
+	require.Equal(t, 1, pending)
+
+	kms := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
+	configured := provisiontest.NewProvisioner(t, f.ti.conn, kms.Factory, testServerURL, f.credentialID, provisiontest.SigningServiceAccount())
+	cleaned, pending, err = configured.CleanupEMAIssuerKMS(ctx, f.ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, 1, cleaned)
+	require.Zero(t, pending)
+	require.Len(t, kms.RevokedGrants(), 1)
+	require.Contains(t, kms.RevokedGrants()[0], provisiontest.SigningServiceAccount(), "the configured signer's grant is removed")
+}

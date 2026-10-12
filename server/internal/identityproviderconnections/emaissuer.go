@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -320,16 +321,21 @@ func (p *Provisioner) disableEMAIssuerKey(ctx context.Context, kms gcpkms.Provis
 	if err != nil {
 		return fmt.Errorf("derive revoked issuer kms key name: %w", err)
 	}
+	// The grant belongs to the account the key's credential impersonated. If
+	// that credential is gone, the configured platform signer is the same
+	// account; with neither, cleanup stays pending rather than claim success.
+	serviceAccount := strings.TrimSpace(p.cfg.SigningServiceAccount)
 	signer, err := q.GetPlatformGcpIamCredentialForProvisioning(ctx, row.ExternalCredentialID)
 	switch {
-	case errors.Is(err, pgx.ErrNoRows) || (err == nil && signer.GcpIamCredential.ImpersonateServiceAccount.String == ""):
-		// The disabled version can't sign whatever its grants say.
-		p.logger.WarnContext(ctx, "revoked issuer key's signing credential is gone; its grant stays on a disabled version", attr.SlogOrganizationID(organizationID))
-		return nil
-	case err != nil:
+	case err == nil && signer.GcpIamCredential.ImpersonateServiceAccount.String != "":
+		serviceAccount = signer.GcpIamCredential.ImpersonateServiceAccount.String
+	case err != nil && !errors.Is(err, pgx.ErrNoRows):
 		return fmt.Errorf("load revoked issuer key's signing credential: %w", err)
 	}
-	if err := kms.RevokeSignerVerifier(ctx, keyName, signer.GcpIamCredential.ImpersonateServiceAccount.String); err != nil {
+	if serviceAccount == "" {
+		return errors.New("revoked issuer key's signer grant has no known service account; remove it by hand")
+	}
+	if err := kms.RevokeSignerVerifier(ctx, keyName, serviceAccount); err != nil {
 		return fmt.Errorf("revoke signer grant on revoked issuer key: %w", err)
 	}
 	return nil
