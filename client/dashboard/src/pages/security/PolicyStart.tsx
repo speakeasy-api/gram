@@ -14,17 +14,21 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
+import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { RiskPreset } from "@gram/client/models/components/riskpreset.js";
 import type { SuggestRiskPolicyResult } from "@gram/client/models/components/suggestriskpolicyresult.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useRiskPresets } from "@gram/client/react-query/riskPresets.js";
 import { useRiskSuggestPolicyMutation } from "@gram/client/react-query/riskSuggestPolicy.js";
 import { ArrowLeft, ArrowRight, Loader2, Sparkles } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { type ReactNode, useEffect, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useQueryState } from "nuqs";
+import { useRoutes } from "@/routes";
 import { ruleCategoryMeta, type DetectorMode } from "./policy-data";
+import { findBlockingShadowMCPPolicy } from "./policy-type";
 import {
   actionBadgeVariant,
   draftFromPreset,
@@ -163,6 +167,10 @@ export function PolicyStartChooser(): JSX.Element {
   const mode = useDetectorMode();
   const promptPoliciesEnabled =
     telemetry.isFeatureEnabled("gram-prompt-policies") ?? false;
+  // The Shadow AI policy kind arrives with the fold-in of the Shadow AI
+  // section into Guardrails.
+  const shadowAIEnabled =
+    useFeatureFlag(FEATURE_FLAGS.shadowAiGuardrails).status === "enabled";
   const [, setKind] = useQueryState("kind");
   // "Change starting point" hands the state over in the route; otherwise
   // pick up a description left behind earlier in this browser session.
@@ -306,6 +314,7 @@ export function PolicyStartChooser(): JSX.Element {
                 onRetry={() => void refetch()}
                 mode={mode}
                 promptPoliciesEnabled={promptPoliciesEnabled}
+                shadowAIEnabled={shadowAIEnabled}
                 onSelect={(preset) => openDraft(draftFromPreset(preset))}
                 onScratch={(kind) => void setKind(kind)}
               />
@@ -331,6 +340,7 @@ function UseCaseTable({
   onRetry,
   mode,
   promptPoliciesEnabled,
+  shadowAIEnabled,
   onSelect,
   onScratch,
 }: {
@@ -340,8 +350,9 @@ function UseCaseTable({
   onRetry: () => void;
   mode: DetectorMode;
   promptPoliciesEnabled: boolean;
+  shadowAIEnabled: boolean;
   onSelect: (preset: RiskPreset) => void;
-  onScratch: (kind: "standard" | "prompt") => void;
+  onScratch: (kind: "standard" | "prompt" | "shadow-ai") => void;
 }): JSX.Element {
   return (
     <div className="bg-card border">
@@ -430,8 +441,90 @@ function UseCaseTable({
             Prompt-based
           </Button>
         ) : null}
+        {shadowAIEnabled ? (
+          <ShadowAIScratchOption onPick={() => onScratch("shadow-ai")} />
+        ) : null}
       </div>
     </div>
+  );
+}
+
+/** Why the Shadow AI option cannot be picked right now, or undefined when it
+ *  can. The server allows one enabled blocking Shadow MCP policy per project,
+ *  so the option points at that one instead of a doomed create; the list has
+ *  to be known first, since a pending or failed read is not proof that the
+ *  slot is free. */
+function shadowAIScratchNote({
+  pending,
+  failed,
+  existing,
+  href,
+}: {
+  pending: boolean;
+  failed: boolean;
+  existing: RiskPolicy | undefined;
+  href: string | undefined;
+}): ReactNode {
+  if (failed) {
+    return (
+      <Text small muted>
+        This project's policies could not be loaded, so a Shadow AI policy
+        cannot be created yet.
+      </Text>
+    );
+  }
+  if (pending) {
+    return (
+      <Text small muted>
+        Checking this project's policies…
+      </Text>
+    );
+  }
+  if (existing && href) {
+    return (
+      <Text small muted>
+        This project already has one.{" "}
+        <Link to={href} className="underline underline-offset-2">
+          Open {existing.name}
+        </Link>
+      </Text>
+    );
+  }
+  return undefined;
+}
+
+/** The "from scratch" entry for a Shadow AI policy: the blocking Shadow MCP
+ *  policy re-presented as the place that decides which AI tools and MCP
+ *  servers may connect. Exported for its test. */
+export function ShadowAIScratchOption({
+  onPick,
+}: {
+  onPick: () => void;
+}): JSX.Element {
+  const routes = useRoutes();
+  const policiesQuery = useRiskListPolicies();
+  const existing = findBlockingShadowMCPPolicy(
+    policiesQuery.data?.policies ?? [],
+  );
+  const note = shadowAIScratchNote({
+    pending: !policiesQuery.data && !policiesQuery.isError,
+    failed: policiesQuery.isError,
+    existing,
+    href: existing ? routes.policyCenter.detail.href(existing.id) : undefined,
+  });
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2">
+      <Button
+        type="button"
+        size="sm"
+        variant="tertiary"
+        disabled={note !== undefined}
+        onClick={onPick}
+      >
+        Shadow AI
+      </Button>
+      {note}
+    </span>
   );
 }
 
