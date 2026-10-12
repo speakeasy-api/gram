@@ -5,13 +5,18 @@
 import { jsonWebKeySetsActivateKey } from "../funcs/jsonWebKeySetsActivateKey.js";
 import { jsonWebKeySetsCreate } from "../funcs/jsonWebKeySetsCreate.js";
 import { jsonWebKeySetsDelete } from "../funcs/jsonWebKeySetsDelete.js";
+import { jsonWebKeySetsDisableOrganizationEnterpriseIssuer } from "../funcs/jsonWebKeySetsDisableOrganizationEnterpriseIssuer.js";
+import { jsonWebKeySetsEnableOrganizationEnterpriseIssuer } from "../funcs/jsonWebKeySetsEnableOrganizationEnterpriseIssuer.js";
 import { jsonWebKeySetsGet } from "../funcs/jsonWebKeySetsGet.js";
 import { jsonWebKeySetsGetDeletePreflight } from "../funcs/jsonWebKeySetsGetDeletePreflight.js";
+import { jsonWebKeySetsGetOrganizationEnterpriseIssuer } from "../funcs/jsonWebKeySetsGetOrganizationEnterpriseIssuer.js";
 import { jsonWebKeySetsList } from "../funcs/jsonWebKeySetsList.js";
 import { jsonWebKeySetsListKeys } from "../funcs/jsonWebKeySetsListKeys.js";
 import { jsonWebKeySetsPublishKey } from "../funcs/jsonWebKeySetsPublishKey.js";
+import { jsonWebKeySetsReplaceOrganizationEnterpriseIssuerKey } from "../funcs/jsonWebKeySetsReplaceOrganizationEnterpriseIssuerKey.js";
 import { jsonWebKeySetsRetireKey } from "../funcs/jsonWebKeySetsRetireKey.js";
 import { jsonWebKeySetsRevokeKey } from "../funcs/jsonWebKeySetsRevokeKey.js";
+import { jsonWebKeySetsRotateOrganizationEnterpriseIssuer } from "../funcs/jsonWebKeySetsRotateOrganizationEnterpriseIssuer.js";
 import { jsonWebKeySetsUpdate } from "../funcs/jsonWebKeySetsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { JSONWebKey } from "../models/components/jsonwebkey.js";
@@ -19,6 +24,7 @@ import { JSONWebKeySet } from "../models/components/jsonwebkeyset.js";
 import { JSONWebKeySetDeletePreflight } from "../models/components/jsonwebkeysetdeletepreflight.js";
 import { ListJSONWebKeySetsResult } from "../models/components/listjsonwebkeysetsresult.js";
 import { ListJSONWebKeysResult } from "../models/components/listjsonwebkeysresult.js";
+import { OrganizationEnterpriseIssuer } from "../models/components/organizationenterpriseissuer.js";
 import {
   ActivateJsonWebKeyRequest,
   ActivateJsonWebKeySecurity,
@@ -32,6 +38,14 @@ import {
   DeleteJsonWebKeySetSecurity,
 } from "../models/operations/deletejsonwebkeyset.js";
 import {
+  DisableOrganizationEnterpriseIssuerRequest,
+  DisableOrganizationEnterpriseIssuerSecurity,
+} from "../models/operations/disableorganizationenterpriseissuer.js";
+import {
+  EnableOrganizationEnterpriseIssuerRequest,
+  EnableOrganizationEnterpriseIssuerSecurity,
+} from "../models/operations/enableorganizationenterpriseissuer.js";
+import {
   GetJsonWebKeySetRequest,
   GetJsonWebKeySetSecurity,
 } from "../models/operations/getjsonwebkeyset.js";
@@ -39,6 +53,10 @@ import {
   GetJsonWebKeySetDeletePreflightRequest,
   GetJsonWebKeySetDeletePreflightSecurity,
 } from "../models/operations/getjsonwebkeysetdeletepreflight.js";
+import {
+  GetOrganizationEnterpriseIssuerRequest,
+  GetOrganizationEnterpriseIssuerSecurity,
+} from "../models/operations/getorganizationenterpriseissuer.js";
 import {
   ListJsonWebKeysRequest,
   ListJsonWebKeysSecurity,
@@ -52,6 +70,10 @@ import {
   PublishJsonWebKeySecurity,
 } from "../models/operations/publishjsonwebkey.js";
 import {
+  ReplaceOrganizationEnterpriseIssuerKeyRequest,
+  ReplaceOrganizationEnterpriseIssuerKeySecurity,
+} from "../models/operations/replaceorganizationenterpriseissuerkey.js";
+import {
   RetireJsonWebKeyRequest,
   RetireJsonWebKeySecurity,
 } from "../models/operations/retirejsonwebkey.js";
@@ -59,6 +81,10 @@ import {
   RevokeJsonWebKeyRequest,
   RevokeJsonWebKeySecurity,
 } from "../models/operations/revokejsonwebkey.js";
+import {
+  RotateOrganizationEnterpriseIssuerRequest,
+  RotateOrganizationEnterpriseIssuerSecurity,
+} from "../models/operations/rotateorganizationenterpriseissuer.js";
 import {
   UpdateJsonWebKeySetRequest,
   UpdateJsonWebKeySetSecurity,
@@ -124,6 +150,44 @@ export class JsonWebKeySets extends ClientSDK {
   }
 
   /**
+   * disableOrganizationEnterpriseIssuer jsonWebKeySets
+   *
+   * @remarks
+   * Stop Speakeasy signing with the organization's enterprise authorization issuer and discard cached service tokens. The issuer URI and its published keys stay; enabling again resumes signing. Requires org:admin.
+   */
+  async disableOrganizationEnterpriseIssuer(
+    request?: DisableOrganizationEnterpriseIssuerRequest | undefined,
+    security?: DisableOrganizationEnterpriseIssuerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<OrganizationEnterpriseIssuer> {
+    return unwrapAsync(jsonWebKeySetsDisableOrganizationEnterpriseIssuer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * enableOrganizationEnterpriseIssuer jsonWebKeySets
+   *
+   * @remarks
+   * Provision the organization's enterprise authorization issuer with a dedicated Speakeasy-managed signing key, or re-enable a disabled one. Idempotent. Requires org:admin and the SSO entitlement. Does not configure trust at any service or grant access.
+   */
+  async enableOrganizationEnterpriseIssuer(
+    request?: EnableOrganizationEnterpriseIssuerRequest | undefined,
+    security?: EnableOrganizationEnterpriseIssuerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<OrganizationEnterpriseIssuer> {
+    return unwrapAsync(jsonWebKeySetsEnableOrganizationEnterpriseIssuer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getSet jsonWebKeySets
    *
    * @remarks
@@ -154,6 +218,25 @@ export class JsonWebKeySets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<JSONWebKeySetDeletePreflight> {
     return unwrapAsync(jsonWebKeySetsGetDeletePreflight(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getOrganizationEnterpriseIssuer jsonWebKeySets
+   *
+   * @remarks
+   * Read the organization's enterprise authorization issuer: the permanent issuer URI to register with supported services, its published keys and whether signing is available. Requires org:read.
+   */
+  async getOrganizationEnterpriseIssuer(
+    request?: GetOrganizationEnterpriseIssuerRequest | undefined,
+    security?: GetOrganizationEnterpriseIssuerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<OrganizationEnterpriseIssuer> {
+    return unwrapAsync(jsonWebKeySetsGetOrganizationEnterpriseIssuer(
       this,
       request,
       security,
@@ -219,6 +302,25 @@ export class JsonWebKeySets extends ClientSDK {
   }
 
   /**
+   * replaceOrganizationEnterpriseIssuerKey jsonWebKeySets
+   *
+   * @remarks
+   * Compromise response: revoke one issuer key immediately and, if it was active, activate a fresh key at once. The issuer URI does not change; services stop accepting the revoked key once their key cache refreshes. Requires org:admin.
+   */
+  async replaceOrganizationEnterpriseIssuerKey(
+    request: ReplaceOrganizationEnterpriseIssuerKeyRequest,
+    security?: ReplaceOrganizationEnterpriseIssuerKeySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<OrganizationEnterpriseIssuer> {
+    return unwrapAsync(jsonWebKeySetsReplaceOrganizationEnterpriseIssuerKey(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * retireKey jsonWebKeySets
    *
    * @remarks
@@ -249,6 +351,25 @@ export class JsonWebKeySets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<JSONWebKey> {
     return unwrapAsync(jsonWebKeySetsRevokeKey(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * rotateOrganizationEnterpriseIssuer jsonWebKeySets
+   *
+   * @remarks
+   * Rotate the issuer's signing key without changing its URI. The first call publishes a new key and returns rotation_ready_at; call again with the same active_kid after that time to activate it. The previous key stays published briefly so services can still verify it. Requires org:admin.
+   */
+  async rotateOrganizationEnterpriseIssuer(
+    request: RotateOrganizationEnterpriseIssuerRequest,
+    security?: RotateOrganizationEnterpriseIssuerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<OrganizationEnterpriseIssuer> {
+    return unwrapAsync(jsonWebKeySetsRotateOrganizationEnterpriseIssuer(
       this,
       request,
       security,

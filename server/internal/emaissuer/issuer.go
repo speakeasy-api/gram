@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -142,11 +143,11 @@ func PublicKeys(ctx context.Context, db repo.DBTX, organizationID string) (*jose
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, ErrNotFound
 	case err != nil:
-		return nil, err
+		return nil, fmt.Errorf("load issuer keys: %w", err)
 	}
 	var keys []jose.JSONWebKey
 	if err := json.Unmarshal(raw, &keys); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode issuer keys: %w", err)
 	}
 	for _, key := range keys {
 		if !key.IsPublic() || !key.Valid() || key.KeyID == "" || (key.Algorithm != string(jose.RS256) && key.Algorithm != string(jose.ES256)) {
