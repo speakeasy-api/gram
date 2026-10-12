@@ -542,7 +542,7 @@ func TestAssistantsService_AttachMCPServer_RejectsUnreachable(t *testing.T) {
 		tx := testenv.BeginTx(t, t.Context(), conn)
 		_, resolveErr := svc.core.resolveMcpServerRefsForWrite(t.Context(), tx, projectID, []*types.AssistantMCPServerRef{
 			{McpServerSlug: tt.slug, EnvironmentSlug: nil},
-		}, false)
+		}, nil)
 		require.NoError(t, tx.Rollback(t.Context()))
 		require.ErrorContains(t, resolveErr, tt.wantErr)
 

@@ -3,4 +3,4 @@
 "server": patch
 ---
 
-Assistant reads list hosted (toolset-backed) MCP servers under `mcp_servers` with a read-only `toolset_slug`, and the runtime resolves hosted servers attached either way through one path, so a server is never dialed twice. The `toolsets` field is deprecated but keeps working. The onboarding agent's `attach_mcp_server` accepts a `toolset_slug`, and `attach_toolset` remains as an alias.
+Assistants resolve hosted (toolset-backed) MCP servers attached either way through one path, so a server is never dialed twice. Responses keep listing hosted servers under `toolsets`. A hosted server sent by its server slug in `mcp_servers` is attached, and the onboarding agent's `attach_mcp_server` accepts a `toolset_slug`, with `attach_toolset` kept as an alias.

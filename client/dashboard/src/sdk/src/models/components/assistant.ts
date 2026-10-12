@@ -76,7 +76,7 @@ export type Assistant = {
    */
   maxConcurrency: number;
   /**
-   * MCP servers attached to the assistant, including hosted (toolset-backed) servers.
+   * MCP servers attached to the assistant that are not hosted (toolset-backed); hosted servers are listed under toolsets.
    */
   mcpServers: Array<AssistantMCPServerRef>;
   /**
@@ -100,7 +100,7 @@ export type Assistant = {
    */
   status: AssistantStatus;
   /**
-   * Deprecated: read mcp_servers, where hosted servers carry toolset_slug. Lists the assistant's hosted (toolset-backed) MCP servers.
+   * Hosted (toolset-backed) MCP servers attached to the assistant, by toolset slug.
    */
   toolsets: Array<AssistantToolsetRef>;
   /**

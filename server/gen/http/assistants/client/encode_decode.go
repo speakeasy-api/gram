@@ -2441,7 +2441,6 @@ func unmarshalAssistantMCPServerRefResponseBodyToTypesAssistantMCPServerRef(v *A
 		McpServerSlug:   *v.McpServerSlug,
 		EnvironmentSlug: v.EnvironmentSlug,
 		EndpointSlug:    v.EndpointSlug,
-		ToolsetSlug:     v.ToolsetSlug,
 	}
 
 	return res
@@ -2483,7 +2482,6 @@ func marshalTypesAssistantMCPServerRefToAssistantMCPServerRefRequestBody(v *type
 		McpServerSlug:   v.McpServerSlug,
 		EnvironmentSlug: v.EnvironmentSlug,
 		EndpointSlug:    v.EndpointSlug,
-		ToolsetSlug:     v.ToolsetSlug,
 	}
 
 	return res
@@ -2512,7 +2510,6 @@ func marshalAssistantMCPServerRefRequestBodyToTypesAssistantMCPServerRef(v *Assi
 		McpServerSlug:   v.McpServerSlug,
 		EnvironmentSlug: v.EnvironmentSlug,
 		EndpointSlug:    v.EndpointSlug,
-		ToolsetSlug:     v.ToolsetSlug,
 	}
 
 	return res

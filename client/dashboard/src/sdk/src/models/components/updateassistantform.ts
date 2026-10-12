@@ -44,7 +44,7 @@ export type UpdateAssistantForm = {
    */
   maxConcurrency?: number | undefined;
   /**
-   * MCP servers to attach. When sent, replaces the assistant's servers that are not hosted (toolset-backed); hosted servers listed here are attached and unlisted ones are kept.
+   * MCP servers to attach. When sent, replaces the assistant's servers that are not hosted (toolset-backed). A hosted server listed here is attached if it is not already; attached hosted servers are left unchanged, and toolsets governs them when both are sent.
    */
   mcpServers?: Array<AssistantMCPServerRef> | undefined;
   /**
@@ -60,7 +60,7 @@ export type UpdateAssistantForm = {
    */
   status?: UpdateAssistantFormStatus | undefined;
   /**
-   * Deprecated: use mcp_servers. Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent, replaces the assistant's hosted servers, and hosted servers listed in mcp_servers are ignored.
+   * Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent, replaces the assistant's hosted servers.
    */
   toolsets?: Array<AssistantToolsetRef> | undefined;
   /**

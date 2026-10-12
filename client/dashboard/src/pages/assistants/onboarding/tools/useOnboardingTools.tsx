@@ -452,7 +452,6 @@ function buildAssistantTools(deps: ToolDeps) {
   };
   type LiveMCPServer = {
     mcpServerSlug: string;
-    toolsetSlug?: string | undefined;
     environmentSlug?: string | undefined;
   };
   const live: {
@@ -942,12 +941,9 @@ function buildAssistantTools(deps: ToolDeps) {
           try {
             const a = await ensureAssistant(deps, {}, live.id);
             trackLive(a);
-            // Unlisted hosted servers stay attached; they are saved through toolsets.
+            // Hosted servers are listed under toolsets and stay attached.
             const next = (a.mcpServers ?? [])
-              .filter(
-                (m) =>
-                  m.toolsetSlug === undefined && m.mcpServerSlug !== serverSlug,
-              )
+              .filter((m) => m.mcpServerSlug !== serverSlug)
               .concat([
                 {
                   mcpServerSlug: serverSlug,
@@ -963,6 +959,7 @@ function buildAssistantTools(deps: ToolDeps) {
             await recomputeBehaviorSection(deps, updated);
             return okResult({
               mcp_servers: updated.mcpServers,
+              toolsets: updated.toolsets,
               ...(environment_slug ? { environment_slug } : {}),
             });
           } catch (e) {
@@ -973,6 +970,16 @@ function buildAssistantTools(deps: ToolDeps) {
     },
     "attach_mcp_server",
   );
+
+  const hostedToolsetSlug = async (
+    serverSlug: string,
+  ): Promise<string | undefined> => {
+    const servers = await sdk.mcpServers.list();
+    const server = servers.mcpServers.find((m) => m.slug === serverSlug);
+    if (!server?.toolsetId || server.toolsetId !== server.id) return undefined;
+    const toolsets = await sdk.toolsets.list();
+    return toolsets.toolsets.find((t) => t.id === server.toolsetId)?.slug;
+  };
 
   const detach_mcp_server = defineFrontendTool<DetachMCPServerArgs, ToolResult>(
     {
@@ -986,10 +993,13 @@ function buildAssistantTools(deps: ToolDeps) {
             if (!live.id) {
               return errResult("No assistant exists yet. Create one first.");
             }
-            const target = live.mcpServers.find(
+            const direct = live.mcpServers.some(
               (m) => m.mcpServerSlug === mcp_server_slug,
             );
-            const hostedSlug = target?.toolsetSlug;
+            // Hosted servers are listed under toolsets; detach through the backing toolset.
+            const hostedSlug = direct
+              ? undefined
+              : await hostedToolsetSlug(mcp_server_slug);
             const updated = await sdk.assistants.update({
               updateAssistantForm:
                 hostedSlug !== undefined
@@ -1002,9 +1012,7 @@ function buildAssistantTools(deps: ToolDeps) {
                   : {
                       id: live.id,
                       mcpServers: live.mcpServers.filter(
-                        (m) =>
-                          m.toolsetSlug === undefined &&
-                          m.mcpServerSlug !== mcp_server_slug,
+                        (m) => m.mcpServerSlug !== mcp_server_slug,
                       ),
                     },
             });
@@ -1012,7 +1020,10 @@ function buildAssistantTools(deps: ToolDeps) {
             trackLive(updated);
             draft.invalidateAll();
             await recomputeBehaviorSection(deps, updated);
-            return okResult({ mcp_servers: updated.mcpServers });
+            return okResult({
+              mcp_servers: updated.mcpServers,
+              toolsets: updated.toolsets,
+            });
           } catch (e) {
             return errResult(e instanceof Error ? e.message : "detach failed");
           }

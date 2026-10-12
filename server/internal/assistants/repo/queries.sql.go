@@ -1781,6 +1781,43 @@ func (q *Queries) ListActiveAssistantRuntimes(ctx context.Context, activeState s
 	return items, nil
 }
 
+const listAssistantAttachedServerIDs = `-- name: ListAssistantAttachedServerIDs :many
+SELECT at.toolset_id AS mcp_server_id
+FROM assistant_toolsets at
+WHERE at.assistant_id = $1
+  AND at.project_id = $2
+UNION
+SELECT ams.mcp_server_id
+FROM assistant_mcp_servers ams
+WHERE ams.assistant_id = $1
+  AND ams.project_id = $2
+`
+
+type ListAssistantAttachedServerIDsParams struct {
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) ListAssistantAttachedServerIDs(ctx context.Context, arg ListAssistantAttachedServerIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listAssistantAttachedServerIDs, arg.AssistantID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var mcp_server_id uuid.UUID
+		if err := rows.Scan(&mcp_server_id); err != nil {
+			return nil, err
+		}
+		items = append(items, mcp_server_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAssistantPendingThreads = `-- name: ListAssistantPendingThreads :many
 SELECT t.id, t.project_id
 FROM assistant_threads t
@@ -2398,12 +2435,12 @@ SELECT
   a.legacy::bool AS legacy,
   ms.slug AS server_slug,
   t.slug AS toolset_slug,
-  COALESCE(ms.visibility, CASE
+  CASE WHEN t.id IS NOT NULL THEN CASE
     WHEN t.mcp_enabled IS NOT TRUE THEN 'disabled'
     WHEN t.mcp_is_public THEN 'public'
     ELSE 'private'
-  END)::text AS visibility,
-  COALESCE(t.mcp_slug, (
+  END ELSE ms.visibility END::text AS visibility,
+  CASE WHEN t.id IS NOT NULL THEN COALESCE(t.mcp_slug, '') ELSE COALESCE((
     SELECT me.slug
     FROM mcp_endpoints me
     WHERE me.mcp_server_id = ms.id
@@ -2412,7 +2449,7 @@ SELECT
       AND me.deleted IS FALSE
     ORDER BY me.created_at
     LIMIT 1
-  ), '')::text AS endpoint_slug,
+  ), '') END::text AS endpoint_slug,
   t.default_environment_slug,
   a.environment_id,
   e.slug AS environment_slug
@@ -2421,11 +2458,12 @@ LEFT JOIN mcp_servers ms
   ON ms.id = a.mcp_server_id
   AND ms.project_id = $1
   AND ms.deleted IS FALSE
+  AND (NOT a.legacy OR ms.toolset_id = ms.id)
 LEFT JOIN toolsets t
   ON t.id = a.mcp_server_id
   AND t.project_id = $1
   AND t.deleted IS FALSE
-  AND (ms.id IS NULL OR ms.toolset_id = ms.id)
+  AND (a.legacy OR ms.toolset_id = ms.id)
 LEFT JOIN environments e ON e.id = a.environment_id AND e.project_id = $1
 WHERE (a.legacy AND t.id IS NOT NULL)
    OR (NOT a.legacy AND ms.id IS NOT NULL)
@@ -2451,8 +2489,9 @@ type LoadAssistantMcpServersRow struct {
 }
 
 // Both attachment tables; hosted rows (toolset id = canonical wrapper id) keep
-// the toolset slug, /mcp/{mcp_slug} address and default environment, and sort
-// first so they win runtime id collisions.
+// the toolset slug, mcp_enabled, /mcp/{mcp_slug} address and default
+// environment, and sort first so they win runtime id collisions. Legacy rows
+// read the toolset whatever the wrapper's current shape.
 func (q *Queries) LoadAssistantMcpServers(ctx context.Context, arg LoadAssistantMcpServersParams) ([]LoadAssistantMcpServersRow, error) {
 	rows, err := q.db.Query(ctx, loadAssistantMcpServers, arg.ProjectID, arg.AssistantIds)
 	if err != nil {

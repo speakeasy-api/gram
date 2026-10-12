@@ -127,6 +127,36 @@ func (f hostedAttachmentFixture) addServerRow(t *testing.T, serverID uuid.UUID, 
 	require.NoError(t, err)
 }
 
+func (f hostedAttachmentFixture) setToolsetMCPEnabledNoSync(t *testing.T, enabled bool) toolsetsrepo.Toolset {
+	t.Helper()
+	ts, err := toolsetsrepo.New(f.db).UpdateToolset(t.Context(), toolsetsrepo.UpdateToolsetParams{
+		Name: f.hosted.Name, McpSlug: f.hosted.McpSlug, McpIsPublic: f.hosted.McpIsPublic, McpEnabled: enabled,
+		ToolSelectionMode: f.hosted.ToolSelectionMode, Slug: f.hosted.Slug, ProjectID: f.projectID,
+	})
+	require.NoError(t, err)
+	return ts
+}
+
+func (f hostedAttachmentFixture) setToolsetMCPEnabled(t *testing.T, enabled bool) {
+	t.Helper()
+	ts := f.setToolsetMCPEnabledNoSync(t, enabled)
+	tx := testenv.BeginTx(t, t.Context(), f.db)
+	_, err := hostedmcp.Sync(t.Context(), tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), ts, nil)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(t.Context()))
+}
+
+func (f hostedAttachmentFixture) updateWrapper(t *testing.T, ms mcpserversrepo.McpServer) {
+	t.Helper()
+	_, err := mcpserversrepo.New(f.db).UpdateMCPServer(t.Context(), mcpserversrepo.UpdateMCPServerParams{
+		Name: ms.Name, Slug: ms.Slug, EnvironmentID: ms.EnvironmentID, UserSessionIssuerID: ms.UserSessionIssuerID,
+		RemoteMcpServerID: ms.RemoteMcpServerID, TunneledMcpServerID: ms.TunneledMcpServerID, ToolsetID: ms.ToolsetID,
+		UnproxiedMcpServerID: ms.UnproxiedMcpServerID, ToolVariationsGroupID: ms.ToolVariationsGroupID, Visibility: ms.Visibility,
+		NetworkAccessModeSet: false, NetworkAccessMode: pgtype.Text{}, ID: ms.ID, ProjectID: f.projectID,
+	})
+	require.NoError(t, err)
+}
+
 func (f hostedAttachmentFixture) view(t *testing.T) *types.Assistant {
 	t.Helper()
 	record, err := f.core.GetAssistant(t.Context(), f.projectID, f.assistant)
@@ -162,7 +192,7 @@ func TestHostedAttachmentRuntimeConfigSurvivesMove(t *testing.T) {
 			f.addServerRow(t, f.hosted.ID, envID)
 			require.Equal(t, want, f.runtime(t), "a twin must not duplicate the server")
 			view := f.view(t)
-			require.Len(t, view.McpServers, 1)
+			require.Empty(t, view.McpServers, "hosted servers are listed only under toolsets")
 			require.Len(t, view.Toolsets, 1)
 
 			require.NoError(t, assistantrepo.New(f.db).ClearAssistantToolsets(t.Context(), assistantrepo.ClearAssistantToolsetsParams{AssistantID: f.assistant, ProjectID: f.projectID}))
@@ -188,20 +218,25 @@ func TestHostedAttachmentWithoutWrapperKeepsLegacyRuntime(t *testing.T) {
 	require.Equal(t, "legacy", view.Toolsets[0].ToolsetSlug)
 }
 
-func TestHostedAttachmentReadSurfacesServerOnce(t *testing.T) {
+// Phase A responses keep main's shape, so an older pod saving both arrays never stores a twin.
+func TestHostedAttachmentReadKeepsMainShape(t *testing.T) {
 	t.Parallel()
-	f := newHostedAttachmentFixture(t, "hosted_read_once")
+	f := newHostedAttachmentFixture(t, "hosted_read_shape")
 	f.addLegacyRow(t, f.hosted.ID, uuid.NullUUID{})
 	f.addServerRow(t, f.remote.ID, uuid.NullUUID{})
 
 	view := f.view(t)
-	require.Len(t, view.McpServers, 2)
-	require.Equal(t, "org-test-billing-x1", view.McpServers[0].McpServerSlug)
-	require.NotNil(t, view.McpServers[0].ToolsetSlug)
-	require.Equal(t, "billing", *view.McpServers[0].ToolsetSlug)
-	require.Equal(t, "remote", view.McpServers[1].McpServerSlug)
-	require.Nil(t, view.McpServers[1].ToolsetSlug)
-	require.Len(t, view.Toolsets, 1, "deprecated toolsets array keeps listing hosted servers")
+	require.Len(t, view.McpServers, 1)
+	require.Equal(t, "remote", view.McpServers[0].McpServerSlug)
+	require.Len(t, view.Toolsets, 1)
+	require.Equal(t, "billing", view.Toolsets[0].ToolsetSlug)
+
+	// A hosted row in assistant_mcp_servers is listed under toolsets too.
+	f2 := newHostedAttachmentFixture(t, "hosted_read_shape_server_row")
+	f2.addServerRow(t, f2.hosted.ID, uuid.NullUUID{})
+	view = f2.view(t)
+	require.Empty(t, view.McpServers)
+	require.Len(t, view.Toolsets, 1)
 	require.Equal(t, "billing", view.Toolsets[0].ToolsetSlug)
 }
 
@@ -227,7 +262,7 @@ func TestHostedAttachmentWritesLeaveNoTwins(t *testing.T) {
 		require.ElementsMatch(t, before, f.runtime(t))
 	})
 
-	t.Run("mcp servers write stores a hosted server as a toolset row", func(t *testing.T) {
+	t.Run("mcp servers write leaves an attached hosted server as it is", func(t *testing.T) {
 		t.Parallel()
 		f := newHostedAttachmentFixture(t, "hosted_write_servers")
 		f.addServerRow(t, f.hosted.ID, uuid.NullUUID{})
@@ -238,9 +273,43 @@ func TestHostedAttachmentWritesLeaveNoTwins(t *testing.T) {
 			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, nil, nil, nil)
 		require.NoError(t, err)
 		counts := f.counts(t)
-		require.EqualValues(t, 2, counts.Toolsets, "hosted server moved to its toolset row; unlisted toolset kept")
-		require.Zero(t, counts.McpServers)
+		require.EqualValues(t, 1, counts.Toolsets)
+		require.EqualValues(t, 1, counts.McpServers)
 		require.ElementsMatch(t, before, f.runtime(t))
+	})
+
+	t.Run("older dashboard attaches a hosted server from the server picker", func(t *testing.T) {
+		t.Parallel()
+		f := newHostedAttachmentFixture(t, "hosted_write_old_picker")
+		f.addLegacyRow(t, f.legacy.ID, uuid.NullUUID{})
+		view := f.view(t)
+
+		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil, view.Toolsets,
+			append(view.McpServers, &types.AssistantMCPServerRef{McpServerSlug: "org-test-billing-x1"}), nil, nil, nil)
+		require.NoError(t, err)
+		counts := f.counts(t)
+		require.EqualValues(t, 2, counts.Toolsets, "attached in today's row shape")
+		require.Zero(t, counts.McpServers)
+		require.ElementsMatch(t, []string{"billing", "legacy"}, runtimeIDs(f.runtime(t)))
+	})
+
+	t.Run("mcp servers echo of an attached hosted server with MCP off is a no-op", func(t *testing.T) {
+		t.Parallel()
+		f := newHostedAttachmentFixture(t, "hosted_write_echo_disabled")
+		f.addLegacyRow(t, f.hosted.ID, f.environmentID(t, "staging"))
+		f.addServerRow(t, f.remote.ID, uuid.NullUUID{})
+		f.setToolsetMCPEnabled(t, false)
+
+		_, err := f.core.UpdateAssistant(ctx, f.projectID, f.assistant, &name, nil, nil, nil,
+			[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}, {McpServerSlug: "remote"}}, nil, nil, nil)
+		require.NoError(t, err)
+		counts := f.counts(t)
+		require.EqualValues(t, 1, counts.Toolsets)
+		require.EqualValues(t, 1, counts.McpServers)
+		view := f.view(t)
+		require.Len(t, view.Toolsets, 1)
+		require.NotNil(t, view.Toolsets[0].EnvironmentSlug)
+		require.Equal(t, "staging", *view.Toolsets[0].EnvironmentSlug, "environment not rewritten")
 	})
 
 	t.Run("echoing a read back is a no-op", func(t *testing.T) {
@@ -293,6 +362,48 @@ func TestHostedAttachmentWritesLeaveNoTwins(t *testing.T) {
 	})
 }
 
+func TestHostedAttachmentCreateByServerSlug(t *testing.T) {
+	t.Parallel()
+	f := newHostedAttachmentFixture(t, "hosted_create_by_server")
+	record, err := f.core.CreateAssistant(t.Context(), "org-test", f.projectID, "user-1", "Second", "openai/gpt-4o-mini", "", nil,
+		[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}, {McpServerSlug: "remote"}}, 300, 1, StatusActive, false)
+	require.NoError(t, err)
+	f.assistant = record.ID
+	counts := f.counts(t)
+	require.EqualValues(t, 1, counts.Toolsets)
+	require.EqualValues(t, 1, counts.McpServers)
+	require.ElementsMatch(t, []string{"billing", "remote"}, runtimeIDs(f.runtime(t)))
+}
+
+// Legacy rows follow the toolset, as on main, when the wrapper has drifted from it.
+func TestHostedAttachmentLegacyRowFollowsToolsetOverWrapper(t *testing.T) {
+	t.Parallel()
+	f := newHostedAttachmentFixture(t, "hosted_drift")
+	f.addLegacyRow(t, f.hosted.ID, uuid.NullUUID{})
+	want := []runtimeMCPServer{{
+		ID:      "billing",
+		URL:     "https://gram.test/mcp/org-test-billing-x1",
+		Headers: map[string]string{"Gram-Environment": "default-env"},
+	}}
+
+	wrapper, err := mcpserversrepo.New(f.db).GetMCPServerByIDAndProjectID(t.Context(), mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: f.hosted.ID, ProjectID: f.projectID})
+	require.NoError(t, err)
+	wrapper.Visibility = "disabled"
+	f.updateWrapper(t, wrapper)
+	endpoints, err := mcpendpointsrepo.New(f.db).ListMCPEndpointsByMCPServerID(t.Context(), mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{McpServerID: f.hosted.ID, ProjectID: f.projectID})
+	require.NoError(t, err)
+	for _, e := range endpoints {
+		_, err := mcpendpointsrepo.New(f.db).DeleteMCPEndpoint(t.Context(), mcpendpointsrepo.DeleteMCPEndpointParams{ID: e.ID, ProjectID: f.projectID})
+		require.NoError(t, err)
+	}
+	require.Equal(t, want, f.runtime(t), "disabled, endpointless wrapper; toolset still on")
+
+	wrapper.Visibility = "public"
+	f.updateWrapper(t, wrapper)
+	f.setToolsetMCPEnabledNoSync(t, false)
+	require.Empty(t, f.runtime(t), "toolset MCP off; wrapper still public")
+}
+
 func runtimeIDs(servers []runtimeMCPServer) []string {
 	ids := make([]string, 0, len(servers))
 	for _, server := range servers {
@@ -339,6 +450,6 @@ func TestHostedAttachmentLegacyRowOnDisabledWrapper(t *testing.T) {
 
 	require.Empty(t, f.runtime(t))
 	view := f.view(t)
-	require.Len(t, view.McpServers, 1)
+	require.Empty(t, view.McpServers)
 	require.Len(t, view.Toolsets, 1)
 }

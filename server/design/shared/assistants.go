@@ -17,7 +17,6 @@ var AssistantMCPServerRef = Type("AssistantMCPServerRef", func() {
 	Attribute("mcp_server_slug", String, "The MCP server slug exposed to the assistant. Covers every backend, including hosted (toolset-backed) servers.")
 	Attribute("environment_slug", String, "Optional environment slug used when connecting to the MCP server.")
 	Attribute("endpoint_slug", String, "The slug of the server's Speakeasy-hosted MCP endpoint (/mcp/{endpoint_slug}). Populated on reads; ignored on writes. Absent when the server has no Speakeasy-hosted endpoint.")
-	Attribute("toolset_slug", String, "The backing toolset's slug when this is a hosted (toolset-backed) MCP server. Populated on reads; ignored on writes.")
 
 	Required("mcp_server_slug")
 })
@@ -49,8 +48,8 @@ var Assistant = Type("Assistant", func() {
 	Attribute("name", String, "The assistant name.")
 	Attribute("model", String, "The model identifier used by the assistant.")
 	Attribute("instructions", String, "The system instructions for the assistant.")
-	Attribute("toolsets", ArrayOf(AssistantToolsetRef), "Deprecated: read mcp_servers, where hosted servers carry toolset_slug. Lists the assistant's hosted (toolset-backed) MCP servers.")
-	Attribute("mcp_servers", ArrayOf(AssistantMCPServerRef), "MCP servers attached to the assistant, including hosted (toolset-backed) servers.")
+	Attribute("toolsets", ArrayOf(AssistantToolsetRef), "Hosted (toolset-backed) MCP servers attached to the assistant, by toolset slug.")
+	Attribute("mcp_servers", ArrayOf(AssistantMCPServerRef), "MCP servers attached to the assistant that are not hosted (toolset-backed); hosted servers are listed under toolsets.")
 	Attribute("skills", ArrayOf(AssistantSkillRef), "Skills attached to the assistant.")
 	Attribute("warm_ttl_seconds", Int, "Warm runtime TTL in seconds.")
 	Attribute("max_concurrency", Int, "Maximum active warm runtimes for the assistant.")

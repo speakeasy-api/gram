@@ -941,14 +941,14 @@ type resolvedMcpServerInsert struct {
 // resolveMcpServerRefsForWrite validates that every user-supplied mcp server
 // slug exists within the project and returns the FK ids to persist, mirroring
 // resolveToolsetRefsForWrite. Failing fast turns silent dispatch-time errors
-// ("unknown mcp server") into 400s at create/update time. skipHosted drops
-// hosted servers, which a toolsets array in the same write governs instead.
+// ("unknown mcp server") into 400s at create/update time. Hosted servers in
+// skipHosted (already attached, or in this write's toolsets) are left as they are.
 func (s *ServiceCore) resolveMcpServerRefsForWrite(
 	ctx context.Context,
 	tx pgx.Tx,
 	projectID uuid.UUID,
 	refs []*types.AssistantMCPServerRef,
-	skipHosted bool,
+	skipHosted map[uuid.UUID]struct{},
 ) ([]resolvedMcpServerInsert, error) {
 	if len(refs) == 0 {
 		return nil, nil
@@ -984,12 +984,14 @@ func (s *ServiceCore) resolveMcpServerRefsForWrite(
 		return nil, fmt.Errorf("resolve mcp server slugs: %w", err)
 	}
 	hosted := map[string]bool{}
+	skipped := map[string]bool{}
 	for _, row := range serverRows {
 		if !row.Slug.Valid {
 			continue
 		}
 		hosted[row.Slug.String] = row.Hosted
-		if row.Hosted && skipHosted {
+		if _, skip := skipHosted[row.ID]; skip && row.Hosted {
+			skipped[row.Slug.String] = true
 			serverIDs[row.Slug.String] = row.ID
 			continue
 		}
@@ -1038,7 +1040,7 @@ func (s *ServiceCore) resolveMcpServerRefsForWrite(
 		if ref == nil {
 			continue
 		}
-		if hosted[ref.McpServerSlug] && skipHosted {
+		if skipped[ref.McpServerSlug] {
 			continue
 		}
 		serverID := serverIDs[ref.McpServerSlug]
@@ -1178,10 +1180,18 @@ func enableAssistantToolsets(
 	return nil
 }
 
+func toolsetIDSet(resolved []resolvedToolsetInsert) map[uuid.UUID]struct{} {
+	out := make(map[uuid.UUID]struct{}, len(resolved))
+	for _, r := range resolved {
+		out[r.ToolsetID] = struct{}{}
+	}
+	return out
+}
+
 // writeAssistantAttachments keeps hosted servers in assistant_toolsets, the shape
 // older pods read, and clears both tables for every written server so none is
 // stored twice. toolsets replaces the hosted servers; mcpServers replaces the
-// other servers and adds hosted ones.
+// other servers and adds hosted ones not yet attached.
 func writeAssistantAttachments(
 	ctx context.Context,
 	tx pgx.Tx,
@@ -1256,8 +1266,7 @@ func deterministicChatID(assistantID uuid.UUID, correlationID string) uuid.UUID 
 }
 
 func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
-	// Hosted servers also fill the deprecated toolsets array for older clients;
-	// one with no addressable wrapper yet appears only there.
+	// Phase A keeps main's shape: hosted servers are listed only under toolsets.
 	toolsets := make([]*types.AssistantToolsetRef, 0, len(record.MCPServers))
 	mcpServers := make([]*types.AssistantMCPServerRef, 0, len(record.MCPServers))
 	for _, row := range record.MCPServers {
@@ -1270,15 +1279,12 @@ func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
 				ToolsetSlug:     row.ToolsetSlug.String,
 				EnvironmentSlug: envSlug,
 			})
-			if !row.ServerSlug.Valid {
-				continue
-			}
+			continue
 		}
 		ref := &types.AssistantMCPServerRef{
 			McpServerSlug:   row.ServerSlug.String,
 			EnvironmentSlug: envSlug,
 			EndpointSlug:    nil,
-			ToolsetSlug:     conv.FromPGText[string](row.ToolsetSlug),
 		}
 		if row.EndpointSlug != "" {
 			endpointSlug := row.EndpointSlug
@@ -1363,7 +1369,7 @@ func (s *ServiceCore) CreateAssistant(
 		return assistantRecord{}, err
 	}
 	// Server rows lock after the hosted sync's domain -> endpoint -> server locks.
-	resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers, toolsets != nil)
+	resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers, toolsetIDSet(resolved))
 	if err != nil {
 		return assistantRecord{}, err
 	}
@@ -1500,8 +1506,17 @@ func (s *ServiceCore) UpdateAssistant(
 	}
 	var resolvedMcpServers []resolvedMcpServerInsert
 	if mcpServers != nil {
+		// Read under the assistant row lock taken by UpdateAssistant.
+		attached, listErr := queries.ListAssistantAttachedServerIDs(ctx, assistantrepo.ListAssistantAttachedServerIDsParams{AssistantID: record.ID, ProjectID: projectID})
+		if listErr != nil {
+			return assistantRecord{}, fmt.Errorf("list assistant attached servers: %w", listErr)
+		}
+		skipHosted := toolsetIDSet(resolved)
+		for _, id := range attached {
+			skipHosted[id] = struct{}{}
+		}
 		// Server rows lock after the hosted sync's domain -> endpoint -> server locks.
-		resolvedMcpServers, err = s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers, toolsets != nil)
+		resolvedMcpServers, err = s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers, skipHosted)
 		if err != nil {
 			return assistantRecord{}, err
 		}

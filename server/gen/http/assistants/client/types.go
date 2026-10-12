@@ -24,13 +24,13 @@ type CreateAssistantRequestBody struct {
 	Model string `form:"model" json:"model" xml:"model"`
 	// The system instructions for the assistant.
 	Instructions string `form:"instructions" json:"instructions" xml:"instructions"`
-	// Deprecated: use mcp_servers. Hosted (toolset-backed) MCP servers to attach,
-	// by toolset slug. When sent, replaces the assistant's hosted servers, and
-	// hosted servers listed in mcp_servers are ignored.
+	// Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent,
+	// replaces the assistant's hosted servers.
 	Toolsets []*AssistantToolsetRefRequestBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
 	// MCP servers to attach. When sent, replaces the assistant's servers that are
-	// not hosted (toolset-backed); hosted servers listed here are attached and
-	// unlisted ones are kept.
+	// not hosted (toolset-backed). A hosted server listed here is attached if it
+	// is not already; attached hosted servers are left unchanged, and toolsets
+	// governs them when both are sent.
 	McpServers []*AssistantMCPServerRefRequestBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Optional warm runtime TTL in seconds.
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
@@ -63,13 +63,13 @@ type UpdateAssistantRequestBody struct {
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Deprecated: use mcp_servers. Hosted (toolset-backed) MCP servers to attach,
-	// by toolset slug. When sent, replaces the assistant's hosted servers, and
-	// hosted servers listed in mcp_servers are ignored.
+	// Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent,
+	// replaces the assistant's hosted servers.
 	Toolsets []*AssistantToolsetRefRequestBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
 	// MCP servers to attach. When sent, replaces the assistant's servers that are
-	// not hosted (toolset-backed); hosted servers listed here are attached and
-	// unlisted ones are kept.
+	// not hosted (toolset-backed). A hosted server listed here is attached if it
+	// is not already; attached hosted servers are left unchanged, and toolsets
+	// governs them when both are sent.
 	McpServers []*AssistantMCPServerRefRequestBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Warm runtime TTL in seconds.
 	WarmTTLSeconds *int `form:"warm_ttl_seconds,omitempty" json:"warm_ttl_seconds,omitempty" xml:"warm_ttl_seconds,omitempty"`
@@ -135,11 +135,11 @@ type GetAssistantResponseBody struct {
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Deprecated: read mcp_servers, where hosted servers carry toolset_slug. Lists
-	// the assistant's hosted (toolset-backed) MCP servers.
+	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
+	// slug.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
-	// MCP servers attached to the assistant, including hosted (toolset-backed)
-	// servers.
+	// MCP servers attached to the assistant that are not hosted (toolset-backed);
+	// hosted servers are listed under toolsets.
 	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Skills attached to the assistant.
 	Skills []*AssistantSkillRefResponseBody `form:"skills,omitempty" json:"skills,omitempty" xml:"skills,omitempty"`
@@ -176,11 +176,11 @@ type CreateAssistantResponseBody struct {
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Deprecated: read mcp_servers, where hosted servers carry toolset_slug. Lists
-	// the assistant's hosted (toolset-backed) MCP servers.
+	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
+	// slug.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
-	// MCP servers attached to the assistant, including hosted (toolset-backed)
-	// servers.
+	// MCP servers attached to the assistant that are not hosted (toolset-backed);
+	// hosted servers are listed under toolsets.
 	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Skills attached to the assistant.
 	Skills []*AssistantSkillRefResponseBody `form:"skills,omitempty" json:"skills,omitempty" xml:"skills,omitempty"`
@@ -217,11 +217,11 @@ type UpgradeAssistantIdentityResponseBody struct {
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Deprecated: read mcp_servers, where hosted servers carry toolset_slug. Lists
-	// the assistant's hosted (toolset-backed) MCP servers.
+	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
+	// slug.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
-	// MCP servers attached to the assistant, including hosted (toolset-backed)
-	// servers.
+	// MCP servers attached to the assistant that are not hosted (toolset-backed);
+	// hosted servers are listed under toolsets.
 	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Skills attached to the assistant.
 	Skills []*AssistantSkillRefResponseBody `form:"skills,omitempty" json:"skills,omitempty" xml:"skills,omitempty"`
@@ -258,11 +258,11 @@ type UpdateAssistantResponseBody struct {
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Deprecated: read mcp_servers, where hosted servers carry toolset_slug. Lists
-	// the assistant's hosted (toolset-backed) MCP servers.
+	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
+	// slug.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
-	// MCP servers attached to the assistant, including hosted (toolset-backed)
-	// servers.
+	// MCP servers attached to the assistant that are not hosted (toolset-backed);
+	// hosted servers are listed under toolsets.
 	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Skills attached to the assistant.
 	Skills []*AssistantSkillRefResponseBody `form:"skills,omitempty" json:"skills,omitempty" xml:"skills,omitempty"`
@@ -324,11 +324,11 @@ type GetManagedAssistantResponseBody struct {
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Deprecated: read mcp_servers, where hosted servers carry toolset_slug. Lists
-	// the assistant's hosted (toolset-backed) MCP servers.
+	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
+	// slug.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
-	// MCP servers attached to the assistant, including hosted (toolset-backed)
-	// servers.
+	// MCP servers attached to the assistant that are not hosted (toolset-backed);
+	// hosted servers are listed under toolsets.
 	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Skills attached to the assistant.
 	Skills []*AssistantSkillRefResponseBody `form:"skills,omitempty" json:"skills,omitempty" xml:"skills,omitempty"`
@@ -365,11 +365,11 @@ type EnsureManagedAssistantResponseBody struct {
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Deprecated: read mcp_servers, where hosted servers carry toolset_slug. Lists
-	// the assistant's hosted (toolset-backed) MCP servers.
+	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
+	// slug.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
-	// MCP servers attached to the assistant, including hosted (toolset-backed)
-	// servers.
+	// MCP servers attached to the assistant that are not hosted (toolset-backed);
+	// hosted servers are listed under toolsets.
 	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Skills attached to the assistant.
 	Skills []*AssistantSkillRefResponseBody `form:"skills,omitempty" json:"skills,omitempty" xml:"skills,omitempty"`
@@ -2265,11 +2265,11 @@ type AssistantResponseBody struct {
 	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
 	// The system instructions for the assistant.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
-	// Deprecated: read mcp_servers, where hosted servers carry toolset_slug. Lists
-	// the assistant's hosted (toolset-backed) MCP servers.
+	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
+	// slug.
 	Toolsets []*AssistantToolsetRefResponseBody `form:"toolsets,omitempty" json:"toolsets,omitempty" xml:"toolsets,omitempty"`
-	// MCP servers attached to the assistant, including hosted (toolset-backed)
-	// servers.
+	// MCP servers attached to the assistant that are not hosted (toolset-backed);
+	// hosted servers are listed under toolsets.
 	McpServers []*AssistantMCPServerRefResponseBody `form:"mcp_servers,omitempty" json:"mcp_servers,omitempty" xml:"mcp_servers,omitempty"`
 	// Skills attached to the assistant.
 	Skills []*AssistantSkillRefResponseBody `form:"skills,omitempty" json:"skills,omitempty" xml:"skills,omitempty"`
@@ -2306,9 +2306,6 @@ type AssistantMCPServerRefResponseBody struct {
 	// (/mcp/{endpoint_slug}). Populated on reads; ignored on writes. Absent when
 	// the server has no Speakeasy-hosted endpoint.
 	EndpointSlug *string `form:"endpoint_slug,omitempty" json:"endpoint_slug,omitempty" xml:"endpoint_slug,omitempty"`
-	// The backing toolset's slug when this is a hosted (toolset-backed) MCP
-	// server. Populated on reads; ignored on writes.
-	ToolsetSlug *string `form:"toolset_slug,omitempty" json:"toolset_slug,omitempty" xml:"toolset_slug,omitempty"`
 }
 
 // AssistantSkillRefResponseBody is used to define fields on response body
@@ -2343,9 +2340,6 @@ type AssistantMCPServerRefRequestBody struct {
 	// (/mcp/{endpoint_slug}). Populated on reads; ignored on writes. Absent when
 	// the server has no Speakeasy-hosted endpoint.
 	EndpointSlug *string `form:"endpoint_slug,omitempty" json:"endpoint_slug,omitempty" xml:"endpoint_slug,omitempty"`
-	// The backing toolset's slug when this is a hosted (toolset-backed) MCP
-	// server. Populated on reads; ignored on writes.
-	ToolsetSlug *string `form:"toolset_slug,omitempty" json:"toolset_slug,omitempty" xml:"toolset_slug,omitempty"`
 }
 
 // SendMessageAttachmentRequestBody is used to define fields on request body

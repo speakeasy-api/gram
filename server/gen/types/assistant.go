@@ -27,11 +27,11 @@ type Assistant struct {
 	Model string
 	// The system instructions for the assistant.
 	Instructions string
-	// Deprecated: read mcp_servers, where hosted servers carry toolset_slug. Lists
-	// the assistant's hosted (toolset-backed) MCP servers.
+	// Hosted (toolset-backed) MCP servers attached to the assistant, by toolset
+	// slug.
 	Toolsets []*AssistantToolsetRef
-	// MCP servers attached to the assistant, including hosted (toolset-backed)
-	// servers.
+	// MCP servers attached to the assistant that are not hosted (toolset-backed);
+	// hosted servers are listed under toolsets.
 	McpServers []*AssistantMCPServerRef
 	// Skills attached to the assistant.
 	Skills []*AssistantSkillRef

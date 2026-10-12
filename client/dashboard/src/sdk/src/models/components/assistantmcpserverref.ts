@@ -21,10 +21,6 @@ export type AssistantMCPServerRef = {
    * The MCP server slug exposed to the assistant. Covers every backend, including hosted (toolset-backed) servers.
    */
   mcpServerSlug: string;
-  /**
-   * The backing toolset's slug when this is a hosted (toolset-backed) MCP server. Populated on reads; ignored on writes.
-   */
-  toolsetSlug?: string | undefined;
 };
 
 /** @internal */
@@ -36,14 +32,12 @@ export const AssistantMCPServerRef$inboundSchema: z.ZodMiniType<
     endpoint_slug: z.optional(z.string()),
     environment_slug: z.optional(z.string()),
     mcp_server_slug: z.string(),
-    toolset_slug: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       "endpoint_slug": "endpointSlug",
       "environment_slug": "environmentSlug",
       "mcp_server_slug": "mcpServerSlug",
-      "toolset_slug": "toolsetSlug",
     });
   }),
 );
@@ -52,7 +46,6 @@ export type AssistantMCPServerRef$Outbound = {
   endpoint_slug?: string | undefined;
   environment_slug?: string | undefined;
   mcp_server_slug: string;
-  toolset_slug?: string | undefined;
 };
 
 /** @internal */
@@ -64,14 +57,12 @@ export const AssistantMCPServerRef$outboundSchema: z.ZodMiniType<
     endpointSlug: z.optional(z.string()),
     environmentSlug: z.optional(z.string()),
     mcpServerSlug: z.string(),
-    toolsetSlug: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       endpointSlug: "endpoint_slug",
       environmentSlug: "environment_slug",
       mcpServerSlug: "mcp_server_slug",
-      toolsetSlug: "toolset_slug",
     });
   }),
 );

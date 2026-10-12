@@ -87,7 +87,7 @@ func TestServiceDeletionWaitsForAssistantAttachments(t *testing.T) {
 				tx := testenv.BeginTx(t, ctx, conn)
 				resolved, err := svc.core.resolveToolsetRefsForWrite(ctx, tx, projectID, payload.Toolsets, payload.McpServers)
 				require.NoError(t, err)
-				resolvedServers, err := svc.core.resolveMcpServerRefsForWrite(ctx, tx, projectID, payload.McpServers, payload.Toolsets != nil)
+				resolvedServers, err := svc.core.resolveMcpServerRefsForWrite(ctx, tx, projectID, payload.McpServers, toolsetIDSet(resolved))
 				require.NoError(t, err)
 
 				// Mirror the deletion services' target-lock/delete/detach sequence.

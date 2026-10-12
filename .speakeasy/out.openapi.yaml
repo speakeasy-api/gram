@@ -80607,7 +80607,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AssistantMCPServerRef'
-          description: MCP servers attached to the assistant, including hosted (toolset-backed) servers.
+          description: MCP servers attached to the assistant that are not hosted (toolset-backed); hosted servers are listed under toolsets.
         model:
           type: string
           description: The model identifier used by the assistant.
@@ -80633,7 +80633,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AssistantToolsetRef'
-          description: 'Deprecated: read mcp_servers, where hosted servers carry toolset_slug. Lists the assistant''s hosted (toolset-backed) MCP servers.'
+          description: Hosted (toolset-backed) MCP servers attached to the assistant, by toolset slug.
         updated_at:
           type: string
           description: Last update timestamp.
@@ -80668,9 +80668,6 @@ components:
         mcp_server_slug:
           type: string
           description: The MCP server slug exposed to the assistant. Covers every backend, including hosted (toolset-backed) servers.
-        toolset_slug:
-          type: string
-          description: The backing toolset's slug when this is a hosted (toolset-backed) MCP server. Populated on reads; ignored on writes.
       required:
         - mcp_server_slug
     AssistantMemory:
@@ -82704,7 +82701,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AssistantMCPServerRef'
-          description: MCP servers to attach. When sent, replaces the assistant's servers that are not hosted (toolset-backed); hosted servers listed here are attached and unlisted ones are kept.
+          description: MCP servers to attach. When sent, replaces the assistant's servers that are not hosted (toolset-backed). A hosted server listed here is attached if it is not already; attached hosted servers are left unchanged, and toolsets governs them when both are sent.
         model:
           type: string
           description: The model identifier used by the assistant.
@@ -82721,7 +82718,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AssistantToolsetRef'
-          description: 'Deprecated: use mcp_servers. Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent, replaces the assistant''s hosted servers, and hosted servers listed in mcp_servers are ignored.'
+          description: Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent, replaces the assistant's hosted servers.
         warm_ttl_seconds:
           type: integer
           description: Optional warm runtime TTL in seconds.
@@ -107505,7 +107502,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AssistantMCPServerRef'
-          description: MCP servers to attach. When sent, replaces the assistant's servers that are not hosted (toolset-backed); hosted servers listed here are attached and unlisted ones are kept.
+          description: MCP servers to attach. When sent, replaces the assistant's servers that are not hosted (toolset-backed). A hosted server listed here is attached if it is not already; attached hosted servers are left unchanged, and toolsets governs them when both are sent.
         model:
           type: string
           description: The model identifier used by the assistant.
@@ -107522,7 +107519,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AssistantToolsetRef'
-          description: 'Deprecated: use mcp_servers. Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent, replaces the assistant''s hosted servers, and hosted servers listed in mcp_servers are ignored.'
+          description: Hosted (toolset-backed) MCP servers to attach, by toolset slug. When sent, replaces the assistant's hosted servers.
         warm_ttl_seconds:
           type: integer
           description: Warm runtime TTL in seconds.
