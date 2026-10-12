@@ -4440,6 +4440,15 @@ CREATE TABLE IF NOT EXISTS workload_issuers (
   -- absent from the registration UI.
   allow_wildcard_admission boolean NOT NULL DEFAULT true,
 
+  -- Where the verification path finds the keys that sign this issuer's
+  -- assertions. NULL is the issuer's remote jwks_uri, which is every issuer an
+  -- operator registers. 'device_keys' marks the issuer Speakeasy creates for
+  -- devices with no platform identity: each assertion is verified against the
+  -- one key registered for its own subject in workload_device_keys, never a
+  -- shared key set, so one enrolled device cannot sign as another. Nullable so
+  -- adding it touches no existing row; values are validated in application code.
+  key_source TEXT,
+
   -- The last discovery document captured for this issuer, verbatim. The typed
   -- columns above model only what Gram acts on; the rest of a document is kept
   -- because a platform preset needs claims_supported to tell an operator what
@@ -4467,6 +4476,7 @@ COMMENT ON COLUMN workload_issuers.description IS '@access: opaque-restricted';
 COMMENT ON COLUMN workload_issuers.tags IS '@access: opaque-confidential';
 COMMENT ON COLUMN workload_issuers.issuer IS '@access: restricted';
 COMMENT ON COLUMN workload_issuers.jwks_uri IS '@access: restricted';
+COMMENT ON COLUMN workload_issuers.key_source IS '@access: confidential';
 COMMENT ON COLUMN workload_issuers.allow_wildcard_admission IS '@access: confidential';
 COMMENT ON COLUMN workload_issuers.metadata IS '@access: opaque-restricted';
 COMMENT ON COLUMN workload_issuers.created_at IS '@access: confidential';
@@ -4595,12 +4605,30 @@ CREATE TABLE IF NOT EXISTS workload_identity_admissions (
   -- the same convention and limits as workload_issuers.tags.
   tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[] CHECK (array_length(tags, 1) <= 40),
 
+  -- The project this workload may send hooks to, which bounds the hooks grant
+  -- its device-agent tokens carry. Unrelated to project_id, which is the
+  -- admission's tier. NULL sends no hooks.
+  hooks_project_id uuid,
+  -- The tenant half of the hooks project reference. It exists so deleting the
+  -- project can SET NULL the pair without touching the NOT NULL
+  -- organization_id; the check pins it to organization_id while set.
+  hooks_project_organization_id TEXT,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT workload_identity_admissions_pkey PRIMARY KEY (id),
+  CONSTRAINT workload_identity_admissions_hooks_project_check CHECK (
+    (hooks_project_organization_id IS NULL AND hooks_project_id IS NULL) OR
+    (hooks_project_organization_id IS NOT NULL AND hooks_project_id IS NOT NULL AND
+     hooks_project_organization_id = organization_id)
+  ),
+  -- Composite so a project in another organization is a schema error. Deleting
+  -- the project clears the hooks project and keeps the admission: losing the
+  -- project must not silently revoke the workload.
+  CONSTRAINT workload_identity_admissions_hooks_project_fkey FOREIGN KEY (hooks_project_organization_id, hooks_project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL,
   CONSTRAINT workload_identity_admissions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   -- Composite for the same reason as the issuer reference below: a project in
   -- another organization is a schema error rather than a row a handler has to
@@ -4622,6 +4650,8 @@ COMMENT ON COLUMN workload_identity_admissions.subject IS '@access: restricted';
 COMMENT ON COLUMN workload_identity_admissions.match_kind IS '@access: confidential';
 COMMENT ON COLUMN workload_identity_admissions.name IS '@access: confidential';
 COMMENT ON COLUMN workload_identity_admissions.tags IS '@access: opaque-confidential';
+COMMENT ON COLUMN workload_identity_admissions.hooks_project_id IS '@access: confidential';
+COMMENT ON COLUMN workload_identity_admissions.hooks_project_organization_id IS '@access: confidential';
 COMMENT ON COLUMN workload_identity_admissions.created_at IS '@access: confidential';
 COMMENT ON COLUMN workload_identity_admissions.updated_at IS '@access: confidential';
 COMMENT ON COLUMN workload_identity_admissions.deleted_at IS '@access: confidential';
@@ -4662,6 +4692,10 @@ WHERE deleted IS FALSE AND project_id IS NULL;
 CREATE INDEX IF NOT EXISTS workload_identity_admissions_workload_issuer_id_idx
 ON workload_identity_admissions (workload_issuer_id)
 WHERE deleted IS FALSE;
+
+-- Supports the hooks project foreign key's SET NULL on project delete.
+CREATE INDEX IF NOT EXISTS workload_identity_admissions_hooks_project_idx
+ON workload_identity_admissions (hooks_project_organization_id, hooks_project_id);
 
 CREATE TABLE IF NOT EXISTS remote_session_client_user_session_issuers (
   remote_session_client_id uuid NOT NULL,
@@ -7433,6 +7467,133 @@ ON workload_agent_assignments (organization_id, agent_id);
 -- Supports the workload issuer foreign-key cascade for the same reason.
 CREATE INDEX IF NOT EXISTS workload_agent_assignments_workload_issuer_idx
 ON workload_agent_assignments (organization_id, workload_issuer_id);
+
+-- A single-use credential an administrator hands to one headless box so it can
+-- enroll as a workload with no platform identity of its own. Redeeming it
+-- registers the box's public key, admits the box, and assigns it this agent.
+CREATE TABLE IF NOT EXISTS workload_device_join_tokens (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+
+  -- SHA-256 of the token. The token itself is shown once, at creation.
+  token_hash TEXT NOT NULL CHECK (token_hash <> ''),
+
+  -- The agent the enrolled device inherits its policy from.
+  agent_id uuid NOT NULL,
+
+  -- The project the enrolled device may send hooks to, copied to its
+  -- admission. A device has no Speakeasy permission of its own to inherit a
+  -- project from, so the administrator names one here.
+  hooks_project_id uuid NOT NULL,
+
+  -- The administrator who created the token, recorded as the actor of the
+  -- enrollment it later authorizes.
+  created_by_user_id TEXT NOT NULL,
+
+  expires_at timestamptz NOT NULL,
+
+  -- Set when the token is redeemed. A token is good for one device only.
+  consumed_at timestamptz,
+  -- The device subject the token enrolled, for tracing an enrollment back to
+  -- the token that authorized it.
+  consumed_by_subject TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT workload_device_join_tokens_pkey PRIMARY KEY (id),
+  CONSTRAINT workload_device_join_tokens_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT workload_device_join_tokens_agent_fkey FOREIGN KEY (organization_id, agent_id) REFERENCES agents (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT workload_device_join_tokens_hooks_project_fkey FOREIGN KEY (organization_id, hooks_project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN workload_device_join_tokens.id IS '@access: confidential';
+COMMENT ON COLUMN workload_device_join_tokens.organization_id IS '@access: confidential';
+COMMENT ON COLUMN workload_device_join_tokens.token_hash IS '@access: secret-restricted';
+COMMENT ON COLUMN workload_device_join_tokens.agent_id IS '@access: confidential';
+COMMENT ON COLUMN workload_device_join_tokens.hooks_project_id IS '@access: confidential';
+COMMENT ON COLUMN workload_device_join_tokens.created_by_user_id IS '@access: confidential';
+COMMENT ON COLUMN workload_device_join_tokens.expires_at IS '@access: confidential';
+COMMENT ON COLUMN workload_device_join_tokens.consumed_at IS '@access: confidential';
+COMMENT ON COLUMN workload_device_join_tokens.consumed_by_subject IS '@access: restricted';
+COMMENT ON COLUMN workload_device_join_tokens.created_at IS '@access: confidential';
+COMMENT ON COLUMN workload_device_join_tokens.updated_at IS '@access: confidential';
+COMMENT ON COLUMN workload_device_join_tokens.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN workload_device_join_tokens.deleted IS '@access: confidential';
+
+-- Redemption looks a token up by its hash, before the organization is known.
+CREATE UNIQUE INDEX IF NOT EXISTS workload_device_join_tokens_token_hash_key
+ON workload_device_join_tokens (token_hash);
+
+-- Supports the agent foreign-key cascade.
+CREATE INDEX IF NOT EXISTS workload_device_join_tokens_agent_idx
+ON workload_device_join_tokens (organization_id, agent_id);
+
+-- Supports the hooks project foreign-key cascade.
+CREATE INDEX IF NOT EXISTS workload_device_join_tokens_hooks_project_idx
+ON workload_device_join_tokens (organization_id, hooks_project_id);
+
+-- The public key an enrolled device signs its workload assertions with. An
+-- assertion from a 'device_keys' issuer is verified against the key registered
+-- here for its own subject, which is what binds a key to one device.
+CREATE TABLE IF NOT EXISTS workload_device_keys (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  workload_issuer_id uuid NOT NULL,
+
+  -- The device's workload subject, device:<uuid>.
+  subject TEXT NOT NULL CHECK (subject <> ''),
+
+  -- The public JWK, stored with its kid set to thumbprint.
+  public_jwk JSONB NOT NULL,
+  -- RFC 7638 SHA-256 thumbprint, base64url. Assertions must name it as kid.
+  thumbprint TEXT NOT NULL CHECK (thumbprint <> ''),
+
+  -- What the device reported about itself at enrollment, for an administrator
+  -- telling enrolled boxes apart. Self-reported, never used for authorization.
+  hostname TEXT CHECK (hostname IS NULL OR CHAR_LENGTH(hostname) <= 255),
+  serial TEXT CHECK (serial IS NULL OR CHAR_LENGTH(serial) <= 255),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT workload_device_keys_pkey PRIMARY KEY (id),
+  CONSTRAINT workload_device_keys_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT workload_device_keys_workload_issuer_fkey FOREIGN KEY (organization_id, workload_issuer_id) REFERENCES workload_issuers (organization_id, id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN workload_device_keys.id IS '@access: confidential';
+COMMENT ON COLUMN workload_device_keys.organization_id IS '@access: confidential';
+COMMENT ON COLUMN workload_device_keys.workload_issuer_id IS '@access: confidential';
+COMMENT ON COLUMN workload_device_keys.subject IS '@access: restricted';
+COMMENT ON COLUMN workload_device_keys.public_jwk IS '@access: confidential';
+COMMENT ON COLUMN workload_device_keys.thumbprint IS '@access: confidential';
+COMMENT ON COLUMN workload_device_keys.hostname IS '@access: confidential-pii';
+COMMENT ON COLUMN workload_device_keys.serial IS '@access: confidential-pii';
+COMMENT ON COLUMN workload_device_keys.created_at IS '@access: confidential';
+COMMENT ON COLUMN workload_device_keys.updated_at IS '@access: confidential';
+COMMENT ON COLUMN workload_device_keys.deleted_at IS '@access: confidential';
+COMMENT ON COLUMN workload_device_keys.deleted IS '@access: confidential';
+
+-- One live key per device: verification reads exactly this row.
+CREATE UNIQUE INDEX IF NOT EXISTS workload_device_keys_subject_key
+ON workload_device_keys (organization_id, workload_issuer_id, subject)
+WHERE deleted IS FALSE;
+
+-- One live device per key: a key registered for two subjects would let its
+-- private key sign as either.
+CREATE UNIQUE INDEX IF NOT EXISTS workload_device_keys_thumbprint_key
+ON workload_device_keys (organization_id, workload_issuer_id, thumbprint)
+WHERE deleted IS FALSE;
+
+-- Supports the workload issuer foreign-key cascade.
+CREATE INDEX IF NOT EXISTS workload_device_keys_workload_issuer_idx
+ON workload_device_keys (organization_id, workload_issuer_id);
+
 
 -- Binding history is retained even when live resources are hard-deleted. Original
 -- association keys and tenant keys are immutable in the service; nullable refs are

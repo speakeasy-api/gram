@@ -50,6 +50,10 @@ type WorkloadIdentityAdmission struct {
 	// @access: opaque-confidential
 	Tags []string
 	// @access: confidential
+	HooksProjectID uuid.NullUUID
+	// @access: confidential
+	HooksProjectOrganizationID pgtype.Text
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
@@ -78,6 +82,8 @@ type WorkloadIssuer struct {
 	JwksUri string
 	// @access: confidential
 	AllowWildcardAdmission bool
+	// @access: confidential
+	KeySource pgtype.Text
 	// @access: opaque-restricted
 	Metadata []byte
 	// @access: confidential
