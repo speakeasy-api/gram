@@ -15,19 +15,19 @@ An organization's internal session issuer signs enterprise-managed authorization
    - `state: keyless`: no replacement yet (KMS outage, signing misconfiguration or mint rate limit). Nothing is signed meanwhile, and EMA connections fall back to other identity providers. Repeat the call; with no active key, `active_kid` may be left out.
 4. Repeats that name a key that was already replaced change nothing, so retries never revoke the fresh key or mint further keys.
 5. If the platform signing identity itself is suspect, pause all signing first (below), then rotate every affected organization.
-6. Check the `gram.internal_session_issuer.operations` metric (`operation=rotate_compromised`) for failed steps.
+6. Check the `gram.internal_session_issuer.operations` metric (`gram.internal_session_issuer.operation=rotate_compromised`) for failed steps.
 
 ## Pausing all signing
 
 - Without a restart: enable the PostHog flag `internal-session-issuer-signing-paused`, for everyone or for one organization's group. Discovery keeps serving.
 - The switch fails closed. Signing runs only while that flag exists and evaluates to off. A missing or deleted flag, or an unavailable flag provider, pauses signing. Keep the flag defined, and off, in every environment.
-- At startup: set `GRAM_INTERNAL_SESSION_ISSUER_SIGNING_PAUSED=true` on the `start` and `mcp` deployments.
+- At startup: set `GRAM_INTERNAL_SESSION_ISSUER_SIGNING_PAUSED=true` on the `start` deployment. A deployment that signs must register the same flag.
 
 An organization admin can also stop their own organization's signing with `internalSessionIssuers.setEnabled` and `enabled: false`. Like compromised rotation, this needs only the admin role and the database.
 
 ## Manual KMS cleanup
 
-Revoked and expired keys have their KMS versions disabled and the signer's grant removed automatically: on rotation, on management reads, and by the hourly `internal-session-issuer-key-sweep` schedule. Each revoked key stays pending (`json_web_keys.kms_disabled_at` NULL) until both steps succeed, and the sweep reports the count still pending as `gram.internal_session_issuer.kms_cleanup.pending`. A value that stays above 0 across sweeps needs a look. To clean up by hand:
+Revoked and expired keys have their KMS versions disabled and the signer's grant removed automatically: on rotation, on management reads, and by the hourly `internal-session-issuer-key-sweep` schedule, which runs on the shared task queue only. Each revoked key stays pending (`json_web_keys.kms_disabled_at` NULL) until both steps succeed, and the sweep reports the count still pending as `gram.internal_session_issuer.kms_cleanup.pending`. A value that stays above 0 across sweeps needs a look. To clean up by hand:
 
 ```sh
 gcloud kms keys versions disable <version> --key <key> --keyring <ring> --location <location> --project <project>
