@@ -89,6 +89,22 @@ type Request struct {
 	Ungrouped    bool
 }
 
+// Reads lists the fields the request touches, which is what LoadLookups
+// loads lookups for.
+func (r Request) Reads() []string {
+	reads := make([]string, 0, len(r.Dimensions)+len(r.Measures)+len(r.Filters))
+	reads = append(reads, r.Dimensions...)
+	for _, m := range r.Measures {
+		if m.Field != "" {
+			reads = append(reads, m.Field)
+		}
+	}
+	for _, f := range r.Filters {
+		reads = append(reads, f.Field)
+	}
+	return reads
+}
+
 // ColumnKind says what a result column is, so a client can lay it out
 // without inspecting values.
 type ColumnKind string
@@ -126,8 +142,8 @@ var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
 // Compile validates a request against the catalog and turns it into SQL.
 // Guardrails are enforced here, not in the transport, so a direct Go caller
-// is bound by them too.
-func Compile(catalog *Catalog, organizationID, projectID string, req Request) (*Plan, error) {
+// is bound by them too. lookups come from LoadLookups; nil folds nothing.
+func Compile(catalog *Catalog, tenant Tenant, lookups LookupMaps, req Request) (*Plan, error) {
 	ds, ok := catalog.Dataset(req.Dataset)
 	if !ok {
 		return nil, newError(ErrUnknownDataset, req.Dataset, "dataset", req.Dataset, fmt.Sprintf("dataset %q does not exist", req.Dataset))
@@ -146,7 +162,7 @@ func Compile(catalog *Catalog, organizationID, projectID string, req Request) (*
 	if grain == "" {
 		grain = TimeGrainNone
 	}
-	if !slices.Contains([]TimeGrain{TimeGrainNone, TimeGrainHour, TimeGrainDay, TimeGrainWeek, TimeGrainMonth}, grain) {
+	if !slices.Contains(timeGrains, grain) {
 		return nil, newError(ErrUnsupportedGrain, name, "grain", string(grain), fmt.Sprintf("grain %q is not one of none, hour, day, week, month", grain))
 	}
 	if req.Ungrouped && grain != TimeGrainNone {
@@ -173,12 +189,16 @@ func Compile(catalog *Catalog, organizationID, projectID string, req Request) (*
 	if limit == 0 {
 		limit = DefaultLimit
 	}
-	if limit < 0 || limit > MaxLimit {
-		return nil, newError(ErrLimitExceeded, name, "limit", fmt.Sprint(req.Limit), fmt.Sprintf("limit must be between 1 and %d", MaxLimit))
+	maxLimit := MaxLimit
+	if req.Ungrouped {
+		maxLimit = MaxRowsLimit
+	}
+	if limit < 0 || limit > maxLimit {
+		return nil, newError(ErrLimitExceeded, name, "limit", fmt.Sprint(req.Limit), fmt.Sprintf("limit must be between 1 and %d", maxLimit))
 	}
 
-	scope := Scope{OrganizationID: organizationID, ProjectID: projectID, FromUnixNano: req.FromUnixNano, ToUnixNano: req.ToUnixNano}
-	builder := sq.Select().FromSelect(ds.Source(scope), "src")
+	qc := QueryContext{Tenant: tenant, Window: Window{FromUnixNano: req.FromUnixNano, ToUnixNano: req.ToUnixNano}, Lookups: lookups}
+	builder := sq.Select().FromSelect(ds.Source(qc), "src")
 
 	// Filters apply to the collapsed rows, after the source query, so a
 	// filter on a dimension whose value settled on the last observation sees
@@ -189,7 +209,7 @@ func Compile(catalog *Catalog, organizationID, projectID string, req Request) (*
 		if !ok || field.Role != RoleDimension {
 			return nil, newError(ErrUnknownField, name, position+".field", filter.Field, fmt.Sprintf("dataset %s has no dimension %s", name, filter.Field))
 		}
-		if !field.Admits(filter.Operator) {
+		if !field.AdmitsOperator(filter.Operator) {
 			return nil, newError(ErrUnsupportedOperator, name, position+".operator", filter.Operator, fmt.Sprintf("%s does not admit %s", filter.Field, filter.Operator))
 		}
 		if len(filter.Values) == 0 {
@@ -198,14 +218,17 @@ func Compile(catalog *Catalog, organizationID, projectID string, req Request) (*
 		if len(filter.Values) > MaxFilterValues {
 			return nil, newError(ErrLimitExceeded, name, position+".values", "", fmt.Sprintf("at most %d values per filter", MaxFilterValues))
 		}
-		switch Operator(filter.Operator) {
-		case OperatorEquals:
-			if len(filter.Values) != 1 {
-				return nil, newError(ErrUnsatisfiable, name, position+".values", "", "equals takes exactly one value")
-			}
-			builder = builder.Where(squirrel.Eq{field.Expr: filter.Values[0]})
-		case OperatorIn:
-			builder = builder.Where(squirrel.Eq{field.Expr: filter.Values})
+		if Operator(filter.Operator) == OperatorEquals && len(filter.Values) != 1 {
+			return nil, newError(ErrUnsatisfiable, name, position+".values", "", "equals takes exactly one value")
+		}
+		expr, args := readExpr(qc, field)
+		// A folded value may stand for itself and its display name, so even
+		// equals can compare against two values.
+		values := foldValues(qc, field, filter.Values)
+		if len(values) == 1 {
+			builder = builder.Where(expr+" = ?", append(args, values[0])...)
+		} else {
+			builder = builder.Where(expr+" IN ("+placeholders(len(values))+")", append(args, anyValues(values)...)...)
 		}
 	}
 
@@ -227,7 +250,8 @@ func Compile(catalog *Catalog, organizationID, projectID string, req Request) (*
 		builder = builder.Column(fmt.Sprintf("fromUnixTimestamp64Nano(%s, 'UTC') AS %s", ds.TimeExpr, timeColumn))
 		plan.Columns = append(plan.Columns, Column{Name: timeColumn, Kind: ColumnTime})
 		for _, field := range dimensions {
-			builder = builder.Column(fmt.Sprintf("%s AS %s", field.Expr, field.Name))
+			expr, args := readExpr(qc, field)
+			builder = builder.Column(expr+" AS "+field.Name, args...)
 			plan.Columns = append(plan.Columns, Column{Name: field.Name, Kind: ColumnDimension})
 		}
 		builder = builder.OrderBy(ds.TimeExpr + " DESC").Limit(uint64(limit))
@@ -245,7 +269,8 @@ func Compile(catalog *Catalog, organizationID, projectID string, req Request) (*
 		plan.Columns = append(plan.Columns, Column{Name: timeBucketColumn, Kind: ColumnTime})
 	}
 	for _, field := range dimensions {
-		builder = builder.Column(fmt.Sprintf("%s AS %s", field.Expr, field.Name))
+		expr, args := readExpr(qc, field)
+		builder = builder.Column(expr+" AS "+field.Name, args...)
 		groupBy = append(groupBy, field.Name)
 		plan.Columns = append(plan.Columns, Column{Name: field.Name, Kind: ColumnDimension})
 	}
@@ -253,7 +278,7 @@ func Compile(catalog *Catalog, organizationID, projectID string, req Request) (*
 	aliases := make([]string, 0, len(req.Measures))
 	for i, measure := range req.Measures {
 		position := fmt.Sprintf("measures[%d]", i)
-		expr, alias, err := measureExpr(ds, measure, position)
+		expr, args, alias, err := measureExpr(ds, qc, measure, position)
 		if err != nil {
 			return nil, err
 		}
@@ -261,7 +286,7 @@ func Compile(catalog *Catalog, organizationID, projectID string, req Request) (*
 			return nil, newError(ErrUnsatisfiable, name, position+".alias", alias, fmt.Sprintf("result column %s is taken", alias))
 		}
 		aliases = append(aliases, alias)
-		builder = builder.Column(fmt.Sprintf("%s AS %s", expr, alias))
+		builder = builder.Column(expr+" AS "+alias, args...)
 		plan.Columns = append(plan.Columns, Column{Name: alias, Kind: ColumnMeasure})
 	}
 
@@ -311,39 +336,69 @@ func finish(plan *Plan, builder squirrel.SelectBuilder) (*Plan, error) {
 	return plan, nil
 }
 
-// measureExpr resolves a requested measure to its SQL and result alias.
-func measureExpr(ds *Dataset, measure Measure, position string) (string, string, error) {
+// measureExpr resolves a requested measure to its SQL, its binds and its
+// result alias.
+func measureExpr(ds *Dataset, qc QueryContext, measure Measure, position string) (string, []any, string, error) {
 	op := strings.ToLower(measure.Op)
 	alias := measure.Alias
 
 	if op == AggregationCount {
 		if measure.Field != "" {
-			return "", "", newError(ErrUnsatisfiable, ds.Name, position+".field", measure.Field, "count takes no field")
+			return "", nil, "", newError(ErrUnsatisfiable, ds.Name, position+".field", measure.Field, "count takes no field")
 		}
 		if alias == "" {
 			alias = AggregationCount
 		}
 		if err := checkAlias(ds, alias, position); err != nil {
-			return "", "", err
+			return "", nil, "", err
 		}
-		return "count()", alias, nil
+		return "count()", nil, alias, nil
 	}
 
 	if measure.Field == "" {
-		return "", "", newError(ErrUnsatisfiable, ds.Name, position+".field", "", fmt.Sprintf("%s needs a field", op))
+		return "", nil, "", newError(ErrUnsatisfiable, ds.Name, position+".field", "", fmt.Sprintf("%s needs a field", op))
 	}
 	field, ok := ds.Field(measure.Field)
-	if !ok || field.Role != RoleMeasure {
-		return "", "", newError(ErrUnknownField, ds.Name, position+".field", measure.Field, fmt.Sprintf("dataset %s has no measure %s", ds.Name, measure.Field))
+
+	// count_distinct is the one aggregation over a dimension: how many
+	// distinct values of it the matching rows carry. It is exact, since the
+	// rows are already collapsed to the dataset's grain inside a bounded
+	// window and the cardinalities are tools, servers and people, not
+	// events. A collapsed row whose observations never carried the value
+	// holds the empty string, which is no value, so it is not counted, the
+	// same guard the sources put on their own identity counts. uniqExactIf
+	// yields UInt64, which the runner narrows on the wire.
+	if op == string(AggregationCountDistinct) {
+		if ok && field.Role == RoleMeasure {
+			return "", nil, "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s counts a dimension, and %s is a measure", op, field.Name))
+		}
+		if !ok || field.Role != RoleDimension {
+			return "", nil, "", newError(ErrUnknownField, ds.Name, position+".field", measure.Field, fmt.Sprintf("dataset %s has no dimension %s", ds.Name, measure.Field))
+		}
+		if !field.AdmitsAggregation(op) {
+			return "", nil, "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s does not admit %s", field.Name, op))
+		}
+		if alias == "" {
+			alias = op + "_" + field.Name
+		}
+		if err := checkAlias(ds, alias, position); err != nil {
+			return "", nil, "", err
+		}
+		expr, args := readExpr(qc, field)
+		return fmt.Sprintf("uniqExact(nullIf(%s, ''))", expr), args, alias, nil
 	}
-	if !field.Admits(op) {
-		return "", "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s does not admit %s", field.Name, op))
+
+	if !ok || field.Role != RoleMeasure {
+		return "", nil, "", newError(ErrUnknownField, ds.Name, position+".field", measure.Field, fmt.Sprintf("dataset %s has no measure %s", ds.Name, measure.Field))
+	}
+	if !field.AdmitsAggregation(op) {
+		return "", nil, "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s does not admit %s", field.Name, op))
 	}
 	if alias == "" {
 		alias = op + "_" + field.Name
 	}
 	if err := checkAlias(ds, alias, position); err != nil {
-		return "", "", err
+		return "", nil, "", err
 	}
 
 	var expr string
@@ -356,10 +411,62 @@ func measureExpr(ds *Dataset, measure Measure, position string) (string, string,
 		expr = fmt.Sprintf("quantile(0.95)(%s)", field.Expr)
 	case AggregationP99:
 		expr = fmt.Sprintf("quantile(0.99)(%s)", field.Expr)
+	case AggregationCountDistinct:
+		// Handled above: a measure never admits it, so this is unreachable
+		// through Admits, and the switch stays exhaustive.
+		return "", nil, "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s counts a dimension, and %s is a measure", op, field.Name))
 	default:
-		return "", "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s is not an aggregation", op))
+		return "", nil, "", newError(ErrUnsupportedAggregation, ds.Name, position+".op", op, fmt.Sprintf("%s is not an aggregation", op))
 	}
-	return expr, alias, nil
+	return expr, nil, alias, nil
+}
+
+// readExpr is a field's expression, folded through its lookup's map when one
+// was loaded; transform leaves a value with no entry as reported.
+func readExpr(qc QueryContext, field *Field) (string, []any) {
+	if field.Lookup == "" {
+		return field.Expr, nil
+	}
+	raws, targets := lookupPairs(qc.Lookups[field.Lookup])
+	if len(raws) == 0 {
+		return field.Expr, nil
+	}
+	return "transform(" + field.Expr + ", ?, ?, " + field.Expr + ")", []any{raws, targets}
+}
+
+// foldValues keeps each filter value and adds what the map folds it to, so
+// a raw name still matches once it is overridden and a display name keeps
+// matching even when it is also someone's raw name. Duplicates are dropped.
+func foldValues(qc QueryContext, field *Field, values []string) []string {
+	if field.Lookup == "" {
+		return values
+	}
+	m := qc.Lookups[field.Lookup]
+	if len(m) == 0 {
+		return values
+	}
+	folded := make([]string, 0, len(values))
+	for _, v := range values {
+		for _, candidate := range []string{v, foldValue(m, v)} {
+			if !slices.Contains(folded, candidate) {
+				folded = append(folded, candidate)
+			}
+		}
+	}
+	return folded
+}
+
+// placeholders renders n bound slots for an IN list.
+func placeholders(n int) string {
+	return strings.TrimSuffix(strings.Repeat("?,", n), ",")
+}
+
+func anyValues(values []string) []any {
+	out := make([]any, len(values))
+	for i, v := range values {
+		out[i] = v
+	}
+	return out
 }
 
 // checkAlias keeps a caller-chosen result column name a plain identifier

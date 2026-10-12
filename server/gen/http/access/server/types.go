@@ -445,6 +445,10 @@ type SetAIToolDecisionResponseBody struct {
 // ListResourceAudienceResponseBody is the type of the "access" service
 // "listResourceAudience" endpoint HTTP response body.
 type ListResourceAudienceResponseBody struct {
+	// Live plugins containing this resource and assigned to an exact audience
+	// role. Omitted without plugin read and administrator access; not evidence of
+	// authorization or installation.
+	RolePlugins []*ResourceAudienceRolePluginResponseBody `json:"role_plugins,omitzero"`
 	// Rules deciding access to this resource, widest first.
 	Entries []*ResourceAudienceEntryResponseBody `form:"entries" json:"entries" xml:"entries"`
 	// Fingerprint of the rules naming this resource. Send it back when saving so a
@@ -455,6 +459,10 @@ type ListResourceAudienceResponseBody struct {
 // SetResourceAudienceResponseBody is the type of the "access" service
 // "setResourceAudience" endpoint HTTP response body.
 type SetResourceAudienceResponseBody struct {
+	// Live plugins containing this resource and assigned to an exact audience
+	// role. Omitted without plugin read and administrator access; not evidence of
+	// authorization or installation.
+	RolePlugins []*ResourceAudienceRolePluginResponseBody `json:"role_plugins,omitzero"`
 	// Rules deciding access to this resource, widest first.
 	Entries []*ResourceAudienceEntryResponseBody `form:"entries" json:"entries" xml:"entries"`
 	// Fingerprint of the rules naming this resource. Send it back when saving so a
@@ -6798,6 +6806,19 @@ type AIDetectionUserResponseBody struct {
 	LastSeen string `form:"last_seen" json:"last_seen" xml:"last_seen"`
 }
 
+// ResourceAudienceRolePluginResponseBody is used to define fields on response
+// body types.
+type ResourceAudienceRolePluginResponseBody struct {
+	// Exact role assigned to the plugin.
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
+	// Plugin ID.
+	PluginID string `form:"plugin_id" json:"plugin_id" xml:"plugin_id"`
+	// Plugin name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Plugin slug.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+}
+
 // ResourceAudienceEntryResponseBody is used to define fields on response body
 // types.
 type ResourceAudienceEntryResponseBody struct {
@@ -7619,6 +7640,16 @@ func NewListResourceAudienceResponseBody(res *access.ResourceAudienceResult) *Li
 	body := &ListResourceAudienceResponseBody{
 		Version: res.Version,
 	}
+	if res.RolePlugins != nil {
+		body.RolePlugins = make([]*ResourceAudienceRolePluginResponseBody, len(res.RolePlugins))
+		for i, val := range res.RolePlugins {
+			if val == nil {
+				body.RolePlugins[i] = nil
+				continue
+			}
+			body.RolePlugins[i] = marshalAccessResourceAudienceRolePluginToResourceAudienceRolePluginResponseBody(val)
+		}
+	}
 	if res.Entries != nil {
 		body.Entries = make([]*ResourceAudienceEntryResponseBody, len(res.Entries))
 		for i, val := range res.Entries {
@@ -7639,6 +7670,16 @@ func NewListResourceAudienceResponseBody(res *access.ResourceAudienceResult) *Li
 func NewSetResourceAudienceResponseBody(res *access.ResourceAudienceResult) *SetResourceAudienceResponseBody {
 	body := &SetResourceAudienceResponseBody{
 		Version: res.Version,
+	}
+	if res.RolePlugins != nil {
+		body.RolePlugins = make([]*ResourceAudienceRolePluginResponseBody, len(res.RolePlugins))
+		for i, val := range res.RolePlugins {
+			if val == nil {
+				body.RolePlugins[i] = nil
+				continue
+			}
+			body.RolePlugins[i] = marshalAccessResourceAudienceRolePluginToResourceAudienceRolePluginResponseBody(val)
+		}
 	}
 	if res.Entries != nil {
 		body.Entries = make([]*ResourceAudienceEntryResponseBody, len(res.Entries))

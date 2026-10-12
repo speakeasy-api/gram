@@ -205,8 +205,9 @@ func Retryer(routes route.Store, tunnelID, selectedAddr, clientAffinityKey, forw
 			return nil, errors.Join(fmt.Errorf("build tunnel retry route URL: %w", err), unpublishErr)
 		}
 		return &proxy.UpstreamResponseRetry{
-			RemoteURL: gatewayURL,
-			Headers:   Headers(tunnelID, forwardToken, clientAffinityKey),
+			RemoteURL:             gatewayURL,
+			Headers:               Headers(tunnelID, forwardToken, clientAffinityKey),
+			AuthorizationOverride: "",
 		}, nil
 	}
 }

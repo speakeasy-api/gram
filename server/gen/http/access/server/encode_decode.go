@@ -7564,6 +7564,23 @@ func marshalAccessAIDetectionUserToAIDetectionUserResponseBody(v *access.AIDetec
 	return res
 }
 
+// marshalAccessResourceAudienceRolePluginToResourceAudienceRolePluginResponseBody
+// builds a value of type *ResourceAudienceRolePluginResponseBody from a value
+// of type *access.ResourceAudienceRolePlugin.
+func marshalAccessResourceAudienceRolePluginToResourceAudienceRolePluginResponseBody(v *access.ResourceAudienceRolePlugin) *ResourceAudienceRolePluginResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ResourceAudienceRolePluginResponseBody{
+		PrincipalUrn: v.PrincipalUrn,
+		PluginID:     v.PluginID,
+		Name:         v.Name,
+		Slug:         v.Slug,
+	}
+
+	return res
+}
+
 // marshalAccessResourceAudienceEntryToResourceAudienceEntryResponseBody builds
 // a value of type *ResourceAudienceEntryResponseBody from a value of type
 // *access.ResourceAudienceEntry.

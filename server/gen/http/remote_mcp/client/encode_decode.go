@@ -3893,6 +3893,7 @@ func unmarshalMcpServerResponseBodyToTypesMcpServer(v *McpServerResponseBody) *t
 		ProjectID:             *v.ProjectID,
 		Name:                  v.Name,
 		Slug:                  v.Slug,
+		PlatformEndpointSlug:  v.PlatformEndpointSlug,
 		EnvironmentID:         v.EnvironmentID,
 		UserSessionIssuerID:   v.UserSessionIssuerID,
 		RemoteMcpServerID:     v.RemoteMcpServerID,
@@ -3966,6 +3967,8 @@ func unmarshalProtectedResourceMetadataUnavailableResponseBodyToRemotemcpProtect
 func unmarshalRemoteMcpServerClientScopesResponseBodyToRemotemcpRemoteMcpServerClientScopes(v *RemoteMcpServerClientScopesResponseBody) *remotemcp.RemoteMcpServerClientScopes {
 	res := &remotemcp.RemoteMcpServerClientScopes{
 		ClientID:       *v.ClientID,
+		IssuerName:     v.IssuerName,
+		IssuerURL:      v.IssuerURL,
 		ScopeSource:    *v.ScopeSource,
 		PinWouldDecide: *v.PinWouldDecide,
 	}

@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   sessions: vi.fn(),
   clients: vi.fn(),
   siblings: vi.fn(),
+  impact: vi.fn(),
   issuers: vi.fn(),
   issuersByIds: vi.fn(),
   hostIssuers: vi.fn(),
@@ -48,6 +50,9 @@ const mocks = vi.hoisted(() => ({
   toastError: vi.fn(),
 }));
 
+vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
+  useCustomerManagedKeys: () => ({ entitled: false, isLoading: false }),
+}));
 vi.mock("sonner", () => ({
   toast: {
     success: mocks.toastSuccess,
@@ -112,6 +117,15 @@ vi.mock("@gram/client/react-query/mcpServers.js", () => ({
   useMcpServers: () => mocks.siblings(),
 }));
 
+vi.mock("@gram/client/react-query/serverIdentityImpact.js", () => ({
+  invalidateAllServerIdentityImpact: () => Promise.resolve(),
+  useServerIdentityImpact: (
+    request: unknown,
+    _security: unknown,
+    options: { enabled?: boolean },
+  ) => mocks.impact(request, options),
+}));
+
 vi.mock("@gram/client/react-query/getRemoteMcpServer.js", () => ({
   useGetRemoteMcpServer: () => mocks.source(),
 }));
@@ -134,9 +148,10 @@ vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
     });
     return { data: { result: { items } }, isLoading: false };
   },
-  // Stands in for the server's tier and search filters over the listing.
+  // Stands in for the server's tier and search filters over the listing; no
+  // tier lists every one.
   useRemoteSessionIssuersInfinite: (request: {
-    tier: "project" | "organization" | "platform";
+    tier?: "project" | "organization" | "platform";
     search?: string;
   }) => {
     mocks.tierSearch(request.tier, request.search);
@@ -156,7 +171,7 @@ vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
           : "platform";
       const q = request.search?.toLowerCase();
       return (
-        tier === request.tier &&
+        (!request.tier || tier === request.tier) &&
         (!q ||
           [issuer.name ?? "", issuer.slug, issuer.issuer].some((field) =>
             field.toLowerCase().includes(q),
@@ -219,6 +234,12 @@ vi.mock("@gram/client/react-query/getRemoteMcpServerScopes.js", () => ({
     mocks.setScopesData(...args),
   invalidateAllGetRemoteMcpServerScopes: (...args: unknown[]) =>
     mocks.invalidateScopes(...args),
+  queryKeyGetRemoteMcpServerScopes: (params: unknown) => [
+    "@gram/client",
+    "remoteMcp",
+    "getServerScopes",
+    params,
+  ],
 }));
 
 vi.mock("@gram/client/react-query/setRemoteMcpServerScopePin.js", () => ({
@@ -306,6 +327,7 @@ function serverScopes(overrides: Record<string, unknown> = {}) {
     challengeScopes: [],
     discoveryEnabled: true,
     sharedServerCount: 0,
+    canPin: true,
     clients: [
       {
         clientId: "client-1",
@@ -367,6 +389,26 @@ function connectClient(): void {
   });
 }
 
+// A service account client (credential_owner self) bound to this server.
+function boundSelfClient(): void {
+  mocks.clients.mockReturnValue({
+    items: [
+      {
+        id: "self-client-1",
+        clientId: "service-client",
+        credentialOwner: "self",
+        tokenEndpointAuthMethod: "client_secret_basic",
+        remoteSessionIssuerId: "provider-1",
+        userSessionIssuerIds: ["user-session-issuer-1"],
+        scope: [],
+      },
+    ],
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
+}
+
 function autoConfigurableProvider(): void {
   mocks.issuers.mockReturnValue({
     data: {
@@ -395,6 +437,56 @@ function confirmSave(): void {
   if (confirm) fireEvent.click(confirm);
 }
 
+function swapClientWithImpact(
+  servers: Array<Record<string, unknown>> | null,
+  hiddenServerCount = 0,
+): void {
+  if (servers) {
+    mocks.impact.mockReturnValue({
+      data: { servers, hiddenServerCount },
+      isLoading: false,
+      isError: false,
+    });
+  }
+  mocks.clients.mockReturnValue({
+    items: [
+      {
+        id: "client-1",
+        clientId: "dashboard-client",
+        remoteSessionIssuerId: "provider-1",
+        userSessionIssuerIds: ["user-session-issuer-1"],
+        scope: ["read", "write"],
+      },
+    ],
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
+  mocks.issuers.mockReturnValue({
+    data: {
+      result: {
+        items: [
+          {
+            id: "provider-1",
+            name: "Example provider",
+            issuer: "https://id.example",
+            slug: "example",
+            projectId: "project-1",
+            clientIdMetadataDocumentSupported: true,
+            authorizationEndpoint: "https://id.example/authorize",
+            tokenEndpoint: "https://id.example/token",
+          },
+        ],
+      },
+    },
+  });
+
+  renderIdentity();
+  fireEvent.click(screen.getByRole("button", { name: "Clear connection" }));
+  fireEvent.click(screen.getByRole("radio", { name: /Auto-Configure/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+}
+
 const target: AuthTarget = {
   kind: "remote-mcp",
   slug: "remote-server",
@@ -407,6 +499,11 @@ const target: AuthTarget = {
 };
 
 beforeEach(() => {
+  mocks.impact.mockReturnValue({
+    data: { servers: [], hiddenServerCount: 0 },
+    isLoading: false,
+    isError: false,
+  });
   mocks.userSessionIssuer.mockReturnValue({
     data: { id: "user-session-issuer-1", projectId: "project-1" },
   });
@@ -500,6 +597,14 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
 });
+
+// A static credential format, picked from the Service Account panel's Static
+// group so it can't be confused with the Manual identity mode.
+function staticFormat(name: string): HTMLElement {
+  return within(
+    screen.getByRole("radiogroup", { name: "Static credential" }),
+  ).getByRole("radio", { name: new RegExp(`^${name}`) });
+}
 
 describe("RemoteMcpIdentitySectionBody", () => {
   it("names the three identity modes after the upstream service", () => {
@@ -1166,6 +1271,13 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(screen.getByRole("dialog")).toBeDefined();
     expect(mocks.detach).not.toHaveBeenCalled();
+    expect(mocks.impact).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        userSessionIssuerId: "user-session-issuer-1",
+        change: "detach",
+      }),
+      expect.objectContaining({ enabled: true }),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() =>
@@ -1301,6 +1413,114 @@ describe("RemoteMcpIdentitySectionBody", () => {
         }),
       }),
     );
+  });
+
+  it("names servers sharing the issuer when a client swap keeps the provider", async () => {
+    swapClientWithImpact([
+      {
+        id: "mcp-server-2",
+        name: "Other server",
+        projectId: "project-1",
+        projectName: "Project",
+        impact: "resignin",
+      },
+    ]);
+
+    expect(screen.getByText("Replace the connected client?")).toBeDefined();
+    expect(screen.getByText("Other server")).toBeDefined();
+    expect(screen.getByText(/have to sign in again:/)).toBeDefined();
+    expect(mocks.commit).not.toHaveBeenCalled();
+    expect(mocks.impact).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        userSessionIssuerId: "user-session-issuer-1",
+        change: "replace",
+        providerId: "provider-1",
+      }),
+      expect.objectContaining({ enabled: true }),
+    );
+  });
+
+  it("names servers in other projects and blocks when some cannot be seen", async () => {
+    swapClientWithImpact(
+      [
+        {
+          id: "mcp-server-3",
+          name: "Elsewhere",
+          projectId: "project-2",
+          projectName: "Other project",
+          impact: "repoint",
+        },
+      ],
+      2,
+    );
+
+    expect(screen.getByText("Elsewhere (Other project)")).toBeDefined();
+    expect(
+      screen.getByText(
+        /2 more servers you don't have access to share this user session issuer and may be affected/,
+      ),
+    ).toBeDefined();
+    expect(screen.queryByText(/other\s+projects may share it/)).toBeNull();
+    const confirm = screen.getByRole("button", { name: "Save changes" });
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("blocks the save when the server refuses the change", async () => {
+    mocks.impact.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: Object.assign(
+        new Error(
+          "change it from the organization's identity provider settings",
+        ),
+        { statusCode: 409 },
+      ),
+    });
+    swapClientWithImpact(null);
+
+    expect(
+      screen.getByText(/change it from the organization's identity provider/),
+    ).toBeDefined();
+    expect(
+      screen.queryByText(/Could not check which other servers share/),
+    ).toBeNull();
+    const confirm = screen.getByRole("button", { name: "Save changes" });
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("holds the confirm while a cached preview is refetched", async () => {
+    mocks.impact.mockReturnValue({
+      data: { servers: [], hiddenServerCount: 0 },
+      isLoading: false,
+      isFetching: true,
+      isError: false,
+    });
+    swapClientWithImpact(null);
+
+    expect(mocks.impact).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ refetchOnMount: "always", staleTime: 0 }),
+    );
+    expect(
+      screen.getByText("Checking other servers on this user session issuer…"),
+    ).toBeDefined();
+    const save = screen.getByRole("button", { name: "Save" });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+  });
+
+  it("warns when the affected servers cannot be checked", async () => {
+    mocks.impact.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+    });
+    swapClientWithImpact(null);
+
+    expect(
+      screen.getByText(/Could not check which other servers share/),
+    ).toBeDefined();
   });
 
   it("holds Save while a replacement client is incomplete, even with header edits", async () => {
@@ -1670,7 +1890,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
   it("labels Basic and Manual credential inputs without exposing their values", () => {
     const { container } = renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Basic" }));
+    fireEvent.click(staticFormat("Basic"));
 
     fireEvent.change(screen.getByLabelText("Username"), {
       target: { value: "operator" },
@@ -1684,7 +1904,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(container.textContent).not.toContain("basic-secret");
     expect(container.textContent).not.toContain("b3BlcmF0b3I6YmFzaWMtc2VjcmV0");
 
-    fireEvent.click(screen.getByRole("button", { name: "Manual" }));
+    fireEvent.click(staticFormat("Manual"));
     fireEvent.change(screen.getByLabelText("Header value"), {
       target: { value: "Custom manual-secret" },
     });
@@ -1731,7 +1951,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
   it("keeps password managers out of the credential fields", () => {
     renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Basic" }));
+    fireEvent.click(staticFormat("Basic"));
 
     // A username next to a password is exactly the shape a manager treats as a
     // login form, but these are credentials for the upstream service.
@@ -1751,13 +1971,16 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
   });
 
-  it("keeps Client Credentials visible but unselectable", () => {
+  it("keeps Signing Client visible but unselectable without KMS", () => {
     renderIdentity();
     fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
 
-    expect(screen.getByText("Coming soon")).toBeDefined();
-    fireEvent.click(screen.getByRole("button", { name: /Client credentials/ }));
-    // Still on Bearer: the segment advertises the roadmap, it does not switch.
+    expect(screen.getByText("Requires KMS")).toBeDefined();
+    const signingKey = within(
+      screen.getByRole("radiogroup", { name: "OAuth credential" }),
+    ).getByRole("radio", { name: /^Signing Client/ }) as HTMLButtonElement;
+    expect(signingKey.disabled).toBe(true);
+    // Still on Bearer: the option advertises KMS signing, it does not switch.
     expect(screen.getByLabelText("Token")).toBeDefined();
   });
 
@@ -2007,6 +2230,204 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
   });
 
+  it("asks to remove the service account client when No Identity is saved", async () => {
+    boundSelfClient();
+
+    renderIdentity();
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /static headers/,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText("Remove the service account client?"),
+    ).toBeDefined();
+    expect(dialog.textContent).toContain(
+      "requests will be rejected until you save a new identity",
+    );
+    expect(dialog.textContent).not.toContain("new credential");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(mocks.detach).toHaveBeenCalledWith({
+        request: {
+          attachUserSessionIssuerForm: {
+            id: "self-client-1",
+            userSessionIssuerId: "user-session-issuer-1",
+          },
+        },
+      }),
+    );
+  });
+
+  it("confirms replacing the service account client with User Identity", async () => {
+    boundSelfClient();
+    autoConfigurableProvider();
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText("Replace the service account client?"),
+    ).toBeDefined();
+    expect(dialog.textContent).toContain(
+      "stops this server using its current service account client",
+    );
+    expect(dialog.textContent).not.toContain("sign in again");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    // The commit replaces the bound client, so it is not detached first.
+    expect(mocks.detach).not.toHaveBeenCalled();
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+
+  it("removes a leftover credential after binding User Identity over the service account client", async () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+    boundSelfClient();
+    autoConfigurableProvider();
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText("Replace the service account client?"),
+    ).toBeDefined();
+    expect(dialog.textContent).toContain(
+      "removes the static Authorization credential",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(mocks.remove).toHaveBeenCalledWith({
+        request: { id: "header-1" },
+      }),
+    );
+    expect(mocks.commit.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.remove.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("holds Save when User Identity is left for an unfinished OAuth client", async () => {
+    connectClient();
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
+    fireEvent.click(
+      within(
+        screen.getByRole("radiogroup", { name: "OAuth credential" }),
+      ).getByRole("radio", { name: /^Client Secret/ }),
+    );
+    addCustomHeader("X-Team", "platform");
+
+    const save = screen.getByRole("button", { name: "Save" });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      screen.getByText(
+        "Finish the service account client, or cancel, to save.",
+      ),
+    ).toBeDefined();
+    fireEvent.click(save);
+    await Promise.resolve();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.commit).not.toHaveBeenCalled();
+    expect(mocks.detach).not.toHaveBeenCalled();
+  });
+
+  it("holds Save when a static credential replacing the service account client is blank", () => {
+    boundSelfClient();
+
+    renderIdentity();
+    // The saved client hides the format choice until it is cleared.
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    fireEvent.click(staticFormat("Bearer"));
+    addCustomHeader("X-Team", "platform");
+
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      screen.getByText("Enter the credential, or cancel, to save."),
+    ).toBeDefined();
+
+    fireEvent.change(screen.getByLabelText("Token"), {
+      target: { value: "bearer-secret-value" },
+    });
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+  });
+
+  it("keeps a static credential an unfinished OAuth client would not replace", async () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+
+    renderIdentity();
+    fireEvent.click(
+      within(
+        screen.getByRole("radiogroup", { name: "OAuth credential" }),
+      ).getByRole("radio", { name: /^Client Secret/ }),
+    );
+    addCustomHeader("X-Team", "platform");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(mocks.create).toHaveBeenCalled());
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+
+  it("confirms the service account client replacing a static credential", async () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+    boundSelfClient();
+
+    renderIdentity();
+    addCustomHeader("X-Team", "platform");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText("Replace the shared credential?"),
+    ).toBeDefined();
+    expect(dialog.textContent).toContain(
+      "replaces the static Authorization credential with the service account client",
+    );
+    expect(dialog.textContent).not.toContain("no longer authenticate");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(mocks.remove).toHaveBeenCalledWith({
+        request: { id: "header-1" },
+      }),
+    );
+  });
+
   it("lets Custom Headers own a credential row it already removed", async () => {
     mocks.headers.mockReturnValue({
       data: { headers: [configuredHeader()] },
@@ -2106,8 +2527,243 @@ describe("RemoteMcpIdentitySectionBody", () => {
       expect(
         screen.getByRole("combobox", { name: "Pinned scopes" }),
       ).toBeDefined();
-      expect(screen.getByText("read")).toBeDefined();
+      // The combobox overlays the chips it selects.
+      const picker = screen.getByRole("combobox", {
+        name: "Pinned scopes",
+      }).parentElement!;
+      expect(within(picker).getByText("read")).toBeDefined();
       expect(screen.getByText("Sign-ins request these scopes.")).toBeDefined();
+    });
+
+    it("names what sign-ins request in the pin status when the pin is not used", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({
+        data: serverScopes({
+          clients: [
+            {
+              clientId: "client-1",
+              scopeSource: "issuer_override",
+              requestedScopes: ["openid", "read"],
+              unadvertisedPinnedScopes: [],
+              pinWouldDecide: false,
+            },
+          ],
+        }),
+        isError: false,
+      });
+
+      renderIdentity();
+
+      expect(
+        screen.getByText(
+          "Not used for this connection. Sign-ins request read, set by the identity provider's override.",
+        ),
+      ).toBeDefined();
+      expect(screen.queryByText("Requested at sign-in")).toBeNull();
+      expect(
+        screen.queryByRole("list", { name: "Requested scopes" }),
+      ).toBeNull();
+    });
+
+    it("adds nothing to the pin status when the pin decides", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+
+      renderIdentity();
+
+      expect(screen.getByText("Sign-ins request these scopes.")).toBeDefined();
+      expect(screen.queryByText(/Sign-ins request read/)).toBeNull();
+      expect(screen.queryByText("Requested at sign-in")).toBeNull();
+    });
+
+    it("tells a writer when sign-ins request nothing", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({
+        data: serverScopes({
+          pinnedScopes: [],
+          clients: [
+            {
+              clientId: "client-1",
+              scopeSource: "issuer_omitted",
+              requestedScopes: [],
+              unadvertisedPinnedScopes: [],
+              pinWouldDecide: false,
+            },
+          ],
+        }),
+        isError: false,
+      });
+
+      renderIdentity();
+
+      expect(
+        screen.getByText(
+          /Sign-ins request no scopes; .+ applies its defaults\.$/,
+        ),
+      ).toBeDefined();
+    });
+
+    it("hides the pin picker with the flag off and shows a writer the summary", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({
+        data: serverScopes({
+          discoveryEnabled: false,
+          clients: [
+            {
+              clientId: "client-1",
+              scopeSource: "issuer_omitted",
+              requestedScopes: [],
+              unadvertisedPinnedScopes: [],
+              pinWouldDecide: false,
+            },
+          ],
+        }),
+        isError: false,
+      });
+
+      renderIdentity();
+
+      expect(
+        screen.queryByRole("combobox", { name: "Pinned scopes" }),
+      ).toBeNull();
+      expect(screen.queryByText("Loading pinned scopes…")).toBeNull();
+      expect(
+        screen.getByText(
+          /^No scopes are requested; .+ applies its defaults\.$/,
+        ),
+      ).toBeDefined();
+    });
+
+    it("shows a reader the summary without the pin picker", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+      mocks.hasScope.mockImplementation(
+        (scope: string, resourceId?: string) =>
+          scope === "mcp:read" && resourceId === "mcp-server-1",
+      );
+
+      renderIdentity();
+
+      expect(mocks.scopes).toHaveBeenCalledWith(
+        { mcpServerId: "mcp-server-1" },
+        undefined,
+        expect.objectContaining({ enabled: true, throwOnError: false }),
+      );
+      expect(
+        screen.queryByRole("combobox", { name: "Pinned scopes" }),
+      ).toBeNull();
+      expect(screen.queryByText("Loading pinned scopes…")).toBeNull();
+      expect(
+        within(
+          screen.getByRole("list", { name: "Requested scopes" }),
+        ).getByText("read"),
+      ).toBeDefined();
+      expect(screen.getByText("Requested at sign-in")).toBeDefined();
+    });
+
+    it("tells a reader when the requested scopes fail to load", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: undefined, isError: true });
+      mocks.hasScope.mockImplementation(
+        (scope: string, resourceId?: string) =>
+          scope === "mcp:read" && resourceId === "mcp-server-1",
+      );
+
+      renderIdentity();
+
+      expect(screen.getByText("Couldn't load requested scopes.")).toBeDefined();
+    });
+
+    it("drops the request sentence while the pin has unsaved changes", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({
+        data: serverScopes({
+          clients: [
+            {
+              clientId: "client-1",
+              scopeSource: "issuer_override",
+              requestedScopes: ["read"],
+              unadvertisedPinnedScopes: [],
+              pinWouldDecide: false,
+            },
+          ],
+        }),
+        isError: false,
+      });
+
+      renderIdentity();
+      expect(
+        screen.getByText(
+          "Not used for this connection. Sign-ins request read, set by the identity provider's override.",
+        ),
+      ).toBeDefined();
+      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
+      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
+
+      expect(screen.getByText("Not used for this connection.")).toBeDefined();
+      expect(screen.queryByText(/Sign-ins request read/)).toBeNull();
+    });
+
+    it("shows only the connected client's request", () => {
+      connectClient();
+      mocks.hasScope.mockImplementation(
+        (scope: string, resourceId?: string) =>
+          scope === "mcp:read" && resourceId === "mcp-server-1",
+      );
+      mocks.scopes.mockReturnValue({
+        data: serverScopes({
+          clients: [
+            {
+              clientId: "client-1",
+              scopeSource: "resource_pin",
+              requestedScopes: ["read"],
+              unadvertisedPinnedScopes: [],
+              pinWouldDecide: true,
+            },
+            {
+              clientId: "client-2",
+              scopeSource: "client_scope",
+              requestedScopes: ["admin"],
+              unadvertisedPinnedScopes: [],
+              pinWouldDecide: false,
+            },
+          ],
+        }),
+        isError: false,
+      });
+
+      renderIdentity();
+
+      const lists = screen.getAllByRole("list", { name: "Requested scopes" });
+      expect(lists).toHaveLength(1);
+      expect(
+        within(lists[0]!)
+          .getAllByRole("listitem")
+          .map((li) => li.textContent),
+      ).toEqual(["read"]);
+      expect(screen.queryByText("admin")).toBeNull();
+      expect(screen.queryByText("Set on this connection.")).toBeNull();
+    });
+
+    it("shows no summary on a server with no bound client", () => {
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+
+      renderIdentity();
+
+      expect(screen.queryByText("Requested at sign-in")).toBeNull();
+    });
+
+    it("shows no summary in Service Account mode", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+
+      renderIdentity();
+      fireEvent.click(screen.getByRole("radio", { name: /Service Account/ }));
+
+      expect(screen.queryByText("Requested at sign-in")).toBeNull();
+      expect(
+        screen.queryByRole("list", { name: "Requested scopes" }),
+      ).toBeNull();
     });
 
     it("neither fetches nor shows the pin without mcp:write", () => {
@@ -2186,6 +2842,73 @@ describe("RemoteMcpIdentitySectionBody", () => {
         serverScopes({ pinnedScopes: ["read", "write"] }),
       );
       expect(mocks.invalidateScopes).not.toHaveBeenCalled();
+    });
+
+    it("cancels in-flight reads before writing the saved pin", async () => {
+      const cancel = vi.spyOn(QueryClient.prototype, "cancelQueries");
+      connectClient();
+      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
+
+      renderIdentity();
+      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
+      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => expect(mocks.setScopesData).toHaveBeenCalledOnce());
+      expect(cancel).toHaveBeenCalledWith({
+        queryKey: [
+          "@gram/client",
+          "remoteMcp",
+          "getServerScopes",
+          { mcpServerId: "mcp-server-1" },
+        ],
+      });
+      expect(cancel.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.setScopesData.mock.invocationCallOrder[0] ?? 0,
+      );
+      cancel.mockRestore();
+    });
+
+    it("refreshes the other servers' views of a shared pin", async () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({
+        data: serverScopes({ sharedServerCount: 1 }),
+        isError: false,
+      });
+      mocks.setPin.mockResolvedValue(
+        serverScopes({ pinnedScopes: ["read", "write"], sharedServerCount: 1 }),
+      );
+
+      renderIdentity();
+      fireEvent.click(screen.getByRole("combobox", { name: "Pinned scopes" }));
+      fireEvent.click(screen.getByRole("option", { name: /^write,/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() =>
+        expect(mocks.toastSuccess).toHaveBeenCalledWith(
+          "Pinned scopes updated",
+        ),
+      );
+      expect(mocks.setScopesData).toHaveBeenCalledOnce();
+      expect(mocks.invalidateScopes).toHaveBeenCalledOnce();
+    });
+
+    it("shows a partial writer the pin without letting them change it", () => {
+      connectClient();
+      mocks.scopes.mockReturnValue({
+        data: serverScopes({ canPin: false, sharedServerCount: 1 }),
+        isError: false,
+      });
+
+      renderIdentity();
+
+      const field = screen.getByRole("combobox", { name: "Pinned scopes" });
+      expect((field as HTMLButtonElement).disabled).toBe(true);
+      expect(
+        screen.getByText(
+          "Pinned scopes are shared by every MCP server that uses this URL. You need edit access to all of them to change the pin.",
+        ),
+      ).toBeDefined();
     });
 
     it("leaves the pin view alone when headers are saved", async () => {
@@ -2276,36 +2999,6 @@ describe("RemoteMcpIdentitySectionBody", () => {
       expect((save as HTMLButtonElement).disabled).toBe(true);
     });
 
-    it("saves a cleared pin with the flag off", async () => {
-      connectClient();
-      mocks.scopes.mockReturnValue({
-        data: serverScopes({ discoveryEnabled: false }),
-        isError: false,
-      });
-
-      renderIdentity();
-      const field = screen.getByRole("combobox", { name: "Pinned scopes" });
-      expect((field as HTMLButtonElement).disabled).toBe(true);
-      const save = screen.getByRole("button", { name: "Save" });
-      expect((save as HTMLButtonElement).disabled).toBe(true);
-
-      fireEvent.click(
-        screen.getByRole("button", { name: "Clear pinned scopes" }),
-      );
-      expect((save as HTMLButtonElement).disabled).toBe(false);
-      fireEvent.click(save);
-
-      await waitFor(() => expect(mocks.setPin).toHaveBeenCalledOnce());
-      expect(mocks.setPin).toHaveBeenCalledWith({
-        request: {
-          setServerScopePinRequestBody: {
-            mcpServerId: "mcp-server-1",
-            scopes: [],
-          },
-        },
-      });
-    });
-
     it("drops a draft edited back to the saved pin", () => {
       connectClient();
       mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
@@ -2387,7 +3080,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       ).toBeNull();
     });
 
-    it("explains a refusal: the pin needs edit access to every server on the URL", () => {
+    it("shows the generic load error on a refusal", () => {
       connectClient();
       mocks.scopes.mockReturnValue({
         data: undefined,
@@ -2401,12 +3094,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
 
       renderIdentity();
 
-      expect(
-        screen.getByText(
-          "Pinned scopes are shared by every MCP server that uses this URL. You need edit access to all of them to view or change the pin.",
-        ),
-      ).toBeDefined();
-      expect(screen.queryByText("Couldn't load pinned scopes.")).toBeNull();
+      expect(screen.getByText("Couldn't load pinned scopes.")).toBeDefined();
     });
 
     it("says the pin is loading until it arrives", () => {

@@ -1,9 +1,9 @@
 import { expect, it } from "vitest";
 import { toCatalogEntry } from "./platforms";
-import { testPlatform } from "./testPlatform";
+import { claudeTagPlatform } from "./catalogFixture";
 import { stepComplete, stepIndexById, stepReachable } from "./steps";
 
-const entry = toCatalogEntry(testPlatform);
+const entry = toCatalogEntry(claudeTagPlatform);
 const definition = entry.setup!;
 const complete = {
   entry,

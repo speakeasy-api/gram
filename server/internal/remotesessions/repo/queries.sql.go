@@ -1115,6 +1115,25 @@ func (q *Queries) CountRemoteSessionSubjectsByClientID(ctx context.Context, arg 
 	return subjects, err
 }
 
+const countSelfRemoteSessionClientsByIssuerID = `-- name: CountSelfRemoteSessionClientsByIssuerID :one
+SELECT COUNT(*)
+FROM remote_session_clients
+WHERE remote_session_issuer_id = $1
+  AND credential_owner = 'self'
+  AND deleted IS FALSE
+`
+
+// Every non-deleted self client on an issuer, across every tenancy tier. The
+// issuer update guard uses this to keep the token endpoint those clients need:
+// like the delete guards, a count limited to the caller's tenant would let an
+// update strand clients the caller cannot see.
+func (q *Queries) CountSelfRemoteSessionClientsByIssuerID(ctx context.Context, remoteSessionIssuerID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countSelfRemoteSessionClientsByIssuerID, remoteSessionIssuerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countTenantRemoteSessionClientsByIssuerID = `-- name: CountTenantRemoteSessionClientsByIssuerID :one
 SELECT COUNT(*)
 FROM remote_session_clients
@@ -1252,6 +1271,25 @@ WHERE trusted_remote_session_issuer_id = $1::uuid
 // unscoped count so a caller can never strand references it cannot see.
 func (q *Queries) CountTrustedUserSessionIssuersByRemoteSessionIssuerID(ctx context.Context, remoteSessionIssuerID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countTrustedUserSessionIssuersByRemoteSessionIssuerID, remoteSessionIssuerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countTrustedUserSessionIssuersForRemoteSessionIssuerClients = `-- name: CountTrustedUserSessionIssuersForRemoteSessionIssuerClients :one
+SELECT COUNT(*)
+FROM user_session_issuers AS usi
+JOIN remote_session_clients AS c ON c.id = usi.trusted_remote_session_client_id
+WHERE c.remote_session_issuer_id = $1::uuid
+  AND c.deleted IS FALSE
+  AND usi.deleted IS FALSE
+`
+
+// Every active user-session issuer whose trusted sign-in client is an active
+// client of this remote issuer, whatever issuer the trust row names. Unscoped
+// like the other migrate guards so no reference can be stranded.
+func (q *Queries) CountTrustedUserSessionIssuersForRemoteSessionIssuerClients(ctx context.Context, remoteSessionIssuerID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countTrustedUserSessionIssuersForRemoteSessionIssuerClients, remoteSessionIssuerID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -1455,7 +1493,9 @@ INSERT INTO remote_session_clients (
     legacy_callback_url,
     json_web_key_set_id,
     identity_provider_connection_id,
-    callback_base_url
+    callback_base_url,
+    grant_types,
+    credential_owner
 )
 VALUES (
     $1,
@@ -1472,7 +1512,11 @@ VALUES (
     $12,
     $13,
     $14,
-    $15
+    $15,
+    $16::text[],
+    -- NULL creates a subject client, so callers that predate credential_owner
+    -- need not name it. Allowed values are validated in application code.
+    COALESCE($17::text, 'subject')
 )
 RETURNING id, project_id, organization_id, attachment_scope, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, json_web_key_set_id, scope, grant_types, audience, token_endpoint_auth_audience_format, client_id_metadata_uri, legacy_callback_url, callback_base_url, resource_identifier, resource_name, resource_documentation, resource_policy_uri, resource_tos_uri, upstream_rejected_at, identity_provider_connection_id, credential_owner, created_at, updated_at, deleted_at, deleted
 `
@@ -1493,6 +1537,8 @@ type CreateRemoteSessionClientParams struct {
 	JsonWebKeySetID                 uuid.NullUUID
 	IdentityProviderConnectionID    uuid.NullUUID
 	CallbackBaseUrl                 pgtype.Text
+	GrantTypes                      []string
+	CredentialOwner                 pgtype.Text
 }
 
 // Remote session clients — credentials Speakeasy uses when acting as an OAuth
@@ -1515,6 +1561,8 @@ func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemot
 		arg.JsonWebKeySetID,
 		arg.IdentityProviderConnectionID,
 		arg.CallbackBaseUrl,
+		arg.GrantTypes,
+		arg.CredentialOwner,
 	)
 	var i RemoteSessionClient
 	err := row.Scan(
@@ -2915,6 +2963,7 @@ SELECT
     c.json_web_key_set_id                  AS json_web_key_set_id,
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
+    c.upstream_rejected_at                 AS upstream_rejected_at,
     i.id                                   AS issuer_id,
     i.issuer                               AS issuer_url,
     i.metadata                             AS issuer_metadata,
@@ -2962,6 +3011,7 @@ type GetClientCredentialsGrantClientRow struct {
 	JsonWebKeySetID                 uuid.NullUUID
 	ClientScope                     []string
 	ClientAudience                  pgtype.Text
+	UpstreamRejectedAt              pgtype.Timestamptz
 	IssuerID                        uuid.UUID
 	IssuerUrl                       string
 	IssuerMetadata                  []byte
@@ -2991,6 +3041,7 @@ func (q *Queries) GetClientCredentialsGrantClient(ctx context.Context, arg GetCl
 		&i.JsonWebKeySetID,
 		&i.ClientScope,
 		&i.ClientAudience,
+		&i.UpstreamRejectedAt,
 		&i.IssuerID,
 		&i.IssuerUrl,
 		&i.IssuerMetadata,
@@ -6189,6 +6240,69 @@ func (q *Queries) ListConflictingClientBindingsForIssuerMigration(ctx context.Co
 	return items, nil
 }
 
+const listEMABindingsForUpstream = `-- name: ListEMABindingsForUpstream :many
+SELECT id, project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource, remote_session_client_id, generation, state, grant_source, requested_scopes, claim_id, claimed_at, created_at, updated_at FROM remote_session_ema_bindings
+WHERE project_id = $1 AND organization_id = $2
+  AND user_session_issuer_id = $3
+  AND ($4::uuid IS NULL OR remote_session_issuer_id = $4::uuid)
+  AND rtrim(resource, '/') = $5::text
+  AND state IS DISTINCT FROM 'unlinked'
+ORDER BY id
+`
+
+type ListEMABindingsForUpstreamParams struct {
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionIssuerID uuid.NullUUID
+	UpstreamResource      string
+}
+
+// Live bindings, in any state, naming one upstream under the same issuer
+// selection as ListEMAChainingBindings: a direct upstream passes no issuer and
+// reads every issuer's bindings, a tunneled upstream passes its own.
+func (q *Queries) ListEMABindingsForUpstream(ctx context.Context, arg ListEMABindingsForUpstreamParams) ([]RemoteSessionEmaBinding, error) {
+	rows, err := q.db.Query(ctx, listEMABindingsForUpstream,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionIssuerID,
+		arg.UpstreamResource,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RemoteSessionEmaBinding
+	for rows.Next() {
+		var i RemoteSessionEmaBinding
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.UserSessionIssuerID,
+			&i.RemoteSessionIssuerID,
+			&i.Resource,
+			&i.RemoteSessionClientID,
+			&i.Generation,
+			&i.State,
+			&i.GrantSource,
+			&i.RequestedScopes,
+			&i.ClaimID,
+			&i.ClaimedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEMAChainingBindings = `-- name: ListEMAChainingBindings :many
 SELECT id, project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource, remote_session_client_id, generation, state, grant_source, requested_scopes, claim_id, claimed_at, created_at, updated_at FROM remote_session_ema_bindings
 WHERE project_id = $1 AND organization_id = $2
@@ -6606,6 +6720,172 @@ func (q *Queries) ListGlobalRemoteSessionIssuersByIssuerURL(ctx context.Context,
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationClientsForUserSessionIssuer = `-- name: ListOrganizationClientsForUserSessionIssuer :many
+SELECT c.id, c.project_id, c.remote_session_issuer_id, i.deleted AS provider_deleted
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS c
+  ON c.id = link.remote_session_client_id
+ AND c.deleted IS FALSE
+JOIN remote_session_issuers AS i
+  ON i.id = c.remote_session_issuer_id
+WHERE link.user_session_issuer_id = $1
+  AND ((c.project_id IS NULL AND c.organization_id = $2::text)
+       OR EXISTS (SELECT 1
+                  FROM projects AS p
+                  WHERE p.id = c.project_id
+                    AND p.organization_id = $2::text))
+ORDER BY c.id
+`
+
+type ListOrganizationClientsForUserSessionIssuerParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+}
+
+type ListOrganizationClientsForUserSessionIssuerRow struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.NullUUID
+	RemoteSessionIssuerID uuid.UUID
+	ProviderDeleted       bool
+}
+
+// Live clients bound to one user session issuer that some project of the
+// organization can see: project-owned clients of the organization's projects
+// and organization-level clients. Each server's derivation then keeps only its
+// own project's and the organization-level ones, as
+// ResyncMCPServerRemoteSessionIssuers does. Clients of a deleted provider stay
+// in the list, as the commit's ListRemoteSessionClientsByProjectIDForUserSessionIssuer
+// keeps them; provider_deleted drops them from the derivation only.
+func (q *Queries) ListOrganizationClientsForUserSessionIssuer(ctx context.Context, arg ListOrganizationClientsForUserSessionIssuerParams) ([]ListOrganizationClientsForUserSessionIssuerRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationClientsForUserSessionIssuer, arg.UserSessionIssuerID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationClientsForUserSessionIssuerRow
+	for rows.Next() {
+		var i ListOrganizationClientsForUserSessionIssuerRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.RemoteSessionIssuerID,
+			&i.ProviderDeleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationGatewaysForUserSessionIssuer = `-- name: ListOrganizationGatewaysForUserSessionIssuer :many
+SELECT g.id, g.project_id, g.name, p.name AS project_name
+FROM meta_mcp_servers AS g
+JOIN projects AS p ON p.id = g.project_id
+WHERE g.user_session_issuer_id = $1
+  AND g.organization_id = $2
+  AND p.organization_id = $2
+  AND p.deleted IS FALSE
+  AND g.deleted IS FALSE
+ORDER BY p.name, g.id
+`
+
+type ListOrganizationGatewaysForUserSessionIssuerParams struct {
+	UserSessionIssuerID uuid.NullUUID
+	OrganizationID      string
+}
+
+type ListOrganizationGatewaysForUserSessionIssuerRow struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	Name        string
+	ProjectName string
+}
+
+// Live gateways on one user session issuer in every project of the
+// organization, for the binding-change impact preview.
+func (q *Queries) ListOrganizationGatewaysForUserSessionIssuer(ctx context.Context, arg ListOrganizationGatewaysForUserSessionIssuerParams) ([]ListOrganizationGatewaysForUserSessionIssuerRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationGatewaysForUserSessionIssuer, arg.UserSessionIssuerID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationGatewaysForUserSessionIssuerRow
+	for rows.Next() {
+		var i ListOrganizationGatewaysForUserSessionIssuerRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.ProjectName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationMCPServersForUserSessionIssuer = `-- name: ListOrganizationMCPServersForUserSessionIssuer :many
+SELECT s.id, s.project_id, s.name, s.slug, s.toolset_id, p.name AS project_name
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id
+WHERE s.user_session_issuer_id = $1
+  AND p.organization_id = $2
+  AND p.deleted IS FALSE
+  AND s.deleted IS FALSE
+ORDER BY p.name, s.id
+`
+
+type ListOrganizationMCPServersForUserSessionIssuerParams struct {
+	UserSessionIssuerID uuid.NullUUID
+	OrganizationID      string
+}
+
+type ListOrganizationMCPServersForUserSessionIssuerRow struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	Name        pgtype.Text
+	Slug        pgtype.Text
+	ToolsetID   uuid.NullUUID
+	ProjectName string
+}
+
+// Live MCP servers on one user session issuer in every project of the
+// organization, for the binding-change impact preview.
+func (q *Queries) ListOrganizationMCPServersForUserSessionIssuer(ctx context.Context, arg ListOrganizationMCPServersForUserSessionIssuerParams) ([]ListOrganizationMCPServersForUserSessionIssuerRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationMCPServersForUserSessionIssuer, arg.UserSessionIssuerID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationMCPServersForUserSessionIssuerRow
+	for rows.Next() {
+		var i ListOrganizationMCPServersForUserSessionIssuerRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Slug,
+			&i.ToolsetID,
+			&i.ProjectName,
 		); err != nil {
 			return nil, err
 		}
@@ -7908,6 +8188,7 @@ SELECT
     c.resource_tos_uri                     AS resource_tos_uri,
     c.client_secret_expires_at             AS client_secret_expires_at,
     c.upstream_rejected_at                 AS upstream_rejected_at,
+    c.credential_owner                     AS credential_owner,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     i.tunneled_mcp_server_id               AS tunneled_mcp_server_id,
     i.slug                                 AS issuer_slug,
@@ -7983,6 +8264,7 @@ type ListRemoteSessionClientsForUserSessionIssuerRow struct {
 	ResourceTosUri                             pgtype.Text
 	ClientSecretExpiresAt                      pgtype.Timestamptz
 	UpstreamRejectedAt                         pgtype.Timestamptz
+	CredentialOwner                            string
 	RemoteSessionIssuerID                      uuid.UUID
 	TunneledMcpServerID                        uuid.NullUUID
 	IssuerSlug                                 string
@@ -8043,6 +8325,7 @@ func (q *Queries) ListRemoteSessionClientsForUserSessionIssuer(ctx context.Conte
 			&i.ResourceTosUri,
 			&i.ClientSecretExpiresAt,
 			&i.UpstreamRejectedAt,
+			&i.CredentialOwner,
 			&i.RemoteSessionIssuerID,
 			&i.TunneledMcpServerID,
 			&i.IssuerSlug,
@@ -12210,20 +12493,25 @@ SET
         WHEN $5::text = '' THEN NULL
         ELSE COALESCE($5, client_setup_documentation_url)
     END,
+    -- A new issuer URL resets every discovered column the edit does not restate.
     authorization_endpoint = CASE
         WHEN $6::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $6
         ELSE COALESCE($6, authorization_endpoint)
     END,
     token_endpoint = CASE
         WHEN $7::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $7
         ELSE COALESCE($7, token_endpoint)
     END,
     revocation_endpoint = CASE
         WHEN $8::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $8
         ELSE COALESCE($8, revocation_endpoint)
     END,
     registration_endpoint = CASE
         WHEN $9::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $9
         ELSE COALESCE($9, registration_endpoint)
     END,
     -- A manually changed key URL invalidates every value derived from the old
@@ -12237,46 +12525,60 @@ SET
     jwks_etag = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN $10::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $10
         ELSE COALESCE($10, jwks_uri)
     END,
     service_documentation = CASE
         WHEN $11::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $11
         ELSE COALESCE($11, service_documentation)
     END,
     op_policy_uri = CASE
         WHEN $12::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $12
         ELSE COALESCE($12, op_policy_uri)
     END,
     op_tos_uri = CASE
         WHEN $13::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $13
         ELSE COALESCE($13, op_tos_uri)
     END,
-    scopes_supported = COALESCE($14::text[], scopes_supported),
-    grant_types_supported = COALESCE($15::text[], grant_types_supported),
-    authorization_grant_profiles_supported = COALESCE($16::text[], authorization_grant_profiles_supported),
+    scopes_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($14::text[], ARRAY[]::text[]) ELSE COALESCE($14::text[], scopes_supported) END,
+    grant_types_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($15::text[], ARRAY[]::text[]) ELSE COALESCE($15::text[], grant_types_supported) END,
+    authorization_grant_profiles_supported = CASE
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN ARRAY[]::text[]
+        ELSE COALESCE($16::text[], authorization_grant_profiles_supported)
+    END,
+    metadata_fetched_at = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_fetched_at END,
+    metadata_last_error = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_last_error END,
+    metadata_last_error_at = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_last_error_at END,
+    metadata_last_error_url = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_last_error_url END,
     -- Keep the local projection source aligned with an explicit operator edit.
-    -- Discovery timestamps are unchanged; only a fresh fetch replaces this evidence.
+    -- A profile edit keeps discovery timestamps; only a fresh fetch replaces this evidence.
     metadata = CASE
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL
         WHEN $16::text[] IS NULL OR metadata IS NULL THEN metadata
         ELSE jsonb_set(metadata, '{authorization_grant_profiles_supported}', to_jsonb($16::text[]))
     END,
-    response_types_supported = COALESCE($17::text[], response_types_supported),
-    token_endpoint_auth_methods_supported = COALESCE($18::text[], token_endpoint_auth_methods_supported),
-    code_challenge_methods_supported = COALESCE($19::text[], code_challenge_methods_supported),
-    client_id_metadata_document_supported = COALESCE($20, client_id_metadata_document_supported),
+    response_types_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($17::text[], ARRAY[]::text[]) ELSE COALESCE($17::text[], response_types_supported) END,
+    token_endpoint_auth_methods_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($18::text[], ARRAY[]::text[]) ELSE COALESCE($18::text[], token_endpoint_auth_methods_supported) END,
+    code_challenge_methods_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $19::text[] ELSE COALESCE($19::text[], code_challenge_methods_supported) END,
+    client_id_metadata_document_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($20::boolean, FALSE) ELSE COALESCE($20::boolean, client_id_metadata_document_supported) END,
     userinfo_endpoint = CASE
         WHEN $21::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $21
         ELSE COALESCE($21, userinfo_endpoint)
     END,
     introspection_endpoint = CASE
         WHEN $22::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $22
         ELSE COALESCE($22, introspection_endpoint)
     END,
-    introspection_endpoint_auth_methods_supported = COALESCE($23::text[], introspection_endpoint_auth_methods_supported),
-    id_token_signing_alg_values_supported = COALESCE($24::text[], id_token_signing_alg_values_supported),
-    claims_supported = COALESCE($25::text[], claims_supported),
-    backchannel_logout_supported = COALESCE($26, backchannel_logout_supported),
-    authorization_response_iss_parameter_supported = COALESCE($27, authorization_response_iss_parameter_supported),
+    introspection_endpoint_auth_methods_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $23::text[] ELSE COALESCE($23::text[], introspection_endpoint_auth_methods_supported) END,
+    id_token_signing_alg_values_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $24::text[] ELSE COALESCE($24::text[], id_token_signing_alg_values_supported) END,
+    claims_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $25::text[] ELSE COALESCE($25::text[], claims_supported) END,
+    backchannel_logout_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $26::boolean ELSE COALESCE($26::boolean, backchannel_logout_supported) END,
+    authorization_response_iss_parameter_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $27::boolean ELSE COALESCE($27::boolean, authorization_response_iss_parameter_supported) END,
     -- An empty array clears scope_override to NULL; omitted keeps it. resource_indicator_supported is set-only.
     scope_override = CASE
         WHEN $28::text[] IS NULL THEN scope_override
@@ -12537,20 +12839,25 @@ SET
         WHEN $5::text = '' THEN NULL
         ELSE COALESCE($5, client_setup_documentation_url)
     END,
+    -- A new issuer URL resets every discovered column the edit does not restate.
     authorization_endpoint = CASE
         WHEN $6::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $6
         ELSE COALESCE($6, authorization_endpoint)
     END,
     token_endpoint = CASE
         WHEN $7::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $7
         ELSE COALESCE($7, token_endpoint)
     END,
     revocation_endpoint = CASE
         WHEN $8::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $8
         ELSE COALESCE($8, revocation_endpoint)
     END,
     registration_endpoint = CASE
         WHEN $9::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $9
         ELSE COALESCE($9, registration_endpoint)
     END,
     -- A manually changed key URL invalidates every value derived from the old
@@ -12564,46 +12871,60 @@ SET
     jwks_etag = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN $10::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $10
         ELSE COALESCE($10, jwks_uri)
     END,
     service_documentation = CASE
         WHEN $11::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $11
         ELSE COALESCE($11, service_documentation)
     END,
     op_policy_uri = CASE
         WHEN $12::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $12
         ELSE COALESCE($12, op_policy_uri)
     END,
     op_tos_uri = CASE
         WHEN $13::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $13
         ELSE COALESCE($13, op_tos_uri)
     END,
-    scopes_supported = COALESCE($14::text[], scopes_supported),
-    grant_types_supported = COALESCE($15::text[], grant_types_supported),
-    authorization_grant_profiles_supported = COALESCE($16::text[], authorization_grant_profiles_supported),
+    scopes_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($14::text[], ARRAY[]::text[]) ELSE COALESCE($14::text[], scopes_supported) END,
+    grant_types_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($15::text[], ARRAY[]::text[]) ELSE COALESCE($15::text[], grant_types_supported) END,
+    authorization_grant_profiles_supported = CASE
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN ARRAY[]::text[]
+        ELSE COALESCE($16::text[], authorization_grant_profiles_supported)
+    END,
+    metadata_fetched_at = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_fetched_at END,
+    metadata_last_error = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_last_error END,
+    metadata_last_error_at = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_last_error_at END,
+    metadata_last_error_url = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_last_error_url END,
     -- Keep the local projection source aligned with an explicit operator edit.
-    -- Discovery timestamps are unchanged; only a fresh fetch replaces this evidence.
+    -- A profile edit keeps discovery timestamps; only a fresh fetch replaces this evidence.
     metadata = CASE
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL
         WHEN $16::text[] IS NULL OR metadata IS NULL THEN metadata
         ELSE jsonb_set(metadata, '{authorization_grant_profiles_supported}', to_jsonb($16::text[]))
     END,
-    response_types_supported = COALESCE($17::text[], response_types_supported),
-    token_endpoint_auth_methods_supported = COALESCE($18::text[], token_endpoint_auth_methods_supported),
-    code_challenge_methods_supported = COALESCE($19::text[], code_challenge_methods_supported),
-    client_id_metadata_document_supported = COALESCE($20, client_id_metadata_document_supported),
+    response_types_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($17::text[], ARRAY[]::text[]) ELSE COALESCE($17::text[], response_types_supported) END,
+    token_endpoint_auth_methods_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($18::text[], ARRAY[]::text[]) ELSE COALESCE($18::text[], token_endpoint_auth_methods_supported) END,
+    code_challenge_methods_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $19::text[] ELSE COALESCE($19::text[], code_challenge_methods_supported) END,
+    client_id_metadata_document_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($20::boolean, FALSE) ELSE COALESCE($20::boolean, client_id_metadata_document_supported) END,
     userinfo_endpoint = CASE
         WHEN $21::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $21
         ELSE COALESCE($21, userinfo_endpoint)
     END,
     introspection_endpoint = CASE
         WHEN $22::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $22
         ELSE COALESCE($22, introspection_endpoint)
     END,
-    introspection_endpoint_auth_methods_supported = COALESCE($23::text[], introspection_endpoint_auth_methods_supported),
-    id_token_signing_alg_values_supported = COALESCE($24::text[], id_token_signing_alg_values_supported),
-    claims_supported = COALESCE($25::text[], claims_supported),
-    backchannel_logout_supported = COALESCE($26, backchannel_logout_supported),
-    authorization_response_iss_parameter_supported = COALESCE($27, authorization_response_iss_parameter_supported),
+    introspection_endpoint_auth_methods_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $23::text[] ELSE COALESCE($23::text[], introspection_endpoint_auth_methods_supported) END,
+    id_token_signing_alg_values_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $24::text[] ELSE COALESCE($24::text[], id_token_signing_alg_values_supported) END,
+    claims_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $25::text[] ELSE COALESCE($25::text[], claims_supported) END,
+    backchannel_logout_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $26::boolean ELSE COALESCE($26::boolean, backchannel_logout_supported) END,
+    authorization_response_iss_parameter_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $27::boolean ELSE COALESCE($27::boolean, authorization_response_iss_parameter_supported) END,
     -- An empty array clears scope_override to NULL; omitted keeps it. resource_indicator_supported is set-only.
     scope_override = CASE
         WHEN $28::text[] IS NULL THEN scope_override
@@ -13114,20 +13435,25 @@ SET
         WHEN $5::text = '' THEN NULL
         ELSE COALESCE($5, client_setup_documentation_url)
     END,
+    -- A new issuer URL resets every discovered column the edit does not restate.
     authorization_endpoint = CASE
         WHEN $6::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $6
         ELSE COALESCE($6, authorization_endpoint)
     END,
     token_endpoint = CASE
         WHEN $7::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $7
         ELSE COALESCE($7, token_endpoint)
     END,
     revocation_endpoint = CASE
         WHEN $8::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $8
         ELSE COALESCE($8, revocation_endpoint)
     END,
     registration_endpoint = CASE
         WHEN $9::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $9
         ELSE COALESCE($9, registration_endpoint)
     END,
     -- Changing the issuer identity or key URL invalidates every value derived
@@ -13140,46 +13466,60 @@ SET
     jwks_etag = CASE WHEN ($2::text IS NULL OR $2::text = issuer) AND ($10::text IS NULL OR ($10::text <> '' AND $10::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN $10::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $10
         ELSE COALESCE($10, jwks_uri)
     END,
     service_documentation = CASE
         WHEN $11::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $11
         ELSE COALESCE($11, service_documentation)
     END,
     op_policy_uri = CASE
         WHEN $12::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $12
         ELSE COALESCE($12, op_policy_uri)
     END,
     op_tos_uri = CASE
         WHEN $13::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $13
         ELSE COALESCE($13, op_tos_uri)
     END,
-    scopes_supported = COALESCE($14::text[], scopes_supported),
-    grant_types_supported = COALESCE($15::text[], grant_types_supported),
-    authorization_grant_profiles_supported = COALESCE($16::text[], authorization_grant_profiles_supported),
+    scopes_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($14::text[], ARRAY[]::text[]) ELSE COALESCE($14::text[], scopes_supported) END,
+    grant_types_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($15::text[], ARRAY[]::text[]) ELSE COALESCE($15::text[], grant_types_supported) END,
+    authorization_grant_profiles_supported = CASE
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN ARRAY[]::text[]
+        ELSE COALESCE($16::text[], authorization_grant_profiles_supported)
+    END,
+    metadata_fetched_at = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_fetched_at END,
+    metadata_last_error = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_last_error END,
+    metadata_last_error_at = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_last_error_at END,
+    metadata_last_error_url = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL ELSE metadata_last_error_url END,
     -- Keep the local projection source aligned with an explicit operator edit.
-    -- Discovery timestamps are unchanged; only a fresh fetch replaces this evidence.
+    -- A profile edit keeps discovery timestamps; only a fresh fetch replaces this evidence.
     metadata = CASE
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN NULL
         WHEN $16::text[] IS NULL OR metadata IS NULL THEN metadata
         ELSE jsonb_set(metadata, '{authorization_grant_profiles_supported}', to_jsonb($16::text[]))
     END,
-    response_types_supported = COALESCE($17::text[], response_types_supported),
-    token_endpoint_auth_methods_supported = COALESCE($18::text[], token_endpoint_auth_methods_supported),
-    code_challenge_methods_supported = COALESCE($19::text[], code_challenge_methods_supported),
-    client_id_metadata_document_supported = COALESCE($20, client_id_metadata_document_supported),
+    response_types_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($17::text[], ARRAY[]::text[]) ELSE COALESCE($17::text[], response_types_supported) END,
+    token_endpoint_auth_methods_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($18::text[], ARRAY[]::text[]) ELSE COALESCE($18::text[], token_endpoint_auth_methods_supported) END,
+    code_challenge_methods_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $19::text[] ELSE COALESCE($19::text[], code_challenge_methods_supported) END,
+    client_id_metadata_document_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN COALESCE($20::boolean, FALSE) ELSE COALESCE($20::boolean, client_id_metadata_document_supported) END,
     userinfo_endpoint = CASE
         WHEN $21::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $21
         ELSE COALESCE($21, userinfo_endpoint)
     END,
     introspection_endpoint = CASE
         WHEN $22::text = '' THEN NULL
+        WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $22
         ELSE COALESCE($22, introspection_endpoint)
     END,
-    introspection_endpoint_auth_methods_supported = COALESCE($23::text[], introspection_endpoint_auth_methods_supported),
-    id_token_signing_alg_values_supported = COALESCE($24::text[], id_token_signing_alg_values_supported),
-    claims_supported = COALESCE($25::text[], claims_supported),
-    backchannel_logout_supported = COALESCE($26, backchannel_logout_supported),
-    authorization_response_iss_parameter_supported = COALESCE($27, authorization_response_iss_parameter_supported),
+    introspection_endpoint_auth_methods_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $23::text[] ELSE COALESCE($23::text[], introspection_endpoint_auth_methods_supported) END,
+    id_token_signing_alg_values_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $24::text[] ELSE COALESCE($24::text[], id_token_signing_alg_values_supported) END,
+    claims_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $25::text[] ELSE COALESCE($25::text[], claims_supported) END,
+    backchannel_logout_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $26::boolean ELSE COALESCE($26::boolean, backchannel_logout_supported) END,
+    authorization_response_iss_parameter_supported = CASE WHEN $2::text IS NOT NULL AND $2::text <> issuer THEN $27::boolean ELSE COALESCE($27::boolean, authorization_response_iss_parameter_supported) END,
     -- An empty array clears scope_override to NULL; omitted keeps it. resource_indicator_supported is set-only.
     scope_override = CASE
         WHEN $28::text[] IS NULL THEN scope_override

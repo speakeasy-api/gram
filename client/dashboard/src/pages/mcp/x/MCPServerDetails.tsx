@@ -1,3 +1,4 @@
+import { invalidateAllResourceAudience } from "@gram/client/react-query/resourceAudience.js";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { AttachedUserSessions } from "@/components/sessions/AttachedUserSessions";
@@ -12,6 +13,8 @@ import {
 } from "@/lib/utils";
 import { getMcpServerArgs, mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
+import { useProjectSlugForRequests } from "@/contexts/Sdk";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import type {
   McpServer,
   McpServerVisibility,
@@ -42,11 +45,14 @@ import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
 import {
   activeTabFromPath,
   initialTabFromHash,
+  isCanonicalHostedWrapper,
   isLegacyAuthenticationTabPath,
   isLegacyToolsTabPath,
   mcpServerTabHref,
   MCP_SERVER_TAB_URLS,
+  toolsetTabForServerPath,
 } from "./MCPServerDetailsRouting";
+import { mcpDetailTabHref } from "../MCPDetailsRouting";
 import { InspectTab } from "./tabs/InspectTab";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { MCP_AGENT_SETUP_SECTION_ID } from "./tabs/settings/sections/AgentSetupSection";
@@ -83,6 +89,25 @@ export default function MCPServerDetails(): JSX.Element {
 
   const mcpServerId = mcpServer?.id ?? "";
 
+  const toolsetTab = toolsetTabForServerPath(
+    location.pathname,
+    idOrSlug,
+    location.hash,
+  );
+  const canonicalWrapper =
+    mcpServer !== undefined &&
+    toolsetTab !== undefined &&
+    isCanonicalHostedWrapper(mcpServer);
+  const gramProject = useProjectSlugForRequests();
+  const { data: toolsetsResult, isLoading: isLoadingToolsets } =
+    useListToolsets({ gramProject }, undefined, {
+      enabled: canonicalWrapper,
+      throwOnError: false,
+    });
+  const wrappedToolsetSlug = canonicalWrapper
+    ? toolsetsResult?.toolsets.find((t) => t.id === mcpServer?.toolsetId)?.slug
+    : undefined;
+
   const { data: endpointsResult, isLoading: isLoadingEndpoints } =
     useMcpEndpoints({ mcpServerId }, undefined, {
       enabled: mcpServerId !== "",
@@ -105,6 +130,14 @@ export default function MCPServerDetails(): JSX.Element {
   }
   if (isError || (!isLoading && !mcpServer)) {
     return <Navigate to={routes.mcp.href()} replace />;
+  }
+  if (wrappedToolsetSlug && toolsetTab) {
+    return (
+      <Navigate
+        to={mcpDetailTabHref(routes, wrappedToolsetSlug, toolsetTab)}
+        replace
+      />
+    );
   }
   if (legacyAuthenticationPath) {
     return (
@@ -146,6 +179,7 @@ export default function MCPServerDetails(): JSX.Element {
     );
   }
   const renderTabContent = () => {
+    if (canonicalWrapper && isLoadingToolsets) return null;
     switch (activeTab) {
       case "overview":
         return (
@@ -477,6 +511,7 @@ function useMcpServerVisibilityUpdate(server: McpServer): {
       await Promise.all([
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        invalidateAllResourceAudience(queryClient, { refetchType: "all" }),
         // Enabling a disabled server (e.g. disabled -> private) auto-attaches
         // it to the Default plugin server-side, which the plugin banner's
         // membership check and publish-freshness state need to pick up.

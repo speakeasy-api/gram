@@ -86,8 +86,7 @@ type PageCursor struct {
 	ID        uuid.UUID
 }
 
-// List returns all policies for a project with their audiences. Progress is
-// intentionally omitted to avoid aggregate queries on list paths.
+// List returns all policies for a project with their audiences.
 func (c *Core) List(ctx context.Context, organizationID string, projectID uuid.UUID) ([]Policy, error) {
 	rows, err := c.queries.ListRiskPolicies(ctx, projectID)
 	if err != nil {
@@ -108,7 +107,7 @@ func (c *Core) List(ctx context.Context, organizationID string, projectID uuid.U
 
 	policies := make([]Policy, 0, len(rows))
 	for _, row := range rows {
-		policies = append(policies, Project(row, audienceByPolicy[row.ID.String()], nil))
+		policies = append(policies, Project(row, audienceByPolicy[row.ID.String()]))
 	}
 	return policies, nil
 }
@@ -131,7 +130,7 @@ func (c *Core) ListEnabledForMCP(
 	scopes := make([]*MCPScope, 0, len(rows))
 	needsAnnotations := false
 	for _, row := range rows {
-		scope := Project(row, nil, nil).MCPScope
+		scope := Project(row, nil).MCPScope
 		if scope == nil {
 			continue
 		}
@@ -198,7 +197,7 @@ func (c *Core) ListEnabledForMCP(
 	}
 	policies := make([]Policy, 0, len(matchedRows))
 	for _, row := range matchedRows {
-		policies = append(policies, Project(row, audienceByPolicy[row.ID.String()], nil))
+		policies = append(policies, Project(row, audienceByPolicy[row.ID.String()]))
 	}
 	return policies, nil
 }
@@ -234,12 +233,12 @@ func (c *Core) ListPage(ctx context.Context, organizationID string, projectID uu
 	}
 	policies := make([]Policy, 0, len(rows))
 	for _, row := range rows {
-		policies = append(policies, Project(row, audienceByPolicy[row.ID.String()], nil))
+		policies = append(policies, Project(row, audienceByPolicy[row.ID.String()]))
 	}
 	return policies, nil
 }
 
-// Get returns one policy with best-effort message-analysis progress.
+// Get returns one policy with its audience.
 func (c *Core) Get(ctx context.Context, projectID, policyID uuid.UUID) (Policy, error) {
 	row, err := c.queries.GetRiskPolicy(ctx, repo.GetRiskPolicyParams{ID: policyID, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -248,29 +247,16 @@ func (c *Core) Get(ctx context.Context, projectID, policyID uuid.UUID) (Policy, 
 	if err != nil {
 		return Policy{}, fmt.Errorf("get risk policy row: %w", err)
 	}
-	return c.ProjectWithProgress(ctx, row)
+	return c.ProjectWithAudience(ctx, row)
 }
 
-// ProjectWithProgress enriches an already-loaded row with its audience and
-// best-effort message-analysis progress.
-func (c *Core) ProjectWithProgress(ctx context.Context, row repo.RiskPolicy) (Policy, error) {
-	total, err := c.queries.CountTotalMessages(ctx, uuid.NullUUID{UUID: row.ProjectID, Valid: true})
-	if err != nil {
-		total = 0
-	}
-	analyzed, err := c.queries.CountAnalyzedMessages(ctx, repo.CountAnalyzedMessagesParams{
-		ProjectID:         row.ProjectID,
-		RiskPolicyID:      row.ID,
-		RiskPolicyVersion: row.Version,
-	})
-	if err != nil {
-		analyzed = 0
-	}
+// ProjectWithAudience enriches an already-loaded row with its audience.
+func (c *Core) ProjectWithAudience(ctx context.Context, row repo.RiskPolicy) (Policy, error) {
 	audience, err := c.AudiencePrincipalURNs(ctx, row.OrganizationID, row.ID.String())
 	if err != nil {
 		return Policy{}, fmt.Errorf("load risk policy audience: %w", err)
 	}
-	return Project(row, audience, &Progress{Total: total, Analyzed: analyzed}), nil
+	return Project(row, audience), nil
 }
 
 // AudiencePrincipalURNs returns the exact-selector audience for one policy,

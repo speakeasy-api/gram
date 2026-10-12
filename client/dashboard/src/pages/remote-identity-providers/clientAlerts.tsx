@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/Button";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useState } from "react";
 import { legacyCallbackURL } from "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
-import { ConfirmDialog } from "./ConfirmDialog";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 // LegacyCallbackAlert flags, to platform admins only, a client registered
 // upstream with the legacy callback URL. Migrating clears compatibility mode,

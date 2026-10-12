@@ -6,10 +6,11 @@ reusable **Source → Transform → Sink** pipeline.
 Each concrete migration is a set of three small implementations wired together by
 the shared harness. The migrations shipped today:
 
-| Migration                                                                           | Doc                                                                |
-| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Postgres `risk_results` → ClickHouse `risk_findings`                                | [RISK_RESULTS_MIGRATION.md](./RISK_RESULTS_MIGRATION.md)           |
-| `risk_findings` `message_created_at`/`assistant_id` column backfill (via mutations) | [RISKFINDINGS_COLS_MIGRATION.md](./RISKFINDINGS_COLS_MIGRATION.md) |
+| Migration                                                                           | Doc                                                                    |
+| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Postgres `risk_results` → ClickHouse `risk_findings`                                | [RISK_RESULTS_MIGRATION.md](./RISK_RESULTS_MIGRATION.md)               |
+| `risk_findings` `message_created_at`/`assistant_id` column backfill (via mutations) | [RISKFINDINGS_COLS_MIGRATION.md](./RISKFINDINGS_COLS_MIGRATION.md)     |
+| Canonical hosted MCP wrappers for legacy toolsets                                   | [HOSTED_MCP_WRAPPERS_MIGRATION.md](./HOSTED_MCP_WRAPPERS_MIGRATION.md) |
 
 ## Concepts
 
@@ -87,8 +88,10 @@ for the migration you want to run. The general shape is:
 go run ./server/cmd/tools/migrations [migration] [flags]
 ```
 
-`-dry-run` defaults to **true** for every migration: a plain run reads and
-transforms but writes nothing. Pass `-dry-run=false` to write.
+`-dry-run` defaults to **true** for every pipeline migration: a plain run reads
+and transforms but writes nothing. Pass `-dry-run=false` to write. The hosted MCP
+wrapper backfill is not a pipeline migration: it is a dry run by default and
+writes only with `-apply`.
 
 ## Adding a new migration
 

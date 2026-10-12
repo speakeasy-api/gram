@@ -5,16 +5,13 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -97,19 +94,7 @@ func TestDeleteToolsetRequestsPublicationForWrapperBackedToolset(t *testing.T) {
 	require.NoError(t, plugins.SoftDeletePluginServers(ctx, defaultPlugin.ID))
 	servers := mcpserversrepo.New(ti.conn)
 	_, err = servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: toolsetID, ProjectID: *authCtx.ProjectID})
-	require.ErrorIs(t, err, pgx.ErrNoRows, "a public-only toolset starts without a hosted wrapper")
-	_, err = servers.CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID: toolsetID, ProjectID: *authCtx.ProjectID, Name: pgtype.Text{String: carried.Name, Valid: true}, Slug: pgtype.Text{String: string(*carried.McpSlug), Valid: true},
-		EnvironmentID: uuid.NullUUID{}, UserSessionIssuerID: uuid.NullUUID{}, RemoteMcpServerID: uuid.NullUUID{}, TunneledMcpServerID: uuid.NullUUID{},
-		ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, UnproxiedMcpServerID: uuid.NullUUID{}, ToolVariationsGroupID: uuid.NullUUID{},
-		Visibility: "private", NetworkAccessMode: networkaccess.Storage(networkaccess.ModePublicOnly),
-	})
-	require.NoError(t, err)
-	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
-		ProjectID: *authCtx.ProjectID, CustomDomainID: uuid.NullUUID{}, McpServerID: uuid.NullUUID{UUID: toolsetID, Valid: true},
-		MetaMcpServerID: uuid.NullUUID{}, Slug: "wrapped-" + uuid.NewString()[:8],
-	})
-	require.NoError(t, err)
+	require.NoError(t, err, "creation materializes the hosted wrapper and its platform endpoint")
 	_, err = plugins.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
 		PluginID: defaultPlugin.ID, ToolsetID: uuid.NullUUID{}, McpServerID: uuid.NullUUID{UUID: toolsetID, Valid: true},
 		DisplayName: "Wrapped toolset", Policy: "required", SortOrder: 0,

@@ -111,10 +111,10 @@ export function XaaConfirmFields({
             ) : (
               "Okta Applications"
             )}
-            , under Resource Server → Cross-app access (XAA); enable it there
-            first if it is disabled. Prefilled with the server’s issuer when
-            known; change it if Okta differs. Not the Audience/tenant ID or the
-            MCP server URL.
+            , under Machine Assignments → Callers → Cross-app access (XAA);
+            enable it there first if it is disabled. Prefilled with the server’s
+            issuer when known; change it if Okta differs. Not the
+            Audience/tenant ID or the MCP server URL.
           </FieldDescription>
           {audienceInvalid && (
             <p

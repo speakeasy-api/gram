@@ -256,6 +256,9 @@ type GetServerScopesResponseBody struct {
 	// How many other live MCP servers in the project share this upstream URL, and
 	// so this pin.
 	SharedServerCount *int `form:"shared_server_count,omitempty" json:"shared_server_count,omitempty" xml:"shared_server_count,omitempty"`
+	// Whether the caller may change the pin: write access to this server and every
+	// server in the project with the same upstream URL.
+	CanPin *bool `form:"can_pin,omitempty" json:"can_pin,omitempty" xml:"can_pin,omitempty"`
 }
 
 // SetServerScopePinResponseBody is the type of the "remoteMcp" service
@@ -283,6 +286,9 @@ type SetServerScopePinResponseBody struct {
 	// How many other live MCP servers in the project share this upstream URL, and
 	// so this pin.
 	SharedServerCount *int `form:"shared_server_count,omitempty" json:"shared_server_count,omitempty" xml:"shared_server_count,omitempty"`
+	// Whether the caller may change the pin: write access to this server and every
+	// server in the project with the same upstream URL.
+	CanPin *bool `form:"can_pin,omitempty" json:"can_pin,omitempty" xml:"can_pin,omitempty"`
 }
 
 // ProbeURLResponseBody is the type of the "remoteMcp" service "probeURL"
@@ -3379,6 +3385,10 @@ type McpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// An addressable platform endpoint slug for this server, populated only when
+	// getting by toolset ID. Absent when no platform endpoint exists; never a
+	// custom-domain slug.
+	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the user session issuer that gates OAuth-based MCP client
@@ -3444,6 +3454,11 @@ type ProtectedResourceMetadataUnavailableResponseBody struct {
 type RemoteMcpServerClientScopesResponseBody struct {
 	// The remote session client's ID.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// The configured name of the client's authorization server; absent when it has
+	// none.
+	IssuerName *string `form:"issuer_name,omitempty" json:"issuer_name,omitempty" xml:"issuer_name,omitempty"`
+	// The issuer URL of the client's authorization server.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
 	// The precedence step that decided the request.
 	ScopeSource *string `form:"scope_source,omitempty" json:"scope_source,omitempty" xml:"scope_source,omitempty"`
 	// The scope parameter the login would send; empty sends none.
@@ -4599,6 +4614,7 @@ func NewGetServerScopesRemoteMcpServerScopesOK(body *GetServerScopesResponseBody
 		AdvertisedScopesKnown: *body.AdvertisedScopesKnown,
 		DiscoveryEnabled:      *body.DiscoveryEnabled,
 		SharedServerCount:     *body.SharedServerCount,
+		CanPin:                *body.CanPin,
 	}
 	v.PinnedScopes = make([]string, len(body.PinnedScopes))
 	for i, val := range body.PinnedScopes {
@@ -4784,6 +4800,7 @@ func NewSetServerScopePinRemoteMcpServerScopesOK(body *SetServerScopePinResponse
 		AdvertisedScopesKnown: *body.AdvertisedScopesKnown,
 		DiscoveryEnabled:      *body.DiscoveryEnabled,
 		SharedServerCount:     *body.SharedServerCount,
+		CanPin:                *body.CanPin,
 	}
 	v.PinnedScopes = make([]string, len(body.PinnedScopes))
 	for i, val := range body.PinnedScopes {
@@ -6452,6 +6469,9 @@ func ValidateGetServerScopesResponseBody(body *GetServerScopesResponseBody) (err
 	if body.SharedServerCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("shared_server_count", "body"))
 	}
+	if body.CanPin == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_pin", "body"))
+	}
 	if body.ResourceURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.resource_url", *body.ResourceURL, goa.FormatURI))
 	}
@@ -6488,6 +6508,9 @@ func ValidateSetServerScopePinResponseBody(body *SetServerScopePinResponseBody) 
 	}
 	if body.SharedServerCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("shared_server_count", "body"))
+	}
+	if body.CanPin == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_pin", "body"))
 	}
 	if body.ResourceURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.resource_url", *body.ResourceURL, goa.FormatURI))

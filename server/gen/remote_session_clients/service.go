@@ -164,12 +164,25 @@ type CreateRemoteSessionClientPayload struct {
 	// the issuer identifier; token_endpoint is available for providers that
 	// require the token endpoint URL.
 	TokenEndpointAuthAudienceFormat *string
+	// Organization JSON Web Key Set to sign private_key_jwt assertions with.
+	// Required when token_endpoint_auth_method is private_key_jwt and optional
+	// otherwise, as with attachKeySet. Must belong to the caller's organization,
+	// which needs the customer-managed encryption keys entitlement.
+	JSONWebKeySetID *string
 	// Explicit upstream OAuth scopes the dance should request for this client.
 	// Omit to fall back to the issuer's scopes_supported.
 	Scope []string
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.
 	Audience *string
+	// Who the upstream access credential belongs to, fixed at creation. subject
+	// (the default) means each caller connects their own upstream account through
+	// the client. self means the client obtains a credential for itself with the
+	// client_credentials grant and every caller shares it; it requires
+	// token_endpoint_auth_method client_secret_basic, client_secret_post (both
+	// with client_secret) or private_key_jwt (with json_web_key_set_id), and an
+	// issuer with a token_endpoint.
+	CredentialOwner string
 	// When the issuer reported issuing the client_id (RFC 7591
 	// client_id_issued_at). Omit to record the time of this call.
 	ClientIDIssuedAt *string

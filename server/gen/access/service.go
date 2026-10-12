@@ -991,11 +991,26 @@ type ResourceAudienceEntry struct {
 // ResourceAudienceResult is the result type of the access service
 // listResourceAudience method.
 type ResourceAudienceResult struct {
+	// Live plugins containing this resource and assigned to an exact audience
+	// role. Omitted without plugin read and administrator access; not evidence of
+	// authorization or installation.
+	RolePlugins []*ResourceAudienceRolePlugin `json:"role_plugins,omitzero"`
 	// Rules deciding access to this resource, widest first.
 	Entries []*ResourceAudienceEntry
 	// Fingerprint of the rules naming this resource. Send it back when saving so a
 	// change made elsewhere is a conflict rather than a silent overwrite.
 	Version string
+}
+
+type ResourceAudienceRolePlugin struct {
+	// Exact role assigned to the plugin.
+	PrincipalUrn string
+	// Plugin ID.
+	PluginID string
+	// Plugin name.
+	Name string
+	// Plugin slug.
+	Slug string
 }
 
 // Role is the result type of the access service getRole method.

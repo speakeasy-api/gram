@@ -12,17 +12,23 @@ import {
 const mocks = vi.hoisted(() => ({
   hasScope: vi.fn(),
   mutate: vi.fn(),
+  mutationOptions: vi.fn(),
+  invalidateAudience: vi.fn(() => Promise.resolve()),
   tunneledSource: vi.fn(),
+}));
+
+vi.mock("@gram/client/react-query/resourceAudience.js", () => ({
+  invalidateAllResourceAudience: mocks.invalidateAudience,
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: mocks.hasScope }),
 }));
 vi.mock("@gram/client/react-query/updateMcpServer.js", () => ({
-  useUpdateMcpServerMutation: () => ({
-    isPending: false,
-    mutate: mocks.mutate,
-  }),
+  useUpdateMcpServerMutation: (options: unknown) => {
+    mocks.mutationOptions(options);
+    return { isPending: false, mutate: mocks.mutate };
+  },
 }));
 vi.mock("@gram/client/react-query/getTunneledMcpServer.js", () => ({
   useGetTunneledMcpServer: () => mocks.tunneledSource(),
@@ -128,6 +134,24 @@ describe("MCPServerAvailabilityToggle", () => {
       }),
     );
   });
+
+  it.each(["private", "disabled"] as const)(
+    "refreshes team audience after changing visibility from %s",
+    async (visibility) => {
+      renderToggle({ ...server, visibility });
+      fireEvent.click(screen.getByRole("switch"));
+      expect(mocks.invalidateAudience).not.toHaveBeenCalled();
+
+      const [variables] = mocks.mutate.mock.calls.at(-1)!;
+      const [options] = mocks.mutationOptions.mock.calls.at(-1)!;
+      await options.onSuccess(undefined, variables);
+
+      expect(mocks.invalidateAudience).toHaveBeenCalledExactlyOnceWith(
+        expect.any(QueryClient),
+        { refetchType: "all" },
+      );
+    },
+  );
 
   it("preserves the existing write-scope gate", () => {
     mocks.hasScope.mockReturnValue(false);

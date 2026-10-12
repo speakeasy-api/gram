@@ -546,6 +546,21 @@ UPDATE platform_mcp_setup_handoffs
 SET expires_at = clock_timestamp() - interval '1 second'
 WHERE id = @id;
 
+-- name: ExpirePlatformMCPOperationReceiptFixture :one
+-- Test-only fixture expiring an idempotency receipt by the database clock,
+-- the clock both the replay pre-check and the locked path judge expiry with.
+UPDATE platform_mcp_operation_receipts
+SET expires_at = clock_timestamp() - interval '1 second'
+WHERE id = @id
+RETURNING expires_at;
+
+-- name: ListPlatformMCPOperationReceiptIDsFixture :many
+-- Test-only inspection of which receipts an organization still holds.
+SELECT id
+FROM platform_mcp_operation_receipts
+WHERE organization_id = @organization_id
+ORDER BY id;
+
 -- name: GetPlatformMCPReadinessFingerprintFixture :one
 -- Test-only inspection of the non-secret identity fingerprint persisted by Platform MCP.
 SELECT provider_authorization_fingerprint
@@ -1503,6 +1518,21 @@ WHERE remote_session_clients.id = @id
   AND (remote_session_clients.organization_id = @organization_id AND remote_session_clients.project_id IS NULL
     OR EXISTS (SELECT 1 FROM projects p WHERE p.id = remote_session_clients.project_id AND p.organization_id = @organization_id));
 
+-- name: ForceRemoteSessionClientCredentialOwnerFixture :execrows
+-- Test fixture: sets who owns a client's upstream credential, which no
+-- application query changes after creation. A 'self' owner must satisfy
+-- remote_session_clients_credential_owner_check, so the client needs a
+-- confidential token endpoint auth method first.
+UPDATE remote_session_clients
+SET credential_owner = @credential_owner,
+    updated_at = clock_timestamp()
+WHERE remote_session_clients.id = @id
+  AND remote_session_clients.deleted IS FALSE
+  AND remote_session_clients.project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid
+  AND (remote_session_clients.organization_id IS NULL OR remote_session_clients.organization_id = @organization_id)
+  AND (remote_session_clients.organization_id = @organization_id AND remote_session_clients.project_id IS NULL
+    OR EXISTS (SELECT 1 FROM projects p WHERE p.id = remote_session_clients.project_id AND p.organization_id = @organization_id));
+
 -- name: ForceRemoteSessionIssuerRegistrationEndpointFixture :execrows
 -- Test fixture: sets the registration endpoint on a client's issuer, which is
 -- where a rotation re-registers the client. NULL stages an issuer that
@@ -1547,7 +1577,8 @@ WHERE remote_session_issuers.id = @id
 -- name: SetPreparationFixtureIssuerCapability :exec
 UPDATE remote_session_issuers
 SET authorization_grant_profiles_supported = ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
-    grant_types_supported = ARRAY['authorization_code','refresh_token','urn:ietf:params:oauth:grant-type:jwt-bearer']
+    grant_types_supported = ARRAY['authorization_code','refresh_token','urn:ietf:params:oauth:grant-type:jwt-bearer'],
+    metadata_fetched_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id;
 
 -- name: SetPreparationFixtureClientGrants :exec
@@ -1672,6 +1703,22 @@ UPDATE remote_session_issuers SET client_id_metadata_document_supported = true, 
 
 -- name: SetPreparationFixtureCIMDURI :exec
 UPDATE remote_session_clients SET client_id_metadata_uri = 'https://gram.example.com/client.json', client_id = 'https://gram.example.com/client.json', client_secret_encrypted = NULL, token_endpoint_auth_method = 'none' WHERE id = @id AND project_id = @project_id;
+
+-- name: SetPreparationFixtureConfidentialClient :execrows
+-- Identity chaining refuses public clients: make a fixture client authenticate
+-- with private_key_jwt against a key set, and its issuer accept that method.
+WITH issuer AS (
+    UPDATE remote_session_issuers
+    SET token_endpoint_auth_methods_supported = array_append(array_remove(token_endpoint_auth_methods_supported, 'private_key_jwt'), 'private_key_jwt')
+    WHERE remote_session_issuers.id = @remote_session_issuer_id AND remote_session_issuers.project_id = @project_id
+    RETURNING remote_session_issuers.id
+)
+UPDATE remote_session_clients
+SET token_endpoint_auth_method = 'private_key_jwt', json_web_key_set_id = @json_web_key_set_id, client_secret_encrypted = NULL,
+    organization_id = @organization_id
+WHERE remote_session_clients.id = @id
+  AND remote_session_clients.project_id = @project_id
+  AND remote_session_clients.remote_session_issuer_id IN (SELECT issuer.id FROM issuer);
 
 -- name: MovePreparationFixtureClientProject :execrows
 UPDATE remote_session_clients SET project_id = @target_project_id

@@ -3760,6 +3760,7 @@ func marshalTypesMcpServerToMcpServerResponseBody(v *types.McpServer) *McpServer
 		ProjectID:             v.ProjectID,
 		Name:                  v.Name,
 		Slug:                  v.Slug,
+		PlatformEndpointSlug:  v.PlatformEndpointSlug,
 		EnvironmentID:         v.EnvironmentID,
 		UserSessionIssuerID:   v.UserSessionIssuerID,
 		RemoteMcpServerID:     v.RemoteMcpServerID,
@@ -3833,6 +3834,8 @@ func marshalRemotemcpProtectedResourceMetadataUnavailableToProtectedResourceMeta
 func marshalRemotemcpRemoteMcpServerClientScopesToRemoteMcpServerClientScopesResponseBody(v *remotemcp.RemoteMcpServerClientScopes) *RemoteMcpServerClientScopesResponseBody {
 	res := &RemoteMcpServerClientScopesResponseBody{
 		ClientID:       v.ClientID,
+		IssuerName:     v.IssuerName,
+		IssuerURL:      v.IssuerURL,
 		ScopeSource:    v.ScopeSource,
 		PinWouldDecide: v.PinWouldDecide,
 	}

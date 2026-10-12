@@ -240,6 +240,19 @@ func (s *Service) ListPlatforms(ctx context.Context, payload *gen.ListPlatformsP
 	return mv.BuildWorkloadPlatformCatalogView(platforms), nil
 }
 
+func (s *Service) GetCustomFlows(ctx context.Context, payload *gen.GetCustomFlowsPayload) (*gen.WorkloadCustomFlows, error) {
+	if _, err := s.resolve(ctx, authz.ScopeWorkloadRead); err != nil {
+		return nil, err
+	}
+
+	flows, err := s.catalog.CustomFlows(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load the custom flows").LogError(ctx, s.logger)
+	}
+
+	return mv.BuildWorkloadCustomFlowsView(flows), nil
+}
+
 func (s *Service) ListTokenEndpoints(ctx context.Context, payload *gen.ListTokenEndpointsPayload) (*types.WorkloadTokenEndpoints, error) {
 	t, err := s.resolve(ctx, authz.ScopeWorkloadRead)
 	if err != nil {

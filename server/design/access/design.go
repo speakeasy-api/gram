@@ -1152,8 +1152,19 @@ var ResourceAudienceEntryModel = Type("ResourceAudienceEntry", func() {
 	})
 })
 
+var ResourceAudienceRolePlugin = Type("ResourceAudienceRolePlugin", func() {
+	Required("principal_urn", "plugin_id", "name", "slug")
+	Attribute("principal_urn", String, "Exact role assigned to the plugin.")
+	Attribute("plugin_id", String, "Plugin ID.")
+	Attribute("name", String, "Plugin name.")
+	Attribute("slug", String, "Plugin slug.")
+})
+
 var ResourceAudienceResult = Type("ResourceAudienceResult", func() {
 	Required("entries", "version")
+	Attribute("role_plugins", ArrayOf(ResourceAudienceRolePlugin), "Live plugins containing this resource and assigned to an exact audience role. Omitted without plugin read and administrator access; not evidence of authorization or installation.", func() {
+		Meta("struct:tag:json", "role_plugins,omitzero")
+	})
 	Attribute("entries", ArrayOf(ResourceAudienceEntryModel), "Rules deciding access to this resource, widest first.")
 	Attribute("version", String, "Fingerprint of the rules naming this resource. Send it back when saving so a change made elsewhere is a conflict rather than a silent overwrite.")
 })

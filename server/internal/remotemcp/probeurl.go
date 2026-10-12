@@ -83,7 +83,7 @@ func ProbeRemoteMcpURL(ctx context.Context, policy *guardian.Policy, rawURL stri
 // back to the initialize handshake when the upstream does not answer it, so
 // upstreams that implement either one verify.
 func probeRemoteMcpURL(ctx context.Context, policy *guardian.Policy, rawURL string) probeObservation {
-	client := policy.Client()
+	client := policy.Client(guardian.WithInternalCatalog())
 	client.Timeout = probeURLTimeout
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) > probeURLMaxRedirects {

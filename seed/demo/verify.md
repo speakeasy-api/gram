@@ -26,6 +26,19 @@ verify those as an ordinary human in the local organization, not through imperso
 
 ## Checks
 
+### Signals Intelligence
+
+Open `/signals-intelligence` in the seeded project with the organization's
+`signals_intelligence` product feature enabled. Confirm nine signals and four
+sensors, with nine total memberships. Expand sensors and inspect their modes and
+ordered signal labels, including incomplete drafts. Both tabs should show populated
+configuration without console errors; this page does not execute classifiers.
+Read-only demo access must not permit mutations. In the local writable org, open
+the signal editor and type a name; confirm no input exception. When deleting a
+temporary configuration, confirm the dialog stays disabled until list refresh and
+closure complete. With the product feature disabled, navigation is hidden and a
+direct URL returns to project overview.
+
 A check FAILS when the page shows an empty state, an error boundary, or zero
 where a value is expected.
 
@@ -477,6 +490,14 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     tool_calls dataset, a 7-day window and a table ordered by p95 duration,
     runs it, and returns rows; the bar names the widget with Priya Raman as
     its creator and **Save** stays disabled until something is edited.
+    Still on the Explore tab, switch the dataset to `skills`: the builder
+    opens grouped by `skill` with a count, and the description beside the
+    grain says which producers report skills. Run, and the table shows
+    `review-pr`, `write-tests` and `release-notes` with counts and no empty
+    group, since a call that named no skill is not a row. Add a filter on
+    `skill`: the values picker offers those three names with counts and
+    never an empty value. Then flip the Explore row in `PAGES.md` from
+    `[~]` to `[x]`.
 27. **Check access** — open MCP → **GitHub** → Team Access and pick Mateo
     Alvarez in Check access. Connect is **Blocked**: the Contractors block
     wins, Engineer's grants show as blocked, and his own grant covering
@@ -495,6 +516,26 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     `mcp:read` and `mcp:write` carry the note that they also connect. Edit
     **Read-only Tools**: All servers is chosen with a Read-Only Tools badge.
     Save stays disabled on each until something is edited.
+29. **Self remote session client**
+    - Run `mise run seed` twice. In the `default` project, open **Remote
+      Identity Providers → Jamf Pro**. The Overview must render the issuer
+      `https://<org-slug>.jamfcloud.example` and its `/api/oauth/token` token
+      endpoint, without an error boundary. No discovery has run. Its
+      **Client Setup Documentation** link opens Jamf's API Roles and Clients
+      guide.
+    - Open **Clients → demo-jamf-pro-api-client**. Its Overview must render
+      client ID `demo-jamf-pro-api-client` and token endpoint authentication
+      method `client_secret_post`, with no scopes. The **MCP Servers** tab is
+      empty, and the **Sessions** tab shows **No active sessions for this
+      client**.
+    - The dashboard does not yet display `credential_owner` (AIM-464). Check the
+      management API response instead: the client's `credential_owner` is
+      `self` and `grant_types` is `client_credentials`. Do not describe these
+      fields as rendered UI.
+    - The client must have no user session issuer binding and no MCP server
+      that uses it. Do not bind it to a server to populate a page: its secret
+      is an invalid ciphertext, so any request would fail with the
+      administrator misconfiguration error.
 
 ## On failure
 

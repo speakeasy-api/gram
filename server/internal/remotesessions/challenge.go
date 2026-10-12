@@ -275,6 +275,14 @@ type ChallengeManager struct {
 	// rotator replaces a client registration the issuer no longer recognizes
 	// before the authorize redirect is minted.
 	rotator *ClientRotator
+
+	// clientCredentials obtains the upstream credential a self client holds
+	// for itself.
+	clientCredentials ClientCredentialSource
+
+	// clientCredentialBuilder builds clientCredentials once the manager is
+	// constructed; nil leaves self clients unsupported.
+	clientCredentialBuilder func(*ChallengeManager) ClientCredentialSource
 }
 
 // RemoteGrant is a grant the remote login callback committed, keyed to the
@@ -401,6 +409,8 @@ func NewChallengeManager(
 		auditLogger:               audit.NewLogger(),
 		rotator:                   nil,
 		assertions:                unavailableTokenEndpointAssertionSigner{},
+		clientCredentials:         unconfiguredClientCredentialSource{},
+		clientCredentialBuilder:   nil,
 	}
 	for _, option := range options {
 		option(manager)
@@ -413,6 +423,9 @@ func NewChallengeManager(
 	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, tunnels, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshSessionEnricher(manager.enricher), WithRefreshTokenEndpointAssertionSigner(manager.assertions))
 	manager.rotator = NewClientRotator(logger, db, enc, policy, tunnels, cacheImpl, serverURL, manager.revoker, manager.auditLogger, manager.registrationTelemetry)
 	manager.rotator.origins = manager.origins
+	if manager.clientCredentialBuilder != nil {
+		manager.clientCredentials = manager.clientCredentialBuilder(manager)
+	}
 	return manager
 }
 
@@ -519,15 +532,22 @@ type Client struct {
 	// invalid_client for this client_id, nil while the registration is in good
 	// standing.
 	UpstreamRejectedAt *time.Time
+
+	// CredentialOwner is who the client's upstream credential belongs to. A
+	// CredentialOwnerSelf client is never connected by a subject: it has no
+	// consent card, connect step or authorize redirect.
+	CredentialOwner CredentialOwner
 }
 
 // needsRegistrationRotation reports whether the client's upstream registration
 // should be replaced before sending a user to the authorize endpoint: the
 // issuer has rejected the client_id, or the secret it issued has expired. A
 // client whose issuer publishes no registration endpoint is never rotated
-// here, since Speakeasy has nowhere to re-register it.
+// here, since Speakeasy has nowhere to re-register it. Neither is a self
+// client, which an administrator provisioned and nobody sends to the
+// authorize endpoint.
 func (c Client) needsRegistrationRotation(now time.Time) (RotationTrigger, bool) {
-	if c.IssuerRegistrationEndpoint == "" {
+	if c.IssuerRegistrationEndpoint == "" || c.CredentialOwner == CredentialOwnerSelf {
 		return "", false
 	}
 	switch {
@@ -891,6 +911,7 @@ func (m *ChallengeManager) ListClients(
 			IssuerRegistrationEndpoint:                       conv.FromPGTextOrEmpty[string](r.IssuerRegistrationEndpoint),
 			ClientSecretExpiresAt:                            timestampPtr(r.ClientSecretExpiresAt),
 			UpstreamRejectedAt:                               timestampPtr(r.UpstreamRejectedAt),
+			CredentialOwner:                                  CredentialOwner(r.CredentialOwner),
 		})
 	}
 	return out, nil
@@ -1161,6 +1182,9 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	parent ParentChallenge,
 	client Client,
 ) (string, error) {
+	if client.CredentialOwner == CredentialOwnerSelf {
+		return "", ErrSelfCredentialClient
+	}
 	// Evaluated once per login; the retry leg reuses the scopes it chose.
 	discover := m.ResourceScopeDiscoveryEnabled(ctx, parent.OrganizationID)
 	return m.mintAuthorization(ctx, parent, client, nil, discover)

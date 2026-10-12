@@ -42,7 +42,6 @@ type Endpoints struct {
 	GetRiskSignals                 goa.Endpoint
 	GetRiskMcpServerCounts         goa.Endpoint
 	GetRiskAnalysisStatus          goa.Endpoint
-	GetRiskPolicyStatus            goa.Endpoint
 	CreateRiskPolicyBypassRequest  goa.Endpoint
 	AcknowledgeRiskPolicyChallenge goa.Endpoint
 	GetRiskPolicyChallenge         goa.Endpoint
@@ -103,7 +102,6 @@ func NewEndpoints(s Service) *Endpoints {
 		GetRiskSignals:                 NewGetRiskSignalsEndpoint(s, a.APIKeyAuth),
 		GetRiskMcpServerCounts:         NewGetRiskMcpServerCountsEndpoint(s, a.APIKeyAuth),
 		GetRiskAnalysisStatus:          NewGetRiskAnalysisStatusEndpoint(s, a.APIKeyAuth),
-		GetRiskPolicyStatus:            NewGetRiskPolicyStatusEndpoint(s, a.APIKeyAuth),
 		CreateRiskPolicyBypassRequest:  NewCreateRiskPolicyBypassRequestEndpoint(s, a.APIKeyAuth),
 		AcknowledgeRiskPolicyChallenge: NewAcknowledgeRiskPolicyChallengeEndpoint(s, a.APIKeyAuth),
 		GetRiskPolicyChallenge:         NewGetRiskPolicyChallengeEndpoint(s, a.APIKeyAuth),
@@ -162,7 +160,6 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetRiskSignals = m(e.GetRiskSignals)
 	e.GetRiskMcpServerCounts = m(e.GetRiskMcpServerCounts)
 	e.GetRiskAnalysisStatus = m(e.GetRiskAnalysisStatus)
-	e.GetRiskPolicyStatus = m(e.GetRiskPolicyStatus)
 	e.CreateRiskPolicyBypassRequest = m(e.CreateRiskPolicyBypassRequest)
 	e.AcknowledgeRiskPolicyChallenge = m(e.AcknowledgeRiskPolicyChallenge)
 	e.GetRiskPolicyChallenge = m(e.GetRiskPolicyChallenge)
@@ -1723,65 +1720,6 @@ func NewGetRiskAnalysisStatusEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 			return nil, err
 		}
 		return s.GetRiskAnalysisStatus(ctx, p)
-	}
-}
-
-// NewGetRiskPolicyStatusEndpoint returns an endpoint function that calls the
-// method "getRiskPolicyStatus" of service "risk".
-func NewGetRiskPolicyStatusEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*GetRiskPolicyStatusPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
-			RequiredScopes: []string{"producer"},
-		}
-		var key string
-		if p.ApikeyToken != nil {
-			key = *p.ApikeyToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err == nil {
-			sc := security.APIKeyScheme{
-				Name:           "project_slug",
-				Scopes:         []string{},
-				RequiredScopes: []string{"producer"},
-			}
-			var key string
-			if p.ProjectSlugInput != nil {
-				key = *p.ProjectSlugInput
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "session",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.SessionToken != nil {
-				key = *p.SessionToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
-		}
-		if err != nil {
-			return nil, err
-		}
-		return s.GetRiskPolicyStatus(ctx, p)
 	}
 }
 

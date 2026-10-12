@@ -357,6 +357,34 @@ func TestServiceUpdateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 	require.Equal(t, "private", server.Visibility, "updating assistant toolsets must also enable the hosted wrapper")
 }
 
+func TestServiceAssistantEnableMaterializesCanonicalWrapper(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_mcp_autoenable_canonical")
+	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant())
+	ts, err := toolsetsRepo.New(conn).CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
+		OrganizationID: "org-test", ProjectID: projectID, Name: "Linear", Slug: "linear",
+		McpSlug: pgtype.Text{String: "org-test-linear-canonical", Valid: true}, McpEnabled: false,
+	})
+	require.NoError(t, err)
+
+	_, err = svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
+		Name: "Assistant", Model: "openai/gpt-4o-mini",
+		Toolsets: []*types.AssistantToolsetRef{{ToolsetSlug: ts.Slug, EnvironmentSlug: nil}},
+	})
+	require.NoError(t, err)
+
+	server, err := mcpserversRepo.New(conn).GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: ts.ID, ProjectID: projectID})
+	require.NoError(t, err, "enabling through an assistant creates the canonical wrapper")
+	require.Equal(t, uuid.NullUUID{UUID: ts.ID, Valid: true}, server.ToolsetID)
+	require.Equal(t, "private", server.Visibility)
+	endpoints, err := mcpendpointsRepo.New(conn).ListMCPEndpointsByMCPServerID(t.Context(), mcpendpointsRepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: projectID, McpServerID: ts.ID})
+	require.NoError(t, err)
+	require.Len(t, endpoints, 1)
+	require.Equal(t, ts.McpSlug.String, endpoints[0].Slug)
+	require.False(t, endpoints[0].CustomDomainID.Valid)
+}
+
 // A remote-backed MCP server (no toolset) can be attached to an assistant and
 // round-trips through the API and the dispatch resolver, which points the
 // runner at the server's Speakeasy-hosted endpoint.

@@ -343,7 +343,7 @@ INSERT INTO assistant_toolsets (
   @project_id
 );
 
--- name: EnableMCPForToolsets :exec
+-- name: EnableMCPForToolsets :many
 -- Flips mcp_enabled to TRUE for the listed toolsets in a project. Every
 -- toolset attached to an assistant must be MCP-reachable for the runtime's
 -- startup config to build; we enable on attach so users don't have to do it
@@ -356,7 +356,8 @@ WHERE id = ANY(@toolset_ids::UUID[])
   AND project_id = @project_id
   AND mcp_enabled IS FALSE
   AND mcp_slug IS NOT NULL
-  AND deleted IS FALSE;
+  AND deleted IS FALSE
+RETURNING id;
 
 -- name: LoadAssistantMcpServers :many
 -- Hydrates assistant_mcp_servers with the fronting mcp_servers row, its

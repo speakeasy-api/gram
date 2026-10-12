@@ -2,6 +2,7 @@ package otel
 
 import (
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"testing"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
@@ -52,7 +53,7 @@ func TestMetricTransformHandlerAppliesOnlyResourceEnrichments(t *testing.T) {
 		published = item
 	}).Return(gcp.NewSuccessPublishResult()).Once()
 	handler := NewMetricTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher)
-	handler.enrichers = []MetricEnricher{stubMetricEnricher{
+	handler.enrichers = []enrich.MetricEnricher{stubMetricEnricher{
 		name: "bounded-resource",
 		enrich: func(context.Context, *otelv1.InboundMetric, oteldialect.MetricDialect) ([]attribute.KeyValue, error) {
 			return []attribute.KeyValue{attribute.String("deployment.environment.name", "test")}, nil
@@ -85,7 +86,7 @@ func TestMetricTransformHandlerPassesSelectedDialectToEnrichers(t *testing.T) {
 	handler := NewMetricTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher)
 	var dialectKey, dialectValue string
 	var dialectErr error
-	handler.enrichers = []MetricEnricher{stubMetricEnricher{
+	handler.enrichers = []enrich.MetricEnricher{stubMetricEnricher{
 		name: "capture-dialect",
 		enrich: func(_ context.Context, _ *otelv1.InboundMetric, metricDialect oteldialect.MetricDialect) ([]attribute.KeyValue, error) {
 			dialectKey, dialectValue, dialectErr = metricDialect.SessionID(point)

@@ -258,6 +258,9 @@ type GetServerScopesResponseBody struct {
 	// How many other live MCP servers in the project share this upstream URL, and
 	// so this pin.
 	SharedServerCount int `form:"shared_server_count" json:"shared_server_count" xml:"shared_server_count"`
+	// Whether the caller may change the pin: write access to this server and every
+	// server in the project with the same upstream URL.
+	CanPin bool `form:"can_pin" json:"can_pin" xml:"can_pin"`
 }
 
 // SetServerScopePinResponseBody is the type of the "remoteMcp" service
@@ -285,6 +288,9 @@ type SetServerScopePinResponseBody struct {
 	// How many other live MCP servers in the project share this upstream URL, and
 	// so this pin.
 	SharedServerCount int `form:"shared_server_count" json:"shared_server_count" xml:"shared_server_count"`
+	// Whether the caller may change the pin: write access to this server and every
+	// server in the project with the same upstream URL.
+	CanPin bool `form:"can_pin" json:"can_pin" xml:"can_pin"`
 }
 
 // ProbeURLResponseBody is the type of the "remoteMcp" service "probeURL"
@@ -3381,6 +3387,10 @@ type McpServerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-safe, project-unique slug derived server-side from the name and ID
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// An addressable platform endpoint slug for this server, populated only when
+	// getting by toolset ID. Absent when no platform endpoint exists; never a
+	// custom-domain slug.
+	PlatformEndpointSlug *string `form:"platform_endpoint_slug,omitempty" json:"platform_endpoint_slug,omitempty" xml:"platform_endpoint_slug,omitempty"`
 	// The ID of the environment associated with the server
 	EnvironmentID *string `form:"environment_id,omitempty" json:"environment_id,omitempty" xml:"environment_id,omitempty"`
 	// The ID of the user session issuer that gates OAuth-based MCP client
@@ -3446,6 +3456,11 @@ type ProtectedResourceMetadataUnavailableResponseBody struct {
 type RemoteMcpServerClientScopesResponseBody struct {
 	// The remote session client's ID.
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
+	// The configured name of the client's authorization server; absent when it has
+	// none.
+	IssuerName *string `form:"issuer_name,omitempty" json:"issuer_name,omitempty" xml:"issuer_name,omitempty"`
+	// The issuer URL of the client's authorization server.
+	IssuerURL *string `form:"issuer_url,omitempty" json:"issuer_url,omitempty" xml:"issuer_url,omitempty"`
 	// The precedence step that decided the request.
 	ScopeSource string `form:"scope_source" json:"scope_source" xml:"scope_source"`
 	// The scope parameter the login would send; empty sends none.
@@ -3595,6 +3610,7 @@ func NewGetServerScopesResponseBody(res *remotemcp.RemoteMcpServerScopes) *GetSe
 		AdvertisedScopesKnown: res.AdvertisedScopesKnown,
 		DiscoveryEnabled:      res.DiscoveryEnabled,
 		SharedServerCount:     res.SharedServerCount,
+		CanPin:                res.CanPin,
 	}
 	if res.PinnedScopes != nil {
 		body.PinnedScopes = make([]string, len(res.PinnedScopes))
@@ -3641,6 +3657,7 @@ func NewSetServerScopePinResponseBody(res *remotemcp.RemoteMcpServerScopes) *Set
 		AdvertisedScopesKnown: res.AdvertisedScopesKnown,
 		DiscoveryEnabled:      res.DiscoveryEnabled,
 		SharedServerCount:     res.SharedServerCount,
+		CanPin:                res.CanPin,
 	}
 	if res.PinnedScopes != nil {
 		body.PinnedScopes = make([]string, len(res.PinnedScopes))

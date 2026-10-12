@@ -443,6 +443,10 @@ type SetAIToolDecisionResponseBody struct {
 // ListResourceAudienceResponseBody is the type of the "access" service
 // "listResourceAudience" endpoint HTTP response body.
 type ListResourceAudienceResponseBody struct {
+	// Live plugins containing this resource and assigned to an exact audience
+	// role. Omitted without plugin read and administrator access; not evidence of
+	// authorization or installation.
+	RolePlugins []*ResourceAudienceRolePluginResponseBody `json:"role_plugins,omitzero"`
 	// Rules deciding access to this resource, widest first.
 	Entries []*ResourceAudienceEntryResponseBody `form:"entries,omitempty" json:"entries,omitempty" xml:"entries,omitempty"`
 	// Fingerprint of the rules naming this resource. Send it back when saving so a
@@ -453,6 +457,10 @@ type ListResourceAudienceResponseBody struct {
 // SetResourceAudienceResponseBody is the type of the "access" service
 // "setResourceAudience" endpoint HTTP response body.
 type SetResourceAudienceResponseBody struct {
+	// Live plugins containing this resource and assigned to an exact audience
+	// role. Omitted without plugin read and administrator access; not evidence of
+	// authorization or installation.
+	RolePlugins []*ResourceAudienceRolePluginResponseBody `json:"role_plugins,omitzero"`
 	// Rules deciding access to this resource, widest first.
 	Entries []*ResourceAudienceEntryResponseBody `form:"entries,omitempty" json:"entries,omitempty" xml:"entries,omitempty"`
 	// Fingerprint of the rules naming this resource. Send it back when saving so a
@@ -6822,6 +6830,19 @@ type AIDetectionUserResponseBody struct {
 	LastSeen *string `form:"last_seen,omitempty" json:"last_seen,omitempty" xml:"last_seen,omitempty"`
 }
 
+// ResourceAudienceRolePluginResponseBody is used to define fields on response
+// body types.
+type ResourceAudienceRolePluginResponseBody struct {
+	// Exact role assigned to the plugin.
+	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
+	// Plugin ID.
+	PluginID *string `form:"plugin_id,omitempty" json:"plugin_id,omitempty" xml:"plugin_id,omitempty"`
+	// Plugin name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Plugin slug.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+}
+
 // ResourceAudienceEntryResponseBody is used to define fields on response body
 // types.
 type ResourceAudienceEntryResponseBody struct {
@@ -11192,6 +11213,16 @@ func NewListResourceAudienceResourceAudienceResultOK(body *ListResourceAudienceR
 	v := &access.ResourceAudienceResult{
 		Version: *body.Version,
 	}
+	if body.RolePlugins != nil {
+		v.RolePlugins = make([]*access.ResourceAudienceRolePlugin, len(body.RolePlugins))
+		for i, val := range body.RolePlugins {
+			if val == nil {
+				v.RolePlugins[i] = nil
+				continue
+			}
+			v.RolePlugins[i] = unmarshalResourceAudienceRolePluginResponseBodyToAccessResourceAudienceRolePlugin(val)
+		}
+	}
 	v.Entries = make([]*access.ResourceAudienceEntry, len(body.Entries))
 	for i, val := range body.Entries {
 		if val == nil {
@@ -11359,6 +11390,16 @@ func NewListResourceAudienceGatewayError(body *ListResourceAudienceGatewayErrorR
 func NewSetResourceAudienceResourceAudienceResultOK(body *SetResourceAudienceResponseBody) *access.ResourceAudienceResult {
 	v := &access.ResourceAudienceResult{
 		Version: *body.Version,
+	}
+	if body.RolePlugins != nil {
+		v.RolePlugins = make([]*access.ResourceAudienceRolePlugin, len(body.RolePlugins))
+		for i, val := range body.RolePlugins {
+			if val == nil {
+				v.RolePlugins[i] = nil
+				continue
+			}
+			v.RolePlugins[i] = unmarshalResourceAudienceRolePluginResponseBodyToAccessResourceAudienceRolePlugin(val)
+		}
 	}
 	v.Entries = make([]*access.ResourceAudienceEntry, len(body.Entries))
 	for i, val := range body.Entries {
@@ -13260,6 +13301,13 @@ func ValidateListResourceAudienceResponseBody(body *ListResourceAudienceResponse
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
 	}
+	for _, e := range body.RolePlugins {
+		if e != nil {
+			if err2 := ValidateResourceAudienceRolePluginResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	for _, e := range body.Entries {
 		if e != nil {
 			if err2 := ValidateResourceAudienceEntryResponseBody(e); err2 != nil {
@@ -13278,6 +13326,13 @@ func ValidateSetResourceAudienceResponseBody(body *SetResourceAudienceResponseBo
 	}
 	if body.Version == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("version", "body"))
+	}
+	for _, e := range body.RolePlugins {
+		if e != nil {
+			if err2 := ValidateResourceAudienceRolePluginResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	for _, e := range body.Entries {
 		if e != nil {
@@ -21780,6 +21835,24 @@ func ValidateAIDetectionUserResponseBody(body *AIDetectionUserResponseBody) (err
 	}
 	if body.LastSeen != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen", *body.LastSeen, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateResourceAudienceRolePluginResponseBody runs the validations defined
+// on ResourceAudienceRolePluginResponseBody
+func ValidateResourceAudienceRolePluginResponseBody(body *ResourceAudienceRolePluginResponseBody) (err error) {
+	if body.PrincipalUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
+	}
+	if body.PluginID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("plugin_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
 	return
 }

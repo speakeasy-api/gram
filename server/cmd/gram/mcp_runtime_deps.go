@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/clientcredentials"
 )
 
 type mcpRemoteSessionDependencies struct {
@@ -63,7 +64,11 @@ func newMCPRemoteSessionDependencies(logger *slog.Logger, tracerProvider trace.T
 	refresher := remotesessions.NewIssuerMetadataRefresher(logger, meterProvider, db, guardianPolicy, tunnels, auditLogger)
 	enricher := remotesessions.NewSessionEnricher(logger, enc, guardianPolicy, idTokenKeys,
 		ratelimit.New(ratelimit.NewRedisStore(redisClient), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)), tunnels, refresher)
-	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnels, cache.NewRedisCacheAdapter(redisClient), serverURL,
+	sharedCache := cache.NewRedisCacheAdapter(redisClient)
+	challenges := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnels, sharedCache, serverURL,
+		remotesessions.WithClientCredentialSource(func(m *remotesessions.ChallengeManager) remotesessions.ClientCredentialSource {
+			return clientcredentials.New(logger, db, enc, m, sharedCache)
+		}),
 		remotesessions.WithPrivateAuthorityValidator(func(ctx context.Context, state remotesessions.RemoteLoginState) error {
 			return mcp.ValidateRemoteLoginPrivateAuthority(ctx, db, logger, state)
 		}),

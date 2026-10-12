@@ -370,27 +370,6 @@ func (q *Queries) CountAllFindings(ctx context.Context, projectID uuid.UUID) (in
 	return column_1, err
 }
 
-const countAnalyzedMessages = `-- name: CountAnalyzedMessages :one
-SELECT COUNT(DISTINCT rr.chat_message_id)::BIGINT
-FROM risk_results rr
-WHERE rr.project_id = $1
-  AND rr.risk_policy_id = $2
-  AND rr.risk_policy_version = $3
-`
-
-type CountAnalyzedMessagesParams struct {
-	ProjectID         uuid.UUID
-	RiskPolicyID      uuid.UUID
-	RiskPolicyVersion int64
-}
-
-func (q *Queries) CountAnalyzedMessages(ctx context.Context, arg CountAnalyzedMessagesParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countAnalyzedMessages, arg.ProjectID, arg.RiskPolicyID, arg.RiskPolicyVersion)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const countEnabledRegexExclusionsInScope = `-- name: CountEnabledRegexExclusionsInScope :one
 SELECT COUNT(*)::BIGINT
 FROM risk_exclusions
@@ -434,34 +413,6 @@ func (q *Queries) CountFalsePositiveRiskResults(ctx context.Context, projectID u
 	return column_1, err
 }
 
-const countFindingsByPolicy = `-- name: CountFindingsByPolicy :one
-SELECT COUNT(*)::BIGINT
-FROM risk_results
-WHERE project_id = $1
-  AND risk_policy_id = $2
-  AND risk_policy_version = $3
-  AND found IS TRUE
-  AND excluded_at IS NULL
-  AND false_positive_at IS NULL
-  AND skill_version_id IS NULL
-`
-
-type CountFindingsByPolicyParams struct {
-	ProjectID         uuid.UUID
-	RiskPolicyID      uuid.UUID
-	RiskPolicyVersion int64
-}
-
-// Reported next to CountAnalyzedMessages, so it stays message-scoped: a
-// skill-anchored finding has no message behind it and would inflate the
-// numerator over a denominator that never counted it. (cubic)
-func (q *Queries) CountFindingsByPolicy(ctx context.Context, arg CountFindingsByPolicyParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countFindingsByPolicy, arg.ProjectID, arg.RiskPolicyID, arg.RiskPolicyVersion)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const countRiskResultsByPolicyID = `-- name: CountRiskResultsByPolicyID :one
 SELECT COUNT(*)::BIGINT
 FROM risk_results
@@ -476,19 +427,6 @@ type CountRiskResultsByPolicyIDParams struct {
 
 func (q *Queries) CountRiskResultsByPolicyID(ctx context.Context, arg CountRiskResultsByPolicyIDParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countRiskResultsByPolicyID, arg.RiskPolicyID, arg.ProjectID)
-	var column_1 int64
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
-const countTotalMessages = `-- name: CountTotalMessages :one
-SELECT COUNT(*)::BIGINT
-FROM chat_messages cm
-WHERE cm.project_id = $1
-`
-
-func (q *Queries) CountTotalMessages(ctx context.Context, projectID uuid.NullUUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countTotalMessages, projectID)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -704,6 +642,31 @@ func (q *Queries) CreateCustomDetectionRule(ctx context.Context, arg CreateCusto
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const createJudgeWindowMessageForTest = `-- name: CreateJudgeWindowMessageForTest :one
+INSERT INTO chat_messages (chat_id, project_id, role, content, generation)
+VALUES ($1, $2, 'user', $3, $4)
+RETURNING id
+`
+
+type CreateJudgeWindowMessageForTestParams struct {
+	ChatID     uuid.UUID
+	ProjectID  uuid.NullUUID
+	Content    string
+	Generation int32
+}
+
+func (q *Queries) CreateJudgeWindowMessageForTest(ctx context.Context, arg CreateJudgeWindowMessageForTestParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createJudgeWindowMessageForTest,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Content,
+		arg.Generation,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const createRiskExclusion = `-- name: CreateRiskExclusion :one
@@ -1887,6 +1850,100 @@ func (q *Queries) GetCustomDetectionRule(ctx context.Context, arg GetCustomDetec
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getJudgeMessageWindow = `-- name: GetJudgeMessageWindow :many
+WITH target AS (
+  SELECT cm.id, cm.chat_id, cm.project_id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.seq, cm.generation FROM chat_messages cm
+  JOIN chats c ON c.id = cm.chat_id AND c.project_id = cm.project_id
+  JOIN projects p ON p.id = c.project_id
+  WHERE cm.id = $1::uuid AND cm.project_id = $3::uuid
+    AND p.organization_id = $4::text
+)
+SELECT evidence.id, evidence.role, LEFT(evidence.content, 4001)::text AS content,
+  COALESCE((SELECT jsonb_agg(jsonb_build_object('function', jsonb_build_object(
+    'name', LEFT(call->'function'->>'name', 257),
+    'arguments', LEFT(call->'function'->>'arguments', 4001))))
+    FROM jsonb_array_elements(jsonb_path_query_array(
+      COALESCE(NULLIF(CASE WHEN jsonb_typeof(evidence.tool_calls) = 'string'
+        THEN (evidence.tool_calls #>> '{}')::jsonb
+        ELSE evidence.tool_calls END, 'null'::jsonb), '[]'::jsonb),
+      '$[0 to 8]')) AS call), '[]'::jsonb)::text AS tool_calls
+FROM (
+SELECT n.id, n.chat_id, n.project_id, n.role, n.content, n.tool_calls, n.created_at, n.seq FROM target t
+JOIN LATERAL (
+  (SELECT prev.id, prev.chat_id, prev.project_id, prev.role, prev.content, prev.tool_calls, prev.created_at, prev.seq FROM chat_messages prev
+   WHERE prev.chat_id = t.chat_id AND prev.project_id = t.project_id AND prev.generation = t.generation
+     AND (prev.created_at, prev.seq) < (t.created_at, t.seq)
+   ORDER BY prev.created_at DESC, prev.seq DESC LIMIT 2)
+  UNION ALL
+  SELECT t.id, t.chat_id, t.project_id, t.role, t.content, t.tool_calls, t.created_at, t.seq
+  UNION ALL
+  (SELECT next.id, next.chat_id, next.project_id, next.role, next.content, next.tool_calls, next.created_at, next.seq FROM chat_messages next
+   WHERE next.chat_id = t.chat_id AND next.project_id = t.project_id AND next.generation = t.generation
+     AND (next.created_at, next.seq) > (t.created_at, t.seq)
+   ORDER BY next.created_at, next.seq LIMIT 2)
+) n ON TRUE
+UNION ALL
+(SELECT recent.id, recent.chat_id, recent.project_id, recent.role, recent.content, recent.tool_calls, recent.created_at, recent.seq FROM chat_messages recent
+ JOIN chats c ON c.id = recent.chat_id AND c.project_id = recent.project_id
+ JOIN projects p ON p.id = c.project_id
+ WHERE $1::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+   AND recent.chat_id = $2::uuid AND recent.project_id = $3::uuid
+   AND p.organization_id = $4::text
+   AND recent.generation = (SELECT MAX(latest.generation) FROM chat_messages latest
+     WHERE latest.chat_id = $2::uuid AND latest.project_id = $3::uuid)
+ ORDER BY recent.created_at DESC, recent.seq DESC LIMIT 4)
+) evidence
+ORDER BY evidence.created_at, evidence.seq
+`
+
+type GetJudgeMessageWindowParams struct {
+	AnchorID       uuid.UUID
+	ChatID         uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type GetJudgeMessageWindowRow struct {
+	ID        uuid.UUID
+	Role      string
+	Content   string
+	ToolCalls string
+}
+
+// Two bounded index probes around a tenant-validated anchor. Keep the target
+// even when no neighbors exist; an absent target is never a valid window.
+// Tool evidence remains valid JSON: one overflow call/rune preserves truncation
+// indicators in the renderer without transferring the full stored payload.
+func (q *Queries) GetJudgeMessageWindow(ctx context.Context, arg GetJudgeMessageWindowParams) ([]GetJudgeMessageWindowRow, error) {
+	rows, err := q.db.Query(ctx, getJudgeMessageWindow,
+		arg.AnchorID,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetJudgeMessageWindowRow
+	for rows.Next() {
+		var i GetJudgeMessageWindowRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Role,
+			&i.Content,
+			&i.ToolCalls,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getMCPExecutionEvidence = `-- name: GetMCPExecutionEvidence :one
@@ -3403,6 +3460,79 @@ func (q *Queries) ListLatestToolCallBlocksByMessageIDs(ctx context.Context, arg 
 	return items, nil
 }
 
+const listLifecycleBoundRiskPoliciesByMCPServer = `-- name: ListLifecycleBoundRiskPoliciesByMCPServer :many
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+FROM risk_policies
+WHERE project_id = $1
+  AND deleted IS FALSE
+  AND COALESCE(mcp_scope->'all_servers', 'false'::jsonb) = 'false'::jsonb
+  AND jsonb_array_length(CASE WHEN jsonb_typeof(mcp_scope->'servers') = 'array' THEN mcp_scope->'servers' ELSE '[]'::jsonb END) = 1
+  AND mcp_scope @> jsonb_build_object(
+    'servers',
+    jsonb_build_array(jsonb_build_object('mcp_server_id', $2::text))
+  )
+ORDER BY id
+`
+
+type ListLifecycleBoundRiskPoliciesByMCPServerParams struct {
+	ProjectID   uuid.UUID
+	McpServerID string
+}
+
+// A policy belongs to one server's lifecycle only when that server is its
+// sole explicit target. Multi-server and all-server policies survive one
+// target's deletion.
+// The JSON guards below never raise on a malformed scope: Postgres does not
+// order AND operands, so a cast or array function cannot rely on an earlier
+// filter to skip a scalar such as {"servers": null}. Only a missing or JSON
+// false all_servers marks a policy server-bound; any other value keeps it.
+func (q *Queries) ListLifecycleBoundRiskPoliciesByMCPServer(ctx context.Context, arg ListLifecycleBoundRiskPoliciesByMCPServerParams) ([]RiskPolicy, error) {
+	rows, err := q.db.Query(ctx, listLifecycleBoundRiskPoliciesByMCPServer, arg.ProjectID, arg.McpServerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskPolicy
+	for rows.Next() {
+		var i RiskPolicy
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.Enabled,
+			&i.Name,
+			&i.PolicyType,
+			&i.Sources,
+			&i.PresidioEntities,
+			&i.AnalyzerConfig,
+			&i.McpScope,
+			&i.PromptInjectionRules,
+			&i.DisabledRules,
+			&i.CustomRuleIds,
+			&i.Action,
+			&i.AudienceType,
+			&i.ShadowMcpDisposition,
+			&i.AutoName,
+			&i.UserMessage,
+			&i.Prompt,
+			&i.ModelConfig,
+			&i.Score,
+			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMetaMCPServerIDsContainingMCPServer = `-- name: ListMetaMCPServerIDsContainingMCPServer :many
 SELECT gateway.id
 FROM meta_mcp_server_members AS member
@@ -3438,6 +3568,124 @@ func (q *Queries) ListMetaMCPServerIDsContainingMCPServer(ctx context.Context, a
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrphanedLifecycleBoundRiskPoliciesByProject = `-- name: ListOrphanedLifecycleBoundRiskPoliciesByProject :many
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+FROM risk_policies AS policy
+WHERE policy.project_id = $1
+  AND policy.deleted IS FALSE
+  AND COALESCE(policy.mcp_scope->'all_servers', 'false'::jsonb) = 'false'::jsonb
+  AND jsonb_array_length(CASE WHEN jsonb_typeof(policy.mcp_scope->'servers') = 'array' THEN policy.mcp_scope->'servers' ELSE '[]'::jsonb END) = 1
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM mcp_servers AS server
+      WHERE server.project_id = policy.project_id
+        AND server.id::text = policy.mcp_scope #>> '{servers,0,mcp_server_id}'
+        AND server.deleted IS TRUE
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM meta_mcp_servers AS gateway
+      WHERE gateway.project_id = policy.project_id
+        AND gateway.id::text = policy.mcp_scope #>> '{servers,0,mcp_server_id}'
+        AND gateway.deleted IS TRUE
+    )
+  )
+ORDER BY policy.id
+`
+
+func (q *Queries) ListOrphanedLifecycleBoundRiskPoliciesByProject(ctx context.Context, projectID uuid.UUID) ([]RiskPolicy, error) {
+	rows, err := q.db.Query(ctx, listOrphanedLifecycleBoundRiskPoliciesByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskPolicy
+	for rows.Next() {
+		var i RiskPolicy
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.Enabled,
+			&i.Name,
+			&i.PolicyType,
+			&i.Sources,
+			&i.PresidioEntities,
+			&i.AnalyzerConfig,
+			&i.McpScope,
+			&i.PromptInjectionRules,
+			&i.DisabledRules,
+			&i.CustomRuleIds,
+			&i.Action,
+			&i.AudienceType,
+			&i.ShadowMcpDisposition,
+			&i.AutoName,
+			&i.UserMessage,
+			&i.Prompt,
+			&i.ModelConfig,
+			&i.Score,
+			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectIDsWithOrphanedLifecycleBoundRiskPolicies = `-- name: ListProjectIDsWithOrphanedLifecycleBoundRiskPolicies :many
+SELECT DISTINCT policy.project_id
+FROM risk_policies AS policy
+WHERE policy.deleted IS FALSE
+  AND COALESCE(policy.mcp_scope->'all_servers', 'false'::jsonb) = 'false'::jsonb
+  AND jsonb_array_length(CASE WHEN jsonb_typeof(policy.mcp_scope->'servers') = 'array' THEN policy.mcp_scope->'servers' ELSE '[]'::jsonb END) = 1
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM mcp_servers AS server
+      WHERE server.project_id = policy.project_id
+        AND server.id::text = policy.mcp_scope #>> '{servers,0,mcp_server_id}'
+        AND server.deleted IS TRUE
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM meta_mcp_servers AS gateway
+      WHERE gateway.project_id = policy.project_id
+        AND gateway.id::text = policy.mcp_scope #>> '{servers,0,mcp_server_id}'
+        AND gateway.deleted IS TRUE
+    )
+  )
+ORDER BY policy.project_id
+`
+
+func (q *Queries) ListProjectIDsWithOrphanedLifecycleBoundRiskPolicies(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listProjectIDsWithOrphanedLifecycleBoundRiskPolicies)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var project_id uuid.UUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

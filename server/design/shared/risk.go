@@ -211,8 +211,6 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("updated_at", String, "When the policy was last updated.", func() {
 		Format(FormatDateTime)
 	})
-	Attribute("pending_messages", Int64, "Number of messages not yet analyzed at the current policy version. Populated on single-policy reads; omitted from list responses (use riskPoliciesStatus for progress).")
-	Attribute("total_messages", Int64, "Total number of messages in the project. Populated on single-policy reads; omitted from list responses.")
 
 	Required("id", "project_id", "name", "policy_type", "sources", "enabled", "action", "audience_type", "audience_principal_urns", "auto_name", "score", "version", "created_at", "updated_at")
 })
@@ -436,22 +434,4 @@ var RiskChatSummary = Type("RiskChatSummary", func() {
 	})
 
 	Required("chat_id", "findings_count", "latest_detected")
-})
-
-var RiskPolicyStatus = Type("RiskPolicyStatus", func() {
-	Meta("struct:pkg:path", "types")
-
-	Attribute("policy_id", String, "The risk policy ID.", func() {
-		Format(FormatUUID)
-	})
-	Attribute("policy_version", Int64, "Current policy version.")
-	Attribute("total_messages", Int64, "Total messages in the project.")
-	Attribute("analyzed_messages", Int64, "Messages analyzed at the current policy version.")
-	Attribute("pending_messages", Int64, "Messages not yet analyzed.")
-	Attribute("findings_count", Int64, "Number of findings at the current policy version.")
-	Attribute("workflow_status", String, "Workflow state: running, sleeping, or not_started.", func() {
-		Enum("running", "sleeping", "not_started")
-	})
-
-	Required("policy_id", "policy_version", "total_messages", "analyzed_messages", "pending_messages", "findings_count", "workflow_status")
 })

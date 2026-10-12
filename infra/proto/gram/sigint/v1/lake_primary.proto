@@ -1,0 +1,22 @@
+edition = "2024";
+
+package gram.sigint.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/sigint/v1;sigintv1";
+
+// LakePrimary writes successful sensor readings as daily UTC-partitioned Parquet
+// in the lake bucket. Delivery is at least once; analytics deduplicate readings
+// by id and choose the winning evaluation_attempt_id.
+message LakePrimary {
+  option (gcp.pubsub.v1.storage_subscription) = {
+    topic: "gram.sigint.v1.Reading"
+    retention: { seconds: 345600 /* 4 days */ }
+    ack_deadline: { seconds: 60 }
+    retry_policy: {
+      minimum_backoff: { seconds: 10 }
+      maximum_backoff: { seconds: 600 }
+    }
+  };
+}

@@ -237,6 +237,8 @@ func TestMCPSecurity_AllowsOAuthCallbackNavigation(t *testing.T) {
 		"/mcp/remote_login_bind",
 		"/x/mcp/idp_callback",
 		"/x/mcp/remote_login_callback",
+		// Exempt by shape: a two-segment tail is never an endpoint slug.
+		"/mcp/idp_callback/0190a6f8-5b2c-7d3e-8f41-2a6b9c0d1e2f",
 	} {
 		t.Run(path, func(t *testing.T) {
 			t.Parallel()

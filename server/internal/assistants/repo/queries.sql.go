@@ -846,7 +846,7 @@ func (q *Queries) DeleteProjectManagedAssistant(ctx context.Context, projectID u
 	return err
 }
 
-const enableMCPForToolsets = `-- name: EnableMCPForToolsets :exec
+const enableMCPForToolsets = `-- name: EnableMCPForToolsets :many
 UPDATE toolsets
 SET mcp_enabled = TRUE,
     updated_at = clock_timestamp()
@@ -855,6 +855,7 @@ WHERE id = ANY($1::UUID[])
   AND mcp_enabled IS FALSE
   AND mcp_slug IS NOT NULL
   AND deleted IS FALSE
+RETURNING id
 `
 
 type EnableMCPForToolsetsParams struct {
@@ -867,9 +868,24 @@ type EnableMCPForToolsetsParams struct {
 // startup config to build; we enable on attach so users don't have to do it
 // separately. mcp_slug is required for an MCP-reachable toolset, so we skip
 // rows that lack one.
-func (q *Queries) EnableMCPForToolsets(ctx context.Context, arg EnableMCPForToolsetsParams) error {
-	_, err := q.db.Exec(ctx, enableMCPForToolsets, arg.ToolsetIds, arg.ProjectID)
-	return err
+func (q *Queries) EnableMCPForToolsets(ctx context.Context, arg EnableMCPForToolsetsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, enableMCPForToolsets, arg.ToolsetIds, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const failAssistantThreadEvent = `-- name: FailAssistantThreadEvent :exec

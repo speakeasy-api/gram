@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -25,6 +26,10 @@ type selection struct {
 	resource         string
 	scopes           []string
 
+	// configuredScopes is the binding's scope set before OIDC filtering; it
+	// bounds an ID-JAG's scope when filtering left none to request.
+	configuredScopes []string
+
 	// trustedIssuerID and trustedClientID are the user session issuer's
 	// upstream identity provider registration, filled in by authorize.
 	trustedIssuerID uuid.UUID
@@ -36,13 +41,25 @@ type selection struct {
 	audience string
 }
 
+// GrantScopes drops OIDC-reserved scopes, which Okta rejects in ID-JAG
+// requests. An empty result requests no scope.
+func GrantScopes(scopes []string) []string {
+	var out []string
+	for _, scope := range scopes {
+		if !oauthwire.IsOIDCReservedScope(scope) {
+			out = append(out, scope)
+		}
+	}
+	return out
+}
+
 // selectBinding applies explicit binding selection: exactly one ready binding
 // must name the endpoint's upstream and still pass readiness. Implicit
 // selection is not supported, so an upstream without a ready binding keeps the
 // interactive path.
-func (c *Chainer) selectBinding(ctx context.Context, logger *slog.Logger, req Request) (selection, Outcome) {
+func (g *Governor) selectBinding(ctx context.Context, logger *slog.Logger, req Request) (selection, Outcome) {
 	var none selection
-	bindings, err := repo.New(c.db).ListEMAChainingBindings(ctx, repo.ListEMAChainingBindingsParams{
+	bindings, err := repo.New(g.db).ListEMAChainingBindings(ctx, repo.ListEMAChainingBindingsParams{
 		ProjectID:             req.ProjectID,
 		OrganizationID:        req.OrganizationID,
 		UserSessionIssuerID:   req.UserSessionIssuerID,
@@ -63,7 +80,7 @@ func (c *Chainer) selectBinding(ctx context.Context, logger *slog.Logger, req Re
 	}
 	b := bindings[0]
 
-	result, err := remotesessions.ReadIdentityChainingForTenant(ctx, c.db, req.ProjectID, req.OrganizationID, remotesessions.PreparationInput{
+	result, err := remotesessions.ReadIdentityChainingForTenant(ctx, g.db, req.ProjectID, req.OrganizationID, remotesessions.PreparationInput{
 		UserSessionIssuerID:     b.UserSessionIssuerID,
 		RemoteSessionIssuerID:   b.RemoteSessionIssuerID,
 		Resource:                b.Resource,
@@ -82,6 +99,10 @@ func (c *Chainer) selectBinding(ctx context.Context, logger *slog.Logger, req Re
 	case result.State != remotesessions.PreparationStateReady || result.BindingID != b.ID || result.ClientID == uuid.Nil || result.ExternalClientID == "":
 		return none, bindingNotReady
 	}
+	scopes := GrantScopes(result.Scopes)
+	if len(scopes) == 0 && len(result.Scopes) > 0 {
+		logger.DebugContext(ctx, "identity chaining dropped every configured scope as OIDC reserved", attr.SlogOAuthScope(strings.Join(result.Scopes, " ")))
+	}
 	return selection{
 		bindingID:        result.BindingID,
 		generation:       result.Generation,
@@ -90,7 +111,8 @@ func (c *Chainer) selectBinding(ctx context.Context, logger *slog.Logger, req Re
 		externalClientID: result.ExternalClientID,
 		issuer:           result.Issuer,
 		resource:         result.Resource,
-		scopes:           result.Scopes,
+		scopes:           scopes,
+		configuredScopes: result.Scopes,
 		trustedIssuerID:  uuid.Nil,
 		trustedClientID:  uuid.Nil,
 		audience:         "",

@@ -186,12 +186,10 @@ export function DistributeServersStep({
     () => (data?.servers as PulseMCPServer[]) ?? [],
     [data],
   );
-  // Onboarding only surfaces servers Speakeasy can fully auto-configure: those whose
-  // OAuth authorization server advertises a dynamic client registration
-  // endpoint (DCR), reported live by the catalog's `supports_dcr` flag.
-  // Everything else would dead-end on "OAuth setup required" or a missing API
-  // key, so we steer the user to the full catalog for those (see note below the
-  // list).
+  // Onboarding surfaces servers the catalog marks as DCR-capable, from native
+  // staff-curated metadata or legacy discovery metadata. Installation still
+  // checks live OAuth readiness. Other servers may need manual OAuth setup or
+  // an API key, so we steer the user to the full catalog for those.
   const autoConfigurableServers = useMemo(
     () => servers.filter((s) => s.supportsDcr),
     [servers],

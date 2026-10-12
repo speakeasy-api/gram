@@ -38,7 +38,7 @@ export type UpdateRemoteSessionClientFormTokenEndpointAuthMethod = ClosedEnum<
 >;
 
 /**
- * Form for updating a remote_session_client. All non-id fields are optional patches.
+ * Form for updating a remote_session_client. All non-id fields are optional patches. credential_owner is fixed at creation and cannot be changed.
  */
 export type UpdateRemoteSessionClientForm = {
   /**

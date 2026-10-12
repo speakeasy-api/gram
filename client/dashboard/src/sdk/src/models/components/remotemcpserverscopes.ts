@@ -25,6 +25,10 @@ export type RemoteMcpServerScopes = {
    */
   advertisedScopesKnown: boolean;
   /**
+   * Whether the caller may change the pin: write access to this server and every server in the project with the same upstream URL.
+   */
+  canPin: boolean;
+  /**
    * The scope parameter of the resource's last WWW-Authenticate challenge; empty when none was seen.
    */
   challengeScopes: Array<string>;
@@ -58,6 +62,7 @@ export const RemoteMcpServerScopes$inboundSchema: z.ZodMiniType<
   z.object({
     advertised_scopes: z.optional(z.array(z.string())),
     advertised_scopes_known: z.boolean(),
+    can_pin: z.boolean(),
     challenge_scopes: z.array(z.string()),
     clients: z.array(RemoteMcpServerClientScopes$inboundSchema),
     discovery_enabled: z.boolean(),
@@ -69,6 +74,7 @@ export const RemoteMcpServerScopes$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "advertised_scopes": "advertisedScopes",
       "advertised_scopes_known": "advertisedScopesKnown",
+      "can_pin": "canPin",
       "challenge_scopes": "challengeScopes",
       "discovery_enabled": "discoveryEnabled",
       "pinned_scopes": "pinnedScopes",

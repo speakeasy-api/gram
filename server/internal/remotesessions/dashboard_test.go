@@ -93,6 +93,7 @@ func TestCommitServerIdentityConfigurationManualCreatesConfigurationAtomically(t
 	require.NoError(t, err)
 	require.Equal(t, issuerAuditBefore+1, issuerAuditAfter)
 	require.Equal(t, clientAuditBefore+1, clientAuditAfter)
+	requireLatestClientCreateSnapshot(t, ctx, ti, result.Client.ID)
 }
 
 func TestCommitServerIdentityConfigurationAutoPrefersCIMD(t *testing.T) {

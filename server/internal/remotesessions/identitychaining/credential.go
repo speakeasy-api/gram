@@ -37,20 +37,7 @@ func (c *Chainer) cachedToken(ctx context.Context, logger *slog.Logger, req Requ
 	var none Token
 	q := repo.New(c.db)
 	now := c.now()
-	row, err := q.GetEMACredentialForUse(ctx, repo.GetEMACredentialForUseParams{
-		OrganizationID:        req.OrganizationID,
-		RemoteSessionIssuerID: sel.remoteIssuerID,
-		BindingID:             sel.bindingID,
-		BindingGeneration:     sel.generation,
-		RequestedScopes:       storedScopes(sel.scopes),
-		UsableAfter:           conv.ToPGTimestamptz(now.Add(accessExpirySkew)),
-		TrustedClientID:       sel.trustedClientID,
-		ProjectID:             uuid.NullUUID{UUID: req.ProjectID, Valid: true},
-		UserSessionIssuerID:   uuid.NullUUID{UUID: req.UserSessionIssuerID, Valid: true},
-		RemoteSessionClientID: uuid.NullUUID{UUID: sel.clientID, Valid: true},
-		Resource:              sel.resource,
-		SubjectUrn:            urn.NewUserSubject(req.UserID).String(),
-	})
+	row, err := q.GetEMACredentialForUse(ctx, credentialForUseParams(req, sel, now))
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return none, false

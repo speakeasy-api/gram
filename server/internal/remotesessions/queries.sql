@@ -401,20 +401,25 @@ SET
         WHEN sqlc.narg('client_setup_documentation_url')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('client_setup_documentation_url'), client_setup_documentation_url)
     END,
+    -- A new issuer URL resets every discovered column the edit does not restate.
     authorization_endpoint = CASE
         WHEN sqlc.narg('authorization_endpoint')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('authorization_endpoint')
         ELSE COALESCE(sqlc.narg('authorization_endpoint'), authorization_endpoint)
     END,
     token_endpoint = CASE
         WHEN sqlc.narg('token_endpoint')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('token_endpoint')
         ELSE COALESCE(sqlc.narg('token_endpoint'), token_endpoint)
     END,
     revocation_endpoint = CASE
         WHEN sqlc.narg('revocation_endpoint')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('revocation_endpoint')
         ELSE COALESCE(sqlc.narg('revocation_endpoint'), revocation_endpoint)
     END,
     registration_endpoint = CASE
         WHEN sqlc.narg('registration_endpoint')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('registration_endpoint')
         ELSE COALESCE(sqlc.narg('registration_endpoint'), registration_endpoint)
     END,
     -- Changing the issuer identity or key URL invalidates every value derived
@@ -427,46 +432,60 @@ SET
     jwks_etag = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('jwks_uri')
         ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)
     END,
     service_documentation = CASE
         WHEN sqlc.narg('service_documentation')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('service_documentation')
         ELSE COALESCE(sqlc.narg('service_documentation'), service_documentation)
     END,
     op_policy_uri = CASE
         WHEN sqlc.narg('op_policy_uri')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('op_policy_uri')
         ELSE COALESCE(sqlc.narg('op_policy_uri'), op_policy_uri)
     END,
     op_tos_uri = CASE
         WHEN sqlc.narg('op_tos_uri')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('op_tos_uri')
         ELSE COALESCE(sqlc.narg('op_tos_uri'), op_tos_uri)
     END,
-    scopes_supported = COALESCE(sqlc.narg('scopes_supported')::text[], scopes_supported),
-    grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
-    authorization_grant_profiles_supported = COALESCE(sqlc.narg('authorization_grant_profiles_supported')::text[], authorization_grant_profiles_supported),
+    scopes_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN COALESCE(sqlc.narg('scopes_supported')::text[], ARRAY[]::text[]) ELSE COALESCE(sqlc.narg('scopes_supported')::text[], scopes_supported) END,
+    grant_types_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN COALESCE(sqlc.narg('grant_types_supported')::text[], ARRAY[]::text[]) ELSE COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported) END,
+    authorization_grant_profiles_supported = CASE
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN ARRAY[]::text[]
+        ELSE COALESCE(sqlc.narg('authorization_grant_profiles_supported')::text[], authorization_grant_profiles_supported)
+    END,
+    metadata_fetched_at = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN NULL ELSE metadata_fetched_at END,
+    metadata_last_error = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN NULL ELSE metadata_last_error END,
+    metadata_last_error_at = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN NULL ELSE metadata_last_error_at END,
+    metadata_last_error_url = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN NULL ELSE metadata_last_error_url END,
     -- Keep the local projection source aligned with an explicit operator edit.
-    -- Discovery timestamps are unchanged; only a fresh fetch replaces this evidence.
+    -- A profile edit keeps discovery timestamps; only a fresh fetch replaces this evidence.
     metadata = CASE
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN NULL
         WHEN sqlc.narg('authorization_grant_profiles_supported')::text[] IS NULL OR metadata IS NULL THEN metadata
         ELSE jsonb_set(metadata, '{authorization_grant_profiles_supported}', to_jsonb(sqlc.narg('authorization_grant_profiles_supported')::text[]))
     END,
-    response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
-    token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
-    code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
-    client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
+    response_types_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN COALESCE(sqlc.narg('response_types_supported')::text[], ARRAY[]::text[]) ELSE COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported) END,
+    token_endpoint_auth_methods_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], ARRAY[]::text[]) ELSE COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported) END,
+    code_challenge_methods_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('code_challenge_methods_supported')::text[] ELSE COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported) END,
+    client_id_metadata_document_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN COALESCE(sqlc.narg('client_id_metadata_document_supported')::boolean, FALSE) ELSE COALESCE(sqlc.narg('client_id_metadata_document_supported')::boolean, client_id_metadata_document_supported) END,
     userinfo_endpoint = CASE
         WHEN sqlc.narg('userinfo_endpoint')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('userinfo_endpoint')
         ELSE COALESCE(sqlc.narg('userinfo_endpoint'), userinfo_endpoint)
     END,
     introspection_endpoint = CASE
         WHEN sqlc.narg('introspection_endpoint')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('introspection_endpoint')
         ELSE COALESCE(sqlc.narg('introspection_endpoint'), introspection_endpoint)
     END,
-    introspection_endpoint_auth_methods_supported = COALESCE(sqlc.narg('introspection_endpoint_auth_methods_supported')::text[], introspection_endpoint_auth_methods_supported),
-    id_token_signing_alg_values_supported = COALESCE(sqlc.narg('id_token_signing_alg_values_supported')::text[], id_token_signing_alg_values_supported),
-    claims_supported = COALESCE(sqlc.narg('claims_supported')::text[], claims_supported),
-    backchannel_logout_supported = COALESCE(sqlc.narg('backchannel_logout_supported'), backchannel_logout_supported),
-    authorization_response_iss_parameter_supported = COALESCE(sqlc.narg('authorization_response_iss_parameter_supported'), authorization_response_iss_parameter_supported),
+    introspection_endpoint_auth_methods_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('introspection_endpoint_auth_methods_supported')::text[] ELSE COALESCE(sqlc.narg('introspection_endpoint_auth_methods_supported')::text[], introspection_endpoint_auth_methods_supported) END,
+    id_token_signing_alg_values_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('id_token_signing_alg_values_supported')::text[] ELSE COALESCE(sqlc.narg('id_token_signing_alg_values_supported')::text[], id_token_signing_alg_values_supported) END,
+    claims_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('claims_supported')::text[] ELSE COALESCE(sqlc.narg('claims_supported')::text[], claims_supported) END,
+    backchannel_logout_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('backchannel_logout_supported')::boolean ELSE COALESCE(sqlc.narg('backchannel_logout_supported')::boolean, backchannel_logout_supported) END,
+    authorization_response_iss_parameter_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('authorization_response_iss_parameter_supported')::boolean ELSE COALESCE(sqlc.narg('authorization_response_iss_parameter_supported')::boolean, authorization_response_iss_parameter_supported) END,
     -- An empty array clears scope_override to NULL; omitted keeps it. resource_indicator_supported is set-only.
     scope_override = CASE
         WHEN sqlc.narg('scope_override')::text[] IS NULL THEN scope_override
@@ -634,6 +653,17 @@ SELECT COUNT(*)
 FROM remote_session_clients
 WHERE remote_session_issuer_id = @remote_session_issuer_id AND deleted IS FALSE;
 
+-- name: CountSelfRemoteSessionClientsByIssuerID :one
+-- Every non-deleted self client on an issuer, across every tenancy tier. The
+-- issuer update guard uses this to keep the token endpoint those clients need:
+-- like the delete guards, a count limited to the caller's tenant would let an
+-- update strand clients the caller cannot see.
+SELECT COUNT(*)
+FROM remote_session_clients
+WHERE remote_session_issuer_id = @remote_session_issuer_id
+  AND credential_owner = 'self'
+  AND deleted IS FALSE;
+
 -- name: CountTrustedUserSessionIssuersByRemoteSessionIssuerID :one
 -- Every active user-session issuer that treats this remote issuer as a trust
 -- anchor, across organizations. Delete, move, and migrate guards use this
@@ -663,6 +693,17 @@ SELECT COUNT(*)
 FROM user_session_issuers
 WHERE trusted_remote_session_client_id = @remote_session_client_id::uuid
   AND deleted IS FALSE;
+
+-- name: CountTrustedUserSessionIssuersForRemoteSessionIssuerClients :one
+-- Every active user-session issuer whose trusted sign-in client is an active
+-- client of this remote issuer, whatever issuer the trust row names. Unscoped
+-- like the other migrate guards so no reference can be stranded.
+SELECT COUNT(*)
+FROM user_session_issuers AS usi
+JOIN remote_session_clients AS c ON c.id = usi.trusted_remote_session_client_id
+WHERE c.remote_session_issuer_id = @remote_session_issuer_id::uuid
+  AND c.deleted IS FALSE
+  AND usi.deleted IS FALSE;
 
 -- name: ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientID :many
 -- Tenant-scoped details for the client delete preflight. Mutation enforcement
@@ -709,7 +750,9 @@ INSERT INTO remote_session_clients (
     legacy_callback_url,
     json_web_key_set_id,
     identity_provider_connection_id,
-    callback_base_url
+    callback_base_url,
+    grant_types,
+    credential_owner
 )
 VALUES (
     @project_id,
@@ -726,7 +769,11 @@ VALUES (
     @legacy_callback_url,
     sqlc.narg('json_web_key_set_id'),
     sqlc.narg('identity_provider_connection_id'),
-    sqlc.narg('callback_base_url')
+    sqlc.narg('callback_base_url'),
+    sqlc.narg('grant_types')::text[],
+    -- NULL creates a subject client, so callers that predate credential_owner
+    -- need not name it. Allowed values are validated in application code.
+    COALESCE(sqlc.narg('credential_owner')::text, 'subject')
 )
 RETURNING *;
 
@@ -1815,6 +1862,7 @@ SELECT
     c.json_web_key_set_id                  AS json_web_key_set_id,
     c.scope                                AS client_scope,
     c.audience                             AS client_audience,
+    c.upstream_rejected_at                 AS upstream_rejected_at,
     i.id                                   AS issuer_id,
     i.issuer                               AS issuer_url,
     i.metadata                             AS issuer_metadata,
@@ -1917,6 +1965,7 @@ SELECT
     c.resource_tos_uri                     AS resource_tos_uri,
     c.client_secret_expires_at             AS client_secret_expires_at,
     c.upstream_rejected_at                 AS upstream_rejected_at,
+    c.credential_owner                     AS credential_owner,
     c.remote_session_issuer_id             AS remote_session_issuer_id,
     i.tunneled_mcp_server_id               AS tunneled_mcp_server_id,
     i.slug                                 AS issuer_slug,
@@ -2843,20 +2892,25 @@ SET
         WHEN sqlc.narg('client_setup_documentation_url')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('client_setup_documentation_url'), client_setup_documentation_url)
     END,
+    -- A new issuer URL resets every discovered column the edit does not restate.
     authorization_endpoint = CASE
         WHEN sqlc.narg('authorization_endpoint')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('authorization_endpoint')
         ELSE COALESCE(sqlc.narg('authorization_endpoint'), authorization_endpoint)
     END,
     token_endpoint = CASE
         WHEN sqlc.narg('token_endpoint')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('token_endpoint')
         ELSE COALESCE(sqlc.narg('token_endpoint'), token_endpoint)
     END,
     revocation_endpoint = CASE
         WHEN sqlc.narg('revocation_endpoint')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('revocation_endpoint')
         ELSE COALESCE(sqlc.narg('revocation_endpoint'), revocation_endpoint)
     END,
     registration_endpoint = CASE
         WHEN sqlc.narg('registration_endpoint')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('registration_endpoint')
         ELSE COALESCE(sqlc.narg('registration_endpoint'), registration_endpoint)
     END,
     -- A manually changed key URL invalidates every value derived from the old
@@ -2870,46 +2924,60 @@ SET
     jwks_etag = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('jwks_uri')
         ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)
     END,
     service_documentation = CASE
         WHEN sqlc.narg('service_documentation')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('service_documentation')
         ELSE COALESCE(sqlc.narg('service_documentation'), service_documentation)
     END,
     op_policy_uri = CASE
         WHEN sqlc.narg('op_policy_uri')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('op_policy_uri')
         ELSE COALESCE(sqlc.narg('op_policy_uri'), op_policy_uri)
     END,
     op_tos_uri = CASE
         WHEN sqlc.narg('op_tos_uri')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('op_tos_uri')
         ELSE COALESCE(sqlc.narg('op_tos_uri'), op_tos_uri)
     END,
-    scopes_supported = COALESCE(sqlc.narg('scopes_supported')::text[], scopes_supported),
-    grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
-    authorization_grant_profiles_supported = COALESCE(sqlc.narg('authorization_grant_profiles_supported')::text[], authorization_grant_profiles_supported),
+    scopes_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN COALESCE(sqlc.narg('scopes_supported')::text[], ARRAY[]::text[]) ELSE COALESCE(sqlc.narg('scopes_supported')::text[], scopes_supported) END,
+    grant_types_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN COALESCE(sqlc.narg('grant_types_supported')::text[], ARRAY[]::text[]) ELSE COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported) END,
+    authorization_grant_profiles_supported = CASE
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN ARRAY[]::text[]
+        ELSE COALESCE(sqlc.narg('authorization_grant_profiles_supported')::text[], authorization_grant_profiles_supported)
+    END,
+    metadata_fetched_at = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN NULL ELSE metadata_fetched_at END,
+    metadata_last_error = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN NULL ELSE metadata_last_error END,
+    metadata_last_error_at = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN NULL ELSE metadata_last_error_at END,
+    metadata_last_error_url = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN NULL ELSE metadata_last_error_url END,
     -- Keep the local projection source aligned with an explicit operator edit.
-    -- Discovery timestamps are unchanged; only a fresh fetch replaces this evidence.
+    -- A profile edit keeps discovery timestamps; only a fresh fetch replaces this evidence.
     metadata = CASE
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN NULL
         WHEN sqlc.narg('authorization_grant_profiles_supported')::text[] IS NULL OR metadata IS NULL THEN metadata
         ELSE jsonb_set(metadata, '{authorization_grant_profiles_supported}', to_jsonb(sqlc.narg('authorization_grant_profiles_supported')::text[]))
     END,
-    response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
-    token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
-    code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
-    client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
+    response_types_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN COALESCE(sqlc.narg('response_types_supported')::text[], ARRAY[]::text[]) ELSE COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported) END,
+    token_endpoint_auth_methods_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], ARRAY[]::text[]) ELSE COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported) END,
+    code_challenge_methods_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('code_challenge_methods_supported')::text[] ELSE COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported) END,
+    client_id_metadata_document_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN COALESCE(sqlc.narg('client_id_metadata_document_supported')::boolean, FALSE) ELSE COALESCE(sqlc.narg('client_id_metadata_document_supported')::boolean, client_id_metadata_document_supported) END,
     userinfo_endpoint = CASE
         WHEN sqlc.narg('userinfo_endpoint')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('userinfo_endpoint')
         ELSE COALESCE(sqlc.narg('userinfo_endpoint'), userinfo_endpoint)
     END,
     introspection_endpoint = CASE
         WHEN sqlc.narg('introspection_endpoint')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('introspection_endpoint')
         ELSE COALESCE(sqlc.narg('introspection_endpoint'), introspection_endpoint)
     END,
-    introspection_endpoint_auth_methods_supported = COALESCE(sqlc.narg('introspection_endpoint_auth_methods_supported')::text[], introspection_endpoint_auth_methods_supported),
-    id_token_signing_alg_values_supported = COALESCE(sqlc.narg('id_token_signing_alg_values_supported')::text[], id_token_signing_alg_values_supported),
-    claims_supported = COALESCE(sqlc.narg('claims_supported')::text[], claims_supported),
-    backchannel_logout_supported = COALESCE(sqlc.narg('backchannel_logout_supported'), backchannel_logout_supported),
-    authorization_response_iss_parameter_supported = COALESCE(sqlc.narg('authorization_response_iss_parameter_supported'), authorization_response_iss_parameter_supported),
+    introspection_endpoint_auth_methods_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('introspection_endpoint_auth_methods_supported')::text[] ELSE COALESCE(sqlc.narg('introspection_endpoint_auth_methods_supported')::text[], introspection_endpoint_auth_methods_supported) END,
+    id_token_signing_alg_values_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('id_token_signing_alg_values_supported')::text[] ELSE COALESCE(sqlc.narg('id_token_signing_alg_values_supported')::text[], id_token_signing_alg_values_supported) END,
+    claims_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('claims_supported')::text[] ELSE COALESCE(sqlc.narg('claims_supported')::text[], claims_supported) END,
+    backchannel_logout_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('backchannel_logout_supported')::boolean ELSE COALESCE(sqlc.narg('backchannel_logout_supported')::boolean, backchannel_logout_supported) END,
+    authorization_response_iss_parameter_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('authorization_response_iss_parameter_supported')::boolean ELSE COALESCE(sqlc.narg('authorization_response_iss_parameter_supported')::boolean, authorization_response_iss_parameter_supported) END,
     -- An empty array clears scope_override to NULL; omitted keeps it. resource_indicator_supported is set-only.
     scope_override = CASE
         WHEN sqlc.narg('scope_override')::text[] IS NULL THEN scope_override
@@ -3654,20 +3722,25 @@ SET
         WHEN sqlc.narg('client_setup_documentation_url')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('client_setup_documentation_url'), client_setup_documentation_url)
     END,
+    -- A new issuer URL resets every discovered column the edit does not restate.
     authorization_endpoint = CASE
         WHEN sqlc.narg('authorization_endpoint')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('authorization_endpoint')
         ELSE COALESCE(sqlc.narg('authorization_endpoint'), authorization_endpoint)
     END,
     token_endpoint = CASE
         WHEN sqlc.narg('token_endpoint')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('token_endpoint')
         ELSE COALESCE(sqlc.narg('token_endpoint'), token_endpoint)
     END,
     revocation_endpoint = CASE
         WHEN sqlc.narg('revocation_endpoint')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('revocation_endpoint')
         ELSE COALESCE(sqlc.narg('revocation_endpoint'), revocation_endpoint)
     END,
     registration_endpoint = CASE
         WHEN sqlc.narg('registration_endpoint')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('registration_endpoint')
         ELSE COALESCE(sqlc.narg('registration_endpoint'), registration_endpoint)
     END,
     -- A manually changed key URL invalidates every value derived from the old
@@ -3681,46 +3754,60 @@ SET
     jwks_etag = CASE WHEN (sqlc.narg('issuer')::text IS NULL OR sqlc.narg('issuer')::text = issuer) AND (sqlc.narg('jwks_uri')::text IS NULL OR (sqlc.narg('jwks_uri')::text <> '' AND sqlc.narg('jwks_uri')::text IS NOT DISTINCT FROM jwks_uri)) THEN jwks_etag ELSE NULL END,
     jwks_uri = CASE
         WHEN sqlc.narg('jwks_uri')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('jwks_uri')
         ELSE COALESCE(sqlc.narg('jwks_uri'), jwks_uri)
     END,
     service_documentation = CASE
         WHEN sqlc.narg('service_documentation')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('service_documentation')
         ELSE COALESCE(sqlc.narg('service_documentation'), service_documentation)
     END,
     op_policy_uri = CASE
         WHEN sqlc.narg('op_policy_uri')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('op_policy_uri')
         ELSE COALESCE(sqlc.narg('op_policy_uri'), op_policy_uri)
     END,
     op_tos_uri = CASE
         WHEN sqlc.narg('op_tos_uri')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('op_tos_uri')
         ELSE COALESCE(sqlc.narg('op_tos_uri'), op_tos_uri)
     END,
-    scopes_supported = COALESCE(sqlc.narg('scopes_supported')::text[], scopes_supported),
-    grant_types_supported = COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported),
-    authorization_grant_profiles_supported = COALESCE(sqlc.narg('authorization_grant_profiles_supported')::text[], authorization_grant_profiles_supported),
+    scopes_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN COALESCE(sqlc.narg('scopes_supported')::text[], ARRAY[]::text[]) ELSE COALESCE(sqlc.narg('scopes_supported')::text[], scopes_supported) END,
+    grant_types_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN COALESCE(sqlc.narg('grant_types_supported')::text[], ARRAY[]::text[]) ELSE COALESCE(sqlc.narg('grant_types_supported')::text[], grant_types_supported) END,
+    authorization_grant_profiles_supported = CASE
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN ARRAY[]::text[]
+        ELSE COALESCE(sqlc.narg('authorization_grant_profiles_supported')::text[], authorization_grant_profiles_supported)
+    END,
+    metadata_fetched_at = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN NULL ELSE metadata_fetched_at END,
+    metadata_last_error = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN NULL ELSE metadata_last_error END,
+    metadata_last_error_at = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN NULL ELSE metadata_last_error_at END,
+    metadata_last_error_url = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN NULL ELSE metadata_last_error_url END,
     -- Keep the local projection source aligned with an explicit operator edit.
-    -- Discovery timestamps are unchanged; only a fresh fetch replaces this evidence.
+    -- A profile edit keeps discovery timestamps; only a fresh fetch replaces this evidence.
     metadata = CASE
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN NULL
         WHEN sqlc.narg('authorization_grant_profiles_supported')::text[] IS NULL OR metadata IS NULL THEN metadata
         ELSE jsonb_set(metadata, '{authorization_grant_profiles_supported}', to_jsonb(sqlc.narg('authorization_grant_profiles_supported')::text[]))
     END,
-    response_types_supported = COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported),
-    token_endpoint_auth_methods_supported = COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported),
-    code_challenge_methods_supported = COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported),
-    client_id_metadata_document_supported = COALESCE(sqlc.narg('client_id_metadata_document_supported'), client_id_metadata_document_supported),
+    response_types_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN COALESCE(sqlc.narg('response_types_supported')::text[], ARRAY[]::text[]) ELSE COALESCE(sqlc.narg('response_types_supported')::text[], response_types_supported) END,
+    token_endpoint_auth_methods_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], ARRAY[]::text[]) ELSE COALESCE(sqlc.narg('token_endpoint_auth_methods_supported')::text[], token_endpoint_auth_methods_supported) END,
+    code_challenge_methods_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('code_challenge_methods_supported')::text[] ELSE COALESCE(sqlc.narg('code_challenge_methods_supported')::text[], code_challenge_methods_supported) END,
+    client_id_metadata_document_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN COALESCE(sqlc.narg('client_id_metadata_document_supported')::boolean, FALSE) ELSE COALESCE(sqlc.narg('client_id_metadata_document_supported')::boolean, client_id_metadata_document_supported) END,
     userinfo_endpoint = CASE
         WHEN sqlc.narg('userinfo_endpoint')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('userinfo_endpoint')
         ELSE COALESCE(sqlc.narg('userinfo_endpoint'), userinfo_endpoint)
     END,
     introspection_endpoint = CASE
         WHEN sqlc.narg('introspection_endpoint')::text = '' THEN NULL
+        WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('introspection_endpoint')
         ELSE COALESCE(sqlc.narg('introspection_endpoint'), introspection_endpoint)
     END,
-    introspection_endpoint_auth_methods_supported = COALESCE(sqlc.narg('introspection_endpoint_auth_methods_supported')::text[], introspection_endpoint_auth_methods_supported),
-    id_token_signing_alg_values_supported = COALESCE(sqlc.narg('id_token_signing_alg_values_supported')::text[], id_token_signing_alg_values_supported),
-    claims_supported = COALESCE(sqlc.narg('claims_supported')::text[], claims_supported),
-    backchannel_logout_supported = COALESCE(sqlc.narg('backchannel_logout_supported'), backchannel_logout_supported),
-    authorization_response_iss_parameter_supported = COALESCE(sqlc.narg('authorization_response_iss_parameter_supported'), authorization_response_iss_parameter_supported),
+    introspection_endpoint_auth_methods_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('introspection_endpoint_auth_methods_supported')::text[] ELSE COALESCE(sqlc.narg('introspection_endpoint_auth_methods_supported')::text[], introspection_endpoint_auth_methods_supported) END,
+    id_token_signing_alg_values_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('id_token_signing_alg_values_supported')::text[] ELSE COALESCE(sqlc.narg('id_token_signing_alg_values_supported')::text[], id_token_signing_alg_values_supported) END,
+    claims_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('claims_supported')::text[] ELSE COALESCE(sqlc.narg('claims_supported')::text[], claims_supported) END,
+    backchannel_logout_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('backchannel_logout_supported')::boolean ELSE COALESCE(sqlc.narg('backchannel_logout_supported')::boolean, backchannel_logout_supported) END,
+    authorization_response_iss_parameter_supported = CASE WHEN sqlc.narg('issuer')::text IS NOT NULL AND sqlc.narg('issuer')::text <> issuer THEN sqlc.narg('authorization_response_iss_parameter_supported')::boolean ELSE COALESCE(sqlc.narg('authorization_response_iss_parameter_supported')::boolean, authorization_response_iss_parameter_supported) END,
     -- An empty array clears scope_override to NULL; omitted keeps it. resource_indicator_supported is set-only.
     scope_override = CASE
         WHEN sqlc.narg('scope_override')::text[] IS NULL THEN scope_override
@@ -4851,6 +4938,18 @@ WHERE project_id = @project_id AND organization_id = @organization_id
 ORDER BY id
 LIMIT 2;
 
+-- name: ListEMABindingsForUpstream :many
+-- Live bindings, in any state, naming one upstream under the same issuer
+-- selection as ListEMAChainingBindings: a direct upstream passes no issuer and
+-- reads every issuer's bindings, a tunneled upstream passes its own.
+SELECT * FROM remote_session_ema_bindings
+WHERE project_id = @project_id AND organization_id = @organization_id
+  AND user_session_issuer_id = @user_session_issuer_id
+  AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
+  AND rtrim(resource, '/') = @upstream_resource::text
+  AND state IS DISTINCT FROM 'unlinked'
+ORDER BY id;
+
 -- name: GetEMAChainingUserIssuer :one
 -- Identity chaining requires an organization-level user session issuer with a
 -- trusted upstream registration; project-level issuers cannot hold one.
@@ -5075,3 +5174,51 @@ WHERE s.subject_urn = @subject_urn AND s.remote_session_client_id = @remote_sess
  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
  AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id));
+
+-- name: ListOrganizationMCPServersForUserSessionIssuer :many
+-- Live MCP servers on one user session issuer in every project of the
+-- organization, for the binding-change impact preview.
+SELECT s.id, s.project_id, s.name, s.slug, s.toolset_id, p.name AS project_name
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id
+WHERE s.user_session_issuer_id = @user_session_issuer_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+  AND s.deleted IS FALSE
+ORDER BY p.name, s.id;
+
+-- name: ListOrganizationClientsForUserSessionIssuer :many
+-- Live clients bound to one user session issuer that some project of the
+-- organization can see: project-owned clients of the organization's projects
+-- and organization-level clients. Each server's derivation then keeps only its
+-- own project's and the organization-level ones, as
+-- ResyncMCPServerRemoteSessionIssuers does. Clients of a deleted provider stay
+-- in the list, as the commit's ListRemoteSessionClientsByProjectIDForUserSessionIssuer
+-- keeps them; provider_deleted drops them from the derivation only.
+SELECT c.id, c.project_id, c.remote_session_issuer_id, i.deleted AS provider_deleted
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS c
+  ON c.id = link.remote_session_client_id
+ AND c.deleted IS FALSE
+JOIN remote_session_issuers AS i
+  ON i.id = c.remote_session_issuer_id
+WHERE link.user_session_issuer_id = @user_session_issuer_id
+  AND ((c.project_id IS NULL AND c.organization_id = @organization_id::text)
+       OR EXISTS (SELECT 1
+                  FROM projects AS p
+                  WHERE p.id = c.project_id
+                    AND p.organization_id = @organization_id::text))
+ORDER BY c.id;
+
+-- name: ListOrganizationGatewaysForUserSessionIssuer :many
+-- Live gateways on one user session issuer in every project of the
+-- organization, for the binding-change impact preview.
+SELECT g.id, g.project_id, g.name, p.name AS project_name
+FROM meta_mcp_servers AS g
+JOIN projects AS p ON p.id = g.project_id
+WHERE g.user_session_issuer_id = @user_session_issuer_id
+  AND g.organization_id = @organization_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+  AND g.deleted IS FALSE
+ORDER BY p.name, g.id;

@@ -1,46 +1,31 @@
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
-import { InfoField, InfoSection, InfoText } from "../../detailFields";
-import { formatTimestamp } from "./formatTimestamp";
+import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
+import { ClientCard } from "./ClientCard";
+import { ClientLifecycleSections } from "./ClientLifecycleSections";
+import { IdentityProviderCard } from "./IdentityProviderCard";
 
 export function OverviewTab({
   client,
+  issuer,
+  isIssuerLoading,
+  issuerId,
 }: {
   client: RemoteSessionClient;
+  issuer: RemoteSessionIssuer | undefined;
+  isIssuerLoading: boolean;
+  issuerId: string;
 }): JSX.Element {
-  const scope =
-    client.scope && client.scope.length > 0 ? client.scope.join(", ") : "—";
-
   return (
-    <div className="grid max-w-3xl items-start gap-8 sm:grid-cols-2">
-      <InfoSection title="Essentials">
-        <InfoField label="Client ID">
-          <InfoText mono>{client.clientId}</InfoText>
-        </InfoField>
-        <InfoField label="Client Issued At">
-          <InfoText>{formatTimestamp(client.clientIdIssuedAt)}</InfoText>
-        </InfoField>
-      </InfoSection>
-
-      <InfoSection title="Details">
-        <InfoField label="Audience">
-          <InfoText mono>{client.audience || "—"}</InfoText>
-        </InfoField>
-        <InfoField label="Scope">
-          <InfoText mono>{scope}</InfoText>
-        </InfoField>
-        <InfoField label="Token Endpoint Authentication Method">
-          <InfoText mono>
-            {client.tokenEndpointAuthMethod ?? "client_secret_basic"}
-          </InfoText>
-        </InfoField>
-        {client.tokenEndpointAuthMethod === "private_key_jwt" && (
-          <InfoField label="Client Assertion Audience">
-            <InfoText mono>
-              {client.tokenEndpointAuthAudienceFormat ?? "issuer"}
-            </InfoText>
-          </InfoField>
-        )}
-      </InfoSection>
+    <div className="flex max-w-3xl flex-col gap-6">
+      {(issuer || isIssuerLoading) && (
+        <IdentityProviderCard issuerId={issuerId} issuer={issuer} />
+      )}
+      <ClientCard client={client} issuer={issuer} issuerId={issuerId} />
+      <ClientLifecycleSections
+        client={client}
+        issuer={issuer}
+        issuerId={issuerId}
+      />
     </div>
   );
 }

@@ -182,6 +182,7 @@ func TestMCPProtocolVersionTelemetryIgnoresSlugSiblingRoutes(t *testing.T) {
 		"/mcp/consent-tools-9f86d081.js",
 		"/x/mcp/idp_callback",
 		"/x/mcp/remote_login_callback",
+		"/mcp/idp_callback/0190a6f8-5b2c-7d3e-8f41-2a6b9c0d1e2f",
 	} {
 		for _, method := range []string{http.MethodGet, http.MethodPost} {
 			got := recordSpanForRequest(t, method, path, mcpversions.Version20250618)

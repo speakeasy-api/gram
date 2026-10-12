@@ -9,21 +9,34 @@ import (
 // sq is the squirrel builder pre-configured for ClickHouse (? placeholders).
 var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
-// Scope is the one tenancy and time window a query runs in. Organization
-// comes from the authenticated session, project from the request, and both
-// are stamped on every row at the ingest edge, so they bound the scan before
-// anything is collapsed.
-type Scope struct {
+// Tenant is whose rows a query reads. Organization comes from the
+// authenticated session, project from the request, and both are stamped on
+// every row at the ingest edge, so they bound the scan before anything is
+// collapsed.
+type Tenant struct {
 	OrganizationID string
 	ProjectID      string
-	FromUnixNano   int64
-	ToUnixNano     int64
+}
+
+// Window is the time range a query reads: from inclusive, to exclusive, in
+// Unix nanoseconds.
+type Window struct {
+	FromUnixNano int64
+	ToUnixNano   int64
+}
+
+// QueryContext is what one query runs in: its tenant, window and loaded
+// lookups.
+type QueryContext struct {
+	Tenant  Tenant
+	Window  Window
+	Lookups LookupMaps
 }
 
 // SourceQuery builds the query that turns observations into rows at the
 // dataset's grain. It is a subquery over the dataset's table, run as part of
 // every request; nothing is stored.
-type SourceQuery func(scope Scope) squirrel.SelectBuilder
+type SourceQuery func(qc QueryContext) squirrel.SelectBuilder
 
 // toolCallEventTypes are the observations of one tool call: the call itself
 // (semantic-convention and Codex producers name it so), its result, and the
@@ -62,13 +75,13 @@ func quotedList(values []string) string {
 // dataset's own predicates apply. Filtering first would let a correction
 // that moved a record out of the dataset (a session id withdrawn, an event
 // retyped) be dropped before the collapse, leaving its stale copy to win.
-func dedupedAgentEvents(scope Scope, extra ...squirrel.Sqlizer) squirrel.SelectBuilder {
+func dedupedAgentEvents(qc QueryContext, extra ...squirrel.Sqlizer) squirrel.SelectBuilder {
 	scoped := sq.Select("*").
 		From("agent_events").
-		Where(squirrel.Eq{"organization_id": scope.OrganizationID}).
-		Where(squirrel.Eq{"project_id": scope.ProjectID}).
-		Where("occurred_at_unix_nano >= ?", scope.FromUnixNano).
-		Where("occurred_at_unix_nano < ?", scope.ToUnixNano).
+		Where(squirrel.Eq{"organization_id": qc.Tenant.OrganizationID}).
+		Where(squirrel.Eq{"project_id": qc.Tenant.ProjectID}).
+		Where("occurred_at_unix_nano >= ?", qc.Window.FromUnixNano).
+		Where("occurred_at_unix_nano < ?", qc.Window.ToUnixNano).
 		OrderBy("observed_at_unix_nano DESC").
 		Suffix("LIMIT 1 BY organization_id, project_id, record_id")
 	builder := sq.Select("*").FromSelect(scoped, "scoped")
@@ -84,7 +97,7 @@ func dedupedAgentEvents(scope Scope, extra ...squirrel.Sqlizer) squirrel.SelectB
 // model an API request stated. The measures are identity-aware counts, so a
 // caller composing sum(turn_count) gets the de-duplicated figure without
 // needing to know why.
-func sessionsSource(scope Scope) squirrel.SelectBuilder {
+func sessionsSource(qc QueryContext) squirrel.SelectBuilder {
 	return sq.Select(
 		"organization_id",
 		"project_id",
@@ -100,17 +113,26 @@ func sessionsSource(scope Scope) squirrel.SelectBuilder {
 		"toInt64(uniqExactIf(turn_id, turn_id != '')) AS turn_count",
 		"toInt64(uniqExactIf(event_id, "+toolCallEventTypesSQL+")) AS tool_call_count",
 	).
-		FromSelect(dedupedAgentEvents(scope, squirrel.NotEq{"session_id": ""}), "deduped").
+		FromSelect(dedupedAgentEvents(qc, squirrel.NotEq{"session_id": ""}), "deduped").
 		GroupBy("organization_id", "project_id", "session_id")
 }
 
-// toolCallsSource collapses agent_events to one row per tool call. Pre- and
-// post-observations of one call are separate rows by design (the canonical
-// event type is part of identity), so argMax by observation time resolves to
-// the terminal observation. A call that was blocked never ran, so its only
-// observation is the decision that blocked it: that row alone is the call,
-// and its outcome resolves to rejected.
-func toolCallsSource(scope Scope) squirrel.SelectBuilder {
+// toolCallsSource is one row per tool call, Skill invocations included.
+func toolCallsSource(qc QueryContext) squirrel.SelectBuilder {
+	return collapsedToolCalls(qc)
+}
+
+// skillsSource is one row per tool call that named a skill. The filter runs
+// after the collapse because not every observation of a call carries the
+// name: a blocked invocation's decision does not, its result does.
+func skillsSource(qc QueryContext) squirrel.SelectBuilder {
+	return collapsedToolCalls(qc).Having("skill_name != ''")
+}
+
+// collapsedToolCalls folds the observations of each tool call (decision,
+// call, result) into one row at its latest observation. A blocked call has
+// only its decision, so that row is the call and its status is rejected.
+func collapsedToolCalls(qc QueryContext) squirrel.SelectBuilder {
 	return sq.Select(
 		"organization_id",
 		"project_id",
@@ -118,6 +140,7 @@ func toolCallsSource(scope Scope) squirrel.SelectBuilder {
 		"argMaxIf(tool_name, observed_at_unix_nano, tool_name != '') AS tool_name",
 		"argMaxIf(mcp_server_name, observed_at_unix_nano, mcp_server_name != '') AS mcp_server_name",
 		"argMaxIf(mcp_tool_name, observed_at_unix_nano, mcp_tool_name != '') AS mcp_tool_name",
+		"argMaxIf(skill_name, observed_at_unix_nano, skill_name != '') AS skill_name",
 		"argMaxIf(session_id, observed_at_unix_nano, session_id != '') AS session_id",
 		"argMaxIf(user_email, observed_at_unix_nano, user_email != '') AS user_email",
 		"argMaxIf(surface, observed_at_unix_nano, surface != '') AS surface",
@@ -126,7 +149,7 @@ func toolCallsSource(scope Scope) squirrel.SelectBuilder {
 		"min(occurred_at_unix_nano) AS started_at",
 		"max(occurred_at_unix_nano) AS ended_at",
 	).
-		FromSelect(dedupedAgentEvents(scope,
+		FromSelect(dedupedAgentEvents(qc,
 			squirrel.Eq{"event_type": toolCallEventTypes},
 			squirrel.NotEq{"event_id": ""},
 		), "deduped").

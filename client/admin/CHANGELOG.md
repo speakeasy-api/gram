@@ -1,5 +1,17 @@
 # admin
 
+## 0.9.2
+
+### Patch Changes
+
+- 4c811b0: The admin command palette lists enterprise organizations first, then pro and pay-as-you-go, then free, then any other account type. The organization list and the staff Admin MCP `find_organizations` tool accept the same `account_tier` sort.
+
+## 0.9.1
+
+### Patch Changes
+
+- 4470b2a: Global identity providers created or rediscovered in the admin app keep the authorization grant profiles their discovery document advertises (including the ID-JAG profile), so identity chaining no longer reports them as unsupported. Providers entered by hand omit the field, so the server does not treat them as discovered. Saving a global provider with a changed issuer URL and no rediscovery sends an empty grant profile list.
+
 ## 0.9.0
 
 ### Minor Changes

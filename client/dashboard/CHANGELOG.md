@@ -1,5 +1,55 @@
 # dashboard
 
+## 0.136.0
+
+### Minor Changes
+
+- b481b2d: The Okta identity provider page has an **Okta sign-in** section. Once the connection is verified and the AI agent is recorded, **Set up Okta sign-in** registers the agent's linked app (its Client ID is the agent ID) as an organization client on the Okta issuer and signs it with private_key_jwt from a signing key set with an active key. The key picker does not offer the Okta connection's managed KMS key. The section shows the active public key (JWK, public members only) with a copy button: paste it in the agent's Credentials in Okta and click Activate. Okta stores the key itself, so rotating the key set or publishing a new key means registering the new public key in Okta again. It also shows the sign-in redirect URI for the linked app.
+  
+  Setup needs customer-managed encryption keys and a Google Cloud KMS key; without the entitlement the section says so and blocks setup. If several organization clients claim the agent ID, the section names the problem and blocks setup until the extras are deleted, and the connection's own managed client is never treated as the sign-in client.
+  
+  A table lists every organization sign-in issuer and whether it trusts Okta sign-in, including issuers that still trust the sign-in client of a previous agent ID. Changing the agent ID warns that those issuers need to be moved. When none trusts Okta sign-in, **Set up Okta sign-in** creates a new `okta-sign-in` sign-in issuer (or the next free numbered slug) instead of reusing an existing one. Admins pick an existing sign-in issuer explicitly with **Trust Okta sign-in** on its row, which asks for confirmation when the issuer trusts another sign-in client or MCP servers or toolsets use it, lists them, and warns that people must already exist through SCIM. If trusting fails, the dialog stays open with the error so a retry trusts the same issuer. **Add sign-in issuer** creates a dedicated sign-in issuer per vendor, checking the slug against every organization sign-in issuer.
+
+### Patch Changes
+
+- 3ffc9d0: Risk policy details load immediately. The obsolete analysis-progress counts are removed, including `risk.getPolicyStatus` and the "View Progress" panel.
+- e5e28d7: Connecting an issuer-gated MCP server from the dashboard now starts the sign-in flow on the `/mcp` routes instead of the legacy `/x/mcp` routes.
+- 56218c5: Explore and widgets can draw a **Stacked bar** and a **Stacked area** chart, which show what made up a total rather than how each series moved. A stack needs a Group by; without one it is drawn as the plain bar or area it is and says so. It stacks one measure that adds up, a count or a sum, since its bands are a total. When a breakdown has more series than fit, the smallest are stacked as one **Other** band so the height is still the real total, and the tooltip gives each bucket's total.
+- af578ee: The Dashboards page lists the dashboards Speakeasy ships with the product, marked **Speakeasy-built**, beside the project's own. One opens read only at `/dashboards/builtin/<slug>` under the shared filter bar, with every card answering within it, and **Duplicate** makes a project dashboard from it, with a saved widget per card, that can be laid out and changed like any other. The first is **MCP & Tools**: what the agents called, how often a call failed, and who was calling.
+- 74a96dd: Fix saving a remote session client with no audience, which the API rejected.
+- 7f35277: Links to a hosted MCP server now open its toolset page instead of the generic server page, which showed controls that do not apply to it.
+- b4c4904: Identity providers with long scope lists or uploaded logos now read cleanly. Scopes show as chips, URL-style scopes drop their shared base and reveal it on hover, and the client page cuts the list after three lines. Logos keep their shape at full height, providers without a logo show their initial, and long endpoint URLs stay on one line with the full value on hover.
+- 52fb54c: The private network setup sheet now suggests `acme-speakeasy` instead of `acme-gram` as an example organization private hostname.
+- fae8c34: The role editor now shows a permission the role only blocks as blocked. The row names the blocked server and says that the block applies even when another role grants the permission. It no longer reads as a grant. Adding that permission from the picker now grants it next to the block and keeps the block. Before, the picker deleted the block.
+- daf0a70: Editing a Shadow MCP policy no longer fails with "cannot change the sources or action of a shadow mcp policy with a disposition". A `block_all` policy — the default, and what every policy the dashboard creates stores — can once again turn its Shadow MCP detector off or move off the Deny action, exactly as the policies that predate the disposition field always could; the server now retires the policy's allowed-server grants along with the posture instead of leaving them behind. An `allow_all` policy still cannot, because its blocked-server list would have nothing left to enforce, but the editor now pins its detector and action up front with the reason, and the remaining server-side rejections say which part of the edit was refused and what to do instead. The Platform MCP `update_risk_policy` tool follows the same rule: a `block_all` policy's patch may turn off `shadow_mcp` or move off the Deny action and retires the policy's allowed-server grants with it, while an `allow_all` policy's patch is refused with the same explanation.
+
+## 0.135.0
+
+### Minor Changes
+
+- 8c561d4: `remoteMcp.getServerScopes` now needs only read access on the target MCP server and reports each client's `issuer_name` and `issuer_url` and whether the caller `can_pin`. In the dashboard, the pinned scopes picker is read-only unless you have edit access on every server sharing the URL, its status line names what sign-ins actually request when the pin does not decide, and in Settings › Identity members who can read but not edit the server see a read-only "Requested at sign-in" summary of the scopes the connected client requests.
+- 8763550: The remote session client page folds Settings into Overview, which shows the identity provider's endpoints, registration methods and supported scopes above the client's editable settings, with scopes chosen from those the provider advertises.
+- 111bf1f: Add Signals intelligence configuration management to the dashboard, with reusable signals, sensor modes, and ordered signal membership. The organization-level `signals_intelligence` product feature controls sidebar and command-palette visibility and direct page access. Read-only project members can inspect configuration; changes require project write access. Enable the feature in demo and local fixtures. Classification execution remains out of scope.
+
+### Patch Changes
+
+- 4ff622b: The Access Hub's forms for registering and editing a custom platform, and for allowing and editing access under one, now take their copy and fields from the server's custom flows. They keep the same fields, checks and wording, and show a loading state, or a message with a retry, while the form is not yet available.
+- fe988df: A widget can be put on a dashboard from wherever it is: **Add to dashboard** on a Widgets tab row or card and in the widget bar picks one of the dashboards you can change, or makes a new one with the widget as its first card, and the toast offers to open it. Saving the builder as a new widget has an **Advanced** section to place it on a dashboard straight away.
+- 502a8b6: A dashboard has the shared filter bar above its cards, offering a date range and the fields (user, agent, model, MCP server, status) some card can be filtered by; every card answers within it. A dashboard opens on its saved filters, or on the past seven days, unless the link says otherwise. Picking in the bar is the viewer's own view until **Save filters** stores it as what the dashboard opens on for everyone; **Reset filters** returns to what is saved.
+- 4470b2a: Identity providers created or refreshed in the dashboard from discovered metadata keep the authorization grant profiles they advertise (including the ID-JAG profile), so identity chaining no longer reports them as unsupported. A discovered issuer that advertises no profiles sends an empty list, so it is still recorded as discovered; providers entered by hand omit the field. Changing a provider's issuer URL without rediscovering clears its grant profiles. The Settings tab does the same, and the OAuth proxy wizard no longer substitutes its defaults for lists a discovered document omits, while still keeping the scopes the operator entered.
+- fe988df: Dashboards moved out of an Explore tab into their own **Dashboards** page in the sidebar, under Observability beside Explore. Each dashboard has its own address, `/dashboards/<id>`. A card's **Open in Explore** and a widget's **Add to dashboard** go between the two pages.
+- fe988df: The Explore query builder is laid out as Datadog's query editor is, and takes two lines instead of a form.
+  
+  - **First line:** the dataset, then the filters as one search field of `field:value` pills. Click a pill to edit it, or the empty field to add one.
+  - **Second line:** hangs from the search icon and reads as a sentence: **Show** | Count of | all rows — **by** | user | + — then **limit to top** | 100 | by | the order for a whole-window chart, or **rollup** | every | 1h (auto) for a timeseries.
+  - **Results header:** the chart type (as icons), the window and **Run query** move here.
+- 73d7328: Adding a source to an MCP gateway never reuses that source's own hosted MCP server as the gateway member. The gateway keeps its own private member server, independent of whether the hosted server is enabled or public.
+- a4ed7f5: The search term on the MCP page is kept in the URL, so going back from a server keeps your search instead of clearing it.
+- 02e02cf: Risk events found in a prompt attachment, such as a spreadsheet, now show their context. The risk-only transcript returned nothing for these findings because they belong to the attachment rather than a message; it now windows around the prompt the attachment was sent with, and the finding drawer shows the flagged attachment beneath that prompt. The session's risky-only count includes those prompts too.
+- 111bf1f: Allow creating and editing sensor and signal slugs in their dashboard forms, with validation for the shared slug format.
+- 3d9795e: Show matching plugin links on Team Access role rows.
+- 0273ee4: Toasts now follow the dashboard's light/dark setting instead of the operating system's, so description text such as the repository link after adding marketplace collaborators is readable in light mode when the OS is in dark mode.
+
 ## 0.134.0
 
 ### Minor Changes
