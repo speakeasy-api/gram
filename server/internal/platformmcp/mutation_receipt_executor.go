@@ -245,9 +245,8 @@ func executeReceipt[T any](ctx context.Context, execution mutationReceiptExecuti
 	if singleUse != nil {
 		// Locked on the input, so two keys racing for one input serialize and
 		// the loser sees the winner's receipt.
-		inputLock := lock
-		inputLock.IdempotencyKey = "input:" + execution.InputHash
-		if err := q.LockPlatformMCPOperationReceipt(ctx, inputLock); err != nil {
+		inputLock := platformrepo.LockPlatformMCPOperationReceiptInputParams{OrganizationID: lock.OrganizationID, SubjectUrn: lock.SubjectUrn, ProjectID: lock.ProjectID, Operation: lock.Operation, InputHash: execution.InputHash}
+		if err := q.LockPlatformMCPOperationReceiptInput(ctx, inputLock); err != nil {
 			return OperationReceipt{}, fmt.Errorf("lock %s input: %w", execution.Label, err)
 		}
 		claimed, err := q.PlatformMCPOperationReceiptInputClaimed(ctx, platformrepo.PlatformMCPOperationReceiptInputClaimedParams{OrganizationID: execution.Principal.OrganizationID, ProjectID: execution.Project.ID, Operation: execution.Operation, UserID: conv.ToPGText(execution.Principal.UserID), InputHash: execution.InputHash, IdempotencyKey: execution.IdempotencyKey})

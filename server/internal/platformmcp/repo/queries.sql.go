@@ -7055,6 +7055,38 @@ func (q *Queries) LockPlatformMCPOperationReceipt(ctx context.Context, arg LockP
 	return err
 }
 
+const lockPlatformMCPOperationReceiptInput = `-- name: LockPlatformMCPOperationReceiptInput :exec
+SELECT pg_advisory_xact_lock(
+    hashtextextended(
+        jsonb_build_array('platform-mcp-receipt-input', $1::text, $2::text, $3::text, $4::text, $5::text)::text,
+        0
+    )
+)
+`
+
+type LockPlatformMCPOperationReceiptInputParams struct {
+	OrganizationID string
+	SubjectUrn     string
+	ProjectID      string
+	Operation      string
+	InputHash      string
+}
+
+// A single-use preview is claimed by its input, so confirmations racing for
+// one input serialize here. The namespace differs from the key lock above so
+// a caller-chosen idempotency key can never name this lock, which is what
+// keeps two confirmations from taking the pair in opposite orders.
+func (q *Queries) LockPlatformMCPOperationReceiptInput(ctx context.Context, arg LockPlatformMCPOperationReceiptInputParams) error {
+	_, err := q.db.Exec(ctx, lockPlatformMCPOperationReceiptInput,
+		arg.OrganizationID,
+		arg.SubjectUrn,
+		arg.ProjectID,
+		arg.Operation,
+		arg.InputHash,
+	)
+	return err
+}
+
 const lockPlatformMCPRemoteIssuerAttachment = `-- name: LockPlatformMCPRemoteIssuerAttachment :exec
 SELECT pg_advisory_xact_lock(
     hashtextextended(

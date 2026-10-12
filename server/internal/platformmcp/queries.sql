@@ -613,6 +613,18 @@ SELECT pg_advisory_xact_lock(
     )
 );
 
+-- name: LockPlatformMCPOperationReceiptInput :exec
+-- A single-use preview is claimed by its input, so confirmations racing for
+-- one input serialize here. The namespace differs from the key lock above so
+-- a caller-chosen idempotency key can never name this lock, which is what
+-- keeps two confirmations from taking the pair in opposite orders.
+SELECT pg_advisory_xact_lock(
+    hashtextextended(
+        jsonb_build_array('platform-mcp-receipt-input', @organization_id::text, @subject_urn::text, @project_id::text, @operation::text, @input_hash::text)::text,
+        0
+    )
+);
+
 -- name: LockPlatformMCPRemoteIssuerAttachment :exec
 -- Serialize browser-catalog attachment for one project/upstream issuer before
 -- checking for an existing remote-session issuer or registering a new client.
