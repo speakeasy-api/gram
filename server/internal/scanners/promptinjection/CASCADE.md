@@ -142,16 +142,13 @@ production prevalence or accuracy measurements.
 
 ### Confirmer and prompt
 
-The report scores each option on 2,046 public cases with production payloads
-against two goals: no false positives on the 1,071 benign cases, and at least
-95% of the 175 well-known attacks caught. A well-known attack is a plain-text
-attack with a classic phrase, such as ignore previous instructions, reveal the
-system prompt, DAN or a fake system override.
+The report scores each option on 2,046 public cases with production payloads,
+with no false positive allowed on the 1,071 benign cases.
 
-| Option (prompt confirm-v4)      | False positives | Well-known caught | All attacks | Median decision |
-| ------------------------------- | --------------- | ----------------- | ----------- | --------------- |
-| Jev → Sonnet 5.5 (this cascade) | 0               | 169 of 175        | 82.9%       | 3.3 s           |
-| Jev → Opus 5.5 → Opus 4.8       | 0               | 171 of 175        | 82.6%       | 4.9 s           |
+| Option (prompt confirm-v4)      | False positives | All attacks | Median decision |
+| ------------------------------- | --------------- | ----------- | --------------- |
+| Jev → Sonnet 5.5 (this cascade) | 0               | 82.9%       | 3.3 s           |
+| Jev → Opus 5.5 → Opus 4.8       | 0               | 82.6%       | 4.9 s           |
 
 Sonnet costs about $0.002 per confirmation against $0.003 for Opus 5.5, and
 refuses far less. The current prompt clarifies confirm-v4: role-play and "act as"

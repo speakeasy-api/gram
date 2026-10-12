@@ -135,7 +135,6 @@ func TestSummaryMarkdownListsTheComparedRunsAndFlips(t *testing.T) {
 	require.Contains(t, md, "| this change (cccccccccc fix: better detector) | 0 | 1 of 1 (100.0%)")
 	require.NotContains(t, md, "an older try", "the PR summary shows only the compared runs")
 	require.Contains(t, md, "| Pass |")
-	require.NotContains(t, md, "Well-known")
 	require.Contains(t, md, "Compared with the base: 1 newly caught · 0 newly missed")
 	require.NoError(t, changeGate(data))
 }
