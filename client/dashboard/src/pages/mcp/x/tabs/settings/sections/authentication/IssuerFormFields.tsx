@@ -540,9 +540,9 @@ export function OverridesFields({
           placeholder="read, write, openid"
         />
         <Text muted small>
-          Comma-separated. When provided, the platform requests these scopes
-          during the OAuth dance; otherwise it falls back to the issuer's
-          scopes_supported.
+          Comma-separated. When provided, every sign-in requests these scopes.
+          Otherwise sign-ins request what the MCP server asks for, falling back
+          to the issuer's scopes_supported.
         </Text>
       </Stack>
 

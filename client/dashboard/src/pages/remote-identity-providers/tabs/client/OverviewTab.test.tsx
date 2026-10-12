@@ -240,7 +240,7 @@ function scopesField(): HTMLElement {
 }
 
 function openScopes() {
-  fireEvent.click(screen.getByText("No scopes"));
+  fireEvent.click(screen.getByText("Discovered at sign-in"));
 }
 
 describe("client overview identity provider card", () => {
@@ -340,12 +340,21 @@ describe("client overview scope picker", () => {
     renderTab({ client: client(undefined, { scope: ["openid", "extra"] }) });
     save();
 
-    expect(lastSaved().scope).toEqual(["openid", "extra"]);
+    expect(lastSaved().scope).toBeUndefined();
     expect(screen.getByText("extra")).toBeTruthy();
   });
 
-  it("sends an empty array when no scopes are chosen", () => {
+  it("omits an unset scope on an unrelated save", () => {
     renderTab();
+    save();
+
+    expect(lastSaved().scope).toBeUndefined();
+  });
+
+  it("sends an empty array when saved scopes are cleared", () => {
+    renderTab({ client: client(undefined, { scope: ["openid"] }) });
+    fireEvent.click(scopesField());
+    fireEvent.click(screen.getByRole("option", { name: /openid/ }));
     save();
 
     expect(lastSaved().scope).toEqual([]);

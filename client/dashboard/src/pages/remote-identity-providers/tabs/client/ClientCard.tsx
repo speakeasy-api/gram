@@ -134,6 +134,12 @@ export function ClientCard({
     },
   });
 
+  // Unchanged scopes are omitted, so a save never turns an unset scope into [].
+  const savedScope = client.scope ?? [];
+  const scopeChanged =
+    scope.length !== savedScope.length ||
+    scope.some((s, i) => s !== savedScope[i]);
+
   const handleSave = () => {
     update.mutate({
       request: {
@@ -143,7 +149,7 @@ export function ClientCard({
           tokenEndpointAuthAudienceFormat: privateKeyJwtSelected
             ? authAudienceFormat
             : undefined,
-          scope,
+          scope: scopeChanged ? scope : undefined,
           audience: audience.trim() || undefined,
           clientSecret: clientSecretUpdateValue(authMethod, clientSecret),
           legacyCallbackUrl:
@@ -195,12 +201,13 @@ export function ClientCard({
                 options={issuer?.scopesSupported ?? []}
                 value={shownScope}
                 onValueChange={setScope}
-                placeholder="No scopes"
+                placeholder="Discovered at sign-in"
                 disabled={!canEdit}
               />
               <Text small muted>
-                Choose from the scopes this identity provider advertises, or
-                type one to add it.
+                Leave empty to request what the MCP server asks for at each
+                sign-in. Choose from the scopes this identity provider
+                advertises, or type one to add it.
               </Text>
             </div>
             <TokenEndpointAuthMethodField
